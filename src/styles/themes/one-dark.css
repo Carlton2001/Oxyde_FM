@@ -1,0 +1,38 @@
+[data-theme="one-dark"] {
+    --bg-color: #282c34;
+    --bg-color-rgb: 40, 44, 52;
+    --text-color: #abb2bf;
+    --text-muted: #5c6370;
+    --sidebar-bg: #21252b;
+    --header-bg: #282c34;
+    --hover-color: #2c313a;
+    --accent-color: #61afef;
+    --accent-color-rgb: 97, 175, 239;
+    --selected-text: #ffffff;
+    --border-color: #181a1f;
+    --border-color-rgb: 24, 26, 31;
+    --surface-primary: #21252b;
+    --surface-secondary: #282c34;
+    --dimmed-opacity: 0.6;
+
+    --menu-bg: #21252b;
+    --menu-border: #181a1f;
+    --menu-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+
+    --scrollbar-bg: transparent;
+    --scrollbar-thumb: #3e4451;
+    --scrollbar-thumb-hover: #4b5263;
+
+    --icon-default: #5c6370;
+    --icon-folder: #61afef;
+    --icon-image: #98c379;
+    --icon-audio: #c678dd;
+    --icon-video: #e06c75;
+    --icon-exec: #e5c07b;
+    --icon-archive: #d19a66;
+    --icon-pdf: #e06c75;
+    --icon-code: #56b6c2;
+    --icon-disk: #5c6370;
+
+    --histogram-opacity: 0.35;
+}

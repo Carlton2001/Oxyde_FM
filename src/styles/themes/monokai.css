@@ -1,0 +1,49 @@
+[data-theme="monokai"] {
+    /* Colors */
+    --bg-color: #272822;
+    /* Monokai Background */
+    --text-color: #f8f8f2;
+    /* Foreground */
+    --text-muted: #88846f;
+    --sidebar-bg: #1e1f1c;
+    /* Slightly darker */
+    --header-bg: #272822;
+    --hover-color: #4a493e;
+    --accent-color: #75715e;
+    --accent-color-rgb: 117, 113, 94;
+    --selected-text: #f8f8f2;
+    --border-color: #171814;
+    --surface-primary: #3e3d32;
+    --surface-secondary: #1e1f1c;
+    --dimmed-opacity: 0.6;
+
+    /* Components */
+    --menu-bg: #272822;
+    --menu-border: #171814;
+    --menu-shadow: 0 0.25rem 0.625rem rgba(0, 0, 0, 0.5);
+
+    /* Scrollbar */
+    --scrollbar-bg: #272822;
+    --scrollbar-thumb: #75715e;
+    --scrollbar-thumb-hover: #e6db74;
+    /* Yellow pop on hover */
+
+    /* File Icons */
+    --icon-default: #f8f8f2;
+    --icon-folder: #e6db74;
+    /* Yellow */
+    --icon-image: #a6e22e;
+    /* Green */
+    --icon-audio: #ae81ff;
+    /* Purple */
+    --icon-video: #f92672;
+    /* Pink */
+    --icon-exec: #fd971f;
+    /* Orange */
+    --icon-archive: #66d9ef;
+    /* Blue */
+    --icon-pdf: #f92672;
+    --icon-code: #66d9ef;
+    --icon-disk: #75715e;
+    --histogram-opacity: 0.5;
+}

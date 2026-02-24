@@ -1,0 +1,38 @@
+[data-theme="ayu-light"] {
+    --bg-color: #f8f9fa;
+    --bg-color-rgb: 248, 249, 250;
+    --text-color: #5c6166;
+    --text-muted: #abb0b6;
+    --sidebar-bg: #f3f4f5;
+    --header-bg: #f8f9fa;
+    --hover-color: #e6e7e8;
+    --accent-color: #ff9940;
+    --accent-color-rgb: 255, 153, 64;
+    --selected-text: #ffffff;
+    --border-color: #edeeef;
+    --border-color-rgb: 237, 238, 239;
+    --surface-primary: #ffffff;
+    --surface-secondary: #f3f4f5;
+    --dimmed-opacity: 0.6;
+
+    --menu-bg: #ffffff;
+    --menu-border: #edeeef;
+    --menu-shadow: 0 8px 16px rgba(0, 0, 0, 0.05);
+
+    --scrollbar-bg: transparent;
+    --scrollbar-thumb: #d5d6d7;
+    --scrollbar-thumb-hover: #abb0b6;
+
+    --icon-default: #abb0b6;
+    --icon-folder: #ff9940;
+    --icon-image: #86b300;
+    --icon-audio: #a37acc;
+    --icon-video: #f07178;
+    --icon-exec: #399ee6;
+    --icon-archive: #e6b673;
+    --icon-pdf: #f07178;
+    --icon-code: #4cb6d6;
+    --icon-disk: #abb0b6;
+
+    --histogram-opacity: 0.25;
+}

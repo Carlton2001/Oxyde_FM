@@ -1,0 +1,45 @@
+[data-theme="windows-dark"] {
+    /* Colors - Zed Dark Inspired */
+    --bg-color: #181818;
+    --bg-color-rgb: 24, 24, 24;
+    --text-color: #d0d0d0;
+    --text-muted: #808080;
+    --sidebar-bg: #111111;
+    --header-bg: #181818;
+
+    --hover-color: #2a2a2a;
+    --accent-color: #52a8ff;
+    --accent-color-rgb: 82, 168, 255;
+    --selected-text: #ffffff;
+
+    --border-color: #282828;
+    --border-color-rgb: 40, 40, 40;
+
+    --surface-primary: #1e1e1e;
+    --surface-secondary: #181818;
+    --dimmed-opacity: 0.5;
+
+    /* Components */
+    --menu-bg: #1e1e1e;
+    --menu-border: #333333;
+    --menu-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.5);
+
+    /* Scrollbar */
+    --scrollbar-bg: transparent;
+    --scrollbar-thumb: #333333;
+    --scrollbar-thumb-hover: #444444;
+
+    /* File Icons */
+    --icon-default: #b0b0b0;
+    --icon-folder: #52a8ff;
+    --icon-image: #81c784;
+    --icon-audio: #b39ddb;
+    --icon-video: #ef9a9a;
+    --icon-exec: #ffb74d;
+    --icon-archive: #a1887f;
+    --icon-pdf: #e57373;
+    --icon-code: #4db6ac;
+    --icon-disk: #90a4ae;
+
+    --histogram-opacity: 0.4;
+}

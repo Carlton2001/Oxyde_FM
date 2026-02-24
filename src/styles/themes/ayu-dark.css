@@ -1,0 +1,38 @@
+[data-theme="ayu-dark"] {
+    --bg-color: #0b0e14;
+    --bg-color-rgb: 11, 14, 20;
+    --text-color: #b3b1ad;
+    --text-muted: #626a73;
+    --sidebar-bg: #090c10;
+    --header-bg: #0b0e14;
+    --hover-color: #191e2a;
+    --accent-color: #e6b450;
+    --accent-color-rgb: 230, 180, 80;
+    --selected-text: #ffffff;
+    --border-color: #151a24;
+    --border-color-rgb: 21, 26, 36;
+    --surface-primary: #0f131a;
+    --surface-secondary: #0b0e14;
+    --dimmed-opacity: 0.6;
+
+    --menu-bg: #0f131a;
+    --menu-border: #151a24;
+    --menu-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+
+    --scrollbar-bg: transparent;
+    --scrollbar-thumb: #191e2a;
+    --scrollbar-thumb-hover: #232834;
+
+    --icon-default: #626a73;
+    --icon-folder: #e6b450;
+    --icon-image: #7edaf6;
+    --icon-audio: #dfbfff;
+    --icon-video: #f07178;
+    --icon-exec: #399ee6;
+    --icon-archive: #ff9940;
+    --icon-pdf: #f07178;
+    --icon-code: #59c2ff;
+    --icon-disk: #626a73;
+
+    --histogram-opacity: 0.35;
+}

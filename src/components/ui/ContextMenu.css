@@ -1,0 +1,130 @@
+/* Context Menu & Menu Items */
+.context-menu {
+    position: fixed;
+    background: var(--menu-bg);
+    border: 1px solid var(--menu-border);
+    border-radius: 8px;
+    box-shadow: var(--menu-shadow);
+    z-index: var(--z-context);
+    padding: 4px;
+    min-width: 160px;
+    color: var(--text-color);
+}
+
+.menu-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 0.8125rem;
+    line-height: 1.2;
+    min-height: 30px;
+}
+
+.menu-item:hover:not(.disabled) {
+    background-color: var(--hover-color);
+    color: var(--text-color);
+}
+
+/* Danger actions (Delete) */
+.menu-item.danger {
+    color: var(--error-color, #ef4444);
+}
+
+.menu-item.danger:hover:not(.disabled) {
+    background-color: var(--danger-bg, rgba(239, 68, 68, 0.15));
+    color: var(--danger-text, #ef4444);
+}
+
+.menu-item.disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+/* Context Menu Submenu */
+.menu-item-with-submenu {
+    position: relative;
+    display: flex;
+    align-items: stretch;
+    border-radius: 6px;
+}
+
+.menu-item-with-submenu:hover {
+    background-color: var(--hover-color);
+}
+
+.menu-item-main {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px 6px 12px;
+    font-size: 0.8125rem;
+    line-height: 1.2;
+    flex: 1;
+    border-radius: 6px 0 0 6px;
+}
+
+.menu-item-arrow {
+    display: flex;
+    align-items: center;
+    padding: 6px 8px;
+    position: relative;
+    border-radius: 0 6px 6px 0;
+}
+
+/* Highlight entire row only for the directly hovered item */
+.menu-item-with-submenu:has(> .menu-item-main:hover)>.menu-item-main,
+.menu-item-with-submenu:has(> .menu-item-main:hover)>.menu-item-arrow,
+.menu-item-with-submenu:has(> .menu-item-arrow:hover)>.menu-item-main,
+.menu-item-with-submenu:has(> .menu-item-arrow:hover)>.menu-item-arrow {
+    background-color: var(--hover-color);
+    color: var(--text-color);
+}
+
+.menu-separator {
+    height: 1px;
+    background-color: var(--border-color);
+    margin: 4px 6px;
+}
+
+.submenu-divider {
+    width: 1px;
+    height: 1.25rem;
+    background-color: var(--border-color);
+    align-self: center;
+}
+
+.submenu {
+    position: absolute;
+    left: 100%;
+    top: 0;
+    background: var(--menu-bg);
+    border: 1px solid var(--menu-border);
+    border-radius: 8px;
+    box-shadow: var(--menu-shadow);
+    padding: 4px;
+    min-width: 160px;
+    z-index: var(--z-context);
+    color: var(--text-color);
+}
+
+/* Flip submenu to the left when it would overflow the right edge */
+.submenu.flip-left {
+    left: auto;
+    right: 100%;
+}
+
+/* Flip submenu upwards when it would overflow the bottom edge */
+.submenu.flip-up {
+    top: auto;
+    bottom: 0;
+}
+
+.win-item-label {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: block;
+    width: 100%;
+}

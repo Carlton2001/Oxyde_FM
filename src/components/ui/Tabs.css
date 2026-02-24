@@ -1,0 +1,277 @@
+.tabs-wrapper {
+    display: flex;
+    align-items: center;
+    background-color: var(--surface-secondary, #f3f3f3);
+    border-bottom: 1px solid var(--border-color);
+    height: 2.5rem;
+    /* Reduced to compensate for top space */
+    /* Slightly taller */
+    -webkit-app-region: no-drag;
+    position: relative;
+    padding: 0 0.5rem;
+    gap: 0.25rem;
+}
+
+.tab-search-container {
+    margin-left: auto;
+    width: 9.17rem;
+    max-width: 40%;
+    display: flex;
+    align-items: center;
+    margin-right: 0.5rem;
+    /* Removed padding-bottom to ensure perfect centering */
+}
+
+.tab-search-container .search-box {
+    height: 1.875rem;
+}
+
+.tabs-container {
+    display: flex;
+    align-items: flex-end;
+    /* Align tabs to the bottom */
+    flex: 1;
+    height: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
+    padding: 0 0.25rem;
+}
+
+/* Hide scrollbar */
+.tabs-container::-webkit-scrollbar {
+    display: none;
+}
+
+.scroll-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    min-width: 1.75rem;
+    border-radius: 0.25rem;
+    background-color: transparent;
+    color: var(--text-secondary);
+    border: none;
+    margin: 0 2px;
+    transition: background-color 0.2s, color 0.2s;
+}
+
+.scroll-btn:hover {
+    background-color: var(--hover-color);
+    color: var(--text-primary);
+}
+
+.tab {
+    display: flex;
+    align-items: center;
+    max-width: 14rem;
+    min-width: 8rem;
+    height: 2.1875rem;
+    /* Exactly 35px. In a 40px header, this leaves 5px top padding, matching the 30px search box (40-30)/2 = 5px */
+    background-color: transparent;
+    border-radius: 0.375rem 0.375rem 0 0;
+    /* Strictly no bottom rounding */
+    padding-left: 0.75rem;
+    padding-right: 0.5rem;
+    /* Increased for better default spacing */
+    padding-bottom: 0.3125rem;
+    /* Optical shift to center content relative to the 40px BAR height */
+    margin-right: 2px;
+    cursor: default;
+    font-size: 0.85rem;
+    flex: 1;
+    /* Allow tabs to grow up to max-width */
+    color: var(--text-muted, #5d5d5d);
+    transition: all 0.2s ease;
+    user-select: none;
+    position: relative;
+    border: 1px solid transparent;
+    border-bottom: none;
+    -webkit-app-region: no-drag;
+    margin-bottom: -1px;
+    /* Overlap with parent border */
+    z-index: 1;
+}
+
+.tab * {
+    pointer-events: none;
+}
+
+.tab-close {
+    pointer-events: auto;
+}
+
+.tab:hover {
+    background-color: var(--hover-color);
+    color: var(--text-primary);
+}
+
+.tab.active {
+    background-color: var(--surface-primary, #ffffff);
+    color: var(--text-color, #1a1a1a);
+    border: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--accent-color);
+    /* The accent line at bottom */
+    box-shadow: none;
+    /* Removed shadow per request */
+    z-index: 2;
+}
+
+.tab-icon {
+    margin-right: 0.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.7;
+    height: 100%;
+}
+
+.tab.active .tab-icon {
+    opacity: 1;
+}
+
+.tab-label {
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: normal;
+    padding-top: 1px;
+    /* Optical fix: push text down slightly to align with icons */
+}
+
+.tab.dragging {
+    opacity: 0.5;
+    background-color: var(--hover-color);
+    border: 1px dashed var(--accent-color);
+}
+
+.tab-close {
+    width: 1.25rem;
+    height: 1.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0.25rem;
+    margin-left: 0.5rem;
+    /* More space from text */
+    opacity: 0;
+    transition: opacity 0.2s, background-color 0.2s;
+}
+
+.tab:hover .tab-close,
+.tab.active .tab-close {
+    opacity: 0.7;
+}
+
+.tab-close.disabled {
+    visibility: hidden;
+    pointer-events: none;
+    opacity: 0 !important;
+}
+
+.tab-close:hover {
+    background-color: rgba(0, 0, 0, 0.1);
+    opacity: 1;
+}
+
+/* Dark mode adjustment for close button hover */
+[data-theme="dark"] .tab-close:hover,
+[data-theme="dark2"] .tab-close:hover,
+[data-theme="vscode-dark"] .tab-close:hover {
+    background-color: rgba(255, 255, 255, 0.15);
+}
+
+
+.new-tab-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: 0.25rem;
+    cursor: default;
+    color: var(--text-secondary);
+    transition: background-color 0.2s;
+    margin-left: 0.25rem;
+    align-self: center;
+    /* Center vertically relative to the 40px bar */
+}
+
+.new-tab-btn:hover {
+    background-color: var(--hover-color);
+    color: var(--text-primary);
+}
+
+.tab-context-menu {
+    position: fixed;
+    z-index: 9999;
+    background-color: var(--menu-bg, #ffffff);
+    border: 1px solid var(--border-color);
+    border-radius: 0.375rem;
+    box-shadow: 0 0.25rem 0.75rem rgba(0, 0, 0, 0.2);
+    padding: 0.25rem;
+    min-width: 9.375rem;
+    color: var(--text-color, #1a1a1a);
+}
+
+.tab-context-menu .menu-item {
+    padding: 0.375rem 0.75rem;
+    border-radius: 0.25rem;
+    cursor: default;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.8125rem;
+    user-select: none;
+    color: var(--text-color, #1a1a1a);
+}
+
+.tab-context-menu .menu-item:hover {
+    background-color: var(--hover-color);
+}
+
+.tab-context-menu .menu-separator {
+    height: 1px;
+    background-color: var(--border-color);
+    margin: 0.25rem 0.375rem;
+}
+
+/* Dragging Visuals */
+.tab-ghost {
+    position: fixed;
+    pointer-events: none;
+    z-index: var(--z-drag);
+    background-color: var(--surface-primary);
+    border: 1px solid var(--accent-color);
+    box-shadow: 0 0.25rem 0.75rem rgba(0, 0, 0, 0.2);
+    padding: 0 0.5rem;
+    border-radius: 0.375rem;
+    height: 1.75rem;
+    display: flex;
+    align-items: center;
+    opacity: 0.9;
+    font-size: 0.85rem;
+    white-space: nowrap;
+    color: var(--text-color);
+    transform: translate(-50%, -50%);
+}
+
+.insertion-marker {
+    position: absolute;
+    width: 2px;
+    height: 1.25rem;
+    background-color: var(--accent-color);
+    border-radius: 1px;
+    pointer-events: none;
+    z-index: 20;
+    transition: left 0.1s ease-out;
+}
+
+.tab.dragging {
+    opacity: 0.4;
+    filter: grayscale(100%);
+}

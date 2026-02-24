@@ -1,0 +1,195 @@
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { invoke } from '@tauri-apps/api/core';
+import { useNavigation } from './useNavigation';
+import { useFiles, getSortedFiles } from './useFileSystem';
+import { useSelection } from './useSelection';
+import { usePanelSearch } from './usePanelSearch';
+
+import { useApp } from '../context/AppContext';
+import { ViewMode, SortConfig, ColumnWidths } from '../types';
+
+export const usePanel = (initialPath: string, panelId?: string, enableSync: boolean = true, activeTabId?: string) => {
+    const { showHidden, showSystem, searchLimit } = useApp();
+
+    // Navigation
+    const { path, history, historyIndex, currentEntry, navigate, goBack, goForward, goUp, updateCurrentSelection, setNavigationState } = useNavigation(initialPath);
+
+    const normalizedPanelId = useMemo(() => {
+        if (!panelId) return 'left' as 'left' | 'right';
+        return (panelId.startsWith('panel-') ? panelId.replace('panel-', '') : panelId) as 'left' | 'right';
+    }, [panelId]);
+
+    // Sync path with backend session
+    useEffect(() => {
+        if (panelId && enableSync) {
+            invoke('active_tab_navigate', { panelId: normalizedPanelId, path }).catch(err => {
+                console.error("Failed to sync navigation:", err);
+            });
+        }
+    }, [path, normalizedPanelId, enableSync]);
+
+    // View State with localStorage persistence
+    const [viewMode, setViewModeState] = useState<ViewMode>(() => {
+        if (panelId) {
+            const saved = localStorage.getItem(`viewMode_${panelId}`);
+            if (saved && ['grid', 'details'].includes(saved)) {
+                return saved as ViewMode;
+            }
+        }
+        return 'grid';
+    });
+
+    // Persist viewMode when it changes
+    const setViewMode = useCallback((mode: ViewMode) => {
+        setViewModeState(mode);
+        if (panelId) {
+            localStorage.setItem(`viewMode_${panelId}`, mode);
+        }
+    }, [panelId]);
+
+    const [sortConfig, setSortConfig] = useState<SortConfig>({ field: 'name', direction: 'asc' });
+
+    // Sync sortConfig with backend session
+    useEffect(() => {
+        if (panelId) {
+            invoke('update_sort_config', { panelId: normalizedPanelId, sortConfig }).catch(err => {
+                console.error("Failed to sync sort config:", err);
+            });
+        }
+    }, [sortConfig, normalizedPanelId]);
+
+    const [colWidths, setColWidths] = useState<ColumnWidths>({ name: 250, location: 200, type: 80, size: 80, date: 160, deletedDate: 160 });
+
+    // Search (extracted to usePanelSearch)
+    const {
+        searchQuery, searchResults, isSearching, searchLimitReached,
+        currentSearchRoot, setSearchQuery, setSearchResults,
+        setIsSearching, setSearchLimitReached
+    } = usePanelSearch({ path, panelId, activeTabId, searchLimit, initialPath });
+
+    // File System
+    const { sortedFiles, summary, isComplete, loading, error, refresh, updateFileSize, setFileCalculating } = useFiles(normalizedPanelId, path, sortConfig, showHidden, showSystem);
+
+    // Effective Files (Normal vs Search)
+    const displayFiles = useMemo(() => {
+        if (searchResults) {
+            return getSortedFiles(searchResults, sortConfig);
+        }
+        return sortedFiles;
+    }, [searchResults, sortedFiles, sortConfig]);
+
+    // Selection
+    const { selected, setSelected, lastSelectedPath, handleSelect, selectMultiple, clearSelection } = useSelection(displayFiles);
+
+    // Sync selection with current history entry when path changes (navigation)
+    const lastPathRef = useRef(path);
+    useEffect(() => {
+        if (path !== lastPathRef.current) {
+            lastPathRef.current = path;
+            const newSelected = new Set(currentEntry?.selected || []);
+            setSelected(newSet => {
+                if (newSet.size === newSelected.size && Array.from(newSet).every(p => newSelected.has(p))) {
+                    return newSet;
+                }
+                return newSelected;
+            });
+        }
+    }, [path, currentEntry, setSelected]);
+
+    // Update selection in history when it changes locally
+    useEffect(() => {
+        updateCurrentSelection(Array.from(selected));
+    }, [selected, updateCurrentSelection]);
+
+    // State Export/Import for Tabs
+    const getPanelState = useCallback(() => ({
+        path,
+        history,
+        historyIndex,
+        viewMode,
+        sortConfig,
+        searchQuery,
+        selected: Array.from(selected)
+    }), [path, history, historyIndex, viewMode, sortConfig, searchQuery, selected]);
+
+    const setPanelState = useCallback((state: any) => {
+        if (!state) return;
+        setNavigationState({
+            path: state.path,
+            history: state.history,
+            historyIndex: state.historyIndex
+        });
+        setViewMode(state.viewMode);
+        setSortConfig(state.sortConfig);
+        if (state.searchQuery !== undefined) setSearchQuery(state.searchQuery);
+        if (state.selected) setSelected(new Set(state.selected));
+    }, [setNavigationState, setViewMode, setSortConfig, setSearchQuery, setSelected]);
+
+    // Navigation helpers
+    const handleNavigate = useCallback((newPath: string, selection?: string[]) => {
+        navigate(newPath, selection || Array.from(selected));
+    }, [navigate, selected]);
+    const handleGoBack = useCallback(() => goBack(Array.from(selected)), [goBack, selected]);
+    const handleGoForward = useCallback(() => goForward(Array.from(selected)), [goForward, selected]);
+    const handleGoUp = useCallback(() => goUp(Array.from(selected)), [goUp, selected]);
+
+    return useMemo(() => ({
+        // State
+        path,
+        files: displayFiles,
+        loading,
+        error,
+        selected,
+        viewMode,
+        sortConfig,
+        history,
+        historyIndex,
+        searchQuery,
+        searchResults,
+        isSearching,
+        searchLimitReached,
+        summary,
+        isComplete,
+        colWidths,
+        lastSelectedPath,
+        currentSearchRoot,
+
+        // Actions
+        navigate: handleNavigate,
+        goBack: handleGoBack,
+        goForward: handleGoForward,
+        goUp: handleGoUp,
+        refresh,
+
+        setViewMode,
+        setSortConfig,
+        setColWidths,
+
+        setSearchQuery,
+        setSearchResults,
+        setIsSearching,
+        setSearchLimitReached,
+
+        handleSelect,
+        selectMultiple,
+        clearSelection,
+        setSelected,
+        updateFileSize,
+        setFileCalculating,
+
+        // Tab Support
+        getPanelState,
+        setPanelState
+    }), [
+        path, displayFiles, loading, error, selected, viewMode, sortConfig,
+        history, historyIndex, searchQuery, searchResults, isSearching, searchLimitReached,
+        summary, isComplete, currentSearchRoot,
+        colWidths, lastSelectedPath,
+        navigate, goBack, goForward, goUp, refresh,
+        setViewMode, setSortConfig, setColWidths,
+        setSearchQuery, setSearchResults, setIsSearching, setSearchLimitReached,
+        handleSelect, selectMultiple, clearSelection, setSelected, updateFileSize, setFileCalculating,
+        getPanelState, setPanelState
+    ]);
+};
+

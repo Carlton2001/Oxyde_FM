@@ -1,0 +1,171 @@
+/* Shared PathBar & Breadcrumbs styles */
+
+.path-bar,
+.path-breadcrumbs {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    background-color: var(--surface-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 0.375rem;
+    padding: 0 0.75rem;
+    color: var(--text-color);
+    font-size: 0.8125rem;
+    display: flex;
+    align-items: center;
+    overflow: hidden;
+    height: 2rem;
+    pointer-events: auto;
+    outline: none;
+    font-family: inherit;
+    -webkit-app-region: no-drag;
+    cursor: default;
+    transition: all 0.15s;
+}
+
+.path-breadcrumbs .path-icon.header-icon {
+    flex-shrink: 0;
+    margin-right: 0.5rem;
+    color: var(--icon-default);
+}
+
+.path-breadcrumbs.editing {
+    background-color: var(--surface-primary);
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 1px var(--accent-color);
+}
+
+.path-input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--text-color);
+    font-family: inherit;
+    font-size: inherit;
+    min-width: 0;
+    padding: 0;
+    margin: 0;
+    height: 100%;
+}
+
+.breadcrumb-list {
+    display: flex;
+    align-items: stretch;
+    height: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    white-space: nowrap;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.breadcrumb-list::-webkit-scrollbar {
+    display: none;
+}
+
+.breadcrumb-list.overflowing {
+    mask-image: linear-gradient(to right, transparent, black 1rem);
+    -webkit-mask-image: linear-gradient(to right, transparent, black 1rem);
+}
+
+.breadcrumb-spacer {
+    flex: 1;
+    height: 100%;
+    cursor: default;
+    min-width: 2rem;
+}
+
+.path-segment {
+    display: flex;
+    align-items: center;
+    padding: 0 0.375rem;
+    margin: 2px 0;
+    border-radius: 0.25rem;
+    transition: background 0.1s;
+    white-space: nowrap;
+    flex-shrink: 0;
+    cursor: default;
+}
+
+.path-segment:hover {
+    background-color: var(--hover-color);
+}
+
+.path-separator {
+    color: var(--text-muted);
+    opacity: 0.5;
+    margin: 2px 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    cursor: default;
+    border-radius: 0.25rem;
+    padding: 0 0.25rem;
+    transition: all 0.15s;
+}
+
+.path-separator:hover,
+.path-separator.active {
+    opacity: 1;
+    color: var(--accent-color);
+    background-color: var(--hover-color);
+}
+
+.breadcrumb-menu {
+    background-color: var(--surface-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+    min-width: 192px;
+    max-width: 320px;
+    max-height: 400px;
+    overflow-y: auto;
+    z-index: 3000;
+    padding: 4px;
+    animation: menuFadeIn 0.15s ease-out;
+}
+
+.breadcrumb-menu .menu-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 0.8125rem;
+    cursor: default;
+    transition: background 0.1s;
+    color: var(--text-color);
+}
+
+.breadcrumb-menu .menu-item:hover {
+    background-color: var(--hover-color);
+    color: var(--text-color);
+}
+
+.breadcrumb-menu .menu-separator {
+    height: 1px;
+    background-color: var(--border-color);
+    margin: 4px 6px;
+}
+
+.breadcrumb-menu .menu-loading,
+.breadcrumb-menu .menu-empty {
+    padding: 0.75rem;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    text-align: center;
+}
+
+@keyframes menuFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-0.5rem);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}

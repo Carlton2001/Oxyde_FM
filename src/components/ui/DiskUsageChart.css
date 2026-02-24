@@ -1,0 +1,14 @@
+.disk-usage-chart-container {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    gap: 0.25rem;
+}
+
+.disk-usage-chart-text {
+    font-size: 0.7rem;
+    color: var(--text-secondary, #aaa);
+    font-weight: 500;
+}

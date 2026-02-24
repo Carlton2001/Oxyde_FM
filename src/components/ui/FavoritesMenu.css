@@ -1,0 +1,12 @@
+.favorites-menu-container {
+    position: relative;
+    display: flex;
+}
+
+.drive-chip.favorites-btn {
+    cursor: default;
+}
+
+.drive-icon-btn.favorites-btn {
+    cursor: default;
+}

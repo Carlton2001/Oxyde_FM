@@ -1,0 +1,38 @@
+[data-theme="one-light"] {
+    --bg-color: #fafafa;
+    --bg-color-rgb: 250, 250, 250;
+    --text-color: #383a42;
+    --text-muted: #a0a1a7;
+    --sidebar-bg: #f3f3f3;
+    --header-bg: #fafafa;
+    --hover-color: #e5e5e6;
+    --accent-color: #4078f2;
+    --accent-color-rgb: 64, 120, 242;
+    --selected-text: #ffffff;
+    --border-color: #e8e8e8;
+    --border-color-rgb: 232, 232, 232;
+    --surface-primary: #ffffff;
+    --surface-secondary: #f3f3f3;
+    --dimmed-opacity: 0.6;
+
+    --menu-bg: #ffffff;
+    --menu-border: #e8e8e8;
+    --menu-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+
+    --scrollbar-bg: transparent;
+    --scrollbar-thumb: #dcdfe4;
+    --scrollbar-thumb-hover: #abb2bf;
+
+    --icon-default: #a0a1a7;
+    --icon-folder: #4078f2;
+    --icon-image: #50a14f;
+    --icon-audio: #a626a4;
+    --icon-video: #e45649;
+    --icon-exec: #986801;
+    --icon-archive: #c18401;
+    --icon-pdf: #e45649;
+    --icon-code: #0184bc;
+    --icon-disk: #a0a1a7;
+
+    --histogram-opacity: 0.2;
+}

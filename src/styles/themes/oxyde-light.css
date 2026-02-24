@@ -1,0 +1,46 @@
+[data-theme="oxyde-light"] {
+    /* Opus Light — Warm ivory & sapphire, editorial elegance */
+    --bg-color: #faf8f5;
+    --bg-color-rgb: 250, 248, 245;
+    --text-color: #1e1e2e;
+    --text-muted: #6b6880;
+    --sidebar-bg: #f3f0ea;
+    --header-bg: #fffdfb;
+    /* True Ivory */
+
+    --hover-color: #edeae4;
+    --accent-color: #3d5af1;
+    --accent-color-rgb: 61, 90, 241;
+    --selected-text: #ffffff;
+
+    --border-color: #ddd8cf;
+    --border-color-rgb: 221, 216, 207;
+
+    --surface-primary: #fffdfb;
+    --surface-secondary: #f5f2ec;
+    --dimmed-opacity: 0.55;
+
+    /* Components */
+    --menu-bg: #fffdfb;
+    --menu-border: #e2ddd4;
+    --menu-shadow: 0 0.5rem 1.5rem rgba(30, 30, 46, 0.10);
+
+    /* Scrollbar */
+    --scrollbar-bg: transparent;
+    --scrollbar-thumb: #d4cfc5;
+    --scrollbar-thumb-hover: #bfb9ad;
+
+    /* File Icons — Rich jewel tones on warm canvas */
+    --icon-default: #6b6880;
+    --icon-folder: #3d5af1;
+    --icon-image: #2d8c5a;
+    --icon-audio: #8b5cf6;
+    --icon-video: #d14d72;
+    --icon-exec: #c87518;
+    --icon-archive: #8d6748;
+    --icon-pdf: #d93636;
+    --icon-code: #0891b2;
+    --icon-disk: #7c7f8a;
+
+    --histogram-opacity: 0.18;
+}

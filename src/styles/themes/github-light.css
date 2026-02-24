@@ -1,0 +1,38 @@
+[data-theme="github-light"] {
+    --bg-color: #ffffff;
+    --bg-color-rgb: 255, 255, 255;
+    --text-color: #1f2328;
+    --text-muted: #656d76;
+    --sidebar-bg: #f6f8fa;
+    --header-bg: #ffffff;
+    --hover-color: #f0f2f4;
+    --accent-color: #0969da;
+    --accent-color-rgb: 9, 105, 218;
+    --selected-text: #ffffff;
+    --border-color: #d0d7de;
+    --border-color-rgb: 208, 215, 222;
+    --surface-primary: #ffffff;
+    --surface-secondary: #f6f8fa;
+    --dimmed-opacity: 0.6;
+
+    --menu-bg: #ffffff;
+    --menu-border: #d0d7de;
+    --menu-shadow: 0 8px 24px rgba(140, 149, 159, 0.2);
+
+    --scrollbar-bg: transparent;
+    --scrollbar-thumb: #d0d7de;
+    --scrollbar-thumb-hover: #afb8c1;
+
+    --icon-default: #656d76;
+    --icon-folder: #54aeff;
+    --icon-image: #1a7f37;
+    --icon-audio: #8250df;
+    --icon-video: #cf222e;
+    --icon-exec: #953800;
+    --icon-archive: #8250df;
+    --icon-pdf: #cf222e;
+    --icon-code: #0550ae;
+    --icon-disk: #656d76;
+
+    --histogram-opacity: 0.2;
+}

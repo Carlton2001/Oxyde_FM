@@ -1,0 +1,50 @@
+[data-theme="solarized-light"] {
+    /* Colors */
+    --bg-color: #eee8d5;
+    /* Base2 */
+    --text-color: #657b83;
+    /* Base00 */
+    --text-muted: #93a1a1;
+    /* Base1 */
+    --sidebar-bg: #eee8d5;
+    /* Base2 */
+    --header-bg: #eee8d5;
+    --hover-color: #ddd6c3;
+    --accent-color: #d33682;
+    --accent-color-rgb: 211, 54, 130;
+    --selected-text: #fdf6e3;
+    --border-color: #d6d6d6;
+    --surface-primary: #fdf6e3;
+    --surface-secondary: #eee8d5;
+    --dimmed-opacity: 0.6;
+
+    /* Components */
+    --menu-bg: #fdf6e3;
+    --menu-border: #93a1a1;
+    --menu-shadow: 0 0.15rem 0.5rem rgba(0, 0, 0, 0.1);
+
+    /* Scrollbar */
+    --scrollbar-bg: #fdf6e3;
+    --scrollbar-thumb: #93a1a1;
+    --scrollbar-thumb-hover: #586e75;
+
+    /* File Icons */
+    --icon-default: #657b83;
+    --icon-folder: #268bd2;
+    /* Blue */
+    --icon-image: #859900;
+    /* Green */
+    --icon-audio: #6c71c4;
+    /* Violet */
+    --icon-video: #dc322f;
+    /* Red */
+    --icon-exec: #b58900;
+    /* Yellow */
+    --icon-archive: #cb4b16;
+    /* Orange */
+    --icon-pdf: #dc322f;
+    --icon-code: #2aa198;
+    /* Cyan */
+    --icon-disk: #93a1a1;
+}
+

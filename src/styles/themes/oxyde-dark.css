@@ -1,0 +1,45 @@
+[data-theme="oxyde-dark"] {
+    /* Opus Dark — Deep indigo night & amber gold, luxurious contrast */
+    --bg-color: #13111c;
+    --bg-color-rgb: 19, 17, 28;
+    --text-color: #e6e1f0;
+    --text-muted: #8e89a5;
+    --sidebar-bg: #0e0c15;
+    --header-bg: #16131f;
+
+    --hover-color: #2e2847;
+    --accent-color: #d4a54a;
+    --accent-color-rgb: 212, 165, 74;
+    --selected-text: #0e0c15;
+
+    --border-color: #272336;
+    --border-color-rgb: 39, 35, 54;
+
+    --surface-primary: #1a1726;
+    --surface-secondary: #151220;
+    --dimmed-opacity: 0.5;
+
+    /* Components */
+    --menu-bg: #1c1930;
+    --menu-border: #302b45;
+    --menu-shadow: 0 0.5rem 2rem rgba(0, 0, 0, 0.55);
+
+    /* Scrollbar */
+    --scrollbar-bg: transparent;
+    --scrollbar-thumb: #302b45;
+    --scrollbar-thumb-hover: #3e3858;
+
+    /* File Icons — Luminous on deep indigo */
+    --icon-default: #b0acc0;
+    --icon-folder: #d4a54a;
+    --icon-image: #6dd58c;
+    --icon-audio: #c69dff;
+    --icon-video: #ff7eb3;
+    --icon-exec: #f5a623;
+    --icon-archive: #c4a882;
+    --icon-pdf: #ff6b6b;
+    --icon-code: #56d4c8;
+    --icon-disk: #8e89a5;
+
+    --histogram-opacity: 0.35;
+}

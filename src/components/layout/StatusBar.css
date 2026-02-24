@@ -1,0 +1,66 @@
+/* StatusBar */
+.status-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 0 0 0.5rem;
+    height: 100%;
+    width: 100%;
+    font-size: 0.75rem;
+    color: var(--text-color);
+    user-select: none;
+    flex-shrink: 0;
+    gap: 1rem;
+}
+
+.status-info {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 500;
+}
+
+.status-info .separator {
+    opacity: 0.3;
+    margin: 0 0.5rem;
+}
+
+.status-section.selected {
+    color: var(--accent-color);
+}
+
+.status-section .size {
+    font-weight: 400;
+}
+
+.view-switcher {
+    display: flex;
+    gap: 2px;
+}
+
+.view-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    color: var(--text-color);
+    transition: all 0.1s;
+    width: 1.5rem;
+    height: 1.5rem;
+    border-radius: 0.25rem;
+    padding: 0;
+    opacity: 0.6;
+}
+
+.view-btn:hover {
+    background-color: var(--hover-color);
+    opacity: 1;
+}
+
+.view-btn.active {
+    background-color: var(--accent-color);
+    color: #ffffff;
+    /* Always white on accent */
+    opacity: 1;
+}

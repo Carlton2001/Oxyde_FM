@@ -1,0 +1,867 @@
+/* Panels */
+.panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid var(--border-color);
+    position: relative;
+    overflow: hidden;
+    background-color: var(--bg-color);
+}
+
+.panel:last-child {
+    border-right: none;
+}
+
+.panel.active.dual,
+.panel.standard {
+    background-color: var(--surface-primary);
+    box-shadow: inset 0 0 0.5rem rgba(0, 0, 0, 0.05);
+}
+
+.panel.active.dual {
+    border-top: 1px solid var(--system-accent, var(--accent-color));
+}
+
+.panel.dual {
+    transition: background-color 0.2s, border-top-color 0.2s;
+    border-top: 1px solid transparent;
+}
+
+.panel-navigation {
+    display: flex;
+    flex-direction: column;
+    background-color: var(--surface-secondary);
+    padding: 0.5rem 0.5rem 0 0.5rem;
+
+    /* vertical separation between children */
+    border-bottom: 1px solid var(--border-color);
+}
+
+.panel-path-bar {
+    padding: 0;
+}
+
+.panel-header {
+    display: flex;
+    align-items: center;
+    height: 2.5rem;
+    padding: 0;
+    background-color: transparent;
+    /* Changed to transparent as parent now manages the block */
+    border: none;
+    /* Removed border as it's now a floating group of controls */
+    gap: 0.5rem;
+    flex-shrink: 0;
+    overflow: hidden;
+}
+
+/* Search Module (Layout only) */
+.search-module {
+    margin-left: auto;
+    width: 9.17rem;
+    max-width: 45%;
+    display: flex;
+    align-items: center;
+    height: 100%;
+}
+
+.search-module .search-box {
+    height: 1.875rem;
+}
+
+
+.search-status-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    width: 100%;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.search-results-count {
+    color: var(--text-color);
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+}
+
+.close-search-header-btn {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    background: var(--surface-primary);
+    border: 1px solid var(--menu-border);
+    border-radius: 0.25rem;
+    padding: 2px 0.5rem;
+    font-size: 0.6875rem;
+    color: var(--text-color);
+    transition: all 0.15s ease;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.close-search-header-btn:hover {
+    background-color: var(--hover-color);
+    border-color: var(--accent-color);
+}
+
+.close-search-header-btn svg {
+    opacity: 0.7;
+}
+
+/* Icon Colors */
+.file-icon {
+    color: var(--icon-default);
+}
+
+.file-icon.folder {
+    color: var(--icon-folder);
+}
+
+.file-icon.image {
+    color: var(--icon-image);
+}
+
+.file-icon.audio {
+    color: var(--icon-audio);
+}
+
+.file-icon.video {
+    color: var(--icon-video);
+}
+
+.file-icon.executable {
+    color: var(--icon-exec);
+}
+
+.file-icon.archive {
+    color: var(--icon-archive);
+}
+
+.file-icon.pdf {
+    color: var(--icon-pdf);
+}
+
+.file-icon.code {
+    color: var(--icon-code);
+}
+
+.file-icon.disk {
+    color: var(--icon-disk);
+}
+
+.system-icon-img {
+    object-fit: contain;
+    image-rendering: -webkit-optimize-contrast;
+    /* Sharp icons on Windows */
+    transition: transform 0.1s ease;
+    user-select: none;
+    -webkit-user-drag: none;
+    pointer-events: none;
+}
+
+
+
+/* Grid View Specific Icon Sizing */
+.file-list.grid .file-icon,
+.virtualized-list.grid .file-icon {
+    width: 100%;
+    height: 3.25rem;
+    /* Fixed height for consistent grid layout */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 2px;
+    flex-shrink: 0;
+    overflow: hidden;
+}
+
+.file-list.grid .system-icon-img,
+.virtualized-list.grid .system-icon-img,
+.thumbnail-img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    transition: transform 0.15s ease-out;
+}
+
+
+
+/* Base File Item (Shared) */
+.file-list {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: auto;
+    padding: 0 0.5rem 0.5rem 0.5rem;
+    scrollbar-gutter: stable;
+    background: transparent;
+    position: relative;
+}
+
+.file-item {
+    display: flex;
+    align-items: center;
+    border-radius: 0.375rem;
+    /* Unified radius */
+    box-sizing: border-box;
+    position: relative;
+    /* Performance: isolate paint/layout for virtualized lists */
+    contain: layout style paint;
+}
+
+.file-item:hover {
+    background-color: var(--hover-color);
+}
+
+.size-histogram-bar {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    z-index: 0;
+    background-color: var(--accent-color);
+    opacity: var(--histogram-opacity, 0.18);
+    pointer-events: none;
+    transition: width 0.3s ease-out;
+}
+
+.panel.active .file-item.selected .size-histogram-bar {
+    background-color: rgba(255, 255, 255, 0.25);
+    opacity: 1;
+}
+
+
+
+.panel.active .file-item.selected {
+    background-color: color-mix(in srgb, var(--accent-color), transparent 85%);
+    box-shadow: inset 3px 0 0 0 var(--accent-color);
+    color: var(--text-color);
+}
+
+
+.panel:not(.active) .file-item.selected {
+    background-color: color-mix(in srgb, var(--accent-color), transparent 94%);
+    box-shadow: inset 3px 0 0 0 color-mix(in srgb, var(--accent-color), transparent 50%);
+}
+
+.file-name {
+    font-size: 0.8125rem;
+    line-height: normal;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    position: relative;
+    z-index: 1;
+}
+
+/* Grid View Overrides */
+.file-list.grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(6.875rem, 1fr));
+    gap: 0.5rem;
+    align-content: start;
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+}
+
+.file-list.grid .file-item,
+.virtualized-list.grid .file-item {
+    flex-direction: column;
+    justify-content: center;
+    text-align: center;
+    padding: 0.4rem;
+    height: 100%;
+    width: 100%;
+    min-width: 0;
+    border: 1px solid transparent;
+    border-radius: 0.5rem;
+    /* Smoother corners for grid items */
+    position: relative;
+    overflow: visible;
+    transition: background-color 0.15s, border-color 0.15s;
+}
+
+/* Specific Selection for Grid */
+.panel.active .file-list.grid .file-item.selected,
+.panel.active .virtualized-list.grid .file-item.selected {
+    background-color: color-mix(in srgb, var(--accent-color), transparent 85%);
+    border-color: var(--accent-color);
+    box-shadow: none;
+    /* Remove the left indicator from detail view */
+}
+
+.panel:not(.active) .file-list.grid .file-item.selected,
+.panel:not(.active) .virtualized-list.grid .file-item.selected {
+    background-color: color-mix(in srgb, var(--accent-color), transparent 94%);
+    border-color: color-mix(in srgb, var(--accent-color), transparent 60%);
+    box-shadow: none;
+}
+
+
+.file-view-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    min-height: 0;
+}
+
+.file-list.grid .file-name,
+.virtualized-list.grid .file-name {
+    max-width: 100%;
+}
+
+
+
+/* Details View Overrides */
+.file-list.details {
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+}
+
+.file-list.details .file-item,
+.virtualized-list.details .file-item {
+    display: grid !important;
+    grid-template-columns: var(--grid-template);
+    align-items: stretch;
+    height: 1.75rem;
+    flex-shrink: 0;
+    box-sizing: border-box;
+    border-bottom: 1px solid transparent;
+    border-radius: 0;
+    font-size: 0.8125rem;
+    position: relative;
+    user-select: none;
+    transition: background-color 0.1s;
+    width: max-content;
+}
+
+/* Trash mode & search mode: grid-template-columns is now generated in JS via --grid-template */
+.file-list.details.trash-mode .file-item,
+.virtualized-list.details.trash-mode .file-item,
+.file-header.trash-mode {
+    display: grid !important;
+    grid-template-columns: var(--grid-template) !important;
+}
+
+.file-list.details .file-item>*:not(.size-histogram-bar),
+.virtualized-list.details .file-item>*:not(.size-histogram-bar) {
+    display: flex;
+    align-items: center;
+    height: 100%;
+}
+
+.file-list.details.search-mode .file-item,
+.virtualized-list.details.search-mode .file-item {
+    display: grid !important;
+    grid-template-columns: var(--grid-template);
+}
+
+.file-header {
+    display: grid !important;
+    grid-template-columns: var(--grid-template);
+    align-items: center;
+    height: 2rem;
+    padding: 0 0.5rem;
+    border-bottom: 1px solid var(--border-color);
+    font-size: 0.75rem;
+    font-weight: 600;
+    background-color: var(--bg-color);
+    position: sticky;
+    top: 0;
+    z-index: var(--z-sticky-header);
+    flex-shrink: 0;
+    color: var(--text-color);
+    scrollbar-gutter: stable;
+    width: max-content;
+    min-width: 100%;
+    box-sizing: border-box;
+}
+
+/* Search mode header: grid-template-columns now generated in JS */
+.file-header.search-mode {
+    grid-template-columns: var(--grid-template);
+}
+
+
+
+.header-selection-gutter {
+    position: absolute;
+    left: 0;
+    top: 0;
+    height: 2rem;
+    width: 0.5rem;
+    /* Matches .file-header padding-left */
+    z-index: 20;
+}
+
+.header-selection-gutter:hover {
+    background-color: var(--hover-color);
+}
+
+
+
+.file-name-group {
+    display: flex;
+    align-items: stretch;
+    gap: 0.2rem;
+    flex: 1;
+    min-width: 0;
+    /* Was 6.25rem (100px) - Changed to 0 to allow full manual resize down to content width */
+    overflow: hidden;
+    padding: 0 0.5rem;
+    position: relative;
+}
+
+.file-name-group>*:not(.size-histogram-bar) {
+    position: relative;
+    z-index: 1;
+}
+
+.file-icon-small {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.25rem;
+    height: 100%;
+    flex-shrink: 0;
+    position: relative;
+    z-index: 2;
+}
+
+.file-name-container {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    padding-left: 0.25rem;
+}
+
+.file-icon-small svg {
+    display: block;
+}
+
+.col {
+    display: flex;
+    align-items: center;
+    padding: 0 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    position: relative;
+    height: 100%;
+    flex-shrink: 0;
+    min-width: 0;
+    /* Allow column content to shrink */
+}
+
+.header-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 0 1 auto;
+    min-width: 0;
+}
+
+.col:hover {
+    background-color: var(--hover-color);
+}
+
+.col-name {
+    flex: 1;
+    min-width: 0;
+    /* Was 6.25rem (100px) - Changed to 0 to allow full manual resize down to content width */
+}
+
+.sort-arrow {
+    margin-left: 0.25rem;
+    opacity: 0.5;
+}
+
+.file-item.diff .file-name {
+    color: #ff4d4d !important;
+}
+
+.file-item.diff .file-info {
+    color: #ff4d4d !important;
+    opacity: 0.8;
+}
+
+.file-info,
+.col-type,
+.col-location,
+.col-size,
+.col-date {
+    padding: 0 0.5rem;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    height: 100%;
+    min-width: 0 !important;
+    overflow: hidden;
+}
+
+.file-info.col-size {
+    justify-content: flex-end;
+    text-align: right;
+}
+
+.text-truncate {
+    display: block;
+    width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.file-list.grid .file-icon,
+.virtualized-list.grid .file-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    margin-top: 0.25rem;
+    margin-bottom: 0.125rem;
+}
+
+
+
+.panel.active .file-item.selected .file-info {
+    color: var(--text-muted);
+}
+
+/* Semi-transparency for hidden/system/cut files - target content only, not the selection box */
+.file-item.hidden .file-icon,
+.file-item.hidden .file-icon-small,
+.file-item.hidden .system-icon-img,
+.file-item.hidden .file-name,
+.file-item.hidden .file-info,
+.file-item.system-file .file-icon,
+.file-item.system-file .file-icon-small,
+.file-item.system-file .system-icon-img,
+.file-item.system-file .file-name,
+.file-item.system-file .file-info,
+.file-item.cut .file-icon,
+.file-item.cut .file-icon-small,
+.file-item.cut .system-icon-img,
+.file-item.cut .file-name,
+.file-item.cut .file-info {
+    opacity: var(--dimmed-opacity);
+}
+
+.resize-handle {
+    position: absolute;
+    right: -3px;
+    top: 0;
+    bottom: 0;
+    width: 0.375rem;
+    cursor: col-resize;
+    z-index: var(--z-resize);
+    background-color: transparent;
+}
+
+.resize-handle::after {
+    content: '';
+    position: absolute;
+    left: 2px;
+    transform: none;
+    top: 0.25rem;
+    bottom: 0.25rem;
+    width: 2px;
+    border-radius: 1px;
+    background-color: var(--border-color);
+    opacity: 0.5;
+    transition: background-color 0.15s, opacity 0.15s;
+}
+
+/* Ensure resize handles are always accessible but don't force width */
+.file-header .col-type,
+.file-header .col-size,
+.file-header .col-date,
+.file-header .col-location {
+    overflow: visible;
+}
+
+.resize-handle:hover::after,
+.resize-handle:active::after {
+    background-color: var(--accent-color);
+    opacity: 1;
+}
+
+.empty-msg {
+    position: absolute;
+    top: 3rem;
+    left: 0;
+    right: 0;
+    display: flex;
+    justify-content: center;
+    color: var(--text-muted);
+    font-size: 0.8125rem;
+    font-style: italic;
+    opacity: 0.7;
+    pointer-events: none;
+}
+
+/* Drag Selection Rect */
+.selection-rect {
+    position: absolute;
+    background-color: rgba(var(--accent-color-rgb), 0.2);
+    border: 1px solid var(--accent-color);
+    pointer-events: none;
+    z-index: var(--z-drag);
+}
+
+.file-item.drop-target {
+    background-color: rgba(var(--accent-color-rgb), 0.15);
+    outline: 2px dashed var(--accent-color);
+    outline-offset: -2px;
+}
+
+.rename-input {
+    flex: 1;
+    width: auto;
+    height: 1.4rem;
+    /* More compact than the 1.75rem row */
+    padding: 0 0.375rem;
+    background-color: var(--bg-color) !important;
+    color: var(--text-color) !important;
+    border: 1px solid var(--accent-color) !important;
+    /* Subtle border without the heavy halo */
+    font-family: inherit;
+    font-size: 0.8125rem;
+    outline: none !important;
+    box-sizing: border-box;
+    border-radius: 0.25rem;
+    margin: 0;
+    line-height: 1.35rem;
+    /* Stabilized line-height for vertical centering inside the input */
+}
+
+.rename-input::selection {
+    background-color: rgba(var(--accent-color-rgb), 0.3);
+    color: var(--text-color);
+}
+
+.rename-input.grid-mode {
+    text-align: center;
+    width: 100%;
+    height: 1.8rem;
+    font-size: 0.8125rem;
+    position: relative;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15), 0 0 0 2px var(--accent-color) !important;
+    z-index: 10;
+    background-color: var(--bg-color) !important;
+}
+
+.grid-name-wrapper {
+    position: relative;
+    width: 100%;
+    min-height: 2.5em;
+    /* Increased for two lines of text */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.grid-name-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    min-width: 0;
+}
+
+.file-extension {
+    font-size: 0.625rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    margin-top: 0.125rem;
+    opacity: 0.7;
+    letter-spacing: 0.025em;
+}
+
+/* Virtualized List Styles */
+.file-list.virtualized.grid {
+    padding: 0.3rem 0 0 0.2rem !important;
+    overflow: hidden !important;
+    display: block !important;
+    width: calc(100% + 0.875rem) !important;
+    margin-right: -0.875rem;
+}
+
+.file-list.virtualized.details {
+    padding: 0 !important;
+    overflow: hidden !important;
+    display: block !important;
+    width: calc(100% + 0.875rem) !important;
+    margin-right: -0.875rem;
+}
+
+.virtualized-list {
+    width: 100% !important;
+    height: 100%;
+    overflow: visible;
+    position: relative;
+}
+
+/* Force inner scroll container to respect layout */
+.virtualized-list>div {
+    scrollbar-gutter: stable;
+}
+
+/* Scroller padding adjustments */
+.virtualized-scroller {
+    box-sizing: border-box;
+    scrollbar-gutter: stable;
+    overflow: auto !important;
+}
+
+.virtualized-scroller.details,
+.virtualized-scroller.grid {
+    padding: 0 0 0.5rem 0 !important;
+}
+
+
+/* Footer Layout (Fixed Status Bar) */
+.panel-footer {
+    display: flex;
+    align-items: center;
+    background-color: var(--surface-secondary);
+    border-top: 1px solid var(--border-color);
+    padding: 0.25rem 0.5rem;
+    flex-shrink: 0;
+    min-height: 1.875rem;
+}
+
+/* Status Bar overrides when in footer */
+.panel-footer .status-bar {
+    position: static;
+    pointer-events: auto;
+    margin: 0;
+    bottom: auto;
+    right: auto;
+}
+
+/* Scroll Button updates */
+.scroll-to-top-btn {
+    position: absolute;
+    bottom: 3.5rem;
+    right: 1.25rem;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 0.375rem;
+    background-color: var(--accent-color);
+    color: white;
+    border: none;
+    box-shadow: 0 0.25rem 0.75rem rgba(0, 0, 0, 0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.2s, background-color 0.2s, opacity 0.2s;
+    animation: scrollFadeIn 0.2s ease-out;
+    pointer-events: auto;
+    z-index: 60;
+}
+
+.scroll-to-top-btn:hover {
+    transform: translateY(-2px);
+    background-color: color-mix(in srgb, var(--accent-color), white 10%);
+}
+
+.scroll-to-top-btn:active {
+    transform: translateY(0);
+}
+
+@keyframes scrollFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(0.625rem);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Search Limit Warning Banner */
+.search-limit-banner {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    background: linear-gradient(90deg, rgba(255, 193, 7, 0.15), rgba(255, 152, 0, 0.1));
+    border-bottom: 1px solid rgba(255, 193, 7, 0.3);
+    color: var(--text-color);
+    font-size: 0.8125rem;
+    flex-shrink: 0;
+}
+
+.search-limit-banner .search-limit-icon {
+    font-size: 1rem;
+}
+
+/* Checkbox Selection */
+.item-checkbox {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.25rem;
+    height: 100%;
+    flex-shrink: 0;
+    cursor: default;
+    z-index: 3;
+}
+
+.checkbox-indicator {
+    width: 1rem;
+    height: 1rem;
+    border-radius: 0.25rem;
+    border: 1px solid var(--border-color);
+    background: var(--bg-color);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    position: relative;
+    flex-shrink: 0;
+    transform: translateY(0.5px);
+    /* Align optically with icons/text */
+}
+
+.checkbox-indicator:hover {
+    border-color: var(--accent-color);
+}
+
+.checkbox-indicator.checked {
+    background-color: var(--accent-color);
+    border-color: var(--accent-color);
+    color: white;
+    /* For the Check icon */
+}
+
+/* Grid checkbox positioning */
+.grid-checkbox {
+    position: absolute;
+    top: 0.25rem;
+    left: 0.25rem;
+    width: auto;
+    height: auto;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+    z-index: 5;
+}
+
+.file-item:hover .grid-checkbox,
+.file-item.selected .grid-checkbox {
+    opacity: 1;
+}
