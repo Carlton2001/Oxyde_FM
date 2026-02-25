@@ -3,7 +3,7 @@ import {
     Copy, Scissors, Trash2, ClipboardPaste,
     ChevronDown, ChevronUp, Undo2, Redo2,
     FolderPlus, Edit2, Settings, ExternalLink, RotateCcw,
-    Archive, Box, FileArchive, Star, ListOrdered, Check
+    Archive, Box, FileArchive, Star, ListOrdered, Check, MoreHorizontal
 } from 'lucide-react';
 import { TFunc } from '../../../i18n';
 import { DriveInfo, SortConfig, SortField, SortDirection } from '../../../types';
@@ -29,6 +29,7 @@ export interface MenuItem extends Partial<MenuAction> {
     children?: MenuItem[];
     danger?: boolean;
     color?: string; // Explicit color override
+    data?: any;
 }
 
 export interface MenuContext {
@@ -380,6 +381,18 @@ export function getMenuItems(ctx: MenuContext): MenuItem[] {
             label: t('sort_by' as any),
             icon: ListOrdered,
             children: sortItems
+        });
+    }
+
+    // --- 9. Native Shell Integration ---
+    if (target && !isTrashContext) {
+        items.push({ id: 'sep_native', type: 'separator' });
+        items.push({
+            id: 'more_options',
+            type: 'native_menu',
+            label: t('more_options' as any),
+            icon: MoreHorizontal,
+            data: { target, isBackground: !!isBackground }
         });
     }
 

@@ -2,7 +2,7 @@
   "name": "oxyde-fm",
   "private": false,
   "author": "Carlton2001",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Explorateur de fichiers moderne, rapide et personnalisable construit avec Tauri, React et Rust.",
   "license": "GPL-3.0-or-later",
   "type": "module",
