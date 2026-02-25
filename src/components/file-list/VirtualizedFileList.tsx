@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { List, Grid, RowComponentProps, CellComponentProps } from 'react-window';
 import { AutoSizer } from 'react-virtualized-auto-sizer';
 import cx from 'classnames';
-import { Check } from 'lucide-react';
+import { Check, Shield } from 'lucide-react';
 
 import { FileEntry, ViewMode, DateFormat, ColumnWidths } from '../../types';
 import { formatSize, formatDate, getFileTypeString } from '../../utils/format';
@@ -94,7 +94,7 @@ const DetailsRow = React.memo((props: RowComponentProps<SharedItemProps>) => {
     const entry = entries[index];
     if (!entry) return null;
 
-    const { isSelected, isRenaming, tooltipText, itemClassName, handlers } = useFileItemState({
+    const { isSelected, isRenaming, isProtected, tooltipText, itemClassName, handlers } = useFileItemState({
         entry, selected, pendingSelection, renamingPath,
         isDragging, dragOverPath, cutPathsSet, diffPaths,
         isTrashView, dateFormat, t,
@@ -155,7 +155,10 @@ const DetailsRow = React.memo((props: RowComponentProps<SharedItemProps>) => {
                         </div>
                     </div>
                 )}
-                <div className="file-icon-small">{getIcon(entry)}</div>
+                <div className="file-icon-small">
+                    {getIcon(entry)}
+                    {isProtected && <Shield className="protected-shield-badge" size={12} fill="currentColor" />}
+                </div>
                 <div className="file-name-container">
                     {isRenaming ? (
                         <RenameInput
@@ -222,7 +225,7 @@ const GridCell = React.memo((props: CellComponentProps<SharedItemProps>) => {
     const entry = entries[index];
     if (!entry) return null;
 
-    const { isSelected, isRenaming, tooltipText, itemClassName, handlers } = useFileItemState({
+    const { isSelected, isRenaming, isProtected, tooltipText, itemClassName, handlers } = useFileItemState({
         entry, selected, pendingSelection, renamingPath,
         isDragging, dragOverPath, cutPathsSet, diffPaths,
         isTrashView, dateFormat, t,
@@ -280,7 +283,10 @@ const GridCell = React.memo((props: CellComponentProps<SharedItemProps>) => {
                         </div>
                     </div>
                 )}
-                <div className="file-icon">{getIcon(entry, 38)}</div>
+                <div className="file-icon">
+                    {getIcon(entry, 38)}
+                    {isProtected && <Shield className="protected-shield-badge grid" size={24} fill="currentColor" />}
+                </div>
                 <div className="grid-name-wrapper">
                     {isRenaming ? (
                         <RenameInput

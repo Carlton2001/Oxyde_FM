@@ -50,6 +50,7 @@ pub fn get_file_entry_from_metadata(metadata: &fs::Metadata, name: &str, path: &
         size,
         modified,
         is_readonly,
+        is_protected: false,
         is_calculated: false,
         original_path: None,
         deleted_time: None,
@@ -106,7 +107,7 @@ pub async fn list_dir(
     }
     };
 
-    let (mut all_entries, summary) = if let Some(cached) = cached_all_entries {
+    let (mut all_entries, _summary) = if let Some(cached) = cached_all_entries {
         cached
     } else {
         // 2. Cache miss -> Read directory
@@ -126,13 +127,25 @@ pub async fn list_dir(
         for entry in read_dir.flatten() {
             if let Ok(metadata) = entry.metadata() {
                 let name = entry.file_name().to_string_lossy().to_string();
-                let file_entry = get_file_entry_from_metadata(&metadata, &name, &entry.path());
+                let path = entry.path();
+                let mut file_entry = get_file_entry_from_metadata(&metadata, &name, &path);
+                
+                // If it's a directory, check if it's protected (Access Denied)
+                if file_entry.is_dir {
+                    // Try to peek into the directory. If it fails with permission error, it's protected.
+                    // We don't use read_dir fully, just check if it's possible.
+                    if let Err(e) = fs::read_dir(&path) {
+                         let kind = e.kind();
+                         if kind == std::io::ErrorKind::PermissionDenied || kind == std::io::ErrorKind::NotFound {
+                             file_entry.is_protected = true;
+                         }
+                    }
+                }
+                
                 entries.push(file_entry);
             }
         }
-
-        let summary = calculate_summary(&entries, Some(path.clone()));
-        (entries, summary)
+        (entries, calculate_summary(&[], None)) // temporary summary, will be replaced
     };
 
     // Filter in-place (no clone needed)
@@ -142,6 +155,7 @@ pub async fn list_dir(
         true
     });
 
+    let summary = calculate_summary(&all_entries, Some(path.clone()));
     sort_file_entries(&mut all_entries, &sort_config);
 
     // Update cache (one clone here is unavoidable: cache needs its own copy)

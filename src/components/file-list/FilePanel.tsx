@@ -81,7 +81,7 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
     useSystemIcons: propUseSystemIcons, onItemMiddleClick, diffPaths, searchLimitReached,
     panelId, onViewModeChange
 }) => {
-    const { useSystemIcons: contextUseSystemIcons, searchLimit, showGridThumbnails } = useApp();
+    const { useSystemIcons: contextUseSystemIcons, searchLimit, showGridThumbnails, notify } = useApp();
     const useSystemIcons = propUseSystemIcons ?? contextUseSystemIcons;
 
     const currentDrive = drives?.find(d => currentPath.toLowerCase().startsWith(d.path.toLowerCase()));
@@ -112,8 +112,8 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
     const availableExtensions = React.useMemo(() => {
         const exts = new Set<string>();
         files.forEach(f => {
-            if (f.is_system && !showSystem) return;
-            if (f.is_hidden && !showHidden) return;
+            if (f.is_system) { if (!showSystem) return; }
+            else if (f.is_hidden) { if (!showHidden) return; }
             if (!f.is_dir) {
                 const ext = f.name.includes('.') ? f.name.split('.').pop()?.toLowerCase() || '' : '';
                 exts.add(ext);
@@ -123,8 +123,8 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
     }, [files, showHidden, showSystem]);
 
     const visibleFiles = React.useMemo(() => files.filter(f => {
-        if (f.is_system && !showSystem) return false;
-        if (f.is_hidden && !showHidden) return false;
+        if (f.is_system) return showSystem;
+        if (f.is_hidden) return showHidden;
 
         if (extensionFilter && !f.is_dir) {
             const ext = f.name.includes('.') ? f.name.split('.').pop()?.toLowerCase() || '' : '';
@@ -193,9 +193,13 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
     }, [isDragging]);
 
     const handleItemDoubleClick = useCallback((entry: FileEntry) => {
+        if (entry.is_protected) {
+            notify(t('protected_access'), 'warning');
+            return;
+        }
         if (entry.is_dir) onNavigate(entry.path);
         else onOpenFile(entry.path);
-    }, [onNavigate, onOpenFile]);
+    }, [onNavigate, onOpenFile, t, notify]);
 
     const handleItemContextMenu = useCallback((entry: FileEntry, e: React.MouseEvent) => {
         const currentSelected = selectedRef.current;

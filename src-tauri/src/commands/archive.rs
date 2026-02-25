@@ -141,6 +141,7 @@ fn list_iso(path: &Path, internal_prefix: &str) -> Result<Vec<FileEntry>, Comman
             is_calculated: false,
             modified: 0,
             is_readonly: true,
+            is_protected: false,
             original_path: None,
             deleted_time: None,
         });
@@ -191,6 +192,7 @@ fn list_zip(path: &Path, internal_prefix: &str) -> Result<Vec<FileEntry>, Comman
                     .map(|ts| ts.unix_timestamp() as u64 * 1000)
                     .unwrap_or(0),
                 is_readonly: false,
+                is_protected: false,
                 original_path: None,
                 deleted_time: None,
             });
@@ -229,6 +231,7 @@ fn list_seven_zip(path: &Path, internal_prefix: &str) -> Result<Vec<FileEntry>, 
                         is_calculated: false,
                         modified: 0, // sevenz-rust entry modified is complex to get
                         is_readonly: false,
+                        is_protected: false,
                         original_path: None,
                         deleted_time: None,
                     });
@@ -283,6 +286,7 @@ fn list_tar(path: &Path, internal_prefix: &str, format: ArchiveFormat) -> Result
                 is_calculated: false,
                 modified: entry.header().mtime().unwrap_or(0) * 1000,
                 is_readonly: false,
+                is_protected: false,
                 original_path: None,
                 deleted_time: None,
             });

@@ -6,6 +6,8 @@ import cx from 'classnames';
 import './PathBar.css';
 import { DriveInfo, FileEntry, DirResponse } from '../../types';
 import { TFunc } from '../../i18n';
+import { useApp } from '../../context/AppContext';
+import { AsyncFileIcon } from '../ui/AsyncFileIcon';
 
 interface PathBarProps {
     path: string;
@@ -20,6 +22,7 @@ interface PathBarProps {
 }
 
 export const PathBar: React.FC<PathBarProps> = ({ path, onNavigate, className, isDragging, onDrop, drives, showHidden = false, panelId, t }) => {
+    const { useSystemIcons } = useApp();
     // Special handling for trash path
     const isTrashPath = path?.startsWith('trash://');
     const isSearchPath = path?.startsWith('search://');
@@ -417,7 +420,11 @@ export const PathBar: React.FC<PathBarProps> = ({ path, onNavigate, className, i
                                     setMenuOpen(null);
                                 }}
                             >
-                                <Folder size="0.875rem" className="file-icon folder" fill="currentColor" fillOpacity={0.2} />
+                                {useSystemIcons ? (
+                                    <AsyncFileIcon path={dir.path} isDir={true} name={dir.name} size={16} className="system-icon-img" />
+                                ) : (
+                                    <Folder size="0.875rem" className="file-icon folder" fill="currentColor" fillOpacity={0.2} />
+                                )}
                                 <span>{dir.name}</span>
                             </div>
                         ))

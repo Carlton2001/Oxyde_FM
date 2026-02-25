@@ -261,8 +261,8 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
                     result.push({ node, level });
                     continue;
                 }
-                if (node.isSystem && !showSystem) continue;
-                if (node.isHidden && !showHidden) continue;
+                if (node.isSystem) { if (!showSystem) continue; }
+                else if (node.isHidden) { if (!showHidden) continue; }
 
                 result.push({ node, level });
 
@@ -473,8 +473,8 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
 
         const children = treeData.get(node.path);
         const visibleChildren = children?.filter(c => {
-            if (c.isSystem && !showSystem) return false;
-            if (c.isHidden && !showHidden) return false;
+            if (c.isSystem) { return showSystem; }
+            if (c.isHidden) { return showHidden; }
             return true;
         });
         const hasEffectiveChildren = visibleChildren ? visibleChildren.length > 0 : node.hasSubdirs;

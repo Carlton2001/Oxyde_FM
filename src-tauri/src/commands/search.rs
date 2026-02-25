@@ -558,6 +558,7 @@ pub async fn start_search(
                         is_calculated: false,
                         modified,
                         is_readonly: metadata.permissions().readonly(),
+                        is_protected: false,
                         original_path: None,
                         deleted_time: None,
                     });

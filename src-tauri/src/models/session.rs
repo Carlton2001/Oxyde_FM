@@ -136,7 +136,8 @@ impl PanelState {
         ) {
             Ok(mut watcher) => {
                 if let Err(e) = watcher.watch(&active_path, RecursiveMode::NonRecursive) {
-                    log::error!("Failed to watch path {:?}: {}", active_path, e);
+                    // Don't log as ERROR for things we might not have access to (system folders)
+                    log::warn!("Could not watch {:?} (Protected or Virtual): {}", active_path, e);
                 } else {
                     self.watched_path = Some(active_path);
                     self.watcher = Some(Arc::new(Mutex::new(watcher)));

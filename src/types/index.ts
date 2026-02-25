@@ -11,6 +11,7 @@ export type FileEntry = {
     is_calculating?: boolean;
     modified: number;
     is_readonly?: boolean;
+    is_protected?: boolean;
     // Trash-specific fields (populated when viewing Recycle Bin)
     original_path?: string;
     deleted_time?: number;

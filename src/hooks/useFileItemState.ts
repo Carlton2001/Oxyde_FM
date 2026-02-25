@@ -37,6 +37,7 @@ export interface FileItemState {
     isDropTarget: boolean;
     isCut: boolean;
     isDiff: boolean;
+    isProtected: boolean;
     tooltipText: string;
     itemClassName: string;
     handlers: {
@@ -63,14 +64,18 @@ export function useFileItemState(props: UseFileItemStateProps): FileItemState {
     const isDropTarget = isDragging && (entry.is_dir || isArchivePath(entry.path)) && dragOverPath === entry.path;
     const isCut = cutPathsSet.has(entry.path);
     const isDiff = !!diffPaths?.has(entry.path);
+    const isProtected = !!entry.is_protected;
 
     const tooltipText = useMemo(() => {
         let text = `${entry.name}\n${t('type')}: ${getFileTypeString(entry, t)}\n${t('size')}: ${entry.is_dir ? t('folder') : formatSize(entry.size, 1, t)}\n${t('date')}: ${formatDate(entry.modified, dateFormat)}`;
+        if (isProtected) {
+            text += `\n[${t('protected_access') || 'Restricted Access'}]`;
+        }
         if (isTrashView && entry.deleted_time) {
             text += `\n${t('date_deleted')}: ${formatDate(entry.deleted_time, dateFormat)}`;
         }
         return text;
-    }, [entry, t, dateFormat, isTrashView]);
+    }, [entry, t, dateFormat, isTrashView, isProtected]);
 
     const itemClassName = useMemo(() => {
         const parts: string[] = ['file-item'];
@@ -81,8 +86,9 @@ export function useFileItemState(props: UseFileItemStateProps): FileItemState {
         if (isCut) parts.push('cut');
         if (isRenaming) parts.push('editing');
         if (isDiff) parts.push('diff');
+        if (isProtected) parts.push('protected');
         return parts.join(' ');
-    }, [isSelected, entry.is_hidden, entry.is_system, isDropTarget, isCut, isRenaming, isDiff]);
+    }, [isSelected, entry.is_hidden, entry.is_system, isDropTarget, isCut, isRenaming, isDiff, isProtected]);
 
     const handlers = useMemo(() => ({
         onClick: (e: React.MouseEvent) => onItemClick(entry, e),
@@ -115,5 +121,5 @@ export function useFileItemState(props: UseFileItemStateProps): FileItemState {
         }
     }), [entry, isRenaming, onItemClick, onItemDoubleClick, onItemContextMenu, onFileDragStart, onItemMiddleClick]);
 
-    return { isSelected, isRenaming, isDropTarget, isCut, isDiff, tooltipText, itemClassName, handlers };
+    return { isSelected, isRenaming, isDropTarget, isCut, isDiff, isProtected, tooltipText, itemClassName, handlers };
 }
