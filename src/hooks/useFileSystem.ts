@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { formatCommandError } from '../utils/error';
 import { FileEntry, DriveInfo, SortConfig, DirResponse, FileSummary, DirBatchEvent, PanelId } from '../types';
-import { getParent } from '../utils/path';
+import { getParent, isVirtualPath } from '../utils/path';
 import { listen } from '@tauri-apps/api/event';
 
 export const useDrives = () => {
@@ -240,7 +240,6 @@ export const useFiles = (panelId: PanelId, path: string, sortConfig: SortConfig,
     const refresh = useCallback(async (silent: boolean = false) => {
         if (!path) return;
 
-        const isTrash = path?.startsWith('trash://');
         const prevParams = prevParamsRef.current;
         const pathOrFiltersChanged = path !== prevParams.path ||
             showHidden !== prevParams.showHidden ||
@@ -262,12 +261,12 @@ export const useFiles = (panelId: PanelId, path: string, sortConfig: SortConfig,
         if (!silent) setLoading(true);
         setError(null);
         try {
-            if (isTrash) {
+            if (path.startsWith('trash://') || path.startsWith('trash:\\\\')) {
                 const entries = await invoke<FileEntry[]>('list_trash');
                 setFiles(entries);
                 setIsComplete(true);
                 setSummary(null);
-            } else if (path.startsWith('search://')) {
+            } else if (isVirtualPath(path)) {
                 setFiles([]);
                 setIsComplete(true);
             } else {

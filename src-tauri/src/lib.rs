@@ -148,6 +148,8 @@ pub fn run() {
             commands::icons::get_file_icon,
             commands::icons::purge_icon_cache,
             commands::thumbnails::get_image_thumbnail,
+            commands::thumbnails::get_office_thumbnail,
+            commands::thumbnails::get_office_text_preview,
             commands::archive::list_archive_contents,
             commands::archive::extract_archive,
             commands::archive::compress_to_archive,

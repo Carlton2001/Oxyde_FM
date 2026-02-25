@@ -8,6 +8,7 @@ import { DriveInfo, FileEntry, DirResponse } from '../../types';
 import { TFunc } from '../../i18n';
 import { useApp } from '../../context/AppContext';
 import { AsyncFileIcon } from '../ui/AsyncFileIcon';
+import { isVirtualPath } from '../../utils/path';
 
 interface PathBarProps {
     path: string;
@@ -24,8 +25,8 @@ interface PathBarProps {
 export const PathBar: React.FC<PathBarProps> = ({ path, onNavigate, className, isDragging, onDrop, drives, showHidden = false, panelId, t }) => {
     const { useSystemIcons } = useApp();
     // Special handling for trash path
-    const isTrashPath = path?.startsWith('trash://');
-    const isSearchPath = path?.startsWith('search://');
+    const isTrashPath = path?.startsWith('trash://') || path?.startsWith('trash:\\\\');
+    const isSearchPath = path?.startsWith('search://') || path?.startsWith('search:\\\\');
     const [isEditing, setIsEditing] = useState(false);
     const [inputPath, setInputPath] = useState(path);
     const [dragTarget, setDragTarget] = useState<string | null>(null);
@@ -41,7 +42,7 @@ export const PathBar: React.FC<PathBarProps> = ({ path, onNavigate, className, i
 
     useEffect(() => {
         if (!isEditing) {
-            if (path?.startsWith('search://')) {
+            if (isVirtualPath(path)) {
                 // Strip root param for display in edit mode to avoid clutter
                 setInputPath(path.split('?')[0]);
             } else {
@@ -197,7 +198,9 @@ export const PathBar: React.FC<PathBarProps> = ({ path, onNavigate, className, i
         }
 
         if (isSearchPath) {
-            const searchPart = path.replace('search://', '');
+            const searchPart = path.startsWith('search://')
+                ? path.replace('search://', '')
+                : path.replace('search:\\\\', '');
             const querySepIndex = searchPart.indexOf('?');
             const query = decodeURIComponent(querySepIndex !== -1 ? searchPart.substring(0, querySepIndex) : searchPart);
 

@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { readTextFileLines, readFile } from '@tauri-apps/plugin-fs';
 import { getPdfThumbnail, PDF_THUMBNAIL_CACHE } from '../../utils/pdf';
-import { PREVIEWABLE_EXTENSIONS, PREVIEWABLE_VIDEO_EXTENSIONS, PREVIEWABLE_TEXT_EXTENSIONS, PREVIEWABLE_PDF_EXTENSIONS } from '../../utils/fileIcons';
+import { PREVIEWABLE_EXTENSIONS, PREVIEWABLE_VIDEO_EXTENSIONS, PREVIEWABLE_TEXT_EXTENSIONS, PREVIEWABLE_PDF_EXTENSIONS, PREVIEWABLE_OFFICE_EXTENSIONS } from '../../utils/fileIcons';
+import { invoke } from '@tauri-apps/api/core';
 import { DiskUsageChart } from './DiskUsageChart';
 import { useApp } from '../../context/AppContext';
 import './Tooltip.css';
@@ -139,6 +140,24 @@ export const Tooltip: React.FC<TooltipProps> = ({ isShiftPressed }) => {
                                     mediaType = 'pdf';
                                 } catch (err) {
                                     console.error('Failed to generate PDF thumbnail', err);
+                                }
+                            } else if (PREVIEWABLE_OFFICE_EXTENSIONS.includes(ext)) {
+                                try {
+                                    const cachedPath = await invoke<string>('get_office_thumbnail', { path });
+                                    mediaSrc = convertFileSrc(cachedPath);
+                                    // Treat as pdf to get the nice drop-shadow / presentation in tooltip
+                                    mediaType = 'pdf';
+                                } catch (err) {
+                                    // Soft fail, no thumbnail available in the archive, try text preview
+                                    try {
+                                        const textPreview = await invoke<string>('get_office_text_preview', { path });
+                                        if (textPreview) {
+                                            textContent = textPreview;
+                                            mediaType = 'text';
+                                        }
+                                    } catch (textErr) {
+                                        console.debug('No embedded thumbnail or text found for office document', err, textErr);
+                                    }
                                 }
                             }
                         }

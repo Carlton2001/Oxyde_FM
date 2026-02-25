@@ -40,6 +40,7 @@ interface VirtualizedFileListProps {
     onItemMiddleClick?: (entry: FileEntry) => void;
     diffPaths?: Set<string>;
     colWidths?: ColumnWidths;
+    isSearching?: boolean;
 }
 
 export interface VirtualizedFileListHandle {
@@ -328,7 +329,7 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
         onRenameTextChange, onRenameCommit, onRenameCancel, getIcon,
         totalItemsSize, showHistogram, isTrashView, searchResults,
         onScrollToggle, onItemMiddleClick,
-        diffPaths, colWidths
+        diffPaths, colWidths, isSearching
     } = props;
 
     const { dateFormat, showCheckboxes } = useApp();
@@ -428,6 +429,14 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
         >
             <AutoSizer renderProp={({ height, width }: { height: number | undefined; width: number | undefined }) => {
                 if (!height || !width) return null;
+
+                if (files.length === 0 && searchResults && searchResults.length === 0 && !isSearching) {
+                    return (
+                        <div className="empty-msg" style={{ width, height, position: 'absolute', top: 0, left: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <span>{t('no_results')}</span>
+                        </div>
+                    );
+                }
 
                 if (isGrid) {
                     const minColumnWidth = rootFontSize * 6.0; // More balanced with 6.0 height

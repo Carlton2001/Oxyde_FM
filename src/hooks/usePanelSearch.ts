@@ -10,6 +10,7 @@ import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 import { FileEntry, SearchEventPayload } from '../types';
 import { purgeIconCache } from '../components/ui/AsyncFileIcon';
+import { isVirtualPath } from '../utils/path';
 
 interface UsePanelSearchOptions {
     path: string;
@@ -102,11 +103,15 @@ export const usePanelSearch = ({
 
     // Search Lifecycle
     useEffect(() => {
-        if (!path.startsWith('search://')) {
+        const isSearch = path.startsWith('search://') || path.startsWith('search:\\\\');
+
+        if (!isSearch) {
             // ONLY update cache if the tab ID matches our current "stable" knowledge
             if (activeTabId && activeTabId === lastActiveTabIdRef.current) {
-                prevPathRef.current = path;
-                tabSearchRootCache.current.set(activeTabId, path);
+                if (!isVirtualPath(path)) {
+                    prevPathRef.current = path;
+                    tabSearchRootCache.current.set(activeTabId, path);
+                }
             }
             // Reset UI state when leaving search
             if (searchResults !== null) {
@@ -119,7 +124,10 @@ export const usePanelSearch = ({
             return;
         }
 
-        const searchPart = path.replace('search://', '');
+        const searchPart = path.startsWith('search://')
+            ? path.replace('search://', '')
+            : path.replace('search:\\\\', '');
+
         const querySepIndex = searchPart.indexOf('?');
         let query = '';
         let uriRoot: string | null = null;
@@ -137,8 +145,8 @@ export const usePanelSearch = ({
         const fullCache = activeTabId ? tabSearchFullCache.current.get(activeTabId) : null;
         const searchRoot = uriRoot || (activeTabId ? tabSearchRootCache.current.get(activeTabId) : null) || prevPathRef.current;
 
-        // If we have cached results for the EXACT same query and root, restore them
-        if (fullCache && fullCache.path === path) {
+        // If we have cached results for the EXACT same query and root, restore them ONLY if complete
+        if (fullCache && fullCache.path === path && fullCache.isComplete) {
             if (searchResults !== fullCache.results) {
                 setSearchResults(fullCache.results);
                 setSearchLimitReached(fullCache.limitReached);

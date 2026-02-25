@@ -155,6 +155,9 @@ export const useAppHandlers = ({
         }
 
         const root = panel.currentSearchRoot || 'C:\\';
+        // Prevent UI flash by eagerly resetting search state
+        panel.setIsSearching(true);
+        panel.setSearchResults(null);
         panel.navigate(`search://${encodeURIComponent(query)}?root=${encodeURIComponent(root)}`);
     }, [left, right]);
 
@@ -162,10 +165,11 @@ export const useAppHandlers = ({
         const panel = id === 'left' ? left : right;
         let root = (panel as any).currentSearchRoot || 'C:\\';
 
-        // Robust root recovery: extract directly from the URI if possible 
-        // to handle multi-tab independence correctly during resets
-        if (panel.path.startsWith('search://')) {
-            const searchPart = panel.path.replace('search://', '');
+        const isSearch = panel.path.startsWith('search://') || panel.path.startsWith('search:\\\\');
+        if (isSearch) {
+            const searchPart = panel.path.startsWith('search://')
+                ? panel.path.replace('search://', '')
+                : panel.path.replace('search:\\\\', '');
             const querySepIndex = searchPart.indexOf('?');
             if (querySepIndex !== -1) {
                 const params = new URLSearchParams(searchPart.substring(querySepIndex + 1));
@@ -180,7 +184,7 @@ export const useAppHandlers = ({
         panel.setSearchLimitReached(false);
 
         // If we were in a search view, navigate back to the origin folder
-        if (panel.path.startsWith('search://')) {
+        if (isSearch) {
             panel.navigate(root);
         }
     }, [left, right]);
@@ -191,8 +195,10 @@ export const useAppHandlers = ({
 
         // Parse current URI to restore previous state
         let initialOptions: any = { query: panel.searchQuery || '' };
-        if (panel.path.startsWith('search://')) {
-            const searchPart = panel.path.replace('search://', '');
+        if (panel.path.startsWith('search://') || panel.path.startsWith('search:\\\\')) {
+            const searchPart = panel.path.startsWith('search://')
+                ? panel.path.replace('search://', '')
+                : panel.path.replace('search:\\\\', '');
             const querySepIndex = searchPart.indexOf('?');
             if (querySepIndex !== -1) {
                 initialOptions.query = decodeURIComponent(searchPart.substring(0, querySepIndex));
@@ -232,6 +238,9 @@ export const useAppHandlers = ({
             if (options.searchInArchives) params.set('search_in_archives', 'true');
             if (options.sizeUnit) params.set('size_unit', options.sizeUnit);
 
+            // Prevent UI flash
+            panel.setIsSearching(true);
+            panel.setSearchResults(null);
             panel.navigate(`search://${query}?${params.toString()}`);
         }
     }, [left, right, dialogs]);

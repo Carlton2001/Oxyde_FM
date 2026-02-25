@@ -104,7 +104,8 @@ impl PanelState {
             .unwrap_or_else(|| PathBuf::from("C:\\"));
 
         // Skip watching virtual paths (like trash:// or search://)
-        let path_str = active_path.to_string_lossy();
+        let path_str = active_path.to_string_lossy().to_lowercase();
+        let path_str = path_str.replace('\\', "/");
         if path_str.starts_with("trash://") || path_str.starts_with("search://") {
             self.watcher = None;
             self.watched_path = None;

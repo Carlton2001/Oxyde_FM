@@ -98,6 +98,7 @@ export const translations = {
         expand: 'Expand',
         go_to_folder: 'Open file location',
         go_to_folder_location: 'Open folder location',
+        no_results: 'No results found for your search',
         tools: 'Tools',
         expand_all: 'Expand all',
         collapse_all: 'Collapse all',
@@ -378,7 +379,7 @@ export const translations = {
         load_more: 'Load More',
         duplicate_start_hint: 'Configure your search and click "Find Duplicates"',
         filter_duplicates: 'Filter results...',
-        no_results: 'No matching duplicates found with current filter',
+        no_duplicates_found: 'No matching duplicates found with current filter',
     },
     fr: {
         // Settings
@@ -477,6 +478,7 @@ export const translations = {
         expand: 'Agrandir',
         go_to_folder: 'Ouvrir l\'emplacement du fichier',
         go_to_folder_location: 'Ouvrir l\'emplacement du dossier',
+        no_results: 'Aucun résultat trouvé pour votre recherche',
         tools: 'Outils',
         expand_all: 'Développer tout',
         collapse_all: 'Réduire tout',
@@ -757,7 +759,7 @@ export const translations = {
         load_more: 'Charger plus',
         duplicate_start_hint: 'Configurez votre recherche et cliquez sur "Chercher les doublons"',
         filter_duplicates: 'Filtrer les résultats...',
-        no_results: 'Aucun doublon trouvé avec le filtre actuel',
+        no_duplicates_found: 'Aucun doublon trouvé avec le filtre actuel',
     }
 };
 

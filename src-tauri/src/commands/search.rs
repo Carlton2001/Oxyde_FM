@@ -5,7 +5,7 @@ use log::info;
 use glob::Pattern;
 use regex::{Regex, RegexBuilder};
 use std::time::SystemTime;
-use walkdir::{DirEntry, WalkDir};
+use walkdir::WalkDir;
 use tauri::{AppHandle, State, Emitter, Manager};
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -300,7 +300,19 @@ fn search_in_iso(
 }
 
 
+fn is_office_doc(path: &std::path::Path) -> bool {
+    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+    matches!(ext.as_str(), 
+        "docx" | "xlsx" | "pptx" | "docm" | "xlsm" | "pptm" |
+        "odt" | "ods" | "odp" | "ott" | "ots" | "otp"
+    )
+}
+
 fn is_binary_file(path: &std::path::Path) -> bool {
+    if is_office_doc(path) {
+        return false;
+    }
+    
     let mut file = match File::open(path) {
         Ok(f) => f,
         Err(_) => return true,
@@ -309,11 +321,83 @@ fn is_binary_file(path: &std::path::Path) -> bool {
     let mut buffer = [0u8; 1024];
     match file.read(&mut buffer) {
         Ok(n) => {
-            // A file containing a NULL byte is almost certainly binary
             buffer[..n].iter().any(|&b| b == 0)
         }
         Err(_) => true,
     }
+}
+
+fn office_file_contains_content(path: &std::path::Path, pattern: &Regex, ignore_accents: bool) -> bool {
+    let file = match File::open(path) {
+        Ok(f) => f,
+        Err(_) => return false,
+    };
+
+    let mut archive = match zip::ZipArchive::new(file) {
+        Ok(a) => a,
+        Err(_) => return false,
+    };
+
+    // Target files for content
+    // docx: word/document.xml
+    // xlsx: xl/sharedStrings.xml or xl/worksheets/sheet*.xml
+    // pptx: ppt/slides/slide*.xml
+    // odt: content.xml
+    
+    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+    let targets = match ext.as_str() {
+        "docx" | "docm" => vec!["word/document.xml"],
+        "xlsx" | "xlsm" => vec!["xl/sharedStrings.xml"], // Shared strings is where 99% of text lives
+        "pptx" | "pptm" => {
+            // Powerpoint is tricky, slides are separate. We'll check the first 5 slides for performance
+            vec!["ppt/slides/slide1.xml", "ppt/slides/slide2.xml", "ppt/slides/slide3.xml"]
+        },
+        "odt" | "ods" | "odp" | "ott" | "ots" | "otp" => vec!["content.xml"],
+        _ => vec!["content.xml", "word/document.xml"]
+    };
+
+    for target in targets {
+        if let Ok(mut content_file) = archive.by_name(target) {
+            let mut content = String::new();
+            if content_file.read_to_string(&mut content).is_ok() {
+                // We strip XML tags but insert newlines for block elements
+                // so that regex expressions (which operate by line) match correctly, just like .txt files.
+                let mut in_tag = false;
+                let mut tag_buffer = String::new();
+                let mut stripped = String::with_capacity(content.len() / 2);
+                
+                for c in content.chars() {
+                    if c == '<' {
+                        in_tag = true;
+                        tag_buffer.clear();
+                    } else if c == '>' {
+                        in_tag = false;
+                        let tl = &tag_buffer;
+                        if tl.starts_with("w:p") || tl.starts_with("/w:p") ||
+                           tl.starts_with("w:br") || tl.starts_with("text:p") ||
+                           tl.starts_with("/text:p") || tl == "p" || tl == "/p" {
+                            stripped.push('\n');
+                        }
+                    } else if in_tag {
+                        if tag_buffer.len() < 10 {
+                            tag_buffer.push(c);
+                        }
+                    } else {
+                        stripped.push(c);
+                    }
+                }
+
+                let check_text = if ignore_accents { crate::utils::remove_accents(&stripped) } else { stripped };
+                for line in check_text.lines() {
+                    if pattern.is_match(line) {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+
+    false
 }
 
 fn file_contains_content(path: &std::path::Path, pattern: &Regex, ignore_accents: bool, ssd_hint: bool) -> bool {
@@ -321,14 +405,24 @@ fn file_contains_content(path: &std::path::Path, pattern: &Regex, ignore_accents
         return false;
     }
 
+    let is_office = is_office_doc(path);
+
     // Hardware-aware throttling
     if !ssd_hint {
         let vol_id = get_physical_disk_id(path);
         let lock = DISK_IO_LOCKS.entry(vol_id).or_insert_with(|| Arc::new(Mutex::new(()))).clone();
         let _guard = lock.lock().unwrap();
-        read_file_and_check(path, pattern, ignore_accents)
+        if is_office {
+            office_file_contains_content(path, pattern, ignore_accents)
+        } else {
+            read_file_and_check(path, pattern, ignore_accents)
+        }
     } else {
-        read_file_and_check(path, pattern, ignore_accents)
+        if is_office {
+            office_file_contains_content(path, pattern, ignore_accents)
+        } else {
+            read_file_and_check(path, pattern, ignore_accents)
+        }
     }
 }
 
@@ -450,9 +544,14 @@ pub async fn start_search(
     // 3. Spawn Thread
     let panel_id_clone = panel_id.clone();
     let app_handle = app.clone();
-    let (search_limit, is_turbo) = {
+    let (search_limit, is_turbo, show_hidden, show_system) = {
         let config = config_state.0.lock().unwrap();
-        (config.search_limit as usize, config.default_turbo_mode)
+        (
+            config.search_limit as usize, 
+            config.default_turbo_mode,
+            config.show_hidden,
+            config.show_system
+        )
     };
     let is_recursive = recursive.unwrap_or(true);
     let should_search_archives = search_in_archives.unwrap_or(false);
@@ -484,26 +583,27 @@ pub async fn start_search(
         let mut total_results = Vec::new();
         let mut batch_start_idx: usize = 0;
         let mut last_emit = std::time::Instant::now();
-
-        let is_hidden_fn = |entry: &DirEntry| -> bool {
-            if let Ok(metadata) = entry.metadata() {
-                let name = entry.file_name().to_str().unwrap_or("");
-                let (hidden, _, _) = crate::utils::get_file_attributes(&metadata, name);
-                return hidden;
-            }
-            false
-        };
+        let mut files_processed: u64 = 0;
 
         let filtered_walker = walker.into_iter().filter_entry(move |e| {
             if e.depth() == 0 { return true; }
-            if is_hidden_fn(e) { return false; }
+            // If the user wants to see hidden files, we don't prune hidden directories
+            if !show_hidden {
+                if let Ok(metadata) = e.metadata() {
+                    let name = e.file_name().to_str().unwrap_or("");
+                    let (hidden, _, _) = crate::utils::get_file_attributes(&metadata, name);
+                    if hidden { return false; }
+                }
+            }
             true
         });
 
         for entry in filtered_walker.filter_map(|e| e.ok()) {
             if cancel_thread.load(Ordering::Relaxed) { break; }
+            if entry.depth() == 0 { continue; } // Skip the root directory itself
             
-            if !is_turbo {
+            files_processed += 1;
+            if !is_turbo && files_processed % 100 == 0 {
                 std::thread::sleep(std::time::Duration::from_millis(1));
             }
 
@@ -515,11 +615,22 @@ pub async fn start_search(
 
             if name.is_empty() { continue; }
 
-            // 1. Name Match
-            if search_params.pattern.matches(&name) {
+            // 1. Initial Name Match
+            let matches_name = search_params.pattern.matches(&name);
+            
+            // Optimization: If we have a content query but the name doesn't match AND we aren't doing the "*" match
+            // we could skip, but for advanced search, usually Name query is empty if user wants ONLY content.
+            // If Name matches OR Query is empty (matched everything), we proceed to further checks.
+            
+            if matches_name {
                 if let Ok(metadata) = entry.metadata() {
                     let is_dir = metadata.is_dir();
-                    
+                    let (is_hidden_attr, is_system_attr, _) = crate::utils::get_file_attributes(&metadata, &name);
+
+                    // Skip hidden/system if not requested
+                    if !show_hidden && is_hidden_attr { continue; }
+                    if !show_system && is_system_attr { continue; }
+
                     if is_dir && (search_params.min_size.is_some() || search_params.max_size.is_some() || content_regex_pattern.is_some()) {
                         continue;
                     }
@@ -544,8 +655,6 @@ pub async fn start_search(
                         }
                     }
 
-                    let (is_hidden_attr, is_system_attr, _) = crate::utils::get_file_attributes(&metadata, &name);
-                    
                     total_results.push(FileEntry {
                         name,
                         path: path.to_string_lossy().to_string(),
@@ -566,7 +675,8 @@ pub async fn start_search(
                     if total_results.len() >= search_limit { break; }
                 }
             }
-            // 5. Archive Search
+            
+            // 5. Archive Search (independent of filename match)
             if should_search_archives && is_archive(path) {
                 if let Ok(metadata) = entry.metadata() {
                     if !metadata.is_dir() {
@@ -583,7 +693,7 @@ pub async fn start_search(
 
             // Emit batch using index slice (no per-item clone)
             let batch_len = total_results.len() - batch_start_idx;
-            if (batch_len >= 1000 || last_emit.elapsed().as_millis() > 750) && batch_len > 0 {
+            if (batch_len >= 500 || last_emit.elapsed().as_millis() > 500) && batch_len > 0 {
                 let _ = app_handle.emit("search_event", SearchEvent {
                     panel_id: panel_id_clone.clone(),
                     results: total_results[batch_start_idx..].to_vec(),

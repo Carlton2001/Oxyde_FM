@@ -18,6 +18,7 @@ const EXECUTABLE_EXTENSIONS = ['exe', 'msi', 'msix', 'appx', 'bat', 'cmd', 'ps1'
 const ARCHIVE_EXTENSIONS = ['zip', 'rar', '7z', 'tar', 'gz', 'bz2', 'xz', 'cab', 'tgz', 'zst', 'tbz2', 'tzst', 'txz'];
 export const PDF_EXTENSIONS = ['pdf'];
 export const PREVIEWABLE_PDF_EXTENSIONS = [...PDF_EXTENSIONS];
+export const PREVIEWABLE_OFFICE_EXTENSIONS = ['docx', 'xlsx', 'pptx', 'odt', 'ods', 'odp'];
 const DISK_EXTENSIONS = ['iso', 'img', 'vmdk', 'vhd', 'vhdx'];
 
 // O(1) lookup Sets for icon resolution (called per-file on render)

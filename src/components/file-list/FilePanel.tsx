@@ -17,6 +17,7 @@ import { ExtensionFilterMenu } from './ExtensionFilterMenu';
 import { SizeFilterMenu, getSizeCategoryForFile, SizeCategoryKey } from './SizeFilterMenu';
 import { DateFilterMenu, getDateCategoryForFile, DateCategoryKey } from './DateFilterMenu';
 import { NameFilterMenu } from './NameFilterMenu';
+import { LocationFilterMenu } from './LocationFilterMenu';
 import { useApp } from '../../context/AppContext';
 import { useFileStats } from '../../hooks/useFileStats';
 import { getVisibleColumns, getColumnMode, buildGridTemplate } from '../../config/columnDefinitions';
@@ -97,8 +98,10 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
     const [sizeFilter, setSizeFilter] = useState<Set<SizeCategoryKey> | null>(null);
     const [dateFilter, setDateFilter] = useState<Set<string> | null>(null);
     const [nameFilter, setNameFilter] = useState<string | null>(null);
+    const [locationFilter, setLocationFilter] = useState<string | null>(null);
+    const [deletedDateFilter, setDeletedDateFilter] = useState<Set<string> | null>(null);
     const [filterMenuAnchor, setFilterMenuAnchor] = useState<{ x: number, y: number } | null>(null);
-    const [activeFilterMenu, setActiveFilterMenu] = useState<'extension' | 'size' | 'date' | 'name' | null>(null);
+    const [activeFilterMenu, setActiveFilterMenu] = useState<'extension' | 'size' | 'date' | 'name' | 'location' | 'deletedDate' | null>(null);
 
     useEffect(() => {
         setExtensionFilter(null);
@@ -120,33 +123,47 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
             }
         });
         return Array.from(exts).sort();
-    }, [files, showHidden, showSystem]);
+    }, [files, searchResults, showHidden, showSystem]);
 
-    const visibleFiles = React.useMemo(() => files.filter(f => {
-        if (f.is_system) return showSystem;
-        if (f.is_hidden) return showHidden;
+    const visibleFiles = React.useMemo(() => {
+        return files.filter(f => {
+            if (f.is_system) return showSystem;
+            if (f.is_hidden) return showHidden;
 
-        if (extensionFilter && !f.is_dir) {
-            const ext = f.name.includes('.') ? f.name.split('.').pop()?.toLowerCase() || '' : '';
-            if (!extensionFilter.has(ext)) return false;
-        }
+            if (extensionFilter && !f.is_dir) {
+                const ext = f.name.includes('.') ? f.name.split('.').pop()?.toLowerCase() || '' : '';
+                if (!extensionFilter.has(ext)) return false;
+            }
 
-        if (sizeFilter && !f.is_dir) {
-            const cat = getSizeCategoryForFile(f.size);
-            if (!sizeFilter.has(cat)) return false;
-        }
+            if (sizeFilter && !f.is_dir) {
+                const cat = getSizeCategoryForFile(f.size);
+                if (!sizeFilter.has(cat)) return false;
+            }
 
-        if (nameFilter) {
-            if (!f.name.toLowerCase().includes(nameFilter.toLowerCase())) return false;
-        }
+            if (nameFilter) {
+                if (!f.name.toLowerCase().includes(nameFilter.toLowerCase())) return false;
+            }
 
-        if (dateFilter) {
-            const cat = getDateCategoryForFile(f.modified || 0);
-            if (!dateFilter.has(cat)) return false;
-        }
+            if (dateFilter) {
+                const cat = getDateCategoryForFile(f.modified || 0);
+                if (!dateFilter.has(cat)) return false;
+            }
 
-        return true;
-    }), [files, showHidden, showSystem, extensionFilter, sizeFilter, nameFilter, dateFilter]);
+            if (locationFilter) {
+                const pathToCheck = f.original_path || f.path;
+                const lastSlashIndex = Math.max(pathToCheck.lastIndexOf('/'), pathToCheck.lastIndexOf('\\'));
+                const dirPath = lastSlashIndex >= 0 ? pathToCheck.substring(0, lastSlashIndex) : pathToCheck;
+                if (!dirPath.toLowerCase().includes(locationFilter.toLowerCase())) return false;
+            }
+
+            if (deletedDateFilter) {
+                const cat = getDateCategoryForFile(f.deleted_time || 0);
+                if (!deletedDateFilter.has(cat)) return false;
+            }
+
+            return true;
+        });
+    }, [files, searchResults, showHidden, showSystem, extensionFilter, sizeFilter, nameFilter, dateFilter, locationFilter, deletedDateFilter]);
 
     const finalFiles = visibleFiles;
     const { stats, totalStats } = useFileStats(finalFiles, selected);
@@ -299,6 +316,16 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
             e.stopPropagation();
             setActiveFilterMenu('date');
             setFilterMenuAnchor({ x: e.clientX, y: e.clientY });
+        } else if (field === 'location') {
+            e.preventDefault();
+            e.stopPropagation();
+            setActiveFilterMenu('location');
+            setFilterMenuAnchor({ x: e.clientX, y: e.clientY });
+        } else if (field === 'deletedDate') {
+            e.preventDefault();
+            e.stopPropagation();
+            setActiveFilterMenu('deletedDate');
+            setFilterMenuAnchor({ x: e.clientX, y: e.clientY });
         }
     }, [availableExtensions.length]);
 
@@ -383,6 +410,8 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
                     isTypeFiltered={extensionFilter !== null}
                     isSizeFiltered={sizeFilter !== null}
                     isNameFiltered={nameFilter !== null}
+                    isLocationFiltered={locationFilter !== null}
+                    isDeletedDateFiltered={deletedDateFilter !== null}
                     isDateFiltered={dateFilter !== null}
                     t={t}
                     panelRef={panelRef}
@@ -438,6 +467,7 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
                         onItemMiddleClick={onItemMiddleClick}
                         diffPaths={diffPaths}
                         colWidths={colWidths}
+                        isSearching={isSearching}
                     />
                 </div>
             </div>
@@ -503,6 +533,28 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
                     y={filterMenuAnchor.y}
                     value={nameFilter || ''}
                     onChange={setNameFilter}
+                    onClose={() => setFilterMenuAnchor(null)}
+                    t={t}
+                />
+            )}
+
+            {filterMenuAnchor && activeFilterMenu === 'location' && (
+                <LocationFilterMenu
+                    x={filterMenuAnchor.x}
+                    y={filterMenuAnchor.y}
+                    value={locationFilter || ''}
+                    onChange={setLocationFilter}
+                    onClose={() => setFilterMenuAnchor(null)}
+                    t={t}
+                />
+            )}
+
+            {filterMenuAnchor && activeFilterMenu === 'deletedDate' && (
+                <DateFilterMenu
+                    x={filterMenuAnchor.x}
+                    y={filterMenuAnchor.y}
+                    selectedDates={deletedDateFilter as Set<DateCategoryKey>}
+                    onChange={(val) => setDeletedDateFilter(val as Set<string>)}
                     onClose={() => setFilterMenuAnchor(null)}
                     t={t}
                 />

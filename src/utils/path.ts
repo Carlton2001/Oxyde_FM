@@ -2,6 +2,12 @@
  * Path utilities for the file manager
  */
 
+export const isVirtualPath = (path: string | null | undefined): boolean => {
+    if (!path) return false;
+    // Regex matches search:// or trash:// and their backslash variants like search:\ or search:\\
+    return /^(search|trash)(:\/\/|:\\{1,2})/i.test(path);
+};
+
 /**
  * Returns the parent directory path of the given path.
  * Returns null for root drives (e.g., "C:\\").
@@ -41,7 +47,13 @@ export const isSameVolume = (path1: string, path2: string): boolean => {
  */
 export const normalizePath = (path: string): string => {
     if (!path) return "";
-    // Standardize slashes
+
+    // Do NOT normalize virtual URI schemes
+    if (isVirtualPath(path)) {
+        return path;
+    }
+
+    // Standardize slashes for physical paths
     let normalized = path.replace(/\//g, "\\");
 
     // Ensure drive letter is uppercase (C:\ instead of c:\)

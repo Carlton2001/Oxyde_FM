@@ -22,6 +22,8 @@ interface FileHeaderProps {
     isSizeFiltered?: boolean;
     isNameFiltered?: boolean;
     isDateFiltered?: boolean;
+    isLocationFiltered?: boolean;
+    isDeletedDateFiltered?: boolean;
     t: TFunc;
     panelRef: React.RefObject<HTMLDivElement | null>;
 }
@@ -43,6 +45,8 @@ export const FileHeader: React.FC<FileHeaderProps> = React.memo(({
     isSizeFiltered,
     isNameFiltered,
     isDateFiltered,
+    isLocationFiltered,
+    isDeletedDateFiltered,
     t,
     panelRef
 }) => {
@@ -100,8 +104,10 @@ export const FileHeader: React.FC<FileHeaderProps> = React.memo(({
                         />
                     </div>
                     {(searchResults && !isTrashView) && (
-                        <div className="col col-location" onClick={() => onSort('location')}>
-                            <span className="header-label">{t('location')}</span> <SortIcon field="location" />
+                        <div className="col col-location" onClick={() => onSort('location')} onContextMenu={(e) => onHeaderContextMenu?.('location', e)}>
+                            <span className="header-label">{t('location')}</span>
+                            {isLocationFiltered && <Filter size={10} style={{ marginLeft: '4px', opacity: 0.8, color: 'var(--accent-color)' }} />}
+                            <SortIcon field="location" />
                             <ResizeHandle
                                 field="location"
                                 panelRef={panelRef}
@@ -116,8 +122,10 @@ export const FileHeader: React.FC<FileHeaderProps> = React.memo(({
                     )}
                     {isTrashView && (
                         <>
-                            <div className="col col-location" onClick={() => onSort('location')}>
-                                <span className="header-label">{t('original_location' as any)}</span> <SortIcon field="location" />
+                            <div className="col col-location" onClick={() => onSort('location')} onContextMenu={(e) => onHeaderContextMenu?.('location', e)}>
+                                <span className="header-label">{t('original_location' as any)}</span>
+                                {isLocationFiltered && <Filter size={10} style={{ marginLeft: '4px', opacity: 0.8, color: 'var(--accent-color)' }} />}
+                                <SortIcon field="location" />
                                 <ResizeHandle
                                     field="location"
                                     panelRef={panelRef}
@@ -130,8 +138,10 @@ export const FileHeader: React.FC<FileHeaderProps> = React.memo(({
                                     t={t}
                                 />
                             </div>
-                            <div className="col col-date" onClick={() => onSort('deletedDate')}>
-                                <span className="header-label">{t('deleted_date' as any)}</span> <SortIcon field="deletedDate" />
+                            <div className="col col-date" onClick={() => onSort('deletedDate')} onContextMenu={(e) => onHeaderContextMenu?.('deletedDate', e)}>
+                                <span className="header-label">{t('deleted_date' as any)}</span>
+                                {isDeletedDateFiltered && <Filter size={10} style={{ marginLeft: '4px', opacity: 0.8, color: 'var(--accent-color)' }} />}
+                                <SortIcon field="deletedDate" />
                                 <ResizeHandle
                                     field="deletedDate"
                                     panelRef={panelRef}

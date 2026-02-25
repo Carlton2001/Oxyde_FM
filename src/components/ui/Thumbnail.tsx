@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { convertFileSrc, invoke } from '@tauri-apps/api/core';
-import { IMAGE_EXTENSIONS } from '../../utils/fileIcons';
+import { readFile } from '@tauri-apps/plugin-fs';
+import { getPdfThumbnail } from '../../utils/pdf';
+import { IMAGE_EXTENSIONS, PREVIEWABLE_OFFICE_EXTENSIONS, PREVIEWABLE_PDF_EXTENSIONS } from '../../utils/fileIcons';
 
 interface ThumbnailProps {
     path: string;
@@ -29,7 +31,11 @@ export const Thumbnail: React.FC<ThumbnailProps> = React.memo(({ path, name, isD
         }
 
         const ext = name.split('.').pop()?.toLowerCase() || '';
-        if (IMAGE_EXTENSIONS.includes(ext)) {
+        const isImage = IMAGE_EXTENSIONS.includes(ext);
+        const isPdf = PREVIEWABLE_PDF_EXTENSIONS.includes(ext);
+        const isOffice = PREVIEWABLE_OFFICE_EXTENSIONS.includes(ext);
+
+        if (isImage || isPdf || isOffice) {
             if (THUMB_CACHE.has(path)) {
                 setSrc(THUMB_CACHE.get(path)!);
                 setError(false);
@@ -39,17 +45,31 @@ export const Thumbnail: React.FC<ThumbnailProps> = React.memo(({ path, name, isD
             let isMounted = true;
             const loadThumb = async () => {
                 try {
-                    // Call the Rust backend to get a resized cached version
-                    const cachedPath = await invoke<string>('get_image_thumbnail', { path });
-                    if (isMounted) {
-                        const finalSrc = convertFileSrc(cachedPath);
+                    let finalSrc = '';
+                    if (isImage) {
+                        // Call the Rust backend to get a resized cached version
+                        const cachedPath = await invoke<string>('get_image_thumbnail', { path });
+                        finalSrc = convertFileSrc(cachedPath);
+                    } else if (isPdf) {
+                        const fileData = await readFile(path);
+                        finalSrc = await getPdfThumbnail(fileData.buffer, 1.0);
+                    } else if (isOffice) {
+                        const cachedPath = await invoke<string>('get_office_thumbnail', { path });
+                        finalSrc = convertFileSrc(cachedPath);
+                    }
+
+                    if (isMounted && finalSrc) {
                         THUMB_CACHE.set(path, finalSrc);
                         setSrc(finalSrc);
                     }
                 } catch (err) {
-                    // Fallback to original if thumbnail generation fails
+                    // Fallback to original if thumbnail generation fails, but only for images
                     if (isMounted) {
-                        setSrc(convertFileSrc(path));
+                        if (isImage) {
+                            setSrc(convertFileSrc(path));
+                        } else {
+                            setError(true);
+                        }
                     }
                 }
             };

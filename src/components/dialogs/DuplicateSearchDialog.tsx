@@ -603,7 +603,7 @@ export const DuplicateSearchDialog: React.FC<DuplicateSearchDialogProps> = ({
                                                 <Search size={48} style={{ marginBottom: '1rem' }} />
                                                 <div style={{ fontSize: '1rem' }}>
                                                     {duplicates.length > 0 && filterQuery
-                                                        ? (t('no_results') || 'No matching duplicates found with current filter')
+                                                        ? (t('no_duplicates_found') || 'No matching duplicates found with current filter')
                                                         : (t('duplicate_start_hint') || 'Configure your search and click "Find Duplicates"')}
                                                 </div>
                                             </>
