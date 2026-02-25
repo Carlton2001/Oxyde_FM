@@ -90,6 +90,7 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
 
     const panelRef = useRef<HTMLDivElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
+    const headerScrollRef = useRef<HTMLDivElement>(null);
     const scrollHandleRef = useRef<VirtualizedFileListHandle>(null);
     const [showScrollTop, setShowScrollTop] = useState(false);
     const [mouseNearScrollbar, setMouseNearScrollbar] = useState(false);
@@ -271,6 +272,23 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
         cancelRename();
     }, [currentPath, cancelRename]);
 
+    // Sync header horizontal scroll with the virtualized list's horizontal scroll
+    useEffect(() => {
+        const container = containerRef.current;
+        const headerScroll = headerScrollRef.current;
+        if (!container || !headerScroll) return;
+
+        const scrollEl = container.querySelector('.virtualized-list') as HTMLElement | null;
+        if (!scrollEl) return;
+
+        const onScroll = () => {
+            headerScroll.scrollLeft = scrollEl.scrollLeft;
+        };
+
+        scrollEl.addEventListener('scroll', onScroll, { passive: true });
+        return () => scrollEl.removeEventListener('scroll', onScroll);
+    });
+
     const {
         selectionRect,
         pendingSelection,
@@ -394,28 +412,30 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
                         <span>{t('search_limit_reached', { count: searchLimit })}</span>
                     </div>
                 )}
-                <FileHeader
-                    viewMode={viewMode}
-                    searchResults={searchResults}
-                    isTrashView={isTrashView}
-                    finalFiles={finalFiles}
-                    sortConfig={sortConfig}
-                    colWidths={colWidths}
-                    onSort={onSort}
-                    onResize={onResize}
-                    onResizeMultiple={onResizeMultiple}
-                    onClearSearch={onClearSearch}
-                    onSelectAll={handleHeaderClick}
-                    onHeaderContextMenu={handleHeaderContextMenu}
-                    isTypeFiltered={extensionFilter !== null}
-                    isSizeFiltered={sizeFilter !== null}
-                    isNameFiltered={nameFilter !== null}
-                    isLocationFiltered={locationFilter !== null}
-                    isDeletedDateFiltered={deletedDateFilter !== null}
-                    isDateFiltered={dateFilter !== null}
-                    t={t}
-                    panelRef={panelRef}
-                />
+                <div className="file-header-scroll-wrapper" ref={headerScrollRef}>
+                    <FileHeader
+                        viewMode={viewMode}
+                        searchResults={searchResults}
+                        isTrashView={isTrashView}
+                        finalFiles={finalFiles}
+                        sortConfig={sortConfig}
+                        colWidths={colWidths}
+                        onSort={onSort}
+                        onResize={onResize}
+                        onResizeMultiple={onResizeMultiple}
+                        onClearSearch={onClearSearch}
+                        onSelectAll={handleHeaderClick}
+                        onHeaderContextMenu={handleHeaderContextMenu}
+                        isTypeFiltered={extensionFilter !== null}
+                        isSizeFiltered={sizeFilter !== null}
+                        isNameFiltered={nameFilter !== null}
+                        isLocationFiltered={locationFilter !== null}
+                        isDeletedDateFiltered={deletedDateFilter !== null}
+                        isDateFiltered={dateFilter !== null}
+                        t={t}
+                        panelRef={panelRef}
+                    />
+                </div>
 
                 <div
                     className={cx("file-list", viewMode, { "search-mode": !!searchResults, "trash-mode": isTrashView, "virtualized": true })}

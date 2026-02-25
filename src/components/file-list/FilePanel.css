@@ -363,6 +363,11 @@
     grid-template-columns: var(--grid-template);
 }
 
+.file-header-scroll-wrapper {
+    overflow: hidden;
+    flex-shrink: 0;
+}
+
 .file-header {
     display: grid !important;
     grid-template-columns: var(--grid-template);
@@ -373,12 +378,8 @@
     font-size: 0.75rem;
     font-weight: 600;
     background-color: var(--bg-color);
-    position: sticky;
-    top: 0;
-    z-index: var(--z-sticky-header);
     flex-shrink: 0;
     color: var(--text-color);
-    scrollbar-gutter: stable;
     width: max-content;
     min-width: 100%;
     box-sizing: border-box;

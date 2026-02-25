@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { convertFileSrc } from '@tauri-apps/api/core';
+import { convertFileSrc, invoke } from '@tauri-apps/api/core';
 import { readTextFileLines, readFile } from '@tauri-apps/plugin-fs';
 import { getPdfThumbnail, PDF_THUMBNAIL_CACHE } from '../../utils/pdf';
 import { PREVIEWABLE_EXTENSIONS, PREVIEWABLE_VIDEO_EXTENSIONS, PREVIEWABLE_TEXT_EXTENSIONS, PREVIEWABLE_PDF_EXTENSIONS, PREVIEWABLE_OFFICE_EXTENSIONS } from '../../utils/fileIcons';
-import { invoke } from '@tauri-apps/api/core';
 import { DiskUsageChart } from './DiskUsageChart';
 import { useApp } from '../../context/AppContext';
 import './Tooltip.css';

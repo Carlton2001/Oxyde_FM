@@ -295,7 +295,7 @@ export const translations = {
         moved_to_recycle_bin_plural: 'moved to Recycle Bin',
         undo_action: 'Undo:',
         redo_action: 'Redo:',
-        calculate_size: 'Calculate size',
+        calculate_size: 'Calculate folders size',
         calculating: 'Calculating...',
         empty_dir: 'Empty',
         // Recycle Bin
@@ -638,7 +638,7 @@ export const translations = {
         moved_to_recycle_bin_plural: 'déplacés vers la corbeille',
         undo_action: 'Annulation :',
         redo_action: 'Rétablissement :',
-        calculate_size: 'Calculer la taille',
+        calculate_size: 'Calculer la taille des dossiers',
         calculating: 'Calcul en cours...',
         empty_dir: 'Vide',
         // Recycle Bin

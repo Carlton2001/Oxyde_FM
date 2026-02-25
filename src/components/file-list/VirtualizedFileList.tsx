@@ -414,7 +414,8 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
         let sum = colWidths.name + (colWidths.type || 0) + (colWidths.size || 0) + (colWidths.date || 0);
         if (searchResults) sum += (colWidths.location || 0);
         if (isTrashView) sum += (colWidths.location || 0) + (colWidths.deletedDate || 0);
-        return sum + (rootFontSize * 2.5);
+        // 1.875rem = 1rem (header padding: 0.5rem each side) + 0.875rem (file-list scrollbar offset)
+        return sum + (rootFontSize * 1.875);
     }, [colWidths, isGrid, searchResults, isTrashView, rootFontSize]);
 
     return (
@@ -473,7 +474,7 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
                         rowComponent={DetailsRow as any}
                         rowProps={sharedProps}
                         listRef={listRef}
-                        style={{ height, width: finalWidth, overflowY: 'auto', overflowX: 'auto' }}
+                        style={{ height, width: finalWidth, overflowY: 'auto', overflowX: 'hidden' }}
                         onScroll={handleScroll}
                     />
                 );
