@@ -7,7 +7,8 @@ use tauri::{AppHandle, Emitter, State};
 use std::path::PathBuf;
 
 #[tauri::command]
-pub fn get_drives() -> Vec<DriveInfo> {
+pub fn get_drives(skip_hardware_info: Option<bool>) -> Vec<DriveInfo> {
+    let skip_hardware_info = skip_hardware_info.unwrap_or(false);
     #[cfg(target_os = "windows")]
     {
         use windows::core::PCWSTR;
@@ -83,7 +84,7 @@ pub fn get_drives() -> Vec<DriveInfo> {
                     let mut media_type = None;
                     let mut physical_id = None;
                     
-                    if win_type == 3 || win_type == 2 || win_type == 5 { // Fixed, Removable or CD-ROM
+                    if !skip_hardware_info && (win_type == 3 || win_type == 2 || win_type == 5) { // Fixed, Removable or CD-ROM
                         let drive_root_unf = format!("\\\\.\\{}:", &drive_path[0..1]);
                         let wide_path: Vec<u16> = drive_root_unf.encode_utf16().chain(std::iter::once(0)).collect();
                         
@@ -861,6 +862,7 @@ pub async fn unmount_disk_image(
                     tabs_to_keep.push(crate::models::Tab {
                         id: new_id.clone(),
                         path: PathBuf::from("C:\\"),
+                        version: 0,
                     });
                     panel.active_tab_id = new_id;
                 } else if active_id_invalidated {

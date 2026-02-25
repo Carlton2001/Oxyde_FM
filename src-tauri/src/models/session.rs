@@ -54,7 +54,9 @@ impl Default for SortConfig {
 pub struct Tab {
     pub id: String,
     pub path: PathBuf,
-    // Future: history for back/forward navigation
+    #[serde(skip)]
+    #[serde(default)]
+    pub version: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -166,6 +168,7 @@ impl Default for SessionState {
                 tabs: vec![Tab {
                     id: "default-left".to_string(),
                     path: PathBuf::from("C:\\"),
+                    version: 0,
                 }],
                 active_tab_id: "default-left".to_string(),
                 watcher: None,
@@ -178,6 +181,7 @@ impl Default for SessionState {
                 tabs: vec![Tab {
                     id: "default-right".to_string(),
                     path: PathBuf::from("C:\\"),
+                    version: 0,
                 }],
                 active_tab_id: "default-right".to_string(),
                 watcher: None,
@@ -229,6 +233,11 @@ impl SessionManager {
 
                     let mut session = self.0.lock().map_err(|_| CommandError::SystemError("Failed to lock session state".to_string()))?;
                     *session = loaded_session;
+                    
+                    // Emit immediately after load so UI knows the restored state
+                    if let Err(e) = app_handle.emit("session_changed", session.clone()) {
+                        log::error!("Failed to emit session after load: {}", e);
+                    }
                 },
                 Err(e) => log::error!("Failed to parse session.json: {}", e),
             }

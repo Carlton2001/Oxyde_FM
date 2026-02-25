@@ -11,31 +11,45 @@ export const useDrives = () => {
 
     const refreshDrives = useCallback(async () => {
         try {
-            const [newDrives, newMountedImages] = await Promise.all([
-                invoke<DriveInfo[]>('get_drives'),
-                invoke<string[]>('get_mounted_images')
-            ]);
+            // 1. Fetch BASIC drive info (FAST, no hardware detection)
+            const basicDrives = await invoke<DriveInfo[]>('get_drives', { skipHardwareInfo: true });
             setDrives(prev => {
-                // Prevent re-render if the drive list is identical (field-by-field)
-                if (prev.length === newDrives.length && prev.every((d, i) => {
-                    const n = newDrives[i];
-                    return d.path === n.path && d.label === n.label
-                        && d.drive_type === n.drive_type && d.is_readonly === n.is_readonly;
+                if (prev.length === basicDrives.length && prev.every((d, i) => {
+                    const n = basicDrives[i];
+                    return d.path === n.path && d.label === n.label && d.drive_type === n.drive_type;
                 })) {
                     return prev;
                 }
-                return newDrives;
+                return basicDrives;
             });
-            setMountedImages(prev => {
-                const normPrev = prev.map(p => p.toLowerCase()).sort();
-                const normNew = newMountedImages.map((p: string) => p.toLowerCase()).sort();
-                if (normPrev.length === normNew.length && normPrev.every((val, index) => val === normNew[index])) {
-                    return prev;
-                }
-                return newMountedImages;
-            });
+
+            // 2. Fetch MOUNTED IMAGES (Medium, runs PowerShell)
+            invoke<string[]>('get_mounted_images').then(newMountedImages => {
+                setMountedImages(prev => {
+                    const normPrev = prev.map(p => p.toLowerCase()).sort();
+                    const normNew = newMountedImages.map((p: string) => p.toLowerCase()).sort();
+                    if (normPrev.length === normNew.length && normPrev.every((val, index) => val === normNew[index])) {
+                        return prev;
+                    }
+                    return newMountedImages;
+                });
+            }).catch(console.error);
+
+            // 3. Fetch ENRICHED drive info (SLOWER, hardware detection/spin-up)
+            invoke<DriveInfo[]>('get_drives', { skipHardwareInfo: false }).then(enrichedDrives => {
+                setDrives(prev => {
+                    // Check if anything actually changed (like media_type or physical_id)
+                    const changed = enrichedDrives.some((d, i) => {
+                        const p = prev[i];
+                        return !p || d.media_type !== p.media_type || d.physical_id !== p.physical_id;
+                    });
+                    if (!changed) return prev;
+                    return enrichedDrives;
+                });
+            }).catch(console.error);
+
         } catch (err) {
-            console.error(err);
+            console.error("Failed to refresh drives:", err);
         }
     }, []);
 

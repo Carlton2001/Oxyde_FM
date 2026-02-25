@@ -1,28 +1,32 @@
 import { useState, useCallback } from 'react';
-import { getParent } from '../utils/path';
+import { getParent, normalizePath } from '../utils/path';
 import { HistoryEntry } from '../types';
 
 interface NavigationState {
     path: string;
     history: HistoryEntry[];
     historyIndex: number;
+    version: number;
 }
 
 export const useNavigation = (initialPath: string = "C:\\") => {
     const [state, setState] = useState<NavigationState>(() => {
-        const initialEntry: HistoryEntry = { path: initialPath, selected: [] };
+        const normInitial = normalizePath(initialPath);
+        const initialEntry: HistoryEntry = { path: normInitial, selected: [] };
         return {
-            path: initialPath,
+            path: normInitial,
             history: [initialEntry],
-            historyIndex: 0
+            historyIndex: 0,
+            version: 0
         };
     });
 
-    const navigate = useCallback((newPath: string, currentSelection?: string[]) => {
-        if (!newPath) return;
+    const navigate = useCallback((pathInput: string, currentSelection?: string[], forceVersion?: number) => {
+        if (!pathInput) return;
+        const newPath = normalizePath(pathInput);
 
         setState(prev => {
-            if (newPath === prev.path) return prev;
+            if (newPath === prev.path && forceVersion === undefined) return prev;
 
             let newHistory = prev.history.slice(0, prev.historyIndex + 1);
             // Update selection for current entry before moving away
@@ -43,7 +47,8 @@ export const useNavigation = (initialPath: string = "C:\\") => {
             return {
                 path: newPath,
                 history: newHistory,
-                historyIndex: newIndex
+                historyIndex: newIndex,
+                version: forceVersion !== undefined ? forceVersion : prev.version + 1
             };
         });
     }, []);
@@ -64,7 +69,8 @@ export const useNavigation = (initialPath: string = "C:\\") => {
                         ...prev,
                         path: entry.path,
                         history: newHistory,
-                        historyIndex: idx
+                        historyIndex: idx,
+                        version: prev.version + 1
                     };
                 }
             }
@@ -88,7 +94,8 @@ export const useNavigation = (initialPath: string = "C:\\") => {
                         ...prev,
                         path: entry.path,
                         history: newHistory,
-                        historyIndex: idx
+                        historyIndex: idx,
+                        version: prev.version + 1
                     };
                 }
             }
@@ -110,7 +117,8 @@ export const useNavigation = (initialPath: string = "C:\\") => {
                 return {
                     path: parent,
                     history: newHistory,
-                    historyIndex: newHistory.length - 1
+                    historyIndex: newHistory.length - 1,
+                    version: prev.version + 1
                 };
             }
             return prev;
@@ -141,6 +149,7 @@ export const useNavigation = (initialPath: string = "C:\\") => {
         goForward,
         goUp,
         updateCurrentSelection,
-        setNavigationState
+        setNavigationState,
+        version: state.version
     };
 };

@@ -8,25 +8,24 @@ import { usePanelSearch } from './usePanelSearch';
 import { useApp } from '../context/AppContext';
 import { ViewMode, SortConfig, ColumnWidths } from '../types';
 
-export const usePanel = (initialPath: string, panelId?: string, enableSync: boolean = true, activeTabId?: string) => {
+export const usePanel = (initialPath: string, panelId?: string, activeTabId?: string) => {
     const { showHidden, showSystem, searchLimit } = useApp();
-
-    // Navigation
-    const { path, history, historyIndex, currentEntry, navigate, goBack, goForward, goUp, updateCurrentSelection, setNavigationState } = useNavigation(initialPath);
 
     const normalizedPanelId = useMemo(() => {
         if (!panelId) return 'left' as 'left' | 'right';
         return (panelId.startsWith('panel-') ? panelId.replace('panel-', '') : panelId) as 'left' | 'right';
     }, [panelId]);
 
-    // Sync path with backend session
+    // Navigation
+    const { path, history, historyIndex, currentEntry, navigate, goBack, goForward, goUp, updateCurrentSelection, setNavigationState, version } = useNavigation(initialPath);
+
     useEffect(() => {
-        if (panelId && enableSync) {
-            invoke('active_tab_navigate', { panelId: normalizedPanelId, path }).catch(err => {
+        if (panelId) {
+            invoke('active_tab_navigate', { panelId: normalizedPanelId, path, version }).catch(err => {
                 console.error("Failed to sync navigation:", err);
             });
         }
-    }, [path, normalizedPanelId, enableSync]);
+    }, [path, normalizedPanelId, version]);
 
     // View State with localStorage persistence
     const [viewMode, setViewModeState] = useState<ViewMode>(() => {
@@ -117,7 +116,8 @@ export const usePanel = (initialPath: string, panelId?: string, enableSync: bool
         setNavigationState({
             path: state.path,
             history: state.history,
-            historyIndex: state.historyIndex
+            historyIndex: state.historyIndex,
+            version: state.version || 0
         });
         setViewMode(state.viewMode);
         setSortConfig(state.sortConfig);
@@ -126,8 +126,8 @@ export const usePanel = (initialPath: string, panelId?: string, enableSync: bool
     }, [setNavigationState, setViewMode, setSortConfig, setSearchQuery, setSelected]);
 
     // Navigation helpers
-    const handleNavigate = useCallback((newPath: string, selection?: string[]) => {
-        navigate(newPath, selection || Array.from(selected));
+    const handleNavigate = useCallback((newPath: string, selection?: string[], forceVersion?: number) => {
+        navigate(newPath, selection || Array.from(selected), forceVersion);
     }, [navigate, selected]);
     const handleGoBack = useCallback(() => goBack(Array.from(selected)), [goBack, selected]);
     const handleGoForward = useCallback(() => goForward(Array.from(selected)), [goForward, selected]);
@@ -136,6 +136,7 @@ export const usePanel = (initialPath: string, panelId?: string, enableSync: bool
     return useMemo(() => ({
         // State
         path,
+        version,
         files: displayFiles,
         loading,
         error,

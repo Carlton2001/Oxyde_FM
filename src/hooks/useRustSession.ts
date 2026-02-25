@@ -6,6 +6,7 @@ import { PanelId } from '../types';
 export interface Tab {
     id: string;
     path: string;
+    version: number;
 }
 
 export interface PanelState {
@@ -46,8 +47,8 @@ export const useRustSession = () => {
         };
     }, [refreshSession]);
 
-    const activeTabNavigate = useCallback(async (panelId: PanelId, path: string) => {
-        await invoke('active_tab_navigate', { panelId, path });
+    const activeTabNavigate = useCallback(async (panelId: PanelId, path: string, version?: number) => {
+        await invoke('active_tab_navigate', { panelId, path, version });
     }, []);
 
     const createTab = useCallback(async (panelId: PanelId, path: string, background?: boolean) => {

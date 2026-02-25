@@ -39,6 +39,7 @@ import { useFavorites } from './hooks/useFavorites';
 
 import { ActionContext } from './types/actions';
 import { actionService } from './services/ActionService';
+import { normalizePath } from './utils/path';
 
 import { DualPanelLayout } from './components/layout/DualPanelLayout';
 import { ContextMenu } from './components/ui/ContextMenu';
@@ -203,8 +204,15 @@ function App() {
     if (layout === 'dual') return;
     if (prevActiveTabIdRef.current !== activeTabId) { prevActiveTabIdRef.current = activeTabId; return; }
     const activeTab = tabs.find(t => t.id === activeTabId);
-    if (activeTab && activeTab.path !== left.path) updateTabPath(activeTabId, left.path);
-  }, [left.path, activeTabId, layout, tabs, updateTabPath]);
+    if (activeTab) {
+      const normTab = normalizePath(activeTab.path);
+      const normPanel = normalizePath(left.path);
+      if (normTab !== normPanel) {
+        // Use current panel version for sync to avoid Rust-side increment loops
+        updateTabPath(activeTabId, left.path, left.version);
+      }
+    }
+  }, [left.path, left.version, activeTabId, layout, tabs, updateTabPath]);
 
 
 

@@ -30,6 +30,7 @@ pub fn create_tab(
     let new_tab = Tab {
         id: new_id.clone(),
         path: PathBuf::from(&path),
+        version: 0,
     };
 
     let panel = session.get_panel_mut(&panel_id);
@@ -74,6 +75,7 @@ pub fn close_tab(
                     panel.tabs.push(Tab {
                         id: default_id.clone(),
                         path: PathBuf::from("C:\\"),
+                        version: 0,
                     });
                     panel.active_tab_id = default_id;
                 }
@@ -133,13 +135,30 @@ pub fn active_tab_navigate(
     state: State<'_, SessionManager>,
     panel_id: String,
     path: String,
+    version: Option<u64>,
 ) -> Result<(), CommandError> {
     let mut session = lock_session(&state)?;
     
     {
         let panel = session.get_panel_mut(&panel_id);
         if let Some(tab) = panel.tabs.iter_mut().find(|t| t.id == panel.active_tab_id) {
-            tab.path = PathBuf::from(path);
+            // Only update if the incoming version is newer or if no version is provided (legacy/internal)
+            if let Some(v) = version {
+                if v > tab.version {
+                    tab.path = PathBuf::from(&path);
+                    tab.version = v;
+                } else if v < tab.version {
+                    log::warn!("REJECTED: Navigation to {:?} (v{}) because current is v{}", path, v, tab.version);
+                    return Ok(());
+                } else {
+                    if tab.path != PathBuf::from(&path) {
+                         tab.path = PathBuf::from(&path);
+                    }
+                }
+            } else {
+                tab.path = PathBuf::from(path);
+                tab.version += 1;
+            }
         }
     }
 
@@ -186,6 +205,7 @@ pub fn duplicate_tab(
             let new_tab = Tab {
                 id: Uuid::new_v4().to_string(),
                 path: tab.path.clone(),
+                version: tab.version,
             };
             // Insert after current
             panel.tabs.insert(pos + 1, new_tab.clone());

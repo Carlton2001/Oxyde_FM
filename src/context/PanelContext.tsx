@@ -4,6 +4,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { usePanel } from '../hooks/usePanel';
 import { PanelId } from '../types';
 import { useRustSession } from '../hooks/useRustSession';
+import { normalizePath } from '../utils/path';
 
 // Infers the return type of usePanel automatically
 type PanelState = ReturnType<typeof usePanel>;
@@ -46,27 +47,11 @@ export const PanelProvider: React.FC<PanelProviderProps> = ({
     // Defaults while loading or if fallback
     const defaultPath = "C:\\";
 
-    // Initialize hooks
-    // Note: usePanel handles its own internal logic for files/selection/etc.
-    // We just need to feed it the path from the session potentially?
-    // Actually, usePanel manages 'path' state internally.
-    // We need to sync it with session.
-
-    // For now, let's keep usePanel independent but initialize it with what we can?
-    // Or better: Watch session changes and call navigate() on usePanel.
-
-    const [isHydrated, setIsHydrated] = useState(false);
-
     const leftActiveTabId = session?.left_panel.active_tab_id;
     const rightActiveTabId = session?.right_panel.active_tab_id;
 
-    const left = usePanel(initialLeftPath || defaultPath, 'left', isHydrated, leftActiveTabId);
-    const right = usePanel(initialRightPath || defaultPath, 'right', isHydrated, rightActiveTabId);
-
-    // Refs to track the last path we successfully synced FROM the backend.
-    // This allows us to distinguish between "Backend changed" (Tab switch) vs "Frontend changed" (Navigation)
-    const lastSyncedLeft = React.useRef<string | null>(null);
-    const lastSyncedRight = React.useRef<string | null>(null);
+    const left = usePanel(initialLeftPath || defaultPath, 'left', leftActiveTabId);
+    const right = usePanel(initialRightPath || defaultPath, 'right', rightActiveTabId);
 
     const [activePanelId, setActivePanelIdState] = useState<PanelId>('left');
 
@@ -79,29 +64,6 @@ export const PanelProvider: React.FC<PanelProviderProps> = ({
     useEffect(() => {
         if (!session) return;
 
-        // Initial Hydration
-        if (!isHydrated) {
-            const leftTab = session.left_panel.tabs.find(t => t.id === session.left_panel.active_tab_id);
-            if (leftTab && leftTab.path !== left.path) {
-                left.navigate(leftTab.path);
-            }
-
-            const activePanel = session.active_panel as PanelId;
-            setActivePanelIdState(activePanel);
-
-            const rightTab = session.right_panel.tabs.find(t => t.id === session.right_panel.active_tab_id);
-            if (rightTab && rightTab.path !== right.path) {
-                right.navigate(rightTab.path);
-            }
-
-            setIsHydrated(true);
-            return;
-        }
-
-        // Normal Sync (Rust -> React)
-        // If Rust changes (e.g. via command), update React (navigate)
-        // This handles "Tab Click" -> Rust Command -> Event -> Session Update -> React Navigate
-
         // Update Active ID
         if (session.active_panel === 'left' || session.active_panel === 'right') {
             if (activePanelId !== session.active_panel) {
@@ -109,30 +71,34 @@ export const PanelProvider: React.FC<PanelProviderProps> = ({
             }
         }
 
-        const leftTab = session.left_panel.tabs.find(t => t.id === session.left_panel.active_tab_id);
-        if (leftTab) {
-            // Logic: Only update Frontend IF Backend has moved from what we last saw.
-            // If Backend is same as last sync, but Frontend is different, assume Frontend is "ahead" (local nav).
-            if (leftTab.path !== lastSyncedLeft.current) {
-                if (leftTab.path !== left.path) {
-                    left.navigate(leftTab.path);
-                }
-                lastSyncedLeft.current = leftTab.path;
+        const leftTabArr = session.left_panel.tabs.find(t => t.id === session.left_panel.active_tab_id);
+        if (leftTabArr) {
+            const normRust = normalizePath(leftTabArr.path);
+            const normReact = normalizePath(left.path);
+
+            if (leftTabArr.version > left.version) {
+                console.log(`[Sync] Left Backend is ahead (v${leftTabArr.version} > v${left.version}). Catching up and moving to: ${normRust}`);
+                left.navigate(normRust, [], leftTabArr.version);
+            } else if (leftTabArr.version === left.version && normRust !== normReact) {
+                console.log(`[Sync] Left Path mismatch at same version (v${left.version}). Correcting to: ${normRust}`);
+                left.navigate(normRust, [], left.version);
             }
         }
 
-        const rightTab = session.right_panel.tabs.find(t => t.id === session.right_panel.active_tab_id);
-        if (rightTab) {
-            if (rightTab.path !== lastSyncedRight.current) {
-                if (rightTab.path !== right.path) {
-                    right.navigate(rightTab.path);
-                }
-                lastSyncedRight.current = rightTab.path;
+        const rightTabArr = session.right_panel.tabs.find(t => t.id === session.right_panel.active_tab_id);
+        if (rightTabArr) {
+            const normRust = normalizePath(rightTabArr.path);
+            const normReact = normalizePath(right.path);
+
+            if (rightTabArr.version > right.version) {
+                console.log(`[Sync] Right Backend is ahead (v${rightTabArr.version} > v${right.version}). Catching up and moving to: ${normRust}`);
+                right.navigate(normRust, [], rightTabArr.version);
+            } else if (rightTabArr.version === right.version && normRust !== normReact) {
+                console.log(`[Sync] Right Path mismatch at same version (v${right.version}). Correcting to: ${normRust}`);
+                right.navigate(normRust, [], right.version);
             }
         }
-    }, [session, isHydrated]);
-    // Dependency on 'left' and 'right' omitted to avoid deep re-renders causing loops, 
-    // assuming left.navigate is stable or we check path equality.
+    }, [session, left.version, left.path, right.version, right.path, activePanelId]);
 
     const value = useMemo(() => ({
         left,
@@ -150,4 +116,3 @@ export const PanelProvider: React.FC<PanelProviderProps> = ({
         </PanelContext.Provider>
     );
 };
-

@@ -14,7 +14,7 @@ interface TabsContextType {
     addTab: (path: string, optionsOrId?: string | { id?: string, background?: boolean, index?: number }, background?: boolean) => Promise<void>;
     closeTab: (id: string, newActiveId?: string) => void;
     setActiveTab: (id: string, currentPanelState?: any) => void;
-    updateTabPath: (id: string, path: string) => void;
+    updateTabPath: (id: string, path: string, version?: number) => void;
     updateTabState: (id: string, state: any) => void; // Legacy hook compat
     duplicateTab: (id: string) => void;
     closeOtherTabs: (id: string) => void;
@@ -106,12 +106,12 @@ export const TabsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         switchTab(id);
     }, [switchTab]);
 
-    const updateTabPath = useCallback((id: string, path: string) => {
+    const updateTabPath = useCallback((id: string, path: string, version?: number) => {
         // Identifying which panel this tab belongs to is tricky purely by ID if we don't know it.
         // But activeTabNavigate only works for the ACTIVE tab of a panel.
         // If the updated tab is the active one, we use activeTabNavigate.
         if (id === activeTabId) {
-            activeTabNavigate(activePanelId as PanelId, path);
+            activeTabNavigate(activePanelId as PanelId, path, version);
         } else {
             console.warn("Updating background tab path not yet fully supported in this hybrid phase");
         }

@@ -95,46 +95,90 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
 
     // Derived state (or defaults)
     const theme = (config?.theme as Theme) || (localStorage.getItem('fm_theme') as Theme) || defaults.theme;
-    const layout = (config?.layout as LayoutMode) || defaults.layout;
-    const language = (config?.language as Language) || defaults.language;
-    const showHidden = config?.show_hidden ?? defaults.showHidden;
-    const showSystem = config?.show_system ?? defaults.showSystem;
-    const useSystemIcons = config?.use_system_icons ?? defaults.useSystemIcons;
-    const dateFormat = (config?.date_format as DateFormat) || defaults.dateFormat;
-    const showPreviews = config?.show_previews ?? defaults.showPreviews;
-    const zipQuality = (config?.zip_quality as CompressionQuality) || defaults.zipQuality;
-    const sevenZipQuality = (config?.seven_zip_quality as CompressionQuality) || defaults.sevenZipQuality;
-    const zstdQuality = (config?.zstd_quality as CompressionQuality) || defaults.zstdQuality;
+    const layout = (config?.layout as LayoutMode) || (localStorage.getItem('fm_layout') as LayoutMode) || defaults.layout;
+    const language = (config?.language as Language) || (localStorage.getItem('fm_language') as Language) || defaults.language;
+    const showHidden = config?.show_hidden ?? (localStorage.getItem('fm_showHidden') === 'true' || (localStorage.getItem('fm_showHidden') === null && defaults.showHidden));
+    const showSystem = config?.show_system ?? (localStorage.getItem('fm_showSystem') === 'true' || (localStorage.getItem('fm_showSystem') === null && defaults.showSystem));
+    const useSystemIcons = config?.use_system_icons ?? (localStorage.getItem('fm_useSystemIcons') === 'true' || (localStorage.getItem('fm_useSystemIcons') === null && defaults.useSystemIcons));
+    const dateFormat = (config?.date_format as DateFormat) || (localStorage.getItem('fm_dateFormat') as DateFormat) || defaults.dateFormat;
+    const showPreviews = config?.show_previews ?? (localStorage.getItem('fm_showPreviews') === 'true' || (localStorage.getItem('fm_showPreviews') === null && defaults.showPreviews));
+    const zipQuality = (config?.zip_quality as CompressionQuality) || (localStorage.getItem('fm_zipQuality') as CompressionQuality) || defaults.zipQuality;
+    const sevenZipQuality = (config?.seven_zip_quality as CompressionQuality) || (localStorage.getItem('fm_sevenZipQuality') as CompressionQuality) || defaults.sevenZipQuality;
+    const zstdQuality = (config?.zstd_quality as CompressionQuality) || (localStorage.getItem('fm_zstdQuality') as CompressionQuality) || defaults.zstdQuality;
     const cachedFontSize = localStorage.getItem('fm_fontSize');
     const fontSize = config?.font_size ?? (cachedFontSize ? parseInt(cachedFontSize, 10) : defaults.fontSize);
-    const searchLimit = config?.search_limit ?? defaults.searchLimit;
-    const defaultTurboMode = config?.default_turbo_mode ?? defaults.defaultTurboMode;
-    const showGridThumbnails = config?.show_grid_thumbnails ?? defaults.showGridThumbnails;
-    const showCheckboxes = config?.show_checkboxes ?? defaults.showCheckboxes;
+    const searchLimit = config?.search_limit ?? (localStorage.getItem('fm_searchLimit') ? parseInt(localStorage.getItem('fm_searchLimit')!, 10) : defaults.searchLimit);
+    const defaultTurboMode = config?.default_turbo_mode ?? (localStorage.getItem('fm_defaultTurboMode') === 'true' || (localStorage.getItem('fm_defaultTurboMode') === null && defaults.defaultTurboMode));
+    const showGridThumbnails = config?.show_grid_thumbnails ?? (localStorage.getItem('fm_showGridThumbnails') === 'true' || (localStorage.getItem('fm_showGridThumbnails') === null && defaults.showGridThumbnails));
+    const showCheckboxes = config?.show_checkboxes ?? (localStorage.getItem('fm_showCheckboxes') === 'true' || (localStorage.getItem('fm_showCheckboxes') === null && defaults.showCheckboxes));
 
     // Setters (memoized to avoid new refs on every render)
-    const setTheme = useCallback((v: Theme) => setConfigValue('theme', v), [setConfigValue]);
-    const setLayout = useCallback((v: LayoutMode) => setConfigValue('layout', v), [setConfigValue]);
-    const setLanguage = useCallback((v: Language) => setConfigValue('language', v), [setConfigValue]);
-    const setShowHidden = useCallback((v: boolean) => setConfigValue('show_hidden', v), [setConfigValue]);
-    const setShowSystem = useCallback((v: boolean) => setConfigValue('show_system', v), [setConfigValue]);
-    const setUseSystemIcons = useCallback((v: boolean) => setConfigValue('use_system_icons', v), [setConfigValue]);
-    const setDateFormat = useCallback((v: DateFormat) => setConfigValue('date_format', v), [setConfigValue]);
-    const setShowPreviews = useCallback((v: boolean) => setConfigValue('show_previews', v), [setConfigValue]);
-    const setZipQuality = useCallback((v: CompressionQuality) => setConfigValue('zip_quality', v), [setConfigValue]);
-    const setSevenZipQuality = useCallback((v: CompressionQuality) => setConfigValue('seven_zip_quality', v), [setConfigValue]);
-    const setZstdQuality = useCallback((v: CompressionQuality) => setConfigValue('zstd_quality', v), [setConfigValue]);
-    const setDefaultTurboMode = useCallback((v: boolean) => setConfigValue('default_turbo_mode', v), [setConfigValue]);
-    const setShowGridThumbnails = useCallback((v: boolean) => setConfigValue('show_grid_thumbnails', v), [setConfigValue]);
-    const setShowCheckboxes = useCallback((v: boolean) => setConfigValue('show_checkboxes', v), [setConfigValue]);
+    const setTheme = useCallback((v: Theme) => {
+        localStorage.setItem('fm_theme', v);
+        setConfigValue('theme', v);
+    }, [setConfigValue]);
+    const setLayout = useCallback((v: LayoutMode) => {
+        localStorage.setItem('fm_layout', v);
+        setConfigValue('layout', v);
+    }, [setConfigValue]);
+    const setLanguage = useCallback((v: Language) => {
+        localStorage.setItem('fm_language', v);
+        setConfigValue('language', v);
+    }, [setConfigValue]);
+    const setShowHidden = useCallback((v: boolean) => {
+        localStorage.setItem('fm_showHidden', v.toString());
+        setConfigValue('show_hidden', v);
+    }, [setConfigValue]);
+    const setShowSystem = useCallback((v: boolean) => {
+        localStorage.setItem('fm_showSystem', v.toString());
+        setConfigValue('show_system', v);
+    }, [setConfigValue]);
+    const setUseSystemIcons = useCallback((v: boolean) => {
+        localStorage.setItem('fm_useSystemIcons', v.toString());
+        setConfigValue('use_system_icons', v);
+    }, [setConfigValue]);
+    const setDateFormat = useCallback((v: DateFormat) => {
+        localStorage.setItem('fm_dateFormat', v);
+        setConfigValue('date_format', v);
+    }, [setConfigValue]);
+    const setShowPreviews = useCallback((v: boolean) => {
+        localStorage.setItem('fm_showPreviews', v.toString());
+        setConfigValue('show_previews', v);
+    }, [setConfigValue]);
+    const setZipQuality = useCallback((v: CompressionQuality) => {
+        localStorage.setItem('fm_zipQuality', v);
+        setConfigValue('zip_quality', v);
+    }, [setConfigValue]);
+    const setSevenZipQuality = useCallback((v: CompressionQuality) => {
+        localStorage.setItem('fm_sevenZipQuality', v);
+        setConfigValue('seven_zip_quality', v);
+    }, [setConfigValue]);
+    const setZstdQuality = useCallback((v: CompressionQuality) => {
+        localStorage.setItem('fm_zstdQuality', v);
+        setConfigValue('zstd_quality', v);
+    }, [setConfigValue]);
+    const setDefaultTurboMode = useCallback((v: boolean) => {
+        localStorage.setItem('fm_defaultTurboMode', v.toString());
+        setConfigValue('default_turbo_mode', v);
+    }, [setConfigValue]);
+    const setShowGridThumbnails = useCallback((v: boolean) => {
+        localStorage.setItem('fm_showGridThumbnails', v.toString());
+        setConfigValue('show_grid_thumbnails', v);
+    }, [setConfigValue]);
+    const setShowCheckboxes = useCallback((v: boolean) => {
+        localStorage.setItem('fm_showCheckboxes', v.toString());
+        setConfigValue('show_checkboxes', v);
+    }, [setConfigValue]);
 
     const setFontSize = useCallback((size: number) => {
         const newSize = Math.max(10, Math.min(24, size));
+        localStorage.setItem('fm_fontSize', newSize.toString());
         setConfigValue('font_size', newSize);
     }, [setConfigValue]);
 
     const setSearchLimit = useCallback((limit: number) => {
         const newLimit = Math.max(10, Math.min(50000, limit));
+        localStorage.setItem('fm_searchLimit', newLimit.toString());
         setConfigValue('search_limit', newLimit);
     }, [setConfigValue]);
 
