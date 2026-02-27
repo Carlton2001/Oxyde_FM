@@ -6,6 +6,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { FileEntry, DriveInfo } from '../../types';
 import { usePanelContext } from '../../context/PanelContext';
+import { formatSize } from '../../utils/format';
 import './SearchDialog.css';
 
 interface DuplicateSearchDialogProps {
@@ -127,13 +128,6 @@ export const DuplicateSearchDialog: React.FC<DuplicateSearchDialogProps> = ({
         } catch (e) {
             console.error("Failed to cancel search", e);
         }
-    };
-
-    const formatSize = (bytes: number) => {
-        if (bytes < 1024) return bytes + ' B';
-        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-        if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
-        return (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' GB';
     };
 
     const { activePanel } = usePanelContext();
@@ -547,7 +541,7 @@ export const DuplicateSearchDialog: React.FC<DuplicateSearchDialogProps> = ({
                                                         </span>
                                                     </div>
                                                     <div style={{ fontSize: '12px', fontWeight: 'bold' }}>
-                                                        {formatSize(group.size)}
+                                                        {formatSize(group.size, 1, t)}
                                                     </div>
                                                 </div>
                                                 {!isCollapsed && (

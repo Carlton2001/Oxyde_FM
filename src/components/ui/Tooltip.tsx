@@ -44,7 +44,7 @@ export const Tooltip: React.FC<TooltipProps> = ({ isShiftPressed }) => {
     const tooltipRef = useRef<HTMLDivElement>(null);
     const showTimeoutRef = useRef<number | null>(null);
     const currentTargetRef = useRef<HTMLElement | null>(null);
-    const { showPreviews } = useApp();
+    const { showPreviews, t } = useApp();
 
     useEffect(() => {
         const handleMouseEnterTarget = (e: MouseEvent) => {
@@ -323,6 +323,7 @@ export const Tooltip: React.FC<TooltipProps> = ({ isShiftPressed }) => {
                     <DiskUsageChart
                         total={tooltip.diskStats.total}
                         free={tooltip.diskStats.free}
+                        t={t}
                     />
                 </div>
             )}

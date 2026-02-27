@@ -256,6 +256,7 @@ export const PropertiesDialog: React.FC<PropertiesDialogProps> = ({ paths, initi
                                                             free={currentDrive.free_bytes || 0}
                                                             size={120}
                                                             showText={false}
+                                                            t={t}
                                                         />
                                                     </div>
                                                 </>

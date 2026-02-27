@@ -21,6 +21,7 @@ src-tauri/binaries
 # IDEs and Editors
 .vscode/*
 !.vscode/extensions.json
+.agents/*
 .idea
 .DS_Store
 *.suo
