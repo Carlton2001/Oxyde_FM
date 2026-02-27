@@ -1,6 +1,6 @@
 [package]
 name = "oxyde-fm"
-version = "1.0.2"
+version = "1.0.3"
 description = "Modern and fast file manager"
 authors = ["Carlton2001"]
 edition = "2021"
@@ -59,7 +59,7 @@ tauri-plugin-updater = "2.10.0"
 tauri-plugin-process = "2"
 
 [dependencies.windows]
-version = "0.61.3"
+version = "1.0.3"
 features = [
     "Win32_Foundation",
     "Win32_System_Registry",
