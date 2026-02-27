@@ -42,3 +42,4 @@ jobs:
           releaseBody: "Consultez le README pour la liste des changements."
           releaseDraft: true
           prerelease: false
+          includeUpdaterJson: true

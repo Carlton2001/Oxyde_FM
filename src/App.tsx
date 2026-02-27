@@ -71,6 +71,9 @@ function App() {
 
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number, target?: string, panelId: PanelId, isDir?: boolean, isBackground?: boolean, isDrive?: boolean, driveType?: DriveInfo['drive_type'], isFavorite?: boolean } | null>(null);
   const [sidebarReduced, setSidebarReduced] = useState(() => localStorage.getItem('sidebarReduced') === 'true');
+  useEffect(() => {
+    localStorage.setItem('sidebarReduced', sidebarReduced.toString());
+  }, [sidebarReduced]);
   const treeRef = useRef<DirectoryTreeHandle>(null);
   const dragGhostRef = useRef<HTMLDivElement>(null);
   const [modifiers, setModifiers] = useState({ ctrl: false, shift: false, alt: false });

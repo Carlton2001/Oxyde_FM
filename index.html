@@ -12,6 +12,11 @@
         var t = localStorage.getItem('fm_theme');
         if (t) document.documentElement.setAttribute('data-theme', t);
       } catch (e) { }
+
+      // Disable default context menu
+      document.addEventListener('contextmenu', function (e) {
+        e.preventDefault();
+      }, { capture: true });
     })();
   </script>
 </head>
