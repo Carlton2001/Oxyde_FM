@@ -65,7 +65,7 @@ function App() {
   const dialogs = useDialogs();
   const { left, right, activePanelId, setActivePanelId } = usePanelContext();
   const fileOps = useFileOperations(notify, t as any);
-  const favorites = useFavorites();
+  const { favorites } = useFavorites();
 
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number, target?: string, panelId: PanelId, isDir?: boolean, isBackground?: boolean, isDrive?: boolean, driveType?: DriveInfo['drive_type'], isFavorite?: boolean } | null>(null);
   const [sidebarReduced, setSidebarReduced] = useState(() => localStorage.getItem('sidebarReduced') === 'true');

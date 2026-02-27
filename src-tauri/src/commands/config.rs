@@ -42,3 +42,15 @@ pub fn set_config_value(
     state.save_config(&app, &config)?;
     Ok(())
 }
+
+#[tauri::command]
+pub fn reset_config_to_default(
+    app: AppHandle,
+    state: State<'_, ConfigManager>,
+) -> Result<(), CommandError> {
+    let default_config = AppConfig::default();
+    let mut config = state.0.lock().map_err(|_| CommandError::SystemError("Failed to lock config".to_string()))?;
+    *config = default_config;
+    state.save_config(&app, &config)?;
+    Ok(())
+}

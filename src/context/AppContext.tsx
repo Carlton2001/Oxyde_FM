@@ -60,6 +60,7 @@ interface AppContextValue {
     setSearchLimit: (limit: number) => void;
 
     refreshDrives: () => void;
+    resetToDefaults: () => Promise<void>;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -69,7 +70,7 @@ interface AppProviderProps {
 }
 
 export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
-    const { config, isLoading, setConfigValue } = useRustConfig();
+    const { config, isLoading, setConfigValue, refreshConfig } = useRustConfig();
     const { notifications, notify, dismissNotification } = useNotifications();
     const { drives, mountedImages, refreshDrives } = useDrives();
 
@@ -184,6 +185,23 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
 
     const t = getT(language);
 
+    const resetToDefaults = useCallback(async () => {
+        try {
+            const { invoke } = await import('@tauri-apps/api/core');
+            await invoke('reset_config_to_default');
+            const keysToRemove = [
+                'fm_theme', 'fm_layout', 'fm_language', 'fm_showHidden', 'fm_showSystem',
+                'fm_useSystemIcons', 'fm_dateFormat', 'fm_showPreviews', 'fm_zipQuality',
+                'fm_sevenZipQuality', 'fm_zstdQuality', 'fm_fontSize', 'fm_searchLimit',
+                'fm_defaultTurboMode', 'fm_showGridThumbnails', 'fm_showCheckboxes'
+            ];
+            keysToRemove.forEach(k => localStorage.removeItem(k));
+            await refreshConfig();
+        } catch (e) {
+            console.error('Failed to reset defaults', e);
+        }
+    }, [refreshConfig]);
+
     // Apply theme and font size
     useEffect(() => {
         document.documentElement.setAttribute('data-theme', theme);
@@ -244,7 +262,8 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
         setShowGridThumbnails,
         showCheckboxes,
         setShowCheckboxes,
-        refreshDrives
+        refreshDrives,
+        resetToDefaults
     };
 
     if (isLoading) {

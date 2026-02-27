@@ -143,6 +143,8 @@ pub fn run() {
             commands::system::get_quick_access_items,
             commands::system::add_to_quick_access,
             commands::system::remove_from_quick_access,
+            commands::system::clear_app_cache,
+            commands::system::restart_app,
             commands::io::set_shortcut_info,
 
             commands::icons::get_file_icon,
@@ -169,6 +171,7 @@ pub fn run() {
             // Config Commands
             commands::config::get_config,
             commands::config::set_config_value,
+            commands::config::reset_config_to_default,
             commands::sidebar::get_sidebar_nodes,
             commands::sidebar::get_subtree_nodes,
             commands::duplicates::find_duplicates,

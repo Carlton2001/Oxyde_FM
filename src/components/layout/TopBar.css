@@ -205,6 +205,23 @@
     z-index: var(--z-menu);
 }
 
+.settings-columns {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+    min-width: 36rem;
+}
+
+.settings-column {
+    display: flex;
+    flex-direction: column;
+}
+
+.settings-column.divider-left {
+    padding-left: 0.5rem;
+    border-left: 1px solid var(--border-color);
+}
+
 .settings-item {
     display: flex;
     align-items: center;

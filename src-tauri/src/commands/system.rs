@@ -1222,7 +1222,49 @@ fn execute_shell_verb_by_canonical_name(_app: &AppHandle, path: &str, target_ver
         let _ = DestroyMenu(hmenu);
         windows::Win32::UI::Shell::ILFree(Some(pidl_full as *const _));
         CoUninitialize();
-
+        
         result
+    }
+}
+
+#[tauri::command]
+pub fn clear_app_cache(app: tauri::AppHandle) -> Result<(), CommandError> {
+    use tauri::Manager;
+    
+    // Clear Webview Browsing Data (EBWebView)
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.clear_all_browsing_data();
+    }
+
+    // Clear local data (thumbnails, thumbnails.db, etc.) except EBWebView
+    if let Ok(path) = app.path().app_local_data_dir() {
+        if path.exists() {
+            if let Ok(entries) = std::fs::read_dir(&path) {
+                for entry in entries.filter_map(|e| e.ok()) {
+                    let entry_path = entry.path();
+                    let file_name = entry_path.file_name().unwrap_or_default().to_string_lossy();
+                    
+                    // Do not attempt to manually delete EBWebView directory since webview uses it
+                    if file_name.to_lowercase().contains("ebwebview") || file_name.to_lowercase() == "webview2" {
+                        continue;
+                    }
+
+                    if entry_path.is_dir() {
+                        let _ = std::fs::remove_dir_all(&entry_path);
+                    } else {
+                        let _ = std::fs::remove_file(&entry_path);
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn restart_app(app: tauri::AppHandle) {
+    if let Ok(current_exe) = std::env::current_exe() {
+        let _ = std::process::Command::new(current_exe).spawn();
+        app.exit(0);
     }
 }
