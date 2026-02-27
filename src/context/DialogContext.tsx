@@ -18,7 +18,7 @@ export interface DialogContextType {
 
     // Quick helpers
     alert: (message: string, title?: string) => Promise<void>;
-    confirm: (message: string, title?: string, isDanger?: boolean, sources?: string[], destination?: string, subMessage?: string) => Promise<boolean>;
+    confirm: (message: string, title?: string, isDanger?: boolean, confirmLabel?: string, sources?: string[], destination?: string, subMessage?: string) => Promise<boolean>;
     prompt: (message: string, title?: string, defaultValue?: string) => Promise<string | null>;
     // Semantic Helpers
     openPropertiesDialog: (paths: string[]) => void;
@@ -61,8 +61,8 @@ export const DialogProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         return openDialog<void>('alert', { message, title });
     }, [openDialog]);
 
-    const confirm = useCallback((message: string, title?: string, isDanger?: boolean, sources?: string[], destination?: string, subMessage?: string) => {
-        return openDialog<boolean>('confirm', { message, title, isDanger, sources, destination, subMessage });
+    const confirm = useCallback((message: string, title?: string, isDanger?: boolean, confirmLabel?: string, sources?: string[], destination?: string, subMessage?: string) => {
+        return openDialog<boolean>('confirm', { message, title, isDanger, confirmLabel, sources, destination, subMessage });
     }, [openDialog]);
 
     const prompt = useCallback((message: string, title?: string, defaultValue?: string) => {
@@ -113,7 +113,7 @@ export const DialogProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         }
 
         // We pass subMessage if we want to visually split the text. In this case, just styling the main message handles the size issue.
-        confirm(mainMessage, title, true, paths, undefined, subMessage).then(confirmed => {
+        confirm(mainMessage, title, true, undefined, paths, undefined, subMessage).then(confirmed => {
             if (confirmed) onConfirm();
         });
     }, [confirm, t]);

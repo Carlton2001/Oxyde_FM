@@ -21,6 +21,9 @@
     "core:window:allow-close",
     "core:window:allow-start-dragging",
     "core:window:allow-toggle-maximize",
-    "core:window:allow-show"
+    "core:window:allow-show",
+    "updater:allow-check",
+    "updater:allow-download-and-install",
+    "process:allow-restart"
   ]
 }

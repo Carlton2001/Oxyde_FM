@@ -190,7 +190,7 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({
                                     try {
                                         const { invoke } = await import('@tauri-apps/api/core');
                                         await invoke('clear_app_cache');
-                                        notify(t('clear_cache' as any) + ' OK', 'success');
+                                        notify(t('clear_cache_success' as any), 'success');
                                     } catch (e: any) {
                                         notify(`Error clearing cache: ${e}`, 'error');
                                     }
@@ -210,7 +210,7 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({
                                 if (confirmed) {
                                     try {
                                         await resetToDefaults();
-                                        notify('Preferences reset.', 'success');
+                                        notify(t('reset_config_success' as any), 'success');
                                     } catch (e: any) {
                                         notify(`Error resetting config: ${e}`, 'error');
                                     }

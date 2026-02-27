@@ -12,6 +12,7 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "Oxyde",
         "width": 1200,
         "height": 800,
@@ -40,5 +41,14 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "active": true,
+      "endpoints": [
+        "https://github.com/Carlton2001/Oxyde_FM/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDc0RjI1QzVCNzlERkZGNzcKUldSMy85OTVXMXp5ZEJMSEIzV254Z0FhTjFBeENLVUpXbHpEVlBYdzRNY3Q0MlZmeGliYnJvQmIK"
+    }
   }
 }

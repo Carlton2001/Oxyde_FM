@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useCallback, ReactNode } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 import { Theme, LayoutMode, Language, DateFormat, CompressionQuality } from '../types';
 import { getT, TFunc } from '../i18n';
 import { useNotifications } from '../hooks/useNotifications';
@@ -22,6 +23,7 @@ interface AppContextValue {
     defaultTurboMode: boolean;
     showGridThumbnails: boolean;
     showCheckboxes: boolean;
+    updateAvailable: boolean;
 
     // Setters
     setTheme: (theme: Theme) => void;
@@ -38,6 +40,7 @@ interface AppContextValue {
     setDefaultTurboMode: (enabled: boolean) => void;
     setShowGridThumbnails: (show: boolean) => void;
     setShowCheckboxes: (show: boolean) => void;
+    setUpdateAvailable: (available: boolean) => void;
 
     // Translation
     t: TFunc;
@@ -112,6 +115,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
     const defaultTurboMode = config?.default_turbo_mode ?? (localStorage.getItem('fm_defaultTurboMode') === 'true' || (localStorage.getItem('fm_defaultTurboMode') === null && defaults.defaultTurboMode));
     const showGridThumbnails = config?.show_grid_thumbnails ?? (localStorage.getItem('fm_showGridThumbnails') === 'true' || (localStorage.getItem('fm_showGridThumbnails') === null && defaults.showGridThumbnails));
     const showCheckboxes = config?.show_checkboxes ?? (localStorage.getItem('fm_showCheckboxes') === 'true' || (localStorage.getItem('fm_showCheckboxes') === null && defaults.showCheckboxes));
+    const [updateAvailable, setUpdateAvailable] = React.useState(false);
 
     // Setters (memoized to avoid new refs on every render)
     const setTheme = useCallback((v: Theme) => {
@@ -187,7 +191,6 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
 
     const resetToDefaults = useCallback(async () => {
         try {
-            const { invoke } = await import('@tauri-apps/api/core');
             await invoke('reset_config_to_default');
             const keysToRemove = [
                 'fm_theme', 'fm_layout', 'fm_language', 'fm_showHidden', 'fm_showSystem',
@@ -262,6 +265,8 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
         setShowGridThumbnails,
         showCheckboxes,
         setShowCheckboxes,
+        updateAvailable,
+        setUpdateAvailable,
         refreshDrives,
         resetToDefaults
     };

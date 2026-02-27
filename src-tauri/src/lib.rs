@@ -84,6 +84,7 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
 }
 
 pub fn run() {
+    #[cfg(debug_assertions)]
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
 
@@ -91,6 +92,8 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_window_state::Builder::new().build())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
 
         .manage(ArchiveState(AtomicBool::new(false)))
         .manage(systems::file_ops::FileOperationManager::new())
@@ -178,16 +181,20 @@ pub fn run() {
             commands::duplicates::cancel_find_duplicates,
         ])
         .setup(|app| {
+            println!("DEBUG: setup() hook starting");
             use tauri::Manager;
             let config_manager = app.state::<models::ConfigManager>();
+            println!("DEBUG: loading config...");
             if let Err(e) = config_manager.load(app.handle()) {
                 eprintln!("Failed to load config: {:?}", e);
             }
 
             let session_manager = app.state::<models::SessionManager>();
+            println!("DEBUG: loading session...");
             if let Err(e) = session_manager.load(app.handle()) {
                 eprintln!("Failed to load session: {:?}", e);
             }
+            println!("DEBUG: session loaded");
 
             // Register WindowState
             let window_state = WindowState::default();
@@ -198,15 +205,15 @@ pub fn run() {
                 use tauri::Manager;
                 APP_HANDLE.set(app.handle().clone()).ok();
                 
-                if let Some(window) = app.get_webview_window("main") {
-                    let hwnd = window.hwnd().unwrap();
+            if let Some(window) = app.get_webview_window("main") {
+                let hwnd = window.hwnd().unwrap();
 
-                    unsafe {
-                        let prev_wndproc = GetWindowLongPtrW(hwnd, GWLP_WNDPROC);
-                        ORIGINAL_WNDPROC.set(prev_wndproc).unwrap();
-                        SetWindowLongPtrW(hwnd, GWLP_WNDPROC, wndproc as usize as isize);
-                    }
+                unsafe {
+                    let prev_wndproc = GetWindowLongPtrW(hwnd, GWLP_WNDPROC);
+                    ORIGINAL_WNDPROC.set(prev_wndproc).unwrap();
+                    SetWindowLongPtrW(hwnd, GWLP_WNDPROC, wndproc as usize as isize);
                 }
+            }
             }
 
             // Start Quick Access Watcher

@@ -21,9 +21,50 @@ import lucideLight from '../../assets/lucide-light.svg';
 import lucideDark from '../../assets/lucide-dark.svg';
 
 // Inline AboutDialog component until extraction (Step 2.3 cleanup usually handles extraction, but good to have it clean here)
+import { check } from '@tauri-apps/plugin-updater';
+import { relaunch } from '@tauri-apps/plugin-process';
+import { Github, RefreshCcw, ExternalLink } from 'lucide-react';
+
 const InlineAboutDialog: React.FC<{ onClose: () => void, t: any, theme: string, appVersion: string }> = ({ onClose, t, theme, appVersion }) => {
     const dragRef = useRef<HTMLDivElement>(null);
     const { position, handleMouseDown } = useDraggable({ initialPosition: { x: 0, y: 0 }, dragRef });
+    const { updateAvailable, setUpdateAvailable } = useApp();
+    const [updating, setUpdating] = React.useState(false);
+    const [updateStatus, setUpdateStatus] = React.useState<'idle' | 'available' | 'none' | 'error'>(updateAvailable ? 'available' : 'idle');
+
+    const { confirm } = useDialogs();
+
+    const handleCheckUpdate = async () => {
+        setUpdating(true);
+        try {
+            const update = await check();
+            if (update?.available) {
+                setUpdateAvailable(true);
+                setUpdateStatus('available');
+
+                const confirmed = await confirm(
+                    t('update_confirm_msg'),
+                    t('update_confirm_title'),
+                    false, // isDanger
+                    t('install'), // confirmLabel
+                );
+
+                if (confirmed) {
+                    await update.downloadAndInstall();
+                    await relaunch();
+                }
+            } else {
+                setUpdateAvailable(false);
+                setUpdateStatus('none');
+            }
+        } catch (e) {
+            console.error(e);
+            setUpdateStatus('error');
+        } finally {
+            setUpdating(false);
+        }
+    };
+
     return (
         <div className="properties-overlay" onClick={onClose}>
             <div
@@ -46,7 +87,35 @@ const InlineAboutDialog: React.FC<{ onClose: () => void, t: any, theme: string, 
                     <div className="about-text-group">
                         <div className="about-app-name">Oxyde</div>
                         <div className="about-tagline">Vibe coded with love</div>
-                        <div className="about-version">Version {appVersion}</div>
+                        <div className="about-version">
+                            Version {appVersion}
+                        </div>
+                    </div>
+
+                    <div className="about-actions" style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
+                        <button
+                            className={`btn secondary small ${updating ? 'loading' : ''}`}
+                            onClick={handleCheckUpdate}
+                            disabled={updating}
+                            style={{ flex: '1 1 auto', minWidth: 'fit-content', justifyContent: 'center' }}
+                        >
+                            <RefreshCcw size={14} className={updating ? 'spin' : ''} />
+                            <span style={{ whiteSpace: 'nowrap' }}>
+                                {updateStatus === 'available' ? t('update_available') :
+                                    updateStatus === 'none' ? t('up_to_date') :
+                                        t('check_updates')}
+                            </span>
+                        </button>
+
+                        <button
+                            className="btn secondary small"
+                            style={{ flex: '1 1 auto', minWidth: 'fit-content', justifyContent: 'center' }}
+                            onClick={() => openUrl('https://github.com/Carlton2001/Oxyde_FM')}
+                        >
+                            <Github size={14} />
+                            <span style={{ whiteSpace: 'nowrap' }}>{t('github_repo')}</span>
+                            <ExternalLink size={10} style={{ marginLeft: '4px', opacity: 0.6 }} />
+                        </button>
                     </div>
 
                     <div className="about-credits">

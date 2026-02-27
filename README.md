@@ -1,7 +1,7 @@
-# Oxyde-FM
+# Oxyde
 
 <p align="center">
-  <img src="screenshots/hero.png" alt="Oxyde-FM Hero" width="100%" />
+  <img src="screenshots/hero.png" alt="Oxyde Hero" width="100%" />
 </p>
 
 Oxyde is a modern, high-performance file manager designed for efficiency and speed. Built on a powerful **Rust** core using **Tauri**, with a sleek **React** and **TypeScript** interface.
@@ -68,7 +68,7 @@ npm run tauri build
 
 ## Note on Contributions
 
-Oxyde-FM is a personal project developed for educational purposes and personal use. To maintain creative control and a manageable development pace, **I am not currently accepting pull requests or external contributions** to this repository.
+Oxyde is a personal project developed for educational purposes and personal use. To maintain creative control and a manageable development pace, **I am not currently accepting pull requests or external contributions** to this repository.
 
 However, since this project is licensed under the **GNU GPL v3**, you are more than welcome to fork the repository, experiment with the code, and build your own versions of the application.
 

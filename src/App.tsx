@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
+import { check } from '@tauri-apps/plugin-updater';
 import { File as FileIcon } from 'lucide-react';
 import cx from 'classnames';
 
@@ -57,6 +58,7 @@ function App() {
     notifications, notify, dismissNotification, drives, mountedImages,
     useSystemIcons, refreshDrives,
     zipQuality, sevenZipQuality, zstdQuality, defaultTurboMode,
+    setUpdateAvailable
   } = useApp();
 
   const clipboardObj = useClipboard();
@@ -252,6 +254,29 @@ function App() {
       unlistenOp.then(fn => fn());
     };
   }, []);
+
+  // 3. Lazy Update Check (30s after startup) - Only once per session
+  const hasCheckedUpdate = useRef(false);
+  useEffect(() => {
+    if (hasCheckedUpdate.current) return;
+
+    const timer = setTimeout(async () => {
+      if (hasCheckedUpdate.current) return;
+      hasCheckedUpdate.current = true;
+
+      try {
+        const update = await check();
+        if (update?.available) {
+          setUpdateAvailable(true);
+          notify(t('update_available_notif' as any), 'info', 0);
+        }
+      } catch (e) {
+        console.error("Lazy update check failed", e);
+      }
+    }, 30000);
+
+    return () => clearTimeout(timer);
+  }, [t, notify, setUpdateAvailable]);
 
   // Global Mouse Navigation
   const stateRef = useRef({ leftPanel: left, rightPanel: right, activePanelId, fileOps });
