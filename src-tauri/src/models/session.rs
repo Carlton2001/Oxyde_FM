@@ -54,7 +54,6 @@ impl Default for SortConfig {
 pub struct Tab {
     pub id: String,
     pub path: PathBuf,
-    #[serde(skip)]
     #[serde(default)]
     pub version: u64,
 }

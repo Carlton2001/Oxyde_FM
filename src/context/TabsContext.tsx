@@ -2,6 +2,7 @@ import React, { createContext, useContext, useCallback, ReactNode } from 'react'
 import { useRustSession, SessionState, Tab } from '../hooks/useRustSession';
 import { invoke } from '@tauri-apps/api/core';
 import { PanelId } from '../types';
+import { useApp } from './AppContext';
 
 export interface UiTab extends Tab {
     label: string;
@@ -59,7 +60,9 @@ export const TabsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     // Strategy: We will bridge the Rust "Active Panel" tabs to this context.
 
-    const activePanelId = session?.active_panel || 'left';
+    const { layout } = useApp();
+    // In single panel mode, always use the left panel's tabs
+    const activePanelId = layout === 'standard' ? 'left' : (session?.active_panel || 'left');
     const activePanelState = activePanelId === 'left' ? session?.left_panel : session?.right_panel;
 
     const currentTabs = activePanelState?.tabs.map(t => ({

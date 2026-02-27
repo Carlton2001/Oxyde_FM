@@ -1,5 +1,5 @@
 
-import React, { createContext, useContext, useState, useMemo, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useMemo, useEffect, useRef, ReactNode } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { usePanel } from '../hooks/usePanel';
 import { PanelId } from '../types';
@@ -44,16 +44,75 @@ export const PanelProvider: React.FC<PanelProviderProps> = ({
     // Phase 1 Migration: Use Rust Session for paths
     const { session, isLoading } = useRustSession();
 
-    // Defaults while loading or if fallback
-    const defaultPath = "C:\\";
+    // Compute initial paths from the FIRST loaded session snapshot.
+    // useState initializer ensures this only runs once, on first mount after session loads.
+    const [resolvedPaths] = useState<{ left: string; right: string } | null>(() => {
+        if (!session) return null;
+        const leftTab = session.left_panel.tabs.find(t => t.id === session.left_panel.active_tab_id);
+        const rightTab = session.right_panel.tabs.find(t => t.id === session.right_panel.active_tab_id);
+        const defaultPath = "C:\\";
+        return {
+            left: initialLeftPath || (leftTab ? normalizePath(leftTab.path) : defaultPath),
+            right: initialRightPath || (rightTab ? normalizePath(rightTab.path) : defaultPath),
+        };
+    });
 
+    // Block rendering until session is loaded and initial paths are resolved
+    // If resolvedPaths is null (session wasn't ready at first useState call), we need to wait
+    const [initialPaths, setInitialPaths] = useState(resolvedPaths);
+
+    useEffect(() => {
+        if (initialPaths || !session) return;
+        const leftTab = session.left_panel.tabs.find(t => t.id === session.left_panel.active_tab_id);
+        const rightTab = session.right_panel.tabs.find(t => t.id === session.right_panel.active_tab_id);
+        const defaultPath = "C:\\";
+        setInitialPaths({
+            left: initialLeftPath || (leftTab ? normalizePath(leftTab.path) : defaultPath),
+            right: initialRightPath || (rightTab ? normalizePath(rightTab.path) : defaultPath),
+        });
+    }, [session, initialPaths, initialLeftPath, initialRightPath]);
+
+    // Don't render until we have initial paths
+    if (isLoading || !initialPaths) {
+        return null;
+    }
+
+    return (
+        <PanelProviderReady
+            session={session}
+            isLoading={isLoading}
+            initialLeftPath={initialPaths.left}
+            initialRightPath={initialPaths.right}
+        >
+            {children}
+        </PanelProviderReady>
+    );
+};
+
+/**
+ * Inner component that creates panels. Separated so that usePanel hooks
+ * are only called once initial paths are definitively known.
+ * This component receives the session from the parent so there is only
+ * ONE useRustSession() instance in the tree.
+ */
+const PanelProviderReady: React.FC<{
+    children: ReactNode;
+    session: any;
+    isLoading: boolean;
+    initialLeftPath: string;
+    initialRightPath: string;
+}> = ({ children, session, isLoading, initialLeftPath, initialRightPath }) => {
     const leftActiveTabId = session?.left_panel.active_tab_id;
     const rightActiveTabId = session?.right_panel.active_tab_id;
 
-    const left = usePanel(initialLeftPath || defaultPath, 'left', leftActiveTabId);
-    const right = usePanel(initialRightPath || defaultPath, 'right', rightActiveTabId);
+    const left = usePanel(initialLeftPath, 'left', leftActiveTabId);
+    const right = usePanel(initialRightPath, 'right', rightActiveTabId);
 
     const [activePanelId, setActivePanelIdState] = useState<PanelId>('left');
+
+    // Track previous active tab IDs to detect tab switches
+    const prevLeftTabIdRef = useRef(leftActiveTabId);
+    const prevRightTabIdRef = useRef(rightActiveTabId);
 
     const setActivePanelId = (id: PanelId) => {
         setActivePanelIdState(id);
@@ -71,12 +130,22 @@ export const PanelProvider: React.FC<PanelProviderProps> = ({
             }
         }
 
-        const leftTabArr = session.left_panel.tabs.find(t => t.id === session.left_panel.active_tab_id);
+        // Detect tab switches
+        const leftTabSwitched = leftActiveTabId !== prevLeftTabIdRef.current;
+        const rightTabSwitched = rightActiveTabId !== prevRightTabIdRef.current;
+        prevLeftTabIdRef.current = leftActiveTabId;
+        prevRightTabIdRef.current = rightActiveTabId;
+
+        const leftTabArr = session.left_panel.tabs.find((t: any) => t.id === session.left_panel.active_tab_id);
         if (leftTabArr) {
             const normRust = normalizePath(leftTabArr.path);
             const normReact = normalizePath(left.path);
 
-            if (leftTabArr.version > left.version) {
+            if (leftTabSwitched && normRust !== normReact) {
+                // Tab switch: force navigate regardless of version
+                console.log(`[Sync] Left Tab switched to ${leftActiveTabId}. Navigating to: ${normRust}`);
+                left.navigate(normRust, [], leftTabArr.version);
+            } else if (leftTabArr.version > left.version) {
                 console.log(`[Sync] Left Backend is ahead (v${leftTabArr.version} > v${left.version}). Catching up and moving to: ${normRust}`);
                 left.navigate(normRust, [], leftTabArr.version);
             } else if (leftTabArr.version === left.version && normRust !== normReact) {
@@ -85,12 +154,16 @@ export const PanelProvider: React.FC<PanelProviderProps> = ({
             }
         }
 
-        const rightTabArr = session.right_panel.tabs.find(t => t.id === session.right_panel.active_tab_id);
+        const rightTabArr = session.right_panel.tabs.find((t: any) => t.id === session.right_panel.active_tab_id);
         if (rightTabArr) {
             const normRust = normalizePath(rightTabArr.path);
             const normReact = normalizePath(right.path);
 
-            if (rightTabArr.version > right.version) {
+            if (rightTabSwitched && normRust !== normReact) {
+                // Tab switch: force navigate regardless of version
+                console.log(`[Sync] Right Tab switched to ${rightActiveTabId}. Navigating to: ${normRust}`);
+                right.navigate(normRust, [], rightTabArr.version);
+            } else if (rightTabArr.version > right.version) {
                 console.log(`[Sync] Right Backend is ahead (v${rightTabArr.version} > v${right.version}). Catching up and moving to: ${normRust}`);
                 right.navigate(normRust, [], rightTabArr.version);
             } else if (rightTabArr.version === right.version && normRust !== normReact) {
@@ -98,7 +171,7 @@ export const PanelProvider: React.FC<PanelProviderProps> = ({
                 right.navigate(normRust, [], right.version);
             }
         }
-    }, [session, left.version, left.path, right.version, right.path, activePanelId]);
+    }, [session, left.version, left.path, right.version, right.path, activePanelId, leftActiveTabId, rightActiveTabId]);
 
     const value = useMemo(() => ({
         left,
