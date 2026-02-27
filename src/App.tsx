@@ -335,7 +335,7 @@ function App() {
 
 
   return (
-    <div className="app-container" onContextMenu={(e) => handleContextMenu(e, activePanelId)}>
+    <div className="app-container">
       <GlobalDialogContainer />
       <DualPanelLayout
         t={t} sidebarReduced={sidebarReduced} setSidebarReduced={setSidebarReduced}

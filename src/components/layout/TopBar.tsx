@@ -119,10 +119,15 @@ export const TopBar: React.FC<TopBarProps> = ({
     };
 
     const toggleSettings = () => {
+        if (!settingsOpen) {
+            localStorage.setItem('fm_first_launch', 'false');
+        }
         setSettingsOpen(!settingsOpen);
         setSettingsPage('main');
         if (hamburgerOpen) setHamburgerOpen(false);
     };
+
+    const isFirstLaunch = localStorage.getItem('fm_first_launch') !== 'false';
 
     const closeHamburger = () => setHamburgerOpen(false);
     const toggleHamburger = () => {
@@ -187,7 +192,12 @@ export const TopBar: React.FC<TopBarProps> = ({
     return (
         <div className="header" data-tauri-drag-region>
             <div className="settings-container branding" onClick={(e) => e.stopPropagation()}>
-                <button className="btn-icon" onClick={toggleSettings} data-tooltip={t('settings' as any)} data-tooltip-pos="bottom">
+                <button
+                    className={cx("btn-icon", { "glow-pulse": isFirstLaunch && !settingsOpen })}
+                    onClick={toggleSettings}
+                    data-tooltip={t('settings' as any)}
+                    data-tooltip-pos="bottom"
+                >
                     <img src="/logo.svg" className="icon-lg app-logo-icon" alt="Oxyde" />
                 </button>
                 <SettingsMenu

@@ -199,6 +199,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
                 'fm_defaultTurboMode', 'fm_showGridThumbnails', 'fm_showCheckboxes'
             ];
             keysToRemove.forEach(k => localStorage.removeItem(k));
+            localStorage.setItem('fm_first_launch', 'true');
             await refreshConfig();
         } catch (e) {
             console.error('Failed to reset defaults', e);
