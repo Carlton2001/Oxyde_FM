@@ -1,44 +1,34 @@
-# Logs
-logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
-
-# Dependency directories
+# --- Dependencies & Build --- #
 node_modules/
 /dist
 /dist-ssr
-target/
+/target
+/src-tauri/target
+/src-tauri/gen/schemas
+/src-tauri/binaries
 
-# Tauri specific
-src-tauri/target
-src-tauri/gen/schemas
-src-tauri/binaries
-
-# IDEs and Editors
-.vscode/*
-!.vscode/extensions.json
-.agents/*
-.idea
-.DS_Store
+# --- IDEs & Tools --- #
+.vscode/
+.idea/
+.agents/
+.aiignore
+.antigravityignore
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
-.aiignore
-.antigravityignore
 
-# System files
+# --- OS & System --- #
+.DS_Store
 Thumbs.db
 desktop.ini
 
-# Environment variables
+# --- Logs & Env --- #
+*.log
+logs
 .env
 .env*.local
 
-# Scripts
-bump-version.ps1
+# --- Local Scripts --- #
+/bump-version.ps1
