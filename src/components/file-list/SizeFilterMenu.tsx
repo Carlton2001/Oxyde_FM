@@ -28,16 +28,17 @@ interface SizeFilterMenuProps {
     x: number;
     y: number;
     selectedSizes: Set<SizeCategoryKey> | null;
+    availableSizeCategories: Set<SizeCategoryKey>;
     onChange: (sizes: Set<SizeCategoryKey> | null) => void;
     onClose: () => void;
     t: TFunc;
 }
 
 export const SizeFilterMenu: React.FC<SizeFilterMenuProps> = ({
-    x, y, selectedSizes, onChange, onClose, t
+    x, y, selectedSizes, availableSizeCategories, onChange, onClose, t
 }) => {
     const menuRef = useRef<HTMLDivElement>(null);
-    const categoryKeys = Object.keys(SIZE_CATEGORIES) as SizeCategoryKey[];
+    const categoryKeys = (Object.keys(SIZE_CATEGORIES) as SizeCategoryKey[]).filter(cat => availableSizeCategories.has(cat));
 
     useEffect(() => {
         const handleClickOutside = (e: MouseEvent) => {

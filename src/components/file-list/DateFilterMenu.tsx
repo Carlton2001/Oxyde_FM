@@ -47,16 +47,17 @@ interface DateFilterMenuProps {
     x: number;
     y: number;
     selectedDates: Set<DateCategoryKey> | null;
+    availableDateCategories: Set<DateCategoryKey>;
     onChange: (dates: Set<DateCategoryKey> | null) => void;
     onClose: () => void;
     t: TFunc;
 }
 
 export const DateFilterMenu: React.FC<DateFilterMenuProps> = ({
-    x, y, selectedDates, onChange, onClose, t
+    x, y, selectedDates, availableDateCategories, onChange, onClose, t
 }) => {
     const menuRef = useRef<HTMLDivElement>(null);
-    const categoryKeys = Object.keys(DATE_CATEGORIES) as DateCategoryKey[];
+    const categoryKeys = (Object.keys(DATE_CATEGORIES) as DateCategoryKey[]).filter(cat => availableDateCategories.has(cat));
 
     useEffect(() => {
         const handleClickOutside = (e: MouseEvent) => {

@@ -24,7 +24,7 @@ interface TooltipProps {
 }
 
 const TOOLTIP_OFFSET = 12;
-const SHOW_DELAY = 500; // 0.5 second delay
+const SHOW_DELAY = 750; // 0.75 second delay
 const EDGE_PADDING = 50;
 const MAX_TEXT_PREVIEW_LINES = 15;
 const MAX_TOTAL_CHARS = 1500;

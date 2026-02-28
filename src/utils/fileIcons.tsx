@@ -42,7 +42,7 @@ export const CODE_EXTENSIONS = [
     'graphql', 'gql', 'proto', 'dockerfile', 'makefile', 'cmake', 'sln', 'csproj', 'vcxproj'
 ];
 
-const TEXT_BASE_EXTENSIONS = ['txt', 'log', 'nfo', 'inf', 'ini', 'cfg', 'conf', 'config', 'bak', 'tmp'];
+const TEXT_BASE_EXTENSIONS = ['txt', 'log', 'nfo', 'inf', 'ini', 'cfg', 'conf', 'config', 'bak', 'tmp', 'csv', 'tsv'];
 export const PREVIEWABLE_TEXT_EXTENSIONS = [...TEXT_BASE_EXTENSIONS, ...CODE_EXTENSIONS];
 
 const WORD_EXTENSIONS = ['doc', 'docx', 'odt', 'rtf', 'pages', 'dot', 'dotx'];

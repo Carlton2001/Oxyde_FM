@@ -124,7 +124,39 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
             }
         });
         return Array.from(exts).sort();
-    }, [files, searchResults, showHidden, showSystem]);
+    }, [files, showHidden, showSystem]);
+
+    const availableSizeCategories = React.useMemo(() => {
+        const cats = new Set<SizeCategoryKey>();
+        files.forEach(f => {
+            if (f.is_system) { if (!showSystem) return; }
+            else if (f.is_hidden) { if (!showHidden) return; }
+            if (!f.is_dir) {
+                cats.add(getSizeCategoryForFile(f.size));
+            }
+        });
+        return cats;
+    }, [files, showHidden, showSystem]);
+
+    const availableDateCategories = React.useMemo(() => {
+        const cats = new Set<DateCategoryKey>();
+        files.forEach(f => {
+            if (f.is_system) { if (!showSystem) return; }
+            else if (f.is_hidden) { if (!showHidden) return; }
+            cats.add(getDateCategoryForFile(f.modified || 0));
+        });
+        return cats;
+    }, [files, showHidden, showSystem]);
+
+    const availableDeletedDateCategories = React.useMemo(() => {
+        const cats = new Set<DateCategoryKey>();
+        files.forEach(f => {
+            if (f.is_system) { if (!showSystem) return; }
+            else if (f.is_hidden) { if (!showHidden) return; }
+            if (f.deleted_time) cats.add(getDateCategoryForFile(f.deleted_time));
+        });
+        return cats;
+    }, [files, showHidden, showSystem]);
 
     const visibleFiles = React.useMemo(() => {
         return files.filter(f => {
@@ -530,6 +562,7 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
                     x={filterMenuAnchor.x}
                     y={filterMenuAnchor.y}
                     selectedSizes={sizeFilter}
+                    availableSizeCategories={availableSizeCategories}
                     onChange={setSizeFilter}
                     onClose={() => setFilterMenuAnchor(null)}
                     t={t}
@@ -541,6 +574,7 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
                     x={filterMenuAnchor.x}
                     y={filterMenuAnchor.y}
                     selectedDates={dateFilter as Set<DateCategoryKey>}
+                    availableDateCategories={availableDateCategories}
                     onChange={(val) => setDateFilter(val as Set<string>)}
                     onClose={() => setFilterMenuAnchor(null)}
                     t={t}
@@ -574,6 +608,7 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
                     x={filterMenuAnchor.x}
                     y={filterMenuAnchor.y}
                     selectedDates={deletedDateFilter as Set<DateCategoryKey>}
+                    availableDateCategories={availableDeletedDateCategories}
                     onChange={(val) => setDeletedDateFilter(val as Set<string>)}
                     onClose={() => setFilterMenuAnchor(null)}
                     t={t}

@@ -100,7 +100,7 @@ export const ExtensionFilterMenu: React.FC<ExtensionFilterMenuProps> = ({
                 <div style={{ overflowY: 'auto', flex: 1, padding: '4px 0' }}>
                     {availableExtensions.map(ext => {
                         const isChecked = selectedExtensions === null || selectedExtensions.has(ext);
-                        const displayExt = ext === '' ? `(${t('none_fem' as any) || 'None'})` : `.${ext}`;
+                        const displayExt = ext === '' ? `(${t('none_fem' as any) || 'None'})` : ext.toUpperCase();
                         return (
                             <div
                                 key={ext}
