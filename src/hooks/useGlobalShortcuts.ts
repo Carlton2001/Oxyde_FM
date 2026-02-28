@@ -53,7 +53,8 @@ export const useGlobalShortcuts = (context: ActionContext, tabs: any[], activeTa
             if (key === 'Control' || key === 'Alt' || key === 'Shift') return;
 
             // Standardize key names for Registry
-            if (e.code === 'Delete') key = 'Delete';
+            if (e.code === 'Space') key = 'Space';
+            else if (e.code === 'Delete') key = 'Delete';
             else if (e.code === 'F2') key = 'F2';
             else if (e.code === 'Enter') key = 'Enter';
             else if (e.code === 'Backspace') key = 'Backspace';
@@ -78,10 +79,15 @@ export const useGlobalShortcuts = (context: ActionContext, tabs: any[], activeTa
             }
 
             if (actionId) {
-                // console.log(`[Shortcuts] Executing ${actionId} for combo ${combo}`);
-                e.preventDefault();
-                e.stopPropagation();
-                await actionService.execute(actionId, contextRef.current);
+                const action = actionService.get(actionId);
+                const isEnabled = action && (!action.isEnabled || action.isEnabled({ ...contextRef.current, shortcutCombo: combo }));
+
+                if (isEnabled) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    // console.log(`[Shortcuts] Executing ${actionId} for combo ${combo}`);
+                    await actionService.execute(actionId, { ...contextRef.current, shortcutCombo: combo });
+                }
             }
         };
 

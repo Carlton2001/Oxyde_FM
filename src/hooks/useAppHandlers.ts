@@ -1,6 +1,7 @@
 import { useCallback, useMemo } from 'react';
 import { PanelId, FileEntry, ColumnWidths, SortField, DriveInfo } from '../types';
 import { ActionContext } from '../types/actions';
+import { AppContextValue } from '../context/AppContext';
 import { actionService } from '../services/ActionService';
 import { formatCommandError } from '../utils/error';
 import { getParent } from '../utils/path';
@@ -33,6 +34,7 @@ interface AppHandlersProps {
     sevenZipQuality: any;
     zstdQuality: any;
     favorites: any[];
+    peekStatus?: AppContextValue['peekStatus'];
 }
 
 export const useAppHandlers = ({
@@ -59,7 +61,8 @@ export const useAppHandlers = ({
     zipQuality,
     sevenZipQuality,
     zstdQuality,
-    favorites
+    favorites,
+    peekStatus
 }: AppHandlersProps) => {
     const activePanel = activePanelId === 'left' ? left : right;
 
@@ -119,8 +122,9 @@ export const useAppHandlers = ({
         },
         refreshBothPanels,
         refreshTreePath,
-        setContextMenu
-    }), [activePanelId, left, right, fileOps, clipboard, notify, t, dialogs, zipQuality, sevenZipQuality, zstdQuality, defaultTurboMode, refreshBothPanels, refreshTreePath, setContextMenu]);
+        setContextMenu,
+        peekStatus
+    }), [activePanelId, left, right, fileOps, clipboard, notify, t, dialogs, zipQuality, sevenZipQuality, zstdQuality, defaultTurboMode, refreshBothPanels, refreshTreePath, setContextMenu, peekStatus]);
 
     const handleAction = useCallback(async (actionId: string, contextOverride?: Partial<ActionContext>) => {
         try {

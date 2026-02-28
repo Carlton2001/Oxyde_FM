@@ -34,32 +34,32 @@ export const KeybindingProvider: React.FC<{ children: ReactNode }> = ({ children
         // console.log(`KeybindingContext: Loaded ${initialBindings.size} shortcuts.`);
     }, []);
 
-    const getActionId = (shortcut: Shortcut) => {
+    const getActionId = React.useCallback((shortcut: Shortcut) => {
         return keybindings.get(shortcut);
-    };
+    }, [keybindings]);
 
-    const getShortcut = (actionId: ActionId) => {
+    const getShortcut = React.useCallback((actionId: ActionId) => {
         for (const [shortcut, id] of keybindings.entries()) {
             if (id === actionId) return shortcut;
         }
         return undefined;
-    };
+    }, [keybindings]);
 
-    const registerKeybinding = (shortcut: Shortcut, actionId: ActionId) => {
+    const registerKeybinding = React.useCallback((shortcut: Shortcut, actionId: ActionId) => {
         setKeybindings(prev => {
             const next = new Map(prev);
             next.set(shortcut, actionId);
             return next;
         });
-    };
+    }, []);
 
-    const unregisterKeybinding = (shortcut: Shortcut) => {
+    const unregisterKeybinding = React.useCallback((shortcut: Shortcut) => {
         setKeybindings(prev => {
             const next = new Map(prev);
             next.delete(shortcut);
             return next;
         });
-    };
+    }, []);
 
     return (
         <KeybindingContext.Provider value={{

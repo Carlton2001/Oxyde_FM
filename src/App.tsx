@@ -32,6 +32,7 @@ import { useFileOperations } from './hooks/useFileOperations';
 import { useClipboard } from './hooks/useClipboard';
 import { useAppHandlers } from './hooks/useAppHandlers';
 import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
+import { useKeybindings } from './context/KeybindingContext';
 import { useDragDrop } from './hooks/useDragDrop';
 import { useNativeDragDrop } from './hooks/useNativeDragDrop';
 import { useFileDrop } from './hooks/useFileDrop';
@@ -58,8 +59,9 @@ function App() {
     notifications, notify, dismissNotification, drives, mountedImages,
     useSystemIcons, refreshDrives,
     zipQuality, sevenZipQuality, zstdQuality, defaultTurboMode,
-    setUpdateAvailable
+    setUpdateAvailable, peekStatus
   } = useApp();
+  const { registerKeybinding } = useKeybindings();
 
   const clipboardObj = useClipboard();
   const { clipboard, copy, cut, clearClipboard, copyToSystem, refreshClipboard } = clipboardObj;
@@ -145,13 +147,21 @@ function App() {
     };
   }, []);
 
+  useEffect(() => {
+    if (peekStatus?.installed && peekStatus?.enabled && peekStatus.activation_shortcut) {
+      if (peekStatus.activation_shortcut !== 'Space') {
+        registerKeybinding(peekStatus.activation_shortcut, 'file.peek');
+      }
+    }
+  }, [peekStatus, registerKeybinding]);
+
   const [progress, setProgress] = useState<{ visible: boolean; message: string; cancellable?: boolean; cancelling?: boolean; task?: string; current?: number; total?: number; filename?: string; } | null>(null);
 
   // Handlers Integration
   const handlers = useAppHandlers({
     left, right, activePanelId, setActivePanelId, layout, fileOps, treeRef, notify, t, dialogs, clipboard: clipboardObj, refreshDrives,
     tabs, activeTabId, setActiveTab, closeTab, addTab, setContextMenu, contextMenu, drives, defaultTurboMode,
-    zipQuality, sevenZipQuality, zstdQuality, favorites
+    zipQuality, sevenZipQuality, zstdQuality, favorites, peekStatus
   });
 
   const {
@@ -182,13 +192,13 @@ function App() {
     notify, t: t as any, dialogs, settings: { zipQuality, sevenZipQuality, zstdQuality, defaultTurboMode }, setProgress,
     contextMenuTarget: contextMenu?.target, isDrive: contextMenu?.isDrive, refreshDrives, mountedImages,
     tabs, activeTabId, setActiveTab, closeTab, refreshBothPanels,
-    modifiers
+    modifiers, peekStatus
   }), [
     activePanelId, left, right, fileOps, clipboard, copy, cut, clearClipboard, copyToSystem, refreshClipboard,
     notify, t, dialogs, zipQuality, sevenZipQuality, zstdQuality, defaultTurboMode, setProgress,
     contextMenu?.target, contextMenu?.isDrive, refreshDrives,
     tabs, activeTabId, setActiveTab, closeTab, refreshBothPanels,
-    modifiers
+    modifiers, peekStatus
   ]);
 
   useGlobalShortcuts(actionContext, tabs, activeTabId, handleTabSwitch);

@@ -428,3 +428,44 @@ export const OPEN_ACTION: ActionDefinition = {
         }
     }
 };
+
+export const PEEK_ACTION: ActionDefinition = {
+    id: 'file.peek',
+    label: 'peek',
+    shortcut: 'Space',
+    isEnabled: (ctx: ActionContext) => {
+        const status = ctx.peekStatus;
+        if (!status || !status.installed) return false;
+
+        // Note: We don't block here based on 'enabled' or 'space_enabled' because they might change.
+        // But for 'Space', we should be careful not to block it if we know it's disabled.
+        // However, since we want "on the fly", we'll check properly in the handler.
+        // Still, if we are NOT using Space, we should at least check if Peek is installed.
+
+        const selection = Array.from(ctx.activePanel.selected);
+        const targetPath = (ctx['contextMenuTarget'] as string | undefined) || (selection.length === 1 ? selection[0] : null);
+        return !!targetPath;
+    },
+    handler: async (ctx: ActionContext) => {
+        const selection = Array.from(ctx.activePanel.selected);
+        const targetPath = (ctx['contextMenuTarget'] as string | undefined) || (selection.length === 1 ? selection[0] : null);
+
+        if (targetPath) {
+            try {
+                // Check latest status on the fly
+                const status: any = await invoke('get_peek_status');
+                if (!status.enabled) return;
+
+                // If triggered by Space, verify it's still allowed
+                if (ctx.shortcutCombo === 'Space' && !status.space_enabled) {
+                    return;
+                }
+
+                await invoke('open_peek', { path: targetPath });
+            } catch (e) {
+                console.error("Failed to open Peek:", e);
+                ctx.notify(String(e), 'error');
+            }
+        }
+    }
+};

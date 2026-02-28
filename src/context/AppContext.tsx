@@ -7,7 +7,7 @@ import { useDrives } from '../hooks/useFileSystem';
 import { useRustConfig } from '../hooks/useRustConfig';
 import { DriveInfo, NotificationType, AppNotification } from '../types';
 
-interface AppContextValue {
+export interface AppContextValue {
     // Settings
     theme: Theme;
     layout: LayoutMode;
@@ -24,6 +24,12 @@ interface AppContextValue {
     showGridThumbnails: boolean;
     showCheckboxes: boolean;
     updateAvailable: boolean;
+    peekStatus: {
+        installed: boolean;
+        enabled: boolean;
+        space_enabled: boolean;
+        activation_shortcut: string | null;
+    } | null;
 
     // Setters
     setTheme: (theme: Theme) => void;
@@ -116,6 +122,16 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
     const showGridThumbnails = config?.show_grid_thumbnails ?? (localStorage.getItem('fm_showGridThumbnails') === 'true' || (localStorage.getItem('fm_showGridThumbnails') === null && defaults.showGridThumbnails));
     const showCheckboxes = config?.show_checkboxes ?? (localStorage.getItem('fm_showCheckboxes') === 'true' || (localStorage.getItem('fm_showCheckboxes') === null && defaults.showCheckboxes));
     const [updateAvailable, setUpdateAvailable] = React.useState(false);
+    const [peekStatus, setPeekStatus] = React.useState<AppContextValue['peekStatus']>(null);
+
+    useEffect(() => {
+        invoke<AppContextValue['peekStatus']>('get_peek_status')
+            .then(setPeekStatus)
+            .catch((e) => {
+                console.error("Failed to get Peek status", e);
+                setPeekStatus({ installed: false, enabled: false, space_enabled: false, activation_shortcut: null });
+            });
+    }, []);
 
     // Setters (memoized to avoid new refs on every render)
     const setTheme = useCallback((v: Theme) => {
@@ -268,6 +284,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
         setShowCheckboxes,
         updateAvailable,
         setUpdateAvailable,
+        peekStatus,
         refreshDrives,
         resetToDefaults
     };

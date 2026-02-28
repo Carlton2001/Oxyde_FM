@@ -1268,3 +1268,130 @@ pub fn restart_app(app: tauri::AppHandle) {
         app.exit(0);
     }
 }
+
+#[derive(serde::Serialize, serde::Deserialize, Debug, Default)]
+pub struct PeekStatus {
+    pub installed: bool,
+    pub enabled: bool,
+    pub space_enabled: bool,
+    pub activation_shortcut: Option<String>,
+}
+
+#[tauri::command]
+pub async fn get_peek_status() -> Result<PeekStatus, String> {
+    let mut status = PeekStatus::default();
+
+    #[cfg(target_os = "windows")]
+    {
+        use std::path::Path;
+        let local_app_data = std::env::var("LOCALAPPDATA").unwrap_or_default();
+        let program_files = std::env::var("ProgramFiles").unwrap_or_default();
+
+        let exe_paths = vec![
+            format!("{}\\PowerToys\\WinUI3Apps\\PowerToys.Peek.UI.exe", local_app_data),
+            format!("{}\\Microsoft\\PowerToys\\PowerToys.Peek.UI.exe", local_app_data),
+            format!("{}\\PowerToys\\WinUI3Apps\\PowerToys.Peek.UI.exe", program_files),
+            format!("{}\\PowerToys\\PowerToys.Peek.UI.exe", program_files),
+        ];
+
+        status.installed = exe_paths.iter().any(|p| Path::new(p).exists());
+        if !status.installed {
+            return Ok(status);
+        }
+
+        // Check if enabled in general settings
+        let general_settings_path = format!("{}\\Microsoft\\PowerToys\\settings.json", local_app_data);
+        if let Ok(content) = std::fs::read_to_string(general_settings_path) {
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
+                if let Some(enabled) = json.get("enabled").and_then(|e| e.get("Peek")).and_then(|p| p.as_bool()) {
+                    status.enabled = enabled;
+                }
+            }
+        }
+
+        // Check Peek specific settings
+        let peek_settings_path = format!("{}\\Microsoft\\PowerToys\\Peek\\settings.json", local_app_data);
+        if let Ok(content) = std::fs::read_to_string(peek_settings_path) {
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&content) {
+                if let Some(props) = json.get("properties") {
+                    status.space_enabled = props.get("EnableSpaceToActivate")
+                        .and_then(|v| v.get("value"))
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false);
+                    
+                    if let Some(shortcut) = props.get("ActivationShortcut") {
+                        let mut parts = Vec::new();
+                        if shortcut.get("ctrl").and_then(|v| v.as_bool()).unwrap_or(false) { parts.push("Ctrl"); }
+                        if shortcut.get("shift").and_then(|v| v.as_bool()).unwrap_or(false) { parts.push("Shift"); }
+                        if shortcut.get("alt").and_then(|v| v.as_bool()).unwrap_or(false) { parts.push("Alt"); }
+                        if shortcut.get("win").and_then(|v| v.as_bool()).unwrap_or(false) { parts.push("Win"); }
+                        
+                        let code = shortcut.get("code").and_then(|v| v.as_u64()).unwrap_or(0);
+                        let key_str = match code {
+                            32 => Some("Space"),
+                            48 => Some("0"), 49 => Some("1"), 50 => Some("2"), 51 => Some("3"), 52 => Some("4"),
+                            53 => Some("5"), 54 => Some("6"), 55 => Some("7"), 56 => Some("8"), 57 => Some("9"),
+                            65 => Some("A"), 66 => Some("B"), 67 => Some("C"), 68 => Some("D"), 69 => Some("E"),
+                            70 => Some("F"), 71 => Some("G"), 72 => Some("H"), 73 => Some("I"), 74 => Some("J"),
+                            75 => Some("K"), 76 => Some("L"), 77 => Some("M"), 78 => Some("N"), 79 => Some("O"),
+                            80 => Some("P"), 81 => Some("Q"), 82 => Some("R"), 83 => Some("S"), 84 => Some("T"),
+                            85 => Some("U"), 86 => Some("V"), 87 => Some("W"), 88 => Some("X"), 89 => Some("Y"),
+                            90 => Some("Z"),
+                            _ => None,
+                        };
+                        
+                        if let Some(k) = key_str {
+                            parts.push(k);
+                            status.activation_shortcut = Some(parts.join("+"));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    Ok(status)
+}
+
+#[tauri::command]
+pub async fn open_peek(path: String) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        use std::process::Command;
+        let local_app_data = std::env::var("LOCALAPPDATA").unwrap_or_default();
+        let program_files = std::env::var("ProgramFiles").unwrap_or_default();
+
+        let paths = vec![
+            format!("{}\\PowerToys\\WinUI3Apps\\PowerToys.Peek.UI.exe", local_app_data),
+            format!("{}\\Microsoft\\PowerToys\\PowerToys.Peek.UI.exe", local_app_data),
+            format!("{}\\PowerToys\\WinUI3Apps\\PowerToys.Peek.UI.exe", program_files),
+            format!("{}\\PowerToys\\PowerToys.Peek.UI.exe", program_files),
+        ];
+
+        let mut exe_path = None;
+        for p in paths {
+            if std::path::Path::new(&p).exists() {
+                exe_path = Some(p);
+                break;
+            }
+        }
+
+        if let Some(exe) = exe_path {
+            let mut cmd = Command::new(exe);
+            cmd.arg(&path);
+            
+            // Try to set the CWD to the parent of the file to help Peek discover siblings
+            if let Some(parent) = std::path::Path::new(&path).parent() {
+                cmd.current_dir(parent);
+            }
+            
+            cmd.spawn().map_err(|e| e.to_string())?;
+            return Ok(());
+        } else {
+            return Err("PowerToys Peek not found".to_string());
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err("Peek is only available on Windows".to_string())
+    }
+}

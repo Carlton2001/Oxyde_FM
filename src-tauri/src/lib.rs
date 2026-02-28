@@ -179,6 +179,8 @@ pub fn run() {
             commands::sidebar::get_subtree_nodes,
             commands::duplicates::find_duplicates,
             commands::duplicates::cancel_find_duplicates,
+            commands::system::get_peek_status,
+            commands::system::open_peek,
         ])
         .setup(|app| {
             println!("DEBUG: setup() hook starting");
