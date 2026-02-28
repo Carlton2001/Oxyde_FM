@@ -181,6 +181,9 @@ pub fn run() {
             commands::duplicates::cancel_find_duplicates,
             commands::system::get_peek_status,
             commands::system::open_peek,
+            commands::network::get_network_resources,
+            commands::network::map_network_drive,
+            commands::network::disconnect_network_drive,
         ])
         .setup(|app| {
             println!("DEBUG: setup() hook starting");

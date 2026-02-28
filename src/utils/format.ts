@@ -69,7 +69,18 @@ export const formatDate = (ms: number, format: DateFormat = 'European', fallback
  * @returns Localized type string (e.g. "PNG File", "Folder")
  */
 export const getFileTypeString = (entry: FileEntry, t: any): string => {
-    if (entry.is_dir) return t('folder');
+    if (entry.is_dir) {
+        if (entry.path === '__network_vincinity__') {
+            return t('network');
+        }
+        if (entry.path.startsWith('\\\\')) {
+            const parts = entry.path.split('\\').filter(Boolean);
+            if (parts.length <= 2) {
+                return t('network');
+            }
+        }
+        return t('folder');
+    }
 
     const lastDotIndex = entry.name.lastIndexOf('.');
     if (lastDotIndex > 0 && lastDotIndex < entry.name.length - 1) {

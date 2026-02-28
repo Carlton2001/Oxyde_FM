@@ -18,6 +18,7 @@ pub fn get_drives(skip_hardware_info: Option<bool>) -> Vec<DriveInfo> {
         };
         use windows::Win32::System::Ioctl::{IOCTL_STORAGE_QUERY_PROPERTY, IOCTL_STORAGE_GET_DEVICE_NUMBER, STORAGE_PROPERTY_QUERY, StorageDeviceSeekPenaltyProperty, DEVICE_SEEK_PENALTY_DESCRIPTOR, STORAGE_DEVICE_NUMBER, StorageAdapterProperty, STORAGE_ADAPTER_DESCRIPTOR, PropertyStandardQuery};
         use windows::Win32::System::IO::DeviceIoControl;
+        use windows::Win32::NetworkManagement::WNet::WNetGetConnectionW;
 
         let mut drives = Vec::new();
         unsafe {
@@ -80,10 +81,25 @@ pub fn get_drives(skip_hardware_info: Option<bool>) -> Vec<DriveInfo> {
                         Some(&mut total_free_bytes),
                     );
 
-                    // Get Hardware Info (SSD/HDD/Bus)
                     let mut media_type = None;
                     let mut physical_id = None;
+                    let mut remote_path = None;
                     
+                    if win_type == 4 { // Remote drive
+                        let mut buffer = [0u16; 1024];
+                        let mut size = buffer.len() as u32;
+                        let root_path_no_slash: Vec<u16> = drive_path[..2]
+                            .encode_utf16()
+                            .chain(std::iter::once(0))
+                            .collect();
+                        
+                            if WNetGetConnectionW(windows::core::PCWSTR(root_path_no_slash.as_ptr()), Some(windows::core::PWSTR(buffer.as_mut_ptr())), &mut size).is_ok() {
+                                remote_path = Some(String::from_utf16_lossy(&buffer[..size as usize - 1])
+                                    .trim_matches(char::from(0))
+                                    .to_string());
+                            }
+                    }
+
                     if !skip_hardware_info && (win_type == 3 || win_type == 2 || win_type == 5) { // Fixed, Removable or CD-ROM
                         let drive_root_unf = format!("\\\\.\\{}:", &drive_path[0..1]);
                         let wide_path: Vec<u16> = drive_root_unf.encode_utf16().chain(std::iter::once(0)).collect();
@@ -162,6 +178,7 @@ pub fn get_drives(skip_hardware_info: Option<bool>) -> Vec<DriveInfo> {
                         free_bytes: free_bytes_available,
                         media_type,
                         physical_id,
+                        remote_path,
                     });
                 }
             }
@@ -239,14 +256,39 @@ pub fn get_accent_color() -> String {
 
 #[tauri::command]
 pub async fn open_item(path: String) -> Result<(), CommandError> {
-    let pb = validate_path(&path)?;
-    info!("Opening item: {:?}", pb);
+    let normalized_path = if path.starts_with("::{") || path.starts_with("?") {
+        path
+    } else {
+        validate_path(&path)?.to_string_lossy().into_owned()
+    };
+    info!("Opening item: {}", normalized_path);
     #[cfg(target_os = "windows")]
     {
-        std::process::Command::new("explorer")
-            .arg(pb)
-            .spawn()
-            .map_err(|e| CommandError::SystemError(e.to_string()))?;
+        if normalized_path.starts_with("::{") || normalized_path.starts_with("?") {
+            use windows::core::{PCWSTR, HSTRING};
+            use windows::Win32::UI::Shell::ShellExecuteW;
+            use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+            let wide_path = HSTRING::from(&normalized_path);
+            unsafe {
+                let res = ShellExecuteW(
+                    None,
+                    PCWSTR::null(),
+                    PCWSTR(wide_path.as_ptr()),
+                    PCWSTR::null(),
+                    PCWSTR::null(),
+                    SW_SHOWNORMAL,
+                );
+                let inst = res.0 as usize;
+                if inst <= 32 {
+                    return Err(CommandError::SystemError(format!("ShellExecuteW failed: {}", inst)));
+                }
+            }
+        } else {
+            std::process::Command::new("explorer")
+                .arg(&normalized_path)
+                .spawn()
+                .map_err(|e| CommandError::SystemError(e.to_string()))?;
+        }
     }
     #[cfg(not(target_os = "windows"))]
     {

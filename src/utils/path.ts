@@ -4,8 +4,10 @@
 
 export const isVirtualPath = (path: string | null | undefined): boolean => {
     if (!path) return false;
-    // Regex matches search:// or trash:// and their backslash variants like search:\ or search:\\
-    return /^(search|trash)(:\/\/|:\\{1,2})/i.test(path);
+    // Regex matches search:// or trash:// and their backslash variants
+    if (/^(search|trash)(:\/\/|:\\{1,2})/i.test(path)) return true;
+    if (path === '__network_vincinity__') return true;
+    return false;
 };
 
 /**
@@ -13,13 +15,23 @@ export const isVirtualPath = (path: string | null | undefined): boolean => {
  * Returns null for root drives (e.g., "C:\\").
  */
 export const getParent = (path: string): string | null => {
-    if (!path) return null;
+    if (!path || isVirtualPath(path)) return null;
     if (path.endsWith(":\\")) return null;
-    const parts = path.split("\\");
+
+    // UNC handle: \\server\share
+    if (path.startsWith('\\\\')) {
+        const parts = path.slice(2).split('\\').filter(Boolean);
+        if (parts.length <= 1) return '__network_vincinity__'; // Parent of \\server is the network root
+        parts.pop();
+        if (parts.length === 0) return '__network_vincinity__';
+        return '\\\\' + parts.join('\\');
+    }
+
+    const parts = path.split("\\").filter(Boolean);
     if (parts.length <= 1) return null;
     parts.pop();
     let parent = parts.join("\\");
-    if (parent.endsWith(":")) parent += "\\";
+    if (parent.match(/^[a-zA-Z]:$/)) parent += "\\";
     return parent || null;
 };
 
@@ -55,6 +67,15 @@ export const normalizePath = (path: string): string => {
 
     // Standardize slashes for physical paths
     let normalized = path.replace(/\//g, "\\");
+
+    // UNC Path handle
+    if (normalized.startsWith('\\\\')) {
+        // Keep initial \\ and remove trailing \
+        if (normalized.length > 2 && normalized.endsWith('\\')) {
+            normalized = normalized.slice(0, -1);
+        }
+        return normalized;
+    }
 
     // Ensure drive letter is uppercase (C:\ instead of c:\)
     if (normalized.match(/^[a-z]:/i)) {

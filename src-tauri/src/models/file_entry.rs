@@ -51,6 +51,17 @@ pub struct FileProperties {
     pub folders_count: Option<u64>,
     pub files_count: Option<u64>,
     pub shortcut: Option<ShortcutInfo>,
+    pub is_media_device: Option<bool>,
+    pub has_web_page: Option<bool>,
+    pub manufacturer: Option<String>,
+    pub model_name: Option<String>,
+    pub model_number: Option<String>,
+    pub serial_number: Option<String>,
+    pub mac_address: Option<String>,
+    pub ip_address: Option<String>,
+    pub unique_id: Option<String>,
+    pub web_page_url: Option<String>,
+    pub debug_props: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -93,6 +104,7 @@ pub struct DriveInfo {
     pub free_bytes: u64,
     pub media_type: Option<String>,
     pub physical_id: Option<String>,
+    pub remote_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -143,6 +155,18 @@ pub struct SnapRect {
     pub y: f64,
     pub width: f64,
     pub height: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NetResource {
+    pub name: String,
+    pub remote_path: String,
+    pub resource_type: u32, // 1 = Disk, 2 = Print, etc.
+    pub display_type: u32,  // 1 = Generic, 2 = Domain, 3 = Server, 4 = Share, etc.
+    pub usage: u32,         // 1 = Connectable, 2 = Container
+    pub provider: Option<String>,
+    pub is_media_device: Option<bool>,
+    pub has_web_page: Option<bool>,
 }
 
 pub fn get_file_entry_from_path(path: &Path) -> Result<FileEntry, CommandError> {

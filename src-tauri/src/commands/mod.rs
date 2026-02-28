@@ -9,5 +9,6 @@ pub mod config;
 
 pub mod sidebar;
 pub mod system;
+pub mod network;
 pub mod thumbnails;
 pub mod duplicates;

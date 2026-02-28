@@ -15,6 +15,11 @@ export type FileEntry = {
     // Trash-specific fields (populated when viewing Recycle Bin)
     original_path?: string;
     deleted_time?: number;
+    // Network-specific fields
+    is_media_device?: boolean;
+    has_web_page?: boolean;
+    drive_type?: string;
+    drive_label?: string;
 };
 
 export type ViewMode = 'grid' | 'details';
@@ -45,6 +50,7 @@ export interface PanelState {
     currentSearchRoot: string;
     colWidths: ColumnWidths;
     lastSelectedPath?: string;
+    loading?: boolean;
     refresh: () => void;
     updateFileSize: (path: string, size: number) => void;
     setFileCalculating: (path: string, isCalculating: boolean) => void;
@@ -103,6 +109,17 @@ export interface FileProperties {
     folders_count?: number;
     files_count?: number;
     shortcut?: ShortcutInfo;
+    is_media_device?: boolean;
+    has_web_page?: boolean;
+    manufacturer?: string;
+    model_name?: string;
+    model_number?: string;
+    serial_number?: string;
+    mac_address?: string;
+    ip_address?: string;
+    unique_id?: string;
+    web_page_url?: string;
+    debug_props?: string[];
 }
 
 export interface FolderSizeResult {
@@ -145,6 +162,18 @@ export interface DriveInfo {
     free_bytes?: number;
     media_type?: string;
     physical_id?: string;
+    remote_path?: string;
+}
+
+export interface NetResource {
+    name: string;
+    remote_path: string;
+    resource_type: number;
+    display_type: number;
+    usage: number;
+    provider?: string;
+    is_media_device?: boolean;
+    has_web_page?: boolean;
 }
 
 export interface QuickAccessItem {

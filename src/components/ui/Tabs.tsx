@@ -2,7 +2,7 @@
 import React, { useRef } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import cx from 'classnames';
-import { X, Plus, Folder, Copy, Split, XCircle, ChevronLeft, ChevronRight, HardDrive, Trash } from 'lucide-react';
+import { X, Plus, Folder, Copy, Split, XCircle, ChevronLeft, ChevronRight, HardDrive, Trash, Network, Globe } from 'lucide-react';
 import { useTabs } from '../../context/TabsContext';
 import { useApp } from '../../context/AppContext';
 import { SearchBox } from './SearchBox';
@@ -269,6 +269,13 @@ export const Tabs: React.FC<TabsProps> = ({
 
     const getTabIcon = (path: string) => {
         if (path === 'trash://') return <Trash size={14} />;
+        if (path === '__network_vincinity__') return <Globe size={14} />;
+        if (path.startsWith('\\\\')) {
+            const parts = path.split('\\').filter(Boolean);
+            if (parts.length <= 2) {
+                return <Network size={14} />;
+            }
+        }
         if (/^[a-zA-Z]:\\$/.test(path)) return <HardDrive size={14} />;
         // Default folder icon
         return <Folder size={14} />;
@@ -276,6 +283,7 @@ export const Tabs: React.FC<TabsProps> = ({
 
     const getTabLabel = (tab: { label: string, path: string }) => {
         if (tab.path === 'trash://') return t('recycle_bin');
+        if (tab.path === '__network_vincinity__') return t('network_vincinity');
 
         if (tab.path.startsWith('search://')) {
             const searchPart = tab.path.replace('search://', '');
@@ -374,6 +382,7 @@ export const Tabs: React.FC<TabsProps> = ({
                         }}
                         onContextMenu={(e) => onContextMenu(e, tab.id)}
                         data-tooltip={draggingId ? undefined : (() => {
+                            if (tab.path === '__network_vincinity__') return t('network_vincinity');
                             if (!tab.path.startsWith('search://')) return tab.path;
                             const searchPart = tab.path.replace('search://', '');
                             const querySepIndex = searchPart.indexOf('?');

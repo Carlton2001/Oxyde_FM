@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { ChevronRight, Folder, Trash, HardDrive, Usb, Disc, Copy } from 'lucide-react';
+import { ChevronRight, Folder, Trash, HardDrive, Usb, Disc, Copy, Network, Globe } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import cx from 'classnames';
@@ -197,6 +197,15 @@ export const PathBar: React.FC<PathBarProps> = ({ path, onNavigate, className, i
             }];
         }
 
+        if (path === '__network_vincinity__') {
+            return [{
+                name: t ? t('network_vincinity' as any) : 'Network Neighborhood',
+                fullPath: '__network_vincinity__',
+                isLast: true,
+                isNetwork: true
+            }];
+        }
+
         if (isSearchPath) {
             const searchPart = path.startsWith('search://')
                 ? path.replace('search://', '')
@@ -223,15 +232,25 @@ export const PathBar: React.FC<PathBarProps> = ({ path, onNavigate, className, i
 
         const parts = path.split('\\').filter(p => p.length > 0);
         let currentPath = "";
+        const isUNC = path.startsWith('\\\\');
+
         return parts.map((part, index) => {
-            if (index === 0) {
-                currentPath = part + "\\";
+            if (isUNC) {
+                if (index === 0) {
+                    currentPath = `\\\\${part}`;
+                } else {
+                    currentPath = `${currentPath}\\${part}`;
+                }
             } else {
-                currentPath = currentPath.endsWith('\\') ? currentPath + part : currentPath + "\\" + part;
+                if (index === 0) {
+                    currentPath = part + "\\";
+                } else {
+                    currentPath = currentPath.endsWith('\\') ? currentPath + part : currentPath + "\\" + part;
+                }
             }
 
             let name = part.replace(/[:\\]+$/, '');
-            if (index === 0 && drives) {
+            if (!isUNC && index === 0 && drives) {
                 const drivePath = part.endsWith(":") ? part + "\\" : part;
                 const drive = drives.find(d => d.path.toUpperCase().startsWith(drivePath.toUpperCase()));
                 if (drive && drive.label) {
@@ -239,18 +258,21 @@ export const PathBar: React.FC<PathBarProps> = ({ path, onNavigate, className, i
                 } else if (index === 0 && part.includes(':')) {
                     name = name + ":";
                 }
-            } else if (index === 0 && part.includes(':')) {
+            } else if (!isUNC && index === 0 && part.includes(':')) {
                 name = name + ":";
             }
 
-            const isDrive = index === 0 && part.includes(':');
+            const isDrive = !isUNC && index === 0 && part.includes(':');
+            const isNetworkServer = isUNC && index === 0;
 
             return {
                 name,
                 fullPath: currentPath,
                 isLast: index === parts.length - 1,
                 isTrash: false,
-                isDrive
+                isDrive,
+                isNetwork: isUNC,
+                isNetworkServer
             };
         });
     }, [path, drives, isTrashPath, t]);
@@ -327,11 +349,15 @@ export const PathBar: React.FC<PathBarProps> = ({ path, onNavigate, className, i
                 <>
                     {isTrashPath ? (
                         <Trash size="1rem" className="path-icon header-icon" />
+                    ) : path === '__network_vincinity__' ? (
+                        <Globe size="1rem" className="path-icon header-icon" />
+                    ) : path?.startsWith('\\\\') ? (
+                        <Network size="1rem" className="path-icon header-icon" />
                     ) : (
                         (() => {
                             const driveInfo = drives?.find(d => path?.toLowerCase().startsWith(d.path.toLowerCase()));
                             const Icon = driveInfo
-                                ? (driveInfo.drive_type === 'removable' ? Usb : (driveInfo.drive_type === 'cdrom' ? Disc : HardDrive))
+                                ? (driveInfo.drive_type === 'removable' ? Usb : (driveInfo.drive_type === 'cdrom' ? Disc : (driveInfo.drive_type === 'remote' ? Network : HardDrive)))
                                 : HardDrive;
                             return <Icon size="1rem" className="path-icon header-icon" />;
                         })()

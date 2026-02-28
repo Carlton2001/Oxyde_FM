@@ -10,6 +10,13 @@ use tauri::{AppHandle, Emitter};
 use log::info;
 use serde::Serialize;
 
+#[cfg(target_os = "windows")]
+use windows::Win32::UI::Shell::PropertiesSystem::{SHGetPropertyStoreFromParsingName, IPropertyStore, GPS_DEFAULT};
+#[cfg(target_os = "windows")]
+use windows::Win32::System::Com::IBindCtx;
+#[cfg(target_os = "windows")]
+use windows::core::{GUID, PCWSTR};
+
 #[derive(Serialize)]
 pub struct DirResponse {
     pub entries: Vec<FileEntry>,
@@ -350,6 +357,119 @@ pub async fn rename_item(app: AppHandle, old_path: String, new_path: String) -> 
 
 #[tauri::command]
 pub fn get_file_properties(path: String) -> Result<FileProperties, CommandError> {
+    if path.starts_with("::{") || path.starts_with("?") || (path.starts_with("\\\\") && path.split('\\').filter(|s| !s.is_empty()).count() == 1) {
+        // Handle shell items (Network devices or Computer roots)
+        let mut props = FileProperties {
+            // ... (rest initialized in code)
+            name: path.split('\\').last().unwrap_or(&path).to_string(), // Best effort name
+            path: path.clone(),
+            parent: "Voisinage Réseau".to_string(),
+            is_dir: false,
+            size: 0,
+            is_calculated: true,
+            created: 0,
+            modified: 0,
+            accessed: 0,
+            readonly: true,
+            is_hidden: false,
+            is_system: false,
+            original_path: None,
+            deleted_time: None,
+            folders_count: None,
+            files_count: None,
+            shortcut: None,
+            is_media_device: Some(true),
+            has_web_page: Some(false),
+            manufacturer: None,
+            model_name: None,
+            model_number: None,
+            serial_number: None,
+            mac_address: None,
+            ip_address: None,
+            unique_id: None,
+            web_page_url: None,
+            debug_props: None,
+        };
+
+        #[cfg(target_os = "windows")]
+        unsafe {
+            use windows::Win32::System::Com::{CoInitializeEx, CoUninitialize, COINIT_MULTITHREADED};
+            use windows::Win32::Foundation::PROPERTYKEY;
+            
+            let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
+            
+            let wide_path: Vec<u16> = path.encode_utf16().chain(std::iter::once(0)).collect();
+            if let Ok(store) = SHGetPropertyStoreFromParsingName::<_, Option<&IBindCtx>, IPropertyStore>(PCWSTR(wide_path.as_ptr()), None, GPS_DEFAULT) {
+                let mut d_props = Vec::new();
+                // Debug out what properties are actually here
+                if let Ok(count) = store.GetCount() {
+                    for i in 0..count {
+                        let mut key = PROPERTYKEY::default();
+                        if let Ok(()) = store.GetAt(i, &mut key) {
+                            if let Ok(var) = store.GetValue(&key) {
+                                if let Ok(pwstr) = windows::Win32::System::Com::StructuredStorage::PropVariantToStringAlloc(&var) {
+                                    let val = pwstr.to_string().unwrap_or_default();
+                                    if !val.is_empty() {
+                                        d_props.push(format!("[{:?}, {}] = {}", key.fmtid, key.pid, val));
+                                    }
+                                    let _ = windows::Win32::System::Com::CoTaskMemFree(Some(pwstr.as_ptr() as *const _));
+                                }
+                            }
+                        }
+                    }
+                }
+                props.debug_props = Some(d_props);
+
+                let get_prop = |guid_values: (u32, u16, u16, [u8; 8]), pid: u32| -> Option<String> {
+                    let key = PROPERTYKEY {
+                        fmtid: GUID::from_values(guid_values.0, guid_values.1, guid_values.2, guid_values.3),
+                        pid,
+                    };
+                    if let Ok(var) = store.GetValue(&key) {
+                        if let Ok(pwstr) = windows::Win32::System::Com::StructuredStorage::PropVariantToStringAlloc(&var) {
+                            let val = pwstr.to_string().unwrap_or_default();
+                            let _ = windows::Win32::System::Com::CoTaskMemFree(Some(pwstr.as_ptr() as *const _));
+                            if !val.is_empty() {
+                                return Some(val);
+                            }
+                        }
+                    }
+                    None
+                };
+
+                // PKEY_Device_Manufacturer {A45C2502-DFC5-491D-8F1D-DC141151D4B2}, 7
+                props.manufacturer = get_prop((0xA45C2502, 0xDFC5, 0x491D, [0x8F, 0x1D, 0xDC, 0x14, 0x11, 0x51, 0xD4, 0xB2]), 7);
+                // PKEY_Device_ModelName {A45C2502-DFC5-491D-8F1D-DC141151D4B2}, 11
+                props.model_name = get_prop((0xA45C2502, 0xDFC5, 0x491D, [0x8F, 0x1D, 0xDC, 0x14, 0x11, 0x51, 0xD4, 0xB2]), 11);
+                // PKEY_Device_ModelNumber {A45C2502-DFC5-491D-8F1D-DC141151D4B2}, 12
+                props.model_number = get_prop((0xA45C2502, 0xDFC5, 0x491D, [0x8F, 0x1D, 0xDC, 0x14, 0x11, 0x51, 0xD4, 0xB2]), 12);
+                // PKEY_Device_SerialNumber {A45C2502-DFC5-491D-8F1D-DC141151D4B2}, 15
+                props.serial_number = get_prop((0xA45C2502, 0xDFC5, 0x491D, [0x8F, 0x1D, 0xDC, 0x14, 0x11, 0x51, 0xD4, 0xB2]), 15);
+                
+                // PKEY_Devices_IpAddress {65AD9E1B-0A09-40A4-9780-45C31E310531}, 3
+                props.ip_address = get_prop((0x65AD9E1B, 0x0A09, 0x40A4, [0x97, 0x80, 0x45, 0xC3, 0x1E, 0x31, 0x05, 0x31]), 3);
+                // PKEY_Devices_MacAddress {65AD9E1B-0A09-40A4-9780-45C31E310531}, 2
+                props.mac_address = get_prop((0x65AD9E1B, 0x0A09, 0x40A4, [0x97, 0x80, 0x45, 0xC3, 0x1E, 0x31, 0x05, 0x31]), 2);
+                // PKEY_Devices_DiscoveryId {65AD9E1B-0A09-40A4-9780-45C31E310531}, 10 (Unique ID)
+                props.unique_id = get_prop((0x65AD9E1B, 0x0A09, 0x40A4, [0x97, 0x80, 0x45, 0xC3, 0x1E, 0x31, 0x05, 0x31]), 10);
+                
+                // For name, sometimes PKEY_Device_FriendlyName {A45C2502-DFC5-491D-8F1D-DC141151D4B2}, 14 is better
+                if let Some(friendly) = get_prop((0xA45C2502, 0xDFC5, 0x491D, [0x8F, 0x1D, 0xDC, 0x14, 0x11, 0x51, 0xD4, 0xB2]), 14) {
+                    props.name = friendly;
+                }
+
+                // Check for webpage verb again to be sure
+                props.has_web_page = Some(props.ip_address.is_some() || props.name.to_lowercase() == "bbox");
+            } else {
+                props.debug_props = Some(vec!["SHGetPropertyStoreFromParsingName failed".to_string()]);
+            }
+            CoUninitialize();
+        }
+
+        return Ok(props);
+    }
+
+
     let path_buf = validate_path(&path)?;
     let metadata = fs::metadata(&path_buf)?;
 
@@ -443,6 +563,17 @@ pub fn get_file_properties(path: String) -> Result<FileProperties, CommandError>
         folders_count: None,
         files_count: None,
         shortcut,
+        is_media_device: Some(false),
+        has_web_page: Some(false),
+        manufacturer: None,
+        model_name: None,
+        model_number: None,
+        serial_number: None,
+        mac_address: None,
+        ip_address: None,
+        unique_id: None,
+        web_page_url: None,
+        debug_props: None,
     })
 }
 
@@ -608,14 +739,17 @@ pub async fn get_files_summary(paths: Vec<String>) -> Result<FileSummary, Comman
 
 #[tauri::command]
 pub async fn show_system_properties(path: String) -> Result<(), CommandError> {
-    let pb = validate_path(&path)?;
-    let normalized_path = pb.to_string_lossy();
+    let normalized_path = if path.starts_with("::{") || path.starts_with("?") {
+        path
+    } else {
+        validate_path(&path)?.to_string_lossy().into_owned()
+    };
     #[cfg(target_os = "windows")]
     {
         use windows::core::{HSTRING, PCWSTR};
         use windows::Win32::UI::Shell::{SHObjectProperties, SHOP_FILEPATH};
 
-        let wide_path = HSTRING::from(normalized_path.as_ref());
+        let wide_path = HSTRING::from(&normalized_path);
 
         unsafe {
             let success = SHObjectProperties(

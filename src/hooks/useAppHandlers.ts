@@ -438,6 +438,9 @@ export const useAppHandlers = ({
                 isBackground: false,
                 isDrive: (entry as any).isDrive,
                 driveType: (entry as any).driveType,
+                isMediaDevice: entry.is_media_device,
+                isNetworkComputer: (entry.path.startsWith('\\\\') && entry.path.split('\\').filter(Boolean).length === 1) && !entry.is_media_device,
+                hasWebPage: entry.has_web_page,
                 isFavorite: entry.is_dir ? favorites.some(f => {
                     const fp = f.path.replace(/[\\/]+$/, '').toLowerCase();
                     const ep = entry.path.replace(/[\\/]+$/, '').toLowerCase();
@@ -476,7 +479,8 @@ export const useAppHandlers = ({
                     const fp = f.path.replace(/[\\/]+$/, '').toLowerCase();
                     const pp = path.replace(/[\\/]+$/, '').toLowerCase();
                     return fp === pp;
-                })
+                }),
+                isNetworkComputer: (path.startsWith('\\\\') && path.split('\\').filter(Boolean).length === 1) || path.toLowerCase() === 'network'
             });
         }
     }, [left, right, setActivePanelId, setContextMenu, drives]);

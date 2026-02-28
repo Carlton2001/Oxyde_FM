@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useCallback, ReactNode } fr
 import { useApp } from './AppContext';
 import { ConflictEntry } from '../types';
 
-export type DialogType = 'alert' | 'confirm' | 'prompt' | 'properties' | 'conflict' | 'about' | 'delete' | 'search' | 'duplicates';
+export type DialogType = 'alert' | 'confirm' | 'prompt' | 'properties' | 'conflict' | 'about' | 'delete' | 'search' | 'duplicates' | 'mapNetworkDrive' | 'disconnectNetworkDrive';
 
 export interface DialogRequest {
     id: string;
@@ -31,6 +31,9 @@ export interface DialogContextType {
     openDuplicateSearch: (props: { initialRoot: string }) => void;
     closeAllDialogs: () => void;
     propertiesPaths: string[]; // Expose currently open properties paths for UI highlighting
+
+    openMapNetworkDriveDialog: () => Promise<void>;
+    openDisconnectNetworkDriveDialog: () => Promise<void>;
 }
 
 const DialogContext = createContext<DialogContextType | null>(null);
@@ -134,6 +137,14 @@ export const DialogProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         setDialogs([]);
     }, []);
 
+    const openMapNetworkDriveDialog = useCallback(() => {
+        return openDialog<void>('mapNetworkDrive', {});
+    }, [openDialog]);
+
+    const openDisconnectNetworkDriveDialog = useCallback(() => {
+        return openDialog<void>('disconnectNetworkDrive', {});
+    }, [openDialog]);
+
     const propertiesPaths = dialogs.find(d => d.type === 'properties')?.props.paths || [];
 
     return (
@@ -153,7 +164,9 @@ export const DialogProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             openSearchDialog,
             openDuplicateSearch,
             closeAllDialogs,
-            propertiesPaths
+            propertiesPaths,
+            openMapNetworkDriveDialog,
+            openDisconnectNetworkDriveDialog
         }}>
             {children}
         </DialogContext.Provider>

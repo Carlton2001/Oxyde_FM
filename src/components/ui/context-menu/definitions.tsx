@@ -1,9 +1,9 @@
-
+import { invoke } from '@tauri-apps/api/core';
 import {
     Copy, Scissors, Trash2, ClipboardPaste,
     ChevronDown, ChevronUp, Undo2, Redo2,
     FolderPlus, Edit2, Settings, ExternalLink, RotateCcw,
-    Archive, Box, FileArchive, Star, ListOrdered, Check, MoreHorizontal
+    Archive, Box, FileArchive, Star, ListOrdered, Check, MoreHorizontal, Globe, RefreshCw, Network, ServerOff
 } from 'lucide-react';
 import { TFunc } from '../../../i18n';
 import { DriveInfo, SortConfig, SortField, SortDirection } from '../../../types';
@@ -40,6 +40,9 @@ export interface MenuContext {
     isSearchContext?: boolean;
     isBackground?: boolean;
     isDrive?: boolean;
+    isMediaDevice?: boolean;
+    isNetworkComputer?: boolean;
+    hasWebPage?: boolean;
     driveType?: DriveInfo['drive_type'];
     isReadOnly?: boolean;
     canPaste?: boolean;
@@ -84,6 +87,8 @@ export interface MenuContext {
         onRemoveFromFavorites?: () => void;
         onSort?: (field: SortField) => void;
         onSortDirection?: (direction: SortDirection) => void;
+        openMapNetworkDriveDialog?: () => void;
+        openDisconnectNetworkDriveDialog?: () => void;
     }
 }
 
@@ -93,8 +98,68 @@ export function getMenuItems(ctx: MenuContext): MenuItem[] {
     const { target, isDir, isTreeContext, isTrashContext, isBackground, isDrive, canPaste, canUndo, undoLabel, canRedo, redoLabel, t, actions, isShiftPressed } = ctx;
     const items: MenuItem[] = [];
 
+    // --- Special Context: Voisinage Réseau ---
+    if (target === '__network_vincinity__') {
+        if (actions.onExpandAll || actions.onCollapseAll) {
+            items.push({
+                id: 'expand_all',
+                type: 'action',
+                label: t('expand_all' as any),
+                icon: ChevronDown,
+                action: () => actions.onExpandAll?.()
+            });
+            items.push({
+                id: 'collapse_all',
+                type: 'action',
+                label: t('collapse_all' as any),
+                icon: ChevronUp,
+                action: () => actions.onCollapseAll?.()
+            });
+            items.push({ id: 'sep_network_nav', type: 'separator' });
+        }
+        if (actions.onRefresh) {
+            items.push({
+                id: 'refresh',
+                type: 'action',
+                label: t('refresh'),
+                icon: RefreshCw,
+                action: () => actions.onRefresh?.()
+            });
+        }
+        if (actions.onOpenNewTab) {
+            items.push({
+                id: 'open_new_tab',
+                type: 'action',
+                label: t('open_in_new_tab'),
+                icon: ExternalLink,
+                action: () => actions.onOpenNewTab?.(target)
+            });
+        }
+        items.push({ id: 'sep_network_drives', type: 'separator' });
+        if (actions.openMapNetworkDriveDialog) {
+            items.push({
+                id: 'map_network_drive',
+                type: 'action',
+                label: t('map_network_drive' as any),
+                icon: Network,
+                action: () => actions.openMapNetworkDriveDialog?.()
+            });
+        }
+        if (actions.openDisconnectNetworkDriveDialog) {
+            items.push({
+                id: 'disconnect_network_drive',
+                type: 'action',
+                label: t('disconnect_network_drive' as any),
+                icon: ServerOff,
+                action: () => actions.openDisconnectNetworkDriveDialog?.()
+            });
+        }
+
+        return items;
+    }
+
     // --- 1. Navigation & Special Context Actions (TOP) ---
-    if (ctx.isSearchContext && target && !isBackground) {
+    if (ctx.isSearchContext && target && !isBackground && !ctx.isNetworkComputer) {
         items.push({
             id: 'go_to_folder',
             type: 'action',
@@ -104,7 +169,7 @@ export function getMenuItems(ctx: MenuContext): MenuItem[] {
         });
     }
 
-    if (isTreeContext) {
+    if (isTreeContext && !ctx.isNetworkComputer) {
         items.push({
             id: 'expand_all',
             type: 'action',
@@ -124,6 +189,13 @@ export function getMenuItems(ctx: MenuContext): MenuItem[] {
     if (target && !isBackground && !isTrashContext) {
         if (isDir) {
             items.push({
+                id: 'open_file',
+                type: 'action',
+                label: t('open'),
+                icon: ExternalLink,
+                action: () => actions.onOpenFile?.(target)
+            });
+            items.push({
                 id: 'open_new_tab',
                 type: 'action',
                 label: t('open_in_new_tab'),
@@ -131,14 +203,29 @@ export function getMenuItems(ctx: MenuContext): MenuItem[] {
                 action: () => actions.onOpenNewTab?.(target)
             });
         } else if (!isDrive) {
-            items.push({
-                id: 'open_file',
-                type: 'action',
-                label: t('open'),
-                icon: ExternalLink,
-                action: () => actions.onOpenFile?.(target)
-            });
+            if (ctx.isMediaDevice) {
+                if (ctx.hasWebPage) {
+                    items.push({
+                        id: 'open_file',
+                        type: 'action',
+                        label: t('view_device_webpage' as any),
+                        icon: Globe,
+                        action: () => actions.onOpenFile?.(target)
+                    });
+                }
+            } else {
+                items.push({
+                    id: 'open_file',
+                    type: 'action',
+                    label: t('open'),
+                    icon: ExternalLink,
+                    action: () => actions.onOpenFile?.(target)
+                });
+            }
         }
+
+        // If it's a network computer, we allow it to fall through to get Properties/Sort/etc
+        // but we'll filter out other sections using the isNetworkComputer flag
     }
 
     if (isDrive && !isBackground) {
@@ -188,7 +275,7 @@ export function getMenuItems(ctx: MenuContext): MenuItem[] {
             });
         }
 
-        if (isDir && !isDrive) {
+        if (isDir && !isDrive && !ctx.isNetworkComputer) {
             items.push({
                 id: 'favorite_toggle',
                 type: 'action',
@@ -200,7 +287,7 @@ export function getMenuItems(ctx: MenuContext): MenuItem[] {
     }
 
     // --- 3. History (Undo / Redo) ---
-    if (canUndo) {
+    if (canUndo && !ctx.isNetworkComputer) {
         items.push({
             id: 'undo',
             type: 'action',
@@ -209,7 +296,7 @@ export function getMenuItems(ctx: MenuContext): MenuItem[] {
             action: () => actions.onUndo()
         });
     }
-    if (canRedo) {
+    if (canRedo && !ctx.isNetworkComputer) {
         items.push({
             id: 'redo',
             type: 'action',
@@ -223,7 +310,7 @@ export function getMenuItems(ctx: MenuContext): MenuItem[] {
 
     // --- 4. Content Creation & Transformation ---
     if (!isTrashContext) {
-        if (isBackground) {
+        if (isBackground && !ctx.isNetworkComputer) {
             items.push({
                 id: 'new_folder',
                 type: 'action',
@@ -233,7 +320,7 @@ export function getMenuItems(ctx: MenuContext): MenuItem[] {
             });
         }
 
-        if (target && !isBackground) {
+        if (target && !isBackground && !ctx.isMediaDevice && !ctx.isNetworkComputer) {
             const ext = target.split('.').pop()?.toLowerCase() || '';
             const isArchive = ['zip', '7z', 'tar', 'tgz', 'txz', 'zst', 'rar', 'tbz2', 'tzst', 'gz', 'bz2', 'xz', 'iso', 'img'].includes(ext);
 
@@ -274,7 +361,7 @@ export function getMenuItems(ctx: MenuContext): MenuItem[] {
 
     // --- 5. Clipboard & Modification ---
     if (!isTrashContext) {
-        if (!isBackground && !isDrive) {
+        if (!isBackground && !isDrive && !ctx.isMediaDevice && !ctx.isNetworkComputer) {
             items.push({
                 id: 'cut',
                 type: 'action',
@@ -296,7 +383,7 @@ export function getMenuItems(ctx: MenuContext): MenuItem[] {
             });
         }
 
-        if (canPaste) {
+        if (canPaste && !ctx.isNetworkComputer) {
             items.push({
                 id: 'paste',
                 type: 'action',
@@ -306,7 +393,7 @@ export function getMenuItems(ctx: MenuContext): MenuItem[] {
             });
         }
 
-        if (target && !isBackground && !isDrive) {
+        if (target && !isBackground && !isDrive && !ctx.isMediaDevice && !ctx.isNetworkComputer) {
             items.push({
                 id: 'rename',
                 type: 'action',
@@ -338,7 +425,7 @@ export function getMenuItems(ctx: MenuContext): MenuItem[] {
             danger: true
         });
     } else {
-        if (!isBackground && !isDrive) {
+        if (!isBackground && !isDrive && !ctx.isMediaDevice && !ctx.isNetworkComputer) {
             items.push({
                 id: 'delete',
                 type: 'action',
@@ -352,14 +439,20 @@ export function getMenuItems(ctx: MenuContext): MenuItem[] {
     }
 
     // --- 7. Information (ALWAYS LAST) ---
-    if (target) {
+    if (target && !ctx.isNetworkComputer) {
         items.push({ id: 'sep_properties', type: 'separator' });
         items.push({
             id: 'properties',
             type: 'action',
             label: t('properties'),
             icon: Settings,
-            action: () => actions.onProperties()
+            action: () => {
+                if (ctx.isMediaDevice || target.startsWith('::{')) {
+                    invoke('show_system_properties', { path: target }).catch(console.error);
+                } else {
+                    actions.onProperties();
+                }
+            }
         });
     }
 
@@ -385,7 +478,7 @@ export function getMenuItems(ctx: MenuContext): MenuItem[] {
     }
 
     // --- 9. Native Shell Integration ---
-    if (target && !isTrashContext) {
+    if (target && !isTrashContext && !ctx.isMediaDevice && !ctx.isNetworkComputer) {
         items.push({ id: 'sep_native', type: 'separator' });
         items.push({
             id: 'more_options',

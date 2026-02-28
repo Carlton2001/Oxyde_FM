@@ -66,6 +66,7 @@ features = [
     "Win32_Storage_FileSystem",
     "Win32_UI_Shell",
     "Win32_UI_Shell_Common",
+    "Win32_UI_Shell_PropertiesSystem",
     "Win32_UI_Controls",
     "Win32_UI_WindowsAndMessaging",
     "Win32_Graphics_Gdi",
@@ -80,6 +81,7 @@ features = [
     "Win32_System_Ioctl",
     "Win32_System_IO",
     "Win32_Globalization",
+    "Win32_NetworkManagement_WNet",
 ]
 
 

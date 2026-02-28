@@ -266,6 +266,29 @@ export const useFiles = (panelId: PanelId, path: string, sortConfig: SortConfig,
                 setFiles(entries);
                 setIsComplete(true);
                 setSummary(null);
+            } else if (path === '__network_vincinity__' || (path.startsWith('\\\\') && path.split('\\').filter(Boolean).length === 1)) {
+                const networkPath = path === '__network_vincinity__' ? undefined : path;
+                const netResources = await invoke<any[]>('get_network_resources', { path: networkPath });
+
+                const entries: FileEntry[] = netResources.map(r => ({
+                    name: r.name,
+                    path: r.remote_path,
+                    is_dir: !r.is_media_device, // If it's a media device, don't treat it as a folder to navigate into
+                    size: 0,
+                    modified: 0,
+                    readonly: true,
+                    is_hidden: false,
+                    is_system: false,
+                    is_calculating: false,
+                    is_calculated: false,
+                    drive_type: r.resource_type === 1 ? 'remote' : undefined, // RESOURCETYPE_DISK
+                    is_media_device: r.is_media_device,
+                    has_web_page: r.has_web_page
+                } as FileEntry));
+
+                setFiles(entries);
+                setIsComplete(true);
+                setSummary(null);
             } else if (isVirtualPath(path)) {
                 setFiles([]);
                 setIsComplete(true);

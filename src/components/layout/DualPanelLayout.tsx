@@ -425,6 +425,7 @@ export const DualPanelLayout: React.FC<DualPanelLayoutProps> = ({
                             searchLimitReached={left.searchLimitReached}
                             panelId="left"
                             onViewModeChange={leftHandlers.setViewMode}
+                            loading={left.loading}
                         />
 
                         {layout === 'dual' && (
@@ -473,6 +474,7 @@ export const DualPanelLayout: React.FC<DualPanelLayoutProps> = ({
                                 searchLimitReached={right.searchLimitReached}
                                 panelId="right"
                                 onViewModeChange={rightHandlers.setViewMode}
+                                loading={right.loading}
                             />
                         )}
                     </div>

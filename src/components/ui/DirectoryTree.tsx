@@ -2,7 +2,7 @@ import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import cx from 'classnames';
-import { ChevronRight, ChevronDown, Folder, FolderOpen, HardDrive, Usb, Disc, Trash, Star } from 'lucide-react';
+import { ChevronRight, ChevronDown, Folder, FolderOpen, HardDrive, Usb, Disc, Trash, Star, Network, Globe } from 'lucide-react';
 import { List, ListImperativeAPI } from 'react-window';
 import { AutoSizer } from 'react-virtualized-auto-sizer';
 
@@ -26,6 +26,8 @@ interface TreeNode {
     isSpacer?: boolean;
     totalBytes?: number;
     freeBytes?: number;
+    isNetwork?: boolean;
+    isNetworkRoot?: boolean;
 }
 
 interface FlattenedNode {
@@ -125,6 +127,7 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
         driveType?: DriveInfo['drive_type'];
         isReadOnly?: boolean;
         isFavorite?: boolean;
+        isNetworkComputer?: boolean;
     } | null>(null);
 
     const [isExpanding, setIsExpanding] = useState(false);
@@ -137,6 +140,39 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
 
     const loadPathContent = useCallback(async (path: string) => {
         const lowerPath = path.toLowerCase();
+
+        // Handle network resource discovery
+        if (path.startsWith('\\\\') || path === '__network_vincinity__') {
+            try {
+                const networkPath = path === '__network_vincinity__' ? undefined : path;
+                const netResources: any[] = await invoke('get_network_resources', { path: networkPath });
+                const treeNodes: TreeNode[] = netResources.map(r => ({
+                    path: r.remote_path,
+                    name: r.name,
+                    isNetwork: true,
+                    hasSubdirs: (r.usage & 2) !== 0, // RESOURCEUSAGE_CONTAINER
+                }));
+                setTreeData(prev => {
+                    const next = new Map(prev);
+                    next.set(path, treeNodes);
+                    treeDataRef.current = next;
+                    return next;
+                });
+                loadedPathsRef.current.add(lowerPath);
+                return;
+            } catch (error) {
+                console.error("Failed to load network resources:", error);
+                setTreeData(prev => {
+                    const next = new Map(prev);
+                    next.set(path, []);
+                    treeDataRef.current = next;
+                    return next;
+                });
+                loadedPathsRef.current.add(lowerPath);
+                return;
+            }
+        }
+
         loadedPathsRef.current.add(lowerPath);
 
         try {
@@ -246,6 +282,15 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
             name: t('recycle_bin' as any),
             hasSubdirs: false,
             isTrash: true
+        });
+
+        // Add Network
+        nodes.push({ path: '__network_spacer__', name: '', isSpacer: true });
+        nodes.push({
+            path: '__network_vincinity__',
+            name: t('network_vincinity' as any),
+            hasSubdirs: true,
+            isNetworkRoot: true
         });
 
         return nodes;
@@ -383,7 +428,8 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
                 const fp = f.path.replace(/[\\/]+$/, '').toLowerCase();
                 const np = node.path.replace(/[\\/]+$/, '').toLowerCase();
                 return fp === np;
-            })
+            }),
+            isNetworkComputer: node.isNetworkRoot || node.isNetwork || node.driveType === 'remote' || (node.path.startsWith('\\\\') && node.path.split('\\').filter(Boolean).length === 1)
         });
     };
 
@@ -443,9 +489,12 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
         if (node.driveType) {
             if (node.driveType === 'removable') return <Usb size="1rem" className={cx(driveClass)} />;
             if (node.driveType === 'cdrom') return <Disc size="1rem" className={cx(driveClass)} />;
+            if (node.driveType === 'remote') return <Network size="1rem" className={cx(driveClass)} />;
             return <HardDrive size="1rem" className={cx(driveClass)} />;
         }
         if (node.isTrash) return <Trash size="1rem" className={cx(driveClass)} />;
+        if (node.isNetworkRoot) return <Globe size="1rem" className={cx(driveClass)} />;
+        if (node.isNetwork) return <Network size="1rem" className={cx(driveClass)} />;
         if (node.isFavorite) return <Star size="1rem" className="sidebar-favorite-icon" />;
         if (useSystemIcons) {
             return <AsyncFileIcon path={node.path} isDir={true} name={node.name} size={16} className="system-icon-img" />;
@@ -625,6 +674,7 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
                     isFavorite={contextMenu.isFavorite}
                     onAddToFavorites={() => { onAddToFavorites?.(contextMenu.path); setContextMenu(null); }}
                     onRemoveFromFavorites={() => { onRemoveFromFavorites?.(contextMenu.path); setContextMenu(null); }}
+                    isNetworkComputer={contextMenu.isNetworkComputer}
                 />
             )}
         </div>

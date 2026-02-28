@@ -3,7 +3,7 @@ import {
     Folder, File, FileText, FileImage, FileVideo, Music,
     Package, Archive, Disc, FileCode, Link, ExternalLink,
     FileSpreadsheet, FileStack, Database, Terminal, Key,
-    ShieldCheck, Box, HardDrive
+    ShieldCheck, Box, HardDrive, Network, Globe
 } from 'lucide-react';
 import { AsyncFileIcon } from '../components/ui/AsyncFileIcon';
 
@@ -99,6 +99,15 @@ export const getFileIcon = (
     }
 
     if (isDir) {
+        if (path === '__network_vincinity__') {
+            return <Globe className="file-icon network-root" {...iconProps} />;
+        }
+        if (path?.startsWith('\\\\')) {
+            const parts = path.split('\\').filter(Boolean);
+            if (parts.length <= 2) {
+                return <Network className="file-icon network" {...iconProps} />;
+            }
+        }
         const isDrive = path && /^[a-zA-Z]:\\?$/.test(path);
         if (isDrive) {
             return <HardDrive className="file-icon drive" {...iconProps} />;

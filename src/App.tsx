@@ -71,7 +71,7 @@ function App() {
   const fileOps = useFileOperations(notify, t as any);
   const { favorites } = useFavorites();
 
-  const [contextMenu, setContextMenu] = useState<{ x: number, y: number, target?: string, panelId: PanelId, isDir?: boolean, isBackground?: boolean, isDrive?: boolean, driveType?: DriveInfo['drive_type'], isFavorite?: boolean } | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number, y: number, target?: string, panelId: PanelId, isDir?: boolean, isBackground?: boolean, isDrive?: boolean, isMediaDevice?: boolean, isNetworkComputer?: boolean, hasWebPage?: boolean, driveType?: DriveInfo['drive_type'], isFavorite?: boolean } | null>(null);
   const [sidebarReduced, setSidebarReduced] = useState(() => localStorage.getItem('sidebarReduced') === 'true');
   useEffect(() => {
     localStorage.setItem('sidebarReduced', sidebarReduced.toString());
@@ -443,7 +443,7 @@ function App() {
           isSearchContext={contextMenu.panelId === 'left' ? left.path.startsWith('search://') : right.path.startsWith('search://')}
           onRestore={handleRestoreSelected} onGoToFolder={handleGoToFolder}
           onOpenNewTab={layout === 'standard' ? (path: string) => { addTab(path); setContextMenu(null); } : undefined}
-          isDir={contextMenu.isDir} isBackground={contextMenu.isBackground} isDrive={contextMenu.isDrive} driveType={contextMenu.driveType}
+          isDir={contextMenu.isDir} isBackground={contextMenu.isBackground} isDrive={contextMenu.isDrive} isMediaDevice={contextMenu.isMediaDevice} isNetworkComputer={contextMenu.isNetworkComputer} hasWebPage={contextMenu.hasWebPage} driveType={contextMenu.driveType}
           isReadOnly={false}
           onExtract={(p: string, toSub: boolean) => handleAction(toSub ? 'archive.extract_to_folder' : 'archive.extract_here', { ...actionContext, contextMenuTarget: p })}
           onCompress={(format: any) => handleAction(`archive.compress_${format}`, actionContext)}

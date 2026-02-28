@@ -8,6 +8,8 @@ import { InputDialog } from '../dialogs/InputDialog';
 import { ConfirmDialog } from '../dialogs/ConfirmDialog';
 import { SearchDialog } from '../dialogs/SearchDialog';
 import { DuplicateSearchDialog } from '../dialogs/DuplicateSearchDialog';
+import { MapNetworkDriveDialog } from '../dialogs/MapNetworkDriveDialog';
+import { DisconnectNetworkDriveDialog } from '../dialogs/DisconnectNetworkDriveDialog';
 import { X } from 'lucide-react';
 import { openUrl } from '@tauri-apps/plugin-opener';
 
@@ -274,6 +276,24 @@ export const GlobalDialogContainer: React.FC = () => {
                                 initialRoot={props.initialRoot}
                                 t={t}
                                 onClose={() => handleClose(null)}
+                            />
+                        );
+
+                    case 'mapNetworkDrive':
+                        return (
+                            <MapNetworkDriveDialog
+                                key={id}
+                                t={t}
+                                onClose={() => handleClose()}
+                            />
+                        );
+
+                    case 'disconnectNetworkDrive':
+                        return (
+                            <DisconnectNetworkDriveDialog
+                                key={id}
+                                t={t}
+                                onClose={() => handleClose()}
                             />
                         );
 

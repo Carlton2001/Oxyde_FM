@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { List, Grid, RowComponentProps, CellComponentProps } from 'react-window';
 import { AutoSizer } from 'react-virtualized-auto-sizer';
 import cx from 'classnames';
-import { Check, Shield } from 'lucide-react';
+import { Check, Shield, Loader2 } from 'lucide-react';
 
 import { FileEntry, ViewMode, DateFormat, ColumnWidths } from '../../types';
 import { formatSize, formatDate, getFileTypeString } from '../../utils/format';
@@ -41,6 +41,7 @@ interface VirtualizedFileListProps {
     diffPaths?: Set<string>;
     colWidths?: ColumnWidths;
     isSearching?: boolean;
+    loading?: boolean;
 }
 
 export interface VirtualizedFileListHandle {
@@ -132,7 +133,7 @@ const DetailsRow = React.memo((props: RowComponentProps<SharedItemProps>) => {
             data-path={entry.path}
             data-tooltip={tooltipText}
             data-tooltip-multiline="true"
-            data-tooltip-image-path={entry.path}
+            data-tooltip-image-path={(entry.path.startsWith('\\\\') || entry.path === '__network_vincinity__') ? undefined : entry.path}
             style={adjustedStyle}
             onClick={handlers.onClick}
             onDoubleClick={handlers.onDoubleClick}
@@ -261,7 +262,7 @@ const GridCell = React.memo((props: CellComponentProps<SharedItemProps>) => {
                 data-path={entry.path}
                 data-tooltip={tooltipText}
                 data-tooltip-multiline="true"
-                data-tooltip-image-path={entry.path}
+                data-tooltip-image-path={(entry.path.startsWith('\\\\') || entry.path === '__network_vincinity__') ? undefined : entry.path}
                 onClick={handlers.onClick}
                 onDoubleClick={handlers.onDoubleClick}
                 onContextMenu={handlers.onContextMenu}
@@ -329,7 +330,7 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
         onRenameTextChange, onRenameCommit, onRenameCancel, getIcon,
         totalItemsSize, showHistogram, isTrashView, searchResults,
         onScrollToggle, onItemMiddleClick,
-        diffPaths, colWidths, isSearching
+        diffPaths, colWidths, isSearching, loading
     } = props;
 
     const { dateFormat, showCheckboxes } = useApp();
@@ -431,7 +432,14 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
             <AutoSizer renderProp={({ height, width }: { height: number | undefined; width: number | undefined }) => {
                 if (!height || !width) return null;
 
-                if (files.length === 0 && searchResults && searchResults.length === 0 && !isSearching) {
+                if (files.length === 0 && (!searchResults || searchResults.length === 0) && !isSearching) {
+                    if (loading) {
+                        return (
+                            <div className="empty-msg loading" style={{ width, height, position: 'absolute', top: 0, left: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <Loader2 size={16} className="spinning" style={{ animation: 'spin 2s linear infinite' }} />&nbsp;&nbsp;<span>{t('loading' as any) || "Loading..."}</span>
+                            </div>
+                        );
+                    }
                     return (
                         <div className="empty-msg" style={{ width, height, position: 'absolute', top: 0, left: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                             <span>{t('no_results')}</span>

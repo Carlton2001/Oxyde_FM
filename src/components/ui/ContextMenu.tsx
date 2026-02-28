@@ -6,6 +6,7 @@ import { DriveInfo, SortConfig, SortField, SortDirection } from '../../types';
 import { useApp } from '../../context/AppContext';
 import { getMenuItems, MenuContext } from './context-menu/definitions';
 import { ContextMenuView } from './context-menu/ContextMenuView';
+import { useDialogs } from '../../context/DialogContext';
 
 export interface ContextMenuProps {
     x: number;
@@ -45,6 +46,9 @@ export interface ContextMenuProps {
     onOpenFile?: (path: string) => void;
     isDir?: boolean;
     isBackground?: boolean;
+    isMediaDevice?: boolean;
+    isNetworkComputer?: boolean;
+    hasWebPage?: boolean;
     isDrive?: boolean;
     driveType?: DriveInfo['drive_type']; // 'fixed' | 'removable' | 'remote' | 'cdrom' | 'unknown';
     onExtract?: (path: string, toSubfolder: boolean) => void;
@@ -64,12 +68,13 @@ export interface ContextMenuProps {
 
 export const ContextMenu: React.FC<ContextMenuProps> = (props) => {
     const { mountedImages } = useApp();
+    const { openMapNetworkDriveDialog, openDisconnectNetworkDriveDialog } = useDialogs();
 
     // Memoize the context and items generation to avoid recalculations if props haven't changed meaningfully
     // though usually a context menu is mounted once and then unmounted.
 
     // Explicit mapping to avoid passing everything blindly
-    const context: MenuContext = useMemo(() => ({
+    const menuContext: MenuContext = useMemo(() => ({
         target: props.target,
         isDir: props.isDir,
         isTreeContext: props.isTreeContext,
@@ -77,6 +82,9 @@ export const ContextMenu: React.FC<ContextMenuProps> = (props) => {
         isSearchContext: props.isSearchContext,
         isBackground: props.isBackground,
         isDrive: props.isDrive,
+        isMediaDevice: props.isMediaDevice,
+        isNetworkComputer: props.isNetworkComputer,
+        hasWebPage: props.hasWebPage,
         driveType: props.driveType,
         isReadOnly: props.isReadOnly,
         canPaste: props.canPaste,
@@ -117,17 +125,23 @@ export const ContextMenu: React.FC<ContextMenuProps> = (props) => {
             onAddToFavorites: props.onAddToFavorites,
             onRemoveFromFavorites: props.onRemoveFromFavorites,
             onSort: props.onSort,
-            onSortDirection: props.onSortDirection
+            onSortDirection: props.onSortDirection,
+            openMapNetworkDriveDialog,
+            openDisconnectNetworkDriveDialog
         }
     }), [
         props.target, props.isDir, props.isTreeContext, props.isTrashContext,
-        props.isBackground, props.isDrive, props.driveType, props.isReadOnly,
-        props.canPaste, props.canUndo, props.undoLabel, props.canRedo, props.redoLabel, props.t,
-        props.onClose, props.onRefresh, props.onUndo, props.onRedo, props.isSearchContext,
-        props.isFavorite, props.onAddToFavorites, props.onRemoveFromFavorites, mountedImages
+        props.isBackground, props.isDrive, props.isMediaDevice, props.isNetworkComputer, props.hasWebPage, props.driveType, props.isReadOnly,
+        props.canPaste, props.canUndo, props.undoLabel, props.canRedo, props.redoLabel, props.sortConfig,
+        props.t, props.onClose, props.onRefresh, props.onUndo, props.onRedo, props.onCopy,
+        props.onCut, props.onPaste, props.onDelete, props.onRename, props.onProperties, props.onNewFolder,
+        props.onCopyName, props.onCopyPath, props.onGoToFolder, props.onRestore, props.onExpandAll, props.onCollapseAll,
+        props.onOpenNewTab, props.onOpenFile, props.onExtract, props.onCompress, props.onMount, props.onUnmount,
+        props.onAddToFavorites, props.onRemoveFromFavorites, props.onSort, props.onSortDirection, props.isShiftPressed, props.isFavorite, mountedImages,
+        openMapNetworkDriveDialog, openDisconnectNetworkDriveDialog
     ]);
 
-    const items = useMemo(() => getMenuItems(context), [context]);
+    const items = useMemo(() => getMenuItems(menuContext), [menuContext]);
 
     return (
         <ContextMenuView

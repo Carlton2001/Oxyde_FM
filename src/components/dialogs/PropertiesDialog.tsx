@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { X, Folder, ChartBarBig, FileText, Link } from 'lucide-react';
+import { X, Folder, ChartBarBig, FileText, Link, Globe } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { FileProperties, FileSummary, NotificationType, FileEntry, FolderSizeResult } from '../../types';
 import { formatSize, formatDate, getFileTypeString } from '../../utils/format';
@@ -196,17 +196,56 @@ export const PropertiesDialog: React.FC<PropertiesDialogProps> = ({ paths, initi
 
                                     {isSingle ? (
                                         <div className="prop-grid">
-                                            <div className="prop-label">{t('type')}</div>
                                             <div className="prop-value">
-                                                {isDriveRoot ? t('disk_drive' as any) : getFileTypeString(properties as any, t)}
+                                                {properties!.is_media_device ? t('network_device' as any) : (isDriveRoot ? t('disk_drive' as any) : getFileTypeString(properties as any, t))}
                                             </div>
 
-                                            {!isDriveRoot && (
+                                            {properties!.is_media_device ? (
+                                                <>
+                                                    <div className="prop-label">{t('manufacturer' as any)}</div>
+                                                    <div className="prop-value">{properties!.manufacturer || '-'}</div>
+
+                                                    <div className="prop-label">{t('model' as any)}</div>
+                                                    <div className="prop-value">{properties!.model_name || '-'}</div>
+
+                                                    <div className="prop-label">{t('model_number' as any)}</div>
+                                                    <div className="prop-value">{properties!.model_number || '-'}</div>
+
+                                                    <div className="prop-divider-row" />
+
+                                                    <div className="prop-label">{t('serial_number' as any)}</div>
+                                                    <div className="prop-value">{properties!.serial_number || '-'}</div>
+
+                                                    <div className="prop-label">{t('mac_address' as any)}</div>
+                                                    <div className="prop-value">{properties!.mac_address || '-'}</div>
+
+                                                    <div className="prop-label">{t('unique_id' as any)}</div>
+                                                    <div className="prop-value" style={{ wordBreak: 'break-all', fontSize: '0.65rem' }}>{properties!.unique_id || '-'}</div>
+
+                                                    <div className="prop-label">{t('ip_address' as any)}</div>
+                                                    <div className="prop-value">{properties!.ip_address || '-'}</div>
+
+                                                    {properties!.debug_props && properties!.debug_props.length > 0 && (
+                                                        <>
+                                                            <div className="prop-divider-row" />
+                                                            <div className="prop-label">Debug Data</div>
+                                                            <div className="prop-value" style={{ gridColumn: '1 / -1' }}>
+                                                                <textarea
+                                                                    readOnly
+                                                                    rows={5}
+                                                                    style={{ width: '100%', fontSize: '0.65rem', overflow: 'auto', backgroundColor: 'transparent', border: '1px solid var(--border-color)', color: 'var(--text-color)' }}
+                                                                    value={properties!.debug_props.join('\n')}
+                                                                />
+                                                            </div>
+                                                        </>
+                                                    )}
+                                                </>
+                                            ) : (!isDriveRoot && (
                                                 <>
                                                     <div className="prop-label">{t('location')}</div>
                                                     <div className="prop-value" data-tooltip={properties!.parent}>{properties!.parent}</div>
                                                 </>
-                                            )}
+                                            ))}
 
                                             {properties!.original_path && (
                                                 <div className="prop-label">{t('original_location')}</div>
@@ -262,56 +301,70 @@ export const PropertiesDialog: React.FC<PropertiesDialogProps> = ({ paths, initi
                                                 </>
                                             ) : (
                                                 <>
-                                                    <div className="prop-label">{t('size')}</div>
-                                                    <div className="prop-value">
-                                                        {properties!.is_dir ? (
-                                                            (localCalculated || properties!.is_calculated) ? (
-                                                                (localCalculated?.size ?? properties!.size) === 0
-                                                                    ? t('empty_dir' as any)
-                                                                    : `${formatSize(localCalculated?.size ?? properties!.size, 1, t)} (${(localCalculated?.size ?? properties!.size).toLocaleString()} ${t('unit_bytes' as any)})`
-                                                            ) : (
-                                                                calcLoading ? (
-                                                                    <span className="calc-status">{t('calculating' as any)}</span>
-                                                                ) : (
-                                                                    <button className="prop-btn xsmall" onClick={handleCalculate}>
-                                                                        <ChartBarBig size={12} className="prop-btn-icon" /> {t('calculate_size' as any)}
-                                                                    </button>
-                                                                )
-                                                            )
-                                                        ) : (
-                                                            `${formatSize(properties!.size, 1, t)} (${properties!.size.toLocaleString()} ${t('unit_bytes' as any)})`
-                                                        )}
-                                                    </div>
-
-                                                    {showCounts && (
+                                                    {!properties!.is_media_device && (
                                                         <>
-                                                            <div className="prop-label">{t('contains')}</div>
+                                                            <div className="prop-label">{t('size')}</div>
                                                             <div className="prop-value">
-                                                                {filesCount} {t(filesCount === 1 ? 'file' as any : 'files' as any)}, {foldersCount} {t(foldersCount === 1 ? 'folder' as any : 'folders' as any)}
+                                                                {properties!.is_dir ? (
+                                                                    (localCalculated || properties!.is_calculated) ? (
+                                                                        (localCalculated?.size ?? properties!.size) === 0
+                                                                            ? t('empty_dir' as any)
+                                                                            : `${formatSize(localCalculated?.size ?? properties!.size, 1, t)} (${(localCalculated?.size ?? properties!.size).toLocaleString()} ${t('unit_bytes' as any)})`
+                                                                    ) : (
+                                                                        calcLoading ? (
+                                                                            <span className="calc-status">{t('calculating' as any)}</span>
+                                                                        ) : (
+                                                                            <button className="prop-btn xsmall" onClick={handleCalculate}>
+                                                                                <ChartBarBig size={12} className="prop-btn-icon" /> {t('calculate_size' as any)}
+                                                                            </button>
+                                                                        )
+                                                                    )
+                                                                ) : (
+                                                                    `${formatSize(properties!.size, 1, t)} (${properties!.size.toLocaleString()} ${t('unit_bytes' as any)})`
+                                                                )}
                                                             </div>
+
+                                                            {showCounts && (
+                                                                <>
+                                                                    <div className="prop-label">{t('contains')}</div>
+                                                                    <div className="prop-value">
+                                                                        {filesCount} {t(filesCount === 1 ? 'file' as any : 'files' as any)}, {foldersCount} {t(foldersCount === 1 ? 'folder' as any : 'folders' as any)}
+                                                                    </div>
+                                                                </>
+                                                            )}
                                                         </>
                                                     )}
                                                 </>
                                             )}
 
-                                            <div className="prop-divider-row" />
+                                            {!properties!.is_media_device && (
+                                                <>
+                                                    <div className="prop-divider-row" />
 
-                                            <div className="prop-label">{t('created')}</div>
-                                            <div className="prop-value">{formatDate(properties!.created, dateFormat, '-')}</div>
+                                                    <div className="prop-label">{t('created')}</div>
+                                                    <div className="prop-value">{formatDate(properties!.created, dateFormat, '-')}</div>
 
-                                            <div className="prop-label">{t('modified')}</div>
-                                            <div className="prop-value">{formatDate(properties!.modified, dateFormat, '-')}</div>
+                                                    <div className="prop-label">{t('modified')}</div>
+                                                    <div className="prop-value">{formatDate(properties!.modified, dateFormat, '-')}</div>
 
-                                            <div className="prop-label">{t('accessed')}</div>
-                                            <div className="prop-value">{formatDate(properties!.accessed, dateFormat, '-')}</div>
+                                                    <div className="prop-label">{t('accessed')}</div>
+                                                    <div className="prop-value">{formatDate(properties!.accessed, dateFormat, '-')}</div>
 
-                                            <div className="prop-divider-row" />
+                                                    <div className="prop-divider-row" />
+                                                </>
+                                            )}
 
                                             <div className="prop-label">{t('attributes')}</div>
                                             <div className="prop-attrs-static">
-                                                {properties!.readonly && <span className="prop-badge">{t('readonly')}</span>}
-                                                {properties!.is_hidden && <span className="prop-badge">{t('hidden')}</span>}
-                                                {!properties!.readonly && !properties!.is_hidden && <span className="prop-text-muted">{t('none' as any)}</span>}
+                                                {properties!.is_media_device ? (
+                                                    <span className="prop-text-muted">{t('none' as any)}</span>
+                                                ) : (
+                                                    <>
+                                                        {properties!.readonly && <span className="prop-badge">{t('readonly')}</span>}
+                                                        {properties!.is_hidden && <span className="prop-badge">{t('hidden')}</span>}
+                                                        {!properties!.readonly && !properties!.is_hidden && <span className="prop-text-muted">{t('none' as any)}</span>}
+                                                    </>
+                                                )}
                                             </div>
                                         </div>
                                     ) : (
@@ -416,9 +469,17 @@ export const PropertiesDialog: React.FC<PropertiesDialogProps> = ({ paths, initi
                 </div>
 
                 <div className="prop-footer spaced">
-                    <button className="btn" onClick={() => invoke('show_system_properties', { path: paths[0] })}>
-                        {t('system_properties')}
-                    </button>
+                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                        <button className="btn" onClick={() => invoke('show_system_properties', { path: paths[0] })}>
+                            {t('system_properties')}
+                        </button>
+                        {properties?.is_media_device && (properties?.has_web_page || initialEntries?.[0]?.has_web_page) && (
+                            <button className="btn" onClick={() => invoke('open_item', { path: paths[0] })}>
+                                <Globe size={14} style={{ marginRight: '6px' }} />
+                                {t('view_device_webpage' as any)}
+                            </button>
+                        )}
+                    </div>
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
                         <button className="btn" onClick={onClose}>{t('cancel')}</button>
                         <button className="btn primary" onClick={handleOk}>OK</button>

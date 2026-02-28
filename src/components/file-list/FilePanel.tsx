@@ -69,6 +69,7 @@ interface FilePanelProps {
     panelId: string;
     searchLimitReached?: boolean;
     onViewModeChange: (mode: ViewMode) => void;
+    loading?: boolean;
 }
 
 export const FilePanel: React.FC<FilePanelProps> = React.memo(({
@@ -80,7 +81,7 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
     dragOverPath, showHidden = false, showSystem = false, layout, cutPaths = [],
     onRename, showHistogram: propShowHistogram, isTrashView = false,
     useSystemIcons: propUseSystemIcons, onItemMiddleClick, diffPaths, searchLimitReached,
-    panelId, onViewModeChange
+    panelId, onViewModeChange, loading
 }) => {
     const { useSystemIcons: contextUseSystemIcons, searchLimit, showGridThumbnails, notify } = useApp();
     const useSystemIcons = propUseSystemIcons ?? contextUseSystemIcons;
@@ -520,6 +521,7 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
                         diffPaths={diffPaths}
                         colWidths={colWidths}
                         isSearching={isSearching}
+                        loading={loading}
                     />
                 </div>
             </div>
