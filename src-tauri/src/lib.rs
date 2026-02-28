@@ -211,7 +211,7 @@ pub fn run() {
                 unsafe {
                     let prev_wndproc = GetWindowLongPtrW(hwnd, GWLP_WNDPROC);
                     ORIGINAL_WNDPROC.set(prev_wndproc).unwrap();
-                    SetWindowLongPtrW(hwnd, GWLP_WNDPROC, wndproc as usize as isize);
+                    SetWindowLongPtrW(hwnd, GWLP_WNDPROC, wndproc as *const () as usize as isize);
                 }
             }
             }

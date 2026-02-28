@@ -1,54 +1,57 @@
 {
-    "$schema":  "https://schema.tauri.app/config/2",
-    "productName":  "Oxyde_FM",
-    "version":  "1.0.4",
-    "identifier":  "com.oxyde.app",
-    "build":  {
-                  "beforeDevCommand":  "npm run dev",
-                  "devUrl":  "http://localhost:1420",
-                  "beforeBuildCommand":  "npm run build",
-                  "frontendDist":  "../dist"
-              },
-    "app":  {
-                "windows":  [
-                                {
-                                    "label":  "main",
-                                    "title":  "Oxyde",
-                                    "width":  1200,
-                                    "height":  800,
-                                    "decorations":  false,
-                                    "transparent":  true
-                                }
-                            ],
-                "security":  {
-                                 "csp":  "default-src \u0027self\u0027; img-src \u0027self\u0027 blob: data: asset: http://asset.localhost https://asset.localhost tauri://localhost; video-src \u0027self\u0027 blob: asset: http://asset.localhost https://asset.localhost tauri://localhost; style-src \u0027self\u0027 \u0027unsafe-inline\u0027; script-src \u0027self\u0027 \u0027unsafe-inline\u0027",
-                                 "assetProtocol":  {
-                                                       "enable":  true,
-                                                       "scope":  [
-                                                                     "**"
-                                                                 ]
-                                                   }
-                             }
-            },
-    "bundle":  {
-                   "publisher":  "Oxyde",
-                   "active":  true,
-                   "targets":  "all",
-                   "icon":  [
-                                "icons/32x32.png",
-                                "icons/128x128.png",
-                                "icons/128x128@2x.png",
-                                "icons/icon.icns",
-                                "icons/icon.ico"
-                            ]
-               },
-    "plugins":  {
-                    "updater":  {
-                                    "active":  true,
-                                    "endpoints":  [
-                                                      "https://github.com/Carlton2001/Oxyde_FM/releases/latest/download/latest.json"
-                                                  ],
-                                    "pubkey":  "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDc0RjI1QzVCNzlERkZGNzcKUldSMy85OTVXMXp5ZEJMSEIzV254Z0FhTjFBeENLVUpXbHpEVlBYdzRNY3Q0MlZmeGliYnJvQmIK"
-                                }
-                }
+    "$schema": "https://schema.tauri.app/config/2",
+    "productName": "Oxyde_FM",
+    "version": "1.0.4",
+    "identifier": "com.oxyde.app",
+    "build": {
+        "beforeDevCommand": "npm run dev",
+        "devUrl": "http://localhost:1420",
+        "beforeBuildCommand": "npm run build",
+        "frontendDist": "../dist"
+    },
+    "app": {
+        "windows": [
+            {
+                "label": "main",
+                "title": "Oxyde",
+                "width": 1200,
+                "height": 800,
+                "decorations": false,
+                "transparent": true
+            }
+        ],
+        "security": {
+            "csp": "default-src \u0027self\u0027; img-src \u0027self\u0027 blob: data: asset: http://asset.localhost https://asset.localhost tauri://localhost; video-src \u0027self\u0027 blob: asset: http://asset.localhost https://asset.localhost tauri://localhost; style-src \u0027self\u0027 \u0027unsafe-inline\u0027; script-src \u0027self\u0027 \u0027unsafe-inline\u0027",
+            "assetProtocol": {
+                "enable": true,
+                "scope": [
+                    "**"
+                ]
+            }
+        }
+    },
+    "bundle": {
+        "publisher": "Oxyde",
+        "active": true,
+        "targets": [
+            "msi",
+            "nsis"
+        ],
+        "icon": [
+            "icons/32x32.png",
+            "icons/128x128.png",
+            "icons/128x128@2x.png",
+            "icons/icon.icns",
+            "icons/icon.ico"
+        ]
+    },
+    "plugins": {
+        "updater": {
+            "active": true,
+            "endpoints": [
+                "https://github.com/Carlton2001/Oxyde_FM/releases/latest/download/latest.json"
+            ],
+            "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDc0RjI1QzVCNzlERkZGNzcKUldSMy85OTVXMXp5ZEJMSEIzV254Z0FhTjFBeENLVUpXbHpEVlBYdzRNY3Q0MlZmeGliYnJvQmIK"
+        }
+    }
 }
