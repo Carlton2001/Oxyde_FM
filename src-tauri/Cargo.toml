@@ -1,6 +1,6 @@
 [package]
 name = "oxyde-fm"
-version = "1.0.6"
+version = "1.0.4"
 description = "Modern and fast file manager"
 authors = ["Carlton2001"]
 edition = "2021"
