@@ -203,6 +203,26 @@ export function getDefaultColumnWidths(): Record<string, number> {
 }
 
 /**
+ * Returns the sum of widths of all visible columns EXCEPT the flexible one.
+ */
+export function getOtherColumnsWidthSum(
+    visibleColumns: ColumnDef[],
+    colWidths: Record<string, number>,
+    flexColKey: string
+): number {
+    return visibleColumns
+        .filter(col => col.key !== flexColKey)
+        .reduce((sum, col) => sum + (colWidths[col.key] || col.defaultWidth), 0);
+}
+
+/**
+ * Returns the first flexible column found in the visible set.
+ */
+export function getFlexibleColumn(visibleColumns: ColumnDef[]): ColumnDef | undefined {
+    return visibleColumns.find(col => col.flex);
+}
+
+/**
  * Generates a CSS grid-template-columns string from column widths and visible columns.
  * The first column (name) with `flex: true` uses its width but will be treated as the flexible column.
  */

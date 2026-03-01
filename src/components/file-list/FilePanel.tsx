@@ -20,7 +20,7 @@ import { NameFilterMenu } from './NameFilterMenu';
 import { LocationFilterMenu } from './LocationFilterMenu';
 import { useApp } from '../../context/AppContext';
 import { useFileStats } from '../../hooks/useFileStats';
-import { getVisibleColumns, getColumnMode, buildGridTemplate } from '../../config/columnDefinitions';
+import { getVisibleColumns, getColumnMode, buildGridTemplate, getOtherColumnsWidthSum, getFlexibleColumn } from '../../config/columnDefinitions';
 import './FilePanel.css';
 
 interface FilePanelProps {
@@ -113,6 +113,57 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
         setFilterMenuAnchor(null);
         setActiveFilterMenu(null);
     }, [currentPath]);
+
+    // Intelligent distribution tracking
+    const lastPanelWidthRef = useRef(0);
+    const colWidthsRef = useRef(colWidths);
+    colWidthsRef.current = colWidths;
+
+    /**
+     * Re-calculates and applies the 'Name' column width based on the current panel width.
+     * This ensures the column fills available space while respecting other column sizes.
+     */
+    const syncFlexColumn = useCallback((currentPanelWidth: number) => {
+        if (viewMode !== 'details' || !onResizeMultiple) return;
+
+        const mode = getColumnMode(!!isTrashView, !!searchResults);
+        const visibleCols = getVisibleColumns(mode);
+        const flexCol = getFlexibleColumn(visibleCols);
+        if (!flexCol) return;
+
+        const otherColsSum = getOtherColumnsWidthSum(
+            visibleCols,
+            colWidthsRef.current as unknown as Record<string, number>,
+            flexCol.key
+        );
+
+        // Technical overhead (1.25rem = 20px) + Safety Margin (0.75rem = 12px) = 32px
+        const totalReserved = otherColsSum + 32;
+        const idealWidth = Math.max(flexCol.minWidth, currentPanelWidth - totalReserved);
+
+        // Prevent unnecessary state updates if the change is negligible
+        const currentFlexWidth = colWidthsRef.current[flexCol.key as keyof ColumnWidths] || flexCol.defaultWidth;
+        if (Math.abs(idealWidth - currentFlexWidth) > 2) {
+            onResizeMultiple({ [flexCol.key]: idealWidth });
+        }
+
+        lastPanelWidthRef.current = currentPanelWidth;
+    }, [viewMode, onResizeMultiple, isTrashView, searchResults]);
+
+    // Observer to handle panel/window resizing
+    React.useLayoutEffect(() => {
+        if (viewMode !== 'details' || !containerRef.current) return;
+
+        const resizeObserver = new ResizeObserver(entries => {
+            const width = entries[0]?.contentRect.width;
+            if (width && width > 0 && Math.abs(width - lastPanelWidthRef.current) > 2) {
+                syncFlexColumn(width);
+            }
+        });
+
+        resizeObserver.observe(containerRef.current);
+        return () => resizeObserver.disconnect();
+    }, [viewMode, syncFlexColumn]);
 
     const availableExtensions = React.useMemo(() => {
         const exts = new Set<string>();
