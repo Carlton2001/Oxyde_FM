@@ -42,14 +42,18 @@ export const PathBar: React.FC<PathBarProps> = ({ path, onNavigate, className, i
 
     useEffect(() => {
         if (!isEditing) {
-            if (isVirtualPath(path)) {
+            if (path === '__network_vincinity__') {
+                setInputPath(t ? t('network_vincinity' as any) : 'Network');
+            } else if (isTrashPath) {
+                setInputPath(t ? t('recycle_bin' as any) : 'Recycle Bin');
+            } else if (isVirtualPath(path)) {
                 // Strip root param for display in edit mode to avoid clutter
                 setInputPath(path.split('?')[0]);
             } else {
                 setInputPath(path);
             }
         }
-    }, [path, isEditing]);
+    }, [path, isEditing, t, isTrashPath]);
 
     // Focus input when entering edit mode
     useEffect(() => {
@@ -122,7 +126,18 @@ export const PathBar: React.FC<PathBarProps> = ({ path, onNavigate, className, i
     }, [menuOpen, fetchSubDirectories]);
 
     const handleSubmit = async () => {
-        const trimmed = inputPath.trim();
+        let trimmed = inputPath.trim();
+
+        // Handle friendly name mappings back to technical paths
+        const networkTerm = t ? t('network_vincinity' as any) : 'Network';
+        const trashTerm = t ? t('recycle_bin' as any) : 'Recycle Bin';
+
+        if (trimmed.toLowerCase() === networkTerm.toLowerCase()) {
+            trimmed = '__network_vincinity__';
+        } else if (trimmed.toLowerCase() === trashTerm.toLowerCase()) {
+            trimmed = 'trash://';
+        }
+
         if (trimmed === path) {
             setIsEditing(false);
             return;
