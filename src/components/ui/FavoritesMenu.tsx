@@ -13,9 +13,10 @@ interface FavoritesMenuProps {
     onNavigate: (path: string) => void;
     currentPath?: string;
     buttonClassName?: string;
+    compact?: boolean;
 }
 
-export const FavoritesMenu: React.FC<FavoritesMenuProps> = ({ onNavigate, currentPath, buttonClassName = "drive-chip favorites-btn" }) => {
+export const FavoritesMenu: React.FC<FavoritesMenuProps> = ({ onNavigate, currentPath, buttonClassName = "drive-chip favorites-btn", compact }) => {
     const { t } = useApp();
     const [isOpen, setIsOpen] = useState(false);
     const { favorites, handleRemoveFavorite: removeFav } = useFavorites();
@@ -87,7 +88,7 @@ export const FavoritesMenu: React.FC<FavoritesMenuProps> = ({ onNavigate, curren
         <div className="favorites-menu-container">
             <div
                 ref={buttonRef}
-                className={cx(buttonClassName, { active: isOpen })}
+                className={cx(buttonClassName, { active: isOpen, compact: compact })}
                 onClick={handleToggle}
                 data-tooltip={t('favorites')}
                 data-tooltip-pos="right"

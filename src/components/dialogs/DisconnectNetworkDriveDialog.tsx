@@ -136,9 +136,13 @@ export const DisconnectNetworkDriveDialog: React.FC<DisconnectNetworkDriveDialog
                                     onChange={() => toggleSelection(d.path)}
                                     style={{ width: '14px', height: '14px' }}
                                 />
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '1px', overflow: 'hidden' }}>
-                                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8125rem', fontWeight: 600 }}>{d.path}</span>
-                                    {d.label && <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.label}</span>}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', overflow: 'hidden', flex: 1 }}>
+                                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-primary)', minWidth: '32px' }}>{d.path}</span>
+                                    {(d.remote_path || d.label) && (
+                                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                            {d.remote_path || d.label}
+                                        </span>
+                                    )}
                                 </div>
                             </label>
                         ))}

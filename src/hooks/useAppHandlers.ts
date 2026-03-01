@@ -57,6 +57,7 @@ export const useAppHandlers = ({
     setContextMenu,
     contextMenu,
     drives,
+    refreshDrives,
     defaultTurboMode,
     zipQuality,
     sevenZipQuality,
@@ -419,6 +420,16 @@ export const useAppHandlers = ({
         }
     }, [notify, t]);
 
+    const handleDisconnectDrive = useCallback(async (path: string) => {
+        try {
+            await invoke('disconnect_network_drive', { letter: path, force: false });
+            notify(t('disconnect_network_drive_success' as any), 'success');
+            refreshDrives();
+        } catch (e) {
+            notify(`${t('error')}: ${formatCommandError(e)}`, 'error');
+        }
+    }, [notify, t, refreshDrives]);
+
     const handleContextMenu = useCallback((e: React.MouseEvent, id: PanelId, entry?: FileEntry) => {
         e.preventDefault();
         e.stopPropagation();
@@ -512,6 +523,7 @@ export const useAppHandlers = ({
         handleTabClose,
         handleItemMiddleClick,
         handleContextMenu,
+        handleDisconnectDrive,
         handleAddToFavorites,
         handleRemoveFromFavorites
     };

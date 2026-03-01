@@ -54,16 +54,56 @@
     gap: 0.5rem;
     flex-shrink: 0;
     overflow: hidden;
+    width: 100%;
+}
+
+/* Drive Chips Container */
+.drive-chips {
+    display: flex;
+    gap: 0.25rem;
+    padding: 0;
+    overflow-x: auto;
+    flex: 1;
+    flex-direction: row;
+    align-items: center;
+    height: 100%;
+    scrollbar-width: none;
+    transition: gap 0.2s;
+    min-width: 0;
+}
+
+.drive-chips::-webkit-scrollbar {
+    display: none;
 }
 
 /* Search Module (Layout only) */
 .search-module {
-    margin-left: auto;
+    flex-shrink: 0;
     width: 9.17rem;
-    max-width: 45%;
+    max-width: 35%;
     display: flex;
     align-items: center;
     height: 100%;
+    transition: width 0.2s, max-width 0.2s;
+}
+
+.search-module.narrow {
+    width: 1.875rem;
+    max-width: 30%;
+    position: relative;
+    z-index: 5;
+    background: var(--surface-secondary);
+}
+
+.search-module.narrow.focused,
+.search-module.narrow:has(input:not(:placeholder-shown)) {
+    width: 9.17rem;
+    max-width: 80%;
+    z-index: 10;
+}
+
+.search-module.narrow .search-box {
+    width: 100%;
 }
 
 .search-module .search-box {

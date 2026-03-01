@@ -71,7 +71,7 @@ function App() {
   const fileOps = useFileOperations(notify, t as any);
   const { favorites } = useFavorites();
 
-  const [contextMenu, setContextMenu] = useState<{ x: number, y: number, target?: string, panelId: PanelId, isDir?: boolean, isBackground?: boolean, isDrive?: boolean, isMediaDevice?: boolean, isNetworkComputer?: boolean, hasWebPage?: boolean, driveType?: DriveInfo['drive_type'], isFavorite?: boolean } | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number, y: number, target?: string, panelId: PanelId, isDir?: boolean, isBackground?: boolean, isDrive?: boolean, isMediaDevice?: boolean, isNetworkComputer?: boolean, hasWebPage?: boolean, driveType?: DriveInfo['drive_type'], isFavorite?: boolean, isTrash?: boolean } | null>(null);
   const [sidebarReduced, setSidebarReduced] = useState(() => localStorage.getItem('sidebarReduced') === 'true');
   useEffect(() => {
     localStorage.setItem('sidebarReduced', sidebarReduced.toString());
@@ -170,7 +170,8 @@ function App() {
     handleRestoreAll, handleEmptyTrash, handleRestoreSelected, handleTabSwitch, handleTabClose,
     handleItemMiddleClick, handleContextMenu, handleSwapPanels, handleSyncPanels, openAdvancedSearch,
     openDuplicateSearchHandler,
-    handleGoToFolder, handleAddToFavorites, handleRemoveFromFavorites
+    handleGoToFolder, handleAddToFavorites, handleRemoveFromFavorites,
+    handleDisconnectDrive
   } = handlers;
 
   const handleDuplicateSearch = useCallback(() => {
@@ -190,13 +191,13 @@ function App() {
     activePanelId, activePanel: activePanelId === 'left' ? left : right, otherPanel: activePanelId === 'left' ? right : left,
     fileOps, clipboard: { clipboard, copy, cut, clearClipboard, copyToSystem, refreshClipboard },
     notify, t: t as any, dialogs, settings: { zipQuality, sevenZipQuality, zstdQuality, defaultTurboMode }, setProgress,
-    contextMenuTarget: contextMenu?.target, isDrive: contextMenu?.isDrive, refreshDrives, mountedImages,
+    contextMenuTarget: contextMenu?.target, isDir: contextMenu?.isDir, isDrive: contextMenu?.isDrive, refreshDrives, mountedImages,
     tabs, activeTabId, setActiveTab, closeTab, refreshBothPanels,
     modifiers, peekStatus
   }), [
     activePanelId, left, right, fileOps, clipboard, copy, cut, clearClipboard, copyToSystem, refreshClipboard,
     notify, t, dialogs, zipQuality, sevenZipQuality, zstdQuality, defaultTurboMode, setProgress,
-    contextMenu?.target, contextMenu?.isDrive, refreshDrives,
+    contextMenu?.target, contextMenu?.isDir, contextMenu?.isDrive, refreshDrives,
     tabs, activeTabId, setActiveTab, closeTab, refreshBothPanels,
     modifiers, peekStatus
   ]);
@@ -378,6 +379,7 @@ function App() {
         onTreeRename={(path: string) => handleAction('file.rename', { contextMenuTarget: path })}
         onTreeNewFolder={(parent: string) => handleAction('file.new_folder', { contextMenuTarget: parent })}
         onTreeUnmount={(path: string) => handleAction('drive.unmount_image', { contextMenuTarget: path, isDrive: true })}
+        onTreeDisconnectDrive={handleDisconnectDrive}
         onTreeProperties={(path: string) => dialogs.openPropertiesDialog([path])}
         onTreePaste={(path: string) => handleAction('file.paste', { ...actionContext, contextMenuTarget: path })}
         setShowAbout={() => dialogs.openAboutDialog()} onCalculateAllSizes={handleCalculateAllSizes}
@@ -398,11 +400,17 @@ function App() {
         onRemoveFromFavorites={handleRemoveFromFavorites}
         onDriveContextMenu={(e: React.MouseEvent, p: string) => {
           const drive = drives.find(d => d.path === p);
+          const isTrash = p === 'trash://';
+          const isNetworkVicinity = p === '__network_vincinity__';
+
           handleContextMenu(e, activePanelId, {
             path: p,
             is_dir: true,
-            isDrive: true,
-            driveType: drive?.drive_type
+            isDrive: !!drive,
+            driveType: drive?.drive_type,
+            isNetworkComputer: isNetworkVicinity || (p.startsWith('\\\\') && p.split('\\').filter(Boolean).length === 1),
+            isTrash: isTrash,
+            isNetworkVicinity: isNetworkVicinity
           } as any);
         }}
         canPaste={!!clipboard && clipboard.paths.length > 0} canUndo={fileOps.canUndo} canRedo={fileOps.canRedo}
@@ -439,7 +447,7 @@ function App() {
           onRename={() => handleAction('file.rename', actionContext)} onProperties={() => handleAction('file.properties', actionContext)}
           onNewFolder={() => handleAction('file.new_folder', actionContext)} onCopyName={() => handleAction('file.copy_name', actionContext)}
           onCopyPath={() => handleAction('file.copy_path', actionContext)} t={t}
-          isTrashContext={contextMenu.panelId === 'left' ? left.path.startsWith('trash://') : right.path.startsWith('trash://')}
+          isTrashContext={contextMenu.isTrash || (contextMenu.target === 'trash://')}
           isSearchContext={contextMenu.panelId === 'left' ? left.path.startsWith('search://') : right.path.startsWith('search://')}
           onRestore={handleRestoreSelected} onGoToFolder={handleGoToFolder}
           onOpenNewTab={layout === 'standard' ? (path: string) => { addTab(path); setContextMenu(null); } : undefined}
@@ -453,6 +461,8 @@ function App() {
           isFavorite={contextMenu.isFavorite}
           onAddToFavorites={() => handleAddToFavorites(contextMenu.target!)}
           onRemoveFromFavorites={() => handleRemoveFromFavorites(contextMenu.target!)}
+          onDisconnectDrive={handleDisconnectDrive}
+          onEmptyTrash={handleEmptyTrash}
         />
       )}
 

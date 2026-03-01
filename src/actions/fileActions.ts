@@ -416,7 +416,14 @@ export const OPEN_ACTION: ActionDefinition = {
 
         const fileEntry = ctx.activePanel.files.find(f => f.path === targetPath) || ctx.activePanel.searchResults?.find(f => f.path === targetPath);
 
-        if (fileEntry && fileEntry.is_dir) {
+        const isDir = (fileEntry && fileEntry.is_dir) ||
+            ctx.isDir ||
+            ctx.isDrive ||
+            targetPath === 'trash://' ||
+            targetPath === '__network_vincinity__' ||
+            targetPath?.startsWith('\\\\');
+
+        if (isDir) {
             ctx.activePanel.navigate(targetPath);
         } else {
             // It's a file, invoke the system open command

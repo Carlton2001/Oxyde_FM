@@ -87,6 +87,8 @@ export interface MenuContext {
         onRemoveFromFavorites?: () => void;
         onSort?: (field: SortField) => void;
         onSortDirection?: (direction: SortDirection) => void;
+        onDisconnectDrive?: (letter: string) => void;
+        onEmptyTrash?: () => void;
         openMapNetworkDriveDialog?: () => void;
         openDisconnectNetworkDriveDialog?: () => void;
     }
@@ -169,7 +171,7 @@ export function getMenuItems(ctx: MenuContext): MenuItem[] {
         });
     }
 
-    if (isTreeContext && !ctx.isNetworkComputer) {
+    if (isTreeContext && !ctx.isNetworkComputer && target !== 'trash://') {
         items.push({
             id: 'expand_all',
             type: 'action',
@@ -186,8 +188,12 @@ export function getMenuItems(ctx: MenuContext): MenuItem[] {
         });
     }
 
-    if (target && !isBackground && !isTrashContext) {
-        if (isDir) {
+    if (target && !isBackground) {
+        // Allow Open for everything except files that are in the Trash
+        // (but allow opening the Trash Root or folders inside the Trash)
+        const canOpen = !isTrashContext || isDir;
+
+        if (canOpen && isDir) {
             items.push({
                 id: 'open_file',
                 type: 'action',
@@ -195,13 +201,15 @@ export function getMenuItems(ctx: MenuContext): MenuItem[] {
                 icon: ExternalLink,
                 action: () => actions.onOpenFile?.(target)
             });
-            items.push({
-                id: 'open_new_tab',
-                type: 'action',
-                label: t('open_in_new_tab'),
-                icon: ExternalLink,
-                action: () => actions.onOpenNewTab?.(target)
-            });
+            if (actions.onOpenNewTab) {
+                items.push({
+                    id: 'open_new_tab',
+                    type: 'action',
+                    label: t('open_in_new_tab'),
+                    icon: ExternalLink,
+                    action: () => actions.onOpenNewTab?.(target)
+                });
+            }
         } else if (!isDrive) {
             if (ctx.isMediaDevice) {
                 if (ctx.hasWebPage) {
@@ -226,16 +234,6 @@ export function getMenuItems(ctx: MenuContext): MenuItem[] {
 
         // If it's a network computer, we allow it to fall through to get Properties/Sort/etc
         // but we'll filter out other sections using the isNetworkComputer flag
-    }
-
-    if (isDrive && !isBackground) {
-        items.push({
-            id: 'open_new_tab_drive',
-            type: 'action',
-            label: t('open_in_new_tab'),
-            icon: ExternalLink,
-            action: () => actions.onOpenNewTab?.(target!)
-        });
     }
 
     items.push({ id: 'sep_nav', type: 'separator' });
@@ -282,6 +280,16 @@ export function getMenuItems(ctx: MenuContext): MenuItem[] {
                 label: ctx.isFavorite ? t('remove_from_favorites' as any) : t('add_to_favorites' as any),
                 icon: Star,
                 action: () => ctx.isFavorite ? actions.onRemoveFromFavorites?.() : actions.onAddToFavorites?.()
+            });
+        }
+
+        if (isDrive && ctx.driveType === 'remote' && actions.onDisconnectDrive) {
+            items.push({
+                id: 'disconnect_network_drive_item',
+                type: 'action',
+                label: t('disconnect_network_drive' as any),
+                icon: ServerOff,
+                action: () => actions.onDisconnectDrive?.(target!)
             });
         }
     }
@@ -383,7 +391,7 @@ export function getMenuItems(ctx: MenuContext): MenuItem[] {
             });
         }
 
-        if (canPaste && !ctx.isNetworkComputer) {
+        if (canPaste && !ctx.isNetworkComputer && !isDrive) {
             items.push({
                 id: 'paste',
                 type: 'action',
@@ -408,22 +416,38 @@ export function getMenuItems(ctx: MenuContext): MenuItem[] {
 
     // --- 6. Trash & Destructive Actions ---
     if (isTrashContext) {
-        items.push({
-            id: 'restore',
-            type: 'action',
-            label: t('restore' as any),
-            icon: RotateCcw,
-            action: () => actions.onRestore?.()
-        });
-        items.push({
-            id: 'delete_perm',
-            type: 'action',
-            label: t('delete'),
-            icon: Trash2,
-            action: () => actions.onDelete(),
-            color: 'var(--error-color)',
-            danger: true
-        });
+        const isTrashRoot = target === 'trash://';
+
+        if (actions.onEmptyTrash) {
+            items.push({
+                id: 'empty_trash',
+                type: 'action',
+                label: t('empty_recycle_bin' as any),
+                icon: Trash2,
+                action: () => actions.onEmptyTrash?.(),
+                danger: true
+            });
+            items.push({ id: 'sep_trash_ops', type: 'separator' });
+        }
+
+        if (!isTrashRoot) {
+            items.push({
+                id: 'restore',
+                type: 'action',
+                label: t('restore' as any),
+                icon: RotateCcw,
+                action: () => actions.onRestore?.()
+            });
+            items.push({
+                id: 'delete_perm',
+                type: 'action',
+                label: t('delete'),
+                icon: Trash2,
+                action: () => actions.onDelete(),
+                color: 'var(--error-color)',
+                danger: true
+            });
+        }
     } else {
         if (!isBackground && !isDrive && !ctx.isMediaDevice && !ctx.isNetworkComputer) {
             items.push({
@@ -439,7 +463,7 @@ export function getMenuItems(ctx: MenuContext): MenuItem[] {
     }
 
     // --- 7. Information (ALWAYS LAST) ---
-    if (target && !ctx.isNetworkComputer) {
+    if (target && !ctx.isNetworkComputer && target !== 'trash://') {
         items.push({ id: 'sep_properties', type: 'separator' });
         items.push({
             id: 'properties',

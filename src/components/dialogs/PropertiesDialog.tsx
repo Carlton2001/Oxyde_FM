@@ -196,6 +196,7 @@ export const PropertiesDialog: React.FC<PropertiesDialogProps> = ({ paths, initi
 
                                     {isSingle ? (
                                         <div className="prop-grid">
+                                            <div className="prop-label">{t('type')}</div>
                                             <div className="prop-value">
                                                 {properties!.is_media_device ? t('network_device' as any) : (isDriveRoot ? t('disk_drive' as any) : getFileTypeString(properties as any, t))}
                                             </div>
@@ -272,21 +273,36 @@ export const PropertiesDialog: React.FC<PropertiesDialogProps> = ({ paths, initi
 
                                             {isDriveRoot && currentDrive && currentDrive.total_bytes !== undefined ? (
                                                 <>
+                                                    {currentDrive.drive_type === 'remote' && currentDrive.remote_path && (
+                                                        <>
+                                                            <div className="prop-label">{t('network_path' as any)}</div>
+                                                            <div className="prop-value">
+                                                                <input
+                                                                    type="text"
+                                                                    className="prop-name-input"
+                                                                    readOnly
+                                                                    value={currentDrive.remote_path}
+                                                                    style={{ height: '24px', fontSize: '0.8rem', padding: '0 8px' }}
+                                                                    onClick={(e) => (e.target as HTMLInputElement).select()}
+                                                                />
+                                                            </div>
+                                                        </>
+                                                    )}
                                                     <div className="prop-label">{t('used_space')}</div>
                                                     <div className="prop-value">
-                                                        {formatSize(currentDrive.total_bytes! - (currentDrive.free_bytes || 0), 1, t)} ({(currentDrive.total_bytes! - (currentDrive.free_bytes || 0)).toLocaleString()} {t('unit_bytes' as any)})
+                                                        {formatSize(currentDrive.total_bytes! - (currentDrive.free_bytes || 0), 1, t)}
                                                     </div>
 
                                                     <div className="prop-label">{t('free_space')}</div>
                                                     <div className="prop-value">
-                                                        {formatSize(currentDrive.free_bytes || 0, 1, t)} ({(currentDrive.free_bytes || 0).toLocaleString()} {t('unit_bytes' as any)})
+                                                        {formatSize(currentDrive.free_bytes || 0, 1, t)}
                                                     </div>
 
                                                     <div className="prop-divider-row" />
 
                                                     <div className="prop-label">{t('capacity')}</div>
                                                     <div className="prop-value">
-                                                        {formatSize(currentDrive.total_bytes!, 1, t)} ({currentDrive.total_bytes!.toLocaleString()} {t('unit_bytes' as any)})
+                                                        {formatSize(currentDrive.total_bytes!, 1, t)}
                                                     </div>
 
                                                     <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'center', padding: '0' }}>
@@ -309,7 +325,7 @@ export const PropertiesDialog: React.FC<PropertiesDialogProps> = ({ paths, initi
                                                                     (localCalculated || properties!.is_calculated) ? (
                                                                         (localCalculated?.size ?? properties!.size) === 0
                                                                             ? t('empty_dir' as any)
-                                                                            : `${formatSize(localCalculated?.size ?? properties!.size, 1, t)} (${(localCalculated?.size ?? properties!.size).toLocaleString()} ${t('unit_bytes' as any)})`
+                                                                            : formatSize(localCalculated?.size ?? properties!.size, 1, t)
                                                                     ) : (
                                                                         calcLoading ? (
                                                                             <span className="calc-status">{t('calculating' as any)}</span>
@@ -320,7 +336,7 @@ export const PropertiesDialog: React.FC<PropertiesDialogProps> = ({ paths, initi
                                                                         )
                                                                     )
                                                                 ) : (
-                                                                    `${formatSize(properties!.size, 1, t)} (${properties!.size.toLocaleString()} ${t('unit_bytes' as any)})`
+                                                                    formatSize(properties!.size, 1, t)
                                                                 )}
                                                             </div>
 

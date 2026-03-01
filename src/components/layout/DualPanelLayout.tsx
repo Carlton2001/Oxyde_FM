@@ -71,6 +71,7 @@ interface DualPanelLayoutProps {
     onTreeRename: (path: string) => void;
     onTreeNewFolder: (path: string) => void;
     onTreeUnmount: (path: string) => void;
+    onTreeDisconnectDrive: (path: string) => void;
     onTreeProperties: (path: string) => void;
     onTreePaste: (path: string) => void;
     // TopBar (only what TopBar still needs)
@@ -155,6 +156,7 @@ export const DualPanelLayout: React.FC<DualPanelLayoutProps> = ({
     onTreeRename,
     onTreeNewFolder,
     onTreeUnmount,
+    onTreeDisconnectDrive,
     onTreeProperties,
     onTreePaste,
     setShowAbout,
@@ -336,6 +338,7 @@ export const DualPanelLayout: React.FC<DualPanelLayoutProps> = ({
                         onTreeRename={onTreeRename}
                         onTreeNewFolder={onTreeNewFolder}
                         onTreeUnmount={onTreeUnmount}
+                        onTreeDisconnectDrive={onTreeDisconnectDrive}
                         onTreeProperties={onTreeProperties}
                         onTreePaste={onTreePaste}
                         canPaste={true}
@@ -354,6 +357,7 @@ export const DualPanelLayout: React.FC<DualPanelLayoutProps> = ({
                         onDriveContextMenu={onDriveContextMenu}
                         onAddToFavorites={onAddToFavorites}
                         onRemoveFromFavorites={onRemoveFromFavorites}
+                        onTreeEmptyTrash={onEmptyTrash}
                     />
                 )}
 

@@ -2,7 +2,8 @@ import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import cx from 'classnames';
-import { ChevronRight, ChevronDown, Folder, FolderOpen, HardDrive, Usb, Disc, Trash, Star, Network, Globe } from 'lucide-react';
+import { ChevronRight, ChevronDown, HardDrive, Usb, Disc, Trash, Network, Folder, FolderOpen, Star, Globe } from 'lucide-react';
+import { getDriveDisplayName, getDriveTooltip, shouldShowDriveCapacity } from '../../utils/drive';
 import { List, ListImperativeAPI } from 'react-window';
 import { AutoSizer } from 'react-virtualized-auto-sizer';
 
@@ -28,6 +29,7 @@ interface TreeNode {
     freeBytes?: number;
     isNetwork?: boolean;
     isNetworkRoot?: boolean;
+    remotePath?: string;
 }
 
 interface FlattenedNode {
@@ -59,6 +61,7 @@ interface DirectoryTreeProps {
     onUndo?: () => void;
     onRedo?: () => void;
     onUnmount?: (path: string) => void;
+    onDisconnectDrive?: (path: string) => void;
     useSystemIcons?: boolean;
     onDragStart?: (sourcePanel: 'left' | 'right', files: FileEntry[]) => void;
     onDrop?: (e: React.DragEvent, targetPath: string) => void;
@@ -69,6 +72,7 @@ interface DirectoryTreeProps {
     favorites?: Array<{ name: string; path: string }>;
     onAddToFavorites?: (path: string) => void;
     onRemoveFromFavorites?: (path: string) => void;
+    onEmptyTrash?: () => void;
 }
 
 export interface DirectoryTreeHandle {
@@ -101,6 +105,7 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
     onUndo,
     onRedo,
     onUnmount,
+    onDisconnectDrive,
     onDragStart,
     onDrop,
     dragState,
@@ -110,7 +115,8 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
     skipExpandAndScroll = false,
     favorites = [],
     onAddToFavorites,
-    onRemoveFromFavorites
+    onRemoveFromFavorites,
+    onEmptyTrash
 }, ref) => {
     const { useSystemIcons: contextUseSystemIcons, showHidden, showSystem } = useApp();
     const useSystemIcons = propUseSystemIcons ?? contextUseSystemIcons;
@@ -128,6 +134,7 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
         isReadOnly?: boolean;
         isFavorite?: boolean;
         isNetworkComputer?: boolean;
+        isTrash?: boolean;
     } | null>(null);
 
     const [isExpanding, setIsExpanding] = useState(false);
@@ -262,8 +269,8 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
 
         // Add Drives
         drives.forEach(drive => {
-            const pathClean = drive.path.replace(/[/\\]+$/, '');
-            const displayName = drive.label ? `${drive.label} (${pathClean})` : pathClean;
+            const displayName = getDriveDisplayName(drive, t);
+
             nodes.push({
                 path: drive.path,
                 name: displayName,
@@ -272,16 +279,8 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
                 isReadOnly: drive.is_readonly,
                 totalBytes: drive.total_bytes,
                 freeBytes: drive.free_bytes,
+                remotePath: drive.remote_path
             });
-        });
-
-        // Add Trash
-        nodes.push({ path: '__trash_spacer__', name: '', isSpacer: true });
-        nodes.push({
-            path: 'trash://',
-            name: t('recycle_bin' as any),
-            hasSubdirs: false,
-            isTrash: true
         });
 
         // Add Network
@@ -291,6 +290,14 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
             name: t('network_vincinity' as any),
             hasSubdirs: true,
             isNetworkRoot: true
+        });
+
+        // Add Trash
+        nodes.push({
+            path: 'trash://',
+            name: t('recycle_bin' as any),
+            hasSubdirs: false,
+            isTrash: true
         });
 
         return nodes;
@@ -411,8 +418,7 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
     const handleContextMenu = (e: React.MouseEvent, node: TreeNode) => {
         e.preventDefault();
         e.stopPropagation();
-        if (node.isTrash) return;
-
+        const isTrash = node.isTrash;
         const isExpanded = expandedPaths.has(node.path.toLowerCase());
 
         setContextMenu({
@@ -429,7 +435,8 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
                 const np = node.path.replace(/[\\/]+$/, '').toLowerCase();
                 return fp === np;
             }),
-            isNetworkComputer: node.isNetworkRoot || node.isNetwork || node.driveType === 'remote' || (node.path.startsWith('\\\\') && node.path.split('\\').filter(Boolean).length === 1)
+            isNetworkComputer: node.isNetworkRoot || node.isNetwork || (node.path.startsWith('\\\\') && node.path.split('\\').filter(Boolean).length === 1),
+            isTrash: isTrash
         });
     };
 
@@ -581,12 +588,14 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
                             onDragStart('left', [{ path: node.path, name: node.name, is_dir: true } as any]);
                         }
                     }}
-                    data-tooltip={isRootDrive && !node.isTrash && node.totalBytes
-                        ? node.path
-                        : (isRootDrive ? node.name : `${node.name}\n${node.path}`)}
-                    data-tooltip-total={node.totalBytes}
-                    data-tooltip-free={node.freeBytes}
-                    data-tooltip-multiline={isRootDrive ? "true" : (isRootDrive ? undefined : "true")}
+                    data-tooltip={node.driveType ? getDriveTooltip({
+                        path: node.path,
+                        label: node.name,
+                        drive_type: node.driveType,
+                        remote_path: node.remotePath
+                    } as any, t) : (node.isTrash || node.isNetworkRoot ? node.name : undefined)}
+                    data-tooltip-total={node.driveType && shouldShowDriveCapacity({ drive_type: node.driveType } as any) ? node.totalBytes : undefined}
+                    data-tooltip-free={node.driveType && shouldShowDriveCapacity({ drive_type: node.driveType } as any) ? node.freeBytes : undefined}
                 >
                     <div
                         className={cx('tree-chevron', { invisible: !hasEffectiveChildren })}
@@ -669,12 +678,20 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
                     isDrive={contextMenu.isDrive}
                     driveType={contextMenu.driveType}
                     onUnmount={() => { onUnmount?.(contextMenu.path); setContextMenu(null); }}
+                    onDisconnectDrive={(path) => {
+                        const cleanPath = path.replace(/[\\/]+$/, '');
+                        onDisconnectDrive?.(cleanPath);
+                        setContextMenu(null);
+                    }}
                     onOpenNewTab={(path) => { onOpenNewTab?.(path); setContextMenu(null); }}
                     isDir={true}
                     isFavorite={contextMenu.isFavorite}
                     onAddToFavorites={() => { onAddToFavorites?.(contextMenu.path); setContextMenu(null); }}
                     onRemoveFromFavorites={() => { onRemoveFromFavorites?.(contextMenu.path); setContextMenu(null); }}
                     isNetworkComputer={contextMenu.isNetworkComputer}
+                    isTrashContext={contextMenu.isTrash}
+                    onOpenFile={(path) => { onNavigate(path); setContextMenu(null); }}
+                    onEmptyTrash={() => { onEmptyTrash?.(); setContextMenu(null); }}
                 />
             )}
         </div>

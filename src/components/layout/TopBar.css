@@ -425,29 +425,14 @@
     color: var(--selected-text);
 }
 
-/* Drive Chips */
-.drive-chips {
-    display: flex;
-    gap: 0.375rem;
-    padding: 0;
-    overflow-x: auto;
-    flex-shrink: 0;
-    flex-direction: row;
-    align-items: center;
-    height: 100%;
-    scrollbar-width: none;
-}
-
-.drive-chips::-webkit-scrollbar {
-    display: none;
-}
+/* End of TopBar styles */
 
 .drive-chip {
     display: flex;
     align-items: center;
     gap: 0.375rem;
     padding: 0 0.625rem;
-    height: 1.75rem;
+    height: 1.875rem;
     background-color: var(--surface-primary);
     border: 1px solid var(--border-color);
     border-radius: 0.375rem;
@@ -455,10 +440,28 @@
     font-weight: 500;
     white-space: nowrap;
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-    transition: all 0.1s;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     -webkit-app-region: no-drag;
     pointer-events: auto;
     box-sizing: border-box;
+}
+
+.drive-chip.compact {
+    padding: 0 0.45rem;
+    gap: 0.2rem;
+    min-width: 1.875rem;
+    justify-content: center;
+}
+
+.drive-chip .drive-chip-label {
+    display: flex;
+    align-items: center;
+    gap: 0.2rem;
+}
+
+.drive-chip .drive-chip-letter {
+    opacity: 0.7;
+    font-weight: 600;
 }
 
 .drive-chip:hover {

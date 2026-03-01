@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import cx from 'classnames';
-import { PanelLeft, PanelLeftClose, Trash, ArrowUpToLine, ChevronsUp } from 'lucide-react';
+import { PanelLeft, PanelLeftClose, Trash, ArrowUpToLine, ChevronsUp, Globe } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { FileEntry, DriveInfo, QuickAccessItem } from '../../types';
 import { TFunc } from '../../i18n';
 import { DirectoryTree, DirectoryTreeHandle } from '../ui/DirectoryTree';
 import { FavoritesMenu } from '../ui/FavoritesMenu';
+import { getDriveTooltip, shouldShowDriveCapacity } from '../../utils/drive';
 import './Sidebar.css';
 
 interface SidebarProps {
@@ -27,7 +28,7 @@ interface SidebarProps {
     onTreeRename?: (path: string) => void;
     onTreeNewFolder?: (parentPath: string) => void;
     onTreeUnmount?: (path: string) => void;
-
+    onTreeDisconnectDrive?: (path: string) => void;
     onTreeProperties?: (path: string) => void;
     onTreePaste?: (path: string) => void;
     canPaste?: boolean;
@@ -48,6 +49,7 @@ interface SidebarProps {
     onDriveContextMenu?: (e: React.MouseEvent, path: string) => void;
     onAddToFavorites?: (path: string) => void;
     onRemoveFromFavorites?: (path: string) => void;
+    onTreeEmptyTrash?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -67,6 +69,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     onTreeRename,
     onTreeNewFolder,
     onTreeUnmount,
+    onTreeDisconnectDrive,
     onTreeProperties,
     onTreePaste,
     canPaste,
@@ -84,7 +87,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
     onOpenNewTab,
     onDriveContextMenu,
     onAddToFavorites,
-    onRemoveFromFavorites
+    onRemoveFromFavorites,
+    onTreeEmptyTrash
 }) => {
     const sidebarRef = React.useRef<HTMLDivElement>(null);
     const [width, setWidth] = React.useState(() => {
@@ -238,10 +242,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
                                             onOpenNewTab?.(drive.path);
                                         }
                                     }}
-                                    data-tooltip={`${drive.label} (${drive.path})`}
-                                    data-tooltip-total={drive.total_bytes}
-                                    data-tooltip-free={drive.free_bytes}
-                                    data-tooltip-multiline="true"
+                                    data-tooltip={getDriveTooltip(drive, t)}
+                                    data-tooltip-total={shouldShowDriveCapacity(drive) ? drive.total_bytes : undefined}
+                                    data-tooltip-free={shouldShowDriveCapacity(drive) ? drive.free_bytes : undefined}
+                                    data-tooltip-multiline={shouldShowDriveCapacity(drive) ? "true" : undefined}
                                     data-tooltip-pos="right"
                                 >
                                     {letter}
@@ -250,6 +254,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         );
                     })}
                     <div className="minimized-divider" />
+                    <button
+                        className={cx("drive-icon-btn", { active: currentPath === '__network_vincinity__' })}
+                        onClick={() => onNavigate('__network_vincinity__')}
+                        onContextMenu={(e) => onDriveContextMenu?.(e, '__network_vincinity__')}
+                        onMouseDown={(e) => {
+                            if (e.button === 1) {
+                                e.preventDefault();
+                                onOpenNewTab?.('__network_vincinity__');
+                            }
+                        }}
+                        data-tooltip={t('network_vincinity' as any)}
+                        data-tooltip-pos="right"
+                    >
+                        <Globe size="1.125rem" />
+                    </button>
                     <button
                         className={cx("drive-icon-btn", { active: currentPath === 'trash://' })}
                         onClick={() => onNavigate('trash://')}
@@ -300,9 +319,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     onItemMiddleClick={onItemMiddleClick}
                     onOpenNewTab={onOpenNewTab}
                     onUnmount={onTreeUnmount}
+                    onDisconnectDrive={onTreeDisconnectDrive}
                     favorites={favorites}
                     onAddToFavorites={onAddToFavorites}
                     onRemoveFromFavorites={onRemoveFromFavorites}
+                    onEmptyTrash={onTreeEmptyTrash}
                 />
             )}
 

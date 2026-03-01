@@ -244,7 +244,7 @@ pub async fn disconnect_network_drive(letter: String, force: bool) -> Result<(),
     #[cfg(target_os = "windows")]
     {
         unsafe {
-            let local_name = if letter.len() == 1 { format!("{}:", letter) } else { letter.clone() };
+            let local_name = letter.trim_end_matches('\\').to_string();
             let wide_local: Vec<u16> = local_name.encode_utf16().chain(std::iter::once(0)).collect();
 
             let result = WNetCancelConnection2W(PCWSTR(wide_local.as_ptr()), CONNECT_UPDATE_PROFILE, force);

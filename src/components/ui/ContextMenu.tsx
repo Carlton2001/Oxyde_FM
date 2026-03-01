@@ -60,6 +60,8 @@ export interface ContextMenuProps {
     isFavorite?: boolean;
     onAddToFavorites?: () => void;
     onRemoveFromFavorites?: () => void;
+    onDisconnectDrive?: (letter: string) => void;
+    onEmptyTrash?: () => void;
     sortConfig?: SortConfig;
     onSort?: (field: SortField) => void;
     onSortDirection?: (direction: SortDirection) => void;
@@ -126,6 +128,8 @@ export const ContextMenu: React.FC<ContextMenuProps> = (props) => {
             onRemoveFromFavorites: props.onRemoveFromFavorites,
             onSort: props.onSort,
             onSortDirection: props.onSortDirection,
+            onDisconnectDrive: props.onDisconnectDrive,
+            onEmptyTrash: props.onEmptyTrash,
             openMapNetworkDriveDialog,
             openDisconnectNetworkDriveDialog
         }
