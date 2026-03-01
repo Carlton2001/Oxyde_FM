@@ -6,15 +6,14 @@
  */
 
 import React from 'react';
-import { FileEntry, SortField, DateFormat } from '../types';
+import { FileEntry, SortField, DateFormat, ColumnMode } from '../types';
 import { formatSize, formatDate, getFileTypeString } from '../utils/format';
 import { getParent } from '../utils/path';
 import { TFunc } from '../i18n';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-/** View modes that determine which columns are visible */
-export type ColumnMode = 'normal' | 'search' | 'trash';
+
 
 /** Context passed to cell renderers */
 export interface CellRenderContext {
@@ -69,7 +68,7 @@ export const COLUMNS: ColumnDef[] = [
         minWidth: 100,
         flex: true,
         cellClass: 'file-name-group',
-        visibleIn: ['normal', 'search', 'trash'],
+        visibleIn: ['normal', 'search', 'trash', 'network'],
         // Name column has special rendering (icon + rename), handled by the component directly
         renderCell: (_entry, _ctx) => null,
         measureContent: (entry) => entry.name,
@@ -111,7 +110,7 @@ export const COLUMNS: ColumnDef[] = [
         defaultWidth: 80,
         minWidth: 20,
         cellClass: 'file-info col-type',
-        visibleIn: ['normal', 'search', 'trash'],
+        visibleIn: ['normal', 'search', 'trash', 'network'],
         renderCell: (entry, ctx) => {
             return React.createElement('span', { className: 'text-truncate' }, getFileTypeString(entry, ctx.t));
         },
@@ -171,9 +170,10 @@ export function getVisibleColumns(mode: ColumnMode): ColumnDef[] {
 /**
  * Returns the current mode based on view state.
  */
-export function getColumnMode(isTrashView: boolean, hasSearchResults: boolean): ColumnMode {
+export function getColumnMode(isTrashView: boolean, hasSearchResults: boolean, isNetworkView?: boolean): ColumnMode {
     if (isTrashView) return 'trash';
     if (hasSearchResults) return 'search';
+    if (isNetworkView) return 'network';
     return 'normal';
 }
 

@@ -6,7 +6,8 @@ import { useSelection } from './useSelection';
 import { usePanelSearch } from './usePanelSearch';
 
 import { useApp } from '../context/AppContext';
-import { ViewMode, SortConfig, ColumnWidths } from '../types';
+import { ViewMode, SortConfig, ColumnWidths, MultiModeColumnWidths, ColumnMode } from '../types';
+import { getColumnMode } from '../config/columnDefinitions';
 
 export const usePanel = (initialPath: string, panelId?: string, activeTabId?: string) => {
     const { showHidden, showSystem, searchLimit } = useApp();
@@ -57,7 +58,28 @@ export const usePanel = (initialPath: string, panelId?: string, activeTabId?: st
         }
     }, [sortConfig, normalizedPanelId]);
 
-    const [colWidths, setColWidths] = useState<ColumnWidths>({ name: 250, location: 200, type: 80, size: 80, date: 160, deletedDate: 160 });
+    // Multi-mode Column Widths management
+    const [allColWidths, setAllColWidths] = useState<MultiModeColumnWidths>(() => {
+        const defaults: ColumnWidths = { name: 250, location: 200, type: 80, size: 80, date: 160, deletedDate: 160 };
+        const modes: ColumnMode[] = ['normal', 'search', 'trash', 'network'];
+
+        try {
+            const result: any = {};
+            modes.forEach(m => {
+                const saved = localStorage.getItem(`colWidths_${m}`);
+                result[m] = saved ? JSON.parse(saved) : { ...defaults };
+            });
+            return result as MultiModeColumnWidths;
+        } catch (e) {
+            console.error("Failed to load column widths from localStorage", e);
+            return {
+                normal: { ...defaults },
+                search: { ...defaults },
+                trash: { ...defaults },
+                network: { ...defaults }
+            };
+        }
+    });
 
     // Search (extracted to usePanelSearch)
     const {
@@ -65,6 +87,29 @@ export const usePanel = (initialPath: string, panelId?: string, activeTabId?: st
         currentSearchRoot, setSearchQuery, setSearchResults,
         setIsSearching, setSearchLimitReached
     } = usePanelSearch({ path, panelId, activeTabId, searchLimit, initialPath });
+
+    // Derive current mode (moved down to have access to searchResults)
+    const isTrashView = !!path && /^(trash)(:\/\/|:\\{1,2})/i.test(path);
+    const isNetworkView = path === '__network_vincinity__' || (!!path && path.startsWith('\\\\') && path.slice(2).split('\\').filter(Boolean).length === 1);
+    const mode = getColumnMode(!!isTrashView, !!searchResults, isNetworkView);
+
+    // Active widths for current mode
+    const colWidths = useMemo(() => allColWidths[mode], [allColWidths, mode]);
+
+    const setColWidths = useCallback((val: ColumnWidths | ((prev: ColumnWidths) => ColumnWidths)) => {
+        setAllColWidths(prev => {
+            const currentModeWidths = prev[mode];
+            const nextModeWidths = typeof val === 'function' ? val(currentModeWidths) : val;
+
+            // Persist to localStorage for this mode
+            localStorage.setItem(`colWidths_${mode}`, JSON.stringify(nextModeWidths));
+
+            return {
+                ...prev,
+                [mode]: nextModeWidths
+            };
+        });
+    }, [mode]);
 
     // File System
     const { sortedFiles, summary, isComplete, loading, error, refresh, updateFileSize, setFileCalculating } = useFiles(normalizedPanelId, path, sortConfig, showHidden, showSystem);
@@ -108,8 +153,9 @@ export const usePanel = (initialPath: string, panelId?: string, activeTabId?: st
         viewMode,
         sortConfig,
         searchQuery,
-        selected: Array.from(selected)
-    }), [path, history, historyIndex, viewMode, sortConfig, searchQuery, selected]);
+        selected: Array.from(selected),
+        allColWidths
+    }), [path, history, historyIndex, viewMode, sortConfig, searchQuery, selected, allColWidths]);
 
     const setPanelState = useCallback((state: any) => {
         if (!state) return;
@@ -123,6 +169,7 @@ export const usePanel = (initialPath: string, panelId?: string, activeTabId?: st
         setSortConfig(state.sortConfig);
         if (state.searchQuery !== undefined) setSearchQuery(state.searchQuery);
         if (state.selected) setSelected(new Set(state.selected));
+        if (state.allColWidths) setAllColWidths(state.allColWidths);
     }, [setNavigationState, setViewMode, setSortConfig, setSearchQuery, setSelected]);
 
     // Navigation helpers
@@ -152,6 +199,9 @@ export const usePanel = (initialPath: string, panelId?: string, activeTabId?: st
         summary,
         isComplete,
         colWidths,
+        mode,
+        isTrashView,
+        isNetworkView,
         lastSelectedPath,
         currentSearchRoot,
 
@@ -185,7 +235,7 @@ export const usePanel = (initialPath: string, panelId?: string, activeTabId?: st
         path, displayFiles, loading, error, selected, viewMode, sortConfig,
         history, historyIndex, searchQuery, searchResults, isSearching, searchLimitReached,
         summary, isComplete, currentSearchRoot,
-        colWidths, lastSelectedPath,
+        colWidths, mode, isTrashView, isNetworkView, lastSelectedPath,
         navigate, goBack, goForward, goUp, refresh,
         setViewMode, setSortConfig, setColWidths,
         setSearchQuery, setSearchResults, setIsSearching, setSearchLimitReached,

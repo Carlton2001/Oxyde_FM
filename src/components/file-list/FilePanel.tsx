@@ -1,5 +1,4 @@
-
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import cx from 'classnames';
 import { ArrowUp } from 'lucide-react';
 import { FilePanelHeader } from './FilePanelHeader';
@@ -63,6 +62,7 @@ interface FilePanelProps {
     onRename?: (oldPath: string, newName: string) => void;
     showHistogram?: boolean;
     isTrashView?: boolean;
+    isNetworkView?: boolean;
     useSystemIcons?: boolean;
     onItemMiddleClick?: (entry: FileEntry) => void;
     diffPaths?: Set<string>;
@@ -79,7 +79,7 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
     onResize, onResizeMultiple, t, searchQuery, searchResults, isSearching,
     onSearch, onQueryChange, onClearSearch, showSearch = true, isDragTarget,
     dragOverPath, showHidden = false, showSystem = false, layout, cutPaths = [],
-    onRename, showHistogram: propShowHistogram, isTrashView = false,
+    onRename, showHistogram: propShowHistogram, isTrashView = false, isNetworkView = false,
     useSystemIcons: propUseSystemIcons, onItemMiddleClick, diffPaths, searchLimitReached,
     panelId, onViewModeChange, loading
 }) => {
@@ -119,6 +119,8 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
     const colWidthsRef = useRef(colWidths);
     colWidthsRef.current = colWidths;
 
+    const mode = useMemo(() => getColumnMode(!!isTrashView, !!searchResults, isNetworkView), [isTrashView, searchResults, isNetworkView]);
+
     /**
      * Re-calculates and applies the 'Name' column width based on the current panel width.
      * This ensures the column fills available space while respecting other column sizes.
@@ -126,7 +128,6 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
     const syncFlexColumn = useCallback((currentPanelWidth: number) => {
         if (viewMode !== 'details' || !onResizeMultiple) return;
 
-        const mode = getColumnMode(!!isTrashView, !!searchResults);
         const visibleCols = getVisibleColumns(mode);
         const flexCol = getFlexibleColumn(visibleCols);
         if (!flexCol) return;
@@ -146,7 +147,18 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
         }
 
         lastPanelWidthRef.current = currentPanelWidth;
-    }, [viewMode, onResizeMultiple, isTrashView, searchResults]);
+    }, [viewMode, onResizeMultiple, mode]);
+
+    // Use a ref for syncFlexColumn to avoid triggering the effect below on every render
+    const syncFlexRef = useRef(syncFlexColumn);
+    syncFlexRef.current = syncFlexColumn;
+
+    // Re-sync when mode changes (e.g. switching to search or trash after a window resize)
+    useEffect(() => {
+        if (lastPanelWidthRef.current > 0) {
+            syncFlexRef.current(lastPanelWidthRef.current);
+        }
+    }, [mode]);
 
     // Observer to handle panel/window resizing
     React.useLayoutEffect(() => {
@@ -446,7 +458,7 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
             onMouseLeave={() => setMouseNearScrollbar(false)}
             style={viewMode === 'details' ? {
                 '--grid-template': buildGridTemplate(
-                    getVisibleColumns(getColumnMode(!!isTrashView, !!searchResults)),
+                    getVisibleColumns(getColumnMode(!!isTrashView, !!searchResults, isNetworkView)),
                     colWidths as unknown as Record<string, number>
                 ),
             } as React.CSSProperties : undefined}
@@ -499,6 +511,7 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
                         viewMode={viewMode}
                         searchResults={searchResults}
                         isTrashView={isTrashView}
+                        isNetworkView={isNetworkView}
                         finalFiles={finalFiles}
                         sortConfig={sortConfig}
                         colWidths={colWidths}
@@ -564,6 +577,7 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
                         totalItemsSize={totalItemsSize}
                         showHistogram={!!showHistogram}
                         isTrashView={isTrashView}
+                        isNetworkView={isNetworkView}
                         ref={scrollHandleRef}
                         onScrollToggle={setShowScrollTop}
                         onItemMiddleClick={onItemMiddleClick}

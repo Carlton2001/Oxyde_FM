@@ -1,16 +1,15 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef, useImperativeHandle } from 'react';
 import { List, Grid, RowComponentProps, CellComponentProps } from 'react-window';
 import { AutoSizer } from 'react-virtualized-auto-sizer';
 import cx from 'classnames';
 import { Check, Shield, Loader2 } from 'lucide-react';
 
-import { FileEntry, ViewMode, DateFormat, ColumnWidths } from '../../types';
-import { formatSize, formatDate, getFileTypeString } from '../../utils/format';
-import { getParent } from '../../utils/path';
+import { FileEntry, ViewMode, ColumnWidths, DateFormat } from '../../types';
 import { TFunc } from '../../i18n';
 import { useApp } from '../../context/AppContext';
 import { useFileItemState } from '../../hooks/useFileItemState';
 import { RenameInput } from './RenameInput';
+import { getColumnMode, getVisibleColumns } from '../../config/columnDefinitions';
 
 interface VirtualizedFileListProps {
     files: FileEntry[];
@@ -35,7 +34,7 @@ interface VirtualizedFileListProps {
     totalItemsSize: number;
     showHistogram: boolean;
     isTrashView: boolean;
-    onSelect?: (path: string, val: boolean, range: boolean) => void; // Deprecated, items use onItemClick
+    isNetworkView?: boolean;
     onScrollToggle: (show: boolean) => void;
     onItemMiddleClick?: (entry: FileEntry) => void;
     diffPaths?: Set<string>;
@@ -79,61 +78,43 @@ interface SharedItemProps {
     rootFontSize: number;
     colWidths?: any;
     showCheckboxes: boolean;
+    isNetworkView?: boolean;
 }
 
 // Memoized Details Row Component
 const DetailsRow = React.memo((props: RowComponentProps<SharedItemProps>) => {
-    const { index, style, ...sharedProps } = props as any;
+    const { index, style, ...sharedProps } = props;
     const {
-        entries, selected, pendingSelection, renamingPath, renameText,
-        isDragging, dragOverPath, cutPathsSet, searchResults,
-        t, onItemClick, onItemDoubleClick, onItemContextMenu, onFileDragStart,
-        onRenameTextChange, onRenameCommit, onRenameCancel, getIcon,
-        totalItemsSize, showHistogram, isTrashView, onItemMiddleClick,
-        dateFormat, diffPaths, rootFontSize, colWidths, showCheckboxes
+        entries, isTrashView, isNetworkView, searchResults,
+        t, dateFormat, colWidths, getIcon, showHistogram, totalItemsSize, showCheckboxes,
+        renamingPath, renameText, onRenameTextChange, onRenameCommit, onRenameCancel
     } = sharedProps;
+
+    const mode = getColumnMode(!!isTrashView, !!searchResults, isNetworkView);
+    const visibleCols = getVisibleColumns(mode);
 
     const entry = entries[index];
     if (!entry) return null;
 
-    const { isSelected, isRenaming, isProtected, tooltipText, itemClassName, handlers } = useFileItemState({
-        entry, selected, pendingSelection, renamingPath,
-        isDragging, dragOverPath, cutPathsSet, diffPaths,
-        isTrashView, dateFormat, t,
-        onItemClick, onItemDoubleClick, onItemContextMenu,
-        onFileDragStart, onItemMiddleClick, showCheckboxes
+    const { isSelected, isRenaming, isCut, isProtected, handlers, itemClassName } = useFileItemState({
+        ...sharedProps,
+        entry
     });
 
-    const pureColumnWidth = useMemo(() => {
-        if (!colWidths) return 0;
-        let sum = colWidths.name + (colWidths.type || 0) + (colWidths.size || 0) + (colWidths.date || 0);
-        if (searchResults) sum += (colWidths.location || 0);
-        if (isTrashView) sum += (colWidths.location || 0) + (colWidths.deletedDate || 0);
-        return sum;
-    }, [colWidths, searchResults, isTrashView]);
+    const isDragOver = sharedProps.dragOverPath === entry.path;
 
-    const safeParse = (val: any) => {
-        if (typeof val === 'number') return isNaN(val) ? 0 : val;
-        const p = parseFloat(val);
-        return isNaN(p) ? 0 : p;
-    };
-
+    // Fixed width based on the calculated column sum
     const adjustedStyle = {
         ...style,
-        left: safeParse(style.left) + (rootFontSize * 0.5),
-        width: pureColumnWidth > 0 ? pureColumnWidth : `calc(${safeParse(style.width)}px - ${rootFontSize}px)`,
-        top: safeParse(style.top),
-        height: safeParse(style.height),
-        pointerEvents: 'auto' as const
+        width: '100%',
+        minWidth: 'max-content'
     };
 
     return (
         <div
-            className={itemClassName}
-            data-path={entry.path}
-            data-tooltip={tooltipText}
-            data-tooltip-multiline="true"
-            data-tooltip-image-path={(entry.path.startsWith('\\\\') || entry.path === '__network_vincinity__') ? undefined : entry.path}
+            className={cx(itemClassName, "details", {
+                "drag-over": isDragOver
+            })}
             style={adjustedStyle}
             onClick={handlers.onClick}
             onDoubleClick={handlers.onDoubleClick}
@@ -149,174 +130,106 @@ const DetailsRow = React.memo((props: RowComponentProps<SharedItemProps>) => {
                 />
             )}
 
-            <div className="file-name-group">
-                {showCheckboxes && (
-                    <div className="item-checkbox" onClick={handlers.onCheckboxClick}>
-                        <div className={cx("checkbox-indicator", { checked: isSelected })}>
-                            {isSelected && <Check size={10} strokeWidth={4} />}
+            {visibleCols.map(col => {
+                if (col.key === 'name') {
+                    return (
+                        <div key={col.key} className="file-name-group">
+                            {showCheckboxes && (
+                                <div className="item-checkbox" onClick={handlers.onCheckboxClick}>
+                                    <div className={cx("checkbox-indicator", { checked: isSelected })}>
+                                        {isSelected && <Check size={10} strokeWidth={4} />}
+                                    </div>
+                                </div>
+                            )}
+                            <div className="file-icon-small">
+                                {getIcon(entry)}
+                                {isProtected && <Shield className="protected-shield-badge" size={12} fill="currentColor" />}
+                            </div>
+                            <div className="file-name-container">
+                                {isRenaming ? (
+                                    <RenameInput
+                                        renameText={renameText}
+                                        onRenameTextChange={onRenameTextChange}
+                                        onRenameCommit={onRenameCommit}
+                                        onRenameCancel={onRenameCancel}
+                                    />
+                                ) : (
+                                    <span className="file-name">{entry.name}</span>
+                                )}
+                            </div>
                         </div>
-                    </div>
-                )}
-                <div className="file-icon-small">
-                    {getIcon(entry)}
-                    {isProtected && <Shield className="protected-shield-badge" size={12} fill="currentColor" />}
-                </div>
-                <div className="file-name-container">
-                    {isRenaming ? (
-                        <RenameInput
-                            renameText={renameText}
-                            onRenameTextChange={onRenameTextChange}
-                            onRenameCommit={onRenameCommit}
-                            onRenameCancel={onRenameCancel}
-                        />
-                    ) : (
-                        <span className="file-name">{entry.name}</span>
-                    )}
-                </div>
-            </div>
+                    );
+                }
 
-            {searchResults && (
-                <div className="file-info col-location">
-                    <span className="text-truncate">{getParent(entry.path)}</span>
-                </div>
-            )}
-
-            {isTrashView && (
-                <>
-                    <div className="file-info col-location">
-                        <span className="text-truncate">{entry.original_path || ''}</span>
+                return (
+                    <div key={col.key} className={col.cellClass} style={col.align === 'right' ? { textAlign: 'right' } : {}}>
+                        {col.renderCell(entry, { t, dateFormat })}
                     </div>
-                    <div className="file-info col-date">
-                        <span className="text-truncate">{entry.deleted_time ? formatDate(entry.deleted_time, dateFormat) : ''}</span>
-                    </div>
-                </>
-            )}
-
-            <div className="file-info col-type">
-                <span className="text-truncate">{getFileTypeString(entry, t)}</span>
-            </div>
-            <div className="file-info col-size">
-                <span className="text-truncate">
-                    {entry.is_dir
-                        ? (entry.is_calculated
-                            ? (entry.size === 0 ? t('empty_dir') : formatSize(entry.size, 1, t))
-                            : (entry.is_calculating ? t('calculating') : ''))
-                        : formatSize(entry.size, 1, t)}
-                </span>
-            </div>
-            <div className="file-info col-date">
-                <span className="text-truncate">{formatDate(entry.modified, dateFormat)}</span>
-            </div>
+                );
+            })}
         </div>
     );
 });
 
 // Memoized Grid Item Component
 const GridCell = React.memo((props: CellComponentProps<SharedItemProps>) => {
-    const { columnIndex, rowIndex, style, ...sharedProps } = props as any;
+    const { columnIndex, rowIndex, style, ...sharedProps } = props;
     const {
-        entries, selected, pendingSelection, renamingPath, renameText,
-        isDragging, dragOverPath, cutPathsSet, showCheckboxes,
-        t, onItemClick, onItemDoubleClick, onItemContextMenu, onFileDragStart,
-        onRenameTextChange, onRenameCommit, onRenameCancel, getIcon,
-        totalItemsSize, showHistogram, isTrashView, onItemMiddleClick,
-        dateFormat, diffPaths, columnCount = 1, rootFontSize
+        entries, renamingPath, renameText, showCheckboxes, getIcon,
+        onRenameTextChange, onRenameCommit, onRenameCancel,
+        columnCount = 1, rootFontSize
     } = sharedProps;
 
     const index = rowIndex * columnCount + columnIndex;
     const entry = entries[index];
-    if (!entry) return null;
 
-    const { isSelected, isRenaming, isProtected, tooltipText, itemClassName, handlers } = useFileItemState({
-        entry, selected, pendingSelection, renamingPath,
-        isDragging, dragOverPath, cutPathsSet, diffPaths,
-        isTrashView, dateFormat, t,
-        onItemClick, onItemDoubleClick, onItemContextMenu,
-        onFileDragStart, onItemMiddleClick, showCheckboxes
+    const { isSelected, isRenaming, isProtected, handlers, itemClassName } = useFileItemState({
+        ...sharedProps,
+        entry: entry || ({} as FileEntry)
     });
 
-    const leftOffset = rootFontSize * 0.125;
-    const topOffset = rootFontSize * 0.125;
-    const widthReduction = rootFontSize * 0.25;
-    const heightReduction = rootFontSize * 0.25;
+    if (!entry) return null;
 
-    const safeParse = (val: any) => {
-        if (typeof val === 'number') return isNaN(val) ? 0 : val;
-        const p = parseFloat(val);
-        return isNaN(p) ? 0 : p;
-    };
-
-    const adjustedStyle = {
-        ...style,
-        left: safeParse(style.left) + leftOffset,
-        top: safeParse(style.top) + topOffset,
-        width: safeParse(style.width) - widthReduction,
-        height: safeParse(style.height) - heightReduction,
-        pointerEvents: 'auto' as const
-    };
+    const isDragOver = sharedProps.dragOverPath === entry.path;
 
     return (
-        <div style={adjustedStyle} data-path={entry.path}>
-            <div
-                className={itemClassName}
-                data-path={entry.path}
-                data-tooltip={tooltipText}
-                data-tooltip-multiline="true"
-                data-tooltip-image-path={(entry.path.startsWith('\\\\') || entry.path === '__network_vincinity__') ? undefined : entry.path}
-                onClick={handlers.onClick}
-                onDoubleClick={handlers.onDoubleClick}
-                onContextMenu={handlers.onContextMenu}
-                draggable={!isRenaming}
-                onDragStart={handlers.onDragStart}
-                onMouseDown={handlers.onMouseDown}
-                style={{ height: '100%', width: '100%', boxSizing: 'border-box' }}
-            >
-                {showHistogram && (
-                    <div
-                        className="size-histogram-bar"
-                        style={{ width: `${(entry.size / totalItemsSize) * 100}%` }}
-                    />
-                )}
-
-                {showCheckboxes && (
-                    <div className="item-checkbox grid-checkbox" onClick={handlers.onCheckboxClick}>
-                        <div className={cx("checkbox-indicator", { checked: isSelected })}>
-                            {isSelected && <Check size={10} strokeWidth={4} />}
-                        </div>
-                    </div>
-                )}
-                <div className="file-icon">
-                    {getIcon(entry, 38)}
-                    {isProtected && <Shield className="protected-shield-badge grid" size={24} fill="currentColor" />}
-                </div>
-                <div className="grid-name-wrapper">
-                    {isRenaming ? (
-                        <RenameInput
-                            renameText={renameText}
-                            onRenameTextChange={onRenameTextChange}
-                            onRenameCommit={onRenameCommit}
-                            onRenameCancel={onRenameCancel}
-                            className="rename-input grid-mode"
-                        />
-                    ) : (
-                        <div className="grid-name-container">
-                            <span className="file-name">
-                                {entry.is_dir ? entry.name : (() => {
-                                    const lastDot = entry.name.lastIndexOf('.');
-                                    return (lastDot > 0) ? entry.name.substring(0, lastDot) : entry.name;
-                                })()}
-                            </span>
-                            {!entry.is_dir ? (
-                                <span className="file-extension">
-                                    {entry.name.includes('.') ? entry.name.split('.').pop()?.toUpperCase() : '\u00A0'}
-                                </span>
-                            ) : (
-                                <span className="file-extension" style={{ visibility: 'hidden' }}>&nbsp;</span>
-                            )}
-                        </div>
-                    )}
-                </div>
+        <div
+            className={cx(itemClassName, "grid", {
+                "drag-over": isDragOver,
+                "is-dir": entry.is_dir
+            })}
+            style={style}
+            onClick={handlers.onClick}
+            onDoubleClick={handlers.onDoubleClick}
+            onContextMenu={handlers.onContextMenu}
+            draggable={!isRenaming}
+            onDragStart={handlers.onDragStart}
+            onMouseDown={handlers.onMouseDown}
+        >
+            <div className="grid-selection-overlay" />
+            <div className="file-icon-large">
+                {getIcon(entry, rootFontSize * 3)}
+                {isProtected && <Shield className="protected-shield-badge" size={16} fill="currentColor" />}
             </div>
+            <div className="file-name-container">
+                {isRenaming ? (
+                    <RenameInput
+                        renameText={renameText}
+                        onRenameTextChange={onRenameTextChange}
+                        onRenameCommit={onRenameCommit}
+                        onRenameCancel={onRenameCancel}
+                    />
+                ) : (
+                    <span className="file-name">{entry.name}</span>
+                )}
+            </div>
+            {showCheckboxes && (
+                <div className="item-checkbox" onClick={handlers.onCheckboxClick}>
+                    <div className={cx("checkbox-indicator", { checked: isSelected })}>
+                        {isSelected && <Check size={10} strokeWidth={4} />}
+                    </div>
+                </div>
+            )}
         </div>
     );
 });
@@ -328,7 +241,7 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
         isDragging, dragOverPath, cutPaths,
         t, onItemClick, onItemDoubleClick, onItemContextMenu, onFileDragStart,
         onRenameTextChange, onRenameCommit, onRenameCancel, getIcon,
-        totalItemsSize, showHistogram, isTrashView, searchResults,
+        totalItemsSize, showHistogram, isTrashView, searchResults, isNetworkView,
         onScrollToggle, onItemMiddleClick,
         diffPaths, colWidths, isSearching, loading
     } = props;
@@ -363,69 +276,55 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
         };
     }, []);
 
-    const isGrid = viewMode !== 'details';
-
-    const handleScroll = useCallback((event: React.UIEvent<HTMLElement>) => {
-        const top = event.currentTarget.scrollTop;
-        if (top !== undefined) {
-            const shouldShow = top > 300;
-            onScrollToggle(shouldShow);
-        }
-    }, [onScrollToggle]);
-
     const listRef = useRef<any>(null);
     const gridRef = useRef<any>(null);
 
-    const scrollToTop = () => {
-        if (isGrid) {
-            gridRef.current?.scrollToCell({ behavior: 'smooth', columnIndex: 0, rowIndex: 0 });
-        } else {
-            listRef.current?.scrollToRow({ behavior: 'smooth', index: 0 });
+    useImperativeHandle(ref, () => ({
+        scrollToTop: () => {
+            listRef.current?.scrollTo(0);
+            gridRef.current?.scrollTo({ scrollTop: 0 });
         }
-    };
-
-    React.useImperativeHandle(ref, () => ({
-        scrollToTop
     }));
 
+    const isGrid = viewMode === 'grid';
     const cutPathsSet = useMemo(() => new Set(cutPaths), [cutPaths]);
 
-    const sharedProps: SharedItemProps = useMemo(() => ({
+    const sharedProps = useMemo<SharedItemProps>(() => ({
         entries: files, selected, pendingSelection, renamingPath, renameText,
         isDragging, dragOverPath, cutPathsSet, searchResults,
         t, onItemClick, onItemDoubleClick, onItemContextMenu, onFileDragStart,
         onRenameTextChange, onRenameCommit, onRenameCancel, getIcon,
-        totalItemsSize, showHistogram, isTrashView, onItemMiddleClick,
+        totalItemsSize, showHistogram, isTrashView, isNetworkView, onItemMiddleClick,
         dateFormat, diffPaths, viewMode, rootFontSize, colWidths, showCheckboxes
     }), [
         files, selected, pendingSelection, renamingPath, renameText,
         isDragging, dragOverPath, cutPathsSet, searchResults,
         t, onItemClick, onItemDoubleClick, onItemContextMenu, onFileDragStart,
         onRenameTextChange, onRenameCommit, onRenameCancel, getIcon,
-        totalItemsSize, showHistogram, isTrashView, onItemMiddleClick,
+        totalItemsSize, showHistogram, isTrashView, isNetworkView, onItemMiddleClick,
         dateFormat, diffPaths, viewMode, rootFontSize, colWidths, showCheckboxes
     ]);
 
     const listRowHeight = rootFontSize * 1.75;
-    const gridRowHeightBase = rootFontSize * 6.0; // Reduced from 7.0
+    const gridRowHeightBase = rootFontSize * 6.0;
     const gridGap = rootFontSize * 0.25;
 
     const totalColumnWidth = useMemo(() => {
         if (!colWidths || isGrid) return 0;
-        let sum = colWidths.name + (colWidths.type || 0) + (colWidths.size || 0) + (colWidths.date || 0);
-        if (searchResults) sum += (colWidths.location || 0);
-        if (isTrashView) sum += (colWidths.location || 0) + (colWidths.deletedDate || 0);
-        // 1.25rem = 20px technical overhead (padding + scrollbar room)
+        const mode = getColumnMode(!!isTrashView, !!searchResults, isNetworkView);
+        const visibleCols = getVisibleColumns(mode);
+        const cw = colWidths as any;
+        const sum = visibleCols.reduce((acc, col) => acc + (cw[col.key] || col.defaultWidth), 0);
         return sum + (rootFontSize * 1.25);
-    }, [colWidths, isGrid, searchResults, isTrashView, rootFontSize]);
+    }, [colWidths, isGrid, searchResults, isTrashView, isNetworkView, rootFontSize]);
 
     return (
         <div
             className={cx("virtualized-list", {
                 "details": !isGrid,
                 "grid": isGrid,
-                "search-mode": !!props.searchResults,
-                "trash-mode": props.isTrashView
+                "search-mode": !!searchResults,
+                "trash-mode": isTrashView
             })}
             style={{ width: '100%', height: '100%', overflowX: 'auto', overflowY: 'hidden' }}
         >
@@ -448,7 +347,7 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
                 }
 
                 if (isGrid) {
-                    const minColumnWidth = rootFontSize * 6.0; // More balanced with 6.0 height
+                    const minColumnWidth = rootFontSize * 6.0;
                     const horizontalPadding = rootFontSize * 2.5;
                     const columnCount = Math.max(1, Math.floor((width - horizontalPadding) / (minColumnWidth + gridGap)));
                     const rowCount = Math.ceil(files.length / columnCount);
@@ -456,7 +355,7 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
 
                     return (
                         <Grid
-                            key={`grid-${rootFontSize}-${columnCount}`} // Force refresh on font or layout change
+                            key={`grid-${rootFontSize}-${columnCount}`}
                             className="virtualized-scroller grid"
                             columnCount={columnCount}
                             columnWidth={columnWidth + gridGap}
@@ -466,7 +365,7 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
                             cellProps={{ ...sharedProps, columnCount }}
                             gridRef={gridRef}
                             style={{ height, width, overflowX: 'hidden', overflowY: 'auto' }}
-                            onScroll={handleScroll}
+                            onScroll={(e: any) => onScrollToggle(e.scrollTop > 100)}
                         />
                     );
                 }
@@ -475,7 +374,7 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
 
                 return (
                     <List
-                        key={`list-${rootFontSize}`} // Force refresh on font change
+                        key={`list-${rootFontSize}`}
                         className="virtualized-scroller details"
                         rowCount={files.length}
                         rowHeight={listRowHeight}
@@ -483,11 +382,10 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
                         rowProps={sharedProps}
                         listRef={listRef}
                         style={{ height, width: finalWidth, overflowY: 'auto', overflowX: 'hidden' }}
-                        onScroll={handleScroll}
+                        onScroll={(e: any) => onScrollToggle(e.scrollOffset > 100)}
                     />
                 );
             }} />
         </div>
     );
 });
-

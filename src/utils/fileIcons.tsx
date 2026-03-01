@@ -74,13 +74,17 @@ interface IconOptions {
  * @param options - Icon size and stroke width options
  * @param useSystemIcons - Whether to use the system icon protocol
  * @param path - Full path of the file (for specific icons)
+ * @param isMediaDevice - Whether the item is a network media device
+ * @param hasWebPage - Whether the item has a web management page
  */
 export const getFileIcon = (
     name: string,
     isDir: boolean,
     options: IconOptions = {},
     useSystemIcons: boolean = false,
-    path?: string
+    path?: string,
+    isMediaDevice?: boolean,
+    hasWebPage?: boolean
 ): React.ReactNode => {
     const { size: pixelSize, strokeWidth = 1.5 } = options;
     const size = pixelSize ? `${pixelSize / 16}rem` : undefined;
@@ -98,20 +102,33 @@ export const getFileIcon = (
         );
     }
 
+    // 1. Virtual Paths & Special Locations (Regardless of isDir)
+    if (path === '__network_vincinity__') {
+        return <Globe className="file-icon network-root" {...iconProps} />;
+    }
+
+    // Windows Shell Items (UPnP, Media Devices, Search results, etc.)
+    if (path?.startsWith('::{') || path?.startsWith('?') || isMediaDevice || hasWebPage) {
+        return <Network className="file-icon network" {...iconProps} />;
+    }
+
+    // Windows Network UNC paths (\\SERVER or \\SERVER\SHARE)
+    if (path?.startsWith('\\\\')) {
+        const parts = path.split('\\').filter(Boolean);
+        // Only use the Network icon for top-level servers (\SERVER)
+        if (parts.length <= 1) {
+            return <Network className="file-icon network" {...iconProps} />;
+        }
+    }
+
+    // Drive roots (C:\)
+    const isDrive = path && /^[a-zA-Z]:\\?$/.test(path);
+    if (isDrive) {
+        return <HardDrive className="file-icon drive" {...iconProps} />;
+    }
+
+    // 2. Standard Directory Icons
     if (isDir) {
-        if (path === '__network_vincinity__') {
-            return <Globe className="file-icon network-root" {...iconProps} />;
-        }
-        if (path?.startsWith('\\\\')) {
-            const parts = path.split('\\').filter(Boolean);
-            if (parts.length <= 2) {
-                return <Network className="file-icon network" {...iconProps} />;
-            }
-        }
-        const isDrive = path && /^[a-zA-Z]:\\?$/.test(path);
-        if (isDrive) {
-            return <HardDrive className="file-icon drive" {...iconProps} />;
-        }
         return <Folder className="file-icon folder" fill="currentColor" fillOpacity={0.2} {...iconProps} />;
     }
 
@@ -193,10 +210,18 @@ export const getFileIcon = (
  * Returns an appropriate icon component for a FileEntry
  */
 export const getFileEntryIcon = (
-    entry: { name: string; is_dir: boolean; path?: string },
+    entry: { name: string; is_dir: boolean; path?: string; is_media_device?: boolean; has_web_page?: boolean },
     options?: IconOptions,
     useSystemIcons: boolean = false
 ): React.ReactNode => {
-    return getFileIcon(entry.name, entry.is_dir, options, useSystemIcons, entry.path);
+    return getFileIcon(
+        entry.name,
+        entry.is_dir,
+        options,
+        useSystemIcons,
+        entry.path,
+        entry.is_media_device,
+        entry.has_web_page
+    );
 };
 

@@ -22,6 +22,7 @@ export type FileEntry = {
     drive_label?: string;
 };
 
+export type ColumnMode = 'normal' | 'search' | 'trash' | 'network';
 export type ViewMode = 'grid' | 'details';
 export type Theme = 'github-light' | 'github-dark' | 'ayu-light' | 'ayu-dark' | 'one-light' | 'one-dark' | 'monokai' | 'solarized-light' | 'solarized-dark' | 'windows-light' | 'windows-dark' | 'oxyde-light' | 'oxyde-dark';
 export type LayoutMode = 'standard' | 'dual';
@@ -49,6 +50,10 @@ export interface PanelState {
     searchLimitReached: boolean;
     currentSearchRoot: string;
     colWidths: ColumnWidths;
+    allColWidths?: MultiModeColumnWidths;
+    mode: ColumnMode;
+    isTrashView: boolean;
+    isNetworkView: boolean;
     lastSelectedPath?: string;
     loading?: boolean;
     refresh: () => void;
@@ -77,6 +82,13 @@ export interface ColumnWidths {
     size: number;
     date: number;
     deletedDate: number;
+}
+
+export interface MultiModeColumnWidths {
+    normal: ColumnWidths;
+    search: ColumnWidths;
+    trash: ColumnWidths;
+    network: ColumnWidths;
 }
 
 export interface ShortcutInfo {

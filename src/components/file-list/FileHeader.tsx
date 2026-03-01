@@ -1,14 +1,16 @@
 import React from 'react';
 import cx from 'classnames';
-import { ChevronUp, ChevronDown, X, Filter } from 'lucide-react';
-import { FileEntry, ViewMode, SortConfig, ColumnWidths, SortField } from '../../types';
+import { ChevronUp, ChevronDown, Filter } from 'lucide-react';
+import { FileEntry, ViewMode, DateFormat, ColumnWidths, SortConfig, SortField } from '../../types';
 import { ResizeHandle } from './ResizeHandle';
 import { TFunc } from '../../i18n';
+import { getColumnMode, getVisibleColumns, getColumnLabel, getColumnSortField } from '../../config/columnDefinitions';
 
 interface FileHeaderProps {
     viewMode: ViewMode;
     searchResults: FileEntry[] | null;
     isTrashView: boolean | undefined;
+    isNetworkView?: boolean;
     finalFiles: FileEntry[];
     sortConfig: SortConfig;
     colWidths: ColumnWidths;
@@ -32,6 +34,7 @@ export const FileHeader: React.FC<FileHeaderProps> = React.memo(({
     viewMode,
     searchResults,
     isTrashView,
+    isNetworkView,
     finalFiles,
     sortConfig,
     colWidths,
@@ -39,8 +42,6 @@ export const FileHeader: React.FC<FileHeaderProps> = React.memo(({
     onResize,
     onResizeMultiple,
     onHeaderContextMenu,
-    onClearSearch,
-    onSelectAll,
     isTypeFiltered,
     isSizeFiltered,
     isNameFiltered,
@@ -48,7 +49,8 @@ export const FileHeader: React.FC<FileHeaderProps> = React.memo(({
     isLocationFiltered,
     isDeletedDateFiltered,
     t,
-    panelRef
+    panelRef,
+    onSelectAll
 }) => {
     const SortIcon = ({ field }: { field: SortField }) => {
         if (sortConfig.field !== field) return null;
@@ -56,6 +58,9 @@ export const FileHeader: React.FC<FileHeaderProps> = React.memo(({
             ? <ChevronUp size={12} className="sort-arrow" />
             : <ChevronDown size={12} className="sort-arrow" />;
     };
+
+    const mode = getColumnMode(!!isTrashView, !!searchResults, isNetworkView);
+    const visibleCols = getVisibleColumns(mode);
 
     return (
         <>
@@ -67,67 +72,36 @@ export const FileHeader: React.FC<FileHeaderProps> = React.memo(({
             />
 
             {viewMode === 'details' && (
-                <div
-                    className={cx("file-header", { "search-mode": !!searchResults, "trash-mode": isTrashView })}
-                    style={{ cursor: 'default' }}
-                    onContextMenu={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                    }}
-                >
-                    <div className="col col-name" onClick={() => onSort('name')} onContextMenu={(e) => onHeaderContextMenu?.('name', e)}>
-                        {searchResults ? (
-                            <div className="search-status-header">
-                                <span className="search-results-count">{t('results')} ({finalFiles.length})</span>
-                                <SortIcon field="name" />
-                                <button className="close-search-header-btn" onClick={(e) => { e.stopPropagation(); onClearSearch(); }} data-tooltip={t('clear') || 'Clear'}>
-                                    <X size={14} /> <span>{t('clear')}</span>
-                                </button>
-                            </div>
-                        ) : (
-                            <>
-                                <span className="header-label">{t('name')}</span>
-                                {isNameFiltered && <Filter size={10} style={{ marginLeft: '4px', opacity: 0.8, color: 'var(--accent-color)' }} />}
-                                <SortIcon field="name" />
-                            </>
-                        )}
-                        <ResizeHandle
-                            field="name"
-                            panelRef={panelRef}
-                            onResize={onResize}
-                            colWidths={colWidths}
-                            files={finalFiles}
-                            searchResults={!!searchResults}
-                            isTrashView={isTrashView}
-                            onResizeMultiple={onResizeMultiple}
-                            t={t}
-                        />
-                    </div>
-                    {(searchResults && !isTrashView) && (
-                        <div className="col col-location" onClick={() => onSort('location')} onContextMenu={(e) => onHeaderContextMenu?.('location', e)}>
-                            <span className="header-label">{t('location')}</span>
-                            {isLocationFiltered && <Filter size={10} style={{ marginLeft: '4px', opacity: 0.8, color: 'var(--accent-color)' }} />}
-                            <SortIcon field="location" />
-                            <ResizeHandle
-                                field="location"
-                                panelRef={panelRef}
-                                onResize={onResize}
-                                colWidths={colWidths}
-                                files={finalFiles}
-                                searchResults={!!searchResults}
-                                onResizeMultiple={onResizeMultiple}
-                                t={t}
-                            />
-                        </div>
-                    )}
-                    {isTrashView && (
-                        <>
-                            <div className="col col-location" onClick={() => onSort('location')} onContextMenu={(e) => onHeaderContextMenu?.('location', e)}>
-                                <span className="header-label">{t('original_location' as any)}</span>
-                                {isLocationFiltered && <Filter size={10} style={{ marginLeft: '4px', opacity: 0.8, color: 'var(--accent-color)' }} />}
-                                <SortIcon field="location" />
+                <div className="file-header" onClick={onSelectAll}>
+                    {visibleCols.map(col => {
+                        const sField = getColumnSortField(col, mode);
+                        const label = t(getColumnLabel(col, mode) as any);
+
+                        const isName = col.key === 'name';
+
+                        const isFiltered =
+                            (col.key === 'type' && isTypeFiltered) ||
+                            (col.key === 'size' && isSizeFiltered) ||
+                            (col.key === 'name' && isNameFiltered) ||
+                            (col.key === 'date' && isDateFiltered) ||
+                            (col.key === 'location' && isLocationFiltered) ||
+                            (col.key === 'deletedDate' && isDeletedDateFiltered);
+
+                        return (
+                            <div
+                                key={col.key}
+                                className={cx("col", `col-${col.key}`, { "col-name": isName })}
+                                onClick={(e) => {
+                                    if (isName) return;
+                                    onSort(sField);
+                                }}
+                                onContextMenu={(e) => onHeaderContextMenu?.(col.key as any, e)}
+                            >
+                                <span className="header-label">{label}</span>
+                                {isFiltered && <Filter size={10} style={{ marginLeft: '4px', opacity: 0.8, color: 'var(--accent-color)' }} />}
+                                <SortIcon field={sField} />
                                 <ResizeHandle
-                                    field="location"
+                                    field={col.key as any}
                                     panelRef={panelRef}
                                     onResize={onResize}
                                     colWidths={colWidths}
@@ -138,75 +112,10 @@ export const FileHeader: React.FC<FileHeaderProps> = React.memo(({
                                     t={t}
                                 />
                             </div>
-                            <div className="col col-date" onClick={() => onSort('deletedDate')} onContextMenu={(e) => onHeaderContextMenu?.('deletedDate', e)}>
-                                <span className="header-label">{t('deleted_date' as any)}</span>
-                                {isDeletedDateFiltered && <Filter size={10} style={{ marginLeft: '4px', opacity: 0.8, color: 'var(--accent-color)' }} />}
-                                <SortIcon field="deletedDate" />
-                                <ResizeHandle
-                                    field="deletedDate"
-                                    panelRef={panelRef}
-                                    onResize={onResize}
-                                    colWidths={colWidths}
-                                    files={finalFiles}
-                                    searchResults={!!searchResults}
-                                    isTrashView={isTrashView}
-                                    onResizeMultiple={onResizeMultiple}
-                                    t={t}
-                                />
-                            </div>
-                        </>
-                    )}
-                    <div className="col col-type" onClick={() => onSort('type')} onContextMenu={(e) => onHeaderContextMenu?.('type', e)}>
-                        <span className="header-label">{t('type')}</span>
-                        {isTypeFiltered && <Filter size={10} style={{ marginLeft: '4px', opacity: 0.8, color: 'var(--accent-color)' }} />}
-                        <SortIcon field="type" />
-                        <ResizeHandle
-                            field="type"
-                            panelRef={panelRef}
-                            onResize={onResize}
-                            colWidths={colWidths}
-                            files={finalFiles}
-                            searchResults={!!searchResults}
-                            isTrashView={isTrashView}
-                            onResizeMultiple={onResizeMultiple}
-                            t={t}
-                        />
-                    </div>
-                    <div className="col col-size" onClick={() => onSort('size')} onContextMenu={(e) => onHeaderContextMenu?.('size', e)}>
-                        <span className="header-label">{t('size')}</span>
-                        {isSizeFiltered && <Filter size={10} style={{ marginLeft: '4px', opacity: 0.8, color: 'var(--accent-color)' }} />}
-                        <SortIcon field="size" />
-                        <ResizeHandle
-                            field="size"
-                            panelRef={panelRef}
-                            onResize={onResize}
-                            colWidths={colWidths}
-                            files={finalFiles}
-                            searchResults={!!searchResults}
-                            isTrashView={isTrashView}
-                            onResizeMultiple={onResizeMultiple}
-                            t={t}
-                        />
-                    </div>
-                    <div className="col col-date" onClick={() => onSort('date')} onContextMenu={(e) => onHeaderContextMenu?.('date', e)}>
-                        <span className="header-label">{t('date')}</span>
-                        {isDateFiltered && <Filter size={10} style={{ marginLeft: '4px', opacity: 0.8, color: 'var(--accent-color)' }} />}
-                        <SortIcon field="date" />
-                        <ResizeHandle
-                            field="date"
-                            panelRef={panelRef}
-                            onResize={onResize}
-                            colWidths={colWidths}
-                            files={finalFiles}
-                            searchResults={!!searchResults}
-                            isTrashView={isTrashView}
-                            onResizeMultiple={onResizeMultiple}
-                            t={t}
-                        />
-                    </div>
+                        );
+                    })}
                 </div>
             )}
         </>
     );
 });
-

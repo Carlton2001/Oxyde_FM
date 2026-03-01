@@ -69,16 +69,21 @@ export const formatDate = (ms: number, format: DateFormat = 'European', fallback
  * @returns Localized type string (e.g. "PNG File", "Folder")
  */
 export const getFileTypeString = (entry: FileEntry, t: any): string => {
+    // 1. Network & Virtual paths (High Priority)
+    if (entry.path === '__network_vincinity__') {
+        return t('network');
+    }
+
+    // Windows Shell items (Media devices, UPnP, etc.) or top-level UNC paths
+    const isNetworkItem = entry.path.startsWith('::{') || entry.path.startsWith('?') ||
+        (entry.path.startsWith('\\\\') && entry.path.split('\\').filter(Boolean).length <= 1) ||
+        entry.is_media_device || entry.has_web_page;
+
+    if (isNetworkItem) {
+        return t('network');
+    }
+
     if (entry.is_dir) {
-        if (entry.path === '__network_vincinity__') {
-            return t('network');
-        }
-        if (entry.path.startsWith('\\\\')) {
-            const parts = entry.path.split('\\').filter(Boolean);
-            if (parts.length <= 2) {
-                return t('network');
-            }
-        }
         return t('folder');
     }
 
