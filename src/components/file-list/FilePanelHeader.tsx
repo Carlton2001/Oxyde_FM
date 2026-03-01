@@ -19,6 +19,7 @@ interface FilePanelHeaderProps {
     onQueryChange: (q: string) => void;
     onSearch: () => void;
     onClearSearch: () => void;
+    showNetwork?: boolean;
     t: TFunc;
 }
 
@@ -34,6 +35,7 @@ export const FilePanelHeader: React.FC<FilePanelHeaderProps> = React.memo(({
     onQueryChange,
     onSearch,
     onClearSearch,
+    showNetwork = true,
     t
 }) => {
     const headerRef = React.useRef<HTMLDivElement>(null);
@@ -105,22 +107,24 @@ export const FilePanelHeader: React.FC<FilePanelHeaderProps> = React.memo(({
                 <div className="drive-chips">
                     <FavoritesMenu onNavigate={onNavigate} currentPath={currentPath} compact={isCompact} />
                     {drives.map(drive => renderDriveChip(drive))}
-                    <div
-                        className={cx("drive-chip", { active: currentPath?.startsWith('__network_vincinity__'), compact: isCompact })}
-                        onClick={(e) => { e.stopPropagation(); onNavigate('__network_vincinity__'); }}
-                        onContextMenu={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            onContextMenu(e, {
-                                path: '__network_vincinity__',
-                                is_dir: true,
-                                isNetworkVicinity: true
-                            } as any);
-                        }}
-                        data-tooltip={t('network_vincinity' as any)}
-                    >
-                        <Globe size="0.875rem" />
-                    </div>
+                    {showNetwork && (
+                        <div
+                            className={cx("drive-chip", { active: currentPath?.startsWith('__network_vincinity__'), compact: isCompact })}
+                            onClick={(e) => { e.stopPropagation(); onNavigate('__network_vincinity__'); }}
+                            onContextMenu={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                onContextMenu(e, {
+                                    path: '__network_vincinity__',
+                                    is_dir: true,
+                                    isNetworkVicinity: true
+                                } as any);
+                            }}
+                            data-tooltip={t('network_vincinity' as any)}
+                        >
+                            <Globe size="0.875rem" />
+                        </div>
+                    )}
                     <div
                         className={cx("drive-chip", { active: currentPath?.startsWith('trash://'), compact: isCompact })}
                         onClick={(e) => { e.stopPropagation(); onNavigate('trash://'); }}

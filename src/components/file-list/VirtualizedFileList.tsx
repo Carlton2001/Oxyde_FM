@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef, useImperativeHandle } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useImperativeHandle } from 'react';
 import { List, Grid, RowComponentProps, CellComponentProps } from 'react-window';
 import { AutoSizer } from 'react-virtualized-auto-sizer';
 import cx from 'classnames';
@@ -86,8 +86,8 @@ const DetailsRow = React.memo((props: RowComponentProps<SharedItemProps>) => {
     const { index, style, ...sharedProps } = props;
     const {
         entries, isTrashView, isNetworkView, searchResults,
-        t, dateFormat, colWidths, getIcon, showHistogram, totalItemsSize, showCheckboxes,
-        renamingPath, renameText, onRenameTextChange, onRenameCommit, onRenameCancel
+        t, dateFormat, getIcon, showHistogram, totalItemsSize, showCheckboxes,
+        renameText, onRenameTextChange, onRenameCommit, onRenameCancel
     } = sharedProps;
 
     const mode = getColumnMode(!!isTrashView, !!searchResults, isNetworkView);
@@ -96,7 +96,7 @@ const DetailsRow = React.memo((props: RowComponentProps<SharedItemProps>) => {
     const entry = entries[index];
     if (!entry) return null;
 
-    const { isSelected, isRenaming, isCut, isProtected, handlers, itemClassName } = useFileItemState({
+    const { isSelected, isRenaming, isProtected, handlers, itemClassName } = useFileItemState({
         ...sharedProps,
         entry
     });
@@ -175,7 +175,7 @@ const DetailsRow = React.memo((props: RowComponentProps<SharedItemProps>) => {
 const GridCell = React.memo((props: CellComponentProps<SharedItemProps>) => {
     const { columnIndex, rowIndex, style, ...sharedProps } = props;
     const {
-        entries, renamingPath, renameText, showCheckboxes, getIcon,
+        entries, renameText, showCheckboxes, getIcon,
         onRenameTextChange, onRenameCommit, onRenameCancel,
         columnCount = 1, rootFontSize
     } = sharedProps;

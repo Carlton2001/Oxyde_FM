@@ -1126,10 +1126,32 @@ fn execute_shell_verb_by_canonical_name(_app: &AppHandle, path: &str, target_ver
 
     unsafe {
         let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
-
+        let is_unpin = target_verbs.iter().any(|v| v.contains("unpin"));
         let mut pidl_full = std::ptr::null_mut();
-        SHParseDisplayName(PCWSTR(path_u16.as_ptr()), None, &mut pidl_full, 0, None)
-            .map_err(|e| CommandError::SystemError(format!("SHParseDisplayName failed: {}", e)))?;
+        if let Err(e) = SHParseDisplayName(PCWSTR(path_u16.as_ptr()), None, &mut pidl_full, 0, None) {
+            if is_unpin {
+                // FALLBACK for missing paths (e.g. disconnected network drives)
+                use std::process::Command;
+                use std::os::windows::process::CommandExt;
+                let p_safe = path_norm.replace("'", "''");
+                let script = format!(
+                    "$sh = New-Object -ComObject Shell.Application; \
+                     $qa = $sh.Namespace('shell:::{{679f85cb-0220-4080-b29b-5540cc05aab6}}'); \
+                     if ($qa) {{ \
+                         $target = '{}'; \
+                         $item = $qa.Items() | Where-Object {{ $_.Path -eq $target -or $_.GetFolder.Self.Path -eq $target }}; \
+                         if ($item) {{ \
+                             $verbs = $item.Verbs() | Where-Object {{ $_.Name.Replace('&','') -match 'unpin|desepingler|retirer|detacher|losen' }}; \
+                             if ($verbs) {{ foreach ($v in $verbs) {{ $v.DoIt(); break; }} }} \
+                             else {{ $item.InvokeVerb('unpinfromhome'); $item.InvokeVerb('unpinfromquickaccess'); }} \
+                         }} \
+                     }}", p_safe
+                );
+                let _ = Command::new("powershell").arg("-NoProfile").arg("-Command").arg(script).creation_flags(0x08000000).output();
+                return Ok(());
+            }
+            return Err(CommandError::SystemError(format!("SHParseDisplayName failed: {}", e)));
+        }
 
         let mut pidl_relative = std::ptr::null_mut();
         let parent_folder: IShellFolder = SHBindToParent(pidl_full, Some(&mut pidl_relative))
@@ -1153,8 +1175,6 @@ fn execute_shell_verb_by_canonical_name(_app: &AppHandle, path: &str, target_ver
 
         let count = GetMenuItemCount(Some(hmenu));
         let mut target_id: Option<u32> = None;
-
-        let is_unpin = target_verbs.iter().any(|v| v.contains("unpin"));
 
         for i in 0..count {
             let id = GetMenuItemID(hmenu, i);

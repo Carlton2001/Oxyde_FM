@@ -26,6 +26,7 @@ pub struct AppConfig {
     pub default_turbo_mode: bool,
     pub show_grid_thumbnails: bool,
     pub show_checkboxes: bool,
+    pub show_network: bool,
 }
 
 impl Default for AppConfig {
@@ -52,7 +53,6 @@ impl Default for AppConfig {
                     "oxyde-dark".to_string()
                 }
             };
-
             // 2. Detect Language
             let language = unsafe {
                 let len = windows::Win32::Globalization::GetUserDefaultUILanguage();
@@ -98,6 +98,7 @@ impl Default for AppConfig {
             default_turbo_mode: true,
             show_grid_thumbnails: false,
             show_checkboxes: false,
+            show_network: true,
         }
     }
 }

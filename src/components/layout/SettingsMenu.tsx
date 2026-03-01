@@ -37,6 +37,7 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({
         defaultTurboMode, setDefaultTurboMode,
         showGridThumbnails, setShowGridThumbnails,
         showCheckboxes, setShowCheckboxes,
+        showNetwork, setShowNetwork,
         t, notify, resetToDefaults
     } = useApp();
     const { confirm } = useDialogs();
@@ -115,6 +116,11 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({
                             <Eye size={14} />
                             <span className="settings-item-text">{t('show_previews' as any)}</span>
                             <Toggle checked={showPreviews} onChange={setShowPreviews} />
+                        </div>
+                        <div className="settings-item" onClick={() => setShowNetwork(!showNetwork)}>
+                            <Globe size={14} />
+                            <span className="settings-item-text">{t('show_network' as any)}</span>
+                            <Toggle checked={showNetwork} onChange={setShowNetwork} />
                         </div>
                     </div>
 

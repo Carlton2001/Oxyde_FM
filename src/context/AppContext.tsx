@@ -23,6 +23,7 @@ export interface AppContextValue {
     defaultTurboMode: boolean;
     showGridThumbnails: boolean;
     showCheckboxes: boolean;
+    showNetwork: boolean;
     updateAvailable: boolean;
     peekStatus: {
         installed: boolean;
@@ -46,6 +47,7 @@ export interface AppContextValue {
     setDefaultTurboMode: (enabled: boolean) => void;
     setShowGridThumbnails: (show: boolean) => void;
     setShowCheckboxes: (show: boolean) => void;
+    setShowNetwork: (show: boolean) => void;
     setUpdateAvailable: (available: boolean) => void;
 
     // Translation
@@ -100,7 +102,8 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
         searchLimit: 3000,
         defaultTurboMode: true,
         showGridThumbnails: false,
-        showCheckboxes: false
+        showCheckboxes: false,
+        showNetwork: true
     };
 
     // Derived state (or defaults)
@@ -121,6 +124,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
     const defaultTurboMode = config?.default_turbo_mode ?? (localStorage.getItem('fm_defaultTurboMode') === 'true' || (localStorage.getItem('fm_defaultTurboMode') === null && defaults.defaultTurboMode));
     const showGridThumbnails = config?.show_grid_thumbnails ?? (localStorage.getItem('fm_showGridThumbnails') === 'true' || (localStorage.getItem('fm_showGridThumbnails') === null && defaults.showGridThumbnails));
     const showCheckboxes = config?.show_checkboxes ?? (localStorage.getItem('fm_showCheckboxes') === 'true' || (localStorage.getItem('fm_showCheckboxes') === null && defaults.showCheckboxes));
+    const showNetwork = config?.show_network ?? (localStorage.getItem('fm_showNetwork') === 'true' || (localStorage.getItem('fm_showNetwork') === null && defaults.showNetwork));
     const [updateAvailable, setUpdateAvailable] = React.useState(false);
     const [peekStatus, setPeekStatus] = React.useState<AppContextValue['peekStatus']>(null);
 
@@ -189,6 +193,10 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
     const setShowCheckboxes = useCallback((v: boolean) => {
         localStorage.setItem('fm_showCheckboxes', v.toString());
         setConfigValue('show_checkboxes', v);
+    }, [setConfigValue]);
+    const setShowNetwork = useCallback((v: boolean) => {
+        localStorage.setItem('fm_showNetwork', v.toString());
+        setConfigValue('show_network', v);
     }, [setConfigValue]);
 
     const setFontSize = useCallback((size: number) => {
@@ -282,6 +290,8 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
         setShowGridThumbnails,
         showCheckboxes,
         setShowCheckboxes,
+        showNetwork,
+        setShowNetwork,
         updateAvailable,
         setUpdateAvailable,
         peekStatus,

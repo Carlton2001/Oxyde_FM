@@ -59,6 +59,7 @@ export interface MenuContext {
 
     sortConfig?: SortConfig;
 
+    showNetwork?: boolean;
     t: TFunc;
     onClose: () => void;
 
@@ -100,7 +101,7 @@ export interface MenuContext {
 const BlankIcon = () => <div className="icon-md" style={{ width: '1rem', height: '1rem' }} />;
 
 export function getMenuItems(ctx: MenuContext): MenuItem[] {
-    const { target, isDir, isTreeContext, isTrashContext, isBackground, isDrive, canPaste, canUndo, undoLabel, canRedo, redoLabel, t, actions, isShiftPressed, isInputContext, isTextSelected } = ctx;
+    const { target, isDir, isTreeContext, isTrashContext, isBackground, isDrive, canPaste, canUndo, undoLabel, canRedo, redoLabel, t, actions, isShiftPressed, isInputContext, isTextSelected, showNetwork = true } = ctx;
     const items: MenuItem[] = [];
 
     // --- Special Context: Input fields ---
@@ -141,7 +142,7 @@ export function getMenuItems(ctx: MenuContext): MenuItem[] {
     }
 
     // --- Special Context: Voisinage Réseau ---
-    if (target === '__network_vincinity__') {
+    if (target === '__network_vincinity__' && showNetwork) {
         if (actions.onExpandAll || actions.onCollapseAll) {
             items.push({
                 id: 'expand_all',
@@ -313,7 +314,7 @@ export function getMenuItems(ctx: MenuContext): MenuItem[] {
             });
         }
 
-        if (isDir && !isDrive && !ctx.isNetworkComputer) {
+        if (isDir && !isTrashContext && target !== '__network_vincinity__' && !ctx.isMediaDevice) {
             items.push({
                 id: 'favorite_toggle',
                 type: 'action',

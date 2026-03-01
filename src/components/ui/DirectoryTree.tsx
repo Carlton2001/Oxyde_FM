@@ -118,7 +118,7 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
     onRemoveFromFavorites,
     onEmptyTrash
 }, ref) => {
-    const { useSystemIcons: contextUseSystemIcons, showHidden, showSystem } = useApp();
+    const { useSystemIcons: contextUseSystemIcons, showHidden, showSystem, showNetwork } = useApp();
     const useSystemIcons = propUseSystemIcons ?? contextUseSystemIcons;
     const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
     const [treeData, setTreeData] = useState<Map<string, TreeNode[]>>(new Map());
@@ -285,12 +285,14 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
 
         // Add Network
         nodes.push({ path: '__network_spacer__', name: '', isSpacer: true });
-        nodes.push({
-            path: '__network_vincinity__',
-            name: t('network_vincinity' as any),
-            hasSubdirs: true,
-            isNetworkRoot: true
-        });
+        if (showNetwork) {
+            nodes.push({
+                path: '__network_vincinity__',
+                name: t('network_vincinity' as any),
+                hasSubdirs: true,
+                isNetworkRoot: true
+            });
+        }
 
         // Add Trash
         nodes.push({

@@ -8,6 +8,7 @@ import { TFunc } from '../../i18n';
 import { DirectoryTree, DirectoryTreeHandle } from '../ui/DirectoryTree';
 import { FavoritesMenu } from '../ui/FavoritesMenu';
 import { getDriveTooltip, shouldShowDriveCapacity } from '../../utils/drive';
+import { useApp } from '../../context/AppContext';
 import './Sidebar.css';
 
 interface SidebarProps {
@@ -90,6 +91,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     onRemoveFromFavorites,
     onTreeEmptyTrash
 }) => {
+    const { showNetwork } = useApp();
     const sidebarRef = React.useRef<HTMLDivElement>(null);
     const [width, setWidth] = React.useState(() => {
         const saved = localStorage.getItem('sidebarWidth');
@@ -254,21 +256,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         );
                     })}
                     <div className="minimized-divider" />
-                    <button
-                        className={cx("drive-icon-btn", { active: currentPath === '__network_vincinity__' })}
-                        onClick={() => onNavigate('__network_vincinity__')}
-                        onContextMenu={(e) => onDriveContextMenu?.(e, '__network_vincinity__')}
-                        onMouseDown={(e) => {
-                            if (e.button === 1) {
-                                e.preventDefault();
-                                onOpenNewTab?.('__network_vincinity__');
-                            }
-                        }}
-                        data-tooltip={t('network_vincinity' as any)}
-                        data-tooltip-pos="right"
-                    >
-                        <Globe size="1.125rem" />
-                    </button>
+                    {showNetwork && (
+                        <button
+                            className={cx("drive-icon-btn", { active: currentPath === '__network_vincinity__' })}
+                            onClick={() => onNavigate('__network_vincinity__')}
+                            onContextMenu={(e) => onDriveContextMenu?.(e, '__network_vincinity__')}
+                            onMouseDown={(e) => {
+                                if (e.button === 1) {
+                                    e.preventDefault();
+                                    onOpenNewTab?.('__network_vincinity__');
+                                }
+                            }}
+                            data-tooltip={t('network_vincinity' as any)}
+                            data-tooltip-pos="right"
+                        >
+                            <Globe size="1.125rem" />
+                        </button>
+                    )}
                     <button
                         className={cx("drive-icon-btn", { active: currentPath === 'trash://' })}
                         onClick={() => onNavigate('trash://')}

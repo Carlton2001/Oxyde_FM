@@ -18,6 +18,7 @@ export interface AppConfig {
     default_turbo_mode: boolean;
     show_grid_thumbnails: boolean;
     show_checkboxes: boolean;
+    show_network: boolean;
 }
 
 export const useRustConfig = () => {

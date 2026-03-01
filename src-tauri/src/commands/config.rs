@@ -33,6 +33,7 @@ pub fn set_config_value(
         "default_turbo_mode" => config.default_turbo_mode = value.parse().unwrap_or(false),
         "show_grid_thumbnails" => config.show_grid_thumbnails = value.parse().unwrap_or(true),
         "show_checkboxes" => config.show_checkboxes = value.parse().unwrap_or(false),
+        "show_network" => config.show_network = value.parse().unwrap_or(true),
         _ => return Err(CommandError::Other(format!("Unknown config key: {}", key))),
     }
 

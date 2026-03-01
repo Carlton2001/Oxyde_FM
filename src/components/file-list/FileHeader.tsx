@@ -1,7 +1,7 @@
 import React from 'react';
 import cx from 'classnames';
 import { ChevronUp, ChevronDown, Filter } from 'lucide-react';
-import { FileEntry, ViewMode, DateFormat, ColumnWidths, SortConfig, SortField } from '../../types';
+import { FileEntry, ViewMode, ColumnWidths, SortConfig, SortField } from '../../types';
 import { ResizeHandle } from './ResizeHandle';
 import { TFunc } from '../../i18n';
 import { getColumnMode, getVisibleColumns, getColumnLabel, getColumnSortField } from '../../config/columnDefinitions';
@@ -91,7 +91,7 @@ export const FileHeader: React.FC<FileHeaderProps> = React.memo(({
                             <div
                                 key={col.key}
                                 className={cx("col", `col-${col.key}`, { "col-name": isName })}
-                                onClick={(e) => {
+                                onClick={() => {
                                     if (isName) return;
                                     onSort(sField);
                                 }}

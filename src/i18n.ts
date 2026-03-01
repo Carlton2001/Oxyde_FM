@@ -48,6 +48,7 @@ export const translations = {
         show_previews: 'Media previews',
         show_grid_thumbnails: 'Image thumbnails (Grid)',
         show_checkboxes: 'Selection checkboxes',
+        show_network: 'Network discovery (Network Vicinity)',
 
         // Header
         name: 'Name',
@@ -420,6 +421,7 @@ export const translations = {
         error_empty_path: 'The folder path is required.',
         map_network_drive_success: 'Network drive mapped successfully!',
         disconnect_network_drive_success: 'Network drive disconnected successfully!',
+        disconnect_network_drive_force_msg: 'There are open files on this connection. Do you want to force disconnection anyway?',
     },
     fr: {
         // Settings
@@ -468,6 +470,7 @@ export const translations = {
         show_previews: 'Aperçus médias',
         show_grid_thumbnails: 'Miniatures images (Grille)',
         show_checkboxes: 'Cases à cocher de sélection',
+        show_network: 'Voisinage réseau',
 
         // Header
         name: 'Nom',
@@ -840,6 +843,7 @@ export const translations = {
         error_empty_path: 'Le chemin du dossier est requis.',
         map_network_drive_success: 'Lecteur réseau connecté avec succès !',
         disconnect_network_drive_success: 'Lecteur réseau déconnecté avec succès !',
+        disconnect_network_drive_force_msg: 'Des fichiers sont ouverts sur cette connexion. Voulez-vous forcer la déconnexion malgré tout ?',
     }
 };
 

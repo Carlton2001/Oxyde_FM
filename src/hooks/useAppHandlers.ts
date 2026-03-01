@@ -421,14 +421,35 @@ export const useAppHandlers = ({
     }, [notify, t]);
 
     const handleDisconnectDrive = useCallback(async (path: string) => {
+        const cleanLetter = path.replace(/[\\/]+$/, '');
         try {
-            await invoke('disconnect_network_drive', { letter: path, force: false });
+            await invoke('disconnect_network_drive', { letter: cleanLetter, force: false });
             notify(t('disconnect_network_drive_success' as any), 'success');
             refreshDrives();
-        } catch (e) {
-            notify(`${t('error')}: ${formatCommandError(e)}`, 'error');
+        } catch (e: any) {
+            const errorStr = e.toString();
+            if (errorStr.includes('2401')) {
+                // ERROR_OPEN_FILES (2401) - Ask for forced disconnection
+                const confirmed = await dialogs.confirm(
+                    t('disconnect_network_drive_force_msg' as any) || "There are open files on this connection. Do you want to force disconnection anyway?",
+                    t('disconnect_network_drive' as any),
+                    true // isDanger
+                );
+
+                if (confirmed) {
+                    try {
+                        await invoke('disconnect_network_drive', { letter: cleanLetter, force: true });
+                        notify(t('disconnect_network_drive_success' as any), 'success');
+                        refreshDrives();
+                    } catch (err) {
+                        notify(`${t('error')}: ${formatCommandError(err)}`, 'error');
+                    }
+                }
+            } else {
+                notify(`${t('error')}: ${formatCommandError(e)}`, 'error');
+            }
         }
-    }, [notify, t, refreshDrives]);
+    }, [notify, t, refreshDrives, dialogs]);
 
     const handleContextMenu = useCallback((e: React.MouseEvent, id: PanelId, entry?: FileEntry) => {
         e.preventDefault();

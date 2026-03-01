@@ -72,7 +72,7 @@ export interface ContextMenuProps {
 
 
 export const ContextMenu: React.FC<ContextMenuProps> = (props) => {
-    const { mountedImages } = useApp();
+    const { mountedImages, showNetwork } = useApp();
     const { openMapNetworkDriveDialog, openDisconnectNetworkDriveDialog } = useDialogs();
 
     // Memoize the context and items generation to avoid recalculations if props haven't changed meaningfully
@@ -104,6 +104,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = (props) => {
         canRedo: props.canRedo,
         redoLabel: props.redoLabel,
         sortConfig: props.sortConfig,
+        showNetwork,
         t: props.t,
         onClose: props.onClose,
         actions: {
@@ -149,7 +150,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = (props) => {
         props.onOpenNewTab, props.onOpenFile, props.onExtract, props.onCompress, props.onMount, props.onUnmount,
         props.onAddToFavorites, props.onRemoveFromFavorites, props.onSort, props.onSortDirection, props.isShiftPressed, props.isFavorite, mountedImages,
         openMapNetworkDriveDialog, openDisconnectNetworkDriveDialog,
-        props.isInputContext, props.isTextSelected, props.onSelectAll
+        props.isInputContext, props.isTextSelected, props.onSelectAll, showNetwork
     ]);
 
     const items = useMemo(() => getMenuItems(menuContext), [menuContext]);
