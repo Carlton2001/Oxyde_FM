@@ -525,7 +525,7 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
         const isExpanded = expandedPaths.has(node.path.toLowerCase());
         const isActive = currentPath.toLowerCase() === node.path.toLowerCase();
         const isDragOver = dragOverNode === node.path;
-        const isRootDrive = !!node.driveType || !!node.isTrash;
+        const isRootDrive = !!node.driveType || !!node.isTrash || !!node.isNetworkRoot;
 
         const children = treeData.get(node.path);
         const visibleChildren = children?.filter(c => {
@@ -630,7 +630,7 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
                         rowHeight={(index: number) => {
                             const vn = visibleNodes[index];
                             if (vn?.node.isSpacer) return 13;
-                            if (vn?.node.driveType || vn?.node.isTrash) return 34;
+                            if (vn?.node.driveType || vn?.node.isTrash || vn?.node.isNetworkRoot) return 34;
                             return 28;
                         }}
                         className="virtual-tree-list"

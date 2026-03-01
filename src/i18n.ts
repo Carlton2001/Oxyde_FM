@@ -60,7 +60,7 @@ export const translations = {
         local_disk: 'Local Disk',
         disk_drive: 'Disk Drive',
         network: 'Network',
-        network_vincinity: 'Network Neighborhood',
+        network_vincinity: 'Network',
 
         // Context Menu
         open: 'Open',
@@ -480,7 +480,7 @@ export const translations = {
         local_disk: 'Disque Local',
         disk_drive: 'Lecteur de Disque',
         network: 'Réseau',
-        network_vincinity: 'Voisinage Réseau',
+        network_vincinity: 'Réseau',
 
         // Context Menu
         open: 'Ouvrir',

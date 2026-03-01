@@ -134,6 +134,8 @@ pub fn run() {
             commands::clipboard::get_clipboard_files,
             commands::clipboard::set_clipboard_files,
             commands::clipboard::set_clipboard_from_trash,
+            commands::clipboard::get_clipboard_text,
+            commands::clipboard::set_clipboard_text,
             commands::io::calculate_folder_size,
             commands::system::set_webview_background,
             commands::system::show_native_context_menu,

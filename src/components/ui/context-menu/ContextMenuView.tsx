@@ -95,6 +95,7 @@ const ContextMenuItemRow: React.FC<ContextMenuItemProps> = ({ item, onClose }) =
             onClick={isSplit ? undefined : handleClick}
             onMouseEnter={handleMouseEnter}
             onMouseLeave={handleMouseLeave}
+            onMouseDown={(e) => e.preventDefault()}
         >
             {isSubmenu ? (
                 <>
@@ -233,6 +234,7 @@ const NativeMenuItemRow: React.FC<{ item: MenuItem; onClose: () => void }> = ({ 
             className="menu-item-with-submenu"
             onMouseEnter={() => setIsOpen(true)}
             onMouseLeave={() => setIsOpen(false)}
+            onMouseDown={(e) => e.preventDefault()}
         >
             <div className="menu-item-main">
                 {item.icon && <item.icon className="icon-md" />}
@@ -313,6 +315,7 @@ const RecursiveWinItem: React.FC<{ item: WinMenuItem, onExecute: (id: number) =>
                 className="menu-item-with-submenu"
                 onMouseEnter={() => setIsOpen(true)}
                 onMouseLeave={() => setIsOpen(false)}
+                onMouseDown={(e) => e.preventDefault()}
             >
                 <div className="menu-item-main">
                     {Icon ? <Icon className="icon-md" /> : <div className="icon-md" />}
@@ -342,7 +345,7 @@ const RecursiveWinItem: React.FC<{ item: WinMenuItem, onExecute: (id: number) =>
     const Icon = getNativeIcon(item.verb, item.label);
 
     return (
-        <div className="menu-item" onClick={(e) => { e.stopPropagation(); onExecute(item.id); }}>
+        <div className="menu-item" onClick={(e) => { e.stopPropagation(); onExecute(item.id); }} onMouseDown={(e) => e.preventDefault()}>
             {Icon ? <Icon className="icon-md" /> : <div className="icon-md" />}
             <span className="win-item-label">{item.label}</span>
         </div>
@@ -407,6 +410,7 @@ export const ContextMenuView: React.FC<ContextMenuViewProps> = ({ items, x, y, o
             }}
             onClick={(e) => e.stopPropagation()}
             onContextMenu={(e) => e.preventDefault()}
+            onMouseDown={(e) => e.preventDefault()}
         >
             {items.map((item, i) => (
                 <ContextMenuItemRow key={item.id || i} item={item} onClose={onClose} />

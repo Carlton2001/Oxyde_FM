@@ -7,7 +7,7 @@ use windows::Win32::System::DataExchange::{
     CloseClipboard, EmptyClipboard, GetClipboardData, OpenClipboard, SetClipboardData,
 };
 use windows::Win32::System::Memory::{GlobalAlloc, GlobalLock, GlobalUnlock, GMEM_MOVEABLE};
-use windows::Win32::System::Ole::CF_HDROP;
+use windows::Win32::System::Ole::{CF_HDROP, CF_UNICODETEXT};
 use windows::Win32::UI::Shell::{IShellItem, SHCreateItemFromParsingName, DROPFILES};
 use crate::models::CommandError;
 use crate::utils::path_security::validate_path;
@@ -206,6 +206,84 @@ pub fn set_clipboard_files(paths: Vec<String>, is_cut: bool) -> Result<(), Comma
     }
 
     Ok(())
+}
+
+#[command]
+pub fn get_clipboard_text() -> Result<String, CommandError> {
+    unsafe {
+        if OpenClipboard(None).is_err() {
+            return Err(CommandError::SystemError("Failed to open clipboard".to_string()));
+        }
+
+        let mut result = String::new();
+        if let Ok(handle) = GetClipboardData(CF_UNICODETEXT.0 as u32) {
+            if !handle.is_invalid() {
+                let ptr = GlobalLock(std::mem::transmute::<
+                    HANDLE,
+                    windows::Win32::Foundation::HGLOBAL,
+                >(handle));
+                
+                if !ptr.is_null() {
+                    let mut len = 0;
+                    let wide_ptr = ptr as *const u16;
+                    while *wide_ptr.add(len) != 0 {
+                        len += 1;
+                    }
+                    
+                    let slice = std::slice::from_raw_parts(wide_ptr, len);
+                    if let Ok(s) = String::from_utf16(slice) {
+                        result = s;
+                    }
+                    
+                    let _ = GlobalUnlock(std::mem::transmute::<
+                        HANDLE,
+                        windows::Win32::Foundation::HGLOBAL,
+                    >(handle));
+                }
+            }
+        }
+
+        let _ = CloseClipboard();
+        Ok(result)
+    }
+}
+
+#[command]
+pub fn set_clipboard_text(text: String) -> Result<(), CommandError> {
+    unsafe {
+        OpenClipboard(None).map_err(|e| CommandError::SystemError(format!("Failed to open clipboard: {:?}", e)))?;
+        
+        if EmptyClipboard().is_err() {
+            let _ = CloseClipboard();
+            return Err(CommandError::SystemError("Failed to empty clipboard".to_string()));
+        }
+
+        let wide_chars: Vec<u16> = text.encode_utf16().chain(std::iter::once(0)).collect();
+        let size = wide_chars.len() * 2;
+
+        let hglobal = GlobalAlloc(GMEM_MOVEABLE, size).map_err(|e| {
+            let _ = CloseClipboard();
+            CommandError::SystemError(format!("Failed to allocate memory: {:?}", e))
+        })?;
+
+        let ptr = GlobalLock(hglobal);
+        if ptr.is_null() {
+            let _ = CloseClipboard();
+            return Err(CommandError::SystemError("Failed to lock memory".to_string()));
+        }
+
+        std::ptr::copy_nonoverlapping(wide_chars.as_ptr(), ptr as *mut u16, wide_chars.len());
+        let _ = GlobalUnlock(hglobal);
+
+        let handle = HANDLE(hglobal.0);
+        SetClipboardData(CF_UNICODETEXT.0 as u32, Some(handle)).map_err(|e| {
+            let _ = CloseClipboard();
+            CommandError::SystemError(format!("Failed to set clipboard data: {:?}", e))
+        })?;
+
+        let _ = CloseClipboard();
+        Ok(())
+    }
 }
 
 /// Special cut operation for recycle bin items using Shell API

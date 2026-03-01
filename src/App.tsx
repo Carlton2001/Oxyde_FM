@@ -64,14 +64,22 @@ function App() {
   const { registerKeybinding } = useKeybindings();
 
   const clipboardObj = useClipboard();
-  const { clipboard, copy, cut, clearClipboard, copyToSystem, refreshClipboard } = clipboardObj;
+  const { clipboard, copy, cut, clearClipboard, copyToSystem, readTextFromSystem, refreshClipboard } = clipboardObj;
   const { tabs, activeTabId, setActiveTab, updateTabPath, addTab, closeTab } = useTabs();
   const dialogs = useDialogs();
   const { left, right, activePanelId, setActivePanelId } = usePanelContext();
   const fileOps = useFileOperations(notify, t as any);
   const { favorites } = useFavorites();
 
-  const [contextMenu, setContextMenu] = useState<{ x: number, y: number, target?: string, panelId: PanelId, isDir?: boolean, isBackground?: boolean, isDrive?: boolean, isMediaDevice?: boolean, isNetworkComputer?: boolean, hasWebPage?: boolean, driveType?: DriveInfo['drive_type'], isFavorite?: boolean, isTrash?: boolean } | null>(null);
+  const [contextMenu, setContextMenu] = useState<{
+    x: number, y: number, target?: string, panelId: PanelId,
+    isDir?: boolean, isBackground?: boolean, isDrive?: boolean,
+    isMediaDevice?: boolean, isNetworkComputer?: boolean,
+    hasWebPage?: boolean, driveType?: DriveInfo['drive_type'],
+    isFavorite?: boolean, isTrash?: boolean,
+    isInputContext?: boolean, isTextSelected?: boolean
+  } | null>(null);
+  const activeInputRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
   const [sidebarReduced, setSidebarReduced] = useState(() => localStorage.getItem('sidebarReduced') === 'true');
   useEffect(() => {
     localStorage.setItem('sidebarReduced', sidebarReduced.toString());
@@ -137,13 +145,37 @@ function App() {
       });
     };
     const handleBlur = () => setModifiers({ shift: false, ctrl: false, alt: false });
+
+    const handleGlobalContextMenu = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const input = target as HTMLInputElement | HTMLTextAreaElement;
+        activeInputRef.current = input;
+
+        const isSelected = (input.selectionEnd || 0) - (input.selectionStart || 0) > 0;
+
+        setContextMenu({
+          x: e.clientX,
+          y: e.clientY,
+          panelId: activePanelId,
+          isInputContext: true,
+          isTextSelected: isSelected
+        });
+      }
+    };
+
     window.addEventListener('keydown', handleKey, true);
     window.addEventListener('keyup', handleKey, true);
     window.addEventListener('blur', handleBlur);
+    window.addEventListener('contextmenu', handleGlobalContextMenu, true);
     return () => {
       window.removeEventListener('keydown', handleKey, true);
       window.removeEventListener('keyup', handleKey, true);
       window.removeEventListener('blur', handleBlur);
+      window.removeEventListener('contextmenu', handleGlobalContextMenu, true);
     };
   }, []);
 
@@ -268,6 +300,57 @@ function App() {
       unlistenOp.then(fn => fn());
     };
   }, []);
+
+  const handleInputPaste = async () => {
+    if (!activeInputRef.current) return;
+    try {
+      const text = await readTextFromSystem();
+      const input = activeInputRef.current;
+      const start = input.selectionStart || 0;
+      const end = input.selectionEnd || 0;
+      const val = input.value;
+      input.value = val.substring(0, start) + text + val.substring(end);
+      input.selectionStart = input.selectionEnd = start + text.length;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.focus();
+    } catch (err) {
+      console.error('Failed to paste from clipboard:', err);
+    }
+    setContextMenu(null);
+  };
+
+  const handleInputCut = () => {
+    if (!activeInputRef.current) return;
+    const input = activeInputRef.current;
+    const start = input.selectionStart || 0;
+    const end = input.selectionEnd || 0;
+    const text = input.value.substring(start, end);
+    if (text) {
+      copyToSystem(text);
+      input.value = input.value.substring(0, start) + input.value.substring(end);
+      input.selectionStart = input.selectionEnd = start;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.focus();
+    }
+    setContextMenu(null);
+  };
+
+  const handleInputCopy = () => {
+    if (!activeInputRef.current) return;
+    const input = activeInputRef.current;
+    const start = input.selectionStart || 0;
+    const end = input.selectionEnd || 0;
+    const text = input.value.substring(start, end);
+    if (text) copyToSystem(text);
+    setContextMenu(null);
+  };
+
+  const handleInputSelectAll = () => {
+    if (!activeInputRef.current) return;
+    activeInputRef.current.select();
+    activeInputRef.current.focus();
+    setContextMenu(null);
+  };
 
   // 3. Lazy Update Check (30s after startup) - Only once per session
   const hasCheckedUpdate = useRef(false);
@@ -440,13 +523,17 @@ function App() {
           onSort={(f) => handleSort(activePanelId, f)}
           onSortDirection={(d) => handleSortDirection(activePanelId, d)}
           onClose={() => setContextMenu(null)} onRefresh={refreshBothPanels} onUndo={handleUndo} onRedo={handleRedo}
-          onCopy={() => handleAction('file.copy', actionContext)} onCut={() => handleAction('file.cut', actionContext)}
-          onPaste={() => handleAction('file.paste', actionContext)}
           onDelete={() => handleAction('file.delete', actionContext)}
           isShiftPressed={modifiers.shift}
           onRename={() => handleAction('file.rename', actionContext)} onProperties={() => handleAction('file.properties', actionContext)}
           onNewFolder={() => handleAction('file.new_folder', actionContext)} onCopyName={() => handleAction('file.copy_name', actionContext)}
           onCopyPath={() => handleAction('file.copy_path', actionContext)} t={t}
+          isInputContext={contextMenu.isInputContext}
+          isTextSelected={contextMenu.isTextSelected}
+          onSelectAll={handleInputSelectAll}
+          onCopy={contextMenu.isInputContext ? handleInputCopy : () => handleAction('file.copy', actionContext)}
+          onCut={contextMenu.isInputContext ? handleInputCut : () => handleAction('file.cut', actionContext)}
+          onPaste={contextMenu.isInputContext ? handleInputPaste : () => handleAction('file.paste', actionContext)}
           isTrashContext={contextMenu.isTrash || (contextMenu.target === 'trash://')}
           isSearchContext={contextMenu.panelId === 'left' ? left.path.startsWith('search://') : right.path.startsWith('search://')}
           onRestore={handleRestoreSelected} onGoToFolder={handleGoToFolder}

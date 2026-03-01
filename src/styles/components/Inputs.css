@@ -1,9 +1,16 @@
 /* Universal Inputs System */
 
+input,
+textarea,
+[contenteditable="true"] {
+    user-select: text;
+}
+
 /* Base Text Input and Textarea */
 .input-field {
     width: 100%;
-    padding: 0.375rem 0.5rem;
+    padding: 0.4375rem 0.75rem;
+    min-width: 0;
     border-radius: 0.25rem;
     font-size: 0.8125rem;
     background: var(--surface-primary);

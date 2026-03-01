@@ -65,6 +65,9 @@ export interface ContextMenuProps {
     sortConfig?: SortConfig;
     onSort?: (field: SortField) => void;
     onSortDirection?: (direction: SortDirection) => void;
+    isInputContext?: boolean;
+    isTextSelected?: boolean;
+    onSelectAll?: () => void;
 }
 
 
@@ -93,6 +96,8 @@ export const ContextMenu: React.FC<ContextMenuProps> = (props) => {
         isShiftPressed: props.isShiftPressed,
         isFavorite: props.isFavorite,
         isImageMounted: props.target ? mountedImages.some(img => img.toLowerCase().replace(/\\/g, '/') === props.target!.toLowerCase().replace(/\\/g, '/')) : false,
+        isInputContext: props.isInputContext,
+        isTextSelected: props.isTextSelected,
 
         canUndo: props.canUndo,
         undoLabel: props.undoLabel,
@@ -131,7 +136,8 @@ export const ContextMenu: React.FC<ContextMenuProps> = (props) => {
             onDisconnectDrive: props.onDisconnectDrive,
             onEmptyTrash: props.onEmptyTrash,
             openMapNetworkDriveDialog,
-            openDisconnectNetworkDriveDialog
+            openDisconnectNetworkDriveDialog,
+            onSelectAll: props.onSelectAll
         }
     }), [
         props.target, props.isDir, props.isTreeContext, props.isTrashContext,
@@ -142,7 +148,8 @@ export const ContextMenu: React.FC<ContextMenuProps> = (props) => {
         props.onCopyName, props.onCopyPath, props.onGoToFolder, props.onRestore, props.onExpandAll, props.onCollapseAll,
         props.onOpenNewTab, props.onOpenFile, props.onExtract, props.onCompress, props.onMount, props.onUnmount,
         props.onAddToFavorites, props.onRemoveFromFavorites, props.onSort, props.onSortDirection, props.isShiftPressed, props.isFavorite, mountedImages,
-        openMapNetworkDriveDialog, openDisconnectNetworkDriveDialog
+        openMapNetworkDriveDialog, openDisconnectNetworkDriveDialog,
+        props.isInputContext, props.isTextSelected, props.onSelectAll
     ]);
 
     const items = useMemo(() => getMenuItems(menuContext), [menuContext]);

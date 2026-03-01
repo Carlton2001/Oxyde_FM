@@ -64,7 +64,7 @@ export const useClipboard = () => {
 
     const copyToSystem = useCallback(async (text: string) => {
         try {
-            await navigator.clipboard.writeText(text);
+            await invoke('set_clipboard_text', { text });
             return true;
         } catch (error) {
             console.error('Failed to copy text to system clipboard:', error);
@@ -72,5 +72,14 @@ export const useClipboard = () => {
         }
     }, []);
 
-    return { clipboard, copy, cut, clearClipboard, copyToSystem, refreshClipboard };
+    const readTextFromSystem = useCallback(async () => {
+        try {
+            return await invoke<string>('get_clipboard_text');
+        } catch (error) {
+            console.error('Failed to read text from system clipboard:', error);
+            return '';
+        }
+    }, []);
+
+    return { clipboard, copy, cut, clearClipboard, copyToSystem, readTextFromSystem, refreshClipboard };
 };

@@ -49,6 +49,8 @@ export interface MenuContext {
     isShiftPressed?: boolean;
     isFavorite?: boolean;
     isImageMounted?: boolean;
+    isInputContext?: boolean;
+    isTextSelected?: boolean;
 
     canUndo: boolean;
     undoLabel?: string;
@@ -91,14 +93,52 @@ export interface MenuContext {
         onEmptyTrash?: () => void;
         openMapNetworkDriveDialog?: () => void;
         openDisconnectNetworkDriveDialog?: () => void;
+        onSelectAll?: () => void;
     }
 }
 
 const BlankIcon = () => <div className="icon-md" style={{ width: '1rem', height: '1rem' }} />;
 
 export function getMenuItems(ctx: MenuContext): MenuItem[] {
-    const { target, isDir, isTreeContext, isTrashContext, isBackground, isDrive, canPaste, canUndo, undoLabel, canRedo, redoLabel, t, actions, isShiftPressed } = ctx;
+    const { target, isDir, isTreeContext, isTrashContext, isBackground, isDrive, canPaste, canUndo, undoLabel, canRedo, redoLabel, t, actions, isShiftPressed, isInputContext, isTextSelected } = ctx;
     const items: MenuItem[] = [];
+
+    // --- Special Context: Input fields ---
+    if (isInputContext) {
+        items.push({
+            id: 'cut',
+            type: 'action',
+            label: t('cut'),
+            icon: Scissors,
+            action: () => actions.onCut(),
+            disabled: !isTextSelected
+        });
+        items.push({
+            id: 'copy',
+            type: 'action',
+            label: t('copy'),
+            icon: Copy,
+            action: () => actions.onCopy(),
+            disabled: !isTextSelected
+        });
+        items.push({
+            id: 'paste',
+            type: 'action',
+            label: t('paste'),
+            icon: ClipboardPaste,
+            action: () => actions.onPaste()
+        });
+        items.push({ id: 'sep_input_1', type: 'separator' });
+        items.push({
+            id: 'select_all',
+            type: 'action',
+            label: t('select_all' as any) || 'Select All',
+            icon: BlankIcon,
+            action: () => actions.onSelectAll?.()
+        });
+
+        return items;
+    }
 
     // --- Special Context: Voisinage Réseau ---
     if (target === '__network_vincinity__') {
