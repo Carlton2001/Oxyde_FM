@@ -12,6 +12,7 @@ import { formatSize, formatDate, getFileTypeString } from '../utils/format';
 import { getParent } from '../utils/path';
 import { useApp } from '../context/AppContext';
 import { TFunc } from '../i18n';
+import { calculateIdealFlexWidth } from '../config/columnDefinitions';
 
 interface AutoFitOptions {
     panelRef: React.RefObject<HTMLDivElement | null>;
@@ -160,36 +161,37 @@ export const useAutoFitColumns = ({
             // 5. Batch Apply (Proportional Fit)
             // ---------------------------------------------------------
             const panelWidth = panelRef.current.clientWidth;
-            const availableWidth = panelWidth - 30;
 
             const fixedSum = maxType + maxSize + maxDate + (isTrashView ? Math.max(maxDeletedDate, Math.ceil(maxDeletedDateText + COL_PADDING)) : 0);
-            let remaining = Math.max(0, availableWidth - fixedSum);
 
             const updates: Partial<ColumnWidths> = {
                 type: maxType,
                 size: maxSize,
                 date: maxDate
             };
+
             if (isTrashView) {
                 updates.deletedDate = Math.max(maxDeletedDate, Math.ceil(maxDeletedDateText + COL_PADDING));
             }
 
             if (searchResults || isTrashView) {
+                const availableForDual = panelWidth - fixedSum - 32;
                 const totalDesired = maxName + maxLocation;
 
-                if (remaining < 200) {
-                    updates.name = Math.max(100, remaining * 0.6);
-                    updates.location = Math.max(50, remaining - (updates.name as number));
-                } else if (remaining >= totalDesired) {
-                    updates.name = remaining - maxLocation;
+                if (availableForDual < 200) {
+                    updates.name = Math.max(100, availableForDual * 0.6);
+                    updates.location = Math.max(50, availableForDual - (updates.name as number));
+                } else if (availableForDual >= totalDesired) {
+                    updates.name = availableForDual - maxLocation;
                     updates.location = maxLocation;
                 } else {
                     const nameRatio = maxName / totalDesired;
-                    updates.name = Math.floor(remaining * nameRatio);
-                    updates.location = remaining - (updates.name as number);
+                    updates.name = Math.floor(availableForDual * nameRatio);
+                    updates.location = availableForDual - (updates.name as number);
                 }
             } else {
-                updates.name = Math.min(maxName, remaining);
+                // Shared Intelligent Fill Logic
+                updates.name = calculateIdealFlexWidth(panelWidth, fixedSum);
             }
 
             if (onResizeMultiple) {

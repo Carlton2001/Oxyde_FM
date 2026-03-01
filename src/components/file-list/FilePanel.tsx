@@ -20,7 +20,7 @@ import { NameFilterMenu } from './NameFilterMenu';
 import { LocationFilterMenu } from './LocationFilterMenu';
 import { useApp } from '../../context/AppContext';
 import { useFileStats } from '../../hooks/useFileStats';
-import { getVisibleColumns, getColumnMode, buildGridTemplate, getOtherColumnsWidthSum, getFlexibleColumn } from '../../config/columnDefinitions';
+import { getVisibleColumns, getColumnMode, buildGridTemplate, getOtherColumnsWidthSum, getFlexibleColumn, calculateIdealFlexWidth } from '../../config/columnDefinitions';
 import './FilePanel.css';
 
 interface FilePanelProps {
@@ -137,9 +137,7 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
             flexCol.key
         );
 
-        // Technical overhead (1.25rem = 20px) + Safety Margin (0.75rem = 12px) = 32px
-        const totalReserved = otherColsSum + 32;
-        const idealWidth = Math.max(flexCol.minWidth, currentPanelWidth - totalReserved);
+        const idealWidth = calculateIdealFlexWidth(currentPanelWidth, otherColsSum, flexCol.minWidth);
 
         // Prevent unnecessary state updates if the change is negligible
         const currentFlexWidth = colWidthsRef.current[flexCol.key as keyof ColumnWidths] || flexCol.defaultWidth;

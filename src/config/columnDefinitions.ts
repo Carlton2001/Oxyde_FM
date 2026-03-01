@@ -223,6 +223,15 @@ export function getFlexibleColumn(visibleColumns: ColumnDef[]): ColumnDef | unde
 }
 
 /**
+ * Calculates the ideal width for the flexible column to fill the panel.
+ * Uses the 32px total reserved space (20px overhead + 12px safety).
+ */
+export function calculateIdealFlexWidth(panelWidth: number, otherColsSum: number, minWidth = 100): number {
+    const totalReserved = otherColsSum + 32;
+    return Math.max(minWidth, panelWidth - totalReserved);
+}
+
+/**
  * Generates a CSS grid-template-columns string from column widths and visible columns.
  * The first column (name) with `flex: true` uses its width but will be treated as the flexible column.
  */
