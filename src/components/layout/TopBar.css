@@ -211,7 +211,7 @@
 }
 
 .hamburger-item svg {
-    color: var(--text-muted);
+    color: var(--text-color);
     width: 14px;
     height: 14px;
 }
@@ -229,13 +229,57 @@
     top: 100%;
     left: 0;
     margin-top: 0.5rem;
+    display: flex;
+    /* Support side-by-side menus */
+    align-items: flex-start;
+    z-index: var(--z-menu);
+    pointer-events: auto;
+}
+
+.settings-main-panel {
     padding: 0.5rem;
     min-width: 18rem;
     background: var(--menu-bg);
     border: 1px solid var(--menu-border);
     border-radius: 0.5rem;
     box-shadow: var(--menu-shadow);
-    z-index: var(--z-menu);
+    flex-shrink: 0;
+    position: relative;
+    z-index: 1;
+    color: var(--text-color);
+    /* Correct color inheritance */
+}
+
+.settings-submenu {
+    position: absolute;
+    left: 100%;
+    /* Float to the right of parent */
+    top: -0.5rem;
+    /* Re-align with top of item, offset by menu padding */
+    margin-left: 0.25rem;
+    padding: 0.5rem;
+    min-width: 15rem;
+    background: var(--menu-bg);
+    border: 1px solid var(--menu-border);
+    border-radius: 0.5rem;
+    box-shadow: var(--menu-shadow), 0 10px 25px rgba(0, 0, 0, 0.15);
+    animation: submenuFadeIn 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+    z-index: 100;
+
+    /* CRITICAL: Reset color inheritance from active parent item */
+    color: var(--text-color) !important;
+}
+
+@keyframes submenuFadeIn {
+    from {
+        opacity: 0;
+        transform: translateX(-10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
 }
 
 .settings-columns {
@@ -255,6 +299,8 @@
     border-left: 1px solid var(--border-color);
 }
 
+/* --- SETTINGS MENU SYSTEM (CLEAN STATES) --- */
+
 .settings-item {
     display: flex;
     align-items: center;
@@ -265,39 +311,63 @@
     line-height: 1.2;
     min-height: 2.25rem;
     margin-bottom: 2px;
-}
-
-.settings-item:hover {
-    background-color: var(--hover-color);
-}
-
-.settings-item.no-hover:hover {
-    background-color: transparent;
+    position: relative;
     cursor: default;
+    transition: background-color 0.1s;
+    user-select: none;
+
+    /* 1. NORMAL STATE */
+    background-color: transparent !important;
+    color: var(--text-color) !important;
 }
 
+.settings-item svg {
+    color: inherit !important;
+    stroke: currentColor !important;
+    opacity: 1 !important;
+    flex-shrink: 0;
+}
+
+/* 2. HOVER STATE */
+.settings-item:hover:not(.no-hover):not(.active) {
+    background-color: var(--hover-color) !important;
+    color: var(--text-color) !important;
+}
+
+/* 3. SELECTED / ACTIVE STATE */
 .settings-item.active {
-    background-color: var(--accent-color);
-    color: var(--selected-text);
+    background-color: var(--accent-color) !important;
+    color: var(--selected-text) !important;
 }
 
-.settings-item-content {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
+/* --- LAYOUT UTILITIES --- */
+
+.settings-item-text {
     flex: 1;
-    min-width: 0;
-}
-
-.settings-item-content span {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    font-weight: 500;
+}
+
+.settings-item-icon-left {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.25rem;
+    height: 1.25rem;
+    flex-shrink: 0;
 }
 
 .settings-item-icon-right {
-    opacity: 0.5;
+    opacity: 0.7;
     flex-shrink: 0;
+    margin-left: 0.5rem;
+}
+
+.settings-item.active .settings-item-icon-right {
+    opacity: 1;
+    color: inherit !important;
 }
 
 .settings-item-text {
@@ -305,6 +375,7 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    font-weight: 500;
 }
 
 .settings-item-back {
@@ -361,16 +432,20 @@
 }
 
 .settings-label {
-    padding: 0.25rem 0.875rem;
+    padding: 0.675rem 0.875rem 0.25rem;
     font-size: 0.6875rem;
+    font-weight: 700;
+    color: var(--text-color);
     opacity: 0.6;
     text-transform: uppercase;
+    letter-spacing: 0.02em;
 }
 
 .settings-sub-label {
-    padding: 2px 0.875rem;
+    padding: 0.5rem 0.875rem 0.25rem;
     font-size: 0.65rem;
-    opacity: 0.4;
+    color: var(--text-color);
+    opacity: 0.5;
     font-weight: 700;
 }
 

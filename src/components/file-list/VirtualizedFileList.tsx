@@ -243,9 +243,9 @@ const GridCell = React.memo((props: CellComponentProps<SharedItemProps>) => {
                 )}
             </div>
             {showCheckboxes && (
-                <div className="item-checkbox" onClick={handlers.onCheckboxClick}>
+                <div className="item-checkbox grid-checkbox" onClick={handlers.onCheckboxClick}>
                     <div className={cx("checkbox-indicator", { checked: isSelected })}>
-                        {isSelected && <Check size={10} strokeWidth={4} />}
+                        {isSelected && <Check size={12} strokeWidth={3.5} />}
                     </div>
                 </div>
             )}

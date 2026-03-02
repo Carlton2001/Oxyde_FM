@@ -188,6 +188,9 @@ pub fn run() {
             commands::network::disconnect_network_drive,
         ])
         .setup(|app| {
+            // Run directory and file migration if needed (com.oxyde.app -> com.oxyde.desktop)
+            systems::migration::run_migration(app.handle());
+
             use tauri::Manager;
             let config_manager = app.state::<models::ConfigManager>();
             if let Err(e) = config_manager.load(app.handle()) {

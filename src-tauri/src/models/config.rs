@@ -10,22 +10,39 @@ use crate::models::CommandError;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
+    #[serde(default)]
     pub theme: String,
+    #[serde(default)]
     pub language: String,
+    #[serde(default)]
     pub layout: String,
+    #[serde(default)]
     pub show_hidden: bool,
+    #[serde(default)]
     pub show_system: bool,
+    #[serde(default)]
     pub use_system_icons: bool,
+    #[serde(default)]
     pub date_format: String,
+    #[serde(default)]
     pub show_previews: bool,
+    #[serde(default)]
     pub zip_quality: String,
+    #[serde(default)]
     pub seven_zip_quality: String,
+    #[serde(default)]
     pub zstd_quality: String,
+    #[serde(default)]
     pub font_size: u32,
+    #[serde(default)]
     pub search_limit: u32,
+    #[serde(default)]
     pub default_turbo_mode: bool,
+    #[serde(default)]
     pub show_grid_thumbnails: bool,
+    #[serde(default)]
     pub show_checkboxes: bool,
+    #[serde(default)]
     pub show_network: bool,
 }
 

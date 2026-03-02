@@ -207,7 +207,7 @@ impl Default for SessionManager {
 impl SessionManager {
     pub fn save(&self, app_handle: &AppHandle) -> Result<(), CommandError> {
         let session = self.0.lock().map_err(|_| CommandError::SystemError("Failed to lock session state".to_string()))?;
-        let config_dir = app_handle.path().app_config_dir().map_err(|e: tauri::Error| CommandError::IoError(e.to_string()))?;
+        let config_dir = app_handle.path().app_local_data_dir().map_err(|e: tauri::Error| CommandError::IoError(e.to_string()))?;
         
         if !config_dir.exists() {
             fs::create_dir_all(&config_dir).map_err(|e| CommandError::IoError(e.to_string()))?;
@@ -221,7 +221,7 @@ impl SessionManager {
     }
 
     pub fn load(&self, app_handle: &AppHandle) -> Result<(), CommandError> {
-        let config_dir = app_handle.path().app_config_dir().map_err(|e: tauri::Error| CommandError::IoError(e.to_string()))?;
+        let config_dir = app_handle.path().app_local_data_dir().map_err(|e: tauri::Error| CommandError::IoError(e.to_string()))?;
         let session_path = config_dir.join("session.json");
 
         if session_path.exists() {

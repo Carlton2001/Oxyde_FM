@@ -313,37 +313,58 @@
     padding-bottom: 0.5rem;
 }
 
+/* Grid View Selection Styles (Modernized) */
 .file-list.grid .file-item,
 .virtualized-list.grid .file-item {
     flex-direction: column;
-    justify-content: center;
+    justify-content: flex-start;
+    align-items: center;
     text-align: center;
-    padding: 0.4rem;
+    padding: 0.75rem 0.5rem 0.5rem 0.5rem;
     height: 100%;
     width: 100%;
     min-width: 0;
     border: 1px solid transparent;
-    border-radius: 0.5rem;
-    /* Smoother corners for grid items */
+    border-radius: 0.625rem;
+    /* Rounder for premium feel */
     position: relative;
     overflow: visible;
-    transition: background-color 0.15s, border-color 0.15s;
+    transition: background-color 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+        border-color 0.15s ease-out,
+        transform 0.1s ease-out;
+    user-select: none;
+    -webkit-user-drag: none;
+    cursor: default;
+    background-clip: padding-box;
 }
 
-/* Specific Selection for Grid */
+.file-list.grid .file-item:hover,
+.virtualized-list.grid .file-item:hover {
+    background-color: var(--hover-color);
+    transform: translateY(-1px);
+}
+
 .panel.active .file-list.grid .file-item.selected,
 .panel.active .virtualized-list.grid .file-item.selected {
     background-color: color-mix(in srgb, var(--accent-color), transparent 85%);
     border-color: var(--accent-color);
-    box-shadow: none;
-    /* Remove the left indicator from detail view */
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    /* Soft shadow for elevation */
 }
 
 .panel:not(.active) .file-list.grid .file-item.selected,
 .panel:not(.active) .virtualized-list.grid .file-item.selected {
     background-color: color-mix(in srgb, var(--accent-color), transparent 94%);
     border-color: color-mix(in srgb, var(--accent-color), transparent 60%);
-    box-shadow: none;
+}
+
+.grid-selection-overlay {
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    z-index: 0;
+    /* This can be used for secondary selection effects later */
 }
 
 
@@ -962,19 +983,38 @@
     /* For the Check icon */
 }
 
-/* Grid checkbox positioning */
+/* Grid checkbox positioning & premium styling */
 .grid-checkbox {
     position: absolute;
-    top: 0.25rem;
-    left: 0.25rem;
+    top: 0.375rem;
+    left: 0.375rem;
     width: auto;
     height: auto;
     opacity: 0;
-    transition: opacity 0.15s ease;
-    z-index: 5;
+    transition: opacity 0.15s ease-out, transform 0.1s ease-out;
+    z-index: 10;
+    padding: 0;
+    background: transparent;
+    scale: 0.9;
 }
 
-.file-item:hover .grid-checkbox,
-.file-item.selected .grid-checkbox {
+.file-item.grid:hover .grid-checkbox,
+.file-item.grid.selected .grid-checkbox {
     opacity: 1;
+    scale: 1;
+}
+
+.grid-checkbox .checkbox-indicator {
+    width: 1.125rem;
+    height: 1.125rem;
+    border: 1.5px solid var(--border-color);
+    background-color: var(--surface-primary);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    transform: none;
+    /* Reset detail-view specific offset */
+}
+
+.grid-checkbox .checkbox-indicator.checked {
+    background-color: var(--accent-color);
+    border-color: var(--accent-color);
 }
