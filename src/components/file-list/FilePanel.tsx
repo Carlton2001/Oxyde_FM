@@ -561,6 +561,7 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
                         isDateFiltered={dateFilter !== null}
                         t={t}
                         panelRef={panelRef}
+                        selected={selected}
                     />
                 </div>
 

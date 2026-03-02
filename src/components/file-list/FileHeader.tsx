@@ -1,10 +1,11 @@
 import React from 'react';
 import cx from 'classnames';
-import { ChevronUp, ChevronDown, Filter } from 'lucide-react';
+import { ChevronUp, ChevronDown, Filter, Check } from 'lucide-react';
 import { FileEntry, ViewMode, ColumnWidths, SortConfig, SortField } from '../../types';
 import { ResizeHandle } from './ResizeHandle';
 import { TFunc } from '../../i18n';
 import { getColumnMode, getVisibleColumns, getColumnLabel, getColumnSortField } from '../../config/columnDefinitions';
+import { useApp } from '../../context/AppContext';
 
 interface FileHeaderProps {
     viewMode: ViewMode;
@@ -28,6 +29,7 @@ interface FileHeaderProps {
     isDeletedDateFiltered?: boolean;
     t: TFunc;
     panelRef: React.RefObject<HTMLDivElement | null>;
+    selected: Set<string>;
 }
 
 export const FileHeader: React.FC<FileHeaderProps> = React.memo(({
@@ -50,8 +52,10 @@ export const FileHeader: React.FC<FileHeaderProps> = React.memo(({
     isDeletedDateFiltered,
     t,
     panelRef,
-    onSelectAll
+    onSelectAll,
+    selected
 }) => {
+    const { showCheckboxes } = useApp();
     const SortIcon = ({ field }: { field: SortField }) => {
         if (sortConfig.field !== field) return null;
         return sortConfig.direction === 'asc'
@@ -65,14 +69,28 @@ export const FileHeader: React.FC<FileHeaderProps> = React.memo(({
     return (
         <>
             <div
-                className="header-selection-gutter"
+                className={cx("header-selection-gutter", { "with-checkbox": showCheckboxes })}
                 onClick={onSelectAll}
-                data-tooltip={t('select_all')}
+                data-tooltip={t(finalFiles.length > 0 && finalFiles.every(f => selected.has(f.path)) ? 'deselect_all' as any : 'select_all')}
                 data-tooltip-pos="right"
-            />
+            >
+                {showCheckboxes && (
+                    <div className="item-checkbox">
+                        <div className={cx("checkbox-indicator", {
+                            checked: finalFiles.length > 0 && finalFiles.every(f => selected.has(f.path)),
+                            indeterminate: finalFiles.some(f => selected.has(f.path)) && !finalFiles.every(f => selected.has(f.path))
+                        })}>
+                            {finalFiles.length > 0 && finalFiles.every(f => selected.has(f.path)) && <Check size={10} strokeWidth={4} />}
+                            {finalFiles.some(f => selected.has(f.path)) && !finalFiles.every(f => selected.has(f.path)) && (
+                                <div style={{ width: '6px', height: '2px', backgroundColor: 'var(--accent-color)', borderRadius: '1px' }} />
+                            )}
+                        </div>
+                    </div>
+                )}
+            </div>
 
             {viewMode === 'details' && (
-                <div className="file-header" onClick={onSelectAll}>
+                <div className="file-header">
                     {visibleCols.map(col => {
                         const sField = getColumnSortField(col, mode);
                         const label = t(getColumnLabel(col, mode) as any);
@@ -91,7 +109,8 @@ export const FileHeader: React.FC<FileHeaderProps> = React.memo(({
                             <div
                                 key={col.key}
                                 className={cx("col", `col-${col.key}`, { "col-name": isName })}
-                                onClick={() => {
+                                onClick={(e) => {
+                                    e.stopPropagation();
                                     onSort(sField);
                                 }}
                                 onContextMenu={(e) => onHeaderContextMenu?.(col.key as any, e)}

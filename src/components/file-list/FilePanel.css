@@ -532,6 +532,7 @@
 .file-header-scroll-wrapper {
     overflow: hidden;
     flex-shrink: 0;
+    position: relative;
 }
 
 .file-header {
@@ -566,6 +567,16 @@
     width: 0.5rem;
     /* Matches .file-header padding-left */
     z-index: 20;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.2s;
+    background-color: var(--bg-color);
+}
+
+.header-selection-gutter.with-checkbox {
+    width: 2rem;
+    /* 0.5rem padding + 1.25rem checkbox + buffer */
 }
 
 .header-selection-gutter:hover {
@@ -1037,11 +1048,11 @@
     border-color: var(--accent-color);
 }
 
-.checkbox-indicator.checked {
+.checkbox-indicator.checked,
+.checkbox-indicator.indeterminate {
     background-color: var(--accent-color);
     border-color: var(--accent-color);
     color: white;
-    /* For the Check icon */
 }
 
 /* Grid checkbox positioning & premium styling */

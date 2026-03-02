@@ -417,7 +417,7 @@ export const DualPanelLayout: React.FC<DualPanelLayoutProps> = ({
                             onQueryChange={leftHandlers.onQueryChange}
                             onClearSearch={leftHandlers.onClearSearch}
                             onCancelSearch={() => handleCancelSearch('left')}
-                            showSearch={layout === 'standard' || activePanelId === 'left'}
+                            showSearch={layout === 'dual'}
                             isDragTarget={!!dragState && dragState.sourcePanel !== 'left'}
                             dragOverPath={null}
                             showHidden={propShowHidden}
@@ -469,7 +469,7 @@ export const DualPanelLayout: React.FC<DualPanelLayoutProps> = ({
                                 onQueryChange={rightHandlers.onQueryChange}
                                 onClearSearch={rightHandlers.onClearSearch}
                                 onCancelSearch={() => handleCancelSearch('right')}
-                                showSearch={activePanelId === 'right'}
+                                showSearch={true}
                                 isDragTarget={!!dragState && dragState.sourcePanel !== 'right'}
                                 dragOverPath={null}
                                 showHidden={propShowHidden}

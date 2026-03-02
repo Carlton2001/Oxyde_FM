@@ -7,8 +7,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Oxyde</title>
   <style id="early-theme-bg">
-    html { background: #13111c; } /* Default Oxyde Dark */
+    html {
+      background: #13111c;
+    }
+
+    /* Default Oxyde Dark */
   </style>
+  <!-- Preload main font to avoid layout shifts (FOUT) -->
+  <link rel="preload" href="/src/assets/fonts/InterVariable.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/src/assets/fonts/InterVariable-Italic.woff2" as="font" type="font/woff2" crossorigin>
   <script>
     (function () {
       try {
