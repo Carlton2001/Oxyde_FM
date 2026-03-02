@@ -269,12 +269,12 @@ export const PathBar: React.FC<PathBarProps> = ({ path, onNavigate, className, i
                 const drivePath = part.endsWith(":") ? part + "\\" : part;
                 const drive = drives.find(d => d.path.toUpperCase().startsWith(drivePath.toUpperCase()));
                 if (drive && drive.label) {
-                    name = `${drive.label} (${name}:)`;
+                    name = `${drive.label} (${name})`;
                 } else if (index === 0 && part.includes(':')) {
-                    name = name + ":";
+                    name = name;
                 }
             } else if (!isUNC && index === 0 && part.includes(':')) {
-                name = name + ":";
+                name = name;
             }
 
             const isDrive = !isUNC && index === 0 && part.includes(':');

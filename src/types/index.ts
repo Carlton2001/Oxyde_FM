@@ -111,9 +111,6 @@ export interface FileProperties {
     created: number;
     modified: number;
     accessed: number;
-    readonly: boolean;
-    is_hidden: boolean;
-    is_system: boolean;
     // Trash-specific fields
     original_path?: string;
     deleted_time?: number;
@@ -145,10 +142,6 @@ export interface FileSummary {
     total_size: number;
     files_count: number;
     folders_count: number;
-    all_readonly: boolean;
-    any_readonly: boolean;
-    all_hidden: boolean;
-    any_hidden: boolean;
     parent_path?: string;
 }
 

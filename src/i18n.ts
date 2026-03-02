@@ -414,6 +414,9 @@ export const translations = {
         map_network_drive_desc: 'What network folder would you like to map?',
         map_network_drive_subdesc: 'Specify the drive letter for the connection and the folder that you want to connect to:',
         drive: 'Drive',
+        username: 'Username',
+        password: 'Password',
+        optional: 'Optional',
         reconnect_at_signin: 'Reconnect at sign-in',
         finish: 'Finish',
         disconnect_network_drive_desc: 'Select the network drive(s) you want to disconnect, then click OK.',
@@ -422,6 +425,7 @@ export const translations = {
         map_network_drive_success: 'Network drive mapped successfully!',
         disconnect_network_drive_success: 'Network drive disconnected successfully!',
         disconnect_network_drive_force_msg: 'There are open files on this connection. Do you want to force disconnection anyway?',
+        drive_in_use: 'In use',
     },
     fr: {
         // Settings
@@ -836,6 +840,9 @@ export const translations = {
         map_network_drive_desc: 'À quel dossier réseau voulez-vous vous connecter ?',
         map_network_drive_subdesc: 'Spécifiez la lettre désignant le lecteur et le dossier auxquels vous souhaitez vous connecter :',
         drive: 'Lecteur',
+        username: 'Utilisateur',
+        password: 'Mot de passe',
+        optional: 'Optionnel',
         reconnect_at_signin: 'Se reconnecter lors de la connexion',
         finish: 'Terminer',
         disconnect_network_drive_desc: 'Sélectionnez le(s) lecteur(s) réseau que vous souhaitez déconnecter, puis cliquez sur OK.',
@@ -844,6 +851,7 @@ export const translations = {
         map_network_drive_success: 'Lecteur réseau connecté avec succès !',
         disconnect_network_drive_success: 'Lecteur réseau déconnecté avec succès !',
         disconnect_network_drive_force_msg: 'Des fichiers sont ouverts sur cette connexion. Voulez-vous forcer la déconnexion malgré tout ?',
+        drive_in_use: 'Utilisé',
     }
 };
 

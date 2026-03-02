@@ -34,11 +34,11 @@
   /* Z-Indices (Global) */
   --z-header: 100;
   --z-sticky-header: 10;
-  --z-resize: 10;
+  --z-resize: 50;
   --z-menu: 1000;
-  --z-drag: 9999;
-  --z-context: 4000;
-  --z-overlay: 1000;
+  --z-drag: 20000;
+  --z-overlay: 10000;
+  --z-context: 15000;
 
   /* Surfaces & Visuals */
   --surface-tertiary: color-mix(in srgb, var(--text-color), transparent 75%);

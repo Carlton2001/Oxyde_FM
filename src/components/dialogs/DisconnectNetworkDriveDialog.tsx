@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useDraggable } from '../../hooks/useDraggable';
-import { X, ServerOff } from 'lucide-react';
+import { X, ServerOff, Check, Loader2, HardDrive } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { TFunc } from '../../i18n';
+import cx from 'classnames';
+import '../../styles/components/Dialogs.css';
 
 interface DisconnectNetworkDriveDialogProps {
     onClose: () => void;
@@ -73,7 +75,7 @@ export const DisconnectNetworkDriveDialog: React.FC<DisconnectNetworkDriveDialog
     };
 
     return (
-        <div className="properties-overlay" onClick={onClose}>
+        <div className="properties-overlay">
             <div
                 ref={dragRef}
                 className="properties-dialog"
@@ -81,8 +83,8 @@ export const DisconnectNetworkDriveDialog: React.FC<DisconnectNetworkDriveDialog
                 style={{
                     transform: `translate(${position.x}px, ${position.y}px)`,
                     transition: 'none',
-                    width: '450px',
-                    maxHeight: '400px'
+                    width: '480px',
+                    height: '460px'
                 }}
             >
                 <div className="prop-header-bar" onMouseDown={handleMouseDown}>
@@ -95,77 +97,67 @@ export const DisconnectNetworkDriveDialog: React.FC<DisconnectNetworkDriveDialog
                     </button>
                 </div>
 
-                <div className="prop-content" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                    <p style={{ margin: 0, fontSize: '0.8125rem' }}>
+                <div className="prop-content" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem', flex: 1, minHeight: 0 }}>
+                    <p style={{ margin: 0, fontSize: '0.8125rem', opacity: 0.8 }}>
                         {t('disconnect_network_drive_desc' as any)}
                     </p>
 
-                    <div style={{
-                        height: '200px',
-                        overflowY: 'auto',
-                        border: '1px solid var(--border-color)',
-                        borderRadius: '0.375rem',
-                        background: 'var(--surface-primary)',
-                        display: 'flex',
-                        flexDirection: 'column'
-                    }}>
-                        {loading && <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>{t('loading' as any)}</div>}
-                        {!loading && drives.length === 0 && (
-                            <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.8125rem' }}>
-                                {t('no_network_drives' as any)}
-                            </div>
-                        )}
-                        {!loading && drives.length > 0 && drives.map(d => (
-                            <label
-                                key={d.path}
-                                style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    padding: '0.625rem 1rem',
-                                    gap: '0.75rem',
-                                    cursor: 'pointer',
-                                    borderBottom: '1px solid var(--border-color)',
-                                    transition: 'background 0.1s ease',
-                                    background: selectedLetters.includes(d.path) ? 'var(--hover-color)' : 'transparent'
-                                }}
-                                className="drive-item-label"
-                            >
-                                <input
-                                    type="checkbox"
-                                    checked={selectedLetters.includes(d.path)}
-                                    onChange={() => toggleSelection(d.path)}
-                                    style={{ width: '14px', height: '14px' }}
-                                />
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', overflow: 'hidden', flex: 1 }}>
-                                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-primary)', minWidth: '32px' }}>{d.path}</span>
-                                    {(d.remote_path || d.label) && (
-                                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                            {d.remote_path || d.label}
-                                        </span>
-                                    )}
+                    <div className="network-drives-container" style={{ flex: 1, minHeight: 0, border: '1px solid var(--border-color)', borderRadius: '0.5rem', background: 'var(--surface-primary)', display: 'flex', flexDirection: 'column' }}>
+                        <div className="duplicate-group-files" style={{ padding: '0.75rem', overflowY: 'auto', flex: 1 }}>
+                            {loading ? (
+                                <div style={{ padding: '3rem', textAlign: 'center', opacity: 0.5 }}><Loader2 className="animate-spin" /></div>
+                            ) : drives.length === 0 ? (
+                                <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                                    {t('no_network_drives_found' as any)}
                                 </div>
-                            </label>
-                        ))}
+                            ) : (
+                                drives.map(d => {
+                                    const isSelected = selectedLetters.includes(d.path);
+                                    return (
+                                        <div
+                                            key={d.path}
+                                            className={cx("duplicate-file-item", { selected: isSelected })}
+                                            onClick={() => toggleSelection(d.path)}
+                                        >
+                                            <div className="prop-checkbox" style={{ pointerEvents: 'none' }}>
+                                                <input type="checkbox" checked={isSelected} readOnly />
+                                                <div className="checkbox-visual">
+                                                    {isSelected && <Check size={10} strokeWidth={3} />}
+                                                </div>
+                                            </div>
+
+                                            <div className="duplicate-file-icon-wrapper" style={{ color: isSelected ? 'var(--accent-color)' : 'var(--text-muted)' }}>
+                                                <HardDrive size={18} strokeWidth={1.5} />
+                                            </div>
+
+                                            <div className="duplicate-file-path-container">
+                                                <div className="duplicate-file-name" style={{ fontSize: '0.8125rem', fontWeight: isSelected ? 600 : 500 }}>
+                                                    {d.path}
+                                                </div>
+                                                <div className="duplicate-file-dir" style={{ opacity: isSelected ? 0.8 : 0.6 }}>
+                                                    {d.remote_path || d.label}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })
+                            )}
+                        </div>
                     </div>
                 </div>
 
-                <div className="prop-footer" style={{ padding: '1rem 1.25rem', display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', background: 'var(--surface-secondary)' }}>
-                    <button className="btn" onClick={onClose} disabled={disconnectLoading}>
-                        {t('cancel')}
-                    </button>
-                    <button className="btn primary" onClick={handleConfirm} disabled={disconnectLoading || selectedLetters.length === 0}>
-                        OK
-                    </button>
+                <div className="prop-footer spaced">
+                    <div />
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <button className="btn" onClick={onClose} disabled={disconnectLoading}>
+                            {t('cancel')}
+                        </button>
+                        <button className="btn primary" onClick={handleConfirm} disabled={disconnectLoading || selectedLetters.length === 0}>
+                            {t('disconnect' as any)}
+                        </button>
+                    </div>
                 </div>
             </div>
-            <style>{`
-                .drive-item-label:hover {
-                    background: var(--hover-color) !important;
-                }
-                .drive-item-label:last-child {
-                    border-bottom: none !important;
-                }
-            `}</style>
         </div>
     );
 };

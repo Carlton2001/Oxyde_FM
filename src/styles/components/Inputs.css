@@ -23,7 +23,7 @@ textarea,
 
 .input-field:focus {
     border-color: var(--accent-color);
-    box-shadow: 0 0 0 1px var(--accent-color);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-color), transparent 85%);
 }
 
 .input-field:disabled {

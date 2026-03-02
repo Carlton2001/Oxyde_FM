@@ -85,7 +85,7 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
 
 pub fn run() {
     #[cfg(debug_assertions)]
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn")).init();
 
 
     tauri::Builder::default()
@@ -188,20 +188,16 @@ pub fn run() {
             commands::network::disconnect_network_drive,
         ])
         .setup(|app| {
-            println!("DEBUG: setup() hook starting");
             use tauri::Manager;
             let config_manager = app.state::<models::ConfigManager>();
-            println!("DEBUG: loading config...");
             if let Err(e) = config_manager.load(app.handle()) {
                 eprintln!("Failed to load config: {:?}", e);
             }
 
             let session_manager = app.state::<models::SessionManager>();
-            println!("DEBUG: loading session...");
             if let Err(e) = session_manager.load(app.handle()) {
                 eprintln!("Failed to load session: {:?}", e);
             }
-            println!("DEBUG: session loaded");
 
             // Register WindowState
             let window_state = WindowState::default();

@@ -12,3 +12,58 @@
     color: var(--text-secondary, #aaa);
     font-weight: 500;
 }
+
+/* Inline Mode Styles */
+.disk-usage-inline {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+}
+
+.disk-usage-bar-bg {
+    height: 1.125rem;
+    /* Increased height */
+    width: 100%;
+    background: var(--border-color);
+    border-radius: 4px;
+    /* More standard drive-bar look */
+    overflow: hidden;
+    position: relative;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.disk-usage-bar-fill {
+    height: 100%;
+    transition: width 0.3s ease-out;
+}
+
+.disk-usage-percent-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.725rem;
+    font-weight: 800;
+    pointer-events: none;
+    transition: all 0.3s ease-out;
+
+    /* Elegant high-contrast: white text on fill, theme-default text on empty space */
+    background: linear-gradient(to right,
+            #ffffff 0%,
+            #ffffff var(--percent),
+            var(--text-color) var(--percent),
+            var(--text-color) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.disk-usage-inline-labels {
+    display: flex;
+    justify-content: center;
+    /* Centered since percent moved inside */
+    font-size: 0.6875rem;
+    color: var(--text-muted);
+    font-weight: 500;
+}

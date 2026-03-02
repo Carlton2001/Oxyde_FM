@@ -69,7 +69,7 @@ export const InputDialog: React.FC<InputDialogProps> = ({
     if (!isOpen) return null;
 
     return (
-        <div className="modal-overlay" onClick={onClose} style={{ zIndex: 12000 }}>
+        <div className="modal-overlay" onClick={onClose}>
             <div
                 ref={dragRef}
                 className="modal"

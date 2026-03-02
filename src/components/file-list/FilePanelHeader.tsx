@@ -59,7 +59,7 @@ export const FilePanelHeader: React.FC<FilePanelHeaderProps> = React.memo(({
     }, [drives.length]);
 
     const renderDriveChip = (drive: DriveInfo) => {
-        const letter = getDriveLetter(drive);
+        const letter = getDriveLetter(drive).replace(':', '');
         const name = getDriveNameOnly(drive, t);
         const isActive = currentPath?.startsWith(drive.path);
 
@@ -93,7 +93,7 @@ export const FilePanelHeader: React.FC<FilePanelHeaderProps> = React.memo(({
                     </span>
                 )}
                 {isCompact && letter && (
-                    <span className="drive-chip-letter">{letter.replace(':', '')}</span>
+                    <span className="drive-chip-letter">{letter}</span>
                 )}
             </div>
         );

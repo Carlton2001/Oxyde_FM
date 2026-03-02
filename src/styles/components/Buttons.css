@@ -20,7 +20,15 @@
 
 .btn:focus {
     outline: none;
-    box-shadow: 0 0 0 2px rgba(var(--accent-color-rgb), 0.3);
+    box-shadow: 0 0 0 2px var(--btn-focus-shadow, rgba(var(--accent-color-rgb), 0.3));
+}
+
+.btn.danger:focus {
+    --btn-focus-shadow: rgba(239, 68, 68, 0.4);
+}
+
+.btn.primary:focus {
+    --btn-focus-shadow: rgba(var(--accent-color-rgb), 0.3);
 }
 
 .btn:hover:not(:disabled) {
@@ -41,12 +49,12 @@
 .btn.primary {
     background: var(--accent-color);
     color: #ffffff;
-    border-color: transparent;
+    border: 1px solid var(--accent-color);
 }
 
 .btn.primary:hover:not(:disabled) {
     background: var(--accent-color);
-    border-color: transparent;
+    border-color: var(--accent-color);
     filter: brightness(1.1);
 }
 
@@ -58,12 +66,12 @@
 .btn.danger {
     background: var(--error-color, #ef4444);
     color: #ffffff;
-    border-color: transparent;
+    border: 1px solid var(--error-color, #ef4444);
 }
 
 .btn.danger:hover:not(:disabled) {
     background: var(--error-color, #ef4444);
-    border-color: transparent;
+    border-color: var(--error-color, #ef4444);
     filter: brightness(1.1);
 }
 

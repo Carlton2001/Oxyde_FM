@@ -30,6 +30,7 @@ interface TreeNode {
     isNetwork?: boolean;
     isNetworkRoot?: boolean;
     remotePath?: string;
+    label?: string;
 }
 
 interface FlattenedNode {
@@ -279,7 +280,8 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
                 isReadOnly: drive.is_readonly,
                 totalBytes: drive.total_bytes,
                 freeBytes: drive.free_bytes,
-                remotePath: drive.remote_path
+                remotePath: drive.remote_path,
+                label: drive.label
             });
         });
 
@@ -592,7 +594,7 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
                     }}
                     data-tooltip={node.driveType ? getDriveTooltip({
                         path: node.path,
-                        label: node.name,
+                        label: node.label,
                         drive_type: node.driveType,
                         remote_path: node.remotePath
                     } as any, t) : (node.isTrash || node.isNetworkRoot ? node.name : undefined)}

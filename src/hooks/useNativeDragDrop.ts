@@ -241,9 +241,11 @@ export const useNativeDragDrop = ({
                     } else if (target.closest('.tree-node-content')) {
                         const path = target.closest('.tree-node-content')?.getAttribute('data-path');
                         setDragOverPath(path || null);
+                        if (path) setDragTargetPath(path);
                     } else if (target.closest('.path-segment')) {
                         const path = target.closest('.path-segment')?.getAttribute('data-path');
                         setDragOverPath(path || null);
+                        if (path) setDragTargetPath(path);
                     } else if (target.closest('.tabs-wrapper')) {
                         // 1.5 Detect Tabs Wrapper
                         // Only if we are dragging directories
@@ -258,8 +260,8 @@ export const useNativeDragDrop = ({
                         setDragOverPath(null);
                     }
 
-                    // 2. Detect Panel (If NOT over tabs)
-                    if (!target.closest('.tabs-wrapper')) {
+                    // 2. Detect Panel (If NOT over tabs or tree/path)
+                    if (!target.closest('.tabs-wrapper') && !target.closest('.tree-node-content') && !target.closest('.path-segment')) {
                         const panelElement = target.closest('.panel');
                         if (panelElement) {
                             const panelContainer = document.querySelector('.panel-container');

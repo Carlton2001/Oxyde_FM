@@ -218,7 +218,7 @@ export const GlobalDialogContainer: React.FC = () => {
                                 onClose={() => handleClose(null)}
                                 confirmLabel="OK"
                                 t={t}
-                                icon="new_folder" // Default icon
+                                icon={props.icon || 'new_folder'}
                             />
                         );
 

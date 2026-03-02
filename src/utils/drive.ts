@@ -8,7 +8,7 @@ export const getDriveDisplayName = (drive: DriveInfo, t: any): string => {
     if (drive.path === 'trash://') return t('recycle_bin');
     if (drive.path === '__network_vincinity__') return t('network_vincinity');
 
-    const pathClean = drive.path.replace(/[/\\]+$/, '');
+    const pathClean = drive.path.replace(/[/\\]+$/, '').replace(':', '');
 
     if (drive.drive_type === 'remote') {
         const sourcePath = drive.remote_path || drive.path;
@@ -33,7 +33,8 @@ export const getDriveTooltip = (drive: DriveInfo, t: any): string => {
         return drive.remote_path || drive.path;
     }
 
-    return drive.label ? `${drive.label} (${drive.path})` : drive.path;
+    const pathClean = drive.path.replace(/[/\\]+$/, '').replace(':', '');
+    return drive.label ? `${drive.label} (${pathClean})` : pathClean;
 };
 
 /**

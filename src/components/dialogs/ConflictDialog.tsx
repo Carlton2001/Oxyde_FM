@@ -62,7 +62,7 @@ export const ConflictDialog: React.FC<ConflictDialogProps> = ({ conflicts, onRes
     if (!current) return null;
 
     return (
-        <div className="properties-overlay" style={{ zIndex: 11000 }}>
+        <div className="properties-overlay">
             <div
                 ref={dragRef}
                 className="properties-dialog conflict-dialog"

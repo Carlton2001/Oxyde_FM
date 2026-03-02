@@ -143,13 +143,13 @@ const PanelProviderReady: React.FC<{
 
             if (leftTabSwitched && normRust !== normReact) {
                 // Tab switch: force navigate regardless of version
-                console.log(`[Sync] Left Tab switched to ${leftActiveTabId}. Navigating to: ${normRust}`);
+                // console.log(`[Sync] Left Tab switched to ${leftActiveTabId}. Navigating to: ${normRust}`);
                 left.navigate(normRust, [], leftTabArr.version);
             } else if (leftTabArr.version > left.version) {
-                console.log(`[Sync] Left Backend is ahead (v${leftTabArr.version} > v${left.version}). Catching up and moving to: ${normRust}`);
+                // console.log(`[Sync] Left Backend is ahead (v${leftTabArr.version} > v${left.version}). Catching up and moving to: ${normRust}`);
                 left.navigate(normRust, [], leftTabArr.version);
             } else if (leftTabArr.version === left.version && normRust !== normReact) {
-                console.log(`[Sync] Left Path mismatch at same version (v${left.version}). Correcting to: ${normRust}`);
+                // console.log(`[Sync] Left Path mismatch at same version (v${left.version}). Correcting to: ${normRust}`);
                 left.navigate(normRust, [], left.version);
             }
         }
@@ -161,13 +161,13 @@ const PanelProviderReady: React.FC<{
 
             if (rightTabSwitched && normRust !== normReact) {
                 // Tab switch: force navigate regardless of version
-                console.log(`[Sync] Right Tab switched to ${rightActiveTabId}. Navigating to: ${normRust}`);
+                // console.log(`[Sync] Right Tab switched to ${rightActiveTabId}. Navigating to: ${normRust}`);
                 right.navigate(normRust, [], rightTabArr.version);
             } else if (rightTabArr.version > right.version) {
-                console.log(`[Sync] Right Backend is ahead (v${rightTabArr.version} > v${right.version}). Catching up and moving to: ${normRust}`);
+                // console.log(`[Sync] Right Backend is ahead (v${rightTabArr.version} > v${right.version}). Catching up and moving to: ${normRust}`);
                 right.navigate(normRust, [], rightTabArr.version);
             } else if (rightTabArr.version === right.version && normRust !== normReact) {
-                console.log(`[Sync] Right Path mismatch at same version (v${right.version}). Correcting to: ${normRust}`);
+                // console.log(`[Sync] Right Path mismatch at same version (v${right.version}). Correcting to: ${normRust}`);
                 right.navigate(normRust, [], right.version);
             }
         }

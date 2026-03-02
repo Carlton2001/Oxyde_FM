@@ -43,9 +43,6 @@ pub struct FileProperties {
     pub created: u64,
     pub modified: u64,
     pub accessed: u64,
-    pub readonly: bool,
-    pub is_hidden: bool,
-    pub is_system: bool,
     pub original_path: Option<String>,
     pub deleted_time: Option<i64>,
     pub folders_count: Option<u64>,
@@ -70,10 +67,6 @@ pub struct FileSummary {
     pub total_size: u64,
     pub files_count: usize,
     pub folders_count: usize,
-    pub all_readonly: bool,
-    pub any_readonly: bool,
-    pub all_hidden: bool,
-    pub any_hidden: bool,
     pub parent_path: Option<String>,
 }
 

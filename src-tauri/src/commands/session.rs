@@ -148,7 +148,7 @@ pub fn active_tab_navigate(
                     tab.path = PathBuf::from(&path);
                     tab.version = v;
                 } else if v < tab.version {
-                    log::warn!("REJECTED: Navigation to {:?} (v{}) because current is v{}", path, v, tab.version);
+                    // log::warn!("REJECTED: Navigation to {:?} (v{}) because current is v{}", path, v, tab.version);
                     return Ok(());
                 } else {
                     if tab.path != PathBuf::from(&path) {

@@ -273,17 +273,8 @@ fn calculate_summary(entries: &[FileEntry], parent_path: Option<String>) -> File
     let mut total_size = 0;
     let mut files_count = 0;
     let mut folders_count = 0;
-    let mut all_readonly = true;
-    let mut any_readonly = false;
-    let mut all_hidden = true;
-    let mut any_hidden = false;
 
     for e in entries.iter() {
-        all_readonly &= e.is_readonly;
-        all_hidden &= e.is_hidden;
-        any_readonly |= e.is_readonly;
-        any_hidden |= e.is_hidden;
-
         if e.is_dir {
             folders_count += 1;
         } else {
@@ -292,20 +283,11 @@ fn calculate_summary(entries: &[FileEntry], parent_path: Option<String>) -> File
         }
     }
 
-    if entries.is_empty() {
-        all_readonly = false;
-        all_hidden = false;
-    }
-
     FileSummary {
         count: entries.len(),
         total_size,
         files_count,
         folders_count,
-        all_readonly,
-        any_readonly,
-        all_hidden,
-        any_hidden,
         parent_path,
     }
 }
@@ -370,9 +352,6 @@ pub fn get_file_properties(path: String) -> Result<FileProperties, CommandError>
             created: 0,
             modified: 0,
             accessed: 0,
-            readonly: true,
-            is_hidden: false,
-            is_system: false,
             original_path: None,
             deleted_time: None,
             folders_count: None,
@@ -504,10 +483,6 @@ pub fn get_file_properties(path: String) -> Result<FileProperties, CommandError>
         .unwrap_or_default()
         .as_millis() as u64;
 
-    let readonly = metadata.permissions().readonly();
-
-    let (is_hidden, is_system, _) = crate::utils::get_file_attributes(&metadata, &name);
-
     let is_dir = metadata.is_dir();
     let size = if is_dir { 0 } else { metadata.len() };
 
@@ -555,9 +530,6 @@ pub fn get_file_properties(path: String) -> Result<FileProperties, CommandError>
         created,
         modified,
         accessed,
-        readonly,
-        is_hidden,
-        is_system,
         original_path,
         deleted_time,
         folders_count: None,
@@ -663,10 +635,6 @@ pub async fn get_files_summary(paths: Vec<String>) -> Result<FileSummary, Comman
     let mut folders_count = 0;
     let count = paths.len();
 
-    let mut all_readonly = true;
-    let mut any_readonly = false;
-    let mut all_hidden = true;
-    let mut any_hidden = false;
     let mut common_parent: Option<String> = None;
     let mut different_parents = false;
 
@@ -674,28 +642,20 @@ pub async fn get_files_summary(paths: Vec<String>) -> Result<FileSummary, Comman
         let pb = PathBuf::from(p);
         let metadata = fs::metadata(&pb)?;
 
-        let readonly = metadata.permissions().readonly();
-        let (is_hidden, _, _) = crate::utils::get_file_attributes(&metadata, "");
         let parent = pb
             .parent()
             .map(|p| p.to_string_lossy().to_string())
             .unwrap_or_default();
 
         if i == 0 {
-            all_readonly = readonly;
-            all_hidden = is_hidden;
             common_parent = Some(parent);
         } else {
-            all_readonly &= readonly;
-            all_hidden &= is_hidden;
             if let Some(ref cp) = common_parent {
                 if cp != &parent {
                     different_parents = true;
                 }
             }
         }
-        any_readonly |= readonly;
-        any_hidden |= is_hidden;
 
         if pb.is_dir() {
             folders_count += 1;
@@ -714,20 +674,11 @@ pub async fn get_files_summary(paths: Vec<String>) -> Result<FileSummary, Comman
         }
     }
 
-    if count == 0 {
-        all_readonly = false;
-        all_hidden = false;
-    }
-
     Ok(FileSummary {
         count,
         total_size,
         files_count,
         folders_count,
-        all_readonly,
-        any_readonly,
-        all_hidden,
-        any_hidden,
         parent_path: if different_parents {
             None
         } else {

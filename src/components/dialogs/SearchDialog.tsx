@@ -1,8 +1,10 @@
 import React, { useState, useRef } from 'react';
-import { X, Search, Folder, Calendar, Target, ChevronDown, Regex, Code, ExternalLink, Check } from 'lucide-react';
+import { X, Search, Folder, Target, ChevronDown, Regex, Code, ExternalLink, Check } from 'lucide-react';
 import { useDraggable } from '../../hooks/useDraggable';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { SearchOptions } from '../../types';
+import { useApp } from '../../context/AppContext';
+import { DatePicker } from '../ui/DatePicker';
 import './SearchDialog.css';
 
 interface SearchDialogProps {
@@ -31,6 +33,7 @@ export const SearchDialog: React.FC<SearchDialogProps> = ({
     const [isRecursive, setIsRecursive] = useState(initialOptions.recursive !== false);
     const [searchInArchives, setSearchInArchives] = useState(initialOptions.searchInArchives || false);
     const [activeTab, setActiveTab] = useState<'general' | 'advanced' | 'help'>(initialActiveTab as any || 'general');
+    const { language } = useApp();
 
     const [minSize, setMinSize] = useState<number | undefined>(initialOptions.minSize !== undefined && initialOptions.sizeUnit ? Math.floor(initialOptions.minSize / {
         bytes: 1, kb: 1024, mb: 1024 * 1024, gb: 1024 * 1024 * 1024, tb: 1024 * 1024 * 1024 * 1024
@@ -131,7 +134,7 @@ export const SearchDialog: React.FC<SearchDialogProps> = ({
                     </button>
                 </div>
 
-                <form className="modal-content search-form" onSubmit={handleExecuteSearch}>
+                <form className="modal-content search-form overflow-visible" onSubmit={handleExecuteSearch}>
                     {activeTab === 'general' ? (
                         <div className="search-tab-content">
                             <div className="input-group">
@@ -271,39 +274,19 @@ export const SearchDialog: React.FC<SearchDialogProps> = ({
                             <div className="input-group">
                                 <label>{t('date_range')}</label>
                                 <div className="range-inputs-row">
-                                    <div className="input-with-icon action-right">
-                                        <input
-                                            type="date"
-                                            value={minDate}
-                                            onChange={(e) => setMinDate(e.target.value)}
-                                        />
-                                        <div className="input-actions-hint right">
-                                            <button
-                                                type="button"
-                                                className="regex-badge-btn"
-                                                onClick={(e) => (e.currentTarget.parentElement?.previousElementSibling as HTMLInputElement).showPicker()}
-                                            >
-                                                <Calendar size={14} />
-                                            </button>
-                                        </div>
-                                    </div>
+                                    <DatePicker
+                                        value={minDate}
+                                        onChange={setMinDate}
+                                        placeholder={t('min')}
+                                        language={language === 'fr' ? 'fr' : 'en'}
+                                    />
                                     <span className="range-separator">—</span>
-                                    <div className="input-with-icon action-right">
-                                        <input
-                                            type="date"
-                                            value={maxDate}
-                                            onChange={(e) => setMaxDate(e.target.value)}
-                                        />
-                                        <div className="input-actions-hint right">
-                                            <button
-                                                type="button"
-                                                className="regex-badge-btn"
-                                                onClick={(e) => (e.currentTarget.parentElement?.previousElementSibling as HTMLInputElement).showPicker()}
-                                            >
-                                                <Calendar size={14} />
-                                            </button>
-                                        </div>
-                                    </div>
+                                    <DatePicker
+                                        value={maxDate}
+                                        onChange={setMaxDate}
+                                        placeholder={t('max')}
+                                        language={language === 'fr' ? 'fr' : 'en'}
+                                    />
                                 </div>
                             </div>
 

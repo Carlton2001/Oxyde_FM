@@ -105,7 +105,7 @@ impl PanelState {
         // Skip watching virtual paths (like trash:// or search://)
         let path_str = active_path.to_string_lossy().to_lowercase();
         let path_str = path_str.replace('\\', "/");
-        if path_str.starts_with("trash://") || path_str.starts_with("search://") {
+        if path_str.starts_with("trash://") || path_str.starts_with("search://") || path_str == "__network_vincinity__" {
             self.watcher = None;
             self.watched_path = None;
             return;

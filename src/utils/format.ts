@@ -69,6 +69,8 @@ export const formatDate = (ms: number, format: DateFormat = 'European', fallback
  * @returns Localized type string (e.g. "PNG File", "Folder")
  */
 export const getFileTypeString = (entry: FileEntry, t: any): string => {
+    if (!entry || !entry.path) return '';
+
     // 1. Network & Virtual paths (High Priority)
     if (entry.path === '__network_vincinity__') {
         return t('network');

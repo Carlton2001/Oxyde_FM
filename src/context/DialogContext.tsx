@@ -68,8 +68,8 @@ export const DialogProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         return openDialog<boolean>('confirm', { message, title, isDanger, confirmLabel, sources, destination, subMessage });
     }, [openDialog]);
 
-    const prompt = useCallback((message: string, title?: string, defaultValue?: string) => {
-        return openDialog<string | null>('prompt', { message, title, defaultValue });
+    const prompt = useCallback((message: string, title?: string, defaultValue?: string, icon?: 'rename' | 'new_folder' | 'default') => {
+        return openDialog<string | null>('prompt', { message, title, defaultValue, icon });
     }, [openDialog]);
 
     const openPropertiesDialog = useCallback((paths: string[]) => {
@@ -81,13 +81,8 @@ export const DialogProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     }, [openDialog]);
 
     const openRenameDialog = useCallback((path: string) => {
-        // Rename usually uses a prompt, but we might want a specific 'rename' type if we have complex logic
-        // For now, let's use 'prompt' but wrap it nicely
-        // OR we can simple use 'prompt' and return the promise
-        const currentName = path.split(/[/\\]/).pop() || ''; // Handles both / and \
-        // Translations: rename_label or generic?
-        // i18n has 'rename' (title), 'rename_label' (New name)
-        return prompt(t('rename_label'), t('rename'), currentName);
+        const currentName = path.split(/[/\\]/).pop() || '';
+        return prompt(t('rename_label'), t('rename'), currentName, 'rename');
     }, [prompt, t]);
 
     const openNewFolderDialog = useCallback(({ onCreate }: { onCreate: (name: string) => void }) => {

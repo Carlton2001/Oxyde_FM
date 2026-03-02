@@ -4,6 +4,7 @@ use windows::Win32::NetworkManagement::WNet::{
     RESOURCE_GLOBALNET, RESOURCETYPE_ANY, NETRESOURCEW, RESOURCEUSAGE_CONTAINER,
     WNET_OPEN_ENUM_USAGE, RESOURCETYPE_DISK, CONNECT_UPDATE_PROFILE, NET_CONNECT_FLAGS
 };
+use log::info;
 use windows::Win32::Foundation::WIN32_ERROR;
 use windows::Win32::UI::Shell::{
     SHGetKnownFolderItem, FOLDERID_NetworkFolder, KF_FLAG_DEFAULT, IShellItem,
@@ -206,7 +207,14 @@ pub async fn get_network_resources(path: Option<String>) -> Result<Vec<NetResour
 }
 
 #[tauri::command]
-pub async fn map_network_drive(letter: String, path: String, reconnect: bool) -> Result<(), String> {
+pub async fn map_network_drive(
+    letter: String, 
+    path: String, 
+    reconnect: bool,
+    username: Option<String>,
+    password: Option<String>,
+) -> Result<(), String> {
+    info!("Mapping network drive: {} -> {} (reconnect: {}, user: {:?})", letter, path, reconnect, username);
     #[cfg(target_os = "windows")]
     {
         unsafe {
@@ -216,17 +224,29 @@ pub async fn map_network_drive(letter: String, path: String, reconnect: bool) ->
             let mut wide_remote: Vec<u16> = path.encode_utf16().chain(std::iter::once(0)).collect();
 
             // Make sure the letter is formatted e.g., "Z:" not just "Z"
-            let local_name = if letter.len() == 1 { format!("{}:", letter) } else { letter.clone() };
+            let local_name = if letter.len() == 1 { format!("{}:", letter) } else { 
+                if !letter.ends_with(':') { format!("{}:", letter) } else { letter.clone() }
+            };
             let mut wide_local: Vec<u16> = local_name.encode_utf16().chain(std::iter::once(0)).collect();
 
             nr.lpLocalName = PWSTR(wide_local.as_mut_ptr());
             nr.lpRemoteName = PWSTR(wide_remote.as_mut_ptr());
 
+            // If we are re-mapping, try to disconnect first to ensure the new persistence setting takes effect
+            let _ = WNetCancelConnection2W(PCWSTR(wide_local.as_ptr()), CONNECT_UPDATE_PROFILE, true);
+
             let flags = if reconnect { CONNECT_UPDATE_PROFILE } else { NET_CONNECT_FLAGS(0) };
 
+            let wide_user: Option<Vec<u16>> = username.map(|u| u.encode_utf16().chain(std::iter::once(0)).collect());
+            let wide_pass: Option<Vec<u16>> = password.map(|p| p.encode_utf16().chain(std::iter::once(0)).collect());
+
+            let user_ptr = wide_user.as_ref().map_or(PCWSTR::null(), |v| PCWSTR(v.as_ptr()));
+            let pass_ptr = wide_pass.as_ref().map_or(PCWSTR::null(), |v| PCWSTR(v.as_ptr()));
+
             // WNetAddConnection2W returns a WIN32_ERROR (u32 wrapped), we check if it is 0 (NO_ERROR)
-            let result = WNetAddConnection2W(&nr, PCWSTR::null(), PCWSTR::null(), flags);
+            let result = WNetAddConnection2W(&nr, pass_ptr, user_ptr, flags);
             if result == WIN32_ERROR(0) {
+                info!("Successfully mapped network drive {}", local_name);
                 return Ok(());
             } else {
                 return Err(format!("WNetAddConnection2W failed with code {:?}", result));

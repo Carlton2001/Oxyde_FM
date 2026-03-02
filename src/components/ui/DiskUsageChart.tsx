@@ -8,9 +8,10 @@ interface DiskUsageChartProps {
     size?: number;
     showText?: boolean;
     t?: any;
+    inline?: boolean;
 }
 
-export const DiskUsageChart: React.FC<DiskUsageChartProps> = ({ total, free, size = 60, showText = true, t }) => {
+export const DiskUsageChart: React.FC<DiskUsageChartProps> = ({ total, free, size = 60, showText = true, t, inline = false }) => {
     const used = total - free;
     const percent = Math.round((used / total) * 100);
     const radius = 16;
@@ -20,6 +21,27 @@ export const DiskUsageChart: React.FC<DiskUsageChartProps> = ({ total, free, siz
     const isNearFull = (free / total) < 0.1;
     const isDanger = (free / total) < 0.05;
     const strokeColor = isDanger ? '#ef4444' : isNearFull ? '#f59e0b' : 'var(--accent-color, #0078d7)';
+
+    if (inline) {
+        return (
+            <div className="disk-usage-inline">
+                <div className="disk-usage-bar-bg">
+                    <div
+                        className="disk-usage-bar-fill"
+                        style={{ width: `${percent}%`, backgroundColor: strokeColor }}
+                    />
+                    <div className="disk-usage-percent-overlay" style={{ "--percent": `${percent}%` } as any}>
+                        {percent}%
+                    </div>
+                </div>
+                {showText && (
+                    <div className="disk-usage-inline-labels">
+                        {formatSize(used, 1, t)} / {formatSize(total, 1, t)}
+                    </div>
+                )}
+            </div>
+        );
+    }
 
     return (
         <div className="disk-usage-chart-container">

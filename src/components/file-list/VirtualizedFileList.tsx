@@ -9,6 +9,7 @@ import { TFunc } from '../../i18n';
 import { useApp } from '../../context/AppContext';
 import { useFileItemState } from '../../hooks/useFileItemState';
 import { RenameInput } from './RenameInput';
+import { getFileTypeString } from '../../utils/format';
 import { getColumnMode, getVisibleColumns } from '../../config/columnDefinitions';
 
 interface VirtualizedFileListProps {
@@ -96,7 +97,7 @@ const DetailsRow = React.memo((props: RowComponentProps<SharedItemProps>) => {
     const entry = entries[index];
     if (!entry) return null;
 
-    const { isSelected, isRenaming, isProtected, handlers, itemClassName } = useFileItemState({
+    const { isSelected, isRenaming, isProtected, handlers, itemClassName, tooltipText } = useFileItemState({
         ...sharedProps,
         entry
     });
@@ -106,7 +107,7 @@ const DetailsRow = React.memo((props: RowComponentProps<SharedItemProps>) => {
     // Fixed width based on the calculated column sum
     const adjustedStyle = {
         ...style,
-        width: '100%',
+        width: 'max-content',
         minWidth: 'max-content'
     };
 
@@ -116,12 +117,16 @@ const DetailsRow = React.memo((props: RowComponentProps<SharedItemProps>) => {
                 "drag-over": isDragOver
             })}
             style={adjustedStyle}
+            data-path={entry.path}
             onClick={handlers.onClick}
             onDoubleClick={handlers.onDoubleClick}
             onContextMenu={handlers.onContextMenu}
             draggable={!isRenaming}
             onDragStart={handlers.onDragStart}
             onMouseDown={handlers.onMouseDown}
+            data-tooltip={tooltipText}
+            data-tooltip-multiline
+            data-tooltip-image-path={entry.path}
         >
             {showHistogram && (
                 <div
@@ -177,13 +182,13 @@ const GridCell = React.memo((props: CellComponentProps<SharedItemProps>) => {
     const {
         entries, renameText, showCheckboxes, getIcon,
         onRenameTextChange, onRenameCommit, onRenameCancel,
-        columnCount = 1, rootFontSize
+        columnCount = 1, rootFontSize, t
     } = sharedProps;
 
     const index = rowIndex * columnCount + columnIndex;
     const entry = entries[index];
 
-    const { isSelected, isRenaming, isProtected, handlers, itemClassName } = useFileItemState({
+    const { isSelected, isRenaming, isProtected, handlers, itemClassName, tooltipText } = useFileItemState({
         ...sharedProps,
         entry: entry || ({} as FileEntry)
     });
@@ -199,12 +204,16 @@ const GridCell = React.memo((props: CellComponentProps<SharedItemProps>) => {
                 "is-dir": entry.is_dir
             })}
             style={style}
+            data-path={entry.path}
             onClick={handlers.onClick}
             onDoubleClick={handlers.onDoubleClick}
             onContextMenu={handlers.onContextMenu}
             draggable={!isRenaming}
             onDragStart={handlers.onDragStart}
             onMouseDown={handlers.onMouseDown}
+            data-tooltip={tooltipText}
+            data-tooltip-multiline
+            data-tooltip-image-path={entry.path}
         >
             <div className="grid-selection-overlay" />
             <div className="file-icon-large">
@@ -218,9 +227,19 @@ const GridCell = React.memo((props: CellComponentProps<SharedItemProps>) => {
                         onRenameTextChange={onRenameTextChange}
                         onRenameCommit={onRenameCommit}
                         onRenameCancel={onRenameCancel}
+                        className="rename-input grid-mode"
                     />
                 ) : (
-                    <span className="file-name">{entry.name}</span>
+                    <>
+                        <span className="file-name">
+                            {!entry.is_dir && entry.name.lastIndexOf('.') > 0
+                                ? entry.name.slice(0, entry.name.lastIndexOf('.'))
+                                : entry.name}
+                        </span>
+                        {!entry.is_dir && (
+                            <span className="file-extension">{getFileTypeString(entry, t)}</span>
+                        )}
+                    </>
                 )}
             </div>
             {showCheckboxes && (

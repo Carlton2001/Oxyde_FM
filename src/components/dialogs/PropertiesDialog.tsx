@@ -89,13 +89,9 @@ export const PropertiesDialog: React.FC<PropertiesDialogProps> = ({ paths, initi
         }
     };
 
-
-
-
     const getIcon = (name: string, isDir: boolean, path?: string) => {
         return getFileIcon(name, isDir, { size: 48, strokeWidth: 1 }, useSystemIcons, path);
     };
-
 
     const handleOk = async () => {
         if (isSingle && properties?.shortcut) {
@@ -110,9 +106,7 @@ export const PropertiesDialog: React.FC<PropertiesDialogProps> = ({ paths, initi
         onClose();
     };
 
-    // Handled by useDraggable hook
-
-    if (!isSingle && !summary) return null; // Or a loader
+    if (!isSingle && !summary) return null;
     if (isSingle && !properties && !loading) return null;
 
     const hasCalculatedSize = !!localCalculated || properties?.is_calculated;
@@ -191,8 +185,6 @@ export const PropertiesDialog: React.FC<PropertiesDialogProps> = ({ paths, initi
                                             })() : `${summary!.count} items`}
                                         </div>
                                     </div>
-
-                                    <div className="prop-divider" />
 
                                     {isSingle ? (
                                         <div className="prop-grid">
@@ -298,18 +290,16 @@ export const PropertiesDialog: React.FC<PropertiesDialogProps> = ({ paths, initi
                                                         {formatSize(currentDrive.free_bytes || 0, 1, t)}
                                                     </div>
 
-                                                    <div className="prop-divider-row" />
-
                                                     <div className="prop-label">{t('capacity')}</div>
                                                     <div className="prop-value">
                                                         {formatSize(currentDrive.total_bytes!, 1, t)}
                                                     </div>
 
-                                                    <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'center', padding: '0' }}>
+                                                    <div style={{ gridColumn: '1 / -1', padding: '0.5rem 0' }}>
                                                         <DiskUsageChart
                                                             total={currentDrive.total_bytes!}
                                                             free={currentDrive.free_bytes || 0}
-                                                            size={120}
+                                                            inline={true}
                                                             showText={false}
                                                             t={t}
                                                         />
@@ -340,11 +330,15 @@ export const PropertiesDialog: React.FC<PropertiesDialogProps> = ({ paths, initi
                                                                 )}
                                                             </div>
 
-                                                            {showCounts && (
+                                                            {isSingle && properties!.is_dir && (
                                                                 <>
                                                                     <div className="prop-label">{t('contains')}</div>
                                                                     <div className="prop-value">
-                                                                        {filesCount} {t(filesCount === 1 ? 'file' as any : 'files' as any)}, {foldersCount} {t(foldersCount === 1 ? 'folder' as any : 'folders' as any)}
+                                                                        {showCounts ? (
+                                                                            <>{filesCount} {t(filesCount === 1 ? 'file' as any : 'files' as any)}, {foldersCount} {t(foldersCount === 1 ? 'folder' as any : 'folders' as any)}</>
+                                                                        ) : (
+                                                                            <span className="prop-text-muted">—</span>
+                                                                        )}
                                                                     </div>
                                                                 </>
                                                             )}
@@ -365,23 +359,8 @@ export const PropertiesDialog: React.FC<PropertiesDialogProps> = ({ paths, initi
 
                                                     <div className="prop-label">{t('accessed')}</div>
                                                     <div className="prop-value">{formatDate(properties!.accessed, dateFormat, '-')}</div>
-
-                                                    <div className="prop-divider-row" />
                                                 </>
                                             )}
-
-                                            <div className="prop-label">{t('attributes')}</div>
-                                            <div className="prop-attrs-static">
-                                                {properties!.is_media_device ? (
-                                                    <span className="prop-text-muted">{t('none' as any)}</span>
-                                                ) : (
-                                                    <>
-                                                        {properties!.readonly && <span className="prop-badge">{t('readonly')}</span>}
-                                                        {properties!.is_hidden && <span className="prop-badge">{t('hidden')}</span>}
-                                                        {!properties!.readonly && !properties!.is_hidden && <span className="prop-text-muted">{t('none' as any)}</span>}
-                                                    </>
-                                                )}
-                                            </div>
                                         </div>
                                     ) : (
                                         <div className="prop-grid">
@@ -397,15 +376,6 @@ export const PropertiesDialog: React.FC<PropertiesDialogProps> = ({ paths, initi
 
                                             <div className="prop-label">{t('total_size')}</div>
                                             <div className="prop-value">{formatSize(summary!.total_size, 1, t)}</div>
-
-                                            <div className="prop-divider-row" />
-
-                                            <div className="prop-label">{t('attributes')}</div>
-                                            <div className="prop-attrs-static">
-                                                {summary!.all_readonly ? <span className="prop-badge">{t('readonly')}</span> : (summary!.any_readonly && <span className="prop-badge partial">{t('readonly')} (partial)</span>)}
-                                                {summary!.all_hidden ? <span className="prop-badge">{t('hidden')}</span> : (summary!.any_hidden && <span className="prop-badge partial">{t('hidden')} (partial)</span>)}
-                                                {!summary!.any_readonly && !summary!.any_hidden && <span className="prop-text-muted">{t('none' as any)}</span>}
-                                            </div>
                                         </div>
                                     )}
                                 </>
@@ -505,5 +475,3 @@ export const PropertiesDialog: React.FC<PropertiesDialogProps> = ({ paths, initi
         </div>
     );
 };
-
-
