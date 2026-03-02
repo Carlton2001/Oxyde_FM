@@ -39,6 +39,7 @@ interface DualPanelLayoutProps {
     executeSearch: (id: 'left' | 'right') => void;
     openAdvancedSearch: (id: 'left' | 'right') => void;
     clearSearch: (id: 'left' | 'right') => void;
+    handleCancelSearch: (id: 'left' | 'right') => void;
     // Handlers
     handleDragStart: (id: 'left' | 'right', files: FileEntry[]) => void;
     handleDrop: (e: React.DragEvent | React.MouseEvent | undefined, targetPath: string | null, currentPath: string) => void;
@@ -129,6 +130,7 @@ export const DualPanelLayout: React.FC<DualPanelLayoutProps> = ({
     executeSearch,
     openAdvancedSearch,
     clearSearch,
+    handleCancelSearch,
     handleDragStart,
     handleDrop,
     dragState,
@@ -376,6 +378,7 @@ export const DualPanelLayout: React.FC<DualPanelLayoutProps> = ({
                             onSearchChange={(q) => handleSearch(activePanelId, q)}
                             onSearchSubmit={() => executeSearch(activePanelId)}
                             onSearchClear={() => clearSearch(activePanelId)}
+                            onCancelSearch={() => handleCancelSearch(activePanelId)}
                             isSearching={activePanel.isSearching}
                         />
                     )}
@@ -413,7 +416,8 @@ export const DualPanelLayout: React.FC<DualPanelLayoutProps> = ({
                             onSearch={leftHandlers.onSearch}
                             onQueryChange={leftHandlers.onQueryChange}
                             onClearSearch={leftHandlers.onClearSearch}
-                            showSearch={layout === 'dual'}
+                            onCancelSearch={() => handleCancelSearch('left')}
+                            showSearch={layout === 'standard' || activePanelId === 'left'}
                             isDragTarget={!!dragState && dragState.sourcePanel !== 'left'}
                             dragOverPath={null}
                             showHidden={propShowHidden}
@@ -464,7 +468,8 @@ export const DualPanelLayout: React.FC<DualPanelLayoutProps> = ({
                                 onSearch={rightHandlers.onSearch}
                                 onQueryChange={rightHandlers.onQueryChange}
                                 onClearSearch={rightHandlers.onClearSearch}
-                                showSearch={true}
+                                onCancelSearch={() => handleCancelSearch('right')}
+                                showSearch={activePanelId === 'right'}
                                 isDragTarget={!!dragState && dragState.sourcePanel !== 'right'}
                                 dragOverPath={null}
                                 showHidden={propShowHidden}

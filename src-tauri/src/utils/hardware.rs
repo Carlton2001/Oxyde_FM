@@ -11,13 +11,32 @@ use windows::core::PCWSTR;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
+pub fn is_network_path(path: &Path) -> bool {
+    #[cfg(target_os = "windows")]
+    {
+        let path_str = path.to_string_lossy();
+        if path_str.starts_with("\\\\") { return true; }
+        
+        if path_str.len() >= 2 && path_str.chars().nth(1) == Some(':') {
+            let root_path = format!("{}:\\", &path_str[0..1]);
+            let wide_root: Vec<u16> = root_path.encode_utf16().chain(std::iter::once(0)).collect();
+            unsafe {
+                if GetDriveTypeW(PCWSTR(wide_root.as_ptr())) == 4 { // DRIVE_REMOTE
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
 pub fn get_physical_disk_id(path: &Path) -> u64 {
     #[cfg(target_os = "windows")]
     {
         let path_str = path.to_string_lossy();
-        if path_str.starts_with("\\\\") {
+        if let Some(stripped) = path_str.strip_prefix("\\\\") {
             // UNC Path: Hash the host part to throttle per-server
-            let parts: Vec<&str> = path_str[2..].split('\\').collect();
+            let parts: Vec<&str> = stripped.split('\\').collect();
             if let Some(host) = parts.first() {
                 let mut hasher = DefaultHasher::new();
                 host.hash(&mut hasher);
@@ -70,21 +89,12 @@ pub fn get_physical_disk_id(path: &Path) -> u64 {
 pub fn is_ssd(path: &Path) -> bool {
     #[cfg(target_os = "windows")]
     {
-        let path_str = path.to_string_lossy();
+        if is_network_path(path) { return false; }
         
-        // Network drives are considered "HDD-like" for throttling (latencies, congestion)
-        if path_str.starts_with("\\\\") { return false; }
-
+        let path_str = path.to_string_lossy();
         if path_str.len() < 2 { return false; }
         
         let drive_root = if path_str.chars().nth(1) == Some(':') {
-            let root_path = format!("{}:\\", &path_str[0..1]);
-            let wide_root: Vec<u16> = root_path.encode_utf16().chain(std::iter::once(0)).collect();
-            unsafe {
-                if GetDriveTypeW(PCWSTR(wide_root.as_ptr())) == 4 { // DRIVE_REMOTE
-                    return false; // Treat NAS as "not SSD" for parallelization safety
-                }
-            }
             format!("\\\\.\\{}:", &path_str[0..1])
         } else {
             return false;

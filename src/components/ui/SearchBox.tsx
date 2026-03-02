@@ -11,6 +11,8 @@ interface SearchBoxProps {
     onClear: () => void;
     clearTitle?: string;
     searchTitle?: string;
+    stopTitle?: string;
+    onCancel?: () => void;
 }
 
 export const SearchBox: React.FC<SearchBoxProps> = ({
@@ -21,7 +23,9 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
     onSubmit,
     onClear,
     clearTitle = 'Clear',
-    searchTitle = 'Search'
+    searchTitle = 'Search',
+    stopTitle = 'Stop',
+    onCancel
 }) => {
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === 'Enter') {
@@ -44,7 +48,17 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
             />
             <div className="search-actions">
                 {isSearching ? (
-                    <Loader2 size={14} className="spinner" />
+                    <button
+                        className="search-stop-btn"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onCancel?.();
+                        }}
+                        data-tooltip={stopTitle}
+                    >
+                        <Loader2 size={14} className="spinner" />
+                        <X size={14} className="stop-icon" />
+                    </button>
                 ) : (
                     <>
                         {query && (

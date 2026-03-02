@@ -184,10 +184,10 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({
                             {page === 'themes' && renderThemesSubmenu()}
                         </div>
                         <div className="settings-item no-hover">
-                            <div className="settings-item-content">
+                            <div className="settings-item-icon-left">
                                 <div className="settings-font-icon-placeholder">A</div>
-                                <span>{t('font_size' as any)}</span>
                             </div>
+                            <span className="settings-item-text">{t('font_size' as any)}</span>
                             <div className="settings-font-controls">
                                 <button
                                     className="font-btn"
@@ -292,15 +292,17 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({
                         <div className="settings-divider" />
                         <div className="settings-label">{t('performance' as any)}</div>
                         <div className="settings-item" onClick={() => setDefaultTurboMode(!defaultTurboMode)}>
-                            <Zap size={14} />
+                            <div className="settings-item-icon-left">
+                                <Zap size={16} className="icon-md" />
+                            </div>
                             <span className="settings-item-text">{t('mode_turbo' as any)}</span>
                             <Toggle checked={defaultTurboMode} onChange={setDefaultTurboMode} />
                         </div>
                         <div className="settings-item no-hover">
-                            <div className="settings-item-content">
-                                <Zap size={14} />
-                                <span>{t('search_limit' as any)}</span>
+                            <div className="settings-item-icon-left">
+                                <Zap size={16} className="icon-md" />
                             </div>
+                            <span className="settings-item-text">{t('search_limit' as any)}</span>
                             <div className="settings-font-controls">
                                 <button
                                     className="font-btn"
@@ -356,8 +358,10 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({
                             });
                             onClose();
                         }}>
-                            <Trash2 size={14} className="error-text" />
-                            <span className="error-text">{t('clear_cache' as any)}</span>
+                            <div className="settings-item-icon-left">
+                                <Trash2 size={14} className="error-text icon-sm" />
+                            </div>
+                            <span className="settings-item-text error-text">{t('clear_cache' as any)}</span>
                         </div>
                         <div className="settings-item" onClick={() => {
                             confirm(
@@ -376,8 +380,10 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({
                             });
                             onClose();
                         }}>
-                            <RefreshCw size={14} className="warning-text" />
-                            <span className="warning-text">{t('reset_config' as any)}</span>
+                            <div className="settings-item-icon-left">
+                                <RefreshCw size={14} className="warning-text icon-sm" />
+                            </div>
+                            <span className="settings-item-text warning-text">{t('reset_config' as any)}</span>
                         </div>
 
                         <div className="settings-divider" style={{ marginTop: 'auto' }} />

@@ -173,7 +173,7 @@ export const MapNetworkDriveDialog: React.FC<MapNetworkDriveDialogProps> = ({ on
                             <input
                                 type="text"
                                 className="input-field"
-                                placeholder={t('optional' as any)}
+                                placeholder="SERVEUR\Utilisateur"
                                 value={username}
                                 onChange={e => setUsername(e.target.value)}
                             />
@@ -184,7 +184,6 @@ export const MapNetworkDriveDialog: React.FC<MapNetworkDriveDialogProps> = ({ on
                             <input
                                 type="password"
                                 className="input-field"
-                                placeholder={t('optional' as any)}
                                 value={password}
                                 onChange={e => setPassword(e.target.value)}
                             />

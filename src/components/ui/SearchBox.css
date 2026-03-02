@@ -77,5 +77,37 @@
 .search-box .spinner {
     color: var(--accent-color);
     animation: spin 1s linear infinite;
-    margin-right: 0.375rem;
+}
+
+.search-stop-btn {
+    position: relative;
+    width: 24px;
+    height: 24px;
+    padding: 2px;
+    margin-right: 4px;
+    background: transparent;
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    border-radius: 4px;
+}
+
+.search-stop-btn .stop-icon {
+    position: absolute;
+    display: none;
+    color: var(--error-color, #ef4444);
+}
+
+.search-stop-btn:hover {
+    background: var(--hover-color);
+}
+
+.search-stop-btn:hover .spinner {
+    display: none;
+}
+
+.search-stop-btn:hover .stop-icon {
+    display: block;
 }

@@ -3,8 +3,16 @@ use crate::WindowState;
 use crate::utils::path_security::validate_path;
 use log::info;
 use std::process::Command;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 use std::path::PathBuf;
+
+#[tauri::command]
+pub fn app_ready(app: AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
 
 #[tauri::command]
 pub fn get_drives(skip_hardware_info: Option<bool>) -> Vec<DriveInfo> {
@@ -1349,7 +1357,7 @@ pub async fn get_peek_status() -> Result<PeekStatus, String> {
         let local_app_data = std::env::var("LOCALAPPDATA").unwrap_or_default();
         let program_files = std::env::var("ProgramFiles").unwrap_or_default();
 
-        let exe_paths = vec![
+        let exe_paths = [
             format!("{}\\PowerToys\\WinUI3Apps\\PowerToys.Peek.UI.exe", local_app_data),
             format!("{}\\Microsoft\\PowerToys\\PowerToys.Peek.UI.exe", local_app_data),
             format!("{}\\PowerToys\\WinUI3Apps\\PowerToys.Peek.UI.exe", program_files),
@@ -1447,9 +1455,9 @@ pub async fn open_peek(path: String) -> Result<(), String> {
             }
             
             cmd.spawn().map_err(|e| e.to_string())?;
-            return Ok(());
+            Ok(())
         } else {
-            return Err("PowerToys Peek not found".to_string());
+            Err("PowerToys Peek not found".to_string())
         }
     }
     #[cfg(not(target_os = "windows"))]

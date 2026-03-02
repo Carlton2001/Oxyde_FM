@@ -48,9 +48,11 @@ export const translations = {
         show_previews: 'Media previews',
         show_grid_thumbnails: 'Image thumbnails (Grid)',
         show_checkboxes: 'Selection checkboxes',
-        show_network: 'Network discovery (Network Vicinity)',
+        show_network: 'Network discovery',
 
         // Header
+        select_date: 'Select date...',
+        in: 'in',
         name: 'Name',
         type: 'Type',
         size: 'Size',
@@ -94,8 +96,10 @@ export const translations = {
         selected_singular: 'selected',
         search: 'Search',
         results: 'Results',
+        search_results: 'Search Results',
         back: 'Back',
         clear: 'Clear',
+        stop: 'Stop',
         file_type: '{ext} File',
         reduce: 'Reduce',
         expand: 'Expand',
@@ -426,6 +430,7 @@ export const translations = {
         disconnect_network_drive_success: 'Network drive disconnected successfully!',
         disconnect_network_drive_force_msg: 'There are open files on this connection. Do you want to force disconnection anyway?',
         drive_in_use: 'In use',
+        username_hint: 'Example: SERVER\\User or DOMAIN\\User',
     },
     fr: {
         // Settings
@@ -477,6 +482,8 @@ export const translations = {
         show_network: 'Voisinage réseau',
 
         // Header
+        select_date: 'Sélectionner...',
+        in: 'dans',
         name: 'Nom',
         type: 'Type',
         size: 'Taille',
@@ -520,8 +527,10 @@ export const translations = {
         selected_singular: 'sélectionné',
         search: 'Rechercher',
         results: 'Résultats',
+        search_results: 'Résultats de recherche',
         back: 'Retour',
         clear: 'Effacer',
+        stop: 'Arrêter',
         file_type: 'Fichier {ext}',
         reduce: 'Réduire',
         expand: 'Agrandir',
@@ -852,6 +861,7 @@ export const translations = {
         disconnect_network_drive_success: 'Lecteur réseau déconnecté avec succès !',
         disconnect_network_drive_force_msg: 'Des fichiers sont ouverts sur cette connexion. Voulez-vous forcer la déconnexion malgré tout ?',
         drive_in_use: 'Utilisé',
+        username_hint: 'Exemple : SERVEUR\\Utilisateur ou DOMAINE\\Utilisateur',
     }
 };
 

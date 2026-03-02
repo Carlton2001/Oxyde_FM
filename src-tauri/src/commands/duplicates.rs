@@ -29,6 +29,12 @@ impl DuplicateSearchState {
     }
 }
 
+impl Default for DuplicateSearchState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct DuplicateGroup {
     pub size: u64,
@@ -133,7 +139,7 @@ pub async fn find_duplicates(
                         let mut groups = initial_groups.lock().unwrap();
                         groups.entry(key).or_default().push(entry.path().to_path_buf());
                         let count = file_count.fetch_add(1, Ordering::Relaxed) + 1;
-                        if count % 5000 == 0 {
+                        if count.is_multiple_of(5000) {
                             drop(groups); // Don't hold lock during emit
                             emit_progress("Scanning", count, 0, &format!("Found {} files...", count));
                         }
@@ -201,7 +207,7 @@ pub async fn find_duplicates(
                 let limit = if size > PARTIAL_HASH_SIZE as u64 { Some(PARTIAL_HASH_SIZE) } else { None };
                 let hash = calculate_hash(&path, limit, false).ok()?;
                 let p = processed_count.fetch_add(1, Ordering::Relaxed) + 1;
-                if p % 500 == 0 || p == total_to_hash {
+                if p.is_multiple_of(500) || p == total_to_hash {
                     emit_progress("Partial Hashing (Start)", p, total_to_hash, &path.file_name().unwrap_or_default().to_string_lossy());
                 }
                 Some((size, path, hash))
@@ -240,7 +246,7 @@ pub async fn find_duplicates(
                 let limit = if size > PARTIAL_HASH_SIZE as u64 { Some(PARTIAL_HASH_SIZE) } else { None };
                 let hash = calculate_hash(&path, limit, true).ok()?;
                 let p = processed_end.fetch_add(1, Ordering::Relaxed) + 1;
-                if p % 500 == 0 || p == total_end {
+                if p.is_multiple_of(500) || p == total_end {
                     emit_progress("Partial Hashing (End)", p, total_end, &path.file_name().unwrap_or_default().to_string_lossy());
                 }
                 Some((size, path, hash))
@@ -278,7 +284,7 @@ pub async fn find_duplicates(
                 let _guard = lock.lock().unwrap();
                 let hash = calculate_hash(&path, None, false).ok()?;
                 let p = processed_final.fetch_add(1, Ordering::Relaxed) + 1;
-                if p % 100 == 0 || p == total_final {
+                if p.is_multiple_of(100) || p == total_final {
                     emit_progress("Full Hashing", p, total_final, &path.file_name().unwrap_or_default().to_string_lossy());
                 }
                 Some((size, path, hash))

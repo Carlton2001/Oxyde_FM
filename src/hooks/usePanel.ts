@@ -85,7 +85,7 @@ export const usePanel = (initialPath: string, panelId?: string, activeTabId?: st
     const {
         searchQuery, searchResults, isSearching, searchLimitReached,
         currentSearchRoot, setSearchQuery, setSearchResults,
-        setIsSearching, setSearchLimitReached
+        setIsSearching, setSearchLimitReached, cancelSearch
     } = usePanelSearch({ path, panelId, activeTabId, searchLimit, initialPath });
 
     // Derive current mode (moved down to have access to searchResults)
@@ -220,6 +220,7 @@ export const usePanel = (initialPath: string, panelId?: string, activeTabId?: st
         setSearchResults,
         setIsSearching,
         setSearchLimitReached,
+        cancelSearch,
 
         handleSelect,
         selectMultiple,

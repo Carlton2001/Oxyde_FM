@@ -92,7 +92,6 @@ export const FileHeader: React.FC<FileHeaderProps> = React.memo(({
                                 key={col.key}
                                 className={cx("col", `col-${col.key}`, { "col-name": isName })}
                                 onClick={() => {
-                                    if (isName) return;
                                     onSort(sField);
                                 }}
                                 onContextMenu={(e) => onHeaderContextMenu?.(col.key as any, e)}

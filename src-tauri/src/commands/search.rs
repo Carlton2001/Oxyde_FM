@@ -13,7 +13,7 @@ use std::thread;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read};
 use crate::utils::archive::{ArchiveFormat, is_archive};
-use crate::utils::hardware::{get_physical_disk_id, is_ssd};
+use crate::utils::hardware::{get_physical_disk_id, is_ssd, is_network_path};
 use dashmap::DashMap;
 use once_cell::sync::Lazy;
 use iso9660_core::iso9660entry::{IsISO9660Record, ISO9660Record};
@@ -37,7 +37,7 @@ enum SearchPattern {
     Literal(String, bool, bool), // (query, case_sensitive, ignore_accents)
 }
 
-static DISK_IO_LOCKS: Lazy<DashMap<u64, Arc<Mutex<()>>>> = Lazy::new(|| DashMap::new());
+static DISK_IO_LOCKS: Lazy<DashMap<u64, Arc<Mutex<()>>>> = Lazy::new(DashMap::new);
 impl SearchPattern {
     fn matches(&self, text: &str) -> bool {
         match self {
@@ -262,7 +262,7 @@ fn search_in_iso(
         };
         if name == "." || name == ".." { continue; }
         
-        let display_name = name.split(';').next().unwrap_or(&name);
+        let display_name = name.split(';').next().unwrap_or(name);
         let new_internal = if internal_path == "/" {
             format!("/{}", display_name)
         } else {
@@ -321,7 +321,7 @@ fn is_binary_file(path: &std::path::Path) -> bool {
     let mut buffer = [0u8; 1024];
     match file.read(&mut buffer) {
         Ok(n) => {
-            buffer[..n].iter().any(|&b| b == 0)
+            buffer[..n].contains(&0)
         }
         Err(_) => true,
     }
@@ -417,12 +417,10 @@ fn file_contains_content(path: &std::path::Path, pattern: &Regex, ignore_accents
         } else {
             read_file_and_check(path, pattern, ignore_accents)
         }
+    } else if is_office {
+        office_file_contains_content(path, pattern, ignore_accents)
     } else {
-        if is_office {
-            office_file_contains_content(path, pattern, ignore_accents)
-        } else {
-            read_file_and_check(path, pattern, ignore_accents)
-        }
+        read_file_and_check(path, pattern, ignore_accents)
     }
 }
 
@@ -438,16 +436,15 @@ fn read_file_and_check(path: &std::path::Path, pattern: &Regex, ignore_accents: 
             if pattern.is_match(&crate::utils::remove_accents(&line)) {
                 return true;
             }
-        } else {
-            if pattern.is_match(&line) {
-                return true;
-            }
+        } else if pattern.is_match(&line) {
+            return true;
         }
     }
     false
 }
 
 
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn start_search(
     app: AppHandle,
@@ -567,9 +564,10 @@ pub async fn start_search(
     let root_path_for_hardware = root_path.clone();
     thread::spawn(move || {
         let is_target_ssd = is_ssd(&root_path_for_hardware);
-        
+        let is_network = is_network_path(&root_path_for_hardware);
+
         #[cfg(target_os = "windows")]
-        if !is_turbo {
+        if !is_turbo && !is_network {
             unsafe {
                 let _ = SetThreadPriority(GetCurrentThread(), THREAD_MODE_BACKGROUND_BEGIN);
             }
@@ -603,7 +601,9 @@ pub async fn start_search(
             if entry.depth() == 0 { continue; } // Skip the root directory itself
             
             files_processed += 1;
-            if !is_turbo && files_processed % 100 == 0 {
+            // On network drives, any sleep (even small) destroys throughput due to latency
+            // We only throttle local non-SSD or non-turbo searches
+            if !is_turbo && !is_network && files_processed.is_multiple_of(100) {
                 std::thread::sleep(std::time::Duration::from_millis(1));
             }
 

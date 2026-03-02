@@ -5,7 +5,7 @@
  * buffered result updates, limit enforcement, and cleanup.
  */
 
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 import { FileEntry, SearchEventPayload } from '../types';
@@ -30,6 +30,7 @@ export interface PanelSearchState {
     setSearchResults: React.Dispatch<React.SetStateAction<FileEntry[] | null>>;
     setIsSearching: (v: boolean) => void;
     setSearchLimitReached: (v: boolean) => void;
+    cancelSearch: () => void;
 }
 
 export const usePanelSearch = ({
@@ -294,6 +295,11 @@ export const usePanelSearch = ({
         return (activeTabId ? tabSearchRootCache.current.get(activeTabId) : null) || prevPathRef.current;
     }, [path, activeTabId]);
 
+    const cancelSearch = useCallback(() => {
+        setIsSearching(false);
+        invoke('cancel_search', { panelId: pid }).catch(console.error);
+    }, [pid]);
+
     return {
         searchQuery,
         searchResults,
@@ -303,6 +309,7 @@ export const usePanelSearch = ({
         setSearchQuery,
         setSearchResults,
         setIsSearching,
-        setSearchLimitReached
+        setSearchLimitReached,
+        cancelSearch
     };
 };

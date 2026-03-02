@@ -224,13 +224,11 @@ pub fn get_office_text_preview(
                     } else if c == '>' {
                         in_tag = false;
                         let tl = &tag_buffer;
-                        if tl.starts_with("w:p") || tl.starts_with("/w:p") ||
+                        if (tl.starts_with("w:p") || tl.starts_with("/w:p") ||
                            tl.starts_with("w:br") || tl.starts_with("text:p") ||
-                           tl.starts_with("/text:p") || tl == "p" || tl == "/p" {
-                            if !preview.ends_with('\n') {
-                                preview.push('\n');
-                                chars_read += 1;
-                            }
+                           tl.starts_with("/text:p") || tl == "p" || tl == "/p") && !preview.ends_with('\n') {
+                            preview.push('\n');
+                            chars_read += 1;
                         }
                     } else if in_tag {
                         if tag_buffer.len() < 10 {

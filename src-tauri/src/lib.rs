@@ -150,6 +150,7 @@ pub fn run() {
             commands::system::remove_from_quick_access,
             commands::system::clear_app_cache,
             commands::system::restart_app,
+            commands::system::app_ready,
             commands::io::set_shortcut_info,
 
             commands::icons::get_file_icon,

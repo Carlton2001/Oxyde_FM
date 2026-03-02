@@ -1,7 +1,7 @@
 use crate::models::NetResource;
 use windows::Win32::NetworkManagement::WNet::{
     WNetOpenEnumW, WNetEnumResourceW, WNetCloseEnum, WNetAddConnection2W, WNetCancelConnection2W,
-    RESOURCE_GLOBALNET, RESOURCETYPE_ANY, NETRESOURCEW, RESOURCEUSAGE_CONTAINER,
+    RESOURCE_GLOBALNET, RESOURCE_CONNECTED, RESOURCETYPE_ANY, NETRESOURCEW, RESOURCEUSAGE_CONTAINER,
     WNET_OPEN_ENUM_USAGE, RESOURCETYPE_DISK, CONNECT_UPDATE_PROFILE, NET_CONNECT_FLAGS
 };
 use log::info;
@@ -74,7 +74,7 @@ pub async fn get_network_resources(path: Option<String>) -> Result<Vec<NetResour
                                                         let mut name_buf = [0u8; 128];
                                                         if context_menu.GetCommandString(
                                                             (id - 1) as usize,
-                                                            GCS_VERBA as u32,
+                                                            GCS_VERBA,
                                                             None,
                                                             PSTR::from_raw(name_buf.as_mut_ptr()),
                                                             name_buf.len() as u32
@@ -112,6 +112,70 @@ pub async fn get_network_resources(path: Option<String>) -> Result<Vec<NetResour
                     }
                 }
                 
+                // --- NEW: Discover Connected Servers (Mapped Drives / Active UNC Sessions) ---
+                // This captures servers like PCS16 that are reachable but might not respond to WSD/UPnP discovery
+                let mut connected_handle = windows::Win32::Foundation::HANDLE::default();
+                if WNetOpenEnumW(
+                    RESOURCE_CONNECTED,
+                    RESOURCETYPE_ANY,
+                    WNET_OPEN_ENUM_USAGE(0),
+                    None,
+                    &mut connected_handle
+                ).is_ok() {
+                    let mut buffer = vec![0u8; 16384];
+                    loop {
+                        let mut count = 0xFFFFFFFFu32;
+                        let mut buffer_size = buffer.len() as u32;
+                        if WNetEnumResourceW(
+                            connected_handle,
+                            &mut count,
+                            buffer.as_mut_ptr() as *mut _,
+                            &mut buffer_size
+                        ).is_ok() {
+                            let ptr = buffer.as_ptr() as *const NETRESOURCEW;
+                            for i in 0..count as usize {
+                                let item = &*ptr.add(i);
+                                if !item.lpRemoteName.is_null() {
+                                    let remote_path = item.lpRemoteName.to_string().unwrap_or_default();
+                                    if let Some(stripped) = remote_path.strip_prefix("\\\\") {
+                                        // Extract server name from \\SERVER\SHARE or \\SERVER
+                                        let parts: Vec<&str> = stripped.split('\\').collect();
+                                        if let Some(server_name) = parts.first() {
+                                            let server_path = format!("\\\\{}", server_name);
+                                            
+                                            // Only add if not already discovered by Shell
+                                            let exists = resources.iter().any(|r| 
+                                                r.remote_path.to_lowercase() == server_path.to_lowercase() ||
+                                                r.name.to_lowercase() == server_name.to_lowercase()
+                                            );
+
+                                            if !exists && !server_name.is_empty() {
+                                                resources.push(NetResource {
+                                                    name: server_name.to_string(),
+                                                    remote_path: server_path,
+                                                    resource_type: 1, // Disk
+                                                    display_type: 1, // Server
+                                                    usage: 2, // Container
+                                                    provider: if !item.lpProvider.is_null() {
+                                                        Some(item.lpProvider.to_string().unwrap_or_default())
+                                                    } else {
+                                                        None
+                                                    },
+                                                    is_media_device: Some(false),
+                                                    has_web_page: Some(false),
+                                                });
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            break;
+                        }
+                    }
+                    let _ = WNetCloseEnum(connected_handle);
+                }
+
                 CoUninitialize();
                 
                 // Sort by name
@@ -161,12 +225,12 @@ pub async fn get_network_resources(path: Option<String>) -> Result<Vec<NetResour
                                 String::new()
                             };
 
-                            let name = if !item.lpComment.is_null() && !item.lpComment.to_string().unwrap_or_default().is_empty() {
-                                item.lpComment.to_string().unwrap_or_default()
-                            } else if !item.lpRemoteName.is_null() {
+                            let name = if !item.lpRemoteName.is_null() {
                                 let rn = item.lpRemoteName.to_string().unwrap_or_default();
-                                let parts: Vec<&str> = rn.split('\\').collect();
+                                let parts: Vec<&str> = rn.split('\\').filter(|s| !s.is_empty()).collect();
                                 parts.last().unwrap_or(&"Unknown").to_string()
+                            } else if !item.lpComment.is_null() && !item.lpComment.to_string().unwrap_or_default().is_empty() {
+                                item.lpComment.to_string().unwrap_or_default()
                             } else {
                                 "Unknown".to_string()
                             };
@@ -218,14 +282,25 @@ pub async fn map_network_drive(
     #[cfg(target_os = "windows")]
     {
         unsafe {
-            let mut nr = NETRESOURCEW::default();
-            nr.dwType = RESOURCETYPE_DISK;
+            let mut nr = NETRESOURCEW {
+                dwType: RESOURCETYPE_DISK,
+                ..Default::default()
+            };
             
-            let mut wide_remote: Vec<u16> = path.encode_utf16().chain(std::iter::once(0)).collect();
+            // Ensure path starts with \\
+            let clean_path = if !path.starts_with("\\\\") {
+                format!("\\\\{}", path.trim_start_matches('\\'))
+            } else {
+                path.clone()
+            };
+            
+            let mut wide_remote: Vec<u16> = clean_path.encode_utf16().chain(std::iter::once(0)).collect();
 
             // Make sure the letter is formatted e.g., "Z:" not just "Z"
-            let local_name = if letter.len() == 1 { format!("{}:", letter) } else { 
-                if !letter.ends_with(':') { format!("{}:", letter) } else { letter.clone() }
+            let local_name = if letter.len() == 1 || !letter.ends_with(':') { 
+                format!("{}:", letter) 
+            } else { 
+                letter.clone() 
             };
             let mut wide_local: Vec<u16> = local_name.encode_utf16().chain(std::iter::once(0)).collect();
 
@@ -247,9 +322,9 @@ pub async fn map_network_drive(
             let result = WNetAddConnection2W(&nr, pass_ptr, user_ptr, flags);
             if result == WIN32_ERROR(0) {
                 info!("Successfully mapped network drive {}", local_name);
-                return Ok(());
+                Ok(())
             } else {
-                return Err(format!("WNetAddConnection2W failed with code {:?}", result));
+                Err(format!("WNetAddConnection2W failed with code {:?}", result))
             }
         }
     }
@@ -269,9 +344,9 @@ pub async fn disconnect_network_drive(letter: String, force: bool) -> Result<(),
 
             let result = WNetCancelConnection2W(PCWSTR(wide_local.as_ptr()), CONNECT_UPDATE_PROFILE, force);
             if result == WIN32_ERROR(0) {
-                return Ok(());
+                Ok(())
             } else {
-                return Err(format!("WNetCancelConnection2W failed with code {:?}", result));
+                Err(format!("WNetCancelConnection2W failed with code {:?}", result))
             }
         }
     }

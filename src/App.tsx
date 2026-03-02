@@ -134,6 +134,14 @@ function App() {
   }, [fileOps.activeOperation]);
 
   useEffect(() => {
+    // Signal that the app is ready and should be shown
+    const timer = setTimeout(() => {
+      invoke('app_ready').catch(console.error);
+    }, 150); // Small delay to ensure styles and fonts are well applied
+    return () => clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
       setModifiers(prev => {
         if (prev.ctrl === e.ctrlKey && prev.shift === e.shiftKey && prev.alt === e.altKey) return prev;
@@ -425,6 +433,10 @@ function App() {
   } : progress;
 
 
+  const handleCancelSearch = (id: 'left' | 'right') => {
+    (id === 'left' ? left : right).cancelSearch();
+  };
+
   const effectiveAction = useMemo(() => {
     return (dragState && dragTargetPath) ? (modifiers.ctrl ? 'copy' : modifiers.shift ? 'move' : (dragState.files[0].path.charAt(0) !== dragTargetPath.charAt(0) ? 'copy' : 'move')) : null;
   }, [dragState, dragTargetPath, modifiers.ctrl, modifiers.shift]);
@@ -445,6 +457,7 @@ function App() {
         executeSearch={executeSearch}
         openAdvancedSearch={openAdvancedSearch}
         clearSearch={clearSearch}
+        handleCancelSearch={handleCancelSearch}
         handleDragStart={handleDragStart} handleDrop={handleDrop} dragState={dragState}
         handleSelect={(id: PanelId, path: string, m: boolean, r: boolean) => { setContextMenu(null); (id === 'left' ? left : right).handleSelect(path, m, r); setActivePanelId(id); }}
         handleSelectMultiple={(id: PanelId, paths: string[], a: boolean) => { (id === 'left' ? left : right).selectMultiple(paths, a); setActivePanelId(id); }}

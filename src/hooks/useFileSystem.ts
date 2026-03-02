@@ -302,8 +302,6 @@ export const useFiles = (panelId: PanelId, path: string, sortConfig: SortConfig,
                     forceRefresh: true // Always force refresh to avoid stale cache issues
                 });
 
-                // console.log('[useFiles] list_dir response', response.entries.length, 'entries');
-
                 if (response.is_complete) {
                     setFiles(prev => {
                         const next = reconcileFiles(prev, response.entries);

@@ -35,6 +35,8 @@ Oxyde is a modern, high-performance file manager designed for efficiency and spe
 *   **Multi-Format Archives**: Built-in support for ZIP, 7z, TAR, and Zstd archive management.
 *   **Premium Themes**: Includes a wide variety of curated themes (GitHub, Ayu, Monokai, Solarized, and more).
 *   **Auto-Updater**: Stay up to date with automatic notifications and seamless installation of the latest versions directly from GitHub releases.
+*   **PowerToys Peek Integration**: Full support for PowerToys Peek, allowing for super-fast file previews with smart activation and real-time status checks.
+*   **Network Drive Management**: Dedicated tools to easily Connect (Map) and Disconnect network drives directly from the interface.
 
 
 ## Technology Stack

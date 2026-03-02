@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { ArrowLeft, ArrowRight, ArrowUp, Home, RefreshCw, Undo2, Redo2, Copy, Scissors, Trash2, ClipboardPaste, Minus, Square, X, ChartBarBig, RotateCcw, ArrowLeftRight, StretchVertical, GitCompare, Sidebar, Columns, Wrench, Search } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { invoke } from '@tauri-apps/api/core';
 import { homeDir } from '@tauri-apps/api/path';
 import { PathBar } from './PathBar';
 import { SettingsMenu } from './SettingsMenu';
@@ -153,41 +152,20 @@ export const TopBar: React.FC<TopBarProps> = ({
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, [settingsOpen, hamburgerOpen]);
 
-    // Windows 11 Snap Layouts Support
     React.useEffect(() => {
-        const btn = document.getElementById('titlebar-maximize');
-        if (!btn) return;
-
-        const updateRect = async () => {
-            const rect = btn.getBoundingClientRect();
+        const updateMaximized = async () => {
             try {
                 const max = await getCurrentWindow().isMaximized();
                 setIsMaximized(max);
-                await invoke('oxide_sync_snap_rect', {
-                    rect: {
-                        x: Math.round(rect.x),
-                        y: Math.round(rect.y),
-                        width: Math.round(rect.width),
-                        height: Math.round(rect.height)
-                    }
-                });
             } catch (err) {
+                // Ignore transient errors
             }
         };
-
-        const observer = new ResizeObserver(() => {
-            updateRect();
-        });
-
-        observer.observe(btn);
-        window.addEventListener('resize', updateRect);
-        updateRect();
-
-        return () => {
-            observer.disconnect();
-            window.removeEventListener('resize', updateRect);
-        };
+        window.addEventListener('resize', updateMaximized);
+        updateMaximized();
+        return () => window.removeEventListener('resize', updateMaximized);
     }, []);
+
 
     return (
         <div className="header" data-tauri-drag-region>

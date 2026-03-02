@@ -149,8 +149,9 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
     const loadPathContent = useCallback(async (path: string) => {
         const lowerPath = path.toLowerCase();
 
-        // Handle network resource discovery
-        if (path.startsWith('\\\\') || path === '__network_vincinity__') {
+        // Handle network resource discovery for neighborhood or server roots
+        const isNetworkServer = path.startsWith('\\\\') && path.split('\\').filter(Boolean).length === 1;
+        if (path === '__network_vincinity__' || isNetworkServer) {
             try {
                 const networkPath = path === '__network_vincinity__' ? undefined : path;
                 const netResources: any[] = await invoke('get_network_resources', { path: networkPath });

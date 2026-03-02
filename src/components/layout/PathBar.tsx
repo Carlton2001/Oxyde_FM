@@ -143,6 +143,14 @@ export const PathBar: React.FC<PathBarProps> = ({ path, onNavigate, className, i
             return;
         }
 
+        // Allow special virtual paths and network server roots without listing validation
+        const isServerRoot = trimmed.startsWith('\\\\') && trimmed.split('\\').filter(Boolean).length === 1;
+        if (trimmed === '__network_vincinity__' || trimmed === 'trash://' || isServerRoot) {
+            onNavigate(trimmed);
+            setIsEditing(false);
+            return;
+        }
+
         // Allow search:// paths without validation
         if (trimmed.startsWith('search://')) {
             // Preserve the original root if the user just edited the query
@@ -232,9 +240,8 @@ export const PathBar: React.FC<PathBarProps> = ({ path, onNavigate, className, i
             const root = params.get('root');
             const folderName = root ? (root.split('\\').filter(Boolean).pop() || root) : '';
 
-            const inLabel = t && t('in' as any) === 'in' ? 'dans' : (t ? t('in' as any) : 'in');
             const displayName = root
-                ? `${t ? t('search' as any) : 'Search'} "${query}" ${inLabel} ${folderName}`
+                ? `${t ? t('search' as any) : 'Search'} "${query}" ${t ? t('in' as any) : 'in'} ${folderName}`
                 : `${t ? t('search' as any) : 'Search'}: ${query}`;
 
             return [{
@@ -270,11 +277,7 @@ export const PathBar: React.FC<PathBarProps> = ({ path, onNavigate, className, i
                 const drive = drives.find(d => d.path.toUpperCase().startsWith(drivePath.toUpperCase()));
                 if (drive && drive.label) {
                     name = `${drive.label} (${name})`;
-                } else if (index === 0 && part.includes(':')) {
-                    name = name;
                 }
-            } else if (!isUNC && index === 0 && part.includes(':')) {
-                name = name;
             }
 
             const isDrive = !isUNC && index === 0 && part.includes(':');

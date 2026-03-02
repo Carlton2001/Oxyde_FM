@@ -6,14 +6,36 @@
   <link rel="icon" type="image/svg+xml" href="/logo.svg" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Oxyde</title>
+  <style id="early-theme-bg">
+    html { background: #13111c; } /* Default Oxyde Dark */
+  </style>
   <script>
     (function () {
       try {
         var t = localStorage.getItem('fm_theme');
-        if (t) document.documentElement.setAttribute('data-theme', t);
+        if (t) {
+          document.documentElement.setAttribute('data-theme', t);
+          var bgColors = {
+            'oxyde-dark': '#13111c',
+            'oxyde-light': '#faf8f5',
+            'github-dark': '#0d1117',
+            'github-light': '#ffffff',
+            'one-dark': '#282c34',
+            'one-light': '#fafafa',
+            'ayu-dark': '#0b0e14',
+            'ayu-light': '#f8f9fa',
+            'monokai': '#272822',
+            'solarized-dark': '#002b36',
+            'solarized-light': '#eee8d5',
+            'windows-dark': '#181818',
+            'windows-light': '#fbfbfb'
+          };
+          if (bgColors[t]) {
+            document.getElementById('early-theme-bg').innerHTML = 'html { background: ' + bgColors[t] + '; }';
+          }
+        }
       } catch (e) { }
 
-      // Disable default context menu
       document.addEventListener('contextmenu', function (e) {
         e.preventDefault();
       }, { capture: true });

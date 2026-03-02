@@ -21,11 +21,13 @@ interface TabsProps {
     onSearchSubmit: () => void;
     onSearchClear: () => void;
     isSearching: boolean;
+    onCancelSearch?: () => void;
 }
 
 export const Tabs: React.FC<TabsProps> = ({
     onSwitch, onClose, isDraggingFiles, dragState, onTabDrop,
-    searchQuery, onSearchChange, onSearchSubmit, onSearchClear, isSearching
+    searchQuery, onSearchChange, onSearchSubmit, onSearchClear, isSearching,
+    onCancelSearch
 }) => {
     const { tabs, activeTabId, addTab, duplicateTab, closeOtherTabs, reorderTabs } = useTabs();
     const { t } = useApp();
@@ -463,6 +465,8 @@ export const Tabs: React.FC<TabsProps> = ({
                     onClear={onSearchClear}
                     clearTitle={t('clear') || 'Clear'}
                     searchTitle={t('search')}
+                    stopTitle={t('stop') || 'Stop'}
+                    onCancel={onCancelSearch}
                 />
             </div>
 

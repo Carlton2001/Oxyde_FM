@@ -1,6 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import cx from 'classnames';
-import { ArrowUp } from 'lucide-react';
+import { ArrowUp, X, Search, Square } from 'lucide-react';
 import { FilePanelHeader } from './FilePanelHeader';
 import { FilePanelFooter } from './FilePanelFooter';
 import { FileEntry, ViewMode, SortConfig, ColumnWidths, SortField, DriveInfo, LayoutMode } from '../../types';
@@ -52,6 +52,7 @@ interface FilePanelProps {
     onSearch: () => void;
     onQueryChange: (query: string) => void;
     onClearSearch: () => void;
+    onCancelSearch?: () => void;
     showSearch?: boolean;
     isDragTarget?: boolean;
     dragOverPath?: string | null;
@@ -77,7 +78,7 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
     colWidths, onNavigate, onOpenFile, onSelect, onSelectMultiple, onClearSelection,
     onContextMenu, onActivate, onFileDragStart, onFileDrop, isDragging, onSort,
     onResize, onResizeMultiple, t, searchQuery, searchResults, isSearching,
-    onSearch, onQueryChange, onClearSearch, showSearch = true, isDragTarget,
+    onSearch, onQueryChange, onClearSearch, onCancelSearch, showSearch = true, isDragTarget,
     dragOverPath, showHidden = false, showSystem = false, layout, cutPaths = [],
     onRename, showHistogram: propShowHistogram, isTrashView = false, isNetworkView = false,
     useSystemIcons: propUseSystemIcons, onItemMiddleClick, diffPaths, searchLimitReached,
@@ -221,7 +222,8 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
     }, [files, showHidden, showSystem]);
 
     const visibleFiles = React.useMemo(() => {
-        return files.filter(f => {
+        const entriesToFilter = files;
+        return entriesToFilter.filter(f => {
             if (f.is_system) return showSystem;
             if (f.is_hidden) return showHidden;
 
@@ -505,6 +507,35 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
                     <div className="search-limit-banner">
                         <span className="search-limit-icon">⚠️</span>
                         <span>{t('search_limit_reached', { count: searchLimit })}</span>
+                    </div>
+                )}
+
+                {searchResults && (
+                    <div className="search-results-banner">
+                        <div className="search-results-info">
+                            <Search size={14} style={{ color: 'var(--accent-color)' }} />
+                            <span className="search-results-label">{t('search_results' as any)}</span>
+                            <span className="search-results-query">"{searchQuery}"</span>
+                        </div>
+                        <div className="search-results-actions">
+                            {isSearching && (
+                                <button
+                                    className="clear-search-premium-btn"
+                                    onClick={onCancelSearch}
+                                    title={t('stop' as any)}
+                                >
+                                    <Square size={10} fill="currentColor" />
+                                    <span>{t('stop' as any)}</span>
+                                </button>
+                            )}
+                            <button
+                                className="clear-search-premium-btn"
+                                onClick={onClearSearch}
+                            >
+                                <X size={14} />
+                                <span>{t('clear' as any)}</span>
+                            </button>
+                        </div>
                     </div>
                 )}
                 <div className="file-header-scroll-wrapper" ref={headerScrollRef}>
