@@ -432,6 +432,8 @@ export const translations = {
         disconnect_network_drive_force_msg: 'There are open files on this connection. Do you want to force disconnection anyway?',
         drive_in_use: 'In use',
         username_hint: 'Example: SERVER\\User or DOMAIN\\User',
+        group_by_date: 'Group by date',
+        items_count: '{count} items',
     },
     fr: {
         // Settings
@@ -864,6 +866,8 @@ export const translations = {
         disconnect_network_drive_force_msg: 'Des fichiers sont ouverts sur cette connexion. Voulez-vous forcer la déconnexion malgré tout ?',
         drive_in_use: 'Utilisé',
         username_hint: 'Exemple : SERVEUR\\Utilisateur ou DOMAINE\\Utilisateur',
+        group_by_date: 'Grouper par date',
+        items_count: '{count} éléments',
     }
 };
 

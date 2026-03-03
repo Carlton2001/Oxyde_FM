@@ -224,14 +224,6 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({
                             <span className="settings-item-text">{t('use_system_icons')}</span>
                             <Toggle checked={useSystemIcons} onChange={setUseSystemIcons} />
                         </div>
-                        <div className="settings-item" onClick={() => setShowCheckboxes(!showCheckboxes)}>
-                            <div className="settings-item-icon-left">
-                                <CheckSquare size={16} className="icon-md" />
-                            </div>
-                            <span className="settings-item-text">{t('show_checkboxes' as any)}</span>
-                            <Toggle checked={showCheckboxes} onChange={setShowCheckboxes} />
-                        </div>
-
                         <div className="settings-divider" />
                         <div className="settings-label">{t('files' as any) || 'Files'}</div>
                         <div className="settings-item" onClick={() => setShowHidden(!showHidden)}>

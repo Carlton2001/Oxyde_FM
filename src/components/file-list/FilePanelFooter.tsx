@@ -14,9 +14,11 @@ interface FilePanelFooterProps {
     onViewModeChange: (mode: 'grid' | 'details') => void;
     onActivate: () => void;
     t: TFunc;
+    groupByDate?: boolean;
+    onGroupByDateChange?: (value: boolean) => void;
 }
 
-export const FilePanelFooter: React.FC<FilePanelFooterProps> = React.memo(({ stats, viewMode, onViewModeChange, onActivate, t }) => {
+export const FilePanelFooter: React.FC<FilePanelFooterProps> = React.memo(({ stats, viewMode, onViewModeChange, onActivate, t, groupByDate, onGroupByDateChange }) => {
     return (
         <div className="panel-footer">
             <StatusBar
@@ -29,6 +31,8 @@ export const FilePanelFooter: React.FC<FilePanelFooterProps> = React.memo(({ sta
                 onViewModeChange={onViewModeChange}
                 onActivate={onActivate}
                 t={t}
+                groupByDate={groupByDate}
+                onGroupByDateChange={onGroupByDateChange}
             />
         </div>
     );

@@ -36,6 +36,15 @@
 .view-switcher {
     display: flex;
     gap: 2px;
+    align-items: center;
+}
+
+.status-divider {
+    width: 1px;
+    height: 14px;
+    background-color: var(--border-color);
+    margin: 0 4px;
+    opacity: 0.5;
 }
 
 .view-btn {

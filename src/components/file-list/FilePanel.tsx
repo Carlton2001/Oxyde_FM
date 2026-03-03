@@ -96,6 +96,7 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
     const scrollHandleRef = useRef<VirtualizedFileListHandle>(null);
     const [showScrollTop, setShowScrollTop] = useState(false);
     const [mouseNearScrollbar, setMouseNearScrollbar] = useState(false);
+    const [groupByDate, setGroupByDate] = useState(false);
 
     const [extensionFilter, setExtensionFilter] = useState<Set<string> | null>(null);
     const [sizeFilter, setSizeFilter] = useState<Set<SizeCategoryKey> | null>(null);
@@ -618,6 +619,7 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
                         colWidths={colWidths}
                         isSearching={isSearching}
                         loading={loading}
+                        groupByDate={groupByDate}
                     />
                 </div>
             </div>
@@ -641,6 +643,8 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
                 onViewModeChange={onViewModeChange}
                 onActivate={onActivate}
                 t={t}
+                groupByDate={groupByDate}
+                onGroupByDateChange={setGroupByDate}
             />
 
             {filterMenuAnchor && activeFilterMenu === 'extension' && (
