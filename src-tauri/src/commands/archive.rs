@@ -113,7 +113,7 @@ fn list_iso(path: &Path, internal_prefix: &str) -> Result<Vec<FileEntry>, Comman
 
         if name == "." || name == ".." { continue; }
         
-        let display_name = name.split(';').next().unwrap_or(&name).to_string();
+        let display_name = name.split(';').next().unwrap_or(name).to_string();
         if display_name.is_empty() { continue; }
 
         let is_dir = matches!(rec, ISO9660Record::Directory(_));
@@ -295,6 +295,7 @@ fn list_tar(path: &Path, internal_prefix: &str, format: ArchiveFormat) -> Result
     Ok(entries)
 }
 
+#[allow(clippy::too_many_arguments)]
 #[command]
 pub async fn extract_archive(archive_path: String, target_dir: String, state: State<'_, ArchiveState>) -> Result<(), CommandError> {
     state.0.store(false, Ordering::Relaxed);
@@ -372,7 +373,7 @@ fn extract_iso_recursive<T: iso9660_core::block_device::ISORead>(
 
         if name == "." || name == ".." { continue; }
         
-        let display_name = name.split(';').next().unwrap_or(&name);
+        let display_name = name.split(';').next().unwrap_or(name);
         let new_internal = if internal_path == "/" {
             format!("/{}", display_name)
         } else {

@@ -64,6 +64,7 @@ pub fn get_file_entry_from_metadata(metadata: &fs::Metadata, name: &str, path: &
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn list_dir(
     app: tauri::AppHandle,
@@ -343,7 +344,7 @@ pub fn get_file_properties(path: String) -> Result<FileProperties, CommandError>
         // Handle shell items (Network devices or Computer roots)
         let mut props = FileProperties {
             // ... (rest initialized in code)
-            name: path.split('\\').last().unwrap_or(&path).to_string(), // Best effort name
+            name: path.split('\\').next_back().unwrap_or(&path).to_string(), // Best effort name
             path: path.clone(),
             parent: "Voisinage Réseau".to_string(),
             is_dir: false,
@@ -391,7 +392,7 @@ pub fn get_file_properties(path: String) -> Result<FileProperties, CommandError>
                                     if !val.is_empty() {
                                         d_props.push(format!("[{:?}, {}] = {}", key.fmtid, key.pid, val));
                                     }
-                                    let _ = windows::Win32::System::Com::CoTaskMemFree(Some(pwstr.as_ptr() as *const _));
+                                    windows::Win32::System::Com::CoTaskMemFree(Some(pwstr.as_ptr() as *const _));
                                 }
                             }
                         }
@@ -407,7 +408,7 @@ pub fn get_file_properties(path: String) -> Result<FileProperties, CommandError>
                     if let Ok(var) = store.GetValue(&key) {
                         if let Ok(pwstr) = windows::Win32::System::Com::StructuredStorage::PropVariantToStringAlloc(&var) {
                             let val = pwstr.to_string().unwrap_or_default();
-                            let _ = windows::Win32::System::Com::CoTaskMemFree(Some(pwstr.as_ptr() as *const _));
+                            windows::Win32::System::Com::CoTaskMemFree(Some(pwstr.as_ptr() as *const _));
                             if !val.is_empty() {
                                 return Some(val);
                             }
@@ -556,7 +557,7 @@ fn get_shortcut_info(path: &std::path::Path) -> Option<crate::models::ShortcutIn
     use windows::Win32::UI::Shell::{IShellLinkW, ShellLink};
     use windows::Win32::Storage::FileSystem::WIN32_FIND_DATAW;
 
-    if !path.extension().map_or(false, |ext| ext.to_ascii_lowercase() == "lnk") {
+    if !path.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("lnk")) {
         return None;
     }
 
@@ -566,7 +567,7 @@ fn get_shortcut_info(path: &std::path::Path) -> Option<crate::models::ShortcutIn
         let link: IShellLinkW = match CoCreateInstance(&ShellLink, None, CLSCTX_INPROC_SERVER) {
             Ok(l) => l,
             Err(_) => {
-                let _ = CoUninitialize();
+                CoUninitialize();
                 return None;
             }
         };
@@ -574,14 +575,14 @@ fn get_shortcut_info(path: &std::path::Path) -> Option<crate::models::ShortcutIn
         let persist: IPersistFile = match link.cast() {
             Ok(p) => p,
             Err(_) => {
-                let _ = CoUninitialize();
+                CoUninitialize();
                 return None;
             }
         };
 
         let wide_path = HSTRING::from(path.to_string_lossy().as_ref());
         if persist.Load(PCWSTR(wide_path.as_ptr()), STGM_READ).is_err() {
-            let _ = CoUninitialize();
+            CoUninitialize();
             return None;
         }
 
@@ -609,7 +610,7 @@ fn get_shortcut_info(path: &std::path::Path) -> Option<crate::models::ShortcutIn
 
         let run_window = link.GetShowCmd().map(|cmd| cmd.0).unwrap_or(1);
 
-        let _ = CoUninitialize();
+        CoUninitialize();
 
         Some(crate::models::ShortcutInfo {
             target,
@@ -649,11 +650,9 @@ pub async fn get_files_summary(paths: Vec<String>) -> Result<FileSummary, Comman
 
         if i == 0 {
             common_parent = Some(parent);
-        } else {
-            if let Some(ref cp) = common_parent {
-                if cp != &parent {
-                    different_parents = true;
-                }
+        } else if let Some(ref cp) = common_parent {
+            if cp != &parent {
+                different_parents = true;
             }
         }
 
@@ -795,7 +794,7 @@ pub async fn set_shortcut_info(path: String, info: crate::models::ShortcutInfo) 
             persist.Save(PCWSTR(wide_path.as_ptr()), true)
                 .map_err(|e| CommandError::SystemError(format!("Save failed: {}", e)))?;
 
-            let _ = CoUninitialize();
+            CoUninitialize();
         }
     }
     Ok(())

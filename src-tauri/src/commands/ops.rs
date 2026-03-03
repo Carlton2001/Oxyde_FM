@@ -374,6 +374,7 @@ pub async fn purge_items(app: AppHandle, manager: State<'_, FileOperationManager
     Ok(id)
 }
 
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn copy_items(
     app: AppHandle, 
@@ -404,6 +405,7 @@ pub async fn copy_items(
     Ok(id)
 }
 
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn move_items(
     app: AppHandle, 
@@ -775,7 +777,7 @@ pub async fn undo_last_action(app: AppHandle, history: State<'_, HistoryManager>
                                      },
                                      Err(_) => {
                                          // Fallback to copy-delete
-                                         if let Ok((collected, size)) = collect_files(&[current_loc], &src_path.parent().unwrap_or(&src_path)) {
+                                          if let Ok((collected, size)) = collect_files(&[current_loc], src_path.parent().unwrap_or(&src_path)) {
                                              files_to_copy_delete.extend(collected);
                                              total_size += size;
                                          }
@@ -1003,7 +1005,7 @@ fn perform_copy_with_progress(
 
          if source.is_dir() {
              if !dest.exists() {
-                 fs::create_dir_all(&dest).map_err(|e| CommandError::IoError(e.to_string()))?;
+                  fs::create_dir_all(dest).map_err(|e| CommandError::IoError(e.to_string()))?;
              }
              continue;
          }
@@ -1015,15 +1017,15 @@ fn perform_copy_with_progress(
              }
          }
 
-         let mut file_in = fs::File::open(&source).map_err(|e| CommandError::IoError(e.to_string()))?;
-         let mut file_out = fs::File::create(&dest).map_err(|e| CommandError::IoError(e.to_string()))?;
+         let mut file_in = fs::File::open(source).map_err(|e| CommandError::IoError(e.to_string()))?;
+         let mut file_out = fs::File::create(dest).map_err(|e| CommandError::IoError(e.to_string()))?;
          
          let mut buffer = [0u8; 81920]; 
          loop {
              if cancel_flag.load(Ordering::Relaxed) {
                  // Clean up partial destination file to avoid leaving corrupted data
                  drop(file_out);
-                 let _ = fs::remove_file(&dest);
+                 let _ = fs::remove_file(dest);
                  return Ok(());
              }
 
@@ -1047,7 +1049,7 @@ fn perform_copy_with_progress(
          }
 
           if move_op && !source.is_dir() {
-              let _ = fs::remove_file(&source);
+              let _ = fs::remove_file(source);
           }
     }
     
