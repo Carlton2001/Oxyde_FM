@@ -40,11 +40,11 @@
 }
 
 .status-divider {
-    width: 1px;
-    height: 14px;
+    width: 1.5px;
+    height: 1.25rem;
     background-color: var(--border-color);
-    margin: 0 4px;
-    opacity: 0.5;
+    margin: 0 0.5rem;
+    opacity: 0.8;
 }
 
 .view-btn {

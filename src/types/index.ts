@@ -296,6 +296,7 @@ export interface FileOperation {
 
 export interface SearchEventPayload {
     panel_id: string;
+    tab_id: string;
     results: FileEntry[];
     completed: boolean;
 }

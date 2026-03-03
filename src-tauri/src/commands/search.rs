@@ -26,6 +26,7 @@ use windows::Win32::System::Threading::{
 #[derive(Clone, serde::Serialize)]
 struct SearchEvent {
     panel_id: String,
+    tab_id: String,
     results: Vec<FileEntry>,
     completed: bool,
 }
@@ -451,6 +452,7 @@ pub async fn start_search(
     state: State<'_, SessionManager>,
     config_state: State<'_, ConfigManager>,
     panel_id: String,
+    tab_id: String,
     query: String,
     search_root: Option<String>,
     regex: Option<bool>,
@@ -487,6 +489,7 @@ pub async fn start_search(
         }
 
         panel.search_context = Some(SearchContext {
+            tab_id: tab_id.clone(),
             query: query.clone(),
             results: Vec::new(),
             is_searching: true,
@@ -540,6 +543,7 @@ pub async fn start_search(
 
     // 3. Spawn Thread
     let panel_id_clone = panel_id.clone();
+    let tab_id_clone = tab_id.clone();
     let app_handle = app.clone();
     let (search_limit, is_turbo, show_hidden, show_system) = {
         let config = config_state.0.lock().unwrap();
@@ -696,6 +700,7 @@ pub async fn start_search(
             if (batch_len >= 500 || last_emit.elapsed().as_millis() > 500) && batch_len > 0 {
                 let _ = app_handle.emit("search_event", SearchEvent {
                     panel_id: panel_id_clone.clone(),
+                    tab_id: tab_id_clone.clone(),
                     results: total_results[batch_start_idx..].to_vec(),
                     completed: false
                 });
@@ -708,6 +713,7 @@ pub async fn start_search(
         if batch_start_idx < total_results.len() {
             let _ = app_handle.emit("search_event", SearchEvent {
                 panel_id: panel_id_clone.clone(),
+                tab_id: tab_id_clone.clone(),
                 results: total_results[batch_start_idx..].to_vec(),
                 completed: false
             });
@@ -739,6 +745,7 @@ pub async fn start_search(
 
         let _ = app_handle.emit("search_event", SearchEvent {
             panel_id: panel_id_clone,
+            tab_id: tab_id_clone,
             results: Vec::new(),
             completed: true
         });
@@ -750,12 +757,19 @@ pub async fn start_search(
 #[tauri::command]
 pub async fn cancel_search(
     state: State<'_, SessionManager>,
-    panel_id: String
+    panel_id: String,
+    tab_id: Option<String>
 ) -> Result<(), String> {
     let mut session = state.0.lock().map_err(|e| e.to_string())?;
     let panel = if panel_id == "left" { &mut session.left_panel } else { &mut session.right_panel };
 
     if let Some(ctx) = &mut panel.search_context {
+        if let Some(ref tid) = tab_id {
+            if ctx.tab_id != *tid {
+                return Ok(());
+            }
+        }
+
         if let Some(token) = &ctx.cancellation_token {
             token.store(true, Ordering::Relaxed);
         }

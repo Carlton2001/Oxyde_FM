@@ -181,7 +181,7 @@ export const usePanelSearch = ({
             if (isCleanedUp || searchCancelled) return;
 
             const payload = event.payload;
-            if (payload.panel_id === pid) {
+            if (payload.panel_id === pid && payload.tab_id === activeTabId) {
                 if (payload.completed) {
                     setIsSearching(false);
                 }
@@ -201,7 +201,7 @@ export const usePanelSearch = ({
                         // Cancel search once we have enough
                         if (totalReceived >= MAX_RESULTS && !searchCancelled) {
                             searchCancelled = true;
-                            invoke('cancel_search', { panelId: pid }).catch(console.error);
+                            invoke('cancel_search', { panelId: pid, tabId: activeTabId }).catch(console.error);
                             setIsSearching(false);
                             setSearchLimitReached(true);
                         }
@@ -262,7 +262,7 @@ export const usePanelSearch = ({
             searchInArchives: params.get('search_in_archives') === 'true'
         };
 
-        invoke('start_search', { panelId: pid, ...searchOptions })
+        invoke('start_search', { panelId: pid, tabId: activeTabId, ...searchOptions })
             .catch(err => {
                 console.error("Failed to start search:", err);
                 setIsSearching(false);
@@ -283,7 +283,7 @@ export const usePanelSearch = ({
             searchBufferRef.current = [];
 
             // Cancel search when navigating away or unmounting
-            invoke('cancel_search', { panelId: pid }).catch(console.error);
+            invoke('cancel_search', { panelId: pid, tabId: activeTabId }).catch(console.error);
         };
     }, [path, panelId, activeTabId, searchLimit]);
 
@@ -297,8 +297,8 @@ export const usePanelSearch = ({
 
     const cancelSearch = useCallback(() => {
         setIsSearching(false);
-        invoke('cancel_search', { panelId: pid }).catch(console.error);
-    }, [pid]);
+        invoke('cancel_search', { panelId: pid, tabId: activeTabId }).catch(console.error);
+    }, [pid, activeTabId]);
 
     return {
         searchQuery,

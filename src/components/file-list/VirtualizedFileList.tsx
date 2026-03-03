@@ -226,29 +226,31 @@ const GridCell = React.memo((props: CellComponentProps<SharedItemProps>) => {
             data-tooltip-image-path={entry.path}
         >
             <div className="grid-selection-overlay" />
-            <div className="file-icon-large">
-                {getIcon(entry, rootFontSize * 3)}
-                {isProtected && <Shield className="protected-shield-badge" size={16} fill="currentColor" />}
-            </div>
-            <div className="file-name-container">
-                {isRenaming ? (
-                    <RenameInput
-                        renameText={renameText}
-                        onRenameTextChange={onRenameTextChange}
-                        onRenameCommit={onRenameCommit}
-                        onRenameCancel={onRenameCancel}
-                        className="rename-input grid-mode"
-                    />
-                ) : (
-                    <>
-                        <span className="file-name">
-                            {!entry.is_dir && entry.name.lastIndexOf('.') > 0
-                                ? entry.name.slice(0, entry.name.lastIndexOf('.'))
-                                : entry.name}
-                        </span>
-                        <span className="file-extension">{getFileTypeString(entry, t)}</span>
-                    </>
-                )}
+            <div className="grid-item-inner">
+                <div className="file-icon-large">
+                    {getIcon(entry, rootFontSize * 3)}
+                    {isProtected && <Shield className="protected-shield-badge" size={16} fill="currentColor" />}
+                </div>
+                <div className="file-name-container">
+                    {isRenaming ? (
+                        <RenameInput
+                            renameText={renameText}
+                            onRenameTextChange={onRenameTextChange}
+                            onRenameCommit={onRenameCommit}
+                            onRenameCancel={onRenameCancel}
+                            className="rename-input grid-mode"
+                        />
+                    ) : (
+                        <>
+                            <span className="file-name">
+                                {!entry.is_dir && entry.name.lastIndexOf('.') > 0
+                                    ? entry.name.slice(0, entry.name.lastIndexOf('.'))
+                                    : entry.name}
+                            </span>
+                            <span className="file-extension">{getFileTypeString(entry, t)}</span>
+                        </>
+                    )}
+                </div>
             </div>
             {showCheckboxes && (
                 <div className="item-checkbox grid-checkbox" onClick={handlers.onCheckboxClick}>
@@ -439,21 +441,23 @@ const GroupedGridItem = React.memo<{ entry: FileEntry; sharedProps: SharedItemPr
             data-tooltip-image-path={entry.path}
         >
             <div className="grid-selection-overlay" />
-            <div className="file-icon-large">
-                {getIcon(entry, rootFontSize * 3)}
-                {isProtected && <Shield className="protected-shield-badge" size={16} fill="currentColor" />}
-            </div>
-            <div className="file-name-container">
-                {isRenaming ? (
-                    <RenameInput renameText={renameText} onRenameTextChange={onRenameTextChange} onRenameCommit={onRenameCommit} onRenameCancel={onRenameCancel} className="rename-input grid-mode" />
-                ) : (
-                    <>
-                        <span className="file-name">
-                            {!entry.is_dir && entry.name.lastIndexOf('.') > 0 ? entry.name.slice(0, entry.name.lastIndexOf('.')) : entry.name}
-                        </span>
-                        <span className="file-extension">{getFileTypeString(entry, t)}</span>
-                    </>
-                )}
+            <div className="grid-item-inner">
+                <div className="file-icon-large">
+                    {getIcon(entry, rootFontSize * 3)}
+                    {isProtected && <Shield className="protected-shield-badge" size={16} fill="currentColor" />}
+                </div>
+                <div className="file-name-container">
+                    {isRenaming ? (
+                        <RenameInput renameText={renameText} onRenameTextChange={onRenameTextChange} onRenameCommit={onRenameCommit} onRenameCancel={onRenameCancel} className="rename-input grid-mode" />
+                    ) : (
+                        <>
+                            <span className="file-name">
+                                {!entry.is_dir && entry.name.lastIndexOf('.') > 0 ? entry.name.slice(0, entry.name.lastIndexOf('.')) : entry.name}
+                            </span>
+                            <span className="file-extension">{getFileTypeString(entry, t)}</span>
+                        </>
+                    )}
+                </div>
             </div>
             {showCheckboxes && (
                 <div className="item-checkbox grid-checkbox" onClick={handlers.onCheckboxClick}>

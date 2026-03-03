@@ -60,6 +60,7 @@ pub struct Tab {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SearchContext {
+    pub tab_id: String,
     pub query: String,
     #[serde(skip)] // Do NOT send search results via the global session state
     pub results: Vec<FileEntry>,

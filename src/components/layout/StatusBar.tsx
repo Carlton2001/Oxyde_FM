@@ -83,6 +83,9 @@ export const StatusBar: React.FC<StatusBarProps> = ({
                 >
                     <CheckSquare size={14} />
                 </button>
+
+                <div className="status-divider" />
+
                 {onGroupByDateChange && (
                     <button
                         className={cx("btn-icon", { active: groupByDate })}
