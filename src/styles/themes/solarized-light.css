@@ -16,7 +16,7 @@
     --border-color: #d6d6d6;
     --surface-primary: #fdf6e3;
     --surface-secondary: #eee8d5;
-    --dimmed-opacity: 0.6;
+    --dimmed-opacity: 0.7;
 
     /* Components */
     --menu-bg: #fdf6e3;
@@ -47,4 +47,3 @@
     /* Cyan */
     --icon-disk: #93a1a1;
 }
-
