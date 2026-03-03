@@ -103,9 +103,10 @@ const InlineAboutDialog: React.FC<{ onClose: () => void, t: any, theme: string, 
                         >
                             <RefreshCcw size={14} className={updating ? 'spin' : ''} />
                             <span style={{ whiteSpace: 'nowrap' }}>
-                                {updateStatus === 'available' ? t('update_available') :
-                                    updateStatus === 'none' ? t('up_to_date') :
-                                        t('check_updates')}
+                                {updating ? t('checking_updates') :
+                                    updateStatus === 'available' ? t('update_available') :
+                                        updateStatus === 'none' ? t('up_to_date') :
+                                            t('check_updates')}
                             </span>
                         </button>
 

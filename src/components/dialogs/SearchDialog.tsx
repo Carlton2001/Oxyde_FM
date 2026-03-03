@@ -346,18 +346,22 @@ export const SearchDialog: React.FC<SearchDialogProps> = ({
                                         { pattern: '.', label: 'regex_any_char' },
                                         { pattern: '\\d', label: 'regex_digit' },
                                         { pattern: '\\w', label: 'regex_word_char' },
-                                        { pattern: '\\s', label: 'regex_whitespace' },
                                         { pattern: '^', label: 'regex_start_line' },
                                         { pattern: '$', label: 'regex_end_line' },
                                         { pattern: '+', label: 'regex_one_or_more' },
-                                        { pattern: '*', label: 'regex_zero_or_more' },
                                         { pattern: '?', label: 'regex_optional' },
                                         { pattern: '|', label: 'regex_either_or' },
+                                        { pattern: '[abc]', label: 'regex_range' },
+                                        { pattern: '[^abc]', label: 'regex_negated_set' },
                                         { pattern: '()', label: 'regex_group' },
+                                        { pattern: '{n}', label: 'regex_count_exact' },
                                     ].map((item, idx) => (
                                         <div key={idx} className="regex-help-item">
                                             <code className="regex-code">{item.pattern}</code>
-                                            <div className="regex-label">{t(item.label as any)}</div>
+                                            <span className="regex-label">{t(item.label as any)}</span>
+                                            <span className="regex-description">
+                                                {t(`${item.label}_desc` as any)}
+                                            </span>
                                         </div>
                                     ))}
                                 </div>

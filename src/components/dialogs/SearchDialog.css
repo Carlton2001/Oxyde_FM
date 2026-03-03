@@ -383,16 +383,21 @@
 .regex-help-list {
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
 }
 
 .regex-help-item {
-    display: flex;
+    display: grid;
+    grid-template-columns: 4rem 10.5rem 1fr;
     align-items: center;
-    gap: 1rem;
-    padding: 0.75rem 2rem;
-    /* Horizontal padding matching general tab */
+    /* Aligné au centre verticalement */
+    gap: 1.25rem;
+    padding: 0.4rem 2rem;
     border-bottom: 1px solid var(--border-color);
+    transition: background-color 0.1s ease;
+}
+
+.regex-help-item:hover {
+    background: var(--bg-hover, rgba(0, 0, 0, 0.02));
 }
 
 .regex-help-item:last-child {
@@ -400,34 +405,48 @@
 }
 
 .regex-code {
-    min-width: 4rem;
-    padding: 0.25rem 0.5rem;
+    min-width: 3.5rem;
+    padding: 0.2rem 0.4rem;
     background: var(--surface-secondary, rgba(0, 0, 0, 0.05));
     border: 1px solid var(--border-color);
-    border-radius: 0.25rem;
-    font-family: 'JetBrains Mono', monospace;
+    border-radius: 0.3125rem;
+    font-family: 'JetBrains Mono', 'Cascadia Code', monospace;
     font-size: 0.75rem;
     color: var(--accent-color);
     text-align: center;
-    font-weight: 600;
-}
-
-.regex-desc {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
+    font-weight: 750;
+    box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.03);
 }
 
 .regex-label {
-    font-weight: 500;
+    font-weight: 600;
     color: var(--text-color);
     font-size: 0.75rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
-.regex-info {
+.regex-description {
     font-size: 0.75rem;
     color: var(--text-muted);
+    line-height: 1.2;
+}
+
+@media (max-width: 650px) {
+    .regex-help-item {
+        grid-template-columns: 3.5rem 1fr;
+        gap: 0.5rem 1rem;
+    }
+
+    .regex-description {
+        grid-column: 2;
+        padding-bottom: 0.4rem;
+    }
+
+    .regex-label {
+        white-space: normal;
+    }
 }
 
 /* Separator */

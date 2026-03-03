@@ -80,11 +80,10 @@ export const StatusBar: React.FC<StatusBarProps> = ({
                     className={cx("btn-icon", { active: showCheckboxes })}
                     onClick={(e) => { e.stopPropagation(); setShowCheckboxes(!showCheckboxes); }}
                     data-tooltip={t('show_checkboxes' as any)}
+                    style={{ marginRight: '4px' }}
                 >
                     <CheckSquare size={14} />
                 </button>
-
-                <div className="status-divider" />
 
                 {onGroupByDateChange && (
                     <button
@@ -102,6 +101,7 @@ export const StatusBar: React.FC<StatusBarProps> = ({
                     className={cx("btn-icon", { active: viewMode === 'details' })}
                     onClick={(e) => { e.stopPropagation(); onViewModeChange('details'); }}
                     data-tooltip={t('view_details')}
+                    style={{ marginRight: '4px' }}
                 >
                     <TableOfContents size={14} />
                 </button>
