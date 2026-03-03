@@ -657,9 +657,18 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
                             </div>
                         );
                     }
+
+                    // Determine the correct empty message
+                    let emptyKey = 'empty';
+                    if (searchResults) {
+                        emptyKey = 'no_results';
+                    } else if (isTrashView) {
+                        emptyKey = 'recycle_bin_empty';
+                    }
+
                     return (
                         <div className="empty-msg" style={{ width, height, position: 'absolute', top: 0, left: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <span>{t('no_results')}</span>
+                            <span>{t(emptyKey as any)}</span>
                         </div>
                     );
                 }
