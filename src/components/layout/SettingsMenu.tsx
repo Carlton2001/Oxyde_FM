@@ -1,6 +1,6 @@
 import React from 'react';
 import cx from 'classnames';
-import { ChevronRight, Sun, Moon, Eye, Globe, Info, Check, Plus, Minus, Grid2x2, Calendar, Zap, CheckSquare, Trash2, RefreshCw } from 'lucide-react';
+import { ChevronRight, Sun, Moon, Eye, Globe, Info, Check, Plus, Minus, Grid2x2, Calendar, Zap, Trash2, RefreshCw } from 'lucide-react';
 import { Toggle } from '../ui/Toggle';
 import { useApp } from '../../context/AppContext';
 import { useDialogs } from '../../context/DialogContext';
@@ -36,7 +36,6 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({
         searchLimit, setSearchLimit,
         defaultTurboMode, setDefaultTurboMode,
         showGridThumbnails, setShowGridThumbnails,
-        showCheckboxes, setShowCheckboxes,
         showNetwork, setShowNetwork,
         t, notify, resetToDefaults
     } = useApp();

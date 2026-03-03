@@ -288,7 +288,7 @@ function App() {
       let cancellable = (task === 'copy' || task === 'move');
       if (task === 'copy') message = callbacksRef.current.t('op_copy' as any);
       if (task === 'move') message = callbacksRef.current.t('op_move' as any);
-      if (task === 'calculate_size') message = callbacksRef.current.t('calculating_size');
+      if (task === 'calculate_size') message = callbacksRef.current.t('calculating');
       callbacksRef.current.setProgress(prev => ({ visible: true, message, task, cancellable: prev?.cancellable ?? cancellable, current, total, filename, cancelling: prev?.cancelling ?? false }));
     });
 
@@ -579,7 +579,7 @@ function App() {
               <>
                 <span className={cx("drag-hint", { active: effectiveAction === 'copy' })}>+Ctrl {t('copy')}</span>
                 <span className="drag-hint-separator">|</span>
-                <span className={cx("drag-hint", { active: effectiveAction === 'move' })}>+Shift {t('move')}</span>
+                <span className={cx("drag-hint", { active: effectiveAction === 'move' })}>+Shift {t('op_move' as any)}</span>
               </>
             )}
           </div>
