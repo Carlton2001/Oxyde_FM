@@ -84,7 +84,7 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
     useSystemIcons: propUseSystemIcons, onItemMiddleClick, diffPaths, searchLimitReached,
     panelId, onViewModeChange, loading
 }) => {
-    const { useSystemIcons: contextUseSystemIcons, searchLimit, showGridThumbnails, notify, showNetwork } = useApp();
+    const { useSystemIcons: contextUseSystemIcons, searchLimit, showGridThumbnails, notify, showNetwork, groupByDate, setGroupByDate } = useApp();
     const useSystemIcons = propUseSystemIcons ?? contextUseSystemIcons;
 
     const currentDrive = drives?.find(d => currentPath.toLowerCase().startsWith(d.path.toLowerCase()));
@@ -96,7 +96,6 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
     const scrollHandleRef = useRef<VirtualizedFileListHandle>(null);
     const [showScrollTop, setShowScrollTop] = useState(false);
     const [mouseNearScrollbar, setMouseNearScrollbar] = useState(false);
-    const [groupByDate, setGroupByDate] = useState(false);
 
     const [extensionFilter, setExtensionFilter] = useState<Set<string> | null>(null);
     const [sizeFilter, setSizeFilter] = useState<Set<SizeCategoryKey> | null>(null);

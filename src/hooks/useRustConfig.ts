@@ -19,6 +19,7 @@ export interface AppConfig {
     show_grid_thumbnails: boolean;
     show_checkboxes: boolean;
     show_network: boolean;
+    group_by_date: boolean;
 }
 
 export const useRustConfig = () => {

@@ -24,6 +24,7 @@ export interface AppContextValue {
     showGridThumbnails: boolean;
     showCheckboxes: boolean;
     showNetwork: boolean;
+    groupByDate: boolean;
     updateAvailable: boolean;
     peekStatus: {
         installed: boolean;
@@ -48,6 +49,7 @@ export interface AppContextValue {
     setShowGridThumbnails: (show: boolean) => void;
     setShowCheckboxes: (show: boolean) => void;
     setShowNetwork: (show: boolean) => void;
+    setGroupByDate: (show: boolean) => void;
     setUpdateAvailable: (available: boolean) => void;
 
     // Translation
@@ -103,7 +105,8 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
         defaultTurboMode: true,
         showGridThumbnails: false,
         showCheckboxes: false,
-        showNetwork: true
+        showNetwork: true,
+        groupByDate: false
     };
 
     // Derived state (or defaults)
@@ -125,6 +128,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
     const showGridThumbnails = config?.show_grid_thumbnails ?? (localStorage.getItem('fm_showGridThumbnails') === 'true' || (localStorage.getItem('fm_showGridThumbnails') === null && defaults.showGridThumbnails));
     const showCheckboxes = config?.show_checkboxes ?? (localStorage.getItem('fm_showCheckboxes') === 'true' || (localStorage.getItem('fm_showCheckboxes') === null && defaults.showCheckboxes));
     const showNetwork = config?.show_network ?? (localStorage.getItem('fm_showNetwork') === 'true' || (localStorage.getItem('fm_showNetwork') === null && defaults.showNetwork));
+    const groupByDate = config?.group_by_date ?? (localStorage.getItem('fm_groupByDate') === 'true' || (localStorage.getItem('fm_groupByDate') === null && defaults.groupByDate));
     const [updateAvailable, setUpdateAvailable] = React.useState(false);
     const [peekStatus, setPeekStatus] = React.useState<AppContextValue['peekStatus']>(null);
 
@@ -198,6 +202,10 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
         localStorage.setItem('fm_showNetwork', v.toString());
         setConfigValue('show_network', v);
     }, [setConfigValue]);
+    const setGroupByDate = useCallback((v: boolean) => {
+        localStorage.setItem('fm_groupByDate', v.toString());
+        setConfigValue('group_by_date', v);
+    }, [setConfigValue]);
 
     const setFontSize = useCallback((size: number) => {
         const newSize = Math.max(10, Math.min(24, size));
@@ -220,7 +228,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
                 'fm_theme', 'fm_layout', 'fm_language', 'fm_showHidden', 'fm_showSystem',
                 'fm_useSystemIcons', 'fm_dateFormat', 'fm_showPreviews', 'fm_zipQuality',
                 'fm_sevenZipQuality', 'fm_zstdQuality', 'fm_fontSize', 'fm_searchLimit',
-                'fm_defaultTurboMode', 'fm_showGridThumbnails', 'fm_showCheckboxes'
+                'fm_defaultTurboMode', 'fm_showGridThumbnails', 'fm_showCheckboxes', 'fm_groupByDate'
             ];
             keysToRemove.forEach(k => localStorage.removeItem(k));
             localStorage.setItem('fm_first_launch', 'true');
@@ -292,6 +300,8 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
         setShowCheckboxes,
         showNetwork,
         setShowNetwork,
+        groupByDate,
+        setGroupByDate,
         updateAvailable,
         setUpdateAvailable,
         peekStatus,

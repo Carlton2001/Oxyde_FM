@@ -34,6 +34,7 @@ pub fn set_config_value(
         "show_grid_thumbnails" => config.show_grid_thumbnails = value.parse().unwrap_or(true),
         "show_checkboxes" => config.show_checkboxes = value.parse().unwrap_or(false),
         "show_network" => config.show_network = value.parse().unwrap_or(true),
+        "group_by_date" => config.group_by_date = value.parse().unwrap_or(false),
         _ => return Err(CommandError::Other(format!("Unknown config key: {}", key))),
     }
 

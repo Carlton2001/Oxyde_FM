@@ -44,6 +44,8 @@ pub struct AppConfig {
     pub show_checkboxes: bool,
     #[serde(default)]
     pub show_network: bool,
+    #[serde(default)]
+    pub group_by_date: bool,
 }
 
 impl Default for AppConfig {
@@ -116,6 +118,7 @@ impl Default for AppConfig {
             show_grid_thumbnails: false,
             show_checkboxes: false,
             show_network: true,
+            group_by_date: false,
         }
     }
 }
