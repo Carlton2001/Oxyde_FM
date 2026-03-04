@@ -1,6 +1,6 @@
 import React from 'react';
 import cx from 'classnames';
-import { ChevronUp, ChevronDown, Filter, Check } from 'lucide-react';
+import { ChevronUp, ChevronDown, Filter } from 'lucide-react';
 import { FileEntry, ViewMode, ColumnWidths, SortConfig, SortField } from '../../types';
 import { ResizeHandle } from './ResizeHandle';
 import { TFunc } from '../../i18n';
@@ -55,7 +55,6 @@ export const FileHeader: React.FC<FileHeaderProps> = React.memo(({
     onSelectAll,
     selected
 }) => {
-    const { showCheckboxes } = useApp();
     const SortIcon = ({ field }: { field: SortField }) => {
         if (sortConfig.field !== field) return null;
         return sortConfig.direction === 'asc'
@@ -67,73 +66,48 @@ export const FileHeader: React.FC<FileHeaderProps> = React.memo(({
     const visibleCols = getVisibleColumns(mode);
 
     return (
-        <>
-            <div
-                className={cx("header-selection-gutter", { "with-checkbox": showCheckboxes })}
-                onClick={onSelectAll}
-                data-tooltip={t(finalFiles.length > 0 && finalFiles.every(f => selected.has(f.path)) ? 'deselect_all' as any : 'select_all')}
-                data-tooltip-pos="right"
-            >
-                {showCheckboxes && (
-                    <div className="item-checkbox">
-                        <div className={cx("checkbox-indicator", {
-                            checked: finalFiles.length > 0 && finalFiles.every(f => selected.has(f.path)),
-                            indeterminate: finalFiles.some(f => selected.has(f.path)) && !finalFiles.every(f => selected.has(f.path))
-                        })}>
-                            {finalFiles.length > 0 && finalFiles.every(f => selected.has(f.path)) && <Check size={10} strokeWidth={4} />}
-                            {finalFiles.some(f => selected.has(f.path)) && !finalFiles.every(f => selected.has(f.path)) && (
-                                <div style={{ width: '6px', height: '2px', backgroundColor: 'var(--accent-color)', borderRadius: '1px' }} />
-                            )}
-                        </div>
+        <div className="file-header">
+            {visibleCols.map(col => {
+                const sField = getColumnSortField(col, mode);
+                const label = t(getColumnLabel(col, mode) as any);
+
+                const isName = col.key === 'name';
+
+                const isFiltered =
+                    (col.key === 'type' && isTypeFiltered) ||
+                    (col.key === 'size' && isSizeFiltered) ||
+                    (col.key === 'name' && isNameFiltered) ||
+                    (col.key === 'date' && isDateFiltered) ||
+                    (col.key === 'location' && isLocationFiltered) ||
+                    (col.key === 'deletedDate' && isDeletedDateFiltered);
+
+                return (
+                    <div
+                        key={col.key}
+                        className={cx("col", `col-${col.key}`, { "col-name": isName })}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onSort(sField);
+                        }}
+                        onContextMenu={(e) => onHeaderContextMenu?.(col.key as any, e)}
+                    >
+                        <span className="header-label">{label}</span>
+                        {isFiltered && <Filter size={10} style={{ marginLeft: '4px', opacity: 0.8, color: 'var(--accent-color)' }} />}
+                        <SortIcon field={sField} />
+                        <ResizeHandle
+                            field={col.key as any}
+                            panelRef={panelRef}
+                            onResize={onResize}
+                            colWidths={colWidths}
+                            files={finalFiles}
+                            searchResults={!!searchResults}
+                            isTrashView={isTrashView}
+                            onResizeMultiple={onResizeMultiple}
+                            t={t}
+                        />
                     </div>
-                )}
-            </div>
-
-            {viewMode === 'details' && (
-                <div className="file-header">
-                    {visibleCols.map(col => {
-                        const sField = getColumnSortField(col, mode);
-                        const label = t(getColumnLabel(col, mode) as any);
-
-                        const isName = col.key === 'name';
-
-                        const isFiltered =
-                            (col.key === 'type' && isTypeFiltered) ||
-                            (col.key === 'size' && isSizeFiltered) ||
-                            (col.key === 'name' && isNameFiltered) ||
-                            (col.key === 'date' && isDateFiltered) ||
-                            (col.key === 'location' && isLocationFiltered) ||
-                            (col.key === 'deletedDate' && isDeletedDateFiltered);
-
-                        return (
-                            <div
-                                key={col.key}
-                                className={cx("col", `col-${col.key}`, { "col-name": isName })}
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    onSort(sField);
-                                }}
-                                onContextMenu={(e) => onHeaderContextMenu?.(col.key as any, e)}
-                            >
-                                <span className="header-label">{label}</span>
-                                {isFiltered && <Filter size={10} style={{ marginLeft: '4px', opacity: 0.8, color: 'var(--accent-color)' }} />}
-                                <SortIcon field={sField} />
-                                <ResizeHandle
-                                    field={col.key as any}
-                                    panelRef={panelRef}
-                                    onResize={onResize}
-                                    colWidths={colWidths}
-                                    files={finalFiles}
-                                    searchResults={!!searchResults}
-                                    isTrashView={isTrashView}
-                                    onResizeMultiple={onResizeMultiple}
-                                    t={t}
-                                />
-                            </div>
-                        );
-                    })}
-                </div>
-            )}
-        </>
+                );
+            })}
+        </div>
     );
 });

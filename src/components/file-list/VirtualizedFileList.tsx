@@ -208,13 +208,20 @@ const GridCell = React.memo((props: CellComponentProps<SharedItemProps>) => {
 
     const isDragOver = sharedProps.dragOverPath === entry.path;
 
+    const gridGap = rootFontSize * 0.25;
+    const adjustedStyle = {
+        ...style,
+        width: parseFloat(String(style.width)) - gridGap,
+        height: parseFloat(String(style.height)) - gridGap,
+    };
+
     return (
         <div
             className={cx(itemClassName, "grid", {
                 "drag-over": isDragOver,
                 "is-dir": entry.is_dir
             })}
-            style={style}
+            style={adjustedStyle}
             data-path={entry.path}
             onClick={handlers.onClick}
             onDoubleClick={handlers.onDoubleClick}

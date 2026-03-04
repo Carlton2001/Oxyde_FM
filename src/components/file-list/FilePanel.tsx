@@ -89,7 +89,7 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
     panelId, onViewModeChange, loading, initialScrollOffset, updateCurrentScroll,
     groupByDate, onGroupByDateChange
 }) => {
-    const { useSystemIcons: contextUseSystemIcons, searchLimit, showGridThumbnails, notify, showNetwork } = useApp();
+    const { useSystemIcons: contextUseSystemIcons, searchLimit, showGridThumbnails, notify, showNetwork, showCheckboxes } = useApp();
     const useSystemIcons = propUseSystemIcons ?? contextUseSystemIcons;
 
     const currentDrive = drives?.find(d => currentPath.toLowerCase().startsWith(d.path.toLowerCase()));
@@ -543,6 +543,13 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
                         </div>
                     </div>
                 )}
+                <div
+                    className={cx("header-selection-gutter", { "with-checkbox": showCheckboxes })}
+                    onClick={handleHeaderClick}
+                    data-tooltip={t(finalFiles.length > 0 && finalFiles.every(f => selected.has(f.path)) ? ('deselect_all' as any) : 'select_all')}
+                    data-tooltip-pos="right"
+                />
+
                 {viewMode === 'details' && (
                     <div className="file-header-scroll-wrapper" ref={headerScrollRef}>
                         <FileHeader
