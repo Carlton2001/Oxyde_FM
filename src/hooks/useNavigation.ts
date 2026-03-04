@@ -135,6 +135,16 @@ export const useNavigation = (initialPath: string = "C:\\") => {
         });
     }, []);
 
+    const updateCurrentScroll = useCallback((offset: number) => {
+        setState(prev => {
+            const newHistory = [...prev.history];
+            if (newHistory[prev.historyIndex]) {
+                newHistory[prev.historyIndex] = { ...newHistory[prev.historyIndex], scrollOffset: offset };
+            }
+            return { ...prev, history: newHistory };
+        });
+    }, []);
+
     const setNavigationState = useCallback((state: NavigationState) => {
         setState(state);
     }, []);
@@ -149,6 +159,7 @@ export const useNavigation = (initialPath: string = "C:\\") => {
         goForward,
         goUp,
         updateCurrentSelection,
+        updateCurrentScroll,
         setNavigationState,
         version: state.version
     };

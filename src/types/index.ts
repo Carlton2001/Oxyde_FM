@@ -34,6 +34,7 @@ export type PanelId = 'left' | 'right';
 export interface HistoryEntry {
     path: string;
     selected?: string[];
+    scrollOffset?: number;
 }
 
 export interface PanelState {

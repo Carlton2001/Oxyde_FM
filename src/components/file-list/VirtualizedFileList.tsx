@@ -44,6 +44,8 @@ interface VirtualizedFileListProps {
     isSearching?: boolean;
     loading?: boolean;
     groupByDate?: boolean;
+    initialScrollOffset?: number;
+    updateCurrentScroll?: (offset: number) => void;
 }
 
 export interface VirtualizedFileListHandle {
@@ -480,7 +482,8 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
         totalItemsSize, showHistogram, isTrashView, searchResults, isNetworkView,
         onScrollToggle, onItemMiddleClick,
         diffPaths, colWidths, isSearching, loading,
-        groupByDate = false
+        groupByDate = false,
+        initialScrollOffset = 0, updateCurrentScroll
     } = props;
 
     const { dateFormat, showCheckboxes } = useApp();
@@ -530,6 +533,33 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
 
     const isGrid = viewMode === 'grid';
     const cutPathsSet = useMemo(() => new Set(cutPaths), [cutPaths]);
+
+    // --- Scroll Restoration ---
+    const isRestoringRef = useRef(false);
+    const currentScrollRef = useRef(0);
+
+    // Secure async scroll restoration for react-window v2
+    useEffect(() => {
+        if (!files || files.length === 0) return;
+
+        isRestoringRef.current = true;
+
+        // Wait for react-window to create DOM element placeholders
+        const timer = setTimeout(() => {
+            if (isGrid && gridRef.current?.element) {
+                gridRef.current.element.scrollTop = initialScrollOffset;
+            } else if (!isGrid && listRef.current?.element) {
+                listRef.current.element.scrollTop = initialScrollOffset;
+            }
+
+            // Allow a tiny moment for browser micro-tasks to apply the scroll before unblocking updates
+            setTimeout(() => {
+                isRestoringRef.current = false;
+            }, 50);
+        }, 50);
+
+        return () => clearTimeout(timer);
+    }, [initialScrollOffset, files.length, isGrid, viewMode, groupByDate]);
 
     // --- Collapsed groups state ---
     const [collapsedGroups, setCollapsedGroups] = useState<Set<DateCategoryKey>>(new Set());
@@ -639,6 +669,16 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
         return item.type === 'header' ? groupHeaderHeight : listRowHeight;
     }, [groupedDetailItems, listRowHeight, groupHeaderHeight]);
 
+    const handleScroll = useCallback((e: React.UIEvent<HTMLElement> | React.UIEvent<HTMLDivElement>) => {
+        const top = e.currentTarget.scrollTop;
+        if (onScrollToggle) onScrollToggle(top > 100);
+
+        if (!isRestoringRef.current && updateCurrentScroll) {
+            currentScrollRef.current = top;
+            updateCurrentScroll(top);
+        }
+    }, [onScrollToggle, updateCurrentScroll]);
+
     return (
         <div
             className={cx("virtualized-list", {
@@ -688,7 +728,7 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
                             ref={scrollContainerRef}
                             className="virtualized-scroller grid grouped-grid-scroller"
                             style={{ height, width, overflowX: 'hidden', overflowY: 'auto' }}
-                            onScroll={(e) => onScrollToggle((e.target as HTMLElement).scrollTop > 100)}
+                            onScroll={handleScroll}
                         >
                             {CATEGORY_ORDER.map(cat => {
                                 const catFiles = groupedByCategory.get(cat);
@@ -726,7 +766,7 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
                             rowProps={groupedSharedProps}
                             listRef={listRef}
                             style={{ height, width: finalWidth, overflowY: 'auto', overflowX: 'hidden' }}
-                            onScroll={(e: React.UIEvent<HTMLElement>) => onScrollToggle(e.currentTarget.scrollTop > 100)}
+                            onScroll={handleScroll}
                         />
                     );
                 }
@@ -751,7 +791,7 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
                             cellProps={{ ...sharedProps, columnCount }}
                             gridRef={gridRef}
                             style={{ height, width, overflowX: 'hidden', overflowY: 'auto' }}
-                            onScroll={(e: React.UIEvent<HTMLElement>) => onScrollToggle(e.currentTarget.scrollTop > 100)}
+                            onScroll={handleScroll}
                         />
                     );
                 }
@@ -769,7 +809,7 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
                         rowProps={sharedProps}
                         listRef={listRef}
                         style={{ height, width: finalWidth, overflowY: 'auto', overflowX: 'hidden' }}
-                        onScroll={(e: React.UIEvent<HTMLElement>) => onScrollToggle(e.currentTarget.scrollTop > 100)}
+                        onScroll={handleScroll}
                     />
                 );
             }} />

@@ -18,7 +18,7 @@ export const usePanel = (initialPath: string, panelId?: string, activeTabId?: st
     }, [panelId]);
 
     // Navigation
-    const { path, history, historyIndex, currentEntry, navigate, goBack, goForward, goUp, updateCurrentSelection, setNavigationState, version } = useNavigation(initialPath);
+    const { path, history, historyIndex, currentEntry, navigate, goBack, goForward, goUp, updateCurrentSelection, updateCurrentScroll, setNavigationState, version } = useNavigation(initialPath);
 
     useEffect(() => {
         if (panelId) {
@@ -204,6 +204,7 @@ export const usePanel = (initialPath: string, panelId?: string, activeTabId?: st
         isNetworkView,
         lastSelectedPath,
         currentSearchRoot,
+        currentEntry,
 
         // Actions
         navigate: handleNavigate,
@@ -228,6 +229,7 @@ export const usePanel = (initialPath: string, panelId?: string, activeTabId?: st
         setSelected,
         updateFileSize,
         setFileCalculating,
+        updateCurrentScroll,
 
         // Tab Support
         getPanelState,
@@ -236,12 +238,12 @@ export const usePanel = (initialPath: string, panelId?: string, activeTabId?: st
     }), [
         path, displayFiles, loading, error, selected, viewMode, sortConfig,
         history, historyIndex, searchQuery, searchResults, isSearching, searchLimitReached,
-        summary, isComplete, currentSearchRoot,
+        summary, isComplete, currentSearchRoot, currentEntry,
         colWidths, mode, isTrashView, isNetworkView, lastSelectedPath,
         navigate, goBack, goForward, goUp, refresh,
         setViewMode, setSortConfig, setColWidths,
         setSearchQuery, setSearchResults, setIsSearching, setSearchLimitReached,
-        handleSelect, selectMultiple, clearSelection, setSelected, updateFileSize, setFileCalculating,
+        handleSelect, selectMultiple, clearSelection, setSelected, updateFileSize, setFileCalculating, updateCurrentScroll,
         getPanelState, setPanelState, setNavigationState
     ]);
 };

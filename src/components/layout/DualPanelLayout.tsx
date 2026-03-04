@@ -12,6 +12,8 @@ interface FullPanelState extends PanelState {
     goBack: () => void;
     goForward: () => void;
     setViewMode: (mode: ViewMode) => void;
+    currentEntry?: { scrollOffset?: number };
+    updateCurrentScroll?: (offset: number) => void;
 }
 
 interface DualPanelLayoutProps {
@@ -435,6 +437,8 @@ export const DualPanelLayout: React.FC<DualPanelLayoutProps> = ({
                             panelId="left"
                             onViewModeChange={leftHandlers.setViewMode}
                             loading={left.loading}
+                            initialScrollOffset={left.currentEntry?.scrollOffset}
+                            updateCurrentScroll={left.updateCurrentScroll}
                         />
 
                         {layout === 'dual' && (
@@ -486,6 +490,8 @@ export const DualPanelLayout: React.FC<DualPanelLayoutProps> = ({
                                 panelId="right"
                                 onViewModeChange={rightHandlers.setViewMode}
                                 loading={right.loading}
+                                initialScrollOffset={right.currentEntry?.scrollOffset}
+                                updateCurrentScroll={right.updateCurrentScroll}
                             />
                         )}
                     </div>

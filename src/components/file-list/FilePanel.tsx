@@ -71,6 +71,8 @@ interface FilePanelProps {
     searchLimitReached?: boolean;
     onViewModeChange: (mode: ViewMode) => void;
     loading?: boolean;
+    initialScrollOffset?: number;
+    updateCurrentScroll?: (offset: number) => void;
 }
 
 export const FilePanel: React.FC<FilePanelProps> = React.memo(({
@@ -82,7 +84,7 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
     dragOverPath, showHidden = false, showSystem = false, layout, cutPaths = [],
     onRename, showHistogram: propShowHistogram, isTrashView = false, isNetworkView = false,
     useSystemIcons: propUseSystemIcons, onItemMiddleClick, diffPaths, searchLimitReached,
-    panelId, onViewModeChange, loading
+    panelId, onViewModeChange, loading, initialScrollOffset, updateCurrentScroll
 }) => {
     const { useSystemIcons: contextUseSystemIcons, searchLimit, showGridThumbnails, notify, showNetwork, groupByDate, setGroupByDate } = useApp();
     const useSystemIcons = propUseSystemIcons ?? contextUseSystemIcons;
@@ -619,6 +621,8 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
                         isSearching={isSearching}
                         loading={loading}
                         groupByDate={groupByDate}
+                        initialScrollOffset={initialScrollOffset}
+                        updateCurrentScroll={updateCurrentScroll}
                     />
                 </div>
             </div>
