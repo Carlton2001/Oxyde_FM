@@ -352,9 +352,18 @@ export const useFiles = (panelId: PanelId, path: string, sortConfig: SortConfig,
 
             const relevant = paths.some(p => {
                 if (!path) return false;
-                const normPath = path.toLowerCase().replace(/\\/g, '/').replace(/\/$/, '');
-                const normP = p.toLowerCase().replace(/\\/g, '/');
-                return normP.startsWith(normPath);
+
+                // Better normalization: remove Windows extended path prefix if present
+                const cleanP = p.replace(/^\\\\?\\/, '');
+                const cleanPath = path.replace(/^\\\\?\\/, '');
+
+                const normPath = cleanPath.toLowerCase().replace(/\\/g, '/').replace(/\/$/, '');
+                const normP = cleanP.toLowerCase().replace(/\\/g, '/');
+
+                // Match if:
+                // 1. It's the directory itself
+                // 2. It's a file/folder WITHIN the directory (normP starts with normPath + '/')
+                return normP === normPath || normP.startsWith(normPath + '/');
             });
 
             if (relevant) {

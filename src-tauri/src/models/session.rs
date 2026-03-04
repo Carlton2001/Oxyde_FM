@@ -126,7 +126,7 @@ impl PanelState {
                     if kind.contains("Access") { return; } // Filter noisy events
 
                     let paths: Vec<String> = event.paths.iter()
-                        .map(|p| p.to_string_lossy().to_string())
+                        .map(|p| p.to_string_lossy().replace("\\\\?\\", "").to_string())
                         .collect();
                     
                     let _ = app_handle.emit("fs-change", FsChangeEvent { kind, paths });

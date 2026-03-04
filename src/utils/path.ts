@@ -60,6 +60,11 @@ export const isSameVolume = (path1: string, path2: string): boolean => {
 export const normalizePath = (path: string): string => {
     if (!path) return "";
 
+    // Handle Windows extended paths (\\?\)
+    if (path.startsWith("\\\\?\\")) {
+        path = path.slice(4);
+    }
+
     // Do NOT normalize virtual URI schemes
     if (isVirtualPath(path)) {
         return path;
