@@ -1,6 +1,6 @@
 import React from 'react';
 import cx from 'classnames';
-import { ChevronRight, Sun, Moon, Eye, Globe, Info, Check, Plus, Minus, Grid2x2, Calendar, Zap, Trash2, RefreshCw } from 'lucide-react';
+import { ChevronRight, Sun, Moon, Eye, Globe, Info, Check, Plus, Minus, Grid2x2, Calendar, Zap, Trash2, RefreshCw, CheckSquare } from 'lucide-react';
 import { Toggle } from '../ui/Toggle';
 import { useApp } from '../../context/AppContext';
 import { useDialogs } from '../../context/DialogContext';
@@ -36,6 +36,7 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({
         searchLimit, setSearchLimit,
         defaultTurboMode, setDefaultTurboMode,
         showGridThumbnails, setShowGridThumbnails,
+        showCheckboxes, setShowCheckboxes,
         showNetwork, setShowNetwork,
         t, notify, resetToDefaults
     } = useApp();
@@ -222,6 +223,13 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({
                             </div>
                             <span className="settings-item-text">{t('use_system_icons')}</span>
                             <Toggle checked={useSystemIcons} onChange={setUseSystemIcons} />
+                        </div>
+                        <div className="settings-item" onClick={() => setShowCheckboxes(!showCheckboxes)}>
+                            <div className="settings-item-icon-left">
+                                <CheckSquare size={16} className="icon-md" />
+                            </div>
+                            <span className="settings-item-text">{t('show_checkboxes' as any)}</span>
+                            <Toggle checked={showCheckboxes} onChange={setShowCheckboxes} />
                         </div>
                         <div className="settings-divider" />
                         <div className="settings-label">{t('files' as any) || 'Files'}</div>

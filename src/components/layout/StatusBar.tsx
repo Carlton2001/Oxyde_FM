@@ -1,8 +1,8 @@
 import React from 'react';
 import { formatSize } from '../../utils/format';
 import { TFunc } from '../../i18n';
-import { LayoutGrid, TableOfContents, CalendarDays, CheckSquare } from 'lucide-react';
-import { useApp } from '../../context/AppContext';
+import { LayoutGrid, TableOfContents, CalendarDays } from 'lucide-react';
+
 import cx from 'classnames';
 import './StatusBar.css';
 
@@ -33,7 +33,7 @@ export const StatusBar: React.FC<StatusBarProps> = ({
     groupByDate = false,
     onGroupByDateChange
 }) => {
-    const { showCheckboxes, setShowCheckboxes } = useApp();
+
 
     const getCountText = (count: number, singularKey: string, pluralKey: string) => {
         if (count === 0) return '';
@@ -76,14 +76,6 @@ export const StatusBar: React.FC<StatusBarProps> = ({
             </div>
 
             <div className="view-switcher">
-                <button
-                    className={cx("btn-icon", { active: showCheckboxes })}
-                    onClick={(e) => { e.stopPropagation(); setShowCheckboxes(!showCheckboxes); }}
-                    data-tooltip={t('show_checkboxes' as any)}
-                    style={{ marginRight: '4px' }}
-                >
-                    <CheckSquare size={14} />
-                </button>
 
                 {onGroupByDateChange && (
                     <button
