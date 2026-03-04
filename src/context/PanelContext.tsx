@@ -1,13 +1,19 @@
-
-import React, { createContext, useContext, useState, useMemo, useEffect, useRef, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useMemo, useEffect, useRef, useCallback, ReactNode } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { usePanel } from '../hooks/usePanel';
 import { PanelId } from '../types';
 import { useRustSession } from '../hooks/useRustSession';
 import { normalizePath } from '../utils/path';
+import { HistoryEntry } from '../types';
 
 // Infers the return type of usePanel automatically
 type PanelState = ReturnType<typeof usePanel>;
+
+interface TabNavSnapshot {
+    history: HistoryEntry[];
+    historyIndex: number;
+    version: number;
+}
 
 interface PanelContextType {
     left: PanelState;
@@ -15,7 +21,6 @@ interface PanelContextType {
     activePanelId: PanelId;
     activePanel: PanelState;
     setActivePanelId: (id: PanelId) => void;
-    // Helper to get the other panel
     otherPanel: PanelState;
     isLoading: boolean;
 }
@@ -41,15 +46,12 @@ export const PanelProvider: React.FC<PanelProviderProps> = ({
     initialLeftPath,
     initialRightPath
 }) => {
-    // Phase 1 Migration: Use Rust Session for paths
     const { session, isLoading } = useRustSession();
 
-    // Compute initial paths from the FIRST loaded session snapshot.
-    // useState initializer ensures this only runs once, on first mount after session loads.
     const [resolvedPaths] = useState<{ left: string; right: string } | null>(() => {
         if (!session) return null;
-        const leftTab = session.left_panel.tabs.find(t => t.id === session.left_panel.active_tab_id);
-        const rightTab = session.right_panel.tabs.find(t => t.id === session.right_panel.active_tab_id);
+        const leftTab = session.left_panel.tabs.find((t: any) => t.id === session.left_panel.active_tab_id);
+        const rightTab = session.right_panel.tabs.find((t: any) => t.id === session.right_panel.active_tab_id);
         const defaultPath = "C:\\";
         return {
             left: initialLeftPath || (leftTab ? normalizePath(leftTab.path) : defaultPath),
@@ -57,14 +59,12 @@ export const PanelProvider: React.FC<PanelProviderProps> = ({
         };
     });
 
-    // Block rendering until session is loaded and initial paths are resolved
-    // If resolvedPaths is null (session wasn't ready at first useState call), we need to wait
     const [initialPaths, setInitialPaths] = useState(resolvedPaths);
 
     useEffect(() => {
         if (initialPaths || !session) return;
-        const leftTab = session.left_panel.tabs.find(t => t.id === session.left_panel.active_tab_id);
-        const rightTab = session.right_panel.tabs.find(t => t.id === session.right_panel.active_tab_id);
+        const leftTab = session.left_panel.tabs.find((t: any) => t.id === session.left_panel.active_tab_id);
+        const rightTab = session.right_panel.tabs.find((t: any) => t.id === session.right_panel.active_tab_id);
         const defaultPath = "C:\\";
         setInitialPaths({
             left: initialLeftPath || (leftTab ? normalizePath(leftTab.path) : defaultPath),
@@ -72,7 +72,6 @@ export const PanelProvider: React.FC<PanelProviderProps> = ({
         });
     }, [session, initialPaths, initialLeftPath, initialRightPath]);
 
-    // Don't render until we have initial paths
     if (isLoading || !initialPaths) {
         return null;
     }
@@ -92,8 +91,6 @@ export const PanelProvider: React.FC<PanelProviderProps> = ({
 /**
  * Inner component that creates panels. Separated so that usePanel hooks
  * are only called once initial paths are definitively known.
- * This component receives the session from the parent so there is only
- * ONE useRustSession() instance in the tree.
  */
 const PanelProviderReady: React.FC<{
     children: ReactNode;
@@ -110,64 +107,112 @@ const PanelProviderReady: React.FC<{
 
     const [activePanelId, setActivePanelIdState] = useState<PanelId>('left');
 
-    // Track previous active tab IDs to detect tab switches
-    const prevLeftTabIdRef = useRef(leftActiveTabId);
-    const prevRightTabIdRef = useRef(rightActiveTabId);
+    // --- Per-tab isolated navigation history ---
+    // Each tab has its own history stack. On tab switch, we save the outgoing tab's
+    // stack and restore the incoming tab's stack via setNavigationState (no navigate() call,
+    // which would wrongly push a new entry into the shared history).
+    const leftTabHistoriesRef = useRef<Map<string, TabNavSnapshot>>(new Map());
+    const rightTabHistoriesRef = useRef<Map<string, TabNavSnapshot>>(new Map());
 
-    const setActivePanelId = (id: PanelId) => {
+    // Track previous active tab IDs to detect switches
+    const prevLeftTabIdRef = useRef<string>(leftActiveTabId);
+    const prevRightTabIdRef = useRef<string>(rightActiveTabId);
+
+    const setActivePanelId = useCallback((id: PanelId) => {
         setActivePanelIdState(id);
         invoke('set_active_panel', { panelId: id }).catch(console.error);
-    };
+    }, []);
 
-    // Sync React Panel state with Rust Session
+    // Sync React panel state with Rust session
     useEffect(() => {
         if (!session) return;
 
-        // Update Active ID
+        // Sync active panel
         if (session.active_panel === 'left' || session.active_panel === 'right') {
             if (activePanelId !== session.active_panel) {
                 setActivePanelIdState(session.active_panel as PanelId);
             }
         }
 
-        // Detect tab switches
         const leftTabSwitched = leftActiveTabId !== prevLeftTabIdRef.current;
         const rightTabSwitched = rightActiveTabId !== prevRightTabIdRef.current;
+
+        // ─── LEFT PANEL ──────────────────────────────────────────────────
+        if (leftTabSwitched && prevLeftTabIdRef.current) {
+            // Save outgoing tab's full nav state
+            leftTabHistoriesRef.current.set(prevLeftTabIdRef.current, {
+                history: left.history,
+                historyIndex: left.historyIndex,
+                version: left.version
+            });
+        }
         prevLeftTabIdRef.current = leftActiveTabId;
-        prevRightTabIdRef.current = rightActiveTabId;
 
         const leftTabArr = session.left_panel.tabs.find((t: any) => t.id === session.left_panel.active_tab_id);
         if (leftTabArr) {
             const normRust = normalizePath(leftTabArr.path);
-            const normReact = normalizePath(left.path);
 
-            if (leftTabSwitched && normRust !== normReact) {
-                // Tab switch: force navigate regardless of version
-                // console.log(`[Sync] Left Tab switched to ${leftActiveTabId}. Navigating to: ${normRust}`);
-                left.navigate(normRust, [], leftTabArr.version);
+            if (leftTabSwitched) {
+                // Tab switch → restore saved history or start fresh
+                const saved = leftTabHistoriesRef.current.get(leftActiveTabId);
+                if (saved) {
+                    left.setNavigationState({
+                        path: normRust,
+                        history: saved.history,
+                        historyIndex: saved.historyIndex,
+                        version: saved.version
+                    });
+                } else {
+                    left.setNavigationState({
+                        path: normRust,
+                        history: [{ path: normRust, selected: [] }],
+                        historyIndex: 0,
+                        version: leftTabArr.version
+                    });
+                }
             } else if (leftTabArr.version > left.version) {
-                // console.log(`[Sync] Left Backend is ahead (v${leftTabArr.version} > v${left.version}). Catching up and moving to: ${normRust}`);
                 left.navigate(normRust, [], leftTabArr.version);
-            } else if (leftTabArr.version === left.version && normRust !== normReact) {
-                // console.log(`[Sync] Left Path mismatch at same version (v${left.version}). Correcting to: ${normRust}`);
+            } else if (leftTabArr.version === left.version && normalizePath(left.path) !== normRust) {
                 left.navigate(normRust, [], left.version);
             }
         }
 
+        // ─── RIGHT PANEL ─────────────────────────────────────────────────
+        if (rightTabSwitched && prevRightTabIdRef.current) {
+            // Save outgoing tab's full nav state
+            rightTabHistoriesRef.current.set(prevRightTabIdRef.current, {
+                history: right.history,
+                historyIndex: right.historyIndex,
+                version: right.version
+            });
+        }
+        prevRightTabIdRef.current = rightActiveTabId;
+
         const rightTabArr = session.right_panel.tabs.find((t: any) => t.id === session.right_panel.active_tab_id);
         if (rightTabArr) {
             const normRust = normalizePath(rightTabArr.path);
-            const normReact = normalizePath(right.path);
 
-            if (rightTabSwitched && normRust !== normReact) {
-                // Tab switch: force navigate regardless of version
-                // console.log(`[Sync] Right Tab switched to ${rightActiveTabId}. Navigating to: ${normRust}`);
-                right.navigate(normRust, [], rightTabArr.version);
+            if (rightTabSwitched) {
+                // Tab switch → restore saved history or start fresh
+                const saved = rightTabHistoriesRef.current.get(rightActiveTabId);
+                if (saved) {
+                    right.setNavigationState({
+                        path: normRust,
+                        history: saved.history,
+                        historyIndex: saved.historyIndex,
+                        version: saved.version
+                    });
+                } else {
+                    right.setNavigationState({
+                        path: normRust,
+                        history: [{ path: normRust, selected: [] }],
+                        historyIndex: 0,
+                        version: rightTabArr.version
+                    });
+                }
             } else if (rightTabArr.version > right.version) {
-                // console.log(`[Sync] Right Backend is ahead (v${rightTabArr.version} > v${right.version}). Catching up and moving to: ${normRust}`);
                 right.navigate(normRust, [], rightTabArr.version);
-            } else if (rightTabArr.version === right.version && normRust !== normReact) {
-                // console.log(`[Sync] Right Path mismatch at same version (v${right.version}). Correcting to: ${normRust}`);
+            } else if (rightTabArr.version === right.version && normalizePath(right.path) !== normRust) {
                 right.navigate(normRust, [], right.version);
             }
         }
@@ -181,7 +226,7 @@ const PanelProviderReady: React.FC<{
         otherPanel: activePanelId === 'left' ? right : left,
         setActivePanelId,
         isLoading
-    }), [left, right, activePanelId, isLoading]);
+    }), [left, right, activePanelId, isLoading, setActivePanelId]);
 
     return (
         <PanelContext.Provider value={value}>

@@ -231,7 +231,8 @@ export const usePanel = (initialPath: string, panelId?: string, activeTabId?: st
 
         // Tab Support
         getPanelState,
-        setPanelState
+        setPanelState,
+        setNavigationState,
     }), [
         path, displayFiles, loading, error, selected, viewMode, sortConfig,
         history, historyIndex, searchQuery, searchResults, isSearching, searchLimitReached,
@@ -241,7 +242,7 @@ export const usePanel = (initialPath: string, panelId?: string, activeTabId?: st
         setViewMode, setSortConfig, setColWidths,
         setSearchQuery, setSearchResults, setIsSearching, setSearchLimitReached,
         handleSelect, selectMultiple, clearSelection, setSelected, updateFileSize, setFileCalculating,
-        getPanelState, setPanelState
+        getPanelState, setPanelState, setNavigationState
     ]);
 };
 

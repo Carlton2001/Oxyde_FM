@@ -519,8 +519,11 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
 
     useImperativeHandle(ref, () => ({
         scrollToTop: () => {
-            listRef.current?.scrollTo(0);
-            gridRef.current?.scrollTo({ scrollTop: 0 });
+            // react-window v2 exposes an .element getter, not a scrollTo() method
+            const listEl = listRef.current?.element;
+            if (listEl) listEl.scrollTop = 0;
+            const gridEl = gridRef.current?.element;
+            if (gridEl) gridEl.scrollTop = 0;
             if (scrollContainerRef.current) scrollContainerRef.current.scrollTop = 0;
         }
     }));
@@ -723,7 +726,7 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
                             rowProps={groupedSharedProps}
                             listRef={listRef}
                             style={{ height, width: finalWidth, overflowY: 'auto', overflowX: 'hidden' }}
-                            onScroll={(e: any) => onScrollToggle(e.scrollOffset > 100)}
+                            onScroll={(e: React.UIEvent<HTMLElement>) => onScrollToggle(e.currentTarget.scrollTop > 100)}
                         />
                     );
                 }
@@ -748,7 +751,7 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
                             cellProps={{ ...sharedProps, columnCount }}
                             gridRef={gridRef}
                             style={{ height, width, overflowX: 'hidden', overflowY: 'auto' }}
-                            onScroll={(e: any) => onScrollToggle(e.scrollTop > 100)}
+                            onScroll={(e: React.UIEvent<HTMLElement>) => onScrollToggle(e.currentTarget.scrollTop > 100)}
                         />
                     );
                 }
@@ -766,7 +769,7 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
                         rowProps={sharedProps}
                         listRef={listRef}
                         style={{ height, width: finalWidth, overflowY: 'auto', overflowX: 'hidden' }}
-                        onScroll={(e: any) => onScrollToggle(e.scrollOffset > 100)}
+                        onScroll={(e: React.UIEvent<HTMLElement>) => onScrollToggle(e.currentTarget.scrollTop > 100)}
                     />
                 );
             }} />
