@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef, useImperativeHandle, useCa
 import { List, Grid, RowComponentProps, CellComponentProps } from 'react-window';
 import { AutoSizer } from 'react-virtualized-auto-sizer';
 import cx from 'classnames';
-import { Check, Shield, Loader2, ChevronDown, ChevronRight } from 'lucide-react';
+import { Check, Loader2, ChevronDown, ChevronRight } from 'lucide-react';
 
 import { FileEntry, ViewMode, ColumnWidths, DateFormat } from '../../types';
 import { TFunc } from '../../i18n';
@@ -160,7 +160,6 @@ const DetailsRow = React.memo((props: RowComponentProps<SharedItemProps>) => {
                             )}
                             <div className="file-icon-small">
                                 {getIcon(entry)}
-                                {isProtected && <Shield className="protected-shield-badge" size={12} fill="currentColor" />}
                             </div>
                             <div className="file-name-container">
                                 {isRenaming ? (
@@ -231,7 +230,6 @@ const GridCell = React.memo((props: CellComponentProps<SharedItemProps>) => {
             <div className="grid-item-inner">
                 <div className="file-icon-large">
                     {getIcon(entry, rootFontSize * 3)}
-                    {isProtected && <Shield className="protected-shield-badge" size={16} fill="currentColor" />}
                 </div>
                 <div className="file-name-container">
                     {isRenaming ? (
@@ -348,7 +346,6 @@ const GroupedDetailsRow = React.memo((props: RowComponentProps<GroupedSharedProp
                             )}
                             <div className="file-icon-small">
                                 {getIcon(entry)}
-                                {isProtected && <Shield className="protected-shield-badge" size={12} fill="currentColor" />}
                             </div>
                             <div className="file-name-container">
                                 {isRenaming ? (
@@ -446,7 +443,6 @@ const GroupedGridItem = React.memo<{ entry: FileEntry; sharedProps: SharedItemPr
             <div className="grid-item-inner">
                 <div className="file-icon-large">
                     {getIcon(entry, rootFontSize * 3)}
-                    {isProtected && <Shield className="protected-shield-badge" size={16} fill="currentColor" />}
                 </div>
                 <div className="file-name-container">
                     {isRenaming ? (
