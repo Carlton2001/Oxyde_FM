@@ -549,7 +549,7 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
 
         isRestoringRef.current = true;
 
-        // Wait for react-window to create DOM element placeholders
+        // Try to apply it as quickly as possible
         const timer = setTimeout(() => {
             const offset = initialScrollOffsetRef.current;
             if (isGrid && gridRef.current?.element) {
@@ -560,11 +560,11 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
                 scrollContainerRef.current.scrollTop = offset;
             }
 
-            // Allow a tiny moment for browser micro-tasks to apply the scroll before unblocking updates
+            // Short block to avoid scroll events from the restoration jump
             setTimeout(() => {
                 isRestoringRef.current = false;
-            }, 50);
-        }, 50);
+            }, 100);
+        }, 0);
 
         return () => clearTimeout(timer);
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -780,6 +780,7 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
                             rowComponent={GroupedDetailsRow as any}
                             rowProps={groupedSharedProps}
                             listRef={listRef}
+                            {...({ initialScrollOffset: initialScrollOffsetRef.current || 0 } as any)}
                             style={{ height, width: finalWidth, overflowY: 'auto', overflowX: 'hidden' }}
                             onScroll={handleScroll}
                         />
@@ -805,6 +806,7 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
                             cellComponent={GridCell as any}
                             cellProps={{ ...sharedProps, columnCount }}
                             gridRef={gridRef}
+                            {...({ initialScrollTop: initialScrollOffsetRef.current || 0 } as any)}
                             style={{ height, width, overflowX: 'hidden', overflowY: 'auto' }}
                             onScroll={handleScroll}
                         />
@@ -823,11 +825,12 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
                         rowComponent={DetailsRow as any}
                         rowProps={sharedProps}
                         listRef={listRef}
+                        {...({ initialScrollOffset: initialScrollOffsetRef.current || 0 } as any)}
                         style={{ height, width: finalWidth, overflowY: 'auto', overflowX: 'hidden' }}
                         onScroll={handleScroll}
                     />
                 );
             }} />
-        </div>
+        </div >
     );
 });
