@@ -420,7 +420,6 @@
 .file-list.grid .file-item:hover,
 .virtualized-list.grid .file-item:hover {
     background-color: var(--hover-color);
-    transform: translateY(-1px);
 }
 
 .panel:not(.active) .file-list.grid .file-item.selected,
@@ -907,7 +906,7 @@
 
 /* Virtualized List Styles */
 .file-list.virtualized.grid {
-    padding: 0.3rem 0 0 0.5rem !important;
+    padding: 0 0 0 0.5rem !important;
     /* Changed margin-left to padding-left */
     overflow: hidden !important;
     display: block !important;
@@ -945,8 +944,11 @@
     overflow: auto !important;
 }
 
-.virtualized-scroller.details,
 .virtualized-scroller.grid {
+    padding: 6px 0 0.5rem 0 !important;
+}
+
+.virtualized-scroller.details {
     padding: 0 0 0.5rem 0 !important;
 }
 
@@ -1132,7 +1134,8 @@
 }
 
 .group-header.grid {
-    padding: 0.375rem 0.75rem;
+    height: 2rem;
+    padding: 0 0.75rem;
     border-bottom: 1px solid var(--border-color);
     background: color-mix(in srgb, var(--surface-secondary), transparent 30%);
 }
@@ -1174,7 +1177,7 @@
 
 /* Grouped grid sections */
 .group-section.grid {
-    margin-bottom: 0.25rem;
+    margin-bottom: 0;
 }
 
 .group-grid-items {
@@ -1182,7 +1185,9 @@
 }
 
 /* Grouped grid scroller */
-.grouped-grid-scroller {
+/* Pass to triple class to ensure it wins over .virtualized-scroller.grid (specificity) */
+.virtualized-scroller.grid.grouped-grid-scroller {
+    padding-top: 0 !important;
     padding-bottom: 0.5rem !important;
 }
 

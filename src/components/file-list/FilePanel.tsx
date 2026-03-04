@@ -543,32 +543,34 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
                         </div>
                     </div>
                 )}
-                <div className="file-header-scroll-wrapper" ref={headerScrollRef}>
-                    <FileHeader
-                        viewMode={viewMode}
-                        searchResults={searchResults}
-                        isTrashView={isTrashView}
-                        isNetworkView={isNetworkView}
-                        finalFiles={finalFiles}
-                        sortConfig={sortConfig}
-                        colWidths={colWidths}
-                        onSort={onSort}
-                        onResize={onResize}
-                        onResizeMultiple={onResizeMultiple}
-                        onClearSearch={onClearSearch}
-                        onSelectAll={handleHeaderClick}
-                        onHeaderContextMenu={handleHeaderContextMenu}
-                        isTypeFiltered={extensionFilter !== null}
-                        isSizeFiltered={sizeFilter !== null}
-                        isNameFiltered={nameFilter !== null}
-                        isLocationFiltered={locationFilter !== null}
-                        isDeletedDateFiltered={deletedDateFilter !== null}
-                        isDateFiltered={dateFilter !== null}
-                        t={t}
-                        panelRef={panelRef}
-                        selected={selected}
-                    />
-                </div>
+                {viewMode === 'details' && (
+                    <div className="file-header-scroll-wrapper" ref={headerScrollRef}>
+                        <FileHeader
+                            viewMode={viewMode}
+                            searchResults={searchResults}
+                            isTrashView={isTrashView}
+                            isNetworkView={isNetworkView}
+                            finalFiles={finalFiles}
+                            sortConfig={sortConfig}
+                            colWidths={colWidths}
+                            onSort={onSort}
+                            onResize={onResize}
+                            onResizeMultiple={onResizeMultiple}
+                            onClearSearch={onClearSearch}
+                            onSelectAll={handleHeaderClick}
+                            onHeaderContextMenu={handleHeaderContextMenu}
+                            isTypeFiltered={extensionFilter !== null}
+                            isSizeFiltered={sizeFilter !== null}
+                            isNameFiltered={nameFilter !== null}
+                            isLocationFiltered={locationFilter !== null}
+                            isDeletedDateFiltered={deletedDateFilter !== null}
+                            isDateFiltered={dateFilter !== null}
+                            t={t}
+                            panelRef={panelRef}
+                            selected={selected}
+                        />
+                    </div>
+                )}
 
                 <div
                     className={cx("file-list", viewMode, { "search-mode": !!searchResults, "trash-mode": isTrashView, "virtualized": true })}
