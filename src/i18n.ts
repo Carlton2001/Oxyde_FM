@@ -417,11 +417,11 @@ export const translations = {
         skip: 'Ignore',
         apply_all: 'Apply to all conflicts',
         cancel_all: 'Cancel All',
-        rename_placeholder: 'Enter new name...',
+        rename_placeholder: 'Enter new name',
         rename_label: 'New name',
         new_folder: 'New Folder',
         enter_folder_name: 'Enter folder name',
-        new_folder_placeholder: 'Enter folder name...',
+        new_folder_placeholder: 'Enter folder name',
 
         // --- Updates & About ---
         update_available: 'A new version is available!',
@@ -876,11 +876,11 @@ export const translations = {
         skip: 'Ignorer',
         apply_all: 'Appliquer à tous les conflits',
         cancel_all: 'Tout annuler',
-        rename_placeholder: 'Entrez le nouveau nom...',
+        rename_placeholder: 'Entrez le nouveau nom',
         rename_label: 'Nouveau nom',
         new_folder: 'Nouveau dossier',
         enter_folder_name: 'Entrez le nom du dossier',
-        new_folder_placeholder: 'Nom du dossier...',
+        new_folder_placeholder: 'Nom du dossier',
 
         // --- Updates & About ---
         update_available: 'Une nouvelle version est disponible !',

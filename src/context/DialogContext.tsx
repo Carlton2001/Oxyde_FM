@@ -24,7 +24,7 @@ export interface DialogContextType {
     openPropertiesDialog: (paths: string[]) => void;
     openAboutDialog: () => void;
     openRenameDialog: (path: string) => Promise<string | null>;
-    openNewFolderDialog: (props: { parentPath: string, onCreate: (name: string) => void }) => void;
+    openNewFolderDialog: (props: { parentPath: string, onCreate: (name: string) => void, existingNames?: string[] }) => void;
     openDeleteDialog: (props: { paths: string[], onConfirm: () => void, isPermanent?: boolean }) => void;
     openConflictDialog: (props: { conflicts: any[], onResolve: (resolutions: any) => void, operation?: string, totalCount?: number }) => void;
     openSearchDialog: (props: { initialRoot: string, initialOptions?: any }) => Promise<any>;
@@ -85,9 +85,21 @@ export const DialogProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         return prompt(t('rename_label'), t('rename'), currentName, 'rename');
     }, [prompt, t]);
 
-    const openNewFolderDialog = useCallback(({ onCreate }: { onCreate: (name: string) => void }) => {
-        // i18n: enter_folder_name, new_folder, new_folder_placeholder
-        prompt(t('enter_folder_name'), t('new_folder'), t('new_folder_placeholder')).then(name => {
+    const openNewFolderDialog = useCallback(({ onCreate, existingNames }: { onCreate: (name: string) => void, existingNames?: string[] }) => {
+        let defaultName = t('new_folder');
+
+        if (existingNames && existingNames.length > 0) {
+            const namesLower = new Set(existingNames.map(n => n.toLowerCase()));
+            if (namesLower.has(defaultName.toLowerCase())) {
+                let counter = 2;
+                while (namesLower.has(`${defaultName} (${counter})`.toLowerCase())) {
+                    counter++;
+                }
+                defaultName = `${defaultName} (${counter})`;
+            }
+        }
+
+        prompt(t('enter_folder_name'), t('new_folder'), defaultName, 'new_folder' as const).then(name => {
             if (name) onCreate(name);
         });
     }, [prompt, t]);

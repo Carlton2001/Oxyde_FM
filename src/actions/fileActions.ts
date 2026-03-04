@@ -340,8 +340,15 @@ export const NEW_FOLDER_ACTION: ActionDefinition = {
         const targetPath = ctx['contextMenuTarget'] as string | undefined;
         const parentPath = targetPath || ctx.activePanel.path;
 
+        // Get existing names if we're in the same folder as the active panel
+        let existingNames: string[] | undefined = undefined;
+        if (parentPath === ctx.activePanel.path) {
+            existingNames = ctx.activePanel.files.map(f => f.name);
+        }
+
         ctx.dialogs.openNewFolderDialog({
             parentPath: parentPath,
+            existingNames,
             onCreate: async (name) => {
                 const sep = parentPath.endsWith('\\') ? '' : '\\';
                 const cleanName = name.trim().replace(/[. ]+$/, '');
