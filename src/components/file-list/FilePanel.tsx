@@ -73,6 +73,8 @@ interface FilePanelProps {
     loading?: boolean;
     initialScrollOffset?: number;
     updateCurrentScroll?: (offset: number) => void;
+    groupByDate: boolean;
+    onGroupByDateChange: (val: boolean) => void;
 }
 
 export const FilePanel: React.FC<FilePanelProps> = React.memo(({
@@ -84,9 +86,10 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
     dragOverPath, showHidden = false, showSystem = false, layout, cutPaths = [],
     onRename, showHistogram: propShowHistogram, isTrashView = false, isNetworkView = false,
     useSystemIcons: propUseSystemIcons, onItemMiddleClick, diffPaths, searchLimitReached,
-    panelId, onViewModeChange, loading, initialScrollOffset, updateCurrentScroll
+    panelId, onViewModeChange, loading, initialScrollOffset, updateCurrentScroll,
+    groupByDate, onGroupByDateChange
 }) => {
-    const { useSystemIcons: contextUseSystemIcons, searchLimit, showGridThumbnails, notify, showNetwork, groupByDate, setGroupByDate } = useApp();
+    const { useSystemIcons: contextUseSystemIcons, searchLimit, showGridThumbnails, notify, showNetwork } = useApp();
     const useSystemIcons = propUseSystemIcons ?? contextUseSystemIcons;
 
     const currentDrive = drives?.find(d => currentPath.toLowerCase().startsWith(d.path.toLowerCase()));
@@ -647,7 +650,7 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
                 onActivate={onActivate}
                 t={t}
                 groupByDate={groupByDate}
-                onGroupByDateChange={setGroupByDate}
+                onGroupByDateChange={onGroupByDateChange}
             />
 
             {filterMenuAnchor && activeFilterMenu === 'extension' && (

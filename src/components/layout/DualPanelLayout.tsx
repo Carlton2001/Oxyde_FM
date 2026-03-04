@@ -14,6 +14,7 @@ interface FullPanelState extends PanelState {
     setViewMode: (mode: ViewMode) => void;
     currentEntry?: { scrollOffset?: number };
     updateCurrentScroll?: (offset: number) => void;
+    setGroupByDate: (val: boolean) => void;
 }
 
 interface DualPanelLayoutProps {
@@ -230,6 +231,7 @@ export const DualPanelLayout: React.FC<DualPanelLayoutProps> = ({
         onAdvancedSearch: () => openAdvancedSearch('left'),
         onFileDrop: (target: string | undefined, e: any) => handleDrop(e, target || null, left.path),
         setViewMode: (mode: ViewMode) => left.setViewMode(mode),
+        onGroupByDateChange: (val: boolean) => left.setGroupByDate(val),
     }), [navigate, handleOpenFile, handleSelect, handleSelectMultiple, handleClearSelection, handleContextMenu, setActivePanelId, handleSort, handleResize, handleResizeMultiple, executeSearch, handleSearch, clearSearch, handleDrop, left]);
 
     const rightHandlers = useMemo(() => ({
@@ -249,6 +251,7 @@ export const DualPanelLayout: React.FC<DualPanelLayoutProps> = ({
         onAdvancedSearch: () => openAdvancedSearch('right'),
         onFileDrop: (target: string | undefined, e: any) => handleDrop(e, target || null, right.path),
         setViewMode: (mode: ViewMode) => right.setViewMode(mode),
+        onGroupByDateChange: (val: boolean) => right.setGroupByDate(val),
     }), [navigate, handleOpenFile, handleSelect, handleSelectMultiple, handleClearSelection, handleContextMenu, setActivePanelId, handleSort, handleResize, handleResizeMultiple, executeSearch, handleSearch, clearSearch, handleDrop, right]);
 
     const makeDragStartHandler = useCallback((panelId: 'left' | 'right') => {
@@ -439,6 +442,8 @@ export const DualPanelLayout: React.FC<DualPanelLayoutProps> = ({
                             loading={left.loading}
                             initialScrollOffset={left.currentEntry?.scrollOffset}
                             updateCurrentScroll={left.updateCurrentScroll}
+                            groupByDate={left.groupByDate}
+                            onGroupByDateChange={leftHandlers.onGroupByDateChange}
                         />
 
                         {layout === 'dual' && (
@@ -492,6 +497,8 @@ export const DualPanelLayout: React.FC<DualPanelLayoutProps> = ({
                                 loading={right.loading}
                                 initialScrollOffset={right.currentEntry?.scrollOffset}
                                 updateCurrentScroll={right.updateCurrentScroll}
+                                groupByDate={right.groupByDate}
+                                onGroupByDateChange={rightHandlers.onGroupByDateChange}
                             />
                         )}
                     </div>

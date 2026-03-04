@@ -61,6 +61,7 @@ export interface PanelState {
     updateFileSize: (path: string, size: number) => void;
     setFileCalculating: (path: string, isCalculating: boolean) => void;
     navigate: (path: string) => void;
+    groupByDate: boolean;
 }
 
 export interface ClipboardState {

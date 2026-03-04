@@ -28,6 +28,9 @@ export const usePanel = (initialPath: string, panelId?: string, activeTabId?: st
         }
     }, [path, normalizedPanelId, version]);
 
+    // Persistence identifiers
+    const groupByDateKey = panelId ? `groupByDate_${panelId}` : null;
+
     // View State with localStorage persistence
     const [viewMode, setViewModeState] = useState<ViewMode>(() => {
         if (panelId) {
@@ -39,6 +42,14 @@ export const usePanel = (initialPath: string, panelId?: string, activeTabId?: st
         return 'grid';
     });
 
+    const [groupByDate, setGroupByDateState] = useState<boolean>(() => {
+        if (groupByDateKey) {
+            const saved = localStorage.getItem(groupByDateKey);
+            return saved === 'true';
+        }
+        return false;
+    });
+
     // Persist viewMode when it changes
     const setViewMode = useCallback((mode: ViewMode) => {
         setViewModeState(mode);
@@ -46,6 +57,13 @@ export const usePanel = (initialPath: string, panelId?: string, activeTabId?: st
             localStorage.setItem(`viewMode_${panelId}`, mode);
         }
     }, [panelId]);
+
+    const setGroupByDate = useCallback((val: boolean) => {
+        setGroupByDateState(val);
+        if (groupByDateKey) {
+            localStorage.setItem(groupByDateKey, String(val));
+        }
+    }, [groupByDateKey]);
 
     const [sortConfig, setSortConfig] = useState<SortConfig>({ field: 'name', direction: 'asc' });
 
@@ -154,8 +172,9 @@ export const usePanel = (initialPath: string, panelId?: string, activeTabId?: st
         sortConfig,
         searchQuery,
         selected: Array.from(selected),
-        allColWidths
-    }), [path, history, historyIndex, viewMode, sortConfig, searchQuery, selected, allColWidths]);
+        allColWidths,
+        groupByDate
+    }), [path, history, historyIndex, viewMode, sortConfig, searchQuery, selected, allColWidths, groupByDate]);
 
     const setPanelState = useCallback((state: any) => {
         if (!state) return;
@@ -170,7 +189,8 @@ export const usePanel = (initialPath: string, panelId?: string, activeTabId?: st
         if (state.searchQuery !== undefined) setSearchQuery(state.searchQuery);
         if (state.selected) setSelected(new Set(state.selected));
         if (state.allColWidths) setAllColWidths(state.allColWidths);
-    }, [setNavigationState, setViewMode, setSortConfig, setSearchQuery, setSelected]);
+        if (state.groupByDate !== undefined) setGroupByDate(state.groupByDate);
+    }, [setNavigationState, setViewMode, setSortConfig, setSearchQuery, setSelected, setGroupByDate]);
 
     // Navigation helpers
     const handleNavigate = useCallback((newPath: string, selection?: string[], forceVersion?: number) => {
@@ -205,6 +225,7 @@ export const usePanel = (initialPath: string, panelId?: string, activeTabId?: st
         lastSelectedPath,
         currentSearchRoot,
         currentEntry,
+        groupByDate,
 
         // Actions
         navigate: handleNavigate,
@@ -214,6 +235,7 @@ export const usePanel = (initialPath: string, panelId?: string, activeTabId?: st
         refresh,
 
         setViewMode,
+        setGroupByDate,
         setSortConfig,
         setColWidths,
 
@@ -239,9 +261,9 @@ export const usePanel = (initialPath: string, panelId?: string, activeTabId?: st
         path, displayFiles, loading, error, selected, viewMode, sortConfig,
         history, historyIndex, searchQuery, searchResults, isSearching, searchLimitReached,
         summary, isComplete, currentSearchRoot, currentEntry,
-        colWidths, mode, isTrashView, isNetworkView, lastSelectedPath,
+        colWidths, mode, isTrashView, isNetworkView, lastSelectedPath, groupByDate,
         navigate, goBack, goForward, goUp, refresh,
-        setViewMode, setSortConfig, setColWidths,
+        setViewMode, setGroupByDate, setSortConfig, setColWidths,
         setSearchQuery, setSearchResults, setIsSearching, setSearchLimitReached,
         handleSelect, selectMultiple, clearSelection, setSelected, updateFileSize, setFileCalculating, updateCurrentScroll,
         getPanelState, setPanelState, setNavigationState
