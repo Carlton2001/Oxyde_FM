@@ -537,6 +537,11 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
     // --- Scroll Restoration ---
     const isRestoringRef = useRef(false);
     const currentScrollRef = useRef(0);
+    const initialScrollOffsetRef = useRef(initialScrollOffset);
+
+    useEffect(() => {
+        initialScrollOffsetRef.current = initialScrollOffset;
+    }, [initialScrollOffset]);
 
     // Secure async scroll restoration for react-window v2
     useEffect(() => {
@@ -546,10 +551,13 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
 
         // Wait for react-window to create DOM element placeholders
         const timer = setTimeout(() => {
+            const offset = initialScrollOffsetRef.current;
             if (isGrid && gridRef.current?.element) {
-                gridRef.current.element.scrollTop = initialScrollOffset;
+                gridRef.current.element.scrollTop = offset;
             } else if (!isGrid && listRef.current?.element) {
-                listRef.current.element.scrollTop = initialScrollOffset;
+                listRef.current.element.scrollTop = offset;
+            } else if (scrollContainerRef.current) {
+                scrollContainerRef.current.scrollTop = offset;
             }
 
             // Allow a tiny moment for browser micro-tasks to apply the scroll before unblocking updates
@@ -559,7 +567,8 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
         }, 50);
 
         return () => clearTimeout(timer);
-    }, [initialScrollOffset, files.length, isGrid, viewMode, groupByDate]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [files.length, isGrid, viewMode, groupByDate]);
 
     // --- Collapsed groups state ---
     const [collapsedGroups, setCollapsedGroups] = useState<Set<DateCategoryKey>>(new Set());
@@ -669,13 +678,19 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
         return item.type === 'header' ? groupHeaderHeight : listRowHeight;
     }, [groupedDetailItems, listRowHeight, groupHeaderHeight]);
 
+    const scrollTimeoutRef = useRef<number | null>(null);
+
     const handleScroll = useCallback((e: React.UIEvent<HTMLElement> | React.UIEvent<HTMLDivElement>) => {
         const top = e.currentTarget.scrollTop;
         if (onScrollToggle) onScrollToggle(top > 100);
 
         if (!isRestoringRef.current && updateCurrentScroll) {
             currentScrollRef.current = top;
-            updateCurrentScroll(top);
+
+            if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
+            scrollTimeoutRef.current = setTimeout(() => {
+                updateCurrentScroll(top);
+            }, 250); // Debounce to prevent constant React re-renders during smooth scrolling
         }
     }, [onScrollToggle, updateCurrentScroll]);
 

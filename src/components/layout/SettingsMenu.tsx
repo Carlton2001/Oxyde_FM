@@ -197,7 +197,7 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({
                                 <span
                                     className="settings-font-display"
                                     onClick={() => setFontSize(16)}
-                                    title={t('reset_to_default' as any, { val: '16px' })}
+                                    data-tooltip={t('reset_to_default' as any, { val: '16px' })}
                                 >
                                     {fontSize}px
                                 </span>
@@ -305,7 +305,7 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({
                                     className="settings-font-display"
                                     style={{ minWidth: '45px' }}
                                     onClick={() => setSearchLimit(3000)}
-                                    title={t('reset_to_default' as any, { val: '3000' })}
+                                    data-tooltip={t('reset_to_default' as any, { val: '3000' })}
                                 >
                                     {searchLimit}
                                 </span>

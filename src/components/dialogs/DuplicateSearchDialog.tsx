@@ -555,7 +555,7 @@ export const DuplicateSearchDialog: React.FC<DuplicateSearchDialogProps> = ({
                                                                 <div key={fIdx}
                                                                     onClick={() => handleJumpToFolder(file.path)}
                                                                     className="duplicate-file-item"
-                                                                    title={t('jump_to_folder') || 'Jump to Folder'}
+                                                                    data-tooltip={t('jump_to_folder') || 'Jump to Folder'}
                                                                 >
                                                                     <FileIcon size={16} style={{ color: 'var(--accent-color)', flexShrink: 0 }} />
                                                                     <div style={{ flex: 1, minWidth: 0, display: 'block' }}>
