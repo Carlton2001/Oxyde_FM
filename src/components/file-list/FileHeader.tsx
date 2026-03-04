@@ -5,7 +5,6 @@ import { FileEntry, ViewMode, ColumnWidths, SortConfig, SortField } from '../../
 import { ResizeHandle } from './ResizeHandle';
 import { TFunc } from '../../i18n';
 import { getColumnMode, getVisibleColumns, getColumnLabel, getColumnSortField } from '../../config/columnDefinitions';
-import { useApp } from '../../context/AppContext';
 
 interface FileHeaderProps {
     viewMode: ViewMode;
@@ -33,7 +32,6 @@ interface FileHeaderProps {
 }
 
 export const FileHeader: React.FC<FileHeaderProps> = React.memo(({
-    viewMode,
     searchResults,
     isTrashView,
     isNetworkView,
@@ -51,9 +49,7 @@ export const FileHeader: React.FC<FileHeaderProps> = React.memo(({
     isLocationFiltered,
     isDeletedDateFiltered,
     t,
-    panelRef,
-    onSelectAll,
-    selected
+    panelRef
 }) => {
     const SortIcon = ({ field }: { field: SortField }) => {
         if (sortConfig.field !== field) return null;

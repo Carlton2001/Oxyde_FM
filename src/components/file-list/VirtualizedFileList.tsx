@@ -109,7 +109,7 @@ const DetailsRow = React.memo((props: RowComponentProps<SharedItemProps>) => {
     const entry = entries[index];
     if (!entry) return null;
 
-    const { isSelected, isRenaming, isProtected, handlers, itemClassName, tooltipText } = useFileItemState({
+    const { isSelected, isRenaming, handlers, itemClassName, tooltipText } = useFileItemState({
         ...sharedProps,
         entry
     });
@@ -199,7 +199,7 @@ const GridCell = React.memo((props: CellComponentProps<SharedItemProps>) => {
     const index = rowIndex * columnCount + columnIndex;
     const entry = entries[index];
 
-    const { isSelected, isRenaming, isProtected, handlers, itemClassName, tooltipText } = useFileItemState({
+    const { isSelected, isRenaming, handlers, itemClassName, tooltipText } = useFileItemState({
         ...sharedProps,
         entry: entry || ({} as FileEntry)
     });
@@ -309,7 +309,7 @@ const GroupedDetailsRow = React.memo((props: RowComponentProps<GroupedSharedProp
     const mode = getColumnMode(!!isTrashView, !!searchResults, isNetworkView);
     const visibleCols = getVisibleColumns(mode);
 
-    const { isSelected, isRenaming, isProtected, handlers, itemClassName, tooltipText } = useFileItemState({
+    const { isSelected, isRenaming, handlers, itemClassName, tooltipText } = useFileItemState({
         ...sharedProps,
         entry
     });
@@ -424,7 +424,7 @@ const GroupedGridItem = React.memo<{ entry: FileEntry; sharedProps: SharedItemPr
         rootFontSize, t
     } = sharedProps;
 
-    const { isSelected, isRenaming, isProtected, handlers, itemClassName, tooltipText } = useFileItemState({
+    const { isSelected, isRenaming, handlers, itemClassName, tooltipText } = useFileItemState({
         ...sharedProps,
         entry
     });
