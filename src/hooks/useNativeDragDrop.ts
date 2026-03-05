@@ -35,84 +35,116 @@ export const useNativeDragDrop = ({
     handlerRef.current = { handleFileDrop };
 
     useEffect(() => {
-        // Native Drag Drop Handlers (External -> App)
-        const handleNativeDragOver = (e: DragEvent) => {
-            e.preventDefault();
-        };
-
-        const handleNativeDrop = (e: DragEvent) => {
-            e.preventDefault();
-
-            const { leftPanel, rightPanel, activePanelId } = stateRef.current;
-            const activePanel = activePanelId === 'left' ? leftPanel : rightPanel;
-
-            if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-                const files = Array.from(e.dataTransfer.files).map((f: any) => ({
-                    path: f.path || f.name,
-                    name: f.name,
-                    is_dir: false // Simple assumption for external drop if not full Entry
-                }));
-
-                const target = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement;
-                let targetPath = activePanel.path;
-
-                if (target) {
-                    const itemEntry = target.closest('.file-item');
-                    if (itemEntry) {
-                        const p = itemEntry.getAttribute('data-path');
-                        if (p) {
-                            const { leftPanel, rightPanel } = stateRef.current;
-                            const allFiles = [...leftPanel.files, ...rightPanel.files];
-                            if (leftPanel.searchResults) allFiles.push(...leftPanel.searchResults);
-                            if (rightPanel.searchResults) allFiles.push(...rightPanel.searchResults);
-                            const entry = allFiles.find(f => f.path === p);
-                            if (entry && entry.is_dir) {
-                                targetPath = p;
-                            } else {
-                                // Not a directory, resolve to panel path
-                                const panelElement = target.closest('.panel');
-                                if (panelElement) {
-                                    const panelContainer = document.querySelector('.panel-container');
-                                    if (panelContainer) {
-                                        const panels = panelContainer.querySelectorAll('.panel');
-                                        const targetId: PanelId = panels[0] === panelElement ? 'left' : 'right';
-                                        targetPath = stateRef.current[targetId === 'left' ? 'leftPanel' : 'rightPanel'].path;
-                                    }
-                                }
-                            }
-                        }
+        const getTargetPathFromElement = (target: HTMLElement): string | null => {
+            const itemEntry = target.closest('.file-item');
+            if (itemEntry) {
+                const p = itemEntry.getAttribute('data-path');
+                if (p) {
+                    const { leftPanel, rightPanel } = stateRef.current;
+                    const allFiles = [...leftPanel.files, ...rightPanel.files];
+                    if (leftPanel.searchResults) allFiles.push(...leftPanel.searchResults);
+                    if (rightPanel.searchResults) allFiles.push(...rightPanel.searchResults);
+                    const entry = allFiles.find(f => f.path === p);
+                    if (entry && entry.is_dir) {
+                        return p;
                     } else {
-                        const panel = target.closest('.panel');
-                        if (panel) {
+                        const panelElement = target.closest('.panel');
+                        if (panelElement) {
                             const panelContainer = document.querySelector('.panel-container');
                             if (panelContainer) {
                                 const panels = panelContainer.querySelectorAll('.panel');
-                                const targetId: PanelId = panels[0] === panel ? 'left' : 'right';
-                                targetPath = stateRef.current[targetId === 'left' ? 'leftPanel' : 'rightPanel'].path;
+                                const targetId: PanelId = panels[0] === panelElement ? 'left' : 'right';
+                                return stateRef.current[targetId === 'left' ? 'leftPanel' : 'rightPanel'].path;
                             }
                         }
                     }
                 }
+            } else {
+                const panel = target.closest('.panel');
+                if (panel) {
+                    const panelContainer = document.querySelector('.panel-container');
+                    if (panelContainer) {
+                        const panels = panelContainer.querySelectorAll('.panel');
+                        const targetId: PanelId = panels[0] === panel ? 'left' : 'right';
+                        return stateRef.current[targetId === 'left' ? 'leftPanel' : 'rightPanel'].path;
+                    }
+                }
+            }
+            return null;
+        };
 
-                const mockEvent = {
-                    dataTransfer: { files: files },
-                    ctrlKey: e.ctrlKey,
-                    shiftKey: e.shiftKey,
-                    preventDefault: () => { },
-                    stopPropagation: () => { }
-                };
+        // Tauri v2 standard event listeners
+        let unlistenDrop: (() => void) | undefined;
 
-                // Use handlerRef to call the latest handleFileDrop
-                handlerRef.current.handleFileDrop(mockEvent, targetPath, targetPath);
+        const setupTauriListeners = async () => {
+            try {
+                const { getCurrentWindow } = await import('@tauri-apps/api/window');
+                const win = getCurrentWindow();
+                const scaleFactor = await win.scaleFactor();
+
+                const unlisten = await win.onDragDropEvent((event) => {
+                    if (event.payload.type === 'drop') {
+                        const { paths, position } = event.payload;
+
+                        if (paths && paths.length > 0) {
+                            // Convert physical position to logical position for elementFromPoint
+                            const logicalX = position.x / scaleFactor;
+                            const logicalY = position.y / scaleFactor;
+
+                            const target = document.elementFromPoint(logicalX, logicalY) as HTMLElement;
+                            let targetPath = stateRef.current.activePanelId === 'left' ? stateRef.current.leftPanel.path : stateRef.current.rightPanel.path;
+
+                            if (target) {
+                                const info = getTargetPathFromElement(target);
+                                if (info) targetPath = info;
+                            }
+
+                            const files = paths.map((p: string) => ({
+                                path: p,
+                                name: p.split(/[\\/]/).pop() || p,
+                                is_dir: false
+                            }));
+
+                            const mockEvent = {
+                                dataTransfer: { files: files },
+                                ctrlKey: false,
+                                shiftKey: false,
+                                preventDefault: () => { },
+                                stopPropagation: () => { }
+                            };
+
+                            handlerRef.current.handleFileDrop(mockEvent, targetPath, targetPath);
+                        }
+                    }
+                });
+                unlistenDrop = unlisten;
+            } catch (err) {
+                console.error("Failed to setup Tauri drag-drop listeners:", err);
             }
         };
 
-        window.addEventListener('dragover', handleNativeDragOver);
-        window.addEventListener('drop', handleNativeDrop);
+        setupTauriListeners();
+
+        // Keep HTML5 listeners for cursor behavior and to signal "accept" to the OS
+        const handleGenericDrag = (e: DragEvent) => {
+            if (e.dataTransfer?.types.includes('Files')) {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'copy';
+            }
+        };
+
+        // Also prevent default drop to stop the browser from "opening" the file
+        const handlePreventDrop = (e: DragEvent) => e.preventDefault();
+
+        window.addEventListener('dragenter', handleGenericDrag, true);
+        window.addEventListener('dragover', handleGenericDrag, true);
+        window.addEventListener('drop', handlePreventDrop, true);
 
         return () => {
-            window.removeEventListener('dragover', handleNativeDragOver);
-            window.removeEventListener('drop', handleNativeDrop);
+            if (unlistenDrop) unlistenDrop();
+            window.removeEventListener('dragenter', handleGenericDrag, true);
+            window.removeEventListener('dragover', handleGenericDrag, true);
+            window.removeEventListener('drop', handlePreventDrop, true);
         };
     }, []);
 

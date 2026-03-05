@@ -18,6 +18,7 @@
         "height": 800,
         "decorations": false,
         "transparent": true,
+        "dragDropEnabled": true,
         "visible": false
       }
     ],

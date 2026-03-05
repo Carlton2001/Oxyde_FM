@@ -19,13 +19,21 @@ export const useDragDrop = (
         setDragOverPath(null);
         setDragTargetPath(null);
 
-        if (!dragState || !dragState.files.length) return;
+        // Accept files from internal state OR from external event (DataTransfer)
+        let files: FileEntry[] = [];
+        if (dragState && dragState.files.length > 0) {
+            files = dragState.files;
+        } else if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            files = e.dataTransfer.files;
+        }
+
+        if (files.length === 0) return;
 
         const target = targetPath || currentPath;
         if (!target) return;
 
         // Default logic: Move on same volume, Copy on different volumes
-        const sourcePath = dragState.files[0].path;
+        const sourcePath = files[0].path;
         const sameVolume = isSameVolume(sourcePath, target);
 
         let action: 'copy' | 'move' = sameVolume ? 'move' : 'copy';
@@ -35,9 +43,9 @@ export const useDragDrop = (
         if (e?.ctrlKey) action = 'copy';
 
         // Check if target is one of the source strings
-        if (dragState.files.some(f => f.path === target)) return;
+        if (files.some(f => f.path === target)) return;
 
-        onDropFile(action, dragState.files, target);
+        onDropFile(action, files, target);
 
         setDragState(null);
     };
