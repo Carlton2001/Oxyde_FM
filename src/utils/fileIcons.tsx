@@ -90,19 +90,7 @@ export const getFileIcon = (
     const size = pixelSize ? `${pixelSize / 16}rem` : undefined;
     const iconProps = { size, strokeWidth };
 
-    if (useSystemIcons) {
-        return (
-            <AsyncFileIcon
-                path={path || ''}
-                isDir={isDir}
-                name={name}
-                size={pixelSize}
-                className="system-icon-img"
-            />
-        );
-    }
-
-    // 1. Virtual Paths & Special Locations (Regardless of isDir)
+    // 1. Virtual Paths & Special Locations (Regardless of isDir) - Prioritize these to block slow system icon retrieval
     if (path === '__network_vincinity__') {
         return <Globe className="file-icon network-root" {...iconProps} />;
     }
@@ -115,7 +103,7 @@ export const getFileIcon = (
     // Windows Network UNC paths (\\SERVER or \\SERVER\SHARE)
     if (path?.startsWith('\\\\')) {
         const parts = path.split('\\').filter(Boolean);
-        // Only use the Network icon for top-level servers (\SERVER)
+        // Only use the Network icon for top-level servers (\SERVER) or computers in vicinity
         if (parts.length <= 1) {
             return <Network className="file-icon network" {...iconProps} />;
         }
@@ -125,6 +113,18 @@ export const getFileIcon = (
     const isDrive = path && /^[a-zA-Z]:\\?$/.test(path);
     if (isDrive) {
         return <HardDrive className="file-icon drive" {...iconProps} />;
+    }
+
+    if (useSystemIcons) {
+        return (
+            <AsyncFileIcon
+                path={path || ''}
+                isDir={isDir}
+                name={name}
+                size={pixelSize}
+                className="system-icon-img"
+            />
+        );
     }
 
     // 2. Standard Directory Icons

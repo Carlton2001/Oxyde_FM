@@ -787,7 +787,6 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
                             rowComponent={GroupedDetailsRow as any}
                             rowProps={groupedSharedProps}
                             listRef={listRef}
-                            {...({ initialScrollOffset: initialScrollOffsetRef.current || 0 } as any)}
                             style={{ height, width: finalWidth, overflowY: 'auto', overflowX: 'hidden' }}
                             onScroll={handleScroll}
                         />
@@ -813,7 +812,6 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
                             cellComponent={GridCell as any}
                             cellProps={{ ...sharedProps, columnCount }}
                             gridRef={gridRef}
-                            {...({ initialScrollTop: initialScrollOffsetRef.current || 0 } as any)}
                             style={{ height, width, overflowX: 'hidden', overflowY: 'auto' }}
                             onScroll={handleScroll}
                         />
@@ -832,7 +830,6 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
                         rowComponent={DetailsRow as any}
                         rowProps={sharedProps}
                         listRef={listRef}
-                        {...({ initialScrollOffset: initialScrollOffsetRef.current || 0 } as any)}
                         style={{ height, width: finalWidth, overflowY: 'auto', overflowX: 'hidden' }}
                         onScroll={handleScroll}
                     />
