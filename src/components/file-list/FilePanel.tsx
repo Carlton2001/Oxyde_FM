@@ -453,7 +453,6 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
             ref={panelRef}
             className={cx("panel", layout, { active: isActive, 'drag-over': isDragTarget })}
             onClick={() => onActivate()}
-            onMouseUp={(e) => { if (isDragging) onFileDrop(currentPath, e); }}
             onMouseMove={(e) => {
                 if (panelRef.current) {
                     const rect = panelRef.current.getBoundingClientRect();
@@ -593,12 +592,6 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
                     onContextMenu={(e) => { e.preventDefault(); onContextMenu(e); onActivate(); }}
                     ref={containerRef}
                     onMouseDown={handleListMouseDown}
-                    onMouseUp={(e) => {
-                        if (isDragging) {
-                            e.stopPropagation();
-                            onFileDrop(dragOverPath || currentPath, e);
-                        }
-                    }}
                 >
                     <SelectionMarquee selectionRect={selectionRect} containerRef={containerRef as React.RefObject<HTMLDivElement>} />
                     <VirtualizedFileList

@@ -112,6 +112,7 @@ interface DualPanelLayoutProps {
     onAddToFavorites?: (path: string) => void;
     onRemoveFromFavorites?: (path: string) => void;
     onDuplicateSearch?: () => void;
+    dragOverPath: string | null;
 }
 
 export const DualPanelLayout: React.FC<DualPanelLayoutProps> = ({
@@ -193,7 +194,8 @@ export const DualPanelLayout: React.FC<DualPanelLayoutProps> = ({
     onDriveContextMenu,
     onAddToFavorites,
     onRemoveFromFavorites,
-    onDuplicateSearch
+    onDuplicateSearch,
+    dragOverPath
 }) => {
     const activePanel = activePanelId === 'left' ? left : right;
 
@@ -424,7 +426,7 @@ export const DualPanelLayout: React.FC<DualPanelLayoutProps> = ({
                             onCancelSearch={() => handleCancelSearch('left')}
                             showSearch={layout === 'dual'}
                             isDragTarget={!!dragState && dragState.sourcePanel !== 'left'}
-                            dragOverPath={null}
+                            dragOverPath={dragOverPath}
                             showHidden={propShowHidden}
                             showSystem={propShowSystem}
                             layout={layout}
@@ -480,7 +482,7 @@ export const DualPanelLayout: React.FC<DualPanelLayoutProps> = ({
                                 onCancelSearch={() => handleCancelSearch('right')}
                                 showSearch={true}
                                 isDragTarget={!!dragState && dragState.sourcePanel !== 'right'}
-                                dragOverPath={null}
+                                dragOverPath={dragOverPath}
                                 showHidden={propShowHidden}
                                 showSystem={propShowSystem}
                                 layout={layout}

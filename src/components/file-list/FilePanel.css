@@ -822,10 +822,9 @@
     z-index: var(--z-drag);
 }
 
-.file-item.drop-target {
-    background-color: rgba(var(--accent-color-rgb), 0.15);
-    outline: 2px dashed var(--accent-color);
-    outline-offset: -2px;
+.file-item.drop-target,
+.file-item.drag-over {
+    background-color: var(--hover-color);
 }
 
 .rename-input {

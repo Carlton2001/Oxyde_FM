@@ -128,19 +128,26 @@
 
 /* Drag Ghost */
 .drag-ghost {
-    position: fixed;
-    z-index: var(--z-drag);
-    pointer-events: none;
+    position: fixed !important;
+    z-index: 100000 !important;
+    pointer-events: none !important;
     background-color: var(--menu-bg);
     border: 1px solid var(--border-color);
     border-radius: 0.5rem;
     box-shadow: 0 0.25rem 1.25rem rgba(0, 0, 0, 0.2);
     padding: 0.5rem 0.75rem;
-    display: flex;
+    display: none;
     flex-direction: column;
     gap: 0.25rem;
     min-width: 9.375rem;
     backdrop-filter: blur(0.5rem);
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+
+.drag-ghost.visible {
+    display: flex;
+    opacity: 1;
 }
 
 .drag-ghost-main {
@@ -184,6 +191,15 @@
 
 .drag-hint-separator {
     opacity: 0.3;
+}
+
+/* Docked state: only changes position, keeps original design */
+.drag-ghost.docked {
+    left: 50% !important;
+    top: auto !important;
+    bottom: 3rem !important;
+    transform: translateX(-50%) !important;
+    animation: none !important;
 }
 
 /* Toggle / Switch */
@@ -272,11 +288,6 @@
 }
 
 /* Dialogs */
-/* Fix Drag Ghost z-index to be above everything */
-#drag-ghost {
-    z-index: 20000 !important;
-}
-
 .modal-overlay {
     position: fixed;
     top: 0;

@@ -59,7 +59,8 @@
     position: relative;
 }
 
-.tree-node-content:hover {
+.tree-node-content:hover,
+.tree-node-content.drag-over {
     background-color: var(--hover-color);
 }
 

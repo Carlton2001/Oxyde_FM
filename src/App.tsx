@@ -4,6 +4,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { check } from '@tauri-apps/plugin-updater';
 import { File as FileIcon } from 'lucide-react';
 import cx from 'classnames';
+import { FileEntry } from './types';
 
 import './styles/global.css';
 import './styles/components/Utilities.css';
@@ -224,8 +225,19 @@ function App() {
   });
 
   // Drag & Drop
+  const [isNativeActive, setIsNativeActive] = useState(false);
   const { onDropFile } = useFileDrop({ t: t as any, notify, refreshBothPanels, refreshTreePath: (p) => treeRef.current?.refreshPath(p), setProgress, initiateFileOp, defaultTurboMode });
-  const { dragState, dragTargetPath, handleDragStart, handleDrop, setDragState, setDragOverPath, setDragTargetPath } = useDragDrop(onDropFile);
+  const { dragState, dragTargetPath, dragOverPath, handleDragStart: originalHandleDragStart, handleDrop, setDragState, setDragOverPath, setDragTargetPath } = useDragDrop(onDropFile);
+
+  useNativeDragDrop({
+    leftPanel: left, rightPanel: right, activePanelId, dragState, dragGhostRef,
+    handleFileDrop: handleDrop, setDragState, setDragOverPath, setDragTargetPath,
+    modifiers, setModifiers, isNativeActive, setIsNativeActive, dragTargetPath
+  });
+
+  const handleDragStart = useCallback((sourcePanel: PanelId, files: FileEntry[]) => {
+    originalHandleDragStart(sourcePanel, files);
+  }, [originalHandleDragStart]);
 
   const actionContext: ActionContext = useMemo(() => ({
     activePanelId, activePanel: activePanelId === 'left' ? left : right, otherPanel: activePanelId === 'left' ? right : left,
@@ -399,10 +411,6 @@ function App() {
     return () => window.removeEventListener('mouseup', handleUp, true);
   }, []);
 
-  useNativeDragDrop({
-    leftPanel: left, rightPanel: right, activePanelId, dragState, dragGhostRef,
-    handleFileDrop: handleDrop, setDragState, setDragOverPath, setDragTargetPath, setModifiers
-  });
 
 
   // Filter out completed/cancelled/error operations - they should never drive the progress UI
@@ -438,8 +446,15 @@ function App() {
   };
 
   const effectiveAction = useMemo(() => {
-    return (dragState && dragTargetPath) ? (modifiers.ctrl ? 'copy' : modifiers.shift ? 'move' : (dragState.files[0].path.charAt(0) !== dragTargetPath.charAt(0) ? 'copy' : 'move')) : null;
-  }, [dragState, dragTargetPath, modifiers.ctrl, modifiers.shift]);
+    if (!dragState) return null;
+    if (modifiers.ctrl) return 'copy';
+    if (modifiers.shift) return 'move';
+    if (dragTargetPath) {
+      if (dragTargetPath === '__TABS__') return 'copy';
+      return dragState.files[0].path.charAt(0) !== dragTargetPath.charAt(0) ? 'copy' : 'move';
+    }
+    return isNativeActive ? 'copy' : null;
+  }, [dragState, dragTargetPath, modifiers.ctrl, modifiers.shift, isNativeActive]);
 
 
 
@@ -516,6 +531,7 @@ function App() {
         undoLabel={actionService.get('file.undo')?.getLabel?.(actionContext)}
         redoLabel={actionService.get('file.redo')?.getLabel?.(actionContext)}
         onDuplicateSearch={handleDuplicateSearch}
+        dragOverPath={dragOverPath}
       />
       <ProgressOverlay
         progress={effectiveProgress as any}
@@ -566,25 +582,41 @@ function App() {
         />
       )}
 
-      {dragState && (
-        <div ref={dragGhostRef} className="drag-ghost" style={{ position: 'fixed', left: 0, top: 0, zIndex: 10000, pointerEvents: 'none', willChange: 'transform' }}>
-          <div className="drag-ghost-main">
-            <FileIcon size={16} />
-            <span className="drag-ghost-text">{dragState.files.length > 1 ? `${dragState.files.length} items` : (dragState.files[0]?.name || "Item")}</span>
-          </div>
-          <div className="drag-ghost-hints">
-            {dragTargetPath === '__TABS__' ? (
-              <span className="drag-hint active">{t('new_tab') || "Open New Tab"}</span>
-            ) : (
-              <>
-                <span className={cx("drag-hint", { active: effectiveAction === 'copy' })}>+Ctrl {t('copy')}</span>
-                <span className="drag-hint-separator">|</span>
-                <span className={cx("drag-hint", { active: effectiveAction === 'move' })}>+Shift {t('op_move' as any)}</span>
-              </>
-            )}
-          </div>
-        </div>
-      )}
+      <div
+        ref={dragGhostRef}
+        className={cx("drag-ghost", { visible: !!dragState, docked: isNativeActive })}
+        style={{
+          position: 'fixed',
+          left: 0,
+          top: 0,
+          zIndex: 100000,
+          pointerEvents: 'none',
+          willChange: 'transform',
+          display: dragState ? 'flex' : 'none'
+        }}
+      >
+        {dragState && (
+          <>
+            <div className="drag-ghost-main">
+              <FileIcon size={16} />
+              <span className="drag-ghost-text">
+                {dragState.files.length > 1 ? `${dragState.files.length} items` : (dragState.files[0]?.name || "Item")}
+              </span>
+            </div>
+            <div className="drag-ghost-hints">
+              {dragTargetPath === '__TABS__' ? (
+                <span className="drag-hint active">{t('new_tab') || "Open New Tab"}</span>
+              ) : (
+                <>
+                  <span className={cx("drag-hint", { active: effectiveAction === 'copy' })}>+Ctrl {t('copy')}</span>
+                  <span className="drag-hint-separator">|</span>
+                  <span className={cx("drag-hint", { active: effectiveAction === 'move' })}>+Shift {t('op_move' as any)}</span>
+                </>
+              )}
+            </div>
+          </>
+        )}
+      </div>
       <NotificationArea notifications={notifications} onDismiss={dismissNotification} />
       <Tooltip isShiftPressed={modifiers.shift} />
     </div>
@@ -592,4 +624,3 @@ function App() {
 }
 
 export default App;
-

@@ -1,6 +1,7 @@
 import { useEffect, useRef, RefObject } from 'react';
 import { PanelState, FileEntry, PanelId } from '../types';
 import { isArchivePath, isSupportedArchiveForAdding } from '../utils/archive';
+import { startDrag } from '@crabnebula/tauri-plugin-drag';
 
 interface UseNativeDragDropProps {
     leftPanel: PanelState;
@@ -12,7 +13,11 @@ interface UseNativeDragDropProps {
     setDragState: (state: { sourcePanel: PanelId; files: FileEntry[] } | null) => void;
     setDragOverPath: (path: string | null) => void;
     setDragTargetPath: (path: string | null) => void;
+    modifiers: { ctrl: boolean; shift: boolean; alt: boolean };
     setModifiers: (mods: { ctrl: boolean; shift: boolean; alt: boolean }) => void;
+    isNativeActive: boolean;
+    setIsNativeActive: (active: boolean) => void;
+    dragTargetPath: string | null;
 }
 
 export const useNativeDragDrop = ({
@@ -25,8 +30,17 @@ export const useNativeDragDrop = ({
     setDragState,
     setDragOverPath,
     setDragTargetPath,
-    setModifiers
+    modifiers,
+    setModifiers,
+    isNativeActive,
+    setIsNativeActive,
+    dragTargetPath
 }: UseNativeDragDropProps) => {
+
+    const modifiersRef = useRef(modifiers);
+    useEffect(() => {
+        modifiersRef.current = modifiers;
+    }, [modifiers]);
 
     const stateRef = useRef({ leftPanel, rightPanel, activePanelId });
     stateRef.current = { leftPanel, rightPanel, activePanelId };
@@ -34,46 +48,89 @@ export const useNativeDragDrop = ({
     const handlerRef = useRef<{ handleFileDrop: (e: any, targetPath: string, currentPath: string) => void }>({ handleFileDrop });
     handlerRef.current = { handleFileDrop };
 
-    useEffect(() => {
-        const getTargetPathFromElement = (target: HTMLElement): string | null => {
-            const itemEntry = target.closest('.file-item');
-            if (itemEntry) {
-                const p = itemEntry.getAttribute('data-path');
-                if (p) {
-                    const { leftPanel, rightPanel } = stateRef.current;
-                    const allFiles = [...leftPanel.files, ...rightPanel.files];
-                    if (leftPanel.searchResults) allFiles.push(...leftPanel.searchResults);
-                    if (rightPanel.searchResults) allFiles.push(...rightPanel.searchResults);
-                    const entry = allFiles.find(f => f.path === p);
-                    if (entry && entry.is_dir) {
-                        return p;
-                    } else {
-                        const panelElement = target.closest('.panel');
-                        if (panelElement) {
-                            const panelContainer = document.querySelector('.panel-container');
-                            if (panelContainer) {
-                                const panels = panelContainer.querySelectorAll('.panel');
-                                const targetId: PanelId = panels[0] === panelElement ? 'left' : 'right';
-                                return stateRef.current[targetId === 'left' ? 'leftPanel' : 'rightPanel'].path;
-                            }
-                        }
-                    }
-                }
-            } else {
-                const panel = target.closest('.panel');
-                if (panel) {
-                    const panelContainer = document.querySelector('.panel-container');
-                    if (panelContainer) {
-                        const panels = panelContainer.querySelectorAll('.panel');
-                        const targetId: PanelId = panels[0] === panel ? 'left' : 'right';
-                        return stateRef.current[targetId === 'left' ? 'leftPanel' : 'rightPanel'].path;
-                    }
-                }
-            }
-            return null;
-        };
+    const dragStateRef = useRef(dragState);
+    dragStateRef.current = dragState;
 
-        // Tauri v2 standard event listeners
+    const nativeStartedRef = useRef(false);
+    const isNativeActiveRef = useRef(isNativeActive);
+    const dragTargetPathRef = useRef(dragTargetPath);
+    useEffect(() => {
+        isNativeActiveRef.current = isNativeActive;
+    }, [isNativeActive]);
+
+    useEffect(() => {
+        dragTargetPathRef.current = dragTargetPath;
+    }, [dragTargetPath]);
+
+    useEffect(() => {
+        if (!dragState) {
+            nativeStartedRef.current = false;
+            setIsNativeActive(false);
+        }
+    }, [dragState, setIsNativeActive]);
+
+    const getTargetPathsFromElement = (target: HTMLElement): { targetPath: string | null, overPath: string | null } => {
+        // 1. Try specifically a Folder/Archive in the list
+        const itemEntry = target.closest('.file-item');
+        if (itemEntry) {
+            const p = itemEntry.getAttribute('data-path');
+            const isDir = itemEntry.getAttribute('data-is-dir') === 'true';
+            if (p && (isDir || isArchivePath(p) && isSupportedArchiveForAdding(p))) return { targetPath: p, overPath: p };
+        }
+
+        // 2. Try Tree nodes
+        const treeEntry = target.closest('.tree-node-content');
+        if (treeEntry) {
+            const p = treeEntry.getAttribute('data-path');
+            return { targetPath: p || null, overPath: p || null };
+        }
+
+        // 3. Try Breadcrumb segments
+        const pathSegment = target.closest('.path-segment');
+        if (pathSegment) {
+            const p = pathSegment.getAttribute('data-path');
+            return { targetPath: p || null, overPath: p || null };
+        }
+
+        // 4. Try Tabs
+        const tabsWrapper = target.closest('.tabs-wrapper');
+        if (tabsWrapper) {
+            if (dragStateRef.current?.files.some(f => f.is_dir)) return { targetPath: '__TABS__', overPath: null };
+            return { targetPath: null, overPath: null };
+        }
+
+        // 5. Fallback to the Panel itself
+        const panel = target.closest('.panel');
+        if (panel) {
+            const panelContainer = document.querySelector('.panel-container');
+            if (panelContainer) {
+                const panels = panelContainer.querySelectorAll('.panel');
+                const targetId: PanelId = panels[0] === panel ? 'left' : 'right';
+                const panelPath = stateRef.current[targetId === 'left' ? 'leftPanel' : 'rightPanel'].path;
+                return { targetPath: panelPath, overPath: null };
+            }
+        }
+        return { targetPath: null, overPath: null };
+    };
+
+    const updateDragUI = (clientX: number, clientY: number) => {
+        if (dragGhostRef.current) {
+            const el = dragGhostRef.current;
+            // Only update transform if NOT docked, otherwise docked CSS !important wins
+            if (!isNativeActive) {
+                el.style.transform = `translate3d(${clientX + 20}px, ${clientY + 20}px, 0)`;
+            }
+        }
+
+        const target = document.elementFromPoint(clientX, clientY) as HTMLElement;
+        if (target) {
+            const { targetPath, overPath } = getTargetPathsFromElement(target);
+            setDragTargetPath(targetPath);
+            setDragOverPath(overPath);
+        }
+    };
+
+    useEffect(() => {
         let unlistenDrop: (() => void) | undefined;
 
         const setupTauriListeners = async () => {
@@ -83,38 +140,48 @@ export const useNativeDragDrop = ({
                 const scaleFactor = await win.scaleFactor();
 
                 const unlisten = await win.onDragDropEvent((event) => {
-                    if (event.payload.type === 'drop') {
-                        const { paths, position } = event.payload;
+                    const payload = event.payload as any;
+                    // We only use Tauri for 'drop' and 'leave'
+                    // Positioning is now handled by the 'dragover' event below for better performance
+                    if (payload.type === 'drop') {
+                        const position = payload.position;
+                        const lx = position ? Math.round(position.x / scaleFactor) : 0;
+                        const ly = position ? Math.round(position.y / scaleFactor) : 0;
 
-                        if (paths && paths.length > 0) {
-                            // Convert physical position to logical position for elementFromPoint
-                            const logicalX = position.x / scaleFactor;
-                            const logicalY = position.y / scaleFactor;
-
-                            const target = document.elementFromPoint(logicalX, logicalY) as HTMLElement;
+                        if ((payload.paths && payload.paths.length > 0) || dragStateRef.current) {
+                            const target = document.elementFromPoint(lx, ly) as HTMLElement;
                             let targetPath = stateRef.current.activePanelId === 'left' ? stateRef.current.leftPanel.path : stateRef.current.rightPanel.path;
-
                             if (target) {
-                                const info = getTargetPathFromElement(target);
-                                if (info) targetPath = info;
+                                const { targetPath: infoPath } = getTargetPathsFromElement(target);
+                                if (infoPath) targetPath = infoPath;
                             }
-
-                            const files = paths.map((p: string) => ({
-                                path: p,
-                                name: p.split(/[\\/]/).pop() || p,
-                                is_dir: false
-                            }));
-
+                            const files = (payload.paths && payload.paths.length > 0) ? payload.paths.map((p: string) => ({
+                                path: p, name: p.split(/[\\/]/).pop() || p, is_dir: false
+                            })) : [];
                             const mockEvent = {
                                 dataTransfer: { files: files },
-                                ctrlKey: false,
-                                shiftKey: false,
-                                preventDefault: () => { },
-                                stopPropagation: () => { }
+                                ctrlKey: modifiersRef.current.ctrl,
+                                shiftKey: modifiersRef.current.shift,
+                                altKey: modifiersRef.current.alt,
+                                preventDefault: () => { }, stopPropagation: () => { }
                             };
-
                             handlerRef.current.handleFileDrop(mockEvent, targetPath, targetPath);
                         }
+                        setDragState(null);
+                        setDragTargetPath(null);
+                        setDragOverPath(null);
+                        setIsNativeActive(false);
+                    } else if (payload.type === 'leave') {
+                        // Only hide/clear if we're not in native docked mode
+                        const isNativeActiveNow = isNativeActiveRef.current;
+                        if (!isNativeActiveNow && dragGhostRef.current) {
+                            dragGhostRef.current.style.setProperty('opacity', '0', 'important');
+                            dragGhostRef.current.style.setProperty('visibility', 'hidden', 'important');
+                        }
+                        setDragOverPath(null);
+
+                        // If internal drag, and we leave without native handoff, we should probably reset?
+                        // Actually, keep it for returning. But if no button, clear.
                     }
                 });
                 unlistenDrop = unlisten;
@@ -125,212 +192,103 @@ export const useNativeDragDrop = ({
 
         setupTauriListeners();
 
-        // Keep HTML5 listeners for cursor behavior and to signal "accept" to the OS
-        const handleGenericDrag = (e: DragEvent) => {
-            if (e.dataTransfer?.types.includes('Files')) {
-                e.preventDefault();
-                e.dataTransfer.dropEffect = 'copy';
-            }
+        const handlePreventDrop = (e: DragEvent) => {
+            if (dragStateRef.current) e.preventDefault();
         };
 
-        // Also prevent default drop to stop the browser from "opening" the file
-        const handlePreventDrop = (e: DragEvent) => e.preventDefault();
-
-        window.addEventListener('dragenter', handleGenericDrag, true);
-        window.addEventListener('dragover', handleGenericDrag, true);
-        window.addEventListener('drop', handlePreventDrop, true);
-
-        return () => {
-            if (unlistenDrop) unlistenDrop();
-            window.removeEventListener('dragenter', handleGenericDrag, true);
-            window.removeEventListener('dragover', handleGenericDrag, true);
-            window.removeEventListener('drop', handlePreventDrop, true);
-        };
-    }, []);
-
-
-    useEffect(() => {
         const handleDocumentMouseUp = (e: MouseEvent) => {
-            if (!dragState) return;
+            if (!dragStateRef.current) return;
 
-            const target = document.elementFromPoint(e.clientX, e.clientY);
-            if (!target) {
-                setDragState(null);
-                setDragTargetPath(null);
-                setDragOverPath(null);
-                return;
-            }
-
-            const itemElement = target.closest('.file-item');
-            if (itemElement) {
-                const path = itemElement.getAttribute('data-path');
-                if (path) {
-                    const { leftPanel, rightPanel, activePanelId } = stateRef.current;
-                    const allFiles = [...leftPanel.files, ...rightPanel.files];
-                    if (leftPanel.searchResults) allFiles.push(...leftPanel.searchResults);
-                    if (rightPanel.searchResults) allFiles.push(...rightPanel.searchResults);
-
-                    const entry = allFiles.find(f => f.path === path);
-
-                    // ONLY drop into item if it is a directory OR a SUPPORTED archive!
-                    if (entry && (entry.is_dir || (isArchivePath(entry.path) && isSupportedArchiveForAdding(entry.path)))) {
-                        const activePanel = activePanelId === 'left' ? leftPanel : rightPanel;
-                        handlerRef.current.handleFileDrop(e as any, path, activePanel.path);
-                        setDragState(null);
-                        setDragTargetPath(null);
-                        setDragOverPath(null);
-                        return;
-                    }
-                    // Otherwise, fall through to panel detection (logic below will find the parent panel)
-                }
-            }
-
-            // 1b. Detect Directory Tree Node
-            const treeElement = target.closest('.tree-node-content');
-            if (treeElement) {
-                const path = treeElement.getAttribute('data-path');
-                if (path) {
-                    const { leftPanel, rightPanel, activePanelId } = stateRef.current;
-                    const activePanel = activePanelId === 'left' ? leftPanel : rightPanel;
-                    handlerRef.current.handleFileDrop(e as any, path, activePanel.path);
-                    setDragState(null);
-                    setDragTargetPath(null);
-                    setDragOverPath(null);
-                    return;
-                }
-            }
-
-            // 1c. Detect Breadcrumb segment
-            const breadcrumbElement = target.closest('.path-segment');
-            if (breadcrumbElement) {
-                const path = breadcrumbElement.getAttribute('data-path');
-                if (path) {
-                    const { leftPanel, rightPanel, activePanelId } = stateRef.current;
-                    const activePanel = activePanelId === 'left' ? leftPanel : rightPanel;
-                    handlerRef.current.handleFileDrop(e as any, path, activePanel.path);
-                    setDragState(null);
-                    setDragTargetPath(null);
-                    setDragOverPath(null);
-                    return;
-                }
-            }
-
-
-            const panelElement = target.closest('.panel');
-            if (panelElement) {
-                const panelContainer = document.querySelector('.panel-container');
-                if (panelContainer) {
-                    const panels = panelContainer.querySelectorAll('.panel');
-                    const targetId: PanelId = panels[0] === panelElement ? 'left' : 'right';
-                    const targetPath = stateRef.current[targetId === 'left' ? 'leftPanel' : 'rightPanel'].path;
-
-                    handlerRef.current.handleFileDrop(e as any, targetPath, targetPath);
-                    setDragState(null);
-                    setDragTargetPath(null);
-                    setDragOverPath(null);
-                    return;
-                }
-            }
-
-            // 3. Ignore Tabs Wrapper (Let Tabs component handle it)
-            if (target.closest('.tabs-wrapper')) {
-                return;
+            const targetPath = dragTargetPathRef.current;
+            if (targetPath) {
+                const { leftPanel, rightPanel, activePanelId } = stateRef.current;
+                // If we have a target path (folder, tree, panel), we use it.
+                // We need a source path to help the handler decide the fallback folder if needed
+                const sourcePanelPath = activePanelId === 'left' ? leftPanel.path : rightPanel.path;
+                handlerRef.current.handleFileDrop(e as any, targetPath, sourcePanelPath);
             }
 
             setDragState(null);
             setDragTargetPath(null);
             setDragOverPath(null);
+            setIsNativeActive(false);
+            nativeStartedRef.current = false;
         };
 
-
-
         const handleMouseMove = (e: MouseEvent) => {
-            if (dragState) {
-                if (dragGhostRef.current) {
-                    dragGhostRef.current.style.transform = `translate3d(${e.clientX + 20}px, ${e.clientY + 20}px, 0)`;
-                }
+            const currentDragState = dragStateRef.current;
+            if (!currentDragState) return;
 
-                const target = document.elementFromPoint(e.clientX, e.clientY);
-                if (target) {
-                    // 1. Detect Folder Item
-                    const itemElement = target.closest('.file-item');
-                    if (itemElement) {
-                        // ... existing ... 
-                        const path = itemElement.getAttribute('data-path');
-                        // Check if it's a directory by looking in BOTH panels using ref
-                        const { leftPanel, rightPanel } = stateRef.current;
-                        const allFiles = [...leftPanel.files, ...rightPanel.files];
-                        if (leftPanel.searchResults) allFiles.push(...leftPanel.searchResults);
-                        if (rightPanel.searchResults) allFiles.push(...rightPanel.searchResults);
+            // SAFETY RESET: if the user let go outside or something failed, reset on first mouse move return
+            if (e.buttons === 0) {
+                setDragState(null);
+                setDragTargetPath(null);
+                setDragOverPath(null);
+                nativeStartedRef.current = false;
+                setIsNativeActive(false);
+                return;
+            }
 
-                        const entry = allFiles.find(f => f.path === path);
-
-                        if (entry && (entry.is_dir || (isArchivePath(entry.path) && isSupportedArchiveForAdding(entry.path)))) {
-                            setDragOverPath(path);
-                        } else {
-                            setDragOverPath(null);
-                        }
-                    } else if (target.closest('.tree-node-content')) {
-                        const path = target.closest('.tree-node-content')?.getAttribute('data-path');
-                        setDragOverPath(path || null);
-                        if (path) setDragTargetPath(path);
-                    } else if (target.closest('.path-segment')) {
-                        const path = target.closest('.path-segment')?.getAttribute('data-path');
-                        setDragOverPath(path || null);
-                        if (path) setDragTargetPath(path);
-                    } else if (target.closest('.tabs-wrapper')) {
-                        // 1.5 Detect Tabs Wrapper
-                        // Only if we are dragging directories
-                        if (dragState.files.some(f => f.is_dir)) {
-                            setDragOverPath(null);
-                            setDragTargetPath('__TABS__');
-                        } else {
-                            setDragOverPath(null);
-                            setDragTargetPath(null);
-                        }
-                    } else {
-                        setDragOverPath(null);
-                    }
-
-                    // 2. Detect Panel (If NOT over tabs or tree/path)
-                    if (!target.closest('.tabs-wrapper') && !target.closest('.tree-node-content') && !target.closest('.path-segment')) {
-                        const panelElement = target.closest('.panel');
-                        if (panelElement) {
-                            const panelContainer = document.querySelector('.panel-container');
-                            if (panelContainer) {
-                                const panels = panelContainer.querySelectorAll('.panel');
-                                const targetId: PanelId = panels[0] === panelElement ? 'left' : 'right';
-                                setDragTargetPath(stateRef.current[targetId === 'left' ? 'leftPanel' : 'rightPanel'].path);
-                            }
-                        } else {
-                            // Only reset if we didn't set TABS
-                            setDragTargetPath(null);
-                        }
-                    }
+            if (!nativeStartedRef.current) {
+                updateDragUI(e.clientX, e.clientY);
+                const edgeThreshold = 5;
+                const isAtEdge = e.clientX < edgeThreshold || e.clientY < edgeThreshold ||
+                    e.clientX > window.innerWidth - edgeThreshold ||
+                    e.clientY > window.innerHeight - edgeThreshold;
+                if (isAtEdge || modifiersRef.current.alt) {
+                    triggerNativeDrag();
                 }
             }
         };
 
+        const triggerNativeDrag = () => {
+            const currentDragState = dragStateRef.current;
+            if (!currentDragState || nativeStartedRef.current) return;
+            nativeStartedRef.current = true;
+            const paths = currentDragState.files.map(f => f.path);
+            if (paths.length > 0) {
+                setIsNativeActive(true);
+                startDrag({ item: paths, icon: '' }).catch(err => {
+                    console.error("Native handoff failed:", err);
+                    nativeStartedRef.current = false;
+                    setIsNativeActive(false);
+                });
+            }
+        };
+
         const handleKeyChange = (e: KeyboardEvent) => {
-            if (dragState) {
+            if (dragStateRef.current) {
                 if (e.key === 'Escape') {
                     setDragState(null);
                     setDragTargetPath(null);
                     setDragOverPath(null);
                 }
-                setModifiers({ ctrl: e.ctrlKey, shift: e.shiftKey, alt: e.altKey });
+                const mods = { ctrl: e.ctrlKey, shift: e.shiftKey, alt: e.altKey };
+                modifiersRef.current = mods;
+                setModifiers(mods);
             }
         };
 
+        // Standard HTML5 Drag Events
+        window.addEventListener('dragenter', handlePreventDrop, true);
+        window.addEventListener('dragover', handlePreventDrop, true);
+        window.addEventListener('drop', handlePreventDrop, true);
+
+        // Internal Mouse/Keyboard Events
         window.addEventListener('mouseup', handleDocumentMouseUp, true);
         document.addEventListener('mousemove', handleMouseMove);
         document.addEventListener('keydown', handleKeyChange);
         document.addEventListener('keyup', handleKeyChange);
+
         return () => {
+            if (unlistenDrop) unlistenDrop();
+            window.removeEventListener('dragenter', handlePreventDrop, true);
+            window.removeEventListener('dragover', handlePreventDrop, true);
+            window.removeEventListener('drop', handlePreventDrop, true);
             window.removeEventListener('mouseup', handleDocumentMouseUp, true);
             document.removeEventListener('mousemove', handleMouseMove);
             document.removeEventListener('keydown', handleKeyChange);
             document.removeEventListener('keyup', handleKeyChange);
         };
-    }, [dragState]);
+    }, []);
 };

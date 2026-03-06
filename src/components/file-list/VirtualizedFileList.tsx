@@ -130,6 +130,7 @@ const DetailsRow = React.memo((props: RowComponentProps<SharedItemProps>) => {
             })}
             style={adjustedStyle}
             data-path={entry.path}
+            data-is-dir={entry.is_dir ? 'true' : 'false'}
             onClick={handlers.onClick}
             onDoubleClick={handlers.onDoubleClick}
             onContextMenu={handlers.onContextMenu}
@@ -223,6 +224,7 @@ const GridCell = React.memo((props: CellComponentProps<SharedItemProps>) => {
             })}
             style={adjustedStyle}
             data-path={entry.path}
+            data-is-dir={entry.is_dir ? 'true' : 'false'}
             onClick={handlers.onClick}
             onDoubleClick={handlers.onDoubleClick}
             onContextMenu={handlers.onContextMenu}
@@ -327,6 +329,7 @@ const GroupedDetailsRow = React.memo((props: RowComponentProps<GroupedSharedProp
             className={cx(itemClassName, "details", { "drag-over": isDragOver })}
             style={adjustedStyle}
             data-path={entry.path}
+            data-is-dir={entry.is_dir ? 'true' : 'false'}
             onClick={handlers.onClick}
             onDoubleClick={handlers.onDoubleClick}
             onContextMenu={handlers.onContextMenu}
@@ -436,6 +439,7 @@ const GroupedGridItem = React.memo<{ entry: FileEntry; sharedProps: SharedItemPr
             className={cx(itemClassName, "grid", { "drag-over": isDragOver, "is-dir": entry.is_dir })}
             style={{ height: gridRowHeight }}
             data-path={entry.path}
+            data-is-dir={entry.is_dir ? 'true' : 'false'}
             onClick={handlers.onClick}
             onDoubleClick={handlers.onDoubleClick}
             onContextMenu={handlers.onContextMenu}

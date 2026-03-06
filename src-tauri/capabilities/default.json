@@ -24,6 +24,7 @@
     "core:window:allow-show",
     "updater:allow-check",
     "updater:allow-download-and-install",
-    "process:allow-restart"
+    "process:allow-restart",
+    "drag:default"
   ]
 }
