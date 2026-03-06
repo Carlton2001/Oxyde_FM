@@ -55,7 +55,7 @@ export interface AppContextValue {
 
     // Notifications
     notifications: AppNotification[];
-    notify: (message: string, type?: NotificationType, duration?: number) => void;
+    notify: (message: string, type?: NotificationType, duration?: number) => string | undefined;
     dismissNotification: (id: string) => void;
 
     // Drives

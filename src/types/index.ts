@@ -188,7 +188,7 @@ export interface QuickAccessItem {
     path: string;
 }
 
-export type NotificationType = 'error' | 'success' | 'info' | 'warning';
+export type NotificationType = 'error' | 'success' | 'info' | 'warning' | 'loading';
 
 export interface AppNotification {
     id: string;

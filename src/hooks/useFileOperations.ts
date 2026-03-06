@@ -3,12 +3,18 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { ConflictEntry, ConflictAction, HistoryState, FileOperation, Transaction, ConflictResponse } from '../types';
 
-export const useFileOperations = (notify?: (message: string, type: 'error' | 'success' | 'info' | 'warning', duration?: number) => void, t?: any) => {
+export const useFileOperations = (
+    notify?: (message: string, type: 'error' | 'success' | 'info' | 'warning' | 'loading', duration?: number) => string | undefined,
+    t?: any,
+    dismissNotification?: (id: string) => void
+) => {
     // Stable refs for notify/t to avoid re-subscribing the event listener on every render
     const notifyRef = useRef(notify);
     const tRef = useRef(t);
+    const dismissRef = useRef(dismissNotification);
     notifyRef.current = notify;
     tRef.current = t;
+    dismissRef.current = dismissNotification;
     // Conflict State
     const [pendingOp, setPendingOp] = useState<{ action: 'copy' | 'move', paths: string[], targetDir: string, turbo: boolean, estimates?: { total_bytes: number, total_files: number, is_cross_volume: boolean, likely_large: boolean } } | null>(null);
     const [conflicts, setConflicts] = useState<ConflictEntry[] | null>(null);
@@ -33,31 +39,35 @@ export const useFileOperations = (notify?: (message: string, type: 'error' | 'su
         }
     }, []);
 
+    const opNotificationMap = useRef<Map<string, string>>(new Map());
+
     // Initial fetch and Event Listeners
     useEffect(() => {
         fetchHistory();
 
         // Listen for file operation events
         const unlisten = listen<FileOperation>('file_op_event', (event) => {
-            // console.log("File Op Event:", event.payload);
             const op = event.payload;
 
-            // If it's final, mark it as completed so we don't accidentally add it later
             const isFinal = op.status === 'Completed' || op.status === 'Cancelled' || (typeof op.status === 'object' && 'Error' in op.status);
             if (isFinal) {
                 completedOpsRef.current.add(op.id);
+                // Dismiss loading notification if any
+                // Dismiss loading notification if any
+                const notifyId = opNotificationMap.current.get(op.id);
+                if (notifyId) {
+                    dismissRef.current?.(notifyId);
+                    opNotificationMap.current.delete(op.id);
+                }
             }
 
             setActiveOps(prev => {
                 const newMap = new Map(prev);
-
                 if (isFinal) {
                     newMap.delete(op.id);
                 } else if (!completedOpsRef.current.has(op.id)) {
-                    // Only update if it hasn't already been marked as final
                     newMap.set(op.id, op);
                 }
-
                 return newMap;
             });
 
@@ -81,7 +91,7 @@ export const useFileOperations = (notify?: (message: string, type: 'error' | 'su
                             msg = `${count} ${itemStr} ${count > 1 ? _t('moved_to_recycle_bin_plural') : _t('moved_to_recycle_bin')}`;
                             break;
                         case 'Delete':
-                            msg = `${count} ${itemStr} ${_t('permanently_deleted')}`;
+                            msg = `${count} ${itemStr} ${_t(count > 1 ? 'permanently_deleted_plural' : 'permanently_deleted')}`;
                             break;
                     }
 
@@ -101,9 +111,10 @@ export const useFileOperations = (notify?: (message: string, type: 'error' | 'su
         };
     }, [fetchHistory]);
 
-    // Safety net: periodically clean stale operations from activeOps
+    // Safety net: periodically clean stale operations from activeOps and notifications
     useEffect(() => {
         const interval = setInterval(() => {
+            // 1. Cleanup activeOps
             setActiveOps(prev => {
                 let changed = false;
                 const next = new Map(prev);
@@ -113,11 +124,26 @@ export const useFileOperations = (notify?: (message: string, type: 'error' | 'su
                     if (isFinal || isStuck) {
                         next.delete(id);
                         completedOpsRef.current.add(id);
+
+                        const notifyId = opNotificationMap.current.get(id);
+                        if (notifyId) {
+                            dismissRef.current?.(notifyId);
+                            opNotificationMap.current.delete(id);
+                        }
+
                         changed = true;
                     }
                 }
                 return changed ? next : prev;
             });
+
+            // 2. Dedicated notification safety net (handles ops that never entered activeOps or missed events)
+            for (const [id, nid] of opNotificationMap.current) {
+                if (completedOpsRef.current.has(id)) {
+                    dismissRef.current?.(nid);
+                    opNotificationMap.current.delete(id);
+                }
+            }
         }, 3000);
         return () => clearInterval(interval);
     }, []);
@@ -136,6 +162,26 @@ export const useFileOperations = (notify?: (message: string, type: 'error' | 'su
                 });
             } else {
                 opId = await invoke<string>(action === 'trash' ? 'delete_items' : 'purge_items', { paths, turbo });
+            }
+
+            // Show persistent loading notification for Trash and Delete
+            // Only show it if the operation hasn't already finished (race condition)
+            if ((action === 'trash' || action === 'delete') && !completedOpsRef.current.has(opId)) {
+                const _t = tRef.current;
+                const _notify = notifyRef.current;
+                if (_t && _notify) {
+                    const message = action === 'trash' ? _t('moving') : _t('deleting');
+                    const nid = _notify(message, 'loading', 0);
+                    if (nid) {
+                        opNotificationMap.current.set(opId, nid);
+
+                        // Final sanity check: did it finish in the micro-moment between has() check and set()?
+                        if (completedOpsRef.current.has(opId)) {
+                            dismissRef.current?.(nid);
+                            opNotificationMap.current.delete(opId);
+                        }
+                    }
+                }
             }
 
             // Add to active ops immediately with initial state (queued)
@@ -218,12 +264,46 @@ export const useFileOperations = (notify?: (message: string, type: 'error' | 'su
         }
     };
 
+    const emptyTrash = async () => {
+        const _notify = notifyRef.current;
+        const _t = tRef.current;
+        let nid: string | undefined;
+        if (_notify && _t) {
+            nid = _notify(_t('emptying_recycle_bin'), 'loading', 0);
+        }
+        try {
+            await invoke('empty_trash');
+            if (nid) dismissRef.current?.(nid);
+            _notify?.(tRef.current?.('recycle_bin_emptied'), 'success');
+        } catch (e) {
+            if (nid) dismissRef.current?.(nid);
+            _notify?.(`${_t('error')}: ${e}`, 'error');
+        }
+        await fetchHistory();
+    };
+
     const deleteItems = async (paths: string[], permanent: boolean = false, turbo: boolean = false) => {
         const isTrashView = paths.some(p => p.toLowerCase().includes('$recycle.bin') || p.toLowerCase().includes('$r'));
 
         if (isTrashView) {
             // When in trash view, 'delete' means permanent removal from recycle bin
-            await invoke('purge_recycle_bin', { paths });
+            const _notify = notifyRef.current;
+            const _t = tRef.current;
+            let nid: string | undefined;
+            if (_notify && _t) {
+                nid = _notify(_t('deleting'), 'loading', 0);
+            }
+            try {
+                await invoke('purge_recycle_bin', { paths });
+                if (nid) dismissRef.current?.(nid);
+                // Success is usually silent for small purges, but let's follow the rule
+                const count = paths.length;
+                const itemStr = count > 1 ? _t('items') : _t('item');
+                _notify?.(`${count} ${itemStr} ${_t(count > 1 ? 'permanently_deleted_plural' : 'permanently_deleted')}`, 'success');
+            } catch (e) {
+                if (nid) dismissRef.current?.(nid);
+                _notify?.(`${_t('error')}: ${e}`, 'error');
+            }
         } else {
             // Normal view: move to trash or permanent delete
             await executeFileOp(permanent ? 'delete' : 'trash', paths, undefined, turbo);
@@ -286,6 +366,7 @@ export const useFileOperations = (notify?: (message: string, type: 'error' | 'su
         resolveConflicts,
         cancelOp,
         deleteItems,
+        emptyTrash,
         renameItem,
         createFolder,
         setDeleteConfirm,

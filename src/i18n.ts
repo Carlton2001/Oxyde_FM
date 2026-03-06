@@ -357,6 +357,7 @@ export const translations = {
         // --- Recycle Bin ---
         recycle_bin: 'Recycle Bin',
         empty_recycle_bin: 'Empty Recycle Bin',
+        emptying_recycle_bin: 'Emptying Recycle Bin...',
         recycle_bin_empty: 'Recycle Bin is empty',
         recycle_bin_emptied: 'Recycle Bin emptied',
         confirm_empty_recycle_bin: 'Permanently delete all items?',
@@ -373,6 +374,7 @@ export const translations = {
         deleted_date: 'Date Deleted',
         date_deleted: 'Date Deleted',
         permanently_deleted: 'Permanently deleted',
+        permanently_deleted_plural: 'Permanently deleted',
         multiple_locations: 'Multiple locations',
         all: 'All',
 
@@ -580,10 +582,10 @@ export const translations = {
         copied_to_clipboard: 'Copié dans le presse-papier',
         cut_to_clipboard: 'Coupé vers le presse-papier',
         copied_from_clipboard: 'Collé depuis le presse-papier',
-        pasted_copied: 'Copié',
-        pasted_copied_plural: 'Copiés',
-        pasted_moved: 'Déplacé',
-        pasted_moved_plural: 'Déplacés',
+        pasted_copied: 'copié',
+        pasted_copied_plural: 'copiés',
+        pasted_moved: 'déplacé',
+        pasted_moved_plural: 'déplacés',
         undo_action: 'Annulation :',
         redo_action: 'Rétablissement :',
         completed: 'Terminé',
@@ -816,6 +818,7 @@ export const translations = {
         // --- Recycle Bin ---
         recycle_bin: 'Corbeille',
         empty_recycle_bin: 'Vider la Corbeille',
+        emptying_recycle_bin: 'Vidage de la corbeille...',
         recycle_bin_empty: 'La Corbeille est vide',
         recycle_bin_emptied: 'Corbeille vidée',
         confirm_empty_recycle_bin: 'Supprimer définitivement tous les éléments ?',
@@ -831,7 +834,8 @@ export const translations = {
         original_location: 'Emplacement d\'origine',
         deleted_date: 'Date de suppression',
         date_deleted: 'Date de suppression',
-        permanently_deleted: 'Supprimé(s) définitivement',
+        permanently_deleted: 'supprimé définitivement',
+        permanently_deleted_plural: 'supprimés définitivement',
         multiple_locations: 'Emplacements multiples',
         all: 'Tous',
 

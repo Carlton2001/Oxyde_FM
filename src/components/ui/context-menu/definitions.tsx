@@ -459,18 +459,6 @@ export function getMenuItems(ctx: MenuContext): MenuItem[] {
     if (isTrashContext) {
         const isTrashRoot = target === 'trash://';
 
-        if (actions.onEmptyTrash) {
-            items.push({
-                id: 'empty_trash',
-                type: 'action',
-                label: t('empty_recycle_bin' as any),
-                icon: Trash2,
-                action: () => actions.onEmptyTrash?.(),
-                danger: true
-            });
-            items.push({ id: 'sep_trash_ops', type: 'separator' });
-        }
-
         if (!isTrashRoot) {
             items.push({
                 id: 'restore',
@@ -482,7 +470,7 @@ export function getMenuItems(ctx: MenuContext): MenuItem[] {
             items.push({
                 id: 'delete_perm',
                 type: 'action',
-                label: t('delete'),
+                label: t('perm_delete' as any),
                 icon: Trash2,
                 action: () => actions.onDelete(),
                 color: 'var(--error-color)',

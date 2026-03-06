@@ -16,7 +16,7 @@ interface AppHandlersProps {
     layout: string;
     fileOps: any;
     treeRef: React.RefObject<DirectoryTreeHandle | null>;
-    notify: (message: string, type: 'error' | 'info' | 'success' | 'warning', duration?: number) => void;
+    notify: (message: string, type: 'error' | 'info' | 'success' | 'warning' | 'loading', duration?: number) => string | undefined;
     t: any;
     dialogs: any;
     clipboard: any;
@@ -342,13 +342,8 @@ export const useAppHandlers = ({
     const handleEmptyTrash = useCallback(async () => {
         const confirmed = await dialogs.confirm(t('confirm_empty_recycle_bin' as any), t('empty_recycle_bin' as any), true);
         if (confirmed) {
-            try {
-                await invoke('empty_trash');
-                notify(t('recycle_bin_emptied' as any), 'success');
-                refreshBothPanels();
-            } catch (e) {
-                notify(`${t('error')}: ${formatCommandError(e)}`, 'error');
-            }
+            await fileOps.emptyTrash();
+            refreshBothPanels();
         }
     }, [dialogs, notify, t, refreshBothPanels]);
 
@@ -468,6 +463,7 @@ export const useAppHandlers = ({
                 panelId: id,
                 isDir: entry.is_dir,
                 isBackground: false,
+                isTrash: panel.path?.startsWith('trash://'),
                 isDrive: (entry as any).isDrive,
                 driveType: (entry as any).driveType,
                 isMediaDevice: entry.is_media_device,
@@ -480,7 +476,7 @@ export const useAppHandlers = ({
                 }) : false
             });
         } else {
-            if (panel.path?.startsWith('trash://')) return;
+            const isTrash = panel.path?.startsWith('trash://');
 
             // Background context menu - check if we are at the root of a drive
             const path = panel.path;
@@ -505,6 +501,7 @@ export const useAppHandlers = ({
                 panelId: id,
                 isDir: true,
                 isBackground: true,
+                isTrash,
                 isDrive: isDriveRoot,
                 driveType,
                 isFavorite: favorites.some(f => {

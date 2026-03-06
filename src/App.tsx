@@ -69,7 +69,7 @@ function App() {
   const { tabs, activeTabId, setActiveTab, updateTabPath, addTab, closeTab } = useTabs();
   const dialogs = useDialogs();
   const { left, right, activePanelId, setActivePanelId } = usePanelContext();
-  const fileOps = useFileOperations(notify, t as any);
+  const fileOps = useFileOperations(notify, t as any, dismissNotification);
   const { favorites } = useFavorites();
 
   const [contextMenu, setContextMenu] = useState<{
@@ -98,6 +98,12 @@ function App() {
       const op = fileOps.activeOperation;
 
       if (op.status === 'Completed' || op.status === 'Cancelled') {
+        setShowProgress(false);
+        return;
+      }
+
+      const isDelete = op.op_type === 'Delete' || op.op_type === 'Trash';
+      if (isDelete) {
         setShowProgress(false);
         return;
       }

@@ -3,7 +3,7 @@ import { NotificationType, AppNotification } from '../types';
 
 interface UseNotificationsReturn {
     notifications: AppNotification[];
-    notify: (message: string, type?: NotificationType, duration?: number) => void;
+    notify: (message: string, type?: NotificationType, duration?: number) => string;
     dismissNotification: (id: string) => void;
 }
 
@@ -13,7 +13,7 @@ interface UseNotificationsReturn {
  */
 export const useNotifications = (): UseNotificationsReturn => {
     const [notifications, setNotifications] = useState<AppNotification[]>([]);
-    const lastNotifyRef = useRef<{ message: string; time: number } | null>(null);
+    const lastNotifyRef = useRef<{ message: string, id: string, time: number } | null>(null);
 
     const dismissNotification = useCallback((id: string) => {
         setNotifications(prev => prev.filter(n => n.id !== id));
@@ -26,16 +26,18 @@ export const useNotifications = (): UseNotificationsReturn => {
         if (lastNotifyRef.current &&
             lastNotifyRef.current.message === message &&
             now - lastNotifyRef.current.time < 1000) {
-            return;
+            return lastNotifyRef.current.id;
         }
-        lastNotifyRef.current = { message, time: now };
 
         const id = Math.random().toString(36).substring(2, 9);
+        lastNotifyRef.current = { message, time: now, id };
+
         setNotifications(prev => [...prev, { id, type, message, duration }]);
 
         if (duration > 0) {
             setTimeout(() => dismissNotification(id), duration);
         }
+        return id;
     }, [dismissNotification]);
 
     return { notifications, notify, dismissNotification };
