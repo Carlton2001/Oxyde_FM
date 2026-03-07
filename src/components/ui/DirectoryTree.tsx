@@ -235,18 +235,20 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
 
     // Listen for file system changes
     useEffect(() => {
-        const unlisten = listen<{ watcher_id: string; path: string; kind: string }>('fs-change', (event) => {
-            const { path } = event.payload;
-            const separator = path.includes('\\') ? '\\' : '/';
-            const parts = path.split(separator);
-            parts.pop();
-            const parentPath = parts.join(separator);
-            const lowerParent = parentPath.toLowerCase();
+        const unlisten = listen<{ kind: string; paths: string[] }>('fs-change', (event) => {
+            const { paths } = event.payload;
 
-            if (loadedPathsRef.current.has(lowerParent)) {
-                loadedPathsRef.current.delete(lowerParent);
-                loadPathContent(parentPath);
-            }
+            paths.forEach(p => {
+                const separator = p.includes('\\') ? '\\' : '/';
+                const parts = p.split(separator);
+                parts.pop();
+                const parentPath = parts.join(separator);
+                const lowerParent = parentPath.toLowerCase();
+
+                if (loadedPathsRef.current.has(lowerParent)) {
+                    loadPathContent(parentPath);
+                }
+            });
         });
 
         return () => {

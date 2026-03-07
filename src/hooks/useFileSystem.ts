@@ -1,8 +1,8 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { formatCommandError } from '../utils/error';
-import { FileEntry, DriveInfo, SortConfig, DirResponse, FileSummary, DirBatchEvent, PanelId } from '../types';
-import { getParent, isVirtualPath } from '../utils/path';
+import { FileEntry, DriveInfo, SortConfig, DirResponse, FileSummary, DirBatchEvent, PanelId, FsChangeEvent } from '../types';
+import { getParent, isVirtualPath, normalizePath } from '../utils/path';
 import { listen } from '@tauri-apps/api/event';
 
 export const useDrives = () => {
@@ -351,38 +351,25 @@ export const useFiles = (panelId: PanelId, path: string, sortConfig: SortConfig,
 
     // Independent fs-change listener to ensuring auto-refresh
     useEffect(() => {
-        const unlisten = listen('fs-change', (event: any) => {
-            const { payload } = event;
-            // payload might be { watcher_id, path, kind } OR { paths: [] } depending on backend implementation.
+        const unlisten = listen<FsChangeEvent>('fs-change', (event) => {
+            const { paths } = event.payload;
+            if (!paths || !path) return;
 
-            let paths: string[] = [];
-            if (payload.paths && Array.isArray(payload.paths)) {
-                paths = payload.paths;
-            } else if (payload.path && typeof payload.path === 'string') {
-                paths = [payload.path];
-            } else if (typeof payload === 'string') {
-                paths = [];
-            } else if (typeof payload === 'object' && payload.path) {
-                paths = [payload.path];
-            }
+            // Use our robust normalization tool
+            const normCurrentPath = normalizePath(path).toLowerCase();
 
-            const relevant = paths.some(p => {
-                if (!path) return false;
-
-                // Better normalization: remove Windows extended path prefix if present
-                const cleanP = p.replace(/^\\\\?\\/, '');
-                const cleanPath = path.replace(/^\\\\?\\/, '');
-
-                const normPath = cleanPath.toLowerCase().replace(/\\/g, '/').replace(/\/$/, '');
-                const normP = cleanP.toLowerCase().replace(/\\/g, '/');
+            const isRelevant = paths.some(p => {
+                const normChangeField = normalizePath(p).toLowerCase();
 
                 // Match if:
-                // 1. It's the directory itself
-                // 2. It's a file/folder WITHIN the directory (normP starts with normPath + '/')
-                return normP === normPath || normP.startsWith(normPath + '/');
+                // 1. It's the directory itself (normChangeField === normCurrentPath)
+                // 2. It's an item WITHIN (normChangeField starts with normCurrentPath + '\')
+                // Note: normalizePath ensures '\' on Windows for physical paths
+                return normChangeField === normCurrentPath ||
+                    normChangeField.startsWith(normCurrentPath.endsWith('\\') ? normCurrentPath : normCurrentPath + '\\');
             });
 
-            if (relevant) {
+            if (isRelevant) {
                 refresh(true);
             }
         });

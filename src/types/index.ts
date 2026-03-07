@@ -307,6 +307,11 @@ export interface SearchEventPayload {
     request_id?: number;
 }
 
+export interface FsChangeEvent {
+    kind: string;
+    paths: string[];
+}
+
 export interface SearchOptions {
     query: string;
     root: string;
