@@ -31,6 +31,7 @@ pub struct DirBatchEvent {
     pub path: String,
     pub entries: Vec<FileEntry>,
     pub is_complete: bool,
+    pub request_id: Option<u64>,
 }
 
 pub fn get_file_entry_from_metadata(metadata: &fs::Metadata, name: &str, path: &std::path::Path) -> FileEntry {
@@ -75,7 +76,8 @@ pub async fn list_dir(
     sort_config: Option<crate::models::session::SortConfig>,
     show_hidden: Option<bool>,
     show_system: Option<bool>,
-    force_refresh: Option<bool>
+    force_refresh: Option<bool>,
+    request_id: Option<u64>
 ) -> Result<DirResponse, CommandError> {
     let show_hidden = show_hidden.unwrap_or(false);
     let show_system = show_system.unwrap_or(false);
@@ -238,6 +240,7 @@ pub async fn list_dir(
                     path: path_stream.clone(),
                     entries: chunk.to_vec(),
                     is_complete: is_last,
+                    request_id,
                 });
             }
         });

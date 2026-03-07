@@ -25,10 +25,11 @@ use windows::Win32::System::Threading::{
 
 #[derive(Clone, serde::Serialize)]
 struct SearchEvent {
-    panel_id: String,
-    tab_id: String,
-    results: Vec<FileEntry>,
-    completed: bool,
+    pub panel_id: String,
+    pub tab_id: String,
+    pub results: Vec<FileEntry>,
+    pub completed: bool,
+    pub request_id: Option<u64>,
 }
 
 #[derive(Clone)]
@@ -465,7 +466,8 @@ pub async fn start_search(
     content_query: Option<String>,
     content_regex: Option<bool>,
     ignore_accents: Option<bool>,
-    search_in_archives: Option<bool>
+    search_in_archives: Option<bool>,
+    request_id: Option<u64>
 ) -> Result<(), String> {
     let cancellation = Arc::new(AtomicBool::new(false));
     let cancel_thread = cancellation.clone();
@@ -702,7 +704,8 @@ pub async fn start_search(
                     panel_id: panel_id_clone.clone(),
                     tab_id: tab_id_clone.clone(),
                     results: total_results[batch_start_idx..].to_vec(),
-                    completed: false
+                    completed: false,
+                    request_id,
                 });
                 batch_start_idx = total_results.len();
                 last_emit = std::time::Instant::now();
@@ -715,7 +718,8 @@ pub async fn start_search(
                 panel_id: panel_id_clone.clone(),
                 tab_id: tab_id_clone.clone(),
                 results: total_results[batch_start_idx..].to_vec(),
-                completed: false
+                completed: false,
+                request_id,
             });
         }
 
@@ -747,7 +751,8 @@ pub async fn start_search(
             panel_id: panel_id_clone,
             tab_id: tab_id_clone,
             results: Vec::new(),
-            completed: true
+            completed: true,
+            request_id,
         });
     });
 

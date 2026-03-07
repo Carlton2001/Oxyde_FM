@@ -116,7 +116,7 @@ export const getSortedFiles = (files: FileEntry[], config: SortConfig) => {
     });
 };
 
-export const useFiles = (panelId: PanelId, path: string, sortConfig: SortConfig, showHidden: boolean, showSystem: boolean) => {
+export const useFiles = (panelId: PanelId, path: string, sortConfig: SortConfig, showHidden: boolean, showSystem: boolean, requestId: number) => {
     const [files, setFiles] = useState<FileEntry[]>([]);
     const [summary, setSummary] = useState<FileSummary | null>(null);
     const [isComplete, setIsComplete] = useState(true);
@@ -127,6 +127,8 @@ export const useFiles = (panelId: PanelId, path: string, sortConfig: SortConfig,
     // Track current path for real-time event filtering (prevents stale closure issues)
     const currentPathRef = useRef(path);
     currentPathRef.current = path;
+    const currentRequestIdRef = useRef(requestId);
+    currentRequestIdRef.current = requestId;
 
     // Internal reconciliation function
     const reconcileFiles = (oldFiles: FileEntry[], newFiles: FileEntry[]): FileEntry[] => {
@@ -210,9 +212,12 @@ export const useFiles = (panelId: PanelId, path: string, sortConfig: SortConfig,
         const unlisten = listen<DirBatchEvent>('dir_batch', (event) => {
             if (isCleanedUp) return;
             const batch = event.payload;
-            // Use currentPathRef to check against CURRENT path, not stale closure path
-            // This prevents memory accumulation from events that arrive after navigation
-            if (batch.panel_id === panelId && batch.path === currentPathRef.current) {
+            // Use currentPathRef and currentRequestIdRef to check against CURRENT state
+            // This prevents data from stale requests (previous tabs or old navigations) leaking into the current view
+            const isTargeted = batch.panel_id === panelId &&
+                (batch.request_id !== undefined ? batch.request_id === currentRequestIdRef.current : batch.path === currentPathRef.current);
+
+            if (isTargeted) {
                 buffer.push(...batch.entries);
 
                 if (batch.is_complete) {
@@ -236,7 +241,7 @@ export const useFiles = (panelId: PanelId, path: string, sortConfig: SortConfig,
             // Clear buffer to free memory
             buffer = [];
         };
-    }, [panelId, path, sortConfig, showHidden, showSystem]);
+    }, [panelId, path, sortConfig, showHidden, showSystem, requestId]);
 
     const refresh = useCallback(async (silent: boolean = false) => {
         if (!path) return;
@@ -265,6 +270,7 @@ export const useFiles = (panelId: PanelId, path: string, sortConfig: SortConfig,
         try {
             if (path.startsWith('trash://') || path.startsWith('trash:\\\\')) {
                 const entries = await invoke<FileEntry[]>('list_trash');
+                if (requestId !== currentRequestIdRef.current) return;
                 setFiles(entries);
                 setIsComplete(true);
                 setSummary(null);
@@ -272,6 +278,7 @@ export const useFiles = (panelId: PanelId, path: string, sortConfig: SortConfig,
             } else if (path === '__network_vincinity__' || (path.startsWith('\\\\') && path.split('\\').filter(Boolean).length === 1)) {
                 const networkPath = path === '__network_vincinity__' ? undefined : path;
                 const netResources = await invoke<any[]>('get_network_resources', { path: networkPath });
+                if (requestId !== currentRequestIdRef.current) return;
 
                 const entries: FileEntry[] = netResources.map(r => ({
                     name: r.name,
@@ -302,8 +309,12 @@ export const useFiles = (panelId: PanelId, path: string, sortConfig: SortConfig,
                     sortConfig,
                     showHidden,
                     showSystem,
-                    forceRefresh: true // Always force refresh to avoid stale cache issues
+                    forceRefresh: true, // Always force refresh to avoid stale cache issues
+                    requestId
                 });
+
+                // GUARD: Ensure this request is still the active one
+                if (requestId !== currentRequestIdRef.current) return;
 
                 setIsProtected(!!response.is_protected);
 
@@ -336,7 +347,7 @@ export const useFiles = (panelId: PanelId, path: string, sortConfig: SortConfig,
         } finally {
             if (!silent) setLoading(false);
         }
-    }, [panelId, path, sortConfig, showHidden, showSystem]);
+    }, [panelId, path, sortConfig, showHidden, showSystem, requestId]);
 
     // Independent fs-change listener to ensuring auto-refresh
     useEffect(() => {
@@ -377,11 +388,11 @@ export const useFiles = (panelId: PanelId, path: string, sortConfig: SortConfig,
         });
 
         return () => { unlisten.then(u => u()); };
-    }, [path, refresh]);
+    }, [path, refresh, requestId]);
 
     useEffect(() => {
         refresh(false);
-    }, [refresh]);
+    }, [refresh, requestId]);
 
     // Trash polling for real-time updates (virtual paths can't be watched natively)
     useEffect(() => {
@@ -408,3 +419,4 @@ export const useFiles = (panelId: PanelId, path: string, sortConfig: SortConfig,
 
     return { files, sortedFiles, summary, isComplete, loading, error, isProtected, refresh, updateFileSize, setFileCalculating };
 };
+

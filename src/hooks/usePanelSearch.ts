@@ -64,6 +64,7 @@ export const usePanelSearch = ({
 
     // Search results buffering
     const searchBufferRef = useRef<FileEntry[]>([]);
+    const requestIdRef = useRef<number>(0);
 
     // Tab switch detection & query cache
     useEffect(() => {
@@ -165,6 +166,8 @@ export const usePanelSearch = ({
         }
 
         setIsSearching(true);
+        requestIdRef.current += 1;
+        const currentSearchRequestId = requestIdRef.current;
         searchBufferRef.current = [];
 
         // Track total received to know when to cancel
@@ -182,6 +185,10 @@ export const usePanelSearch = ({
 
             const payload = event.payload;
             if (payload.panel_id === pid && payload.tab_id === activeTabId) {
+                // If the backend provided a requestId, it MUST match our current one
+                if (payload.request_id !== undefined && payload.request_id !== currentSearchRequestId) {
+                    return;
+                }
                 if (payload.completed) {
                     setIsSearching(false);
                 }
@@ -262,7 +269,12 @@ export const usePanelSearch = ({
             searchInArchives: params.get('search_in_archives') === 'true'
         };
 
-        invoke('start_search', { panelId: pid, tabId: activeTabId, ...searchOptions })
+        invoke('start_search', {
+            panelId: pid,
+            tabId: activeTabId,
+            requestId: currentSearchRequestId,
+            ...searchOptions
+        })
             .catch(err => {
                 console.error("Failed to start search:", err);
                 setIsSearching(false);

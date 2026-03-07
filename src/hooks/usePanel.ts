@@ -130,7 +130,7 @@ export const usePanel = (initialPath: string, panelId?: string, activeTabId?: st
     }, [mode]);
 
     // File System
-    const { sortedFiles, summary, isComplete, loading, error, isProtected, refresh, updateFileSize, setFileCalculating } = useFiles(normalizedPanelId, path, sortConfig, showHidden, showSystem);
+    const { sortedFiles, summary, isComplete, loading, error, isProtected, refresh, updateFileSize, setFileCalculating } = useFiles(normalizedPanelId, path, sortConfig, showHidden, showSystem, version);
 
     // Effective Files (Normal vs Search)
     const displayFiles = useMemo(() => {

@@ -159,6 +159,7 @@ export interface DirBatchEvent {
     path: string;
     entries: FileEntry[];
     is_complete: boolean;
+    request_id?: number;
 }
 
 export interface DriveInfo {
@@ -303,6 +304,7 @@ export interface SearchEventPayload {
     tab_id: string;
     results: FileEntry[];
     completed: boolean;
+    request_id?: number;
 }
 
 export interface SearchOptions {
