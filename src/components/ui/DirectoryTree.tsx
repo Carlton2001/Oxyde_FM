@@ -23,6 +23,7 @@ interface TreeNode {
     hasSubdirs?: boolean;
     isTrash?: boolean;
     isReadOnly?: boolean;
+    isProtected?: boolean;
     isFavorite?: boolean;
     isSpacer?: boolean;
     totalBytes?: number;
@@ -192,6 +193,7 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
                 isHidden: n.is_hidden,
                 isSystem: n.is_system,
                 isReadOnly: n.is_readonly,
+                isProtected: n.is_protected,
                 hasSubdirs: n.has_subdirs
             }));
             setTreeData(prev => {
@@ -459,6 +461,7 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
                         isHidden: n.is_hidden,
                         isSystem: n.is_system,
                         isReadOnly: n.is_readonly,
+                        isProtected: n.is_protected,
                         hasSubdirs: n.has_subdirs
                     }));
                     next.set(parentPath, treeNodes);
@@ -547,6 +550,7 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
                         active: isActive,
                         'context-active': contextMenu?.path.toLowerCase() === node.path.toLowerCase(),
                         dimmed: node.isHidden || node.isSystem,
+                        protected: node.isProtected,
                         'drag-over': isDragOver,
                         'root-drive-item': isRootDrive
                     })}

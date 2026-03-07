@@ -638,11 +638,11 @@
 
 /* Protected Items Style (Admin Rights) */
 .file-item.protected .file-icon {
-    color: #e74c3c !important;
+    color: #ff3b30 !important;
 }
 
 .file-item.protected .system-icon-img {
-    filter: sepia(1) saturate(20) hue-rotate(-50deg) brightness(0.8) contrast(1.2);
+    filter: brightness(0.18) sepia(1) saturate(30) !important;
 }
 
 .file-item.protected .file-name {

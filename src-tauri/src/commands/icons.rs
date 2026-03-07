@@ -37,8 +37,8 @@ pub fn get_file_icon(app: AppHandle, path: String, size: String) -> Result<Vec<u
     let cache_dir = app.path().app_cache_dir().ok().map(|p| p.join("icons"));
     
     // Virtual path logic (copying the folder "C:\Windows" spirit)
-    let (real_path, use_attributes) = if path.starts_with("oxyde_ext_") {
-        (format!("C:\\template.{}", &path[10..]), true)
+    let (real_path, use_attributes) = if let Some(ext) = path.strip_prefix("oxyde_ext_") {
+        (format!("C:\\template.{}", ext), true)
     } else if path == "oxyde_dir_generic" {
         ("C:\\Windows".to_string(), false)
     } else {

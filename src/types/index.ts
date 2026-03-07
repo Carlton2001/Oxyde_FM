@@ -221,6 +221,7 @@ export interface SidebarNode {
     is_hidden: boolean;
     is_system: boolean;
     is_readonly: boolean;
+    is_protected: boolean;
     has_subdirs: boolean;
 }
 

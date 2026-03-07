@@ -27,15 +27,24 @@ pub async fn get_sidebar_nodes(path: String) -> Result<Vec<SidebarNode>, Command
         let (is_hidden, is_system, _) = crate::utils::get_file_attributes(&metadata, &name);
         
         // Efficiently check for subdirectories
+        // Detect if directory is protected (Access Denied)
+        let mut is_protected = false;
+        let mut node_has_subdirs = false;
+
         let node_path = entry.path();
-        let has_subdirs = match fs::read_dir(&node_path) {
+        match fs::read_dir(&node_path) {
             Ok(sub_entries) => {
-                sub_entries.filter_map(|e| e.ok()).any(|sub_entry| {
+                node_has_subdirs = sub_entries.filter_map(|e| e.ok()).any(|sub_entry| {
                     sub_entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false)
-                })
+                });
             }
-            Err(_) => false,
-        };
+            Err(e) => {
+                let kind = e.kind();
+                if kind == std::io::ErrorKind::PermissionDenied || kind == std::io::ErrorKind::NotFound {
+                    is_protected = true;
+                }
+            }
+        }
 
         nodes.push(SidebarNode {
             name,
@@ -43,7 +52,8 @@ pub async fn get_sidebar_nodes(path: String) -> Result<Vec<SidebarNode>, Command
             is_hidden,
             is_system,
             is_readonly: metadata.permissions().readonly(),
-            has_subdirs,
+            is_protected,
+            has_subdirs: node_has_subdirs,
         });
     }
 
@@ -87,11 +97,20 @@ pub async fn get_subtree_nodes(path: String) -> Result<std::collections::HashMap
             
             let node_path = entry.path();
             let mut node_has_subdirs = false;
+            let mut is_protected = false;
 
-            if let Ok(sub_entries) = fs::read_dir(&node_path) {
-                node_has_subdirs = sub_entries.filter_map(|e| e.ok()).any(|se| {
-                    se.file_type().map(|ft| ft.is_dir()).unwrap_or(false)
-                });
+            match fs::read_dir(&node_path) {
+                Ok(sub_entries) => {
+                    node_has_subdirs = sub_entries.filter_map(|e| e.ok()).any(|se| {
+                        se.file_type().map(|ft| ft.is_dir()).unwrap_or(false)
+                    });
+                }
+                Err(e) => {
+                    let kind = e.kind();
+                    if kind == std::io::ErrorKind::PermissionDenied || kind == std::io::ErrorKind::NotFound {
+                        is_protected = true;
+                    }
+                }
             }
 
             nodes.push(SidebarNode {
@@ -100,6 +119,7 @@ pub async fn get_subtree_nodes(path: String) -> Result<std::collections::HashMap
                 is_hidden,
                 is_system,
                 is_readonly: metadata.permissions().readonly(),
+                is_protected,
                 has_subdirs: node_has_subdirs,
             });
         }

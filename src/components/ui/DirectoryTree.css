@@ -139,6 +139,15 @@
     opacity: 1;
 }
 
+/* Protected Folders (Admin Rights) */
+.tree-node-content.protected .tree-icon {
+    color: #ff3b30 !important;
+}
+
+.tree-node-content.protected .system-icon-img {
+    filter: brightness(0.18) sepia(1) saturate(30) !important;
+}
+
 .tree-label {
     flex: none;
     overflow: visible;

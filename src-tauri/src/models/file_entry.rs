@@ -84,6 +84,7 @@ pub struct SidebarNode {
     pub is_hidden: bool,
     pub is_system: bool,
     pub is_readonly: bool,
+    pub is_protected: bool,
     pub has_subdirs: bool,
 }
 
