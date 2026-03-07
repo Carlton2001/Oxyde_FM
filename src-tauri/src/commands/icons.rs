@@ -14,9 +14,12 @@ use windows::Win32::Graphics::Gdi::{
     GetObjectW, BITMAP
 };
 use crate::models::CommandError;
+use tauri::{AppHandle, Manager};
 use std::collections::HashMap;
 use std::sync::Mutex;
 use lazy_static::lazy_static;
+use std::path::PathBuf;
+use std::fs;
 
 lazy_static! {
     static ref ICON_CACHE: Mutex<HashMap<String, Vec<u8>>> = Mutex::new(HashMap::new());
@@ -30,12 +33,13 @@ pub fn purge_icon_cache() {
 }
 
 #[tauri::command]
-pub fn get_file_icon(path: String, size: String) -> Result<Vec<u8>, CommandError> {
-    extract_icon_png(&path, &size, false)
+pub fn get_file_icon(app: AppHandle, path: String, size: String) -> Result<Vec<u8>, CommandError> {
+    let cache_dir = app.path().app_cache_dir().ok().map(|p| p.join("icons"));
+    extract_icon_png(&path, &size, false, cache_dir)
         .map_err(|e| CommandError::SystemError(format!("Failed to extract icon: {}", e)))
 }
 
-pub fn extract_icon_png(path: &str, size: &str, use_attributes: bool) -> Result<Vec<u8>, String> {
+pub fn extract_icon_png(path: &str, size: &str, use_attributes: bool, cache_dir: Option<PathBuf>) -> Result<Vec<u8>, String> {
     let wide_path: Vec<u16> = std::ffi::OsStr::new(path)
         .encode_wide()
         .chain(std::iter::once(0))
@@ -71,6 +75,18 @@ pub fn extract_icon_png(path: &str, size: &str, use_attributes: bool) -> Result<
             let cache = ICON_CACHE.lock().unwrap();
             if let Some(data) = cache.get(&cache_key) {
                 return Ok(data.clone());
+            }
+        }
+
+        // Try to load from disk cache
+        if let Some(ref dir) = cache_dir {
+            let file_path = dir.join(format!("{}.png", cache_key));
+            if file_path.exists() {
+                if let Ok(data) = fs::read(file_path) {
+                    let mut cache = ICON_CACHE.lock().unwrap();
+                    cache.insert(cache_key, data.clone());
+                    return Ok(data);
+                }
             }
         }
 
@@ -119,6 +135,13 @@ pub fn extract_icon_png(path: &str, size: &str, use_attributes: bool) -> Result<
         
         if let Err(e) = icon_bitmap.write_to(&mut cursor, image::ImageFormat::Png) {
              return Err(format!("Failed to encode icon to PNG: {}", e));
+        }
+
+        // Save to disk cache
+        if let Some(ref dir) = cache_dir {
+             let _ = fs::create_dir_all(dir);
+             let file_path = dir.join(format!("{}.png", cache_key));
+             let _ = fs::write(file_path, &png_buffer);
         }
 
         {

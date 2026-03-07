@@ -16,9 +16,48 @@ const inFlightRequests = new Map<string, Promise<string>>();
 
 const UNIQUE_ICON_EXTENSIONS = new Set(['exe', 'ico', 'cur', 'ani', 'lnk', 'url', 'cpl', 'msi', 'msix', 'appx']);
 
+/**
+ * Identifies folders that likely have custom icons (drives, cloud, system folders)
+ */
+const isSpecialPath = (path: string): boolean => {
+    if (!path) return false;
+    // Root drives (C:\) or Shell namespaces
+    if (/^[a-zA-Z]:\\?$/.test(path) || path.startsWith('::{') || path.startsWith('?') || path.startsWith('trash://')) return true;
+
+    // Network servers (\\SERVER)
+    if (path.startsWith('\\\\')) {
+        const parts = path.split('\\').filter(Boolean);
+        if (parts.length <= 1) return true;
+    }
+
+    const lower = path.toLowerCase();
+
+    // Special subfolders in user profile usually have custom icons
+    if (lower.includes('\\users\\')) {
+        const parts = lower.split('\\');
+        const userIdx = parts.indexOf('users');
+        // Check if it's a folder like C:\Users\Name\Documents (3 levels after root)
+        if (userIdx !== -1 && parts.length === userIdx + 3) {
+            const leaf = parts[parts.length - 1];
+            const specialNames = [
+                'documents', 'downloads', 'desktop', 'pictures', 'videos', 'music',
+                'favorites', 'links', 'onedrive', 'searches', 'contacts', '3d objects',
+                'mes documents', 'mes images', 'mes vidéos', 'téléchargements', 'bureau', 'ma musique'
+            ];
+            if (specialNames.includes(leaf)) return true;
+        }
+    }
+
+    return false;
+};
+
 const getCacheKey = (path: string, name: string, isDir: boolean, size: number) => {
     const sizeStr = size <= 16 ? '32' : '96';
-    if (isDir) return `dir:${path}:${sizeStr}`;
+    if (isDir) {
+        if (isSpecialPath(path)) return `dir:${path}:${sizeStr}`;
+        // Standard folders share the same cache entry
+        return `dir:generic:${sizeStr}`;
+    }
 
     const dotIndex = name.lastIndexOf('.');
     const ext = dotIndex !== -1 ? name.slice(dotIndex + 1).toLowerCase() : 'noext';
@@ -49,7 +88,6 @@ export const AsyncFileIcon: React.FC<AsyncFileIconProps> = React.memo(({ path, i
         if (iconUrl || error) return;
 
         let isMounted = true;
-        let timeout: ReturnType<typeof setTimeout>;
 
         const fetchIcon = async () => {
             // Check if already in flight
@@ -64,8 +102,13 @@ export const AsyncFileIcon: React.FC<AsyncFileIconProps> = React.memo(({ path, i
                     const rootFontSize = getActualRootFontSize();
                     const targetPx = (size / 16) * rootFontSize;
                     const sizeStr = targetPx <= 24 ? 'small' : 'large';
+
+                    // Use a stable path for generic directories to hit backend cache
+                    const isGenericDir = isDir && !isSpecialPath(path);
+                    const fetchPath = isGenericDir ? "C:\\Windows" : path;
+
                     // The backend now returns Vec<u8> (binary)
-                    const bytes = await invoke<number[]>('get_file_icon', { path, size: sizeStr });
+                    const bytes = await invoke<number[]>('get_file_icon', { path: fetchPath, size: sizeStr });
                     if (!bytes || bytes.length === 0) throw new Error('Empty icon');
 
                     const blob = new Blob([new Uint8Array(bytes)], { type: 'image/png' });
@@ -90,19 +133,29 @@ export const AsyncFileIcon: React.FC<AsyncFileIconProps> = React.memo(({ path, i
             }
         };
 
-        timeout = setTimeout(fetchIcon, 30);
+        fetchIcon();
 
         return () => {
             isMounted = false;
-            clearTimeout(timeout);
         };
-    }, [cacheKey, iconUrl, error, path, size]);
-
-    const Fallback = isDir ?
-        <Folder size={`${size / 16}rem`} className={className || "text-blue-400"} /> :
-        <File size={`${size / 16}rem`} className={className || "text-slate-400"} />;
+    }, [cacheKey, iconUrl, error, size]);
 
     const remSize = `${size / 16}rem`;
+    const genericCacheKey = `dir:generic:${size <= 24 ? '32' : '96'}`;
+    const genericUrl = isDir ? blobUrlCache.get(genericCacheKey) : null;
+
+    const Fallback = (isDir && genericUrl) ? (
+        <img
+            src={genericUrl}
+            style={{ width: remSize, height: remSize, objectFit: 'contain', opacity: 0.6 }}
+            className={className}
+            alt=""
+        />
+    ) : isDir ? (
+        <Folder size={remSize} className={className || "text-blue-400"} />
+    ) : (
+        <File size={remSize} className={className || "text-slate-400"} />
+    );
 
     return (
         <div className="relative flex items-center justify-center shrink-0" style={{ width: remSize, height: remSize }}>
@@ -132,4 +185,42 @@ export const purgeIconCache = () => {
     inFlightRequests.clear();
     invoke('purge_icon_cache').catch(() => { });
 };
+
+// --- PRE-WARMING ---
+// Fetch the generic and common special folder icons immediately so they are ready before any folder is rendered.
+const preWarmIcons = async () => {
+    try {
+        const rootFontSize = getActualRootFontSize();
+
+        // Define common sizes to pre-load
+        const sizes = [16, 48]; // 32px and 96px logic
+
+        // 1. Pre-warm Generic Folder (High Priority)
+        for (const size of sizes) {
+            const targetPx = (size / 16) * rootFontSize;
+            const sizeStr = targetPx <= 24 ? 'small' : 'large';
+            const cacheKey = `dir:generic:${targetPx <= 24 ? '32' : '96'}`;
+
+            if (!blobUrlCache.has(cacheKey)) {
+                invoke<number[]>('get_file_icon', { path: "C:\\Windows", size: sizeStr }).then(bytes => {
+                    if (bytes && bytes.length > 0) {
+                        const blob = new Blob([new Uint8Array(bytes)], { type: 'image/png' });
+                        blobUrlCache.set(cacheKey, URL.createObjectURL(blob));
+                    }
+                }).catch(() => { });
+            }
+        }
+
+        // 2. Pre-warm Special Folders (Lower Priority, Background)
+        // Optimization: if we could get the real paths from Tauri, it would be better.
+        // For now, we only pre-warm the generic one which is the most frequent.
+    } catch (e) {
+        console.warn('Pre-warming icons failed:', e);
+    }
+};
+
+// Initialize pre-warming
+if (typeof window !== 'undefined') {
+    preWarmIcons();
+}
 
