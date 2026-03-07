@@ -1306,7 +1306,18 @@ pub fn clear_app_cache(app: tauri::AppHandle) -> Result<(), CommandError> {
         let _ = window.clear_all_browsing_data();
     }
 
-    // Clear local data (thumbnails, thumbnails.db, etc.) except EBWebView
+    // 1. Clear Icon RAM Cache
+    super::icons::purge_icon_cache();
+
+    // 2. Clear app_cache_dir (Icons, etc.)
+    if let Ok(path) = app.path().app_cache_dir() {
+        if path.exists() {
+            let _ = std::fs::remove_dir_all(&path);
+            let _ = std::fs::create_dir_all(&path);
+        }
+    }
+
+    // 3. Clear local data (thumbnails, thumbnails.db, etc.) except EBWebView
     if let Ok(path) = app.path().app_local_data_dir() {
         if path.exists() {
             if let Ok(entries) = std::fs::read_dir(&path) {

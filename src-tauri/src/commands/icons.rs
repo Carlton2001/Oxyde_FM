@@ -35,11 +35,32 @@ pub fn purge_icon_cache() {
 #[tauri::command]
 pub fn get_file_icon(app: AppHandle, path: String, size: String) -> Result<Vec<u8>, CommandError> {
     let cache_dir = app.path().app_cache_dir().ok().map(|p| p.join("icons"));
-    extract_icon_png(&path, &size, false, cache_dir)
+    
+    // Virtual path logic (copying the folder "C:\Windows" spirit)
+    let (real_path, use_attributes) = if path.starts_with("oxyde_ext_") {
+        (format!("C:\\template.{}", &path[10..]), true)
+    } else if path == "oxyde_dir_generic" {
+        ("C:\\Windows".to_string(), false)
+    } else {
+        (path.clone(), false)
+    };
+
+    // Cache key is based on the input path to be 100% stable
+    // We sanitize it for the filename
+    let safe_id = path.replace(|c: char| !c.is_alphanumeric(), "_");
+    let cache_key = format!("{}_{}", safe_id, size);
+
+    extract_icon_png(&real_path, &size, use_attributes, cache_dir, cache_key)
         .map_err(|e| CommandError::SystemError(format!("Failed to extract icon: {}", e)))
 }
 
-pub fn extract_icon_png(path: &str, size: &str, use_attributes: bool, cache_dir: Option<PathBuf>) -> Result<Vec<u8>, String> {
+pub fn extract_icon_png(
+    path: &str, 
+    size: &str, 
+    use_attributes: bool, 
+    cache_dir: Option<PathBuf>,
+    cache_key: String
+) -> Result<Vec<u8>, String> {
     let wide_path: Vec<u16> = std::ffi::OsStr::new(path)
         .encode_wide()
         .chain(std::iter::once(0))
@@ -55,21 +76,18 @@ pub fn extract_icon_png(path: &str, size: &str, use_attributes: bool, cache_dir:
     }
 
     unsafe {
-        let result = SHGetFileInfoW(
+        SHGetFileInfoW(
             PCWSTR(wide_path.as_ptr()),
             attributes,
             Some(&mut shfileinfo),
             std::mem::size_of::<SHFILEINFOW>() as u32,
             flags,
         );
-
-        if result == 0 {
-            return Err("Failed to get file icon info".to_string());
-        }
-
+        
         let icon_index = shfileinfo.iIcon;
-        // Bump version key to v8
-        let cache_key = format!("v8_{}_{}", icon_index, size);
+
+        // We don't check for 0 here anymore as SHGFI_USEFILEATTRIBUTES can be tricky
+        // but SHGetFileInfoW is robust enough.
 
         {
             let cache = ICON_CACHE.lock().unwrap();

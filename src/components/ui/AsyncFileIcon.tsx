@@ -14,7 +14,10 @@ interface AsyncFileIconProps {
 const blobUrlCache = new Map<string, string>();
 const inFlightRequests = new Map<string, Promise<string>>();
 
-const UNIQUE_ICON_EXTENSIONS = new Set(['exe', 'ico', 'cur', 'ani', 'lnk', 'url', 'cpl', 'msi', 'msix', 'appx']);
+const UNIQUE_ICON_EXTENSIONS = new Set([
+    'exe', 'ico', 'cur', 'ani', 'lnk', 'url', 'cpl', 'msi', 'msix', 'appx',
+    'bat', 'cmd', 'msc', 'ps1', 'scr', 'theme', 'themepack'
+]);
 
 /**
  * Identifies folders that likely have custom icons (drives, cloud, system folders)
@@ -62,7 +65,10 @@ const getCacheKey = (path: string, name: string, isDir: boolean, size: number) =
     const dotIndex = name.lastIndexOf('.');
     const ext = dotIndex !== -1 ? name.slice(dotIndex + 1).toLowerCase() : 'noext';
 
+    // Files with embedded icons (exe, ico, lnk) MUST use their full path
     if (UNIQUE_ICON_EXTENSIONS.has(ext)) return `path:${path}:${sizeStr}`;
+
+    // Standard extensions can share a cache key
     return `ext:${ext}:${sizeStr}`;
 };
 
@@ -103,9 +109,16 @@ export const AsyncFileIcon: React.FC<AsyncFileIconProps> = React.memo(({ path, i
                     const targetPx = (size / 16) * rootFontSize;
                     const sizeStr = targetPx <= 24 ? 'small' : 'large';
 
-                    // Use a stable path for generic directories to hit backend cache
-                    const isGenericDir = isDir && !isSpecialPath(path);
-                    const fetchPath = isGenericDir ? "C:\\Windows" : path;
+                    // NEW SIMPLE LOGIC: Mirror of the folder system
+                    let fetchPath = path;
+                    const dotIndex = name.lastIndexOf('.');
+                    const ext = dotIndex !== -1 ? name.slice(dotIndex + 1).toLowerCase() : 'noext';
+
+                    if (isDir) {
+                        if (!isSpecialPath(path)) fetchPath = "oxyde_dir_generic";
+                    } else {
+                        if (!UNIQUE_ICON_EXTENSIONS.has(ext)) fetchPath = `oxyde_ext_${ext}`;
+                    }
 
                     // The backend now returns Vec<u8> (binary)
                     const bytes = await invoke<number[]>('get_file_icon', { path: fetchPath, size: sizeStr });
@@ -141,13 +154,23 @@ export const AsyncFileIcon: React.FC<AsyncFileIconProps> = React.memo(({ path, i
     }, [cacheKey, iconUrl, error, size]);
 
     const remSize = `${size / 16}rem`;
-    const genericCacheKey = `dir:generic:${size <= 24 ? '32' : '96'}`;
-    const genericUrl = isDir ? blobUrlCache.get(genericCacheKey) : null;
+    const genericDirCacheKey = `dir:generic:${size <= 24 ? '32' : '96'}`;
+    const genericFileCacheKey = `ext:generic:${size <= 24 ? '32' : '96'}`;
 
-    const Fallback = (isDir && genericUrl) ? (
+    const genericDirUrl = isDir ? blobUrlCache.get(genericDirCacheKey) : null;
+    const genericFileUrl = !isDir ? blobUrlCache.get(genericFileCacheKey) : null;
+
+    const Fallback = (isDir && genericDirUrl) ? (
         <img
-            src={genericUrl}
+            src={genericDirUrl}
             style={{ width: remSize, height: remSize, objectFit: 'contain', opacity: 0.6 }}
+            className={className}
+            alt=""
+        />
+    ) : (!isDir && genericFileUrl) ? (
+        <img
+            src={genericFileUrl}
+            style={{ width: remSize, height: remSize, objectFit: 'contain', opacity: 0.4 }}
             className={className}
             alt=""
         />
@@ -211,9 +234,40 @@ const preWarmIcons = async () => {
             }
         }
 
-        // 2. Pre-warm Special Folders (Lower Priority, Background)
-        // Optimization: if we could get the real paths from Tauri, it would be better.
-        // For now, we only pre-warm the generic one which is the most frequent.
+        // 2. Pre-warm Generic File (High Priority)
+        for (const size of sizes) {
+            const targetPx = (size / 16) * rootFontSize;
+            const sizeStr = targetPx <= 24 ? 'small' : 'large';
+            const cacheKey = `ext:generic:${targetPx <= 24 ? '32' : '96'}`;
+
+            if (!blobUrlCache.has(cacheKey)) {
+                invoke<number[]>('get_file_icon', { path: "oxyde_ext_unknown", size: sizeStr }).then(bytes => {
+                    if (bytes && bytes.length > 0) {
+                        const blob = new Blob([new Uint8Array(bytes)], { type: 'image/png' });
+                        blobUrlCache.set(cacheKey, URL.createObjectURL(blob));
+                    }
+                }).catch(() => { });
+            }
+        }
+
+        // 3. Pre-warm Common Extensions (Background)
+        const commonExts = ['zip', 'pdf', 'txt', 'png', 'jpg', 'mp3', 'wav', 'mp4'];
+        for (const ext of commonExts) {
+            for (const size of sizes) {
+                const targetPx = (size / 16) * rootFontSize;
+                const sizeStr = targetPx <= 24 ? 'small' : 'large';
+                const cacheKey = `ext:${ext}:${targetPx <= 24 ? '32' : '96'}`;
+
+                if (!blobUrlCache.has(cacheKey)) {
+                    invoke<number[]>('get_file_icon', { path: `oxyde_ext_${ext}`, size: sizeStr }).then(bytes => {
+                        if (bytes && bytes.length > 0) {
+                            const blob = new Blob([new Uint8Array(bytes)], { type: 'image/png' });
+                            blobUrlCache.set(cacheKey, URL.createObjectURL(blob));
+                        }
+                    }).catch(() => { });
+                }
+            }
+        }
     } catch (e) {
         console.warn('Pre-warming icons failed:', e);
     }
