@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef, useImperativeHandle, useCa
 import { List, Grid, RowComponentProps, CellComponentProps } from 'react-window';
 import { AutoSizer } from 'react-virtualized-auto-sizer';
 import cx from 'classnames';
-import { Check, Loader2, ChevronDown, ChevronRight } from 'lucide-react';
+import { Check, Loader2, ChevronDown, ChevronRight, Ban } from 'lucide-react';
 
 import { FileEntry, ViewMode, ColumnWidths, DateFormat } from '../../types';
 import { TFunc } from '../../i18n';
@@ -46,6 +46,7 @@ interface VirtualizedFileListProps {
     groupByDate?: boolean;
     initialScrollOffset?: number;
     updateCurrentScroll?: (offset: number) => void;
+    isProtected?: boolean;
 }
 
 export interface VirtualizedFileListHandle {
@@ -490,7 +491,8 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
         onScrollToggle, onItemMiddleClick,
         diffPaths, colWidths, isSearching, loading,
         groupByDate = false,
-        initialScrollOffset = 0, updateCurrentScroll
+        initialScrollOffset = 0, updateCurrentScroll,
+        isProtected = false
     } = props;
 
     const { dateFormat, showCheckboxes } = useApp();
@@ -732,8 +734,15 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
                     }
 
                     return (
-                        <div className="empty-msg" style={{ width, height, position: 'absolute', top: 0, left: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <span>{t(emptyKey as any)}</span>
+                        <div className="empty-msg" style={{ width, height, position: 'absolute', top: 0, left: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1rem' }}>
+                            {isProtected ? (
+                                <>
+                                    <Ban size={48} className="protected-icon" style={{ color: 'var(--danger-color, #ff4d4d)', opacity: 0.8 }} />
+                                    <span style={{ maxWidth: '300px', textAlign: 'center', opacity: 0.7 }}>{t('protected_access' as any)}</span>
+                                </>
+                            ) : (
+                                <span>{t(emptyKey as any)}</span>
+                            )}
                         </div>
                     );
                 }

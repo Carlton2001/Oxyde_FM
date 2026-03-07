@@ -130,7 +130,7 @@ export const usePanel = (initialPath: string, panelId?: string, activeTabId?: st
     }, [mode]);
 
     // File System
-    const { sortedFiles, summary, isComplete, loading, error, refresh, updateFileSize, setFileCalculating } = useFiles(normalizedPanelId, path, sortConfig, showHidden, showSystem);
+    const { sortedFiles, summary, isComplete, loading, error, isProtected, refresh, updateFileSize, setFileCalculating } = useFiles(normalizedPanelId, path, sortConfig, showHidden, showSystem);
 
     // Effective Files (Normal vs Search)
     const displayFiles = useMemo(() => {
@@ -207,6 +207,7 @@ export const usePanel = (initialPath: string, panelId?: string, activeTabId?: st
         files: displayFiles,
         loading,
         error,
+        isProtected,
         selected,
         viewMode,
         sortConfig,
@@ -258,7 +259,7 @@ export const usePanel = (initialPath: string, panelId?: string, activeTabId?: st
         setPanelState,
         setNavigationState,
     }), [
-        path, displayFiles, loading, error, selected, viewMode, sortConfig,
+        path, displayFiles, loading, error, isProtected, selected, viewMode, sortConfig,
         history, historyIndex, searchQuery, searchResults, isSearching, searchLimitReached,
         summary, isComplete, currentSearchRoot, currentEntry,
         colWidths, mode, isTrashView, isNetworkView, lastSelectedPath, groupByDate,

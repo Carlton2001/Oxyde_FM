@@ -151,6 +151,7 @@ export interface DirResponse {
     entries: FileEntry[];
     summary: FileSummary;
     is_complete: boolean;
+    is_protected?: boolean;
 }
 
 export interface DirBatchEvent {

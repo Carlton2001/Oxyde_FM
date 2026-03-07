@@ -75,6 +75,7 @@ interface FilePanelProps {
     updateCurrentScroll?: (offset: number) => void;
     groupByDate: boolean;
     onGroupByDateChange: (val: boolean) => void;
+    isProtected?: boolean;
 }
 
 export const FilePanel: React.FC<FilePanelProps> = React.memo(({
@@ -87,7 +88,7 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
     onRename, showHistogram: propShowHistogram, isTrashView = false, isNetworkView = false,
     useSystemIcons: propUseSystemIcons, onItemMiddleClick, diffPaths, searchLimitReached,
     panelId, onViewModeChange, loading, initialScrollOffset, updateCurrentScroll,
-    groupByDate, onGroupByDateChange
+    groupByDate, onGroupByDateChange, isProtected
 }) => {
     const { useSystemIcons: contextUseSystemIcons, searchLimit, showGridThumbnails, notify, showNetwork, showCheckboxes } = useApp();
     const useSystemIcons = propUseSystemIcons ?? contextUseSystemIcons;
@@ -628,6 +629,7 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
                         groupByDate={groupByDate}
                         initialScrollOffset={initialScrollOffset}
                         updateCurrentScroll={updateCurrentScroll}
+                        isProtected={isProtected}
                     />
                 </div>
             </div>

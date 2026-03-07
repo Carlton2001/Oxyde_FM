@@ -78,6 +78,7 @@ pub struct CachedResults {
     pub config: SortConfig,
     pub show_hidden: bool,
     pub show_system: bool,
+    pub is_protected: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

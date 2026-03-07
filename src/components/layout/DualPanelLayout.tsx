@@ -15,6 +15,7 @@ interface FullPanelState extends PanelState {
     currentEntry?: { scrollOffset?: number };
     updateCurrentScroll?: (offset: number) => void;
     setGroupByDate: (val: boolean) => void;
+    isProtected: boolean;
 }
 
 interface DualPanelLayoutProps {
@@ -446,6 +447,7 @@ export const DualPanelLayout: React.FC<DualPanelLayoutProps> = ({
                             updateCurrentScroll={left.updateCurrentScroll}
                             groupByDate={left.groupByDate}
                             onGroupByDateChange={leftHandlers.onGroupByDateChange}
+                            isProtected={left.isProtected}
                         />
 
                         {layout === 'dual' && (
@@ -501,6 +503,7 @@ export const DualPanelLayout: React.FC<DualPanelLayoutProps> = ({
                                 updateCurrentScroll={right.updateCurrentScroll}
                                 groupByDate={right.groupByDate}
                                 onGroupByDateChange={rightHandlers.onGroupByDateChange}
+                                isProtected={right.isProtected}
                             />
                         )}
                     </div>

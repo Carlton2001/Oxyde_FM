@@ -122,6 +122,7 @@ export const useFiles = (panelId: PanelId, path: string, sortConfig: SortConfig,
     const [isComplete, setIsComplete] = useState(true);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [isProtected, setIsProtected] = useState(false);
     const prevParamsRef = useRef({ path, sortConfig, showHidden, showSystem });
     // Track current path for real-time event filtering (prevents stale closure issues)
     const currentPathRef = useRef(path);
@@ -251,6 +252,7 @@ export const useFiles = (panelId: PanelId, path: string, sortConfig: SortConfig,
         if (pathOrFiltersChanged) {
             setFiles([]);
             setSummary(null);
+            setIsProtected(false);
             prevParamsRef.current = { path, sortConfig, showHidden, showSystem };
         } else if (sortChanged) {
             // Just update ref, don't clear files. Sorting will be handled by useMemo.
@@ -266,6 +268,7 @@ export const useFiles = (panelId: PanelId, path: string, sortConfig: SortConfig,
                 setFiles(entries);
                 setIsComplete(true);
                 setSummary(null);
+                setIsProtected(false);
             } else if (path === '__network_vincinity__' || (path.startsWith('\\\\') && path.split('\\').filter(Boolean).length === 1)) {
                 const networkPath = path === '__network_vincinity__' ? undefined : path;
                 const netResources = await invoke<any[]>('get_network_resources', { path: networkPath });
@@ -301,6 +304,8 @@ export const useFiles = (panelId: PanelId, path: string, sortConfig: SortConfig,
                     showSystem,
                     forceRefresh: true // Always force refresh to avoid stale cache issues
                 });
+
+                setIsProtected(!!response.is_protected);
 
                 if (response.is_complete) {
                     setFiles(prev => {
@@ -401,5 +406,5 @@ export const useFiles = (panelId: PanelId, path: string, sortConfig: SortConfig,
         setFiles(prev => prev.map(f => f.path === p ? { ...f, is_calculating: isCalculating } : f));
     }, []);
 
-    return { files, sortedFiles, summary, isComplete, loading, error, refresh, updateFileSize, setFileCalculating };
+    return { files, sortedFiles, summary, isComplete, loading, error, isProtected, refresh, updateFileSize, setFileCalculating };
 };

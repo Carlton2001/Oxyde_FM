@@ -22,6 +22,7 @@ pub struct DirResponse {
     pub entries: Vec<FileEntry>,
     pub summary: FileSummary,
     pub is_complete: bool,
+    pub is_protected: bool,
 }
 
 #[derive(Serialize, Clone)]
@@ -96,6 +97,7 @@ pub async fn list_dir(
                             entries: cached.entries.clone(),
                             summary: cached.summary.clone(),
                             is_complete: true,
+                            is_protected: cached.is_protected,
                         });
                     }
                     
@@ -125,11 +127,24 @@ pub async fn list_dir(
                 internal_path
             )?;
             let summary = calculate_summary(&entries, Some(path.clone()));
-            return Ok(DirResponse { entries, summary, is_complete: true });
+            return Ok(DirResponse { entries, summary, is_complete: true, is_protected: false });
         }
 
         let dir_path = validate_path(&path)?;
-        let read_dir = fs::read_dir(&dir_path)?;
+        
+        let read_dir = match fs::read_dir(&dir_path) {
+            Ok(rd) => Ok(rd),
+            Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
+                let summary = calculate_summary(&[], Some(path.clone()));
+                return Ok(DirResponse {
+                    entries: Vec::new(),
+                    summary,
+                    is_complete: true,
+                    is_protected: true,
+                });
+            }
+            Err(e) => Err(CommandError::IoError(e.to_string())),
+        }?;
 
         let mut entries = Vec::with_capacity(2048);
         for entry in read_dir.flatten() {
@@ -184,6 +199,7 @@ pub async fn list_dir(
             config: sort_config,
             show_hidden,
             show_system,
+            is_protected: false, // If we reached here, it's not protected
         });
     }
 
@@ -196,6 +212,7 @@ pub async fn list_dir(
             entries: all_entries,
             summary,
             is_complete: true,
+            is_protected: false,
         })
     } else {
         // Split: keep initial, spawn remaining
@@ -229,6 +246,7 @@ pub async fn list_dir(
             entries: all_entries, // now contains only the initial batch
             summary,
             is_complete: false,
+            is_protected: false,
         })
     }
 }
