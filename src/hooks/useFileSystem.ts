@@ -116,6 +116,11 @@ export const getSortedFiles = (files: FileEntry[], config: SortConfig) => {
     });
 };
 
+const normalizeEntry = (f: FileEntry): FileEntry => ({
+    ...f,
+    path: normalizePath(f.path)
+});
+
 export const useFiles = (panelId: PanelId, path: string, sortConfig: SortConfig, showHidden: boolean, showSystem: boolean, requestId: number) => {
     const [files, setFiles] = useState<FileEntry[]>([]);
     const [summary, setSummary] = useState<FileSummary | null>(null);
@@ -131,7 +136,8 @@ export const useFiles = (panelId: PanelId, path: string, sortConfig: SortConfig,
     currentRequestIdRef.current = requestId;
 
     // Internal reconciliation function
-    const reconcileFiles = (oldFiles: FileEntry[], newFiles: FileEntry[]): FileEntry[] => {
+    const reconcileFiles = (oldFiles: FileEntry[], newFilesInput: FileEntry[]): FileEntry[] => {
+        const newFiles = newFilesInput.map(normalizeEntry);
         if (oldFiles.length === 0) return newFiles;
 
         const oldMap = new Map(oldFiles.map(f => [f.path, f]));
@@ -218,7 +224,8 @@ export const useFiles = (panelId: PanelId, path: string, sortConfig: SortConfig,
                 (batch.request_id !== undefined ? batch.request_id === currentRequestIdRef.current : batch.path === currentPathRef.current);
 
             if (isTargeted) {
-                buffer.push(...batch.entries);
+                const normalizedEntries = batch.entries.map(normalizeEntry);
+                buffer.push(...normalizedEntries);
 
                 if (batch.is_complete) {
                     if (timeout) clearTimeout(timeout);
@@ -269,8 +276,9 @@ export const useFiles = (panelId: PanelId, path: string, sortConfig: SortConfig,
         setError(null);
         try {
             if (path.startsWith('trash://') || path.startsWith('trash:\\\\')) {
-                const entries = await invoke<FileEntry[]>('list_trash');
+                const entriesRaw = await invoke<FileEntry[]>('list_trash');
                 if (requestId !== currentRequestIdRef.current) return;
+                const entries = entriesRaw.map(normalizeEntry);
                 setFiles(entries);
                 setIsComplete(true);
                 setSummary(null);

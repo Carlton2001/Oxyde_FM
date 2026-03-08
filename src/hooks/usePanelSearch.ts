@@ -10,7 +10,12 @@ import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 import { FileEntry, SearchEventPayload } from '../types';
 import { purgeIconCache } from '../components/ui/AsyncFileIcon';
-import { isVirtualPath } from '../utils/path';
+import { isVirtualPath, normalizePath } from '../utils/path';
+
+const normalizeEntry = (f: FileEntry): FileEntry => ({
+    ...f,
+    path: normalizePath(f.path)
+});
 
 interface UsePanelSearchOptions {
     path: string;
@@ -201,7 +206,8 @@ export const usePanelSearch = ({
                     // Only buffer what we need
                     const canAccept = MAX_RESULTS - totalReceived;
                     if (canAccept > 0) {
-                        const toBuffer = payload.results.slice(0, canAccept);
+                        const toBufferRaw = payload.results.slice(0, canAccept);
+                        const toBuffer = toBufferRaw.map(normalizeEntry);
                         searchBufferRef.current.push(...toBuffer);
                         totalReceived += toBuffer.length;
 
