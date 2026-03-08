@@ -12,6 +12,7 @@ import { TFunc } from '../../i18n';
 import { useApp } from '../../context/AppContext';
 import { ContextMenu } from './ContextMenu';
 import { AsyncFileIcon } from './AsyncFileIcon';
+import { getParent, normalizePath } from '../../utils/path';
 import './DirectoryTree.css';
 
 interface TreeNode {
@@ -148,7 +149,8 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
     const manuallyCollapsedRef = useRef<string | null>(null);
 
     const loadPathContent = useCallback(async (path: string) => {
-        const lowerPath = path.toLowerCase();
+        const normPath = normalizePath(path);
+        const lowerPath = normPath.toLowerCase();
 
         // Handle network resource discovery for neighborhood or server roots
         const isNetworkServer = path.startsWith('\\\\') && path.split('\\').filter(Boolean).length === 1;
@@ -164,7 +166,7 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
                 }));
                 setTreeData(prev => {
                     const next = new Map(prev);
-                    next.set(path, treeNodes);
+                    next.set(normPath, treeNodes);
                     treeDataRef.current = next;
                     return next;
                 });
@@ -198,7 +200,7 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
             }));
             setTreeData(prev => {
                 const next = new Map(prev);
-                next.set(path, treeNodes);
+                next.set(normPath, treeNodes);
                 treeDataRef.current = next;
                 return next;
             });
@@ -206,7 +208,7 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
             loadedPathsRef.current.delete(lowerPath);
             setTreeData(prev => {
                 const next = new Map(prev);
-                next.set(path, []);
+                next.set(normPath, []);
                 treeDataRef.current = next;
                 return next;
             });
@@ -214,10 +216,11 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
     }, []);
 
     const refreshPath = React.useCallback(async (path: string) => {
-        const lowerPath = path.toLowerCase();
+        const normPath = normalizePath(path);
+        const lowerPath = normPath.toLowerCase();
         if (expandedPaths.has(lowerPath) || loadedPathsRef.current.has(lowerPath)) {
             loadedPathsRef.current.delete(lowerPath);
-            await loadPathContent(path);
+            await loadPathContent(normPath);
         }
     }, [expandedPaths, loadPathContent]);
 
@@ -239,13 +242,13 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
             const { paths } = event.payload;
 
             paths.forEach(p => {
-                const separator = p.includes('\\') ? '\\' : '/';
-                const parts = p.split(separator);
-                parts.pop();
-                const parentPath = parts.join(separator);
-                const lowerParent = parentPath.toLowerCase();
+                const normP = normalizePath(p);
+                const parentPath = getParent(normP);
+                if (!parentPath) return;
 
-                if (loadedPathsRef.current.has(lowerParent)) {
+                const normParent = normalizePath(parentPath).toLowerCase();
+
+                if (loadedPathsRef.current.has(normParent)) {
                     loadPathContent(parentPath);
                 }
             });
@@ -327,9 +330,10 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
 
                 result.push({ node, level });
 
-                const lowerPath = node.path.toLowerCase();
+                const normPath = normalizePath(node.path);
+                const lowerPath = normPath.toLowerCase();
                 if (expandedPaths.has(lowerPath)) {
-                    const children = treeData.get(node.path);
+                    const children = treeData.get(normPath);
                     if (children) {
                         addNodes(children, level + 1);
                     }
@@ -392,10 +396,14 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
         if (!currentPath || minimized || skipExpandAndScroll || skipSyncInternal) return;
 
         // Only scroll if the path has actually changed since the last scroll
-        const lowerPath = currentPath.toLowerCase();
+        const normPath = normalizePath(currentPath);
+        const lowerPath = normPath.toLowerCase();
         if (lowerPath === lastScrolledPathRef.current) return;
 
-        const index = visibleNodes.findIndex(vn => vn.node.path.toLowerCase() === lowerPath);
+        const index = visibleNodes.findIndex(vn => {
+            const vnNorm = normalizePath(vn.node.path);
+            return vnNorm.toLowerCase() === lowerPath;
+        });
         if (index !== -1 && listRef.current) {
             listRef.current.scrollToRow({ index, align: 'smart' });
             lastScrolledPathRef.current = lowerPath;
@@ -404,7 +412,8 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
 
     const toggleExpand = useCallback(async (e: React.MouseEvent, node: TreeNode) => {
         e.stopPropagation();
-        const lowerPath = node.path.toLowerCase();
+        const normPath = normalizePath(node.path);
+        const lowerPath = normPath.toLowerCase();
 
         setExpandedPaths(prev => {
             const next = new Set(prev);
@@ -428,7 +437,9 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
         e.preventDefault();
         e.stopPropagation();
         const isTrash = node.isTrash;
-        const isExpanded = expandedPaths.has(node.path.toLowerCase());
+        const normPath = normalizePath(node.path);
+        const lowerPath = normPath.toLowerCase();
+        const isExpanded = expandedPaths.has(lowerPath);
 
         setContextMenu({
             x: e.clientX,
@@ -457,6 +468,7 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
             setTreeData(prev => {
                 const next = new Map(prev);
                 Object.entries(subtreeData).forEach(([parentPath, nodes]) => {
+                    const normParent = normalizePath(parentPath);
                     const treeNodes: TreeNode[] = nodes.map(n => ({
                         path: n.path,
                         name: n.name,
@@ -466,7 +478,7 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
                         isProtected: n.is_protected,
                         hasSubdirs: n.has_subdirs
                     }));
-                    next.set(parentPath, treeNodes);
+                    next.set(normParent, treeNodes);
                 });
                 treeDataRef.current = next;
                 return next;
@@ -474,11 +486,11 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
 
             setExpandedPaths(prev => {
                 const next = new Set(prev);
-                Object.keys(subtreeData).forEach(p => next.add(p.toLowerCase()));
+                Object.keys(subtreeData).forEach(p => next.add(normalizePath(p).toLowerCase()));
                 return next;
             });
 
-            Object.keys(subtreeData).forEach(p => loadedPathsRef.current.add(p.toLowerCase()));
+            Object.keys(subtreeData).forEach(p => loadedPathsRef.current.add(normalizePath(p).toLowerCase()));
         } catch (err) {
             console.error(`Expand all failed for ${path}`, err);
         } finally {
@@ -487,14 +499,13 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
     };
 
     const collapseAll = (path: string) => {
+        const normPath = normalizePath(path).toLowerCase();
         setExpandedPaths(prev => {
-            const next = new Set<string>();
-            const lowerPath = path.toLowerCase();
-            const prefix = lowerPath.endsWith('\\') ? lowerPath : `${lowerPath}\\`;
-
-            for (const pLower of prev) {
-                if (pLower !== lowerPath && !pLower.startsWith(prefix)) {
-                    next.add(pLower);
+            const next = new Set(prev);
+            // Remove the path itself and all its children
+            for (const p of next) {
+                if (p === normPath || p.startsWith(normPath.endsWith('\\') ? normPath : normPath + '\\')) {
+                    next.delete(p);
                 }
             }
             return next;
@@ -532,12 +543,14 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
             </div>
         );
 
-        const isExpanded = expandedPaths.has(node.path.toLowerCase());
-        const isActive = currentPath.toLowerCase() === node.path.toLowerCase();
+        const normNodePath = normalizePath(node.path);
+        const nodePathLower = normNodePath.toLowerCase();
+        const isExpanded = expandedPaths.has(nodePathLower);
+        const isActive = normalizePath(currentPath).toLowerCase() === nodePathLower;
         const isDragOver = dragOverNode === node.path;
         const isRootDrive = !!node.driveType || !!node.isTrash || !!node.isNetworkRoot;
 
-        const children = treeData.get(node.path);
+        const children = treeData.get(normNodePath);
         const visibleChildren = children?.filter(c => {
             if (c.isSystem) { return showSystem; }
             if (c.isHidden) { return showHidden; }
