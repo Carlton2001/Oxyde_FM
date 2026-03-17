@@ -38,6 +38,7 @@ Oxyde is a modern, high-performance file manager designed for efficiency and spe
 *   **PowerToys Peek Integration**: Full support for PowerToys Peek, allowing for super-fast file previews with smart activation and real-time status checks.
 *   **Network Drive Management**: Dedicated tools to easily Connect (Map) and Disconnect network drives directly from the interface.
 
+*  **Language**: For now, english and french.
 
 ## Technology Stack
 
