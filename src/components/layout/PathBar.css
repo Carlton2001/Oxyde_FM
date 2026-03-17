@@ -58,6 +58,7 @@
     white-space: nowrap;
     scrollbar-width: none;
     -ms-overflow-style: none;
+    min-width: 0;
 }
 
 .breadcrumb-list::-webkit-scrollbar {
@@ -72,8 +73,8 @@
 .breadcrumb-spacer {
     flex: 1;
     height: 100%;
-    cursor: default;
-    min-width: 2rem;
+    cursor: text;
+    min-width: 1rem;
 }
 
 .path-segment {

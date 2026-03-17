@@ -298,24 +298,28 @@ export const PathBar: React.FC<PathBarProps> = ({ path, onNavigate, className, i
     const scrollRef = useRef<HTMLDivElement>(null);
     const [hasOverflow, setHasOverflow] = useState(false);
 
-    // Check overflow on path change and resize
-    useEffect(() => {
-        const checkOverflow = () => {
-            if (scrollRef.current) {
-                const { scrollWidth, clientWidth } = scrollRef.current;
-                setHasOverflow(scrollWidth > clientWidth);
-            }
-        };
-
-        checkOverflow();
-        // Auto-scroll to end
+    const scrollToLastItem = useCallback(() => {
         if (scrollRef.current) {
+            const { scrollWidth, clientWidth } = scrollRef.current;
+            setHasOverflow(scrollWidth > clientWidth);
+            // Always scroll to end to ensure last item is visible
             scrollRef.current.scrollLeft = scrollRef.current.scrollWidth;
         }
+    }, []);
 
-        window.addEventListener('resize', checkOverflow);
-        return () => window.removeEventListener('resize', checkOverflow);
-    }, [path]);
+    // Check overflow and scroll on path change and window resize
+    useEffect(() => {
+        scrollToLastItem();
+        
+        // Small delay to ensure items are rendered and measured correctly
+        const timer = setTimeout(scrollToLastItem, 10);
+
+        window.addEventListener('resize', scrollToLastItem);
+        return () => {
+            window.removeEventListener('resize', scrollToLastItem);
+            clearTimeout(timer);
+        };
+    }, [path, scrollToLastItem]);
 
     // Manual Drag handling
     const isDragRef = useRef(false);

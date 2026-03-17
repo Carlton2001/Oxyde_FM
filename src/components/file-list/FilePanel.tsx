@@ -13,7 +13,7 @@ import { useSelectionMarquee } from '../../hooks/useSelectionMarquee';
 import { SelectionMarquee } from './SelectionMarquee';
 import { VirtualizedFileList, VirtualizedFileListHandle } from './VirtualizedFileList';
 import { ExtensionFilterMenu } from './ExtensionFilterMenu';
-import { SizeFilterMenu, getSizeCategoryForFile, SizeCategoryKey } from './SizeFilterMenu';
+import { SizeFilterMenu, getSizeCategoryForFile, SizeCategoryKey, SIZE_CATEGORIES } from './SizeFilterMenu';
 import { DateFilterMenu, getDateCategoryForFile, DateCategoryKey } from './DateFilterMenu';
 import { NameFilterMenu } from './NameFilterMenu';
 import { LocationFilterMenu } from './LocationFilterMenu';
@@ -99,6 +99,7 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
     const panelRef = useRef<HTMLDivElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const headerScrollRef = useRef<HTMLDivElement>(null);
+    const filterScrollRef = useRef<HTMLDivElement>(null);
     const scrollHandleRef = useRef<VirtualizedFileListHandle>(null);
     const [showScrollTop, setShowScrollTop] = useState(false);
     const [mouseNearScrollbar, setMouseNearScrollbar] = useState(false);
@@ -112,14 +113,24 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
     const [filterMenuAnchor, setFilterMenuAnchor] = useState<{ x: number, y: number } | null>(null);
     const [activeFilterMenu, setActiveFilterMenu] = useState<'extension' | 'size' | 'date' | 'name' | 'location' | 'deletedDate' | null>(null);
 
-    useEffect(() => {
+    const isFiltered = extensionFilter !== null || sizeFilter !== null || dateFilter !== null || nameFilter !== null || locationFilter !== null || deletedDateFilter !== null;
+
+    const clearAllFilters = useCallback(() => {
         setExtensionFilter(null);
         setSizeFilter(null);
         setDateFilter(null);
         setNameFilter(null);
+        setLocationFilter(null);
+        setDeletedDateFilter(null);
+    }, []);
+
+    const currentMode = isTrashView ? 'trash' : (searchResults ? 'search' : 'normal');
+
+    useEffect(() => {
+        clearAllFilters();
         setFilterMenuAnchor(null);
         setActiveFilterMenu(null);
-    }, [currentPath]);
+    }, [currentMode, clearAllFilters]);
 
     // Intelligent distribution tracking
     const lastPanelWidthRef = useRef(0);
@@ -385,6 +396,9 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
 
         const onScroll = () => {
             headerScroll.scrollLeft = scrollEl.scrollLeft;
+            if (filterScrollRef.current) {
+                filterScrollRef.current.scrollLeft = scrollEl.scrollLeft;
+            }
         };
 
         scrollEl.addEventListener('scroll', onScroll, { passive: true });
@@ -576,6 +590,61 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
                             panelRef={panelRef}
                             selected={selected}
                         />
+                    </div>
+                )}
+
+                {isFiltered && (
+                    <div className={cx("active-filters-scroll-wrapper", viewMode)} ref={filterScrollRef}>
+                        <div className={cx("active-filters-bar", viewMode)}>
+                            <div className="active-filters-info">
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
+                                    <span className="active-filters-label">
+                                        <Search size={14} />
+                                        {t('active_filters')}
+                                    </span>
+                                    <div className="active-filters-pills">
+                                        {extensionFilter && (
+                                            <span className="filter-pill">
+                                                {t('type')}: {extensionFilter.size === 0 ? `(${t('none')})` :
+                                                    extensionFilter.size > 3 ? `${extensionFilter.size} ${t('types' as any) || 'types'}` :
+                                                        Array.from(extensionFilter).map(ext => ext ? ext.toUpperCase() : `(${t('none_fem')})`).join(', ')}
+                                            </span>
+                                        )}
+                                        {sizeFilter && (
+                                            <span className="filter-pill">
+                                                {t('size')}: {sizeFilter.size === 0 ? `(${t('none')})` :
+                                                    sizeFilter.size > 2 ? `${sizeFilter.size} ${t('categories' as any) || 'categories'}` :
+                                                        Array.from(sizeFilter).map(s => t(SIZE_CATEGORIES[s].key as any)).join(', ')}
+                                            </span>
+                                        )}
+                                        {dateFilter && (
+                                            <span className="filter-pill">
+                                                {t('date')}: {dateFilter.size === 0 ? `(${t('none')})` :
+                                                    dateFilter.size > 2 ? `${dateFilter.size} ${t('periods' as any) || 'periods'}` :
+                                                        Array.from(dateFilter).map(d => t(d as any)).join(', ')}
+                                            </span>
+                                        )}
+                                        {nameFilter && <span className="filter-pill">{t('name')}: {nameFilter}</span>}
+                                        {locationFilter && <span className="filter-pill">{t('location')}: {locationFilter}</span>}
+                                        {deletedDateFilter && (
+                                            <span className="filter-pill">
+                                                {t('deleted_date')}: {deletedDateFilter.size === 0 ? `(${t('none')})` :
+                                                    deletedDateFilter.size > 2 ? `${deletedDateFilter.size} ${t('periods' as any) || 'periods'}` :
+                                                        Array.from(deletedDateFilter).map(d => t(d as any)).join(', ')}
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+                                <button 
+                                    className="clear-filters-x-btn" 
+                                    onClick={clearAllFilters} 
+                                    data-tooltip={t('remove_all_filters' as any)}
+                                    data-tooltip-pos="left"
+                                >
+                                    <X size={14} />
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 )}
 

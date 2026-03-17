@@ -159,66 +159,6 @@ export const ConflictDialog: React.FC<ConflictDialogProps> = ({ conflicts, onRes
                     </button>
                 </div>
             </div>
-
-            <style>{`
-                .conflict-comparison {
-                    display: flex;
-                    align-items: center;
-                    gap: 1rem;
-                }
-                .conflict-card {
-                    flex: 1;
-                    padding: 1rem;
-                    background: var(--surface-secondary);
-                    border: 1px solid var(--border-color);
-                    border-radius: 0.5rem;
-                    display: flex;
-                    flex-direction: column;
-                    gap: 0.5rem;
-                }
-                .conflict-card.highlighted {
-                    border-color: var(--accent-color);
-                    background: color-mix(in srgb, var(--accent-color), transparent 95%);
-                }
-                .conflict-card-label {
-                    font-size: 0.75rem;
-                    font-weight: 600;
-                    opacity: 0.6;
-                    text-transform: uppercase;
-                }
-                .conflict-file-info {
-                    display: flex;
-                    gap: 1rem;
-                    align-items: flex-start;
-                }
-                .conflict-details {
-                    display: flex;
-                    flex-direction: column;
-                    min-width: 0;
-                }
-                .conflict-name {
-                    font-weight: 600;
-                    font-size: 0.85rem;
-                    word-break: break-all;
-                    margin-bottom: 2px;
-                }
-                .conflict-info-grid {
-                    display: grid;
-                    grid-template-columns: max-content 1fr;
-                    gap: 0.25rem 0.75rem;
-                    margin-top: 0.5rem;
-                    align-items: baseline;
-                }
-                .conflict-info-label {
-                    font-size: 0.75rem;
-                    opacity: 0.6;
-                }
-                .conflict-info-value {
-                    font-size: 0.8125rem;
-                    word-break: break-all;
-                    font-weight: 500;
-                }
-            `}</style>
         </div>
     );
 };
