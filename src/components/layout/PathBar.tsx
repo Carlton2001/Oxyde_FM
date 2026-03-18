@@ -300,10 +300,14 @@ export const PathBar: React.FC<PathBarProps> = ({ path, onNavigate, className, i
 
     const scrollToLastItem = useCallback(() => {
         if (scrollRef.current) {
-            const { scrollWidth, clientWidth } = scrollRef.current;
-            setHasOverflow(scrollWidth > clientWidth);
-            // Always scroll to end to ensure last item is visible
-            scrollRef.current.scrollLeft = scrollRef.current.scrollWidth;
+            // Use requestAnimationFrame to ensure the browser has finished layout
+            requestAnimationFrame(() => {
+                if (!scrollRef.current) return;
+                const { scrollWidth, clientWidth } = scrollRef.current;
+                setHasOverflow(scrollWidth > clientWidth);
+                // Force scroll to the extreme right
+                scrollRef.current.scrollLeft = scrollRef.current.scrollWidth;
+            });
         }
     }, []);
 
@@ -311,13 +315,29 @@ export const PathBar: React.FC<PathBarProps> = ({ path, onNavigate, className, i
     useEffect(() => {
         scrollToLastItem();
         
-        // Small delay to ensure items are rendered and measured correctly
-        const timer = setTimeout(scrollToLastItem, 10);
+        // Immediate and delayed triggers to handle both DOM changes and CSS transitions (0.15s)
+        const timer1 = setTimeout(scrollToLastItem, 10);
+        const timer2 = setTimeout(scrollToLastItem, 200);
 
         window.addEventListener('resize', scrollToLastItem);
+        
+        // Also observe the element size itself, because TopBar actions appearing 
+        // will change the pathbar width without a window resize event.
+        let observer: ResizeObserver | null = null;
+        if (scrollRef.current) {
+            observer = new ResizeObserver(() => {
+                scrollToLastItem();
+                // Double check after a small delay to handle parent transitions
+                setTimeout(scrollToLastItem, 160);
+            });
+            observer.observe(scrollRef.current);
+        }
+
         return () => {
             window.removeEventListener('resize', scrollToLastItem);
-            clearTimeout(timer);
+            clearTimeout(timer1);
+            clearTimeout(timer2);
+            if (observer) observer.disconnect();
         };
     }, [path, scrollToLastItem]);
 
