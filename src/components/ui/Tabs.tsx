@@ -261,14 +261,14 @@ export const Tabs: React.FC<TabsProps> = ({
 
     // Use ResizeObserver to keep active tab visible when the bar resizes
     React.useEffect(() => {
-        if (!scrollRef.current) return;
+        if (!wrapperRef.current) return;
 
         const observer = new ResizeObserver(() => {
             scrollToActiveTab();
             checkScroll();
         });
 
-        observer.observe(scrollRef.current);
+        observer.observe(wrapperRef.current);
         return () => observer.disconnect();
     }, [scrollToActiveTab]);
 
@@ -479,6 +479,7 @@ export const Tabs: React.FC<TabsProps> = ({
 
             <div className="tab-search-container">
                 <SearchBox
+                    autoExpand={true}
                     query={searchQuery}
                     placeholder={t('search') + "..."}
                     isSearching={isSearching}

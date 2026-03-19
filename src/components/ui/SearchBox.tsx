@@ -1,5 +1,6 @@
 import React from 'react';
 import { Search, X, Loader2 } from 'lucide-react';
+import cx from 'classnames';
 import './SearchBox.css';
 
 interface SearchBoxProps {
@@ -13,6 +14,8 @@ interface SearchBoxProps {
     searchTitle?: string;
     stopTitle?: string;
     onCancel?: () => void;
+    autoExpand?: boolean;
+    className?: string;
 }
 
 export const SearchBox: React.FC<SearchBoxProps> = ({
@@ -25,8 +28,13 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
     clearTitle = 'Clear',
     searchTitle = 'Search',
     stopTitle = 'Stop',
-    onCancel
+    onCancel,
+    autoExpand = false,
+    className
 }) => {
+    const [isFocused, setIsFocused] = React.useState(false);
+    const inputRef = React.useRef<HTMLInputElement>(null);
+
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === 'Enter') {
             e.preventDefault();
@@ -38,18 +46,26 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
     };
 
     return (
-        <div className="search-box">
+        <div className={cx("search-box", className, { 
+            "auto-expand": autoExpand, 
+            "focused": isFocused,
+            "has-text": !!query
+        })}>
             <input
+                ref={inputRef}
                 type="text"
                 placeholder={placeholder}
                 value={query}
                 onChange={(e) => onChange(e.target.value)}
                 onKeyDown={handleKeyDown}
+                onFocus={() => setIsFocused(true)}
+                onBlur={() => setIsFocused(false)}
             />
             <div className="search-actions">
                 {isSearching ? (
                     <button
                         className="search-stop-btn"
+                        onMouseDown={(e) => e.preventDefault()}
                         onClick={(e) => {
                             e.stopPropagation();
                             onCancel?.();
@@ -64,6 +80,7 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                         {query && (
                             <button
                                 className="clear-search-btn"
+                                onMouseDown={(e) => e.preventDefault()}
                                 onClick={onClear}
                                 data-tooltip={clearTitle}
                             >
@@ -72,7 +89,21 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                         )}
                         <button
                             className="search-submit-btn"
-                            onClick={onSubmit}
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                if (autoExpand) {
+                                    if (!isFocused && !query) {
+                                        inputRef.current?.focus();
+                                    } else if (query) {
+                                        onSubmit();
+                                    } else {
+                                        inputRef.current?.blur();
+                                    }
+                                } else {
+                                    onSubmit();
+                                }
+                            }}
                             data-tooltip={searchTitle}
                         >
                             <Search size={14} />

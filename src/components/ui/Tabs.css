@@ -14,12 +14,10 @@
 
 .tab-search-container {
     margin-left: auto;
-    width: 9.17rem;
-    max-width: 40%;
     display: flex;
     align-items: center;
     margin-right: 0.5rem;
-    /* Removed padding-bottom to ensure perfect centering */
+    min-width: 0;
 }
 
 .tab-search-container .search-box {

@@ -63,10 +63,25 @@ export const useGlobalShortcuts = (context: ActionContext, tabs: any[], activeTa
             parts.push(key);
             const combo = parts.join('+');
 
-            // 3. Block unwanted shortcuts
-            if (combo === 'Ctrl+N' || combo === 'Ctrl+F') {
+            // 3. Specialized shortcuts
+            if (combo === 'Ctrl+N') {
                 e.preventDefault();
                 e.stopPropagation();
+                return;
+            }
+
+            if (combo === 'Ctrl+F') {
+                e.preventDefault();
+                e.stopPropagation();
+                // Find the active search input:
+                // 1. In the active panel (Dual Panel Mode)
+                // 2. In the tabs bar (Standard Mode)
+                const selector = '.panel.active .search-box input, .panel.standard .search-box input, .tabs-wrapper .search-box input';
+                const searchInput = document.querySelector(selector) as HTMLInputElement;
+                if (searchInput) {
+                    searchInput.focus();
+                    searchInput.select();
+                }
                 return;
             }
 

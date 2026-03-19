@@ -99,7 +99,6 @@ export const FilePanelHeader: React.FC<FilePanelHeaderProps> = React.memo(({
         );
     };
 
-    const [isSearchFocused, setIsSearchFocused] = React.useState(false);
 
     return (
         <div className="panel-header" ref={headerRef}>
@@ -145,14 +144,11 @@ export const FilePanelHeader: React.FC<FilePanelHeaderProps> = React.memo(({
             )}
 
             {showSearch && (
-                <div
-                    className={cx("search-module", { narrow: isNarrow, focused: isSearchFocused })}
-                    onFocus={() => setIsSearchFocused(true)}
-                    onBlur={() => setIsSearchFocused(false)}
-                >
+                <div className={cx("search-module", { narrow: isNarrow })}>
                     <SearchBox
+                        autoExpand={true}
                         query={searchQuery}
-                        placeholder={isNarrow && !isSearchFocused ? "" : (t('search') + "...")}
+                        placeholder={isNarrow ? "" : (t('search') + "...")}
                         isSearching={isSearching}
                         onChange={onQueryChange}
                         onSubmit={onSearch}

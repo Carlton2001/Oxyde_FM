@@ -277,6 +277,7 @@ export const DualPanelLayout: React.FC<DualPanelLayoutProps> = ({
                 });
                 handleDragStart(panelId, selectedFiles.length > 0 ? selectedFiles : [entry]);
             } else {
+                handleSelect(panelId, entry.path, false, false);
                 handleDragStart(panelId, [entry]);
             }
         };
