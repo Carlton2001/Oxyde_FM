@@ -11,12 +11,13 @@ import { ContextMenuView } from './context-menu/ContextMenuView';
 
 interface FavoritesMenuProps {
     onNavigate: (path: string) => void;
+    onOpenNewTab?: (path: string) => void;
     currentPath?: string;
     buttonClassName?: string;
     compact?: boolean;
 }
 
-export const FavoritesMenu: React.FC<FavoritesMenuProps> = ({ onNavigate, currentPath, buttonClassName = "drive-chip favorites-btn", compact }) => {
+export const FavoritesMenu: React.FC<FavoritesMenuProps> = ({ onNavigate, onOpenNewTab, currentPath, buttonClassName = "drive-chip favorites-btn", compact }) => {
     const { t } = useApp();
     const [isOpen, setIsOpen] = useState(false);
     const { favorites, handleRemoveFavorite: removeFav } = useFavorites();
@@ -65,6 +66,16 @@ export const FavoritesMenu: React.FC<FavoritesMenuProps> = ({ onNavigate, curren
         onNavigate(path);
     };
 
+    const handleMouseDownItem = (path: string, e: React.MouseEvent) => {
+        if (e.button === 1) { // Middle click
+            e.preventDefault();
+            e.stopPropagation();
+            setIsOpen(false);
+            setContextMenu(null);
+            onOpenNewTab?.(path);
+        }
+    };
+
     const handleContextMenuRow = (path: string, e: React.MouseEvent) => {
         e.preventDefault();
         e.stopPropagation();
@@ -90,6 +101,14 @@ export const FavoritesMenu: React.FC<FavoritesMenuProps> = ({ onNavigate, curren
                 ref={buttonRef}
                 className={cx(buttonClassName, { active: isOpen, compact: compact })}
                 onClick={handleToggle}
+                onMouseDown={(e) => {
+                    if (e.button === 1) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        // Potentially add quick navigate if needed?
+                        // For now keep button toggle as main action
+                    }
+                }}
                 data-tooltip={t('favorites')}
                 data-tooltip-pos="right"
             >
@@ -111,6 +130,7 @@ export const FavoritesMenu: React.FC<FavoritesMenuProps> = ({ onNavigate, curren
                             key={fav.path}
                             className={cx("menu-item", { active: currentPath === fav.path })}
                             onClick={(e) => handleSelect(fav.path, e)}
+                            onMouseDown={(e) => handleMouseDownItem(fav.path, e)}
                             onContextMenu={(e) => handleContextMenuRow(fav.path, e)}
                         >
                             <Star size="0.875rem" className="file-icon folder" fill="currentColor" fillOpacity={0.2} />

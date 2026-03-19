@@ -83,23 +83,35 @@ export const TabsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         let index: number | undefined;
 
         if (typeof optionsOrId === 'string') {
-            // id = optionsOrId; // Ignored
             background = backgroundArg;
         } else if (typeof optionsOrId === 'object') {
-            // id = optionsOrId.id; // Ignored
             background = optionsOrId.background;
             index = optionsOrId.index;
         } else {
             background = backgroundArg;
         }
 
+        // 1. Create the tab first
         await createTab(activePanelId as PanelId, path, background);
 
+        // 2. If we need to position it somewhere specific, we MUST get the fresh length
+        // from a direct session fetch, as the 'tabs' state from the context is stale here.
         if (typeof index === 'number') {
-            // New tab is appended at the end. Source index is currentTabs.length.
-            await reorderTabs(currentTabs.length, index);
+            try {
+                const freshSession = await invoke<SessionState>('get_session_state');
+                const pId = activePanelId === 'left' ? 'left_panel' : 'right_panel';
+                const freshTabs = freshSession[pId].tabs;
+                
+                // The new tab is always at the last position in Rust
+                const sourceIndex = freshTabs.length - 1;
+                if (sourceIndex !== index && sourceIndex >= 0) {
+                    await invoke('reorder_tabs', { sourceIndex, targetIndex: index });
+                }
+            } catch (e) {
+                console.error("Failed to reorder new tab after creation:", e);
+            }
         }
-    }, [createTab, activePanelId, currentTabs.length, reorderTabs]);
+    }, [createTab, activePanelId]);
 
     const closeTab = useCallback((id: string, _newActiveId?: string) => {
         rustCloseTab(id);

@@ -3264,7 +3264,7 @@ dependencies = [
 
 [[package]]
 name = "oxyde-fm"
-version = "1.1.1"
+version = "1.1.2"
 dependencies = [
  "base64 0.22.1",
  "blake3",

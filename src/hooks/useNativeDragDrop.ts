@@ -200,19 +200,21 @@ export const useNativeDragDrop = ({
             if (!dragStateRef.current) return;
 
             const targetPath = dragTargetPathRef.current;
-            if (targetPath) {
+            if (targetPath && targetPath !== '__TABS__') {
                 const { leftPanel, rightPanel, activePanelId } = stateRef.current;
-                // If we have a target path (folder, tree, panel), we use it.
-                // We need a source path to help the handler decide the fallback folder if needed
                 const sourcePanelPath = activePanelId === 'left' ? leftPanel.path : rightPanel.path;
                 handlerRef.current.handleFileDrop(e as any, targetPath, sourcePanelPath);
             }
 
-            setDragState(null);
-            setDragTargetPath(null);
-            setDragOverPath(null);
-            setIsNativeActive(false);
-            nativeStartedRef.current = false;
+            // Small delay to allow local onMouseUp handlers (like Tabs.tsx) to catch the event
+            // before we wipe the dragState globally.
+            setTimeout(() => {
+                setDragState(null);
+                setDragTargetPath(null);
+                setDragOverPath(null);
+                setIsNativeActive(false);
+                nativeStartedRef.current = false;
+            }, 50);
         };
 
         const handleMouseMove = (e: MouseEvent) => {

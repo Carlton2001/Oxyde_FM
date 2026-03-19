@@ -125,8 +125,17 @@ export const PathBar: React.FC<PathBarProps> = ({ path, onNavigate, className, i
         await fetchSubDirectories(folderPath);
     }, [menuOpen, fetchSubDirectories]);
 
+    const [isNavigating, setIsNavigating] = useState(false);
+
     const handleSubmit = async () => {
-        let trimmed = inputPath.trim();
+        if (isNavigating) return;
+        
+        // Use the ref directly to be sure we have the absolute latest value from the DOM,
+        // avoiding race conditions with rapid keystrokes after a paste.
+        const currentInputValue = inputRef.current?.value || inputPath;
+        
+        // Strip all quotes and perform a clean trim
+        let trimmed = currentInputValue.replace(/"/g, '').trim();
 
         // Handle friendly name mappings back to technical paths
         const networkTerm = t ? t('network_vincinity' as any) : 'Network';
@@ -138,7 +147,11 @@ export const PathBar: React.FC<PathBarProps> = ({ path, onNavigate, className, i
             trimmed = 'trash://';
         }
 
-        if (trimmed === path) {
+        // Quick exit if path hasn't changed (normalized comparison)
+        const normalizedInput = trimmed.replace(/[\\/]+$/, '').toLowerCase();
+        const normalizedCurrent = path.replace(/[\\/]+$/, '').toLowerCase();
+        
+        if (normalizedInput === normalizedCurrent && trimmed !== '__network_vincinity__' && !trimmed.startsWith('search://')) {
             setIsEditing(false);
             return;
         }
@@ -167,6 +180,7 @@ export const PathBar: React.FC<PathBarProps> = ({ path, onNavigate, className, i
             return;
         }
 
+        setIsNavigating(true);
         try {
             // Validate existence by listing
             await invoke('list_dir', { panelId, path: trimmed });
@@ -178,8 +192,6 @@ export const PathBar: React.FC<PathBarProps> = ({ path, onNavigate, className, i
             if (inputRef.current && inputRef.current.parentElement) {
                 const container = inputRef.current.parentElement;
 
-                // Save original styles if needed, or just let React reset them on re-render?
-                // Direct DOM manipulation is fine here for transient effect.
                 container.style.borderColor = '#ef4444'; // Red
                 container.style.boxShadow = '0 0 0 1px #ef4444'; // Red ring
 
@@ -192,17 +204,22 @@ export const PathBar: React.FC<PathBarProps> = ({ path, onNavigate, className, i
 
                 // Revert after short delay
                 setTimeout(() => {
-                    container.style.borderColor = '';
-                    container.style.boxShadow = '';
+                    if (container) {
+                        container.style.borderColor = '';
+                        container.style.boxShadow = '';
+                    }
                     setInputPath(path); // Revert to valid path
                     setIsEditing(false);
                 }, 1000);
             }
+        } finally {
+            setIsNavigating(false);
         }
     };
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === 'Enter') {
+            e.preventDefault();
             handleSubmit();
         } else if (e.key === 'Escape') {
             setInputPath(path);
@@ -378,15 +395,15 @@ export const PathBar: React.FC<PathBarProps> = ({ path, onNavigate, className, i
         >
 
             {isEditing ? (
-                <input
-                    ref={inputRef}
-                    className="path-input"
-                    value={inputPath}
-                    onChange={(e) => setInputPath(e.target.value)}
-                    onBlur={handleSubmit}
-                    onKeyDown={handleKeyDown}
-                    autoFocus
-                />
+                    <input
+                        ref={inputRef}
+                        className="path-input"
+                        value={inputPath}
+                        onChange={(e) => setInputPath(e.target.value)}
+                        onBlur={handleSubmit}
+                        onKeyDown={handleKeyDown}
+                        autoFocus
+                    />
             ) : (
                 <>
                     {isTrashPath ? (

@@ -228,12 +228,12 @@
 }
 
 .active-filters-bar {
-    display: flex;
+    display: flex; /* Default flex for non-details modes */
     align-items: center;
     justify-content: space-between;
-    padding: 0 0.75rem;
-    height: 2rem;
-    background: color-mix(in srgb, var(--surface-secondary), transparent 30%);
+    padding: 0;
+    height: 1.85rem;
+    background: transparent; /* No background on the full row */
     border-bottom: 1px solid var(--border-color);
     box-sizing: border-box;
     position: relative;
@@ -247,32 +247,23 @@
     display: grid !important;
     grid-template-columns: var(--grid-template);
     width: max-content;
-    min-width: max-content;
+    min-width: 100%;
     padding: 0;
-}
-
-/* Match .group-header.details .group-header-content */
-.active-filters-bar.details .active-filters-info {
-    grid-column: 1 / -1;
-    padding: 0 0.75rem;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    width: 100%;
-    box-sizing: border-box;
-    cursor: default;
-}
-
-.active-filters-bar.grid {
-    width: 100%;
+    border-bottom: none; /* Let the info block handle its border if needed or keep it minimal */
 }
 
 .active-filters-info {
+    grid-column: 2 / -1; /* Align starting with the Name column */
     display: flex;
     align-items: center;
-    gap: 0.625rem;
-    min-width: 0;
-    flex: 1;
+    justify-content: space-between;
+    height: 100%;
+    padding: 0 0.75rem;
+    background: color-mix(in srgb, var(--surface-secondary), transparent 30%);
+    backdrop-filter: blur(8px);
+    border-bottom: 2px solid var(--border-color); /* Slightly thicker bottom border for depth */
+    border-left: 1px solid var(--border-color); /* Vertical separator for the "square" area */
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .active-filters-label {
@@ -702,19 +693,13 @@
     left: 0;
     top: 0;
     height: 2rem;
-    width: 0.5rem;
-    /* Matches .file-header padding-left */
+    width: 0.5rem; /* STRICT 0.5rem WIDTH */
     z-index: 20;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: background-color 0.2s;
-    background-color: var(--bg-color);
-}
-
-.header-selection-gutter.with-checkbox {
-    width: 2rem;
-    /* 0.5rem padding + 1.25rem checkbox + buffer */
+    transition: background-color 0.1s;
+    background-color: transparent;
 }
 
 .header-selection-gutter:hover {

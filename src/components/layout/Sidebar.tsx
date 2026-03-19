@@ -225,6 +225,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <div className="minimized-actions">
                     <FavoritesMenu
                         onNavigate={onNavigate}
+                        onOpenNewTab={onOpenNewTab}
                         currentPath={currentPath}
                         buttonClassName="drive-icon-btn favorites-btn"
                     />

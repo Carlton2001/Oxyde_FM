@@ -116,7 +116,26 @@ export const Tabs: React.FC<TabsProps> = ({
             }
         };
 
-        const handleGlobalMouseUp = () => {
+        const handleGlobalMouseUp = (e: MouseEvent) => {
+            // Handle File Drop (Simulated DnD)
+            if (isDraggingFolders && dragState && onTabDrop) {
+                // Determine if we are dropping on the tabs bar
+                if (wrapperRef.current) {
+                    const rect = wrapperRef.current.getBoundingClientRect();
+                    const isOverTabs = e.clientX >= rect.left && e.clientX <= rect.right &&
+                                     e.clientY >= rect.top && e.clientY <= rect.bottom;
+                    
+                    if (isOverTabs) {
+                        const folders = dragState.files.filter(f => f.is_dir);
+                        if (folders.length > 0) {
+                            onTabDrop(folders, fileDropIndex !== null ? fileDropIndex : undefined);
+                        }
+                    }
+                }
+                setFileDropIndex(null);
+            }
+
+            // Normal tab reorder drop
             if (draggingId && dropTargetId && draggingId !== dropTargetId && !isOutOfBounds) {
                 const sourceIndex = tabs.findIndex(t => t.id === draggingId);
                 const targetIndex = tabs.findIndex(t => t.id === dropTargetId);
@@ -131,7 +150,7 @@ export const Tabs: React.FC<TabsProps> = ({
             setMouseDownInfo(null);
         };
 
-        if (draggingId || mouseDownInfo) {
+        if (draggingId || mouseDownInfo || isDraggingFolders) {
             window.addEventListener('mousemove', handleGlobalMouseMove);
             window.addEventListener('mouseup', handleGlobalMouseUp);
         }
@@ -139,7 +158,7 @@ export const Tabs: React.FC<TabsProps> = ({
             window.removeEventListener('mousemove', handleGlobalMouseMove);
             window.removeEventListener('mouseup', handleGlobalMouseUp);
         };
-    }, [draggingId, dropTargetId, tabs, reorderTabs, isOutOfBounds, mouseDownInfo]);
+    }, [draggingId, dropTargetId, tabs, reorderTabs, isOutOfBounds, mouseDownInfo, isDraggingFolders, dragState, onTabDrop, fileDropIndex]);
 
     const onTabMouseDown = (e: React.MouseEvent, id: string) => {
         if (e.button === 0) {
@@ -229,12 +248,29 @@ export const Tabs: React.FC<TabsProps> = ({
         return () => wrapper.removeEventListener('wheel', handleWheel);
     }, [handleWheel]);
 
-    React.useEffect(() => {
+    const scrollToActiveTab = React.useCallback(() => {
         const activeTab = document.getElementById(`tab-${activeTabId}`);
         if (activeTab && scrollRef.current) {
             activeTab.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
         }
     }, [activeTabId]);
+
+    React.useEffect(() => {
+        scrollToActiveTab();
+    }, [activeTabId, scrollToActiveTab]);
+
+    // Use ResizeObserver to keep active tab visible when the bar resizes
+    React.useEffect(() => {
+        if (!scrollRef.current) return;
+
+        const observer = new ResizeObserver(() => {
+            scrollToActiveTab();
+            checkScroll();
+        });
+
+        observer.observe(scrollRef.current);
+        return () => observer.disconnect();
+    }, [scrollToActiveTab]);
 
     const handleCreateTab = (id: string) => {
         addTab('C:\\', { id });
@@ -313,20 +349,6 @@ export const Tabs: React.FC<TabsProps> = ({
             onMouseMove={handleFileDragMove}
             onMouseLeave={() => {
                 if (isDraggingFolders) setFileDropIndex(null);
-            }}
-            onMouseUp={(e) => {
-                // Handle File Drop (Simulated DnD)
-                // Use isDraggingFolders check
-                if (isDraggingFolders && dragState && onTabDrop) {
-                    e.preventDefault();
-                    // Pass the calculated drop index
-                    const folders = dragState.files.filter(f => f.is_dir);
-                    if (folders.length > 0) {
-                        onTabDrop(folders, fileDropIndex !== null ? fileDropIndex : undefined);
-                    }
-                    setFileDropIndex(null);
-                    return;
-                }
             }}
         >
             {showLeftScroll && (
