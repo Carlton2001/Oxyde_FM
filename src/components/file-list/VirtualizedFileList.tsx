@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef, useImperativeHandle, useCa
 import { List, Grid, RowComponentProps, CellComponentProps } from 'react-window';
 import { AutoSizer } from 'react-virtualized-auto-sizer';
 import cx from 'classnames';
-import { Check, Loader2, ChevronDown, ChevronRight, Ban } from 'lucide-react';
+import { Check, Loader2, ChevronDown, ChevronRight, Ban, X, Search } from 'lucide-react';
 
 import { FileEntry, ViewMode, ColumnWidths, DateFormat } from '../../types';
 import { TFunc } from '../../i18n';
@@ -12,6 +12,21 @@ import { RenameInput } from './RenameInput';
 import { getFileTypeString } from '../../utils/format';
 import { getColumnMode, getVisibleColumns } from '../../config/columnDefinitions';
 import { getDateCategoryForFile, DATE_CATEGORIES, DateCategoryKey } from './DateFilterMenu';
+import { SIZE_CATEGORIES } from './SizeFilterMenu';
+
+// --- Error Boundary for the virtualized list ---
+class ErrorBoundary extends React.Component<{ children: React.ReactNode; fallback: React.ReactNode }, { hasError: boolean }> {
+    constructor(props: any) {
+        super(props);
+        this.state = { hasError: false };
+    }
+    static getDerivedStateFromError() { return { hasError: true }; }
+    componentDidCatch(error: any, errorInfo: any) { console.error("VirtualizedList Crash:", error, errorInfo); }
+    render() {
+        if (this.state.hasError) return this.props.fallback;
+        return this.props.children;
+    }
+}
 
 interface VirtualizedFileListProps {
     files: FileEntry[];
@@ -47,6 +62,7 @@ interface VirtualizedFileListProps {
     initialScrollOffset?: number;
     updateCurrentScroll?: (offset: number) => void;
     isProtected?: boolean;
+    activeFilters?: ActiveFilters;
 }
 
 export interface VirtualizedFileListHandle {
@@ -82,253 +98,64 @@ interface SharedItemProps {
     columnCount?: number;
     viewMode: ViewMode;
     rootFontSize: number;
-    colWidths?: any;
-    showCheckboxes: boolean;
     isNetworkView?: boolean;
+    activeFilters?: ActiveFilters;
+    showCheckboxes: boolean;
 }
 
-// --- Grouped item types ---
-type GroupHeaderItem = { type: 'header'; category: DateCategoryKey; count: number };
-type GroupFileItem = { type: 'file'; entry: FileEntry };
-type GroupedItem = GroupHeaderItem | GroupFileItem;
-
-// Category order for display
-const CATEGORY_ORDER: DateCategoryKey[] = ['today', 'yesterday', 'this_week', 'last_week', 'this_month', 'older'];
-
-// Memoized Details Row Component
-const DetailsRow = React.memo((props: RowComponentProps<SharedItemProps>) => {
-    const { index, style, ...sharedProps } = props;
-    const {
-        entries, isTrashView, isNetworkView, searchResults,
-        t, dateFormat, getIcon, showHistogram, totalItemsSize, showCheckboxes,
-        renameText, onRenameTextChange, onRenameCommit, onRenameCancel
-    } = sharedProps;
-
-    const mode = getColumnMode(!!isTrashView, !!searchResults, isNetworkView);
-    const visibleCols = getVisibleColumns(mode);
-
-    const entry = entries[index];
-    if (!entry) return null;
-
-    const { isSelected, isRenaming, handlers, itemClassName, tooltipText } = useFileItemState({
-        ...sharedProps,
-        entry
-    });
-
-    const isDragOver = sharedProps.dragOverPath === entry.path;
-
-    // Fixed width based on the calculated column sum
-    const adjustedStyle = {
-        ...style,
-        width: 'max-content',
-        minWidth: 'max-content'
-    };
-
-    return (
-        <div
-            className={cx(itemClassName, "details", {
-                "drag-over": isDragOver
-            })}
-            style={adjustedStyle}
-            data-path={entry.path}
-            data-is-dir={entry.is_dir ? 'true' : 'false'}
-            onClick={handlers.onClick}
-            onDoubleClick={handlers.onDoubleClick}
-            onContextMenu={handlers.onContextMenu}
-            draggable={!isRenaming}
-            onDragStart={handlers.onDragStart}
-            onMouseDown={handlers.onMouseDown}
-            data-tooltip={tooltipText}
-            data-tooltip-multiline
-            data-tooltip-image-path={entry.path}
-        >
-            {showHistogram && (
-                <div
-                    className="size-histogram-bar"
-                    style={{ width: `${(entry.size / totalItemsSize) * 100}%` }}
-                />
-            )}
-
-            {visibleCols.map(col => {
-                if (col.key === 'name') {
-                    return (
-                        <div key={col.key} className="file-name-group">
-                            {showCheckboxes && (
-                                <div className="item-checkbox" onClick={handlers.onCheckboxClick}>
-                                    <div className={cx("checkbox-indicator", { checked: isSelected })}>
-                                        {isSelected && <Check size={10} strokeWidth={4} />}
-                                    </div>
-                                </div>
-                            )}
-                            <div className="file-icon-small">
-                                {getIcon(entry)}
-                            </div>
-                            <div className="file-name-container">
-                                {isRenaming ? (
-                                    <RenameInput
-                                        renameText={renameText}
-                                        onRenameTextChange={onRenameTextChange}
-                                        onRenameCommit={onRenameCommit}
-                                        onRenameCancel={onRenameCancel}
-                                    />
-                                ) : (
-                                    <span className="file-name">{entry.name}</span>
-                                )}
-                            </div>
-                        </div>
-                    );
-                }
-
-                return (
-                    <div key={col.key} className={col.cellClass} style={col.align === 'right' ? { textAlign: 'right' } : {}}>
-                        {col.renderCell(entry, { t, dateFormat })}
-                    </div>
-                );
-            })}
-        </div>
-    );
-});
-
-// Memoized Grid Item Component
-const GridCell = React.memo((props: CellComponentProps<SharedItemProps>) => {
-    const { columnIndex, rowIndex, style, ...sharedProps } = props;
-    const {
-        entries, renameText, showCheckboxes, getIcon,
-        onRenameTextChange, onRenameCommit, onRenameCancel,
-        columnCount = 1, rootFontSize, t
-    } = sharedProps;
-
-    const index = rowIndex * columnCount + columnIndex;
-    const entry = entries[index];
-
-    const { isSelected, isRenaming, handlers, itemClassName, tooltipText } = useFileItemState({
-        ...sharedProps,
-        entry: entry || ({} as FileEntry)
-    });
-
-    if (!entry) return null;
-
-    const isDragOver = sharedProps.dragOverPath === entry.path;
-
-    const gridGap = rootFontSize * 0.25;
-    const adjustedStyle = {
-        ...style,
-        width: parseFloat(String(style.width)) - gridGap,
-        height: parseFloat(String(style.height)) - gridGap,
-    };
-
-    return (
-        <div
-            className={cx(itemClassName, "grid", {
-                "drag-over": isDragOver,
-                "is-dir": entry.is_dir
-            })}
-            style={adjustedStyle}
-            data-path={entry.path}
-            data-is-dir={entry.is_dir ? 'true' : 'false'}
-            onClick={handlers.onClick}
-            onDoubleClick={handlers.onDoubleClick}
-            onContextMenu={handlers.onContextMenu}
-            draggable={!isRenaming}
-            onDragStart={handlers.onDragStart}
-            onMouseDown={handlers.onMouseDown}
-            data-tooltip={tooltipText}
-            data-tooltip-multiline
-            data-tooltip-image-path={entry.path}
-        >
-            <div className="grid-selection-overlay" />
-            <div className="grid-item-inner">
-                <div className="file-icon-large">
-                    {getIcon(entry, rootFontSize * 3)}
-                </div>
-                <div className="file-name-container">
-                    {isRenaming ? (
-                        <RenameInput
-                            renameText={renameText}
-                            onRenameTextChange={onRenameTextChange}
-                            onRenameCommit={onRenameCommit}
-                            onRenameCancel={onRenameCancel}
-                            className="rename-input grid-mode"
-                        />
-                    ) : (
-                        <>
-                            <span className="file-name">
-                                {!entry.is_dir && entry.name.lastIndexOf('.') > 0
-                                    ? entry.name.slice(0, entry.name.lastIndexOf('.'))
-                                    : entry.name}
-                            </span>
-                            <span className="file-extension">{getFileTypeString(entry, t)}</span>
-                        </>
-                    )}
-                </div>
-            </div>
-            {showCheckboxes && (
-                <div className="item-checkbox grid-checkbox" onClick={handlers.onCheckboxClick}>
-                    <div className={cx("checkbox-indicator", { checked: isSelected })}>
-                        {isSelected && <Check size={12} strokeWidth={3.5} />}
-                    </div>
-                </div>
-            )}
-        </div>
-    );
-});
-
-// --- Grouped Details Row (handles both headers and file items) ---
-interface GroupedSharedProps extends SharedItemProps {
-    groupedItems: GroupedItem[];
-    collapsedGroups: Set<DateCategoryKey>;
-    onToggleGroup: (category: DateCategoryKey) => void;
+export interface ActiveFilters {
+    extensions: Set<string>;
+    sizes: Set<string>;
+    date: Set<string>;
+    deletedDates: Set<string>;
+    name: string | null;
+    location: string | null;
+    onRemoveExtension: (ext: string) => void;
+    onRemoveSize: (size: any) => void;
+    onRemoveDate: (date: any) => void;
+    onRemoveDeletedDate: (date: any) => void;
+    onRemoveName: () => void;
+    onRemoveLocation: () => void;
+    onClearAll: () => void;
 }
 
-const GroupedDetailsRow = React.memo((props: RowComponentProps<GroupedSharedProps>) => {
-    const { index, style, ...sharedProps } = props;
-    const { groupedItems, collapsedGroups, onToggleGroup, t } = sharedProps;
+type GroupedItem =
+    | { type: 'filters' }
+    | { type: 'header'; category: DateCategoryKey; count: number }
+    | { type: 'file'; entry: FileEntry };
 
-    const item = groupedItems[index];
-    if (!item) return null;
+type GroupedGridRowItem =
+    | { type: 'filters' }
+    | { type: 'header'; category: DateCategoryKey; count: number }
+    | { type: 'grid-row'; entries: FileEntry[]; category: DateCategoryKey };
 
-    if (item.type === 'header') {
-        const isCollapsed = collapsedGroups.has(item.category);
-        const label = t(DATE_CATEGORIES[item.category] as any) || item.category;
-        return (
-            <div className="group-header details" style={{ ...style, width: 'max-content', minWidth: 'max-content' }} onClick={() => onToggleGroup(item.category)}>
-                <div className="group-header-content">
-                    {isCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
-                    <span className="group-header-label">{label}</span>
-                    <span className="group-header-count">{t('items_count' as any, { count: item.count })}</span>
-                </div>
-            </div>
-        );
-    }
+const CATEGORY_ORDER: DateCategoryKey[] = [
+    'today',
+    'yesterday',
+    'this_week',
+    'last_week',
+    'this_month',
+    'older'
+];
 
-    // File item — delegate to the standard DetailsRow logic
-    const entry = item.entry;
-    const {
-        isTrashView, isNetworkView, searchResults,
-        dateFormat, getIcon, showHistogram, totalItemsSize, showCheckboxes,
-        renameText, onRenameTextChange, onRenameCommit, onRenameCancel
-    } = sharedProps;
-
-    const mode = getColumnMode(!!isTrashView, !!searchResults, isNetworkView);
-    const visibleCols = getVisibleColumns(mode);
+// --- Standard Row sub-component for hook safety ---
+const DetailsRowContent = React.memo(({ entry, style, sharedProps }: { entry: FileEntry, style: React.CSSProperties, sharedProps: SharedItemProps }) => {
+    const { t, dateFormat, searchResults, isTrashView, isNetworkView, getIcon, showHistogram, totalItemsSize, showCheckboxes, renameText, onRenameTextChange, onRenameCommit, onRenameCancel } = sharedProps;
 
     const { isSelected, isRenaming, handlers, itemClassName, tooltipText } = useFileItemState({
         ...sharedProps,
-        entry
+        entry,
+        showCheckboxes
     });
 
     const isDragOver = sharedProps.dragOverPath === entry.path;
-
-    const adjustedStyle = {
-        ...style,
-        width: 'max-content',
-        minWidth: 'max-content'
-    };
+    const mode = getColumnMode(!!isTrashView, !!searchResults, isNetworkView);
+    const visibleCols = getVisibleColumns(mode);
 
     return (
         <div
             className={cx(itemClassName, "details", { "drag-over": isDragOver })}
-            style={adjustedStyle}
+            style={{ ...style, width: 'max-content', minWidth: 'max-content' }}
             data-path={entry.path}
             data-is-dir={entry.is_dir ? 'true' : 'false'}
             onClick={handlers.onClick}
@@ -378,59 +205,323 @@ const GroupedDetailsRow = React.memo((props: RowComponentProps<GroupedSharedProp
     );
 });
 
-// --- Grouped Grid: rendered as a flat scrollable list (no react-window Grid) ---
-interface GroupedGridSectionProps {
-    category: DateCategoryKey;
-    files: FileEntry[];
-    collapsed: boolean;
-    onToggle: (cat: DateCategoryKey) => void;
-    sharedProps: SharedItemProps;
-    columnCount: number;
-    columnWidth: number;
-    gridGap: number;
-    gridRowHeight: number;
-}
+const DetailsRow = React.memo((props: RowComponentProps<SharedItemProps>) => {
+    const { index, style, entries } = props;
+    const entry = entries[index];
+    if (!entry) return null;
+    return <DetailsRowContent entry={entry} style={style} sharedProps={props} />;
+});
 
-const GroupedGridSection = React.memo<GroupedGridSectionProps>(({
-    category, files, collapsed, onToggle, sharedProps, columnCount, columnWidth, gridGap, gridRowHeight
-}) => {
-    const { t } = sharedProps;
-    const label = t(DATE_CATEGORIES[category] as any) || category;
+// --- Grid Cell sub-component for hook safety ---
+const GridCellContent = React.memo(({ entry, style, sharedProps }: { entry: FileEntry, style: React.CSSProperties, sharedProps: SharedItemProps }) => {
+    const { getIcon, rootFontSize, t, renameText, onRenameTextChange, onRenameCommit, onRenameCancel, showCheckboxes } = sharedProps;
+
+    const { isSelected, isRenaming, handlers, itemClassName, tooltipText } = useFileItemState({
+        ...sharedProps,
+        entry,
+        showCheckboxes
+    });
+
+    const isDragOver = sharedProps.dragOverPath === entry.path;
+    const gridGap = rootFontSize * 0.25;
+    const adjustedStyle = {
+        ...style,
+        width: Math.max(0, (typeof style.width === 'number' ? style.width : parseFloat(String(style.width)) || 0) - gridGap),
+        height: Math.max(0, (typeof style.height === 'number' ? style.height : parseFloat(String(style.height)) || 0) - gridGap),
+    };
 
     return (
-        <div className="group-section grid">
-            <div className="group-header grid" onClick={() => onToggle(category)}>
-                <div className="group-header-content">
-                    {collapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
-                    <span className="group-header-label">{label}</span>
-                    <span className="group-header-count">{t('items_count' as any, { count: files.length })}</span>
+        <div
+            className={cx(itemClassName, "grid", {
+                "drag-over": isDragOver,
+                "is-dir": entry.is_dir
+            })}
+            style={adjustedStyle}
+            data-path={entry.path}
+            data-is-dir={entry.is_dir ? 'true' : 'false'}
+            onClick={handlers.onClick}
+            onDoubleClick={handlers.onDoubleClick}
+            onContextMenu={handlers.onContextMenu}
+            draggable={!isRenaming}
+            onDragStart={handlers.onDragStart}
+            onMouseDown={handlers.onMouseDown}
+            data-tooltip={tooltipText}
+            data-tooltip-multiline
+            data-tooltip-image-path={entry.path}
+        >
+            <div className="grid-selection-overlay" />
+            <div className="grid-item-inner">
+                <div className="file-icon-large">
+                    {getIcon(entry, rootFontSize * 3)}
+                </div>
+                <div className="file-name-container">
+                    {isRenaming ? (
+                        <RenameInput renameText={renameText} onRenameTextChange={onRenameTextChange} onRenameCommit={onRenameCommit} onRenameCancel={onRenameCancel} className="rename-input grid-mode" />
+                    ) : (
+                        <>
+                            <span className="file-name">
+                                {!entry.is_dir && entry.name.lastIndexOf('.') > 0 ? entry.name.slice(0, entry.name.lastIndexOf('.')) : entry.name}
+                            </span>
+                            <span className="file-extension">{getFileTypeString(entry, t)}</span>
+                        </>
+                    )}
                 </div>
             </div>
-            {!collapsed && (
-                <div className="group-grid-items" style={{
-                    display: 'grid',
-                    gridTemplateColumns: `repeat(${columnCount}, ${columnWidth}px)`,
-                    gap: `${gridGap}px`,
-                }}>
-                    {files.map(entry => (
-                        <GroupedGridItem key={entry.path} entry={entry} sharedProps={sharedProps} gridRowHeight={gridRowHeight} />
-                    ))}
+            {showCheckboxes && (
+                <div className="item-checkbox grid-checkbox" onClick={handlers.onCheckboxClick}>
+                    <div className={cx("checkbox-indicator", { checked: isSelected })}>
+                        {isSelected && <Check size={12} strokeWidth={3.5} />}
+                    </div>
                 </div>
             )}
         </div>
     );
 });
 
-const GroupedGridItem = React.memo<{ entry: FileEntry; sharedProps: SharedItemProps; gridRowHeight: number }>(({ entry, sharedProps, gridRowHeight }) => {
-    const {
-        renameText, showCheckboxes, getIcon,
-        onRenameTextChange, onRenameCommit, onRenameCancel,
-        rootFontSize, t
-    } = sharedProps;
+const GridCell = React.memo((props: CellComponentProps<SharedItemProps>) => {
+    const { columnIndex, rowIndex, style, entries, columnCount = 1 } = props;
+    const index = rowIndex * columnCount + columnIndex;
+    const entry = entries[index];
+    if (!entry) return null;
+    return <GridCellContent entry={entry} style={style} sharedProps={props} />;
+});
+
+// --- Grouped Details Row Components ---
+interface GroupedSharedProps extends SharedItemProps {
+    groupedItems: GroupedItem[];
+    collapsedGroups: Set<DateCategoryKey>;
+    onToggleGroup: (category: DateCategoryKey) => void;
+}
+
+const FiltersRow = React.memo(({ activeFilters, t, style }: { activeFilters: ActiveFilters; t: TFunc; style: React.CSSProperties }) => {
+    return (
+        <div style={style}>
+            <div className="group-header details is-filters" style={{ width: 'max-content', minWidth: 'max-content', height: '1.85rem' }}>
+                <div className="active-filters-info">
+                    <div className="active-filters-label">
+                        <Search size={14} />
+                        <span>{t('active_filters' as any) || 'Active filters'}</span>
+                    </div>
+                    <div className="active-filters-pills">
+                        {activeFilters.extensions.size > 0 && (
+                            <div className="filter-pill-group">
+                                {Array.from(activeFilters.extensions).map(ext => (
+                                    <span key={ext} className="filter-pill" onClick={() => activeFilters.onRemoveExtension(ext)}>
+                                        {t('type')}: {ext === '' ? `(${t('none_fem' as any)})` : ext.toUpperCase()} <X size={10} style={{ marginLeft: '4px' }} />
+                                    </span>
+                                ))}
+                            </div>
+                        )}
+                        {activeFilters.sizes.size > 0 && (
+                            <div className="filter-pill-group">
+                                {Array.from(activeFilters.sizes).map(size => {
+                                    const info = (SIZE_CATEGORIES as any)[size];
+                                    const label = info ? t(info.key as any) : size;
+                                    return (
+                                        <span key={size} className="filter-pill" onClick={() => activeFilters.onRemoveSize(size)}>
+                                            {t('size')}: {label} <X size={10} style={{ marginLeft: '4px' }} />
+                                        </span>
+                                    );
+                                })}
+                            </div>
+                        )}
+                        {activeFilters.deletedDates.size > 0 && (
+                            <div className="filter-pill-group">
+                                {Array.from(activeFilters.deletedDates).map(date => {
+                                    const key = (DATE_CATEGORIES as any)[date];
+                                    const label = key ? t(key as any) : date;
+                                    return (
+                                        <span key={date} className="filter-pill" onClick={() => activeFilters.onRemoveDeletedDate(date)}>
+                                            {t('deleted_date')}: {label} <X size={10} style={{ marginLeft: '4px' }} />
+                                        </span>
+                                    );
+                                })}
+                            </div>
+                        )}
+                        {activeFilters.date.size > 0 && (
+                            <div className="filter-pill-group">
+                                {Array.from(activeFilters.date).map(date => {
+                                    const key = (DATE_CATEGORIES as any)[date];
+                                    const label = key ? t(key as any) : date;
+                                    return (
+                                        <span key={date} className="filter-pill" onClick={() => activeFilters.onRemoveDate(date)}>
+                                            {t('date')}: {label} <X size={10} style={{ marginLeft: '4px' }} />
+                                        </span>
+                                    );
+                                })}
+                            </div>
+                        )}
+                        {activeFilters.name && (
+                            <div className="filter-pill-group">
+                                <span className="filter-pill" onClick={activeFilters.onRemoveName}>
+                                    {t('name')}: {activeFilters.name} <X size={10} style={{ marginLeft: '4px' }} />
+                                </span>
+                            </div>
+                        )}
+                        {activeFilters.location && (
+                            <div className="filter-pill-group">
+                                <span className="filter-pill" onClick={activeFilters.onRemoveLocation}>
+                                    {t('location')}: {activeFilters.location} <X size={10} style={{ marginLeft: '4px' }} />
+                                </span>
+                            </div>
+                        )}
+                    </div>
+                    <button className="clear-filters-x-btn" onClick={activeFilters.onClearAll} title={t('remove_all_filters' as any)}>
+                        <X size={14} />
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+});
+
+// --- Grouped File Row sub-component for hook safety ---
+const GroupedFileRow = React.memo(({ entry, style, sharedProps }: { entry: FileEntry, style: React.CSSProperties, sharedProps: GroupedSharedProps }) => {
+    const { t, dateFormat, searchResults, isTrashView, isNetworkView, getIcon, showHistogram, totalItemsSize, showCheckboxes, renameText, onRenameTextChange, onRenameCommit, onRenameCancel } = sharedProps;
 
     const { isSelected, isRenaming, handlers, itemClassName, tooltipText } = useFileItemState({
         ...sharedProps,
-        entry
+        entry,
+        showCheckboxes
+    });
+
+    const isDragOver = sharedProps.dragOverPath === entry.path;
+    const mode = getColumnMode(!!isTrashView, !!searchResults, isNetworkView);
+    const visibleCols = getVisibleColumns(mode);
+
+    return (
+        <div
+            className={cx(itemClassName, "details", { "drag-over": isDragOver })}
+            style={{ ...style, width: 'max-content', minWidth: 'max-content' }}
+            data-path={entry.path}
+            data-is-dir={entry.is_dir ? 'true' : 'false'}
+            onClick={handlers.onClick}
+            onDoubleClick={handlers.onDoubleClick}
+            onContextMenu={handlers.onContextMenu}
+            draggable={!isRenaming}
+            onDragStart={handlers.onDragStart}
+            onMouseDown={handlers.onMouseDown}
+            data-tooltip={tooltipText}
+            data-tooltip-multiline
+            data-tooltip-image-path={entry.path}
+        >
+            {showHistogram && (
+                <div className="size-histogram-bar" style={{ width: `${(entry.size / totalItemsSize) * 100}%` }} />
+            )}
+            {visibleCols.map(col => {
+                if (col.key === 'name') {
+                    return (
+                        <div key={col.key} className="file-name-group">
+                            {showCheckboxes && (
+                                <div className="item-checkbox" onClick={handlers.onCheckboxClick}>
+                                    <div className={cx("checkbox-indicator", { checked: isSelected })}>
+                                        {isSelected && <Check size={10} strokeWidth={4} />}
+                                    </div>
+                                </div>
+                            )}
+                            <div className="file-icon-small">
+                                {getIcon(entry)}
+                            </div>
+                            <div className="file-name-container">
+                                {isRenaming ? (
+                                    <RenameInput renameText={renameText} onRenameTextChange={onRenameTextChange} onRenameCommit={onRenameCommit} onRenameCancel={onRenameCancel} />
+                                ) : (
+                                    <span className="file-name">{entry.name}</span>
+                                )}
+                            </div>
+                        </div>
+                    );
+                }
+                return (
+                    <div key={col.key} className={col.cellClass} style={col.align === 'right' ? { textAlign: 'right' } : {}}>
+                        {col.renderCell(entry, { t, dateFormat })}
+                    </div>
+                );
+            })}
+        </div>
+    );
+});
+
+const GroupedDetailsRow = React.memo((props: RowComponentProps<GroupedSharedProps>) => {
+    const { index, style, groupedItems, collapsedGroups, onToggleGroup, t, activeFilters } = props;
+
+    const item = groupedItems[index];
+    if (!item) return null;
+
+    if (item.type === 'filters') {
+        if (!activeFilters) return null;
+        return <FiltersRow activeFilters={activeFilters} t={t} style={style} />;
+    }
+
+    if (item.type === 'header') {
+        const isCollapsed = collapsedGroups.has(item.category);
+        const labelKey = (DATE_CATEGORIES as any)[item.category] || item.category;
+        const label = t(labelKey as any) || item.category;
+        return (
+            <div className="group-header details" style={{ ...style, width: 'max-content', minWidth: 'max-content' }} onClick={() => onToggleGroup(item.category)}>
+                <div className="group-header-content">
+                    {isCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+                    <span className="group-header-label">{label}</span>
+                    <span className="group-header-count">{t('items_count' as any, { count: item.count })}</span>
+                </div>
+            </div>
+        );
+    }
+
+    // File item 
+    return <GroupedFileRow entry={item.entry} style={style} sharedProps={props} />;
+});
+
+
+
+const GroupedGridRowComponent = React.memo((props: RowComponentProps<GroupedGridSharedProps>) => {
+    const { index, style, groupedGridItems, collapsedGroups, onToggleGroup, t, activeFilters, columnCount, columnWidth, gridGap, gridRowHeight } = props;
+
+    const item = groupedGridItems[index];
+    if (!item) return null;
+
+    if (item.type === 'filters') {
+        if (!activeFilters) return null;
+        return <FiltersRow activeFilters={activeFilters} t={t} style={style} />;
+    }
+
+    if (item.type === 'header') {
+        const isCollapsed = collapsedGroups.has(item.category);
+        const labelKey = (DATE_CATEGORIES as any)[item.category] || item.category;
+        const label = t(labelKey as any) || item.category;
+        return (
+            <div className="group-header grid" style={style} onClick={() => onToggleGroup(item.category)}>
+                <div className="group-header-content">
+                    {isCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+                    <span className="group-header-label">{label}</span>
+                    <span className="group-header-count">{t('items_count' as any, { count: item.count })}</span>
+                </div>
+            </div>
+        );
+    }
+
+    // Grid row
+    return (
+        <div className="group-grid-items" style={{
+            ...style,
+            display: 'grid',
+            gridTemplateColumns: `repeat(${columnCount}, ${columnWidth}px)`,
+            gap: `${gridGap}px`,
+        }}>
+            {item.entries.map(entry => (
+                <GroupedGridItem key={entry.path} entry={entry} sharedProps={props} gridRowHeight={gridRowHeight} />
+            ))}
+        </div>
+    );
+});
+
+const GroupedGridItem = React.memo<{ entry: FileEntry; sharedProps: SharedItemProps; gridRowHeight: number }>(({ entry, sharedProps, gridRowHeight }) => {
+    const { getIcon, rootFontSize, t, renameText, onRenameTextChange, onRenameCommit, onRenameCancel, showCheckboxes } = sharedProps;
+
+    const { isSelected, isRenaming, handlers, itemClassName, tooltipText } = useFileItemState({
+        ...sharedProps,
+        entry,
+        showCheckboxes
     });
 
     const isDragOver = sharedProps.dragOverPath === entry.path;
@@ -480,6 +571,17 @@ const GroupedGridItem = React.memo<{ entry: FileEntry; sharedProps: SharedItemPr
     );
 });
 
+interface GroupedGridSharedProps extends SharedItemProps {
+    groupedGridItems: GroupedGridRowItem[];
+    collapsedGroups: Set<DateCategoryKey>;
+    onToggleGroup: (category: DateCategoryKey) => void;
+    columnCount: number;
+    columnWidth: number;
+    gridGap: number;
+    gridRowHeight: number;
+}
+
+// --- Main Component ---
 export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, VirtualizedFileListProps>((props, ref) => {
     const {
         viewMode, files,
@@ -492,11 +594,11 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
         diffPaths, colWidths, isSearching, loading,
         groupByDate = false,
         initialScrollOffset = 0, updateCurrentScroll,
-        isProtected = false
+        isProtected = false,
+        activeFilters
     } = props;
 
     const { dateFormat, showCheckboxes } = useApp();
-
     const [rootFontSize, setRootFontSize] = useState(16);
 
     useEffect(() => {
@@ -531,7 +633,6 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
 
     useImperativeHandle(ref, () => ({
         scrollToTop: () => {
-            // react-window v2 exposes an .element getter, not a scrollTo() method
             const listEl = listRef.current?.element;
             if (listEl) listEl.scrollTop = 0;
             const gridEl = gridRef.current?.element;
@@ -543,7 +644,6 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
     const isGrid = viewMode === 'grid';
     const cutPathsSet = useMemo(() => new Set(cutPaths), [cutPaths]);
 
-    // --- Scroll Restoration ---
     const isRestoringRef = useRef(false);
     const currentScrollRef = useRef(0);
     const initialScrollOffsetRef = useRef(initialScrollOffset);
@@ -552,121 +652,64 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
         initialScrollOffsetRef.current = initialScrollOffset;
     }, [initialScrollOffset]);
 
-    // Secure async scroll restoration for react-window v2
-    useEffect(() => {
-        if (!files || files.length === 0) return;
+    const hasFilters = useCallback(() => {
+        if (!activeFilters) return false;
+        return activeFilters.extensions.size > 0 || 
+               activeFilters.sizes.size > 0 || 
+               activeFilters.date.size > 0 || 
+               activeFilters.deletedDates.size > 0 ||
+               !!activeFilters.name || 
+               !!activeFilters.location;
+    }, [activeFilters]);
 
-        isRestoringRef.current = true;
+    const groupedByCategory = useMemo(() => {
+        if (!groupByDate) return null;
+        const groups = new Map<DateCategoryKey, FileEntry[]>();
+        CATEGORY_ORDER.forEach(cat => groups.set(cat, []));
 
-        // Try to apply it as quickly as possible
-        const timer = setTimeout(() => {
-            const offset = initialScrollOffsetRef.current;
-            if (isGrid && gridRef.current?.element) {
-                gridRef.current.element.scrollTop = offset;
-            } else if (!isGrid && listRef.current?.element) {
-                listRef.current.element.scrollTop = offset;
-            } else if (scrollContainerRef.current) {
-                scrollContainerRef.current.scrollTop = offset;
-            }
+        files.forEach(file => {
+            const cat = getDateCategoryForFile(file.modified || 0);
+            groups.get(cat)?.push(file);
+        });
+        return groups;
+    }, [files, groupByDate]);
 
-            // Short block to avoid scroll events from the restoration jump
-            setTimeout(() => {
-                isRestoringRef.current = false;
-            }, 100);
-        }, 0);
-
-        return () => clearTimeout(timer);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [files.length, isGrid, viewMode, groupByDate]);
-
-    // --- Collapsed groups state ---
     const [collapsedGroups, setCollapsedGroups] = useState<Set<DateCategoryKey>>(new Set());
-
-    // Reset collapsed state when toggling groupByDate off/on or changing path
-    useEffect(() => {
-        setCollapsedGroups(new Set());
-    }, [groupByDate]);
-
-    const handleToggleGroup = useCallback((category: DateCategoryKey) => {
+    const handleToggleGroup = useCallback((cat: DateCategoryKey) => {
         setCollapsedGroups(prev => {
             const next = new Set(prev);
-            if (next.has(category)) next.delete(category);
-            else next.add(category);
+            if (next.has(cat)) next.delete(cat);
+            else next.add(cat);
             return next;
         });
     }, []);
 
-    // --- Grouping logic ---
-    const groupedByCategory = useMemo(() => {
-        if (!groupByDate) return null;
-
-        const groups = new Map<DateCategoryKey, FileEntry[]>();
-        for (const cat of CATEGORY_ORDER) {
-            groups.set(cat, []);
-        }
-
-        for (const file of files) {
-            const cat = getDateCategoryForFile(file.modified || 0);
-            groups.get(cat)!.push(file);
-        }
-
-        // Remove empty categories
-        for (const [cat, entries] of groups) {
-            if (entries.length === 0) groups.delete(cat);
-        }
-
-        return groups;
-    }, [files, groupByDate]);
-
-    // Flat list for details grouped mode
     const groupedDetailItems = useMemo<GroupedItem[]>(() => {
-        if (!groupedByCategory) return [];
-
+        if (!groupByDate && !hasFilters()) return [];
         const items: GroupedItem[] = [];
-        for (const cat of CATEGORY_ORDER) {
-            const entries = groupedByCategory.get(cat);
-            if (!entries || entries.length === 0) continue;
-            items.push({ type: 'header', category: cat, count: entries.length });
-            if (!collapsedGroups.has(cat)) {
-                for (const entry of entries) {
-                    items.push({ type: 'file', entry });
-                }
-            }
+
+        if (hasFilters()) {
+            items.push({ type: 'filters' });
         }
+
+        if (groupByDate && groupedByCategory) {
+            CATEGORY_ORDER.forEach(cat => {
+                const entries = groupedByCategory.get(cat);
+                if (!entries || entries.length === 0) return;
+
+                items.push({ type: 'header', category: cat, count: entries.length });
+                if (!collapsedGroups.has(cat)) {
+                    entries.forEach(entry => items.push({ type: 'file', entry }));
+                }
+            });
+        } else {
+            files.forEach(entry => items.push({ type: 'file', entry }));
+        }
+
         return items;
-    }, [groupedByCategory, collapsedGroups]);
+    }, [files, groupByDate, groupedByCategory, collapsedGroups, hasFilters()]);
 
-    // Provide a flat entries array for grouped items (needed by SharedItemProps)
-    const groupedEntries = useMemo(() => {
-        if (!groupedByCategory) return files;
-        return groupedDetailItems.filter((i): i is GroupFileItem => i.type === 'file').map(i => i.entry);
-    }, [groupedByCategory, groupedDetailItems, files]);
-
-    const sharedProps = useMemo<SharedItemProps>(() => ({
-        entries: files, selected, pendingSelection, renamingPath, renameText,
-        isDragging, dragOverPath, cutPathsSet, searchResults,
-        t, onItemClick, onItemDoubleClick, onItemContextMenu, onFileDragStart,
-        onRenameTextChange, onRenameCommit, onRenameCancel, getIcon,
-        totalItemsSize, showHistogram, isTrashView, isNetworkView, onItemMiddleClick,
-        dateFormat, diffPaths, viewMode, rootFontSize, colWidths, showCheckboxes
-    }), [
-        files, selected, pendingSelection, renamingPath, renameText,
-        isDragging, dragOverPath, cutPathsSet, searchResults,
-        t, onItemClick, onItemDoubleClick, onItemContextMenu, onFileDragStart,
-        onRenameTextChange, onRenameCommit, onRenameCancel, getIcon,
-        totalItemsSize, showHistogram, isTrashView, isNetworkView, onItemMiddleClick,
-        dateFormat, diffPaths, viewMode, rootFontSize, colWidths, showCheckboxes
-    ]);
-
-    const groupedSharedProps = useMemo<GroupedSharedProps>(() => ({
-        ...sharedProps,
-        entries: groupedEntries,
-        groupedItems: groupedDetailItems,
-        collapsedGroups,
-        onToggleGroup: handleToggleGroup
-    }), [sharedProps, groupedEntries, groupedDetailItems, collapsedGroups, handleToggleGroup]);
-
-    const listRowHeight = rootFontSize * 1.75;
+    const listRowHeight = rootFontSize * 1.85;
     const groupHeaderHeight = rootFontSize * 2.0;
     const gridRowHeightBase = rootFontSize * 6.0;
     const gridGap = rootFontSize * 0.25;
@@ -680,28 +723,53 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
         return sum + (rootFontSize * 1.25);
     }, [colWidths, isGrid, searchResults, isTrashView, isNetworkView, rootFontSize]);
 
-    // Variable row height for grouped details mode
     const getGroupedRowHeight = useCallback((index: number): number => {
         const item = groupedDetailItems[index];
         if (!item) return listRowHeight;
+        if (item.type === 'filters') return groupHeaderHeight + (rootFontSize * 0.5); // Add 0.5rem margin
         return item.type === 'header' ? groupHeaderHeight : listRowHeight;
-    }, [groupedDetailItems, listRowHeight, groupHeaderHeight]);
+    }, [groupedDetailItems, listRowHeight, groupHeaderHeight, rootFontSize]);
 
     const scrollTimeoutRef = useRef<number | null>(null);
 
-    const handleScroll = useCallback((e: React.UIEvent<HTMLElement> | React.UIEvent<HTMLDivElement>) => {
-        const top = e.currentTarget.scrollTop;
+    const handleScroll = useCallback((e: any) => {
+        let top = 0;
+        if (e && e.currentTarget) {
+            top = e.currentTarget.scrollTop;
+        } else if (e && typeof e.scrollTop === 'number') {
+            top = e.scrollTop;
+        } else if (e && typeof e.scrollOffset === 'number') {
+            top = e.scrollOffset;
+        }
+
         if (onScrollToggle) onScrollToggle(top > 100);
 
         if (!isRestoringRef.current && updateCurrentScroll) {
             currentScrollRef.current = top;
-
-            if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
-            scrollTimeoutRef.current = setTimeout(() => {
+            if (scrollTimeoutRef.current) window.clearTimeout(scrollTimeoutRef.current);
+            scrollTimeoutRef.current = window.setTimeout(() => {
                 updateCurrentScroll(top);
-            }, 250); // Debounce to prevent constant React re-renders during smooth scrolling
+            }, 250);
         }
     }, [onScrollToggle, updateCurrentScroll]);
+
+    const sharedProps: SharedItemProps = {
+        entries: files, selected, pendingSelection, renamingPath, renameText,
+        isDragging, dragOverPath, cutPathsSet, searchResults,
+        t, onItemClick, onItemDoubleClick, onItemContextMenu, onFileDragStart,
+        onRenameTextChange, onRenameCommit, onRenameCancel, getIcon,
+        totalItemsSize, showHistogram, isTrashView, onItemMiddleClick,
+        dateFormat, diffPaths, viewMode, rootFontSize, isNetworkView, activeFilters,
+        showCheckboxes
+    };
+
+    const groupedSharedProps: GroupedSharedProps = {
+        ...sharedProps,
+        entries: files,
+        groupedItems: groupedDetailItems,
+        collapsedGroups,
+        onToggleGroup: handleToggleGroup
+    };
 
     return (
         <div
@@ -716,134 +784,162 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
             <AutoSizer renderProp={({ height, width }: { height: number | undefined; width: number | undefined }) => {
                 if (!height || !width) return null;
 
-                if (files.length === 0 && (!searchResults || searchResults.length === 0) && !isSearching) {
-                    if (loading) {
-                        return (
-                            <div className="empty-msg loading" style={{ width, height, position: 'absolute', top: 0, left: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                <Loader2 size={16} className="spinning" style={{ animation: 'spin 2s linear infinite' }} />&nbsp;&nbsp;<span>{t('loading' as any) || "Loading..."}</span>
-                            </div>
-                        );
-                    }
+                return (
+                    <ErrorBoundary fallback={<div className="empty-msg" style={{ width, height, position: 'absolute', top: 0, left: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Error in VirtualizedFileList</div>}>
+                        {(() => {
+                            if (files.length === 0 && (!searchResults || searchResults.length === 0) && !isSearching && !hasFilters()) {
+                                if (loading) {
+                                    return (
+                                        <div className="empty-msg loading" style={{ width, height, position: 'absolute', top: 0, left: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                            <Loader2 size={16} className="spinning" style={{ animation: 'spin 2s linear infinite' }} />&nbsp;&nbsp;<span>{t('loading' as any) || "Loading..."}</span>
+                                        </div>
+                                    );
+                                }
 
-                    // Determine the correct empty message
-                    let emptyKey = 'empty';
-                    if (searchResults) {
-                        emptyKey = 'no_results';
-                    } else if (isTrashView) {
-                        emptyKey = 'recycle_bin_empty';
-                    }
+                                let emptyKey = 'empty';
+                                if (searchResults) emptyKey = 'no_results';
+                                else if (isTrashView) emptyKey = 'recycle_bin_empty';
 
-                    return (
-                        <div className="empty-msg" style={{ width, height, position: 'absolute', top: 0, left: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1rem' }}>
-                            {isProtected ? (
-                                <>
-                                    <Ban size={48} className="protected-icon" style={{ color: 'var(--danger-color, #ff4d4d)', opacity: 0.8 }} />
-                                    <span style={{ maxWidth: '300px', textAlign: 'center', opacity: 0.7 }}>{t('protected_access' as any)}</span>
-                                </>
-                            ) : (
-                                <span>{t(emptyKey as any)}</span>
-                            )}
-                        </div>
-                    );
-                }
-
-                // --- GROUPED GRID MODE ---
-                if (isGrid && groupByDate && groupedByCategory) {
-                    const minColumnWidth = rootFontSize * 6.0;
-                    const horizontalPadding = rootFontSize * 2.5;
-                    const columnCount = Math.max(1, Math.floor((width - horizontalPadding) / (minColumnWidth + gridGap)));
-                    const columnWidth = (width - horizontalPadding - (columnCount - 1) * gridGap) / columnCount;
-
-                    return (
-                        <div
-                            ref={scrollContainerRef}
-                            className="virtualized-scroller grid grouped-grid-scroller"
-                            style={{ height, width, overflowX: 'hidden', overflowY: 'auto' }}
-                            onScroll={handleScroll}
-                        >
-                            {CATEGORY_ORDER.map(cat => {
-                                const catFiles = groupedByCategory.get(cat);
-                                if (!catFiles || catFiles.length === 0) return null;
                                 return (
-                                    <GroupedGridSection
-                                        key={cat}
-                                        category={cat}
-                                        files={catFiles}
-                                        collapsed={collapsedGroups.has(cat)}
-                                        onToggle={handleToggleGroup}
-                                        sharedProps={sharedProps}
-                                        columnCount={columnCount}
-                                        columnWidth={columnWidth}
-                                        gridGap={gridGap}
-                                        gridRowHeight={gridRowHeightBase}
+                                    <div className="empty-msg" style={{ width, height, position: 'absolute', top: 0, left: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1rem' }}>
+                                        {isProtected ? (
+                                            <>
+                                                <Ban size={48} className="protected-icon" style={{ color: 'var(--danger-color)', opacity: 0.8 }} />
+                                                <span style={{ maxWidth: '300px', textAlign: 'center', opacity: 0.7 }}>{t('protected_access' as any)}</span>
+                                            </>
+                                        ) : (
+                                            <span>{t(emptyKey as any)}</span>
+                                        )}
+                                    </div>
+                                );
+                            }
+
+                            if (isGrid && groupByDate && groupedByCategory) {
+                                const minColumnWidth = rootFontSize * 6.0;
+                                const horizontalPadding = rootFontSize * 2.5;
+                                const columnCount = Math.max(1, Math.floor((width - horizontalPadding) / (minColumnWidth + gridGap)));
+                                const columnWidth = (width - horizontalPadding - (columnCount - 1) * gridGap) / columnCount;
+
+                                // Flatten data into rows
+                                const items: GroupedGridRowItem[] = [];
+                                if (hasFilters()) {
+                                    items.push({ type: 'filters' });
+                                }
+
+                                CATEGORY_ORDER.forEach(cat => {
+                                    const entries = groupedByCategory.get(cat);
+                                    if (!entries || entries.length === 0) return;
+
+                                    items.push({ type: 'header', category: cat, count: entries.length });
+                                    if (!collapsedGroups.has(cat)) {
+                                        for (let i = 0; i < entries.length; i += columnCount) {
+                                            items.push({ 
+                                                type: 'grid-row', 
+                                                entries: entries.slice(i, i + columnCount),
+                                                category: cat
+                                            });
+                                        }
+                                    }
+                                });
+
+                                const getGridRowHeight = (index: number) => {
+                                    const item = items[index];
+                                    if (!item) return gridRowHeightBase + gridGap;
+                                    if (item.type === 'filters') return (rootFontSize * 1.85) + (rootFontSize * 0.5);
+                                    if (item.type === 'header') return groupHeaderHeight;
+                                    return gridRowHeightBase + gridGap;
+                                };
+
+                                return (
+                                    <List
+                                        key={`grid-grouped-${rootFontSize}-${columnCount}`}
+                                        className="virtualized-scroller grid"
+                                        rowCount={items.length}
+                                        rowHeight={getGridRowHeight}
+                                        rowComponent={GroupedGridRowComponent as any}
+                                        rowProps={{ 
+                                            ...sharedProps, 
+                                            groupedGridItems: items, 
+                                            collapsedGroups, 
+                                            onToggleGroup: handleToggleGroup,
+                                            columnCount,
+                                            columnWidth,
+                                            gridGap,
+                                            gridRowHeight: gridRowHeightBase
+                                        }}
+                                        listRef={listRef}
+                                        style={{ height, width, overflowY: 'auto', overflowX: 'hidden' }}
+                                        onScroll={handleScroll}
                                     />
                                 );
-                            })}
-                        </div>
-                    );
-                }
+                            }
 
-                // --- GROUPED DETAILS MODE ---
-                if (!isGrid && groupByDate && groupedDetailItems.length > 0) {
-                    const finalWidth = Math.max(width, totalColumnWidth);
+                            if (!isGrid && (groupByDate || hasFilters()) && groupedDetailItems.length > 0) {
+                                const finalWidth = Math.max(width, totalColumnWidth);
+                                return (
+                                    <List
+                                        key={`list-grouped-${rootFontSize}`}
+                                        className="virtualized-scroller details"
+                                        rowCount={groupedDetailItems.length}
+                                        rowHeight={getGroupedRowHeight}
+                                        rowComponent={GroupedDetailsRow as any}
+                                        rowProps={groupedSharedProps}
+                                        listRef={listRef}
+                                        style={{ height, width: finalWidth, overflowY: 'auto', overflowX: 'hidden' }}
+                                        onScroll={handleScroll}
+                                    />
+                                );
+                            }
 
-                    return (
-                        <List
-                            key={`list-grouped-${rootFontSize}`}
-                            className="virtualized-scroller details"
-                            rowCount={groupedDetailItems.length}
-                            rowHeight={getGroupedRowHeight}
-                            rowComponent={GroupedDetailsRow as any}
-                            rowProps={groupedSharedProps}
-                            listRef={listRef}
-                            style={{ height, width: finalWidth, overflowY: 'auto', overflowX: 'hidden' }}
-                            onScroll={handleScroll}
-                        />
-                    );
-                }
+                            if (isGrid) {
+                                const minColumnWidth = rootFontSize * 6.0;
+                                const horizontalPadding = rootFontSize * 2.5;
+                                const columnCount = Math.max(1, Math.floor((width - horizontalPadding) / (minColumnWidth + gridGap)));
+                                const columnWidth = (width - horizontalPadding - (columnCount - 1) * gridGap) / columnCount;
 
-                // --- STANDARD GRID MODE ---
-                if (isGrid) {
-                    const minColumnWidth = rootFontSize * 6.0;
-                    const horizontalPadding = rootFontSize * 2.5;
-                    const columnCount = Math.max(1, Math.floor((width - horizontalPadding) / (minColumnWidth + gridGap)));
-                    const rowCount = Math.ceil(files.length / columnCount);
-                    const columnWidth = (width - horizontalPadding - (columnCount - 1) * gridGap) / columnCount;
+                                const filtersHeight = hasFilters() ? (rootFontSize * 2.35) : 0;
+                                return (
+                                    <div style={{ height, width, display: 'flex', flexDirection: 'column' }}>
+                                        {hasFilters() && activeFilters && (
+                                            <div style={{ flexShrink: 0 }}>
+                                                <FiltersRow activeFilters={activeFilters} t={t} style={{ position: 'relative', zIndex: 20, marginBottom: '0.5rem' }} />
+                                            </div>
+                                        )}
+                                        <Grid
+                                            key={`grid-${columnCount}-${rootFontSize}`}
+                                            className="virtualized-scroller grid"
+                                            columnCount={columnCount}
+                                            columnWidth={columnWidth + gridGap}
+                                            rowCount={Math.ceil(files.length / columnCount)}
+                                            rowHeight={gridRowHeightBase + gridGap}
+                                            cellComponent={GridCell as any}
+                                            cellProps={{ ...sharedProps, columnCount }}
+                                            gridRef={gridRef}
+                                            style={{ height: height - filtersHeight, width, overflowY: 'auto', overflowX: 'hidden' }}
+                                            onScroll={handleScroll}
+                                        />
+                                    </div>
+                                );
+                            }
 
-                    return (
-                        <Grid
-                            key={`grid-${rootFontSize}-${columnCount}`}
-                            className="virtualized-scroller grid"
-                            columnCount={columnCount}
-                            columnWidth={columnWidth + gridGap}
-                            rowCount={rowCount}
-                            rowHeight={gridRowHeightBase + gridGap}
-                            cellComponent={GridCell as any}
-                            cellProps={{ ...sharedProps, columnCount }}
-                            gridRef={gridRef}
-                            style={{ height, width, overflowX: 'hidden', overflowY: 'auto' }}
-                            onScroll={handleScroll}
-                        />
-                    );
-                }
-
-                // --- STANDARD DETAILS MODE ---
-                const finalWidth = Math.max(width, totalColumnWidth);
-
-                return (
-                    <List
-                        key={`list-${rootFontSize}`}
-                        className="virtualized-scroller details"
-                        rowCount={files.length}
-                        rowHeight={listRowHeight}
-                        rowComponent={DetailsRow as any}
-                        rowProps={sharedProps}
-                        listRef={listRef}
-                        style={{ height, width: finalWidth, overflowY: 'auto', overflowX: 'hidden' }}
-                        onScroll={handleScroll}
-                    />
+                            const finalWidth = Math.max(width, totalColumnWidth);
+                            return (
+                                <List
+                                    key={`list-${rootFontSize}`}
+                                    className="virtualized-scroller details"
+                                    rowCount={files.length}
+                                    rowHeight={listRowHeight}
+                                    rowComponent={DetailsRow as any}
+                                    rowProps={sharedProps}
+                                    listRef={listRef}
+                                    style={{ height, width: finalWidth, overflowY: 'auto', overflowX: 'hidden' }}
+                                    onScroll={handleScroll}
+                                />
+                            );
+                        })()}
+                    </ErrorBoundary>
                 );
             }} />
-        </div >
+        </div>
     );
 });
