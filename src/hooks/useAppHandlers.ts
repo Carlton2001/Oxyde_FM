@@ -395,9 +395,13 @@ export const useAppHandlers = ({
 
     const handleItemMiddleClick = useCallback((entry: FileEntry) => {
         if (entry.is_dir && layout === 'standard') {
-            addTab(entry.path, undefined, true);
+            const currentIndex = tabs.findIndex(t => t.id === activeTabId);
+            const targetIndex = currentIndex !== -1 ? currentIndex + 1 : undefined;
+            
+            // Pass the target index to insert right of the parent tab
+            addTab(entry.path, { index: targetIndex, background: true } as any, true);
         }
-    }, [addTab, layout]);
+    }, [addTab, layout, tabs, activeTabId]);
 
     const handleAddToFavorites = useCallback(async (path: string) => {
         try {

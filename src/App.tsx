@@ -502,7 +502,11 @@ function App() {
         setShowAbout={() => dialogs.openAboutDialog()} onCalculateAllSizes={handleCalculateAllSizes}
         onRestoreAll={handleRestoreAll} onRestoreSelected={handleRestoreSelected} onEmptyTrash={handleEmptyTrash}
         onTabSwitch={handleTabSwitch} onTabClose={handleTabClose} onItemMiddleClick={handleItemMiddleClick}
-        onOpenNewTab={layout === 'standard' ? (path: string) => addTab(path) : undefined}
+        onOpenNewTab={layout === 'standard' ? (path: string) => {
+          const currentIndex = tabs.findIndex(t => t.id === activeTabId);
+          const targetIndex = currentIndex !== -1 ? currentIndex + 1 : undefined;
+          addTab(path, { index: targetIndex } as any);
+        } : undefined}
         onTabDrop={async (files: any[], index?: number) => {
           const folders = files.filter(f => f.is_dir);
           for (let i = 0; i < folders.length; i++) {
@@ -572,7 +576,12 @@ function App() {
           isTrashContext={contextMenu.isTrash || (contextMenu.target === 'trash://')}
           isSearchContext={contextMenu.panelId === 'left' ? left.path.startsWith('search://') : right.path.startsWith('search://')}
           onRestore={handleRestoreSelected} onGoToFolder={handleGoToFolder}
-          onOpenNewTab={layout === 'standard' ? (path: string) => { addTab(path); setContextMenu(null); } : undefined}
+          onOpenNewTab={layout === 'standard' ? (path: string) => {
+            const currentIndex = tabs.findIndex(t => t.id === activeTabId);
+            const targetIndex = currentIndex !== -1 ? currentIndex + 1 : undefined;
+            addTab(path, { index: targetIndex } as any);
+            setContextMenu(null);
+          } : undefined}
           isDir={contextMenu.isDir} isBackground={contextMenu.isBackground} isDrive={contextMenu.isDrive} isMediaDevice={contextMenu.isMediaDevice} isNetworkComputer={contextMenu.isNetworkComputer} hasWebPage={contextMenu.hasWebPage} driveType={contextMenu.driveType}
           isReadOnly={false}
           onExtract={(p: string, toSub: boolean) => handleAction(toSub ? 'archive.extract_to_folder' : 'archive.extract_here', { ...actionContext, contextMenuTarget: p })}
