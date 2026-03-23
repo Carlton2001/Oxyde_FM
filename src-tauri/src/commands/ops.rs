@@ -319,8 +319,46 @@ pub async fn check_conflicts(
         if let Some(file_name) = source_path.file_name() {
             let target_path = target_base.join(file_name);
             if target_path.exists() {
-                let source_entry = get_file_entry_from_path(&source_path)?;
-                let target_entry = get_file_entry_from_path(&target_path)?;
+                let mut source_entry = get_file_entry_from_path(&source_path)?;
+                let mut target_entry = get_file_entry_from_path(&target_path)?;
+
+                // For directories, calculate size and item count recursively
+                if source_entry.is_dir {
+                    let mut s = 0;
+                    let mut f = 0;
+                    let mut i = 0;
+                    for entry in walkdir::WalkDir::new(&source_path).into_iter().filter_map(|e| e.ok()) {
+                        if entry.file_type().is_dir() {
+                            f += 1;
+                        } else {
+                            i += 1;
+                            s += entry.metadata().map(|m| m.len()).unwrap_or(0);
+                        }
+                    }
+                    if f > 0 { f -= 1; } // Don't count the root folder itself
+                    source_entry.size = s;
+                    source_entry.folders_count = Some(f);
+                    source_entry.files_count = Some(i);
+                }
+
+                if target_entry.is_dir {
+                    let mut s = 0;
+                    let mut f = 0;
+                    let mut i = 0;
+                    for entry in walkdir::WalkDir::new(&target_path).into_iter().filter_map(|e| e.ok()) {
+                        if entry.file_type().is_dir() {
+                            f += 1;
+                        } else {
+                            i += 1;
+                            s += entry.metadata().map(|m| m.len()).unwrap_or(0);
+                        }
+                    }
+                    if f > 0 { f -= 1; } 
+                    target_entry.size = s;
+                    target_entry.folders_count = Some(f);
+                    target_entry.files_count = Some(i);
+                }
+
                 conflicts.push(ConflictEntry {
                     name: file_name.to_string_lossy().to_string(),
                     source: source_entry,

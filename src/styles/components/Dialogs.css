@@ -1456,4 +1456,195 @@
     align-items: center;
     justify-content: center;
     color: var(--text-muted);
-}
+}
+
+/* Conflict Dialog V2 (Vertical Stacked) */
+.conflict-dialog.v2 {
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.conflict-message-v2 {
+    margin-bottom: 1.25rem;
+    font-size: 0.9375rem;
+    font-weight: 500;
+    color: var(--text-color);
+    line-height: 1.4;
+}
+
+.conflict-comparison-v2 {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+.conflict-row {
+    background: var(--surface-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 0.75rem;
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    transition: all 0.2s ease;
+    position: relative;
+}
+
+.conflict-row.source {
+    background: color-mix(in srgb, var(--surface-secondary), transparent 20%);
+}
+
+.conflict-row.is-newer {
+    border-color: var(--accent-color);
+    background: color-mix(in srgb, var(--accent-color), transparent 96%);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    z-index: 1;
+}
+
+.conflict-row-label {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    opacity: 0.5;
+}
+
+.conflict-row.is-newer .conflict-row-label {
+    opacity: 0.8;
+    color: var(--accent-color);
+}
+
+.delta-badge {
+    height: 1.125rem;
+    padding: 0 0.5rem;
+    border-radius: 99rem;
+    font-size: 0.625rem;
+    font-weight: 800;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: normal; /* Better for vertical centering with font's intrinsic metrics */
+    border: 1px solid transparent;
+}
+
+.delta-badge.newer {
+    background: color-mix(in srgb, var(--accent-color), transparent 85%);
+    color: var(--accent-color);
+    border-color: color-mix(in srgb, var(--accent-color), transparent 70%);
+}
+
+.delta-badge.newer.warning {
+    background: color-mix(in srgb, #ef4444, transparent 85%);
+    color: #ef4444;
+    border-color: color-mix(in srgb, #ef4444, transparent 70%);
+}
+
+.delta-badge.larger {
+    background: color-mix(in srgb, #22c55e, transparent 85%);
+    color: #22c55e;
+    border-color: color-mix(in srgb, #22c55e, transparent 70%);
+    margin-left: 0.25rem;
+}
+
+.conflict-row-content {
+    display: flex;
+    gap: 1.25rem;
+    align-items: center;
+}
+
+.conflict-icon-wrapper {
+    flex-shrink: 0;
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.conflict-info-main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.conflict-name-row {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-color);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.conflict-meta-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1.5rem;
+}
+
+.meta-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.8125rem;
+}
+
+.meta-item .label {
+    opacity: 0.5;
+    font-size: 0.75rem;
+}
+
+.meta-item .value {
+    font-weight: 500;
+}
+
+.meta-item .value.highlight {
+    color: var(--accent-color);
+    font-weight: 600;
+}
+
+.conflict-path-row {
+    font-size: 0.75rem;
+    opacity: 0.4;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-family: 'JetBrains Mono', monospace;
+}
+
+.conflict-divider {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.5rem 0;
+    position: relative;
+    z-index: 0;
+}
+
+.divider-line {
+    flex: 1;
+    height: 1px;
+    background: var(--border-color);
+    opacity: 0.5;
+}
+
+.divider-vs {
+    padding: 0 1rem;
+    font-size: 0.625rem;
+    font-weight: 900;
+    opacity: 0.3;
+    letter-spacing: 0.2em;
+}
+
+.conflict-item-count {
+    margin-left: 4px;
+    opacity: 0.7;
+    font-weight: normal;
+    font-size: 0.75rem;
+}

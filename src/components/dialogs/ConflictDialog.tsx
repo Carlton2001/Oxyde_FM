@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
-import { X, ArrowRight } from 'lucide-react';
+import { X } from 'lucide-react';
+import cx from 'classnames';
 import { ConflictEntry, ConflictAction } from '../../types';
 import { Toggle } from '../ui/Toggle';
 import { TFunc } from '../../i18n';
@@ -31,19 +32,33 @@ export const ConflictDialog: React.FC<ConflictDialogProps> = ({ conflicts, onRes
 
     const { useSystemIcons, dateFormat } = useApp();
 
+    const isSourceNewer = current.source.modified > current.target.modified;
+    const isTargetNewer = current.target.modified > current.source.modified;
+    const isSourceLarger = current.source.size > current.target.size;
+    const isTargetLarger = current.target.size > current.source.size;
+
+    const isSourceNewerButSmaller = isSourceNewer && (current.source.size < current.target.size);
+    const isTargetNewerButSmaller = isTargetNewer && (current.target.size < current.source.size);
+
     const getIcon = (entry: any) => {
         return getFileIcon(
             entry.name || entry.path.split('\\').pop(),
             entry.is_dir,
-            { size: 32, strokeWidth: 1.5 },
+            { size: 40, strokeWidth: 1.5 },
             useSystemIcons,
             entry.path
         );
     };
 
+    const formatItemsCount = (entry: any) => {
+        if (!entry.is_dir) return null;
+        if (entry.files_count === undefined && entry.folders_count === undefined) return null;
+        const total = (entry.files_count || 0) + (entry.folders_count || 0);
+        return `(${total} ${total > 1 ? t('items') : t('item')})`;
+    };
+
     const handleAction = (action: ConflictAction) => {
         if (applyToAll) {
-            // Apply this action to all remaining conflicts
             const newResolutions = new Map(resolutions);
             for (let i = currentIndex; i < conflicts.length; i++) {
                 newResolutions.set(conflicts[i].source.path, action);
@@ -65,9 +80,9 @@ export const ConflictDialog: React.FC<ConflictDialogProps> = ({ conflicts, onRes
         <div className="properties-overlay">
             <div
                 ref={dragRef}
-                className="properties-dialog conflict-dialog"
+                className="properties-dialog conflict-dialog v2"
                 style={{
-                    width: '62.5rem',
+                    width: '38rem',
                     transform: `translate(${position.x}px, ${position.y}px)`,
                     transition: 'none'
                 }}
@@ -82,58 +97,82 @@ export const ConflictDialog: React.FC<ConflictDialogProps> = ({ conflicts, onRes
                     <button className="btn-icon" onClick={onCancel}><X size={16} /></button>
                 </div>
 
-                <div className="prop-content" style={{ padding: '1.5rem' }}>
-                    <div className="conflict-message" style={{ marginBottom: '1.5rem', fontSize: '0.9rem' }}>
+                <div className="prop-content" style={{ padding: '1.25rem' }}>
+                    <div className="conflict-message-v2">
                         {t('conflict_msg' as any).replace('{name}', current.name)}
                     </div>
 
-                    <div className="conflict-comparison">
-                        {/* Source File (New) - LEFT */}
-                        <div className="conflict-card highlighted">
-                            <div className="conflict-card-header">
-                                <span className="conflict-card-label">{t('source_file' as any)}</span>
+                    <div className="conflict-comparison-v2">
+                        {/* Source File (Incoming) */}
+                        <div className={cx("conflict-row source", { "is-newer": isSourceNewer })}>
+                            <div className="conflict-row-label">
+                                <span>{t('source_file' as any)}</span>
+                                {isSourceNewer && <span className={cx("delta-badge newer", { "warning": isSourceNewerButSmaller })}>{t('newer' as any) || 'Newer'}</span>}
+                                {isSourceLarger && <span className="delta-badge larger">{t('larger') || 'Larger'}</span>}
                             </div>
-                            <div className="conflict-file-info">
-                                {getIcon(current.source)}
-                                <div className="conflict-details">
-                                    <div className="conflict-name" data-tooltip={current.source.path}>{current.name}</div>
-                                    <div className="conflict-info-grid">
-                                        <div className="conflict-info-label">{t('location')}</div>
-                                        <div className="conflict-info-value">{getParent(current.source.path) || ''}</div>
-
-                                        <div className="conflict-info-label">{t('date')}</div>
-                                        <div className="conflict-info-value">{formatDate(current.source.modified, dateFormat)}</div>
-
-                                        <div className="conflict-info-label">{t('size')}</div>
-                                        <div className="conflict-info-value">{formatSize(current.source.size, 1, t)}</div>
+                            <div className="conflict-row-content">
+                                <div className="conflict-icon-wrapper">
+                                    {getIcon(current.source)}
+                                </div>
+                                <div className="conflict-info-main">
+                                    <div className="conflict-name-row">
+                                        <span className="name">{current.name}</span>
                                     </div>
+                                    <div className="conflict-meta-row">
+                                        <div className="meta-item">
+                                            <span className="label">{t('size')} :</span>
+                                            <span className={cx("value", { "highlight": isSourceLarger })}>
+                                                {formatSize(current.source.size, 1, t)} {formatItemsCount(current.source)}
+                                            </span>
+                                        </div>
+                                        <div className="meta-item">
+                                            <span className="label">{t('date')} :</span>
+                                            <span className={cx("value", { "highlight": isSourceNewer })}>
+                                                {formatDate(current.source.modified, dateFormat)}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div className="conflict-path-row">{getParent(current.source.path)}</div>
                                 </div>
                             </div>
                         </div>
 
-                        <div className="conflict-arrow">
-                            <ArrowRight size={24} style={{ opacity: 0.3 }} />
+                        <div className="conflict-divider">
+                            <div className="divider-line" />
+                            <div className="divider-vs">VS</div>
+                            <div className="divider-line" />
                         </div>
 
-                        {/* Target File (Existing) - RIGHT */}
-                        <div className="conflict-card">
-                            <div className="conflict-card-header">
-                                <span className="conflict-card-label">{t('target_file' as any)}</span>
+                        {/* Target File (Existing) */}
+                        <div className={cx("conflict-row target", { "is-newer": isTargetNewer })}>
+                            <div className="conflict-row-label">
+                                <span>{t('target_file' as any)}</span>
+                                {isTargetNewer && <span className={cx("delta-badge newer", { "warning": isTargetNewerButSmaller })}>{t('newer' as any) || 'Newer'}</span>}
+                                {isTargetLarger && <span className="delta-badge larger">{t('larger') || 'Larger'}</span>}
                             </div>
-                            <div className="conflict-file-info">
-                                {getIcon(current.target)}
-                                <div className="conflict-details">
-                                    <div className="conflict-name" data-tooltip={current.target.path}>{current.name}</div>
-                                    <div className="conflict-info-grid">
-                                        <div className="conflict-info-label">{t('location')}</div>
-                                        <div className="conflict-info-value">{getParent(current.target.path) || ''}</div>
-
-                                        <div className="conflict-info-label">{t('date')}</div>
-                                        <div className="conflict-info-value">{formatDate(current.target.modified, dateFormat)}</div>
-
-                                        <div className="conflict-info-label">{t('size')}</div>
-                                        <div className="conflict-info-value">{formatSize(current.target.size, 1, t)}</div>
+                            <div className="conflict-row-content">
+                                <div className="conflict-icon-wrapper">
+                                    {getIcon(current.target)}
+                                </div>
+                                <div className="conflict-info-main">
+                                    <div className="conflict-name-row">
+                                        <span className="name">{current.name}</span>
                                     </div>
+                                    <div className="conflict-meta-row">
+                                        <div className="meta-item">
+                                            <span className="label">{t('size')} :</span>
+                                            <span className={cx("value", { "highlight": isTargetLarger })}>
+                                                {formatSize(current.target.size, 1, t)} {formatItemsCount(current.target)}
+                                            </span>
+                                        </div>
+                                        <div className="meta-item">
+                                            <span className="label">{t('date')} :</span>
+                                            <span className={cx("value", { "highlight": isTargetNewer })}>
+                                                {formatDate(current.target.modified, dateFormat)}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div className="conflict-path-row">{getParent(current.target.path)}</div>
                                 </div>
                             </div>
                         </div>
@@ -151,10 +190,10 @@ export const ConflictDialog: React.FC<ConflictDialogProps> = ({ conflicts, onRes
                             label={t('apply_all' as any)}
                         />
                     )}
-                    <button className="btn" onClick={() => handleAction('skip')} style={{ minWidth: '6.25rem' }}>
+                    <button className="btn" onClick={() => handleAction('skip')} style={{ minWidth: '7rem' }}>
                         {t('skip' as any)}
                     </button>
-                    <button className="btn primary" onClick={() => handleAction('replace')} style={{ minWidth: '6.25rem' }}>
+                    <button className="btn primary" onClick={() => handleAction('replace')} style={{ minWidth: '7rem' }}>
                         {t('replace' as any)}
                     </button>
                 </div>

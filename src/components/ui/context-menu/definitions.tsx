@@ -520,7 +520,7 @@ export function getMenuItems(ctx: MenuContext): MenuItem[] {
             items.push({
                 id: 'delete',
                 type: 'action',
-                label: (isShiftPressed || ctx.isNukeOverride) ? t('perm_delete' as any) : t('delete'),
+                label: (isShiftPressed || isNukeOverride) ? t('perm_delete' as any) : t('delete'),
                 icon: Trash2,
                 action: () => actions.onDelete(),
                 color: 'var(--error-color)',

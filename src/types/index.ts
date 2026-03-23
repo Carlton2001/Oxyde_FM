@@ -10,6 +10,8 @@ export type FileEntry = {
     is_calculated?: boolean;
     is_calculating?: boolean;
     modified: number;
+    folders_count?: number;
+    files_count?: number;
     is_readonly?: boolean;
     is_protected?: boolean;
     // Trash-specific fields (populated when viewing Recycle Bin)

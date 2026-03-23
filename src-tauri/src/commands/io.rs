@@ -61,6 +61,8 @@ pub fn get_file_entry_from_metadata(metadata: &fs::Metadata, name: &str, path: &
         is_readonly,
         is_protected: false,
         is_calculated: false,
+        folders_count: None,
+        files_count: None,
         original_path: None,
         deleted_time: None,
     }

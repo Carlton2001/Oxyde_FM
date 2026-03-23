@@ -139,6 +139,8 @@ fn list_iso(path: &Path, internal_prefix: &str) -> Result<Vec<FileEntry>, Comman
             is_junction: false,
             size,
             is_calculated: false,
+            folders_count: None,
+            files_count: None,
             modified: 0,
             is_readonly: true,
             is_protected: false,
@@ -184,6 +186,8 @@ fn list_zip(path: &Path, internal_prefix: &str) -> Result<Vec<FileEntry>, Comman
                 is_junction: false,
                 size: if is_dir { 0 } else { file.size() },
                 is_calculated: false,
+                folders_count: None,
+                files_count: None,
                 modified: file.last_modified()
                     .and_then(|dt| {
                         let t: Result<time::OffsetDateTime, _> = dt.try_into();
@@ -229,6 +233,8 @@ fn list_seven_zip(path: &Path, internal_prefix: &str) -> Result<Vec<FileEntry>, 
                         is_junction: false,
                         size: entry.size(),
                         is_calculated: false,
+                        folders_count: None,
+                        files_count: None,
                         modified: 0, // sevenz-rust entry modified is complex to get
                         is_readonly: false,
                         is_protected: false,
@@ -284,6 +290,8 @@ fn list_tar(path: &Path, internal_prefix: &str, format: ArchiveFormat) -> Result
                 is_junction: false,
                 size: entry.header().size().unwrap_or(0),
                 is_calculated: false,
+                folders_count: None,
+                files_count: None,
                 modified: entry.header().mtime().unwrap_or(0) * 1000,
                 is_readonly: false,
                 is_protected: false,

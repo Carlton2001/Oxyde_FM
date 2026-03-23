@@ -163,6 +163,8 @@ fn search_in_archive(
                                     is_hidden: false,
                                     size,
                                     modified: 0,
+                                    folders_count: None,
+                                    files_count: None,
                                     ..FileEntry::default()
                                 });
                             }
@@ -291,6 +293,8 @@ fn search_in_iso(
                 path: format!("{}\\{}", archive_path.to_string_lossy(), new_internal.trim_start_matches('/').replace('/', "\\")),
                 is_dir,
                 size,
+                folders_count: None,
+                files_count: None,
                 ..FileEntry::default()
             });
         }
@@ -672,6 +676,8 @@ pub async fn start_search(
                         size: if is_dir { 0 } else { metadata.len() },
                         is_calculated: false,
                         modified,
+                        folders_count: None,
+                        files_count: None,
                         is_readonly: metadata.permissions().readonly(),
                         is_protected: false,
                         original_path: None,
