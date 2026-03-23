@@ -91,7 +91,10 @@
     background-color: var(--danger-bg, rgba(239, 68, 68, 0.15));
 }
 
-.nav-btn:disabled {
+/* All header buttons should be transparent to window dragging when disabled */
+.nav-btn:disabled,
+.header .btn-icon:disabled,
+.header button:disabled {
     opacity: 0.3;
     pointer-events: none;
 }
