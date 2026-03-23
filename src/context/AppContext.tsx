@@ -1,11 +1,10 @@
 import React, { createContext, useContext, useEffect, useCallback, ReactNode } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { Theme, LayoutMode, Language, DateFormat, CompressionQuality } from '../types';
+import { Theme, LayoutMode, Language, DateFormat, CompressionQuality, DriveInfo, NotificationType, AppNotification } from '../types';
 import { getT, TFunc } from '../i18n';
 import { useNotifications } from '../hooks/useNotifications';
 import { useDrives } from '../hooks/useFileSystem';
 import { useRustConfig } from '../hooks/useRustConfig';
-import { DriveInfo, NotificationType, AppNotification } from '../types';
 
 export interface AppContextValue {
     // Settings
@@ -24,6 +23,7 @@ export interface AppContextValue {
     showGridThumbnails: boolean;
     showCheckboxes: boolean;
     showNetwork: boolean;
+    confirmDelete: boolean;
     updateAvailable: boolean;
     peekStatus: {
         installed: boolean;
@@ -48,6 +48,7 @@ export interface AppContextValue {
     setShowGridThumbnails: (show: boolean) => void;
     setShowCheckboxes: (show: boolean) => void;
     setShowNetwork: (show: boolean) => void;
+    setConfirmDelete: (show: boolean) => void;
     setUpdateAvailable: (available: boolean) => void;
 
     // Translation
@@ -69,9 +70,13 @@ export interface AppContextValue {
     // Search Limit
     searchLimit: number;
     setSearchLimit: (limit: number) => void;
+    isTrashEmpty: boolean;
+    refreshTrashStatus: () => Promise<void>;
 
     refreshDrives: () => void;
     resetToDefaults: () => Promise<void>;
+    driveTrashConfigs: Record<string, { nukeOnDelete: boolean }>;
+    refreshDriveTrashConfigs: () => Promise<void>;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -103,7 +108,8 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
         defaultTurboMode: true,
         showGridThumbnails: false,
         showCheckboxes: false,
-        showNetwork: true
+        showNetwork: true,
+        confirmDelete: true
     };
 
     // Derived state (or defaults)
@@ -125,8 +131,11 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
     const showGridThumbnails = config?.show_grid_thumbnails ?? (localStorage.getItem('fm_showGridThumbnails') === 'true' || (localStorage.getItem('fm_showGridThumbnails') === null && defaults.showGridThumbnails));
     const showCheckboxes = config?.show_checkboxes ?? (localStorage.getItem('fm_showCheckboxes') === 'true' || (localStorage.getItem('fm_showCheckboxes') === null && defaults.showCheckboxes));
     const showNetwork = config?.show_network ?? (localStorage.getItem('fm_showNetwork') === 'true' || (localStorage.getItem('fm_showNetwork') === null && defaults.showNetwork));
+    const confirmDelete = config?.confirm_delete ?? (localStorage.getItem('fm_confirmDelete') === 'true' || (localStorage.getItem('fm_confirmDelete') === null && defaults.confirmDelete));
     const [updateAvailable, setUpdateAvailable] = React.useState(false);
+    const [isTrashEmpty, setIsTrashEmpty] = React.useState(true);
     const [peekStatus, setPeekStatus] = React.useState<AppContextValue['peekStatus']>(null);
+    const [driveTrashConfigs, setDriveTrashConfigs] = React.useState<Record<string, { nukeOnDelete: boolean }>>({});
 
     useEffect(() => {
         invoke<AppContextValue['peekStatus']>('get_peek_status')
@@ -136,6 +145,40 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
                 setPeekStatus({ installed: false, enabled: false, space_enabled: false, activation_shortcut: null });
             });
     }, []);
+
+    const refreshDriveTrashConfigs = useCallback(async () => {
+        const newConfigs: Record<string, { nukeOnDelete: boolean }> = {};
+        await Promise.all(
+            drives.map(async (drive) => {
+                try {
+                    const drivePath = drive.path.endsWith('\\') || drive.path.endsWith('/') ? drive.path : drive.path + '\\';
+                    const config: { nuke_on_delete: boolean } = await invoke('get_recycle_bin_config', { drivePath: drivePath });
+                    const normKey = drive.path.toLowerCase().match(/^([a-z]:)/)?.[1] || drive.path.toLowerCase();
+                    newConfigs[normKey] = { nukeOnDelete: config.nuke_on_delete };
+                } catch (err) {
+                    // Ignore errors for individual drives
+                }
+            })
+        );
+        setDriveTrashConfigs(newConfigs);
+    }, [drives]);
+
+    const refreshTrashStatus = useCallback(async () => {
+        try {
+            const [usageSize, usageItems] = await invoke<[number, number]>('get_total_recycle_bin_usage');
+            console.log("Trash status refresh:", { usageSize, usageItems });
+            setIsTrashEmpty(usageItems === 0);
+            refreshDriveTrashConfigs();
+        } catch (e) {
+            console.error("Failed to refresh trash status", e);
+        }
+    }, [refreshDriveTrashConfigs]);
+
+    useEffect(() => {
+        refreshTrashStatus();
+        const interval = setInterval(refreshTrashStatus, 30000);
+        return () => clearInterval(interval);
+    }, [refreshTrashStatus, drives.length]);
 
     // Setters (memoized to avoid new refs on every render)
     const setTheme = useCallback((v: Theme) => {
@@ -197,6 +240,11 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
     const setShowNetwork = useCallback((v: boolean) => {
         localStorage.setItem('fm_showNetwork', v.toString());
         setConfigValue('show_network', v);
+    }, [setConfigValue]);
+
+    const setConfirmDelete = useCallback((v: boolean) => {
+        localStorage.setItem('fm_confirmDelete', v.toString());
+        setConfigValue('confirm_delete', v);
     }, [setConfigValue]);
 
 
@@ -302,11 +350,17 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
         setShowCheckboxes,
         showNetwork,
         setShowNetwork,
+        confirmDelete,
+        setConfirmDelete,
         updateAvailable,
         setUpdateAvailable,
         peekStatus,
+        isTrashEmpty,
+        refreshTrashStatus,
         refreshDrives,
-        resetToDefaults
+        resetToDefaults,
+        driveTrashConfigs,
+        refreshDriveTrashConfigs
     };
 
     if (isLoading) {

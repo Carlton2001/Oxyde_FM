@@ -58,6 +58,7 @@ export interface ActionContext {
         sevenZipQuality: CompressionQuality;
         zstdQuality: CompressionQuality;
         defaultTurboMode: boolean;
+        confirmDelete: boolean;
     };
 
     // UI Feedback
@@ -66,6 +67,7 @@ export interface ActionContext {
     otherPanel?: PanelState;
     refreshBothPanels?: () => void;
     refreshTreePath?: (path: string) => void;
+    driveTrashConfigs?: Record<string, { nukeOnDelete: boolean }>;
 
     // Tab Management
     tabs?: import('../hooks/useRustSession').Tab[];

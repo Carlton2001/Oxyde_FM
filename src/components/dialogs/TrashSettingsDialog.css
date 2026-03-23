@@ -1,0 +1,229 @@
+.trash-settings-modal {
+    width: 28rem;
+    height: fit-content;
+    max-height: 90vh;
+}
+
+.ts-section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+}
+
+.ts-total-usage {
+    margin-bottom: 1.5rem;
+    padding: 1rem 1.25rem;
+    background: var(--surface-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 0.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.ts-usage-info {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.ts-usage-text {
+    display: flex;
+    flex-direction: column;
+}
+
+.ts-usage-size {
+    font-size: 1.125rem;
+    font-weight: 700;
+    color: var(--text-color);
+}
+
+.ts-usage-count {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.ts-section.global-options {
+    margin-bottom: 0;
+}
+
+.ts-section-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+.ts-drive-table {
+    border: 1px solid var(--border-color);
+    border-radius: 0.375rem;
+    background: var(--bg-color);
+    overflow: hidden;
+}
+
+.ts-table-header {
+    display: flex;
+    padding: 0.5rem 0.75rem;
+    background: var(--header-bg);
+    border-bottom: 1px solid var(--border-color);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+.ts-table-header .col-name { flex: 1; }
+.ts-table-header .col-space { width: 6rem; text-align: right; }
+
+.ts-table-body {
+    max-height: 8rem;
+    overflow-y: auto;
+}
+
+.ts-drive-row {
+    display: flex;
+    padding: 0.625rem 0.75rem;
+    font-size: 0.8125rem;
+    border-bottom: 1px solid var(--border-color);
+    cursor: default;
+    align-items: center;
+}
+
+.ts-drive-row:last-child { border-bottom: none; }
+
+.ts-drive-row:hover { background: var(--hover-color); }
+
+.ts-drive-row.active {
+    background: rgba(var(--accent-color-rgb), 0.15);
+    color: var(--accent-color);
+}
+
+.ts-drive-row .col-name {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ts-drive-row .col-space {
+    width: 6rem;
+    text-align: right;
+    font-size: 0.75rem;
+    opacity: 0.8;
+}
+
+.ts-settings-card {
+    padding: 1.25rem;
+    background: var(--surface-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 0.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+}
+
+.ts-control-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.ts-control-label {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+}
+
+.ts-label-title {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--text-color);
+}
+
+.ts-label-desc {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.ts-input-group {
+    display: flex;
+    align-items: center;
+    gap: 0;
+}
+
+.ts-number-input {
+    width: 6rem;
+    height: 28px;
+    padding: 0 0.625rem;
+    background: var(--bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 0.25rem 0 0 0.25rem;
+    color: var(--text-color);
+    font-family: inherit;
+    font-size: 0.8125rem;
+    box-sizing: border-box;
+}
+
+.ts-number-input:focus {
+    outline: none;
+    border-color: var(--accent-color);
+}
+
+.ts-unit-toggle {
+    display: flex;
+    height: 28px;
+    background: var(--bg-color);
+    border: 1px solid var(--border-color);
+    border-left: none;
+    border-radius: 0 0.25rem 0.25rem 0;
+    padding: 2px;
+    box-sizing: border-box;
+}
+
+.ts-unit-toggle button {
+    padding: 0 8px;
+    height: 100%;
+    border-radius: 2px;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 0.6875rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.1s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.ts-unit-toggle button.active {
+    background: var(--accent-color);
+    color: #fff;
+}
+
+.ts-divider {
+    height: 1px;
+    background: var(--border-color);
+    opacity: 0.5;
+}
+
+.scrollbar-custom::-webkit-scrollbar {
+    width: 0.5rem;
+}
+
+.scrollbar-custom::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb);
+    border-radius: 4px;
+}
+
+.scrollbar-custom::-webkit-scrollbar-thumb:hover {
+    background: var(--scrollbar-thumb-hover);
+}

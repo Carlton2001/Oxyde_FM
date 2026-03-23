@@ -222,6 +222,17 @@ export const DELETE_ACTION: ActionDefinition = {
     getLabel: (ctx: ActionContext) => {
         const isTrashView = ctx.activePanel.path?.startsWith('trash://') || false;
         if (ctx.modifiers?.shift || isTrashView) return 'perm_delete';
+        
+        // Check drive config
+        const path = ctx['contextMenuTarget'] || ctx.activePanel.path;
+        if (path && ctx.driveTrashConfigs) {
+            const driveMatch = path.match(/^([a-zA-Z]:)/);
+            if (driveMatch) {
+                const driveLetter = driveMatch[1].toLowerCase();
+                if (ctx.driveTrashConfigs[driveLetter]?.nukeOnDelete) return 'perm_delete';
+            }
+        }
+        
         return 'delete';
     },
     icon: Trash2,
@@ -234,42 +245,64 @@ export const DELETE_ACTION: ActionDefinition = {
 
         if (finalPaths.length > 0) {
             const isTrashView = ctx.activePanel.path?.startsWith('trash://') || false;
-            const isPermanent = ctx.modifiers?.shift || isTrashView;
-
-            ctx.dialogs.openDeleteDialog({
-                paths: finalPaths,
-                isPermanent,
-                onConfirm: async () => {
-                    try {
-                        await ctx.fileOps.deleteItems(finalPaths, isPermanent, ctx.settings['defaultTurboMode']);
-
-                        // If we deleted from tree, refresh the parent in tree
-                        if (targetPath && ctx.refreshTreePath) {
-                            const parent = getParent(targetPath);
-                            if (parent) ctx.refreshTreePath(parent);
-                        }
-
-                        // Fallback navigation for both panels
-                        [ctx.activePanel, ctx.otherPanel].forEach(panel => {
-                            if (!panel) return;
-                            const path = panel.path;
-                            if (path) {
-                                const isDeleted = finalPaths.some(p =>
-                                    path === p || path.startsWith(p.endsWith('\\') ? p : p + '\\')
-                                );
-                                if (isDeleted) {
-                                    const parent = getParent(finalPaths[0]);
-                                    if (parent) panel.navigate(parent);
-                                }
-                            }
-                        });
-
-                        if (ctx.refreshBothPanels) ctx.refreshBothPanels();
-                    } catch (e) {
-                        ctx.notify(`${ctx.t('error')}: ${formatCommandError(e)}`, 'error');
+            let isPermanent = ctx.modifiers?.shift || isTrashView;
+            
+            // Check drive config if not already permanent
+            if (!isPermanent && ctx.driveTrashConfigs) {
+                const samplePath = finalPaths[0];
+                const driveMatch = samplePath.match(/^([a-zA-Z]:)/);
+                if (driveMatch) {
+                    const driveLetter = driveMatch[1].toLowerCase();
+                    if (ctx.driveTrashConfigs[driveLetter]?.nukeOnDelete) {
+                        isPermanent = true;
                     }
                 }
-            });
+            }
+            
+            // Respect global confirmation setting. 
+            // Permanent deletions (Shift+Del or Trash) should always confirm for safety.
+            const shouldConfirm = ctx.settings.confirmDelete || isPermanent;
+
+            const performDelete = async () => {
+                try {
+                    await ctx.fileOps.deleteItems(finalPaths, isPermanent, ctx.settings['defaultTurboMode']);
+
+                    // If we deleted from tree, refresh the parent in tree
+                    if (targetPath && ctx.refreshTreePath) {
+                        const parent = getParent(targetPath);
+                        if (parent) ctx.refreshTreePath(parent);
+                    }
+
+                    // Fallback navigation for both panels
+                    [ctx.activePanel, ctx.otherPanel].forEach(panel => {
+                        if (!panel) return;
+                        const path = panel.path;
+                        if (path) {
+                            const isDeleted = finalPaths.some(p =>
+                                path === p || path.startsWith(p.endsWith('\\') ? p : p + '\\')
+                            );
+                            if (isDeleted) {
+                                const parent = getParent(finalPaths[0]);
+                                if (parent) panel.navigate(parent);
+                            }
+                        }
+                    });
+
+                    if (ctx.refreshBothPanels) ctx.refreshBothPanels();
+                } catch (e) {
+                    ctx.notify(`${ctx.t('error')}: ${formatCommandError(e)}`, 'error');
+                }
+            };
+
+            if (shouldConfirm) {
+                ctx.dialogs.openDeleteDialog({
+                    paths: finalPaths,
+                    isPermanent,
+                    onConfirm: performDelete
+                });
+            } else {
+                performDelete();
+            }
         }
     }
 };

@@ -35,6 +35,10 @@ interface AppHandlersProps {
     zstdQuality: any;
     favorites: any[];
     peekStatus?: AppContextValue['peekStatus'];
+    openTrashSettings: () => void;
+    confirmDelete: boolean;
+    refreshTrashStatus: () => Promise<void>;
+    driveTrashConfigs: Record<string, { nukeOnDelete: boolean }>;
 }
 
 export const useAppHandlers = ({
@@ -63,7 +67,11 @@ export const useAppHandlers = ({
     sevenZipQuality,
     zstdQuality,
     favorites,
-    peekStatus
+    peekStatus,
+    openTrashSettings,
+    confirmDelete,
+    refreshTrashStatus,
+    driveTrashConfigs
 }: AppHandlersProps) => {
     const activePanel = activePanelId === 'left' ? left : right;
 
@@ -119,13 +127,14 @@ export const useAppHandlers = ({
             zipQuality,
             sevenZipQuality,
             zstdQuality,
-            defaultTurboMode
+            defaultTurboMode,
+            confirmDelete
         },
-        refreshBothPanels,
         refreshTreePath,
         setContextMenu,
-        peekStatus
-    }), [activePanelId, left, right, fileOps, clipboard, notify, t, dialogs, zipQuality, sevenZipQuality, zstdQuality, defaultTurboMode, refreshBothPanels, refreshTreePath, setContextMenu, peekStatus]);
+        peekStatus,
+        driveTrashConfigs
+    }), [activePanelId, left, right, fileOps, clipboard, notify, t, dialogs, zipQuality, sevenZipQuality, zstdQuality, defaultTurboMode, refreshBothPanels, refreshTreePath, setContextMenu, peekStatus, driveTrashConfigs]);
 
     const handleAction = useCallback(async (actionId: string, contextOverride?: Partial<ActionContext>) => {
         try {
@@ -334,6 +343,7 @@ export const useAppHandlers = ({
                     if (parent) refreshTreePath(parent);
                 });
             }
+            refreshTrashStatus();
         } catch (e) {
             notify(`${t('error')}: ${formatCommandError(e)}`, 'error');
         }
@@ -344,8 +354,14 @@ export const useAppHandlers = ({
         if (confirmed) {
             await fileOps.emptyTrash();
             refreshBothPanels();
+            refreshTrashStatus();
         }
     }, [dialogs, notify, t, refreshBothPanels]);
+
+    const handleTrashProperties = useCallback(() => {
+        openTrashSettings();
+        setContextMenu(null);
+    }, [openTrashSettings, setContextMenu]);
 
     const handleRestoreSelected = useCallback(async () => {
         const panel = contextMenu ? (contextMenu.panelId === 'left' ? left : right) : activePanel;
@@ -363,6 +379,7 @@ export const useAppHandlers = ({
                 });
             }
 
+            refreshTrashStatus();
             setContextMenu(null);
         } catch (e) {
             notify(`${t('error')}: ${formatCommandError(e)}`, 'error');
@@ -540,6 +557,7 @@ export const useAppHandlers = ({
         handleGoToFolder,
         handleRestoreAll,
         handleEmptyTrash,
+        handleTrashProperties,
         handleRestoreSelected,
         handleTabSwitch,
         handleTabClose,

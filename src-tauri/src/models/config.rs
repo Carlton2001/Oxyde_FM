@@ -9,6 +9,13 @@ use windows::core::PCWSTR;
 use crate::models::CommandError;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TrashDriveSettings {
+    pub drive_path: String,
+    pub max_size_mb: u64,
+    pub use_trash: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
     #[serde(default)]
     pub theme: String,
@@ -46,7 +53,13 @@ pub struct AppConfig {
     pub show_network: bool,
     #[serde(default)]
     pub group_by_date: bool,
+    #[serde(default)]
+    pub trash_drive_settings: Vec<TrashDriveSettings>,
+    #[serde(default = "default_true")]
+    pub confirm_delete: bool,
 }
+
+fn default_true() -> bool { true }
 
 impl Default for AppConfig {
     fn default() -> Self {
@@ -119,6 +132,8 @@ impl Default for AppConfig {
             show_checkboxes: false,
             show_network: true,
             group_by_date: false,
+            trash_drive_settings: Vec::new(),
+            confirm_delete: true,
         }
     }
 }

@@ -51,6 +51,7 @@ import { NotificationArea } from './components/ui/NotificationArea';
 import { ProgressOverlay } from './components/ui/ProgressOverlay';
 import { Tooltip } from './components/ui/Tooltip';
 import { DirectoryTreeHandle } from './components/ui/DirectoryTree';
+import { TrashSettingsDialog } from './components/dialogs/TrashSettingsDialog';
 import { PanelId, DriveInfo } from './types';
 
 function App() {
@@ -60,7 +61,8 @@ function App() {
     notifications, notify, dismissNotification, drives, mountedImages,
     useSystemIcons, refreshDrives,
     zipQuality, sevenZipQuality, zstdQuality, defaultTurboMode,
-    setUpdateAvailable, peekStatus
+    setUpdateAvailable, peekStatus, confirmDelete, setConfirmDelete,
+    isTrashEmpty, refreshTrashStatus, driveTrashConfigs, refreshDriveTrashConfigs
   } = useApp();
   const { registerKeybinding } = useKeybindings();
 
@@ -89,6 +91,7 @@ function App() {
   const dragGhostRef = useRef<HTMLDivElement>(null);
   const [modifiers, setModifiers] = useState({ ctrl: false, shift: false, alt: false });
   const [showProgress, setShowProgress] = useState(false);
+  const [isTrashSettingsOpen, setIsTrashSettingsOpen] = useState(false);
   const activeOpRef = useRef(fileOps.activeOperation);
   activeOpRef.current = fileOps.activeOperation;
 
@@ -208,7 +211,9 @@ function App() {
   const handlers = useAppHandlers({
     left, right, activePanelId, setActivePanelId, layout, fileOps, treeRef, notify, t, dialogs, clipboard: clipboardObj, refreshDrives,
     tabs, activeTabId, setActiveTab, closeTab, addTab, setContextMenu, contextMenu, drives, defaultTurboMode,
-    zipQuality, sevenZipQuality, zstdQuality, favorites, peekStatus
+    zipQuality, sevenZipQuality, zstdQuality, favorites, peekStatus, confirmDelete,
+    openTrashSettings: () => setIsTrashSettingsOpen(true),
+    refreshTrashStatus, driveTrashConfigs
   });
 
   const {
@@ -218,7 +223,7 @@ function App() {
     handleItemMiddleClick, handleContextMenu, handleSwapPanels, handleSyncPanels, openAdvancedSearch,
     openDuplicateSearchHandler,
     handleGoToFolder, handleAddToFavorites, handleRemoveFromFavorites,
-    handleDisconnectDrive
+    handleDisconnectDrive, handleTrashProperties
   } = handlers;
 
   const handleDuplicateSearch = useCallback(() => {
@@ -248,16 +253,16 @@ function App() {
   const actionContext: ActionContext = useMemo(() => ({
     activePanelId, activePanel: activePanelId === 'left' ? left : right, otherPanel: activePanelId === 'left' ? right : left,
     fileOps, clipboard: { clipboard, copy, cut, clearClipboard, copyToSystem, refreshClipboard },
-    notify, t: t as any, dialogs, settings: { zipQuality, sevenZipQuality, zstdQuality, defaultTurboMode }, setProgress,
+    notify, t: t as any, dialogs, settings: { zipQuality, sevenZipQuality, zstdQuality, defaultTurboMode, confirmDelete }, setProgress,
     contextMenuTarget: contextMenu?.target, isDir: contextMenu?.isDir, isDrive: contextMenu?.isDrive, refreshDrives, mountedImages,
     tabs, activeTabId, setActiveTab, closeTab, refreshBothPanels,
-    modifiers, peekStatus
+    modifiers, peekStatus, driveTrashConfigs
   }), [
     activePanelId, left, right, fileOps, clipboard, copy, cut, clearClipboard, copyToSystem, refreshClipboard,
     notify, t, dialogs, zipQuality, sevenZipQuality, zstdQuality, defaultTurboMode, setProgress,
     contextMenu?.target, contextMenu?.isDir, contextMenu?.isDrive, refreshDrives,
     tabs, activeTabId, setActiveTab, closeTab, refreshBothPanels,
-    modifiers, peekStatus
+    modifiers, peekStatus, driveTrashConfigs
   ]);
 
   useGlobalShortcuts(actionContext, tabs, activeTabId, handleTabSwitch);
@@ -291,10 +296,10 @@ function App() {
 
 
   // Ref for callbacks used in stable IPC listeners
-  const callbacksRef = useRef({ refreshBothPanels, t, setProgress });
+  const callbacksRef = useRef({ refreshBothPanels, t, setProgress, refreshTrashStatus });
   useEffect(() => {
-    callbacksRef.current = { refreshBothPanels, t, setProgress };
-  }, [refreshBothPanels, t, setProgress]);
+    callbacksRef.current = { refreshBothPanels, t, setProgress, refreshTrashStatus };
+  }, [refreshBothPanels, t, setProgress, refreshTrashStatus]);
 
   // IPC listeners - must be stable to not lose events during re-renders
   useEffect(() => {
@@ -317,6 +322,7 @@ function App() {
       if (op.status === 'Completed' || (typeof op.status === 'object' && op.status.Error)) {
         // Operation finished - Refresh UI
         callbacksRef.current.refreshBothPanels();
+        callbacksRef.current.refreshTrashStatus();
         return;
       }
     });
@@ -498,9 +504,11 @@ function App() {
         onTreeUnmount={(path: string) => handleAction('drive.unmount_image', { contextMenuTarget: path, isDrive: true })}
         onTreeDisconnectDrive={handleDisconnectDrive}
         onTreeProperties={(path: string) => dialogs.openPropertiesDialog([path])}
+        onTrashProperties={handleTrashProperties}
         onTreePaste={(path: string) => handleAction('file.paste', { ...actionContext, contextMenuTarget: path })}
         setShowAbout={() => dialogs.openAboutDialog()} onCalculateAllSizes={handleCalculateAllSizes}
         onRestoreAll={handleRestoreAll} onRestoreSelected={handleRestoreSelected} onEmptyTrash={handleEmptyTrash}
+        isTrashEmpty={isTrashEmpty}
         onTabSwitch={handleTabSwitch} onTabClose={handleTabClose} onItemMiddleClick={handleItemMiddleClick}
         onOpenNewTab={layout === 'standard' ? (path: string) => {
           const currentIndex = tabs.findIndex(t => t.id === activeTabId);
@@ -575,7 +583,7 @@ function App() {
           onPaste={contextMenu.isInputContext ? handleInputPaste : () => handleAction('file.paste', actionContext)}
           isTrashContext={contextMenu.isTrash || (contextMenu.target === 'trash://')}
           isSearchContext={contextMenu.panelId === 'left' ? left.path.startsWith('search://') : right.path.startsWith('search://')}
-          onRestore={handleRestoreSelected} onGoToFolder={handleGoToFolder}
+          onRestore={handleRestoreSelected} onRestoreAll={handleRestoreAll} onEmptyTrash={handleEmptyTrash} onGoToFolder={handleGoToFolder}
           onOpenNewTab={layout === 'standard' ? (path: string) => {
             const currentIndex = tabs.findIndex(t => t.id === activeTabId);
             const targetIndex = currentIndex !== -1 ? currentIndex + 1 : undefined;
@@ -593,7 +601,20 @@ function App() {
           onAddToFavorites={() => handleAddToFavorites(contextMenu.target!)}
           onRemoveFromFavorites={() => handleRemoveFromFavorites(contextMenu.target!)}
           onDisconnectDrive={handleDisconnectDrive}
-          onEmptyTrash={handleEmptyTrash}
+          onTrashProperties={handleTrashProperties}
+        />
+      )}
+
+      {isTrashSettingsOpen && (
+        <TrashSettingsDialog 
+          isOpen={isTrashSettingsOpen}
+          onClose={() => setIsTrashSettingsOpen(false)}
+          t={t as any}
+          drives={drives}
+          confirmDeleteGlobal={confirmDelete}
+          onUpdateGlobalConfirm={setConfirmDelete}
+          isTrashEmpty={isTrashEmpty}
+          refreshConfigs={refreshDriveTrashConfigs}
         />
       )}
 

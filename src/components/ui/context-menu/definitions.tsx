@@ -51,6 +51,8 @@ export interface MenuContext {
     isImageMounted?: boolean;
     isInputContext?: boolean;
     isTextSelected?: boolean;
+    isTrashEmpty?: boolean;
+    isNukeOverride?: boolean;
 
     canUndo: boolean;
     undoLabel?: string;
@@ -92,6 +94,8 @@ export interface MenuContext {
         onSortDirection?: (direction: SortDirection) => void;
         onDisconnectDrive?: (letter: string) => void;
         onEmptyTrash?: () => void;
+        onRestoreAll?: () => void;
+        onTrashProperties?: () => void;
         openMapNetworkDriveDialog?: () => void;
         openDisconnectNetworkDriveDialog?: () => void;
         onSelectAll?: () => void;
@@ -101,7 +105,7 @@ export interface MenuContext {
 const BlankIcon = () => <div className="icon-md" style={{ width: '1rem', height: '1rem' }} />;
 
 export function getMenuItems(ctx: MenuContext): MenuItem[] {
-    const { target, isDir, isTreeContext, isTrashContext, isBackground, isDrive, canPaste, canUndo, undoLabel, canRedo, redoLabel, t, actions, isShiftPressed, isInputContext, isTextSelected, showNetwork = true } = ctx;
+    const { target, isDir, isTreeContext, isTrashContext, isBackground, isDrive, canPaste, canUndo, undoLabel, canRedo, redoLabel, t, actions, isShiftPressed, isInputContext, isTextSelected, isNukeOverride, showNetwork = true } = ctx;
     const items: MenuItem[] = [];
 
     // --- Special Context: Input fields ---
@@ -477,12 +481,46 @@ export function getMenuItems(ctx: MenuContext): MenuItem[] {
                 danger: true
             });
         }
+        
+        if (isTrashRoot) {
+            if (actions.onRestoreAll && !ctx.isTrashEmpty) {
+                items.push({
+                    id: 'restore_all',
+                    type: 'action',
+                    label: t('restore_all' as any),
+                    icon: RotateCcw,
+                    action: () => actions.onRestoreAll?.()
+                });
+            }
+
+            if (actions.onEmptyTrash && !ctx.isTrashEmpty) {
+                items.push({
+                    id: 'empty_trash',
+                    type: 'action',
+                    label: t('empty_recycle_bin' as any),
+                    icon: Trash2,
+                    action: () => actions.onEmptyTrash?.(),
+                    color: 'var(--error-color)'
+                });
+            }
+        }
+
+        if (actions.onTrashProperties) {
+            items.push({ id: 'sep_trash_props', type: 'separator' });
+            items.push({
+                id: 'trash_properties',
+                type: 'action',
+                label: t('properties'),
+                icon: Settings,
+                action: () => actions.onTrashProperties?.()
+            });
+        }
     } else {
         if (!isBackground && !isDrive && !ctx.isMediaDevice && !ctx.isNetworkComputer) {
             items.push({
                 id: 'delete',
                 type: 'action',
-                label: isShiftPressed ? t('perm_delete' as any) : t('delete'),
+                label: (isShiftPressed || ctx.isNukeOverride) ? t('perm_delete' as any) : t('delete'),
                 icon: Trash2,
                 action: () => actions.onDelete(),
                 color: 'var(--error-color)',

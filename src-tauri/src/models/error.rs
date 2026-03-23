@@ -8,6 +8,7 @@ pub enum CommandError {
     SystemError(String),
     ArchiveError(String),
     TrashError(String),
+    TrashFull(String),
     Other(String),
 }
 
@@ -21,6 +22,7 @@ impl fmt::Display for CommandError {
             CommandError::SystemError(msg) => write!(f, "System Error: {}", msg),
             CommandError::ArchiveError(msg) => write!(f, "Archive Error: {}", msg),
             CommandError::TrashError(msg) => write!(f, "Trash Error: {}", msg),
+            CommandError::TrashFull(msg) => write!(f, "Trash Full: {}", msg),
             CommandError::Other(msg) => write!(f, "Error: {}", msg),
         }
     }

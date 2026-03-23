@@ -6,6 +6,7 @@ import cx from 'classnames';
 import { PanelState, DriveInfo, FileEntry, SortField, ColumnWidths, ViewMode } from '../../types';
 import { Tabs } from '../ui/Tabs';
 import { TFunc } from '../../i18n';
+import { useApp } from '../../context/AppContext';
 
 interface FullPanelState extends PanelState {
     goUp: () => void;
@@ -113,7 +114,9 @@ interface DualPanelLayoutProps {
     onAddToFavorites?: (path: string) => void;
     onRemoveFromFavorites?: (path: string) => void;
     onDuplicateSearch?: () => void;
+    onTrashProperties?: () => void;
     dragOverPath: string | null;
+    isTrashEmpty: boolean;
 }
 
 export const DualPanelLayout: React.FC<DualPanelLayoutProps> = ({
@@ -196,9 +199,21 @@ export const DualPanelLayout: React.FC<DualPanelLayoutProps> = ({
     onAddToFavorites,
     onRemoveFromFavorites,
     onDuplicateSearch,
-    dragOverPath
+    onTrashProperties,
+    dragOverPath,
+    isTrashEmpty
 }) => {
+    const { driveTrashConfigs } = useApp();
     const activePanel = activePanelId === 'left' ? left : right;
+
+    const isNukeOverride = useMemo(() => {
+        if (!activePanel.path) return false;
+        const targetDriveMatch = activePanel.path.match(/^([a-zA-Z]:)/);
+        if (!targetDriveMatch) return false;
+        const targetDrive = targetDriveMatch[1].toLowerCase();
+
+        return driveTrashConfigs[targetDrive]?.nukeOnDelete || false;
+    }, [activePanel.path, driveTrashConfigs]);
 
     // Use Refs to ensure drag handlers always access latest state (files/selection)
     // and to properly handle switching between files vs searchResults
@@ -321,6 +336,8 @@ export const DualPanelLayout: React.FC<DualPanelLayoutProps> = ({
                 onRestoreAll={onRestoreAll}
                 onRestoreSelected={onRestoreSelected}
                 onEmptyTrash={onEmptyTrash}
+                isTrashEmpty={isTrashEmpty}
+                isNukeOverride={isNukeOverride}
                 onSwapPanels={onSwapPanels}
                 onSyncPanels={onSyncPanels}
                 isSyncDisabled={isSyncDisabled}
@@ -369,6 +386,8 @@ export const DualPanelLayout: React.FC<DualPanelLayoutProps> = ({
                         onAddToFavorites={onAddToFavorites}
                         onRemoveFromFavorites={onRemoveFromFavorites}
                         onTreeEmptyTrash={onEmptyTrash}
+                        onTreeRestoreAll={onRestoreAll}
+                        onTrashProperties={onTrashProperties}
                     />
                 )}
 

@@ -37,6 +37,7 @@ export interface ContextMenuProps {
     isTrashContext?: boolean;
     isSearchContext?: boolean;
     onRestore?: () => void;
+    onRestoreAll?: () => void;
     // Tree context (DirectoryTree)
     isTreeContext?: boolean;
     onExpandAll?: () => void;
@@ -68,15 +69,25 @@ export interface ContextMenuProps {
     isInputContext?: boolean;
     isTextSelected?: boolean;
     onSelectAll?: () => void;
+    onTrashProperties?: () => void;
 }
 
 
 export const ContextMenu: React.FC<ContextMenuProps> = (props) => {
-    const { mountedImages, showNetwork } = useApp();
+    const { mountedImages, showNetwork, isTrashEmpty, driveTrashConfigs } = useApp();
     const { openMapNetworkDriveDialog, openDisconnectNetworkDriveDialog } = useDialogs();
 
     // Memoize the context and items generation to avoid recalculations if props haven't changed meaningfully
     // though usually a context menu is mounted once and then unmounted.
+
+    const isNukeOverride = useMemo(() => {
+        if (!props.target || props.isTrashContext || props.isBackground) return false;
+        const targetDriveMatch = props.target.match(/^([a-zA-Z]:)/);
+        if (!targetDriveMatch) return false;
+        const targetDrive = targetDriveMatch[1].toLowerCase();
+        
+        return driveTrashConfigs[targetDrive]?.nukeOnDelete || false;
+    }, [props.target, props.isTrashContext, props.isBackground, driveTrashConfigs]);
 
     // Explicit mapping to avoid passing everything blindly
     const menuContext: MenuContext = useMemo(() => ({
@@ -98,6 +109,8 @@ export const ContextMenu: React.FC<ContextMenuProps> = (props) => {
         isImageMounted: props.target ? mountedImages.some(img => img.toLowerCase().replace(/\\/g, '/') === props.target!.toLowerCase().replace(/\\/g, '/')) : false,
         isInputContext: props.isInputContext,
         isTextSelected: props.isTextSelected,
+        isTrashEmpty,
+        isNukeOverride,
 
         canUndo: props.canUndo,
         undoLabel: props.undoLabel,
@@ -136,9 +149,10 @@ export const ContextMenu: React.FC<ContextMenuProps> = (props) => {
             onSortDirection: props.onSortDirection,
             onDisconnectDrive: props.onDisconnectDrive,
             onEmptyTrash: props.onEmptyTrash,
-            openMapNetworkDriveDialog,
+            onRestoreAll: props.onRestoreAll,
             openDisconnectNetworkDriveDialog,
-            onSelectAll: props.onSelectAll
+            onSelectAll: props.onSelectAll,
+            onTrashProperties: props.onTrashProperties
         }
     }), [
         props.target, props.isDir, props.isTreeContext, props.isTrashContext,
@@ -150,7 +164,8 @@ export const ContextMenu: React.FC<ContextMenuProps> = (props) => {
         props.onOpenNewTab, props.onOpenFile, props.onExtract, props.onCompress, props.onMount, props.onUnmount,
         props.onAddToFavorites, props.onRemoveFromFavorites, props.onSort, props.onSortDirection, props.isShiftPressed, props.isFavorite, mountedImages,
         openMapNetworkDriveDialog, openDisconnectNetworkDriveDialog,
-        props.isInputContext, props.isTextSelected, props.onSelectAll, showNetwork
+        props.isInputContext, props.isTextSelected, props.onSelectAll, showNetwork, props.onTrashProperties,
+        isTrashEmpty, props.onRestoreAll, isNukeOverride, driveTrashConfigs
     ]);
 
     const items = useMemo(() => getMenuItems(menuContext), [menuContext]);

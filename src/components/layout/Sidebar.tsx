@@ -51,6 +51,8 @@ interface SidebarProps {
     onAddToFavorites?: (path: string) => void;
     onRemoveFromFavorites?: (path: string) => void;
     onTreeEmptyTrash?: () => void;
+    onTreeRestoreAll?: () => void;
+    onTrashProperties?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -89,7 +91,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
     onDriveContextMenu,
     onAddToFavorites,
     onRemoveFromFavorites,
-    onTreeEmptyTrash
+    onTreeEmptyTrash,
+    onTreeRestoreAll,
+    onTrashProperties
 }) => {
     const { showNetwork } = useApp();
     const sidebarRef = React.useRef<HTMLDivElement>(null);
@@ -329,6 +333,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     onAddToFavorites={onAddToFavorites}
                     onRemoveFromFavorites={onRemoveFromFavorites}
                     onEmptyTrash={onTreeEmptyTrash}
+                    onRestoreAll={onTreeRestoreAll}
+                    onTrashProperties={onTrashProperties}
                 />
             )}
 

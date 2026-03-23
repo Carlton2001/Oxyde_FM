@@ -766,11 +766,14 @@ impl FileOperationManager {
             unsafe {
                 let result = SHFileOperationW(&mut sh_op);
                 if result != 0 {
+                    if result == 0x4C7 || result == 0x80070005u32 as i32 {
+                        return Err("TrashFull: Opération annulée, nécessitant des droits administrateur ou trop volumineuse.".to_string());
+                    }
                     return Err(format!("Windows Shell Error (0x{:X}). The file might be in use or the Recycle Bin is unavailable for this drive.", result));
                 }
                 
                 if sh_op.fAnyOperationsAborted.as_bool() {
-                    return Err("Operation was aborted.".to_string());
+                    return Err("TrashFull: Operation was aborted.".to_string());
                 }
             }
         }

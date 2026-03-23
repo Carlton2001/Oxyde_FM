@@ -2,12 +2,14 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { ConflictEntry, ConflictAction, HistoryState, FileOperation, Transaction, ConflictResponse } from '../types';
+import { useDialogs } from '../context/DialogContext';
 
 export const useFileOperations = (
     notify?: (message: string, type: 'error' | 'success' | 'info' | 'warning' | 'loading', duration?: number) => string | undefined,
     t?: any,
     dismissNotification?: (id: string) => void
 ) => {
+    const { confirm } = useDialogs();
     // Stable refs for notify/t to avoid re-subscribing the event listener on every render
     const notifyRef = useRef(notify);
     const tRef = useRef(t);
@@ -98,10 +100,25 @@ export const useFileOperations = (
                     if (msg) _notify(msg, 'success');
                 }
             } else if (typeof op.status === 'object' && op.status && 'Error' in op.status) {
+                const errorMsg = (op.status as any).Error as string;
                 const _notify = notifyRef.current;
                 const _t = tRef.current;
-                if (_notify && _t) {
-                    _notify(`${_t('error')}: ${(op.status as any).Error}`, 'error');
+                if (errorMsg.includes('TrashFull')) {
+                    if (_t) {
+                        confirm(
+                            _t('trash_full_confirm'),
+                            _t('trash_full_title'),
+                            true // isDanger
+                        ).then(confirmed => {
+                            if (confirmed) {
+                                // op.sources contains the paths as strings, wait, no, it contains PathBufs which serialize to strings
+                                const paths = op.sources;
+                                executeFileOp('delete', paths, undefined, op.turbo);
+                            }
+                        });
+                    }
+                } else if (_notify && _t) {
+                    _notify(`${_t('error')}: ${errorMsg}`, 'error');
                 }
             }
         });
@@ -109,7 +126,7 @@ export const useFileOperations = (
         return () => {
             unlisten.then(f => f());
         };
-    }, [fetchHistory]);
+    }, [fetchHistory, confirm]); // Added confirm to deps
 
     // Safety net: periodically clean stale operations from activeOps and notifications
     useEffect(() => {
@@ -306,7 +323,30 @@ export const useFileOperations = (
             }
         } else {
             // Normal view: move to trash or permanent delete
-            await executeFileOp(permanent ? 'delete' : 'trash', paths, undefined, turbo);
+            try {
+                await executeFileOp(permanent ? 'delete' : 'trash', paths, undefined, turbo);
+            } catch (e: any) {
+                // If moving to trash failed because it's too large (or was cancelled/denied)
+                // suggest permanent deletion instead.
+                
+                // Tauri v2 serializes enums as objects: { TrashFull: "message" }
+                const isTrashFull = e && typeof e === 'object' && 'TrashFull' in e;
+                const isTrashFullStr = typeof e === 'string' && e.includes('Trash Full');
+
+                if (isTrashFull || isTrashFullStr) {
+                    const _t = tRef.current;
+                    const confirmed = await confirm(
+                        _t('trash_full_confirm'),
+                        _t('trash_full_title'),
+                        true // isDanger
+                    );
+                    if (confirmed) {
+                        return await executeFileOp('delete', paths, undefined, turbo);
+                    }
+                    return; // User cancelled the permanent delete too
+                }
+                throw e; 
+            }
         }
         await fetchHistory();
     };

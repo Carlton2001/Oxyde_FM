@@ -35,12 +35,25 @@ pub fn set_config_value(
         "show_checkboxes" => config.show_checkboxes = value.parse().unwrap_or(false),
         "show_network" => config.show_network = value.parse().unwrap_or(true),
         "group_by_date" => config.group_by_date = value.parse().unwrap_or(false),
+        "confirm_delete" => config.confirm_delete = value.parse().unwrap_or(true),
         _ => return Err(CommandError::Other(format!("Unknown config key: {}", key))),
     }
 
     // Save using the internal helper without re-locking, 
     // OR we could drop lock and call save(). 
     // Since we hold the lock and have the updated data, we can just call save_config with it.
+    state.save_config(&app, &config)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn set_trash_settings(
+    app: AppHandle,
+    state: State<'_, ConfigManager>,
+    settings: Vec<crate::models::TrashDriveSettings>,
+) -> Result<(), CommandError> {
+    let mut config = state.0.lock().map_err(|_| CommandError::SystemError("Failed to lock config".to_string()))?;
+    config.trash_drive_settings = settings;
     state.save_config(&app, &config)?;
     Ok(())
 }

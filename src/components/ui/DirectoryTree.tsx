@@ -76,6 +76,8 @@ interface DirectoryTreeProps {
     onAddToFavorites?: (path: string) => void;
     onRemoveFromFavorites?: (path: string) => void;
     onEmptyTrash?: () => void;
+    onRestoreAll?: () => void;
+    onTrashProperties?: () => void;
 }
 
 export interface DirectoryTreeHandle {
@@ -119,7 +121,9 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
     favorites = [],
     onAddToFavorites,
     onRemoveFromFavorites,
-    onEmptyTrash
+    onEmptyTrash,
+    onRestoreAll,
+    onTrashProperties
 }, ref) => {
     const { useSystemIcons: contextUseSystemIcons, showHidden, showSystem, showNetwork } = useApp();
     const useSystemIcons = propUseSystemIcons ?? contextUseSystemIcons;
@@ -716,6 +720,8 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
                     isTrashContext={contextMenu.isTrash}
                     onOpenFile={(path) => { onNavigate(path); setContextMenu(null); }}
                     onEmptyTrash={() => { onEmptyTrash?.(); setContextMenu(null); }}
+                    onRestoreAll={() => { onRestoreAll?.(); setContextMenu(null); }}
+                    onTrashProperties={() => { onTrashProperties?.(); setContextMenu(null); }}
                 />
             )}
         </div>

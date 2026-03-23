@@ -129,6 +129,9 @@ pub fn run() {
             commands::ops::purge_items,
             commands::ops::purge_recycle_bin,
             commands::ops::move_from_trash,
+            commands::ops::get_recycle_bin_config,
+            commands::ops::set_recycle_bin_config,
+            commands::ops::get_total_recycle_bin_usage,
             commands::ops::get_history,
             commands::ops::undo_last_action,
             commands::ops::redo_last_action,
@@ -178,6 +181,7 @@ pub fn run() {
             // Config Commands
             commands::config::get_config,
             commands::config::set_config_value,
+            commands::config::set_trash_settings,
             commands::config::reset_config_to_default,
             commands::sidebar::get_sidebar_nodes,
             commands::sidebar::get_subtree_nodes,

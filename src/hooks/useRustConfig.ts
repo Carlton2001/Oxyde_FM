@@ -20,6 +20,7 @@ export interface AppConfig {
     show_checkboxes: boolean;
     show_network: boolean;
     group_by_date: boolean;
+    confirm_delete: boolean;
 }
 
 export const useRustConfig = () => {

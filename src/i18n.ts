@@ -80,6 +80,7 @@ export const translations = {
         refresh: 'Refresh',
         create: 'Create',
         cancel: 'Cancel',
+        ok: 'OK',
         undo: 'Undo',
         redo: 'Redo',
         confirm: 'Confirm',
@@ -380,6 +381,14 @@ export const translations = {
         permanently_deleted_plural: 'Permanently deleted',
         multiple_locations: 'Multiple locations',
         all: 'All',
+        trash_properties: 'Recycle Bin Properties',
+        recycle_bin_location: 'Recycle Bin Location',
+        settings_for_selected_location: 'Settings for selected location',
+        custom_size: 'Custom size',
+        max_capacity: 'Maximum size',
+        dont_move_to_trash: 'Don\'t move files to the Recycle Bin.',
+        delete_immediately_desc: 'Remove files immediately when deleted.',
+        display_delete_confirmation: 'Display delete confirmation dialog',
 
         // --- Tabs ---
         new_tab: 'New Tab',
@@ -427,6 +436,8 @@ export const translations = {
         new_folder: 'New Folder',
         enter_folder_name: 'Enter folder name',
         new_folder_placeholder: 'Enter folder name',
+        trash_full_title: 'Item too large',
+        trash_full_confirm: 'This item is too large for the Recycle Bin. Do you want to permanently delete it?',
 
         // --- Updates & About ---
         update_available: 'A new version is available!',
@@ -544,6 +555,7 @@ export const translations = {
         refresh: 'Actualiser',
         create: 'Créer',
         cancel: 'Annuler',
+        ok: 'OK',
         undo: 'Annuler',
         redo: 'Rétablir',
         confirm: 'Confirmer',
@@ -831,6 +843,14 @@ export const translations = {
         recycle_confirm_single: 'Déplacer cet élément vers la corbeille ?',
         recycle_confirm_multiple: 'Déplacer {count} éléments vers la corbeille ?',
         moved_to_recycle_bin: 'déplacé vers la corbeille',
+        trash_properties: 'Propriétés de : Corbeille',
+        recycle_bin_location: 'Emplacement de la Corbeille',
+        settings_for_selected_location: 'Paramètres pour l\'emplacement sélectionné',
+        custom_size: 'Taille personnalisée',
+        max_capacity: 'Taille maximale',
+        dont_move_to_trash: 'Ne pas déplacer les fichiers vers la Corbeille.',
+        delete_immediately_desc: 'Supprimer immédiatement les fichiers lorsqu\'ils sont effacés.',
+        display_delete_confirmation: 'Afficher la confirmation de suppression',
         moved_to_recycle_bin_plural: 'déplacés vers la corbeille',
         restore: 'Restaurer',
         restore_all: 'Tout restaurer',
@@ -891,6 +911,8 @@ export const translations = {
         new_folder: 'Nouveau dossier',
         enter_folder_name: 'Entrez le nom du dossier',
         new_folder_placeholder: 'Nom du dossier',
+        trash_full_title: 'Élément trop volumineux',
+        trash_full_confirm: 'Cet élément est trop volumineux pour la corbeille. Voulez-vous le supprimer définitivement ?',
 
         // --- Updates & About ---
         update_available: 'Une nouvelle version est disponible !',

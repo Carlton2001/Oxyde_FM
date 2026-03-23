@@ -56,6 +56,8 @@ interface TopBarProps {
     isSyncDisabled?: boolean;
     onComparePanels?: () => void;
     isComparing?: boolean;
+    isTrashEmpty?: boolean;
+    isNukeOverride?: boolean;
 }
 
 export const TopBar: React.FC<TopBarProps> = ({
@@ -97,6 +99,8 @@ export const TopBar: React.FC<TopBarProps> = ({
     isSyncDisabled = false,
     onComparePanels,
     isComparing = false,
+    isTrashEmpty = false,
+    isNukeOverride = false,
     isShiftPressed
 }) => {
     const [settingsOpen, setSettingsOpen] = useState(false);
@@ -276,7 +280,7 @@ export const TopBar: React.FC<TopBarProps> = ({
                 {activePanel.selected.size > 0 && (
                     <button
                         className="btn-icon danger"
-                        data-tooltip={isTrashView || isShiftPressed ? t("perm_delete" as any) : t("delete")}
+                        data-tooltip={(isTrashView || isShiftPressed || isNukeOverride) ? t("perm_delete" as any) : t("delete")}
                         data-tooltip-pos="bottom"
                         onClick={onDelete}
                     >
@@ -338,6 +342,7 @@ export const TopBar: React.FC<TopBarProps> = ({
                     <button
                         className="btn-icon"
                         onClick={onRestoreAll}
+                        disabled={isTrashEmpty}
                         data-tooltip={t('restore_all' as any)}
                         data-tooltip-pos="bottom"
                     >
@@ -347,6 +352,7 @@ export const TopBar: React.FC<TopBarProps> = ({
                     <button
                         className="btn-icon danger"
                         onClick={onEmptyTrash}
+                        disabled={isTrashEmpty}
                         data-tooltip={t('empty_recycle_bin' as any)}
                         data-tooltip-pos="bottom"
                     >
