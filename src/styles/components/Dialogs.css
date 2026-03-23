@@ -178,7 +178,7 @@
 .drag-hint {
     padding: 2px 0.25rem;
     border-radius: 3px;
-    transition: all 0.1s ease;
+    transition: opacity 0.1s ease, color 0.1s ease;
 }
 
 .drag-hint.active {

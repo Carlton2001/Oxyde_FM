@@ -46,7 +46,7 @@
     /* Exactly 28px */
     border-radius: 0;
     cursor: default;
-    transition: all 0.1s ease;
+    transition: opacity 0.1s ease;
     user-select: none;
     white-space: nowrap;
     box-sizing: border-box;

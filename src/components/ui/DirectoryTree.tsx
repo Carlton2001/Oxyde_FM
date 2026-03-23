@@ -240,6 +240,8 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
         }
     }), [refreshPath]);
 
+    const fsChangeDebounceRef = useRef<Record<string, any>>({});
+
     // Listen for file system changes
     useEffect(() => {
         const unlisten = listen<{ kind: string; paths: string[] }>('fs-change', (event) => {
@@ -250,16 +252,26 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
                 const parentPath = getParent(normP);
                 if (!parentPath) return;
 
-                const normParent = normalizePath(parentPath).toLowerCase();
+                const normParent = normalizePath(parentPath);
+                const normParentLower = normParent.toLowerCase();
 
-                if (loadedPathsRef.current.has(normParent)) {
-                    loadPathContent(parentPath);
+                if (loadedPathsRef.current.has(normParentLower)) {
+                    // Debounce refresh for this parent
+                    if (fsChangeDebounceRef.current[normParentLower]) {
+                        clearTimeout(fsChangeDebounceRef.current[normParentLower]);
+                    }
+                    fsChangeDebounceRef.current[normParentLower] = setTimeout(() => {
+                        loadPathContent(normParent);
+                        delete fsChangeDebounceRef.current[normParentLower];
+                    }, 200);
                 }
             });
         });
 
         return () => {
             unlisten.then(f => f());
+            // Clear all pending timeouts on unmount
+            Object.values(fsChangeDebounceRef.current).forEach(clearTimeout);
         };
     }, [loadPathContent]);
 

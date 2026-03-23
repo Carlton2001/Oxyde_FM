@@ -176,7 +176,7 @@
     border: 1px solid var(--border-color);
     background: var(--surface-tertiary);
     color: var(--text-color);
-    transition: all 0.1s ease-in-out;
+    transition: background-color 0.1s ease-in-out, border-color 0.1s ease-in-out;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -316,7 +316,7 @@
     border-radius: 0.25rem;
     cursor: default;
     /* Per user request: Curseur par défaut */
-    transition: all 0.1s ease;
+    transition: background-color 0.1s ease, color 0.1s ease;
     flex-shrink: 0;
 }
 
@@ -510,8 +510,7 @@
     border-radius: 0.625rem;
     position: relative;
     overflow: hidden;
-    transition: background-color 0.2s cubic-bezier(0.4, 0, 0.2, 1),
-        border-color 0.15s ease-out,
+    transition: border-color 0.15s ease-out,
         transform 0.1s ease-out;
     user-select: none;
     cursor: default;
@@ -632,7 +631,6 @@
     font-size: 0.8125rem;
     position: relative;
     user-select: none;
-    transition: background-color 0.1s;
     width: max-content;
 }
 

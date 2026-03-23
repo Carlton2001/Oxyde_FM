@@ -54,7 +54,7 @@
     color: var(--text-secondary);
     border: none;
     margin: 0 2px;
-    transition: background-color 0.2s, color 0.2s;
+    transition: color 0.2s;
 }
 
 .scroll-btn:hover {
@@ -83,7 +83,7 @@
     flex: 1;
     /* Allow tabs to grow up to max-width */
     color: var(--text-muted, #5d5d5d);
-    transition: all 0.2s ease;
+    transition: opacity 0.2s ease, transform 0.1s ease;
     user-select: none;
     position: relative;
     border: 1px solid transparent;
@@ -157,7 +157,7 @@
     margin-left: 0.5rem;
     /* More space from text */
     opacity: 0;
-    transition: opacity 0.2s, background-color 0.2s;
+    transition: opacity 0.2s;
 }
 
 .tab:hover .tab-close,
@@ -193,7 +193,7 @@
     border-radius: 0.25rem;
     cursor: default;
     color: var(--text-secondary);
-    transition: background-color 0.2s;
+    transition: color 0.2s;
     margin-left: 0.25rem;
     align-self: center;
     /* Center vertically relative to the 40px bar */

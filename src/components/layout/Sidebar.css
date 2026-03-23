@@ -90,7 +90,7 @@
     background: transparent;
     color: var(--text-color);
     border: none;
-    transition: background 0.15s, color 0.15s;
+    transition: opacity 0.15s;
     opacity: 0.7;
 }
 
@@ -133,7 +133,7 @@
     color: var(--text-color);
     opacity: 0;
     visibility: hidden;
-    transition: all 0.15s ease;
+    transition: opacity 0.15s ease, transform 0.15s ease;
     transform: scale(0.8);
     z-index: 10;
     box-shadow: 0 2px 0.25rem rgba(0, 0, 0, 0.1);
@@ -179,7 +179,7 @@
     font-size: 0.8125rem;
     color: var(--text-color);
     cursor: pointer;
-    transition: all 0.1s;
+    transition: opacity 0.1s;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;

@@ -357,6 +357,8 @@ export const useFiles = (panelId: PanelId, path: string, sortConfig: SortConfig,
         }
     }, [panelId, path, sortConfig, showHidden, showSystem, requestId]);
 
+    const fsChangeDebounceRef = useRef<any>(null);
+
     // Independent fs-change listener to ensuring auto-refresh
     useEffect(() => {
         const unlisten = listen<FsChangeEvent>('fs-change', (event) => {
@@ -378,12 +380,19 @@ export const useFiles = (panelId: PanelId, path: string, sortConfig: SortConfig,
             });
 
             if (isRelevant) {
-                refresh(true);
+                if (fsChangeDebounceRef.current) clearTimeout(fsChangeDebounceRef.current);
+                fsChangeDebounceRef.current = setTimeout(() => {
+                    refresh(true);
+                    fsChangeDebounceRef.current = null;
+                }, 200);
             }
         });
 
-        return () => { unlisten.then(u => u()); };
-    }, [path, refresh, requestId]);
+        return () => {
+            unlisten.then(u => u());
+            if (fsChangeDebounceRef.current) clearTimeout(fsChangeDebounceRef.current);
+        };
+    }, [path, refresh]);
 
     useEffect(() => {
         refresh(false);
