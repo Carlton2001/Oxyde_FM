@@ -414,7 +414,7 @@ export function getMenuItems(ctx: MenuContext): MenuItem[] {
 
     // --- 5. Clipboard & Modification ---
     if (!isTrashContext) {
-        if (!isBackground && !isDrive && !ctx.isMediaDevice && !ctx.isNetworkComputer) {
+        if (!isBackground && (!isDrive || isBackground) && !ctx.isMediaDevice && !ctx.isNetworkComputer) {
             items.push({
                 id: 'cut',
                 type: 'action',
@@ -436,7 +436,7 @@ export function getMenuItems(ctx: MenuContext): MenuItem[] {
             });
         }
 
-        if (canPaste && !ctx.isNetworkComputer && !isDrive) {
+        if (canPaste && !ctx.isNetworkComputer && (!isDrive || isBackground)) {
             items.push({
                 id: 'paste',
                 type: 'action',
@@ -446,7 +446,7 @@ export function getMenuItems(ctx: MenuContext): MenuItem[] {
             });
         }
 
-        if (target && !isBackground && !isDrive && !ctx.isMediaDevice && !ctx.isNetworkComputer) {
+        if (target && !isBackground && (!isDrive || isBackground) && !ctx.isMediaDevice && !ctx.isNetworkComputer) {
             items.push({
                 id: 'rename',
                 type: 'action',
@@ -516,7 +516,7 @@ export function getMenuItems(ctx: MenuContext): MenuItem[] {
             });
         }
     } else {
-        if (!isBackground && !isDrive && !ctx.isMediaDevice && !ctx.isNetworkComputer) {
+        if (!isBackground && (!isDrive || isBackground) && !ctx.isMediaDevice && !ctx.isNetworkComputer) {
             items.push({
                 id: 'delete',
                 type: 'action',

@@ -118,7 +118,7 @@ export const useFileOperations = (
                         });
                     }
                 } else if (_notify && _t) {
-                    _notify(`${_t('error')}: ${errorMsg}`, 'error');
+                    _notify(`${_t('error')}: ${_t(errorMsg as any)}`, 'error');
                 }
             }
         });

@@ -333,6 +333,8 @@ impl FileOperationManager {
         
         let mut handles = Vec::with_capacity(concurrency);
 
+        let error_captured = Arc::new(Mutex::new(None));
+        
         for thread_idx in 0..concurrency {
             let files = files_to_process_arc.clone();
             let processed_bytes = processed_bytes_atomic.clone();
@@ -341,7 +343,7 @@ impl FileOperationManager {
             let pause = pause_flag.clone();
             let turbo = turbo_flag.clone();
             let idx = current_index.clone();
-            let _op_arc = op.clone();
+            let error_share = error_captured.clone();
             
             let handle = std::thread::spawn(move || {
                 let mut is_in_background_mode = false;
@@ -386,26 +388,35 @@ impl FileOperationManager {
                         let _ = std::fs::create_dir_all(parent);
                     }
 
-                    let mut file_in = match std::fs::File::open(src) {
-                        Ok(f) => f,
-                        Err(_) => {
-                            processed_files.fetch_add(1, Ordering::Relaxed);
-                            continue;
-                        }
-                    };
-                    let mut file_out = match std::fs::File::create(dest) {
-                        Ok(f) => f,
-                        Err(_) => {
-                            processed_files.fetch_add(1, Ordering::Relaxed);
-                            continue;
-                        }
-                    };
+                    let mut file_in = std::fs::File::open(src).map_err(|e| {
+                        let key = match e.kind() {
+                            std::io::ErrorKind::PermissionDenied => "error_access_denied",
+                            std::io::ErrorKind::StorageFull => "error_disk_full",
+                            _ => return format!("Failed to open {:?}: {}", src, e),
+                        }.to_string();
+                        let mut share = error_share.lock().unwrap();
+                        if share.is_none() { *share = Some(key.clone()); }
+                        key
+                    })?;
+
+                    let mut file_out = std::fs::File::create(dest).map_err(|e| {
+                        let key = match e.kind() {
+                            std::io::ErrorKind::PermissionDenied => "error_access_denied",
+                            std::io::ErrorKind::StorageFull => "error_disk_full",
+                            _ => return format!("Failed to create {:?}: {}", dest, e),
+                        }.to_string();
+                        let mut share = error_share.lock().unwrap();
+                        if share.is_none() { *share = Some(key.clone()); }
+                        key
+                    })?;
                     
                     let buffer_size = if is_turbo { 1024 * 1024 } else { 512 * 1024 };
                     let mut buffer = vec![0u8; buffer_size];
                     
                     loop {
                         if cancel.load(Ordering::Relaxed) { break; }
+                        if error_share.lock().unwrap().is_some() { break; }
+
                         while pause.load(Ordering::Relaxed) {
                             std::thread::sleep(std::time::Duration::from_millis(100));
                             if cancel.load(Ordering::Relaxed) { return Ok(()); }
@@ -414,10 +425,20 @@ impl FileOperationManager {
                         let n = match file_in.read(&mut buffer) {
                             Ok(0) => break,
                             Ok(n) => n,
-                            Err(_) => break,
+                            Err(e) => {
+                                let msg = format!("Read error on {:?}: {}", src, e);
+                                let mut share = error_share.lock().unwrap();
+                                if share.is_none() { *share = Some(msg.clone()); }
+                                return Err(msg);
+                            }
                         };
                         
-                        if file_out.write_all(&buffer[..n]).is_err() { break; }
+                        if let Err(e) = file_out.write_all(&buffer[..n]) {
+                            let msg = format!("Write error on {:?}: {}", dest, e);
+                            let mut share = error_share.lock().unwrap();
+                            if share.is_none() { *share = Some(msg.clone()); }
+                            return Err(msg);
+                        }
                         processed_bytes.fetch_add(n as u64, Ordering::Relaxed);
 
                         if !turbo.load(Ordering::Relaxed) {
@@ -451,11 +472,17 @@ impl FileOperationManager {
             Self::emit_progress(app, op, &processed_bytes_atomic, &processed_files_atomic, &mut last_processed_bytes, &mut last_emit, &mut speed_samples);
             
             if cancel_flag.load(Ordering::Relaxed) { break; }
+            if error_captured.lock().unwrap().is_some() { break; }
         }
 
         // Wait for all threads
         for handle in handles {
             let _ = handle.join();
+        }
+
+        // Check if any error was captured
+        if let Some(e) = error_captured.lock().unwrap().clone() {
+            return Err(e);
         }
 
         // Final update to ensure 100% progress is shown before completion
@@ -602,6 +629,7 @@ impl FileOperationManager {
         let mut handles = Vec::with_capacity(concurrency);
         let real_sources_arc = Arc::new(real_sources);
         let processed_files_atomic = Arc::new(AtomicUsize::new(0));
+        let error_captured = Arc::new(Mutex::new(None));
 
         {
             let mut locked = op.lock().unwrap();
@@ -617,7 +645,7 @@ impl FileOperationManager {
             let turbo = turbo_flag.clone();
             let idx = current_index.clone();
             let _app_handle = app.clone();
-            let _op_arc = op.clone();
+            let error_share = error_captured.clone();
             
             let handle = std::thread::spawn(move || {
                 let mut is_in_background_mode = false;
@@ -657,7 +685,14 @@ impl FileOperationManager {
 
                     if let Err(e) = res {
                         if e.kind() != std::io::ErrorKind::NotFound {
-                            info!("Delete error for {:?}: {}", src, e);
+                            let key = match e.kind() {
+                                std::io::ErrorKind::PermissionDenied => "error_access_denied",
+                                std::io::ErrorKind::StorageFull => "error_disk_full",
+                                _ => return Err(format!("Failed to delete {:?}: {}", src, e)),
+                            }.to_string();
+                            let mut share = error_share.lock().unwrap();
+                            if share.is_none() { *share = Some(key.clone()); }
+                            return Err(key);
                         }
                     }
 
@@ -691,10 +726,16 @@ impl FileOperationManager {
             let _ = app.emit("file_op_event", op_data);
             
             if cancel_flag.load(Ordering::Relaxed) { break; }
+            if error_captured.lock().unwrap().is_some() { break; }
         }
 
         for handle in handles {
             let _ = handle.join();
+        }
+
+        // Check if any error was captured
+        if let Some(e) = error_captured.lock().unwrap().clone() {
+            return Err(e);
         }
         
         Ok(())
