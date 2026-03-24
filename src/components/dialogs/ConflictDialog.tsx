@@ -44,7 +44,7 @@ const ConflictDetailPanel: React.FC<ConflictDetailPanelProps> = ({ current, t, d
     };
 
     return (
-        <div className="conflict-comparison-v2">
+        <div className="conflict-comparison">
             <div className={cx("conflict-row source", { "is-newer": isSourceNewer })}>
                 <div className="conflict-row-label">
                     <span>{t('source_file' as any)}</span>
@@ -86,21 +86,7 @@ const ConflictDetailPanel: React.FC<ConflictDetailPanelProps> = ({ current, t, d
             </div>
 
             {inheritedRes && (
-                <div 
-                    className={cx("inherited-resolution-badge", inheritedRes.action)}
-                    style={{
-                        padding: '4px 8px',
-                        background: 'rgba(255,255,255,0.05)',
-                        border: '1px solid var(--border-color)',
-                        borderRadius: '4px',
-                        fontSize: '0.75rem',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        marginTop: '4px',
-                        opacity: 0.8
-                    }}
-                >
+                <div className={cx("inherited-resolution-badge", inheritedRes.action)}>
                     {inheritedRes.action === 'replace' ? <CheckCircle2 size={12} className="replace" /> : <XCircle size={12} className="skip" />}
                     <span>{t('inherited_from' as any) || 'Inherited from'} <b>{inheritedRes.parent}</b> : {t(inheritedRes.action as any)}</span>
                 </div>
@@ -338,6 +324,7 @@ export const ConflictDialog: React.FC<ConflictDialogProps> = ({ conflicts, onRes
                         width: `${size.width}px`,
                         height: `${size.height}px`,
                         transform: `translate(${position.x}px, ${position.y}px)`,
+                        transition: 'none'
                     }}
                 >
                     {/* Header */}
@@ -349,50 +336,44 @@ export const ConflictDialog: React.FC<ConflictDialogProps> = ({ conflicts, onRes
                     </div>
 
                     <div className="search-tabs">
-                        <div className="hybrid-tabs">
-                            <button 
-                                className={cx("search-tab", { active: activeFilter === 'all' })} 
-                                onClick={() => setActiveFilter('all')}
-                                disabled={counts.all === 0}
-                            >
-                                {t('all' as any)} {counts.all > 0 && <span className="tab-count">{counts.all}</span>}
-                            </button>
-                            <button 
-                                className={cx("search-tab", { active: activeFilter === 'identical' })} 
-                                onClick={() => setActiveFilter('identical')}
-                                disabled={counts.identical === 0}
-                            >
-                                {t('identical')} {counts.identical > 0 && <span className="tab-count">{counts.identical}</span>}
-                            </button>
-                            <button 
-                                className={cx("search-tab", { active: activeFilter === 'newer' })} 
-                                onClick={() => setActiveFilter('newer')}
-                                disabled={counts.newer === 0}
-                            >
-                                {t('newer')} {counts.newer > 0 && <span className="tab-count">{counts.newer}</span>}
-                            </button>
-                            <button 
-                                className={cx("search-tab", { active: activeFilter === 'older' })} 
-                                onClick={() => setActiveFilter('older')}
-                                disabled={counts.older === 0}
-                            >
-                                {t('older')} {counts.older > 0 && <span className="tab-count">{counts.older}</span>}
-                            </button>
-                        </div>
+                        <button 
+                            className={cx("search-tab", { active: activeFilter === 'all' })} 
+                            onClick={() => setActiveFilter('all')}
+                            disabled={counts.all === 0}
+                        >
+                            {t('all' as any)} {counts.all > 0 && <span className="tab-count">{counts.all}</span>}
+                        </button>
+                        <button 
+                            className={cx("search-tab", { active: activeFilter === 'identical' })} 
+                            onClick={() => setActiveFilter('identical')}
+                            disabled={counts.identical === 0}
+                        >
+                            {t('identical')} {counts.identical > 0 && <span className="tab-count">{counts.identical}</span>}
+                        </button>
+                        <button 
+                            className={cx("search-tab", { active: activeFilter === 'newer' })} 
+                            onClick={() => setActiveFilter('newer')}
+                            disabled={counts.newer === 0}
+                        >
+                            {t('newer')} {counts.newer > 0 && <span className="tab-count">{counts.newer}</span>}
+                        </button>
+                        <button 
+                            className={cx("search-tab", { active: activeFilter === 'older' })} 
+                            onClick={() => setActiveFilter('older')}
+                            disabled={counts.older === 0}
+                        >
+                            {t('older')} {counts.older > 0 && <span className="tab-count">{counts.older}</span>}
+                        </button>
                         <div style={{ flex: 1 }} />
                         <div className="hybrid-search-container">
-                            <div className="search-box hybrid-search-bar">
+                            <div className="input-with-icon icon-right hybrid-search-bar">
+                                <Search size={14} className="input-icon right" />
                                 <input
                                     type="text"
                                     value={filterQuery}
                                     placeholder={t('filter_results')}
                                     onChange={(e) => setFilterQuery(e.target.value)}
                                 />
-                                <div className="search-actions">
-                                    <div className="search-submit-btn">
-                                        <Search size={14} />
-                                    </div>
-                                </div>
                             </div>
                         </div>
                     </div>
@@ -524,7 +505,7 @@ export const ConflictDialog: React.FC<ConflictDialogProps> = ({ conflicts, onRes
         <div className="conflict-overlay simple">
             <div
                 ref={dragRef}
-                className="properties-dialog conflict-dialog v2"
+                className="properties-dialog conflict-dialog simple"
                 style={{
                     transform: `translate(${position.x}px, ${position.y}px)`,
                     transition: 'none'
@@ -541,7 +522,7 @@ export const ConflictDialog: React.FC<ConflictDialogProps> = ({ conflicts, onRes
                 </div>
 
                 <div className="prop-content" style={{ padding: '1.25rem' }}>
-                    <div className="conflict-message-v2">
+                    <div className="conflict-message">
                         {t('conflict_msg' as any).replace('{name}', current.name)}
                     </div>
 
