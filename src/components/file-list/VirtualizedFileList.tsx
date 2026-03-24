@@ -684,11 +684,21 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
         });
     }, []);
 
+    const hasActiveFilters = useMemo(() => {
+        if (!activeFilters) return false;
+        return activeFilters.extensions.size > 0 ||
+               activeFilters.sizes.size > 0 ||
+               activeFilters.date.size > 0 ||
+               activeFilters.deletedDates.size > 0 ||
+               !!activeFilters.name ||
+               !!activeFilters.location;
+    }, [activeFilters]);
+
     const groupedDetailItems = useMemo<GroupedItem[]>(() => {
-        if (!groupByDate && !hasFilters()) return [];
+        if (!groupByDate && !hasActiveFilters) return [];
         const items: GroupedItem[] = [];
 
-        if (hasFilters()) {
+        if (hasActiveFilters) {
             items.push({ type: 'filters' });
         }
 
@@ -707,7 +717,7 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
         }
 
         return items;
-    }, [files, groupByDate, groupedByCategory, collapsedGroups, hasFilters()]);
+    }, [files, groupByDate, groupedByCategory, collapsedGroups, hasActiveFilters]);
 
     const listRowHeight = rootFontSize * 1.85;
     const groupHeaderHeight = rootFontSize * 2.0;
@@ -785,9 +795,9 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
                 if (!height || !width) return null;
 
                 return (
-                    <ErrorBoundary fallback={<div className="empty-msg" style={{ width, height, position: 'absolute', top: 0, left: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Error in VirtualizedFileList</div>}>
+                    <ErrorBoundary key={viewMode} fallback={<div className="empty-msg" style={{ width, height, position: 'absolute', top: 0, left: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Error in VirtualizedFileList</div>}>
                         {(() => {
-                            if (files.length === 0 && (!searchResults || searchResults.length === 0) && !isSearching && !hasFilters()) {
+                            if (files.length === 0 && (!searchResults || searchResults.length === 0) && !isSearching && !hasActiveFilters) {
                                 if (loading) {
                                     return (
                                         <div className="empty-msg loading" style={{ width, height, position: 'absolute', top: 0, left: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -822,7 +832,7 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
 
                                 // Flatten data into rows
                                 const items: GroupedGridRowItem[] = [];
-                                if (hasFilters()) {
+                                if (hasActiveFilters) {
                                     items.push({ type: 'filters' });
                                 }
 
@@ -874,7 +884,7 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
                                 );
                             }
 
-                            if (!isGrid && (groupByDate || hasFilters()) && groupedDetailItems.length > 0) {
+                            if (!isGrid && (groupByDate || hasActiveFilters) && groupedDetailItems.length > 0) {
                                 const finalWidth = Math.max(width, totalColumnWidth);
                                 return (
                                     <List
@@ -897,10 +907,10 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
                                 const columnCount = Math.max(1, Math.floor((width - horizontalPadding) / (minColumnWidth + gridGap)));
                                 const columnWidth = (width - horizontalPadding - (columnCount - 1) * gridGap) / columnCount;
 
-                                const filtersHeight = hasFilters() ? (rootFontSize * 2.35) : 0;
+                                const filtersHeight = hasActiveFilters ? (rootFontSize * 2.35) : 0;
                                 return (
                                     <div style={{ height, width, display: 'flex', flexDirection: 'column' }}>
-                                        {hasFilters() && activeFilters && (
+                                        {hasActiveFilters && activeFilters && (
                                             <div style={{ flexShrink: 0 }}>
                                                 <FiltersRow activeFilters={activeFilters} t={t} style={{ position: 'relative', zIndex: 20, marginBottom: '0.5rem' }} />
                                             </div>

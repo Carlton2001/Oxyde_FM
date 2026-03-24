@@ -279,8 +279,8 @@ export type OpStatus =
     | 'Paused'
     | 'Cancelled'
     | 'Completed'
-    | { Error: string }
-    | 'WaitingForConflictResolution';
+    | { Error: string };
+// Note: WaitingForConflictResolution was removed — conflicts are always resolved before the op starts
 
 export type FileOpType = 'Copy' | 'Move' | 'Delete' | 'Trash';
 

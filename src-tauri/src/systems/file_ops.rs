@@ -26,7 +26,7 @@ pub enum OpStatus {
     Cancelled,
     Completed,
     Error(String),
-    WaitingForConflictResolution,
+    // Note: WaitingForConflictResolution was removed — conflicts are resolved before the operation starts
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -368,9 +368,11 @@ impl FileOperationManager {
                      if let Some(ref res_map) = resolutions {
                          match Self::get_resolution(src, res_map) {
                              Some(ConflictAction::Skip) => continue,
-                             _ => {} // Replace or None (default to replace for files in this context? No, wait)
+                             // Replace (explicit) or no resolution (default: overwrite, same as a standard copy)
+                             _ => {}
                          }
                      }
+                     // If resolutions is None (no conflict dialog was shown), overwrite by default
                  }
                  let size = std::fs::metadata(src).map(|m| m.len()).unwrap_or(0);
                  total_bytes += size;
@@ -587,12 +589,23 @@ impl FileOperationManager {
         }
 
         if is_move {
-            // Clean up source directories (naive approach: try to remove them, silence errors if not empty)
-             for src in &sources {
-                 if src.is_dir() {
-                     let _ = std::fs::remove_dir_all(src);
-                 }
-             }
+            // Only remove source directories that had no skipped files.
+            // If any file within a source dir was explicitly skipped, we must NOT delete the source
+            // to avoid losing those skipped files permanently.
+            for src in &sources {
+                if src.is_dir() {
+                    let has_skipped_files = resolutions.as_ref().map_or(false, |res_map| {
+                        res_map.iter().any(|(path, action)| {
+                            *action == ConflictAction::Skip
+                                && PathBuf::from(path).starts_with(src)
+                        })
+                    });
+
+                    if !has_skipped_files {
+                        let _ = std::fs::remove_dir_all(src);
+                    }
+                }
+            }
         }
 
         Ok(())

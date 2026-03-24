@@ -244,17 +244,29 @@ export const ConflictDialog: React.FC<ConflictDialogProps> = ({ conflicts, onRes
     const { useSystemIcons, dateFormat } = useApp();
 
     const handleAction = (action: ConflictAction) => {
+        // In hybrid view, displayEntry is the filtered entry being shown — not necessarily current.
+        // We must resolve based on what is actually displayed, not the global index.
+        const targetEntry = viewMode === 'detailed' ? displayEntry : current;
+        if (!targetEntry) return;
+
         const newResolutions = { ...resolutions };
-        newResolutions[current.source.path] = action;
+        newResolutions[targetEntry.source.path] = action;
         setResolutions(newResolutions);
         
-        if (currentIndex + 1 < conflicts.length) {
-            setCurrentIndex(currentIndex + 1);
-        } else if (viewMode === 'simple') {
-            // In simple view, auto-resolve when finishing the list
-            const resultMap = new Map<string, ConflictAction>();
-            Object.entries(newResolutions).forEach(([k, v]) => resultMap.set(k, v));
-            onResolve(resultMap);
+        if (viewMode === 'detailed') {
+            // In hybrid view: navigate to next unresolved item in filteredConflicts
+            const nextIdx = filteredConflicts.findIndex((c, i) => i > currentIndex && !newResolutions[c.source.path]);
+            if (nextIdx !== -1) setCurrentIndex(nextIdx);
+        } else {
+            // In simple view: step through conflicts sequentially
+            if (currentIndex + 1 < conflicts.length) {
+                setCurrentIndex(currentIndex + 1);
+            } else {
+                // Auto-resolve when reaching the end in simple view
+                const resultMap = new Map<string, ConflictAction>();
+                Object.entries(newResolutions).forEach(([k, v]) => resultMap.set(k, v));
+                onResolve(resultMap);
+            }
         }
     };
 
@@ -310,7 +322,11 @@ export const ConflictDialog: React.FC<ConflictDialogProps> = ({ conflicts, onRes
     };
 
     const resolvedCount = Object.keys(resolutions).length;
-    const isAllResolved = resolvedCount >= conflicts.length;
+    // A conflict is considered resolved if it has an explicit resolution OR an inherited one
+    const effectivelyResolvedCount = conflicts.filter(c =>
+        resolutions[c.source.path] !== undefined || getInheritedResolution(c.source.path) !== null
+    ).length;
+    const isAllResolved = effectivelyResolvedCount >= conflicts.length;
 
     if (!current) return null;
 
@@ -539,7 +555,7 @@ export const ConflictDialog: React.FC<ConflictDialogProps> = ({ conflicts, onRes
                     <button className="btn" onClick={onCancel} style={{ marginRight: 'auto' }}>
                         {t('cancel_all' as any)}
                     </button>
-                    {current.source.is_dir && (
+                    {isMultiple && (
                         <button className="btn btn-advanced" onClick={() => setViewMode('detailed')}>
                             <Settings2 size={16} />
                             {t('compare_all')}

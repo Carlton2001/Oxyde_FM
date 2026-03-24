@@ -226,6 +226,7 @@ function App() {
     openDuplicateSearchHandler(activePanelId);
   }, [openDuplicateSearchHandler, activePanelId]);
 
+
   // Comparison Hook
   const { histogramPanels, diffPaths, isComparing, handleComparePanels, handleCalculateAllSizes } = usePanelComparison({
     left, right, activePanelId, notify, t: t as any
@@ -241,6 +242,26 @@ function App() {
     handleFileDrop: handleDrop, setDragState, setDragOverPath, setDragTargetPath,
     modifiers, setModifiers, isNativeActive, setIsNativeActive, dragTargetPath
   });
+
+  const handleOpenNewTab = useCallback((path: string) => {
+    const currentIndex = tabs.findIndex(t => t.id === activeTabId);
+    const targetIndex = currentIndex !== -1 ? currentIndex + 1 : undefined;
+    addTab(path, { index: targetIndex } as any);
+  }, [tabs, activeTabId, addTab]);
+
+  const handleTabDrop = useCallback(async (files: any[], index?: number) => {
+    const folders = files.filter(f => f.is_dir);
+    for (let i = 0; i < folders.length; i++) {
+      const targetIndex = index !== undefined ? index + i : undefined;
+      await addTab(folders[i].path, { index: targetIndex });
+    }
+    setDragState(null);
+  }, [addTab, setDragState]);
+
+  const handleContextMenuOpenNewTab = useCallback((path: string) => {
+    handleOpenNewTab(path);
+    setContextMenu(null);
+  }, [handleOpenNewTab]);
 
   const handleDragStart = useCallback((sourcePanel: PanelId, files: FileEntry[]) => {
     originalHandleDragStart(sourcePanel, files);
@@ -519,19 +540,8 @@ function App() {
         onRestoreAll={handleRestoreAll} onRestoreSelected={handleRestoreSelected} onEmptyTrash={handleEmptyTrash}
         isTrashEmpty={isTrashEmpty}
         onTabSwitch={handleTabSwitch} onTabClose={handleTabClose} onItemMiddleClick={handleItemMiddleClick}
-        onOpenNewTab={layout === 'standard' ? useCallback((path: string) => {
-          const currentIndex = tabs.findIndex(t => t.id === activeTabId);
-          const targetIndex = currentIndex !== -1 ? currentIndex + 1 : undefined;
-          addTab(path, { index: targetIndex } as any);
-        }, [tabs, activeTabId, addTab]) : undefined}
-        onTabDrop={useCallback(async (files: any[], index?: number) => {
-          const folders = files.filter(f => f.is_dir);
-          for (let i = 0; i < folders.length; i++) {
-            const targetIndex = index !== undefined ? index + i : undefined;
-            await addTab(folders[i].path, { index: targetIndex });
-          }
-          setDragState(null);
-        }, [addTab, setDragState])}
+        onOpenNewTab={layout === 'standard' ? handleOpenNewTab : undefined}
+        onTabDrop={handleTabDrop}
         onSwapPanels={handleSwapPanels} onSyncPanels={handleSyncPanels} isSyncDisabled={left.path === right.path}
         onComparePanels={handleComparePanels} isComparing={isComparing} diffPaths={diffPaths}
         onAddToFavorites={handleAddToFavorites}
@@ -593,12 +603,7 @@ function App() {
           isTrashContext={contextMenu.isTrash || (contextMenu.target === 'trash://')}
           isSearchContext={contextMenu.panelId === 'left' ? left.path.startsWith('search://') : right.path.startsWith('search://')}
           onRestore={handleRestoreSelected} onRestoreAll={handleRestoreAll} onEmptyTrash={handleEmptyTrash} onGoToFolder={handleGoToFolder}
-          onOpenNewTab={layout === 'standard' ? (path: string) => {
-            const currentIndex = tabs.findIndex(t => t.id === activeTabId);
-            const targetIndex = currentIndex !== -1 ? currentIndex + 1 : undefined;
-            addTab(path, { index: targetIndex } as any);
-            setContextMenu(null);
-          } : undefined}
+          onOpenNewTab={layout === 'standard' ? handleContextMenuOpenNewTab : undefined}
           isDir={contextMenu.isDir} isBackground={contextMenu.isBackground} isDrive={contextMenu.isDrive} isMediaDevice={contextMenu.isMediaDevice} isNetworkComputer={contextMenu.isNetworkComputer} hasWebPage={contextMenu.hasWebPage} driveType={contextMenu.driveType}
           isReadOnly={false}
           onExtract={(p: string, toSub: boolean) => handleAction(toSub ? 'archive.extract_to_folder' : 'archive.extract_here', { ...actionContext, contextMenuTarget: p })}
