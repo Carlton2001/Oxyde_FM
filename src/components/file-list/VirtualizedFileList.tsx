@@ -652,16 +652,6 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
         initialScrollOffsetRef.current = initialScrollOffset;
     }, [initialScrollOffset]);
 
-    const hasFilters = useCallback(() => {
-        if (!activeFilters) return false;
-        return activeFilters.extensions.size > 0 || 
-               activeFilters.sizes.size > 0 || 
-               activeFilters.date.size > 0 || 
-               activeFilters.deletedDates.size > 0 ||
-               !!activeFilters.name || 
-               !!activeFilters.location;
-    }, [activeFilters]);
-
     const groupedByCategory = useMemo(() => {
         if (!groupByDate) return null;
         const groups = new Map<DateCategoryKey, FileEntry[]>();

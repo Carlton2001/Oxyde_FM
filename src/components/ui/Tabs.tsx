@@ -271,15 +271,6 @@ export const Tabs: React.FC<TabsProps> = ({
         return () => observer.disconnect();
     }, [scrollToActiveTab]);
 
-    const handleCreateTab = (id: string) => {
-        addTab('C:\\', { id });
-        setTimeout(() => {
-            if (scrollRef.current) {
-                scrollRef.current.scrollTo({ left: scrollRef.current.scrollWidth, behavior: 'smooth' });
-            }
-        }, 50);
-    };
-
 
     // We need a local context menu for tabs.
     const [menu, setMenu] = React.useState<{ x: number, y: number, tabId: string } | null>(null);

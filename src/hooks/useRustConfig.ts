@@ -21,6 +21,7 @@ export interface AppConfig {
     show_network: boolean;
     group_by_date: boolean;
     confirm_delete: boolean;
+    first_launch: boolean;
 }
 
 export const useRustConfig = () => {

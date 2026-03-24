@@ -366,10 +366,8 @@ impl FileOperationManager {
                  let dest_path = dest_root.clone();
                  if dest_path.exists() {
                      if let Some(ref res_map) = resolutions {
-                         match Self::get_resolution(src, res_map) {
-                             Some(ConflictAction::Skip) => continue,
-                             // Replace (explicit) or no resolution (default: overwrite, same as a standard copy)
-                             _ => {}
+                         if let Some(ConflictAction::Skip) = Self::get_resolution(src, res_map) {
+                             continue;
                          }
                      }
                      // If resolutions is None (no conflict dialog was shown), overwrite by default
@@ -594,7 +592,7 @@ impl FileOperationManager {
             // to avoid losing those skipped files permanently.
             for src in &sources {
                 if src.is_dir() {
-                    let has_skipped_files = resolutions.as_ref().map_or(false, |res_map| {
+                    let has_skipped_files = resolutions.as_ref().is_some_and(|res_map| {
                         res_map.iter().any(|(path, action)| {
                             *action == ConflictAction::Skip
                                 && PathBuf::from(path).starts_with(src)

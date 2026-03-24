@@ -347,7 +347,7 @@ fn add_conflict_recursive(
     if source_entry.is_dir {
         // Calculate size and item count for the folder itself
         let mut s = 0;
-        let mut f = 0;
+        let mut f: u64 = 0;
         let mut i = 0;
         for entry in walkdir::WalkDir::new(source_path).into_iter().filter_map(|e| e.ok()) {
             if entry.file_type().is_dir() {
@@ -357,14 +357,14 @@ fn add_conflict_recursive(
                 s += entry.metadata().map(|m| m.len()).unwrap_or(0);
             }
         }
-        if f > 0 { f -= 1; }
+        f = f.saturating_sub(1);
         source_entry.size = s;
         source_entry.folders_count = Some(f);
         source_entry.files_count = Some(i);
 
         // Do the same for target folder
         let mut ts = 0;
-        let mut tf = 0;
+        let mut tf: u64 = 0;
         let mut ti = 0;
         for entry in walkdir::WalkDir::new(target_path).into_iter().filter_map(|e| e.ok()) {
             if entry.file_type().is_dir() {
@@ -374,7 +374,7 @@ fn add_conflict_recursive(
                 ts += entry.metadata().map(|m| m.len()).unwrap_or(0);
             }
         }
-        if tf > 0 { tf -= 1; }
+        tf = tf.saturating_sub(1);
         target_entry.size = ts;
         target_entry.folders_count = Some(tf);
         target_entry.files_count = Some(ti);
@@ -477,10 +477,8 @@ fn get_recycle_bin_capacity_estimate(path_str: &str, config: &crate::models::App
                             Some(&mut data as *mut _ as *mut u8), 
                             Some(&mut data_size as *mut _)
                         );
-                        if result.0 == 0 {
-                            if key_type == REG_DWORD {
-                                capacity = Some((data as u64) * 1024 * 1024);
-                            }
+                        if result.0 == 0 && key_type == REG_DWORD {
+                            capacity = Some((data as u64) * 1024 * 1024);
                         }
                         let _ = windows::Win32::System::Registry::RegCloseKey(hkey);
                     }

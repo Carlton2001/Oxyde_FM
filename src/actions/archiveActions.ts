@@ -110,7 +110,7 @@ const compress = async (ctx: ActionContext, format: 'zip' | '7z' | 'tar' | 'zst'
 
     let defaultBase = selection.length === 1
         ? (firstItem.split('\\').pop()?.split('/').pop()?.split('.').shift() || "Archive")
-        : (parentDir.split('\\').pop()?.split('/').pop() || "Archive");
+        : (parentDir?.split('\\').pop()?.split('/').pop() || "Archive");
 
     // Suggest a unique name by default
     defaultBase = getUniqueArchiveName(defaultBase, format, existingNames);
@@ -128,7 +128,7 @@ const compress = async (ctx: ActionContext, format: 'zip' | '7z' | 'tar' | 'zst'
     const finalBase = getUniqueArchiveName(userBaseName.trim(), format, existingNames);
 
     const archiveName = format === 'zst' ? `${finalBase}.tar.zst` : `${finalBase}.${format}`;
-    const archivePath = `${parentDir}${parentDir.endsWith('\\') ? '' : '\\'}${archiveName}`;
+    const archivePath = `${parentDir || ''}${parentDir?.endsWith('\\') ? '' : '\\'}${archiveName}`;
 
     // Quality defaults from settings
     let quality = 'normal';
