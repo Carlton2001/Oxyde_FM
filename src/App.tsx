@@ -136,12 +136,6 @@ function App() {
     }
   }, [fileOps.activeOperation?.id, fileOps.activeOperation?.status]);
 
-  // Effect 2: Immediately HIDE when the operation reaches a final state
-  useEffect(() => {
-    if (!fileOps.activeOperation) {
-      setShowProgress(false);
-    }
-  }, [fileOps.activeOperation]);
 
   useEffect(() => {
     // Signal that the app is ready and should be shown
@@ -207,12 +201,14 @@ function App() {
 
   const [progress, setProgress] = useState<{ visible: boolean; message: string; cancellable?: boolean; cancelling?: boolean; task?: string; current?: number; total?: number; filename?: string; } | null>(null);
 
+  const openTrashSettings = useCallback(() => setIsTrashSettingsOpen(true), []);
+
   // Handlers Integration
   const handlers = useAppHandlers({
     left, right, activePanelId, setActivePanelId, layout, fileOps, treeRef, notify, t, dialogs, clipboard: clipboardObj, refreshDrives,
     tabs, activeTabId, setActiveTab, closeTab, addTab, setContextMenu, contextMenu, drives, defaultTurboMode,
     zipQuality, sevenZipQuality, zstdQuality, favorites, peekStatus, confirmDelete,
-    openTrashSettings: () => setIsTrashSettingsOpen(true),
+    openTrashSettings,
     refreshTrashStatus, driveTrashConfigs
   });
 
@@ -268,12 +264,25 @@ function App() {
   useGlobalShortcuts(actionContext, tabs, activeTabId, handleTabSwitch);
 
   // Sync conflicts
+  const lastConflictSessionRef = useRef<string | null>(null);
   useEffect(() => {
-    if ((fileOps.conflicts?.length ?? 0) > 0 && !dialogs.dialogs.some(d => d.type === 'conflict')) {
+    const conflictCount = fileOps.conflicts?.length ?? 0;
+    const hasActiveDialog = dialogs.dialogs.some(d => d.type === 'conflict');
+    const currentSessionId = fileOps.conflicts?.[0] ? `${fileOps.conflicts[0].source.path}-${conflictCount}` : null;
+    
+    if (conflictCount > 0 && !hasActiveDialog && lastConflictSessionRef.current !== currentSessionId) {
+      lastConflictSessionRef.current = currentSessionId;
       dialogs.openConflictDialog({
         conflicts: fileOps.conflicts!, operation: fileOps.pendingOp?.action, totalCount: fileOps.pendingOp?.paths.length,
-        onResolve: (res) => res ? fileOps.resolveConflicts(res) : fileOps.cancelOp()
+        onResolve: (res) => {
+          // Note: we don't reset lastConflictSessionRef here 
+          // to prevent immediate re-open if fileOps.conflicts hasn't cleared yet
+          if (res) fileOps.resolveConflicts(res); 
+          else fileOps.cancelOp();
+        }
       });
+    } else if (conflictCount === 0) {
+      lastConflictSessionRef.current = null;
     }
   }, [fileOps.conflicts, fileOps.pendingOp, fileOps.resolveConflicts, fileOps.cancelOp, dialogs]);
 
@@ -510,19 +519,19 @@ function App() {
         onRestoreAll={handleRestoreAll} onRestoreSelected={handleRestoreSelected} onEmptyTrash={handleEmptyTrash}
         isTrashEmpty={isTrashEmpty}
         onTabSwitch={handleTabSwitch} onTabClose={handleTabClose} onItemMiddleClick={handleItemMiddleClick}
-        onOpenNewTab={layout === 'standard' ? (path: string) => {
+        onOpenNewTab={layout === 'standard' ? useCallback((path: string) => {
           const currentIndex = tabs.findIndex(t => t.id === activeTabId);
           const targetIndex = currentIndex !== -1 ? currentIndex + 1 : undefined;
           addTab(path, { index: targetIndex } as any);
-        } : undefined}
-        onTabDrop={async (files: any[], index?: number) => {
+        }, [tabs, activeTabId, addTab]) : undefined}
+        onTabDrop={useCallback(async (files: any[], index?: number) => {
           const folders = files.filter(f => f.is_dir);
           for (let i = 0; i < folders.length; i++) {
             const targetIndex = index !== undefined ? index + i : undefined;
             await addTab(folders[i].path, { index: targetIndex });
           }
           setDragState(null);
-        }}
+        }, [addTab, setDragState])}
         onSwapPanels={handleSwapPanels} onSyncPanels={handleSyncPanels} isSyncDisabled={left.path === right.path}
         onComparePanels={handleComparePanels} isComparing={isComparing} diffPaths={diffPaths}
         onAddToFavorites={handleAddToFavorites}

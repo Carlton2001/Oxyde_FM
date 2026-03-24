@@ -8,6 +8,8 @@ use crate::utils::path_security::validate_path;
 use std::path::PathBuf;
 use tauri::{AppHandle, Emitter, State}; // Emitter needed for legacy progress emit
 use std::sync::{Arc};
+use std::collections::HashMap;
+use crate::models::ConflictAction;
 use std::sync::atomic::{AtomicBool, Ordering};
 use log::{info, warn};
 
@@ -319,51 +321,8 @@ pub async fn check_conflicts(
         if let Some(file_name) = source_path.file_name() {
             let target_path = target_base.join(file_name);
             if target_path.exists() {
-                let mut source_entry = get_file_entry_from_path(&source_path)?;
-                let mut target_entry = get_file_entry_from_path(&target_path)?;
-
-                // For directories, calculate size and item count recursively
-                if source_entry.is_dir {
-                    let mut s = 0;
-                    let mut f = 0;
-                    let mut i = 0;
-                    for entry in walkdir::WalkDir::new(&source_path).into_iter().filter_map(|e| e.ok()) {
-                        if entry.file_type().is_dir() {
-                            f += 1;
-                        } else {
-                            i += 1;
-                            s += entry.metadata().map(|m| m.len()).unwrap_or(0);
-                        }
-                    }
-                    if f > 0 { f -= 1; } // Don't count the root folder itself
-                    source_entry.size = s;
-                    source_entry.folders_count = Some(f);
-                    source_entry.files_count = Some(i);
-                }
-
-                if target_entry.is_dir {
-                    let mut s = 0;
-                    let mut f = 0;
-                    let mut i = 0;
-                    for entry in walkdir::WalkDir::new(&target_path).into_iter().filter_map(|e| e.ok()) {
-                        if entry.file_type().is_dir() {
-                            f += 1;
-                        } else {
-                            i += 1;
-                            s += entry.metadata().map(|m| m.len()).unwrap_or(0);
-                        }
-                    }
-                    if f > 0 { f -= 1; } 
-                    target_entry.size = s;
-                    target_entry.folders_count = Some(f);
-                    target_entry.files_count = Some(i);
-                }
-
-                conflicts.push(ConflictEntry {
-                    name: file_name.to_string_lossy().to_string(),
-                    source: source_entry,
-                    target: target_entry,
-                });
+                // Initial top-level conflict found
+                add_conflict_recursive(&source_path, &target_path, &mut conflicts)?;
             }
         }
     }
@@ -375,6 +334,79 @@ pub async fn check_conflicts(
         is_cross_volume,
         likely_large,
     })
+}
+
+fn add_conflict_recursive(
+    source_path: &std::path::Path,
+    target_path: &std::path::Path,
+    conflicts: &mut Vec<ConflictEntry>,
+) -> Result<(), CommandError> {
+    let mut source_entry = get_file_entry_from_path(source_path)?;
+    let mut target_entry = get_file_entry_from_path(target_path)?;
+
+    if source_entry.is_dir {
+        // Calculate size and item count for the folder itself
+        let mut s = 0;
+        let mut f = 0;
+        let mut i = 0;
+        for entry in walkdir::WalkDir::new(source_path).into_iter().filter_map(|e| e.ok()) {
+            if entry.file_type().is_dir() {
+                f += 1;
+            } else {
+                i += 1;
+                s += entry.metadata().map(|m| m.len()).unwrap_or(0);
+            }
+        }
+        if f > 0 { f -= 1; }
+        source_entry.size = s;
+        source_entry.folders_count = Some(f);
+        source_entry.files_count = Some(i);
+
+        // Do the same for target folder
+        let mut ts = 0;
+        let mut tf = 0;
+        let mut ti = 0;
+        for entry in walkdir::WalkDir::new(target_path).into_iter().filter_map(|e| e.ok()) {
+            if entry.file_type().is_dir() {
+                tf += 1;
+            } else {
+                ti += 1;
+                ts += entry.metadata().map(|m| m.len()).unwrap_or(0);
+            }
+        }
+        if tf > 0 { tf -= 1; }
+        target_entry.size = ts;
+        target_entry.folders_count = Some(tf);
+        target_entry.files_count = Some(ti);
+        
+        // Add the folder conflict itself
+        conflicts.push(ConflictEntry {
+            name: source_path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default(),
+            source: source_entry,
+            target: target_entry,
+        });
+
+        // Now recursively check children for conflicts
+        for entry in std::fs::read_dir(source_path)? {
+            let entry = entry?;
+            let entry_path = entry.path();
+            let entry_name = entry.file_name();
+            let target_child_path = target_path.join(&entry_name);
+            
+            if target_child_path.exists() {
+                add_conflict_recursive(&entry_path, &target_child_path, conflicts)?;
+            }
+        }
+    } else {
+        // Individual file conflict
+        conflicts.push(ConflictEntry {
+            name: source_path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default(),
+            source: source_entry,
+            target: target_entry,
+        });
+    }
+    
+    Ok(())
 }
 
 
@@ -822,7 +854,7 @@ pub async fn delete_items(app: AppHandle, manager: State<'_, FileOperationManage
 
     // Lock is already released as we work with config_snapshot
     
-    let mut op = FileOperation::new(FileOpType::Trash, paths_validated, None);
+    let mut op = FileOperation::new(FileOpType::Trash, paths_validated, None, None);
     if let Some(t) = turbo {
         op.turbo = t;
         op.turbo_flag.store(t, Ordering::Relaxed);
@@ -839,7 +871,7 @@ pub async fn purge_items(app: AppHandle, manager: State<'_, FileOperationManager
         paths_validated.push(validate_path(&p)?);
     }
     
-    let mut op = FileOperation::new(FileOpType::Delete, paths_validated, None);
+    let mut op = FileOperation::new(FileOpType::Delete, paths_validated, None, None);
     if let Some(t) = turbo {
         op.turbo = t;
         op.turbo_flag.store(t, Ordering::Relaxed);
@@ -859,13 +891,14 @@ pub async fn copy_items(
     total_size: Option<u64>,
     total_files: Option<usize>,
     is_cross_volume: Option<bool>,
+    resolutions: Option<HashMap<String, ConflictAction>>,
 ) -> Result<String, CommandError> {
     let target_dir_validated = validate_path(&target_dir)?;
     let paths_validated: Vec<PathBuf> = paths.iter()
         .map(|p| validate_path(p))
         .collect::<Result<Vec<PathBuf>, CommandError>>()?;
 
-    let mut op = FileOperation::new(FileOpType::Copy, paths_validated, Some(target_dir_validated));
+    let mut op = FileOperation::new(FileOpType::Copy, paths_validated, Some(target_dir_validated), resolutions);
     if let Some(t) = turbo {
         op.turbo = t;
         op.turbo_flag.store(t, Ordering::Relaxed);
@@ -890,13 +923,14 @@ pub async fn move_items(
     total_size: Option<u64>,
     total_files: Option<usize>,
     is_cross_volume: Option<bool>,
+    resolutions: Option<HashMap<String, ConflictAction>>,
 ) -> Result<String, CommandError> {
     let target_dir_validated = validate_path(&target_dir)?;
     let paths_validated: Vec<PathBuf> = paths.iter()
         .map(|p| validate_path(p))
         .collect::<Result<Vec<PathBuf>, CommandError>>()?;
     
-    let mut op = FileOperation::new(FileOpType::Move, paths_validated, Some(target_dir_validated));
+    let mut op = FileOperation::new(FileOpType::Move, paths_validated, Some(target_dir_validated), resolutions);
     if let Some(t) = turbo {
         op.turbo = t;
         op.turbo_flag.store(t, Ordering::Relaxed);

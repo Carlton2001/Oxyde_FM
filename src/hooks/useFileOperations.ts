@@ -165,7 +165,14 @@ export const useFileOperations = (
         return () => clearInterval(interval);
     }, []);
 
-    const executeFileOp = async (action: 'copy' | 'move' | 'trash' | 'delete', paths: string[], targetDir?: string, turbo: boolean = false, initialEstimates?: { total_bytes: number, total_files: number, is_cross_volume: boolean, likely_large: boolean }) => {
+    const executeFileOp = async (
+        action: 'copy' | 'move' | 'trash' | 'delete', 
+        paths: string[], 
+        targetDir?: string, 
+        turbo: boolean = false, 
+        initialEstimates?: { total_bytes: number, total_files: number, is_cross_volume: boolean, likely_large: boolean },
+        resolutions?: Record<string, string>
+    ) => {
         try {
             let opId: string;
             if (action === 'copy' || action === 'move') {
@@ -175,7 +182,8 @@ export const useFileOperations = (
                     turbo,
                     total_size: initialEstimates?.total_bytes,
                     total_files: initialEstimates?.total_files,
-                    is_cross_volume: initialEstimates?.is_cross_volume
+                    is_cross_volume: initialEstimates?.is_cross_volume,
+                    resolutions
                 });
             } else {
                 opId = await invoke<string>(action === 'trash' ? 'delete_items' : 'purge_items', { paths, turbo });
@@ -268,7 +276,8 @@ export const useFileOperations = (
 
         const finalPaths = op.paths.filter(path => resolutions.get(path) !== 'skip');
         if (finalPaths.length > 0) {
-            await executeFileOp(op.action, finalPaths, op.targetDir, op.turbo, op.estimates);
+            const resolutionsObj = Object.fromEntries(resolutions);
+            await executeFileOp(op.action, finalPaths, op.targetDir, op.turbo, op.estimates, resolutionsObj);
         }
     };
 

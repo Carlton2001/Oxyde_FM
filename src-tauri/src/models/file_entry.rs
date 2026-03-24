@@ -134,6 +134,13 @@ pub struct ConflictResponse {
     pub likely_large: bool,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum ConflictAction {
+    Replace,
+    Skip,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TrashEntry {
     pub name: String,

@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use crate::models::ConflictAction;
 use std::sync::{Arc, Mutex};
 use std::path::PathBuf;
 use serde::{Serialize, Deserialize};
@@ -51,6 +52,7 @@ pub struct FileOperation {
     pub bytes_per_second: u64,
     pub turbo: bool,
     pub is_cross_volume: bool,
+    pub resolutions: Option<HashMap<String, ConflictAction>>,
     // Private/Internal state, not serialized by default unless needed
     #[serde(skip)]
     pub cancel_flag: Arc<AtomicBool>,
@@ -61,7 +63,7 @@ pub struct FileOperation {
 }
 
 impl FileOperation {
-    pub fn new(op_type: FileOpType, sources: Vec<PathBuf>, destination: Option<PathBuf>) -> Self {
+    pub fn new(op_type: FileOpType, sources: Vec<PathBuf>, destination: Option<PathBuf>, resolutions: Option<HashMap<String, ConflictAction>>) -> Self {
         Self {
             id: Uuid::new_v4().to_string(),
             op_type,
@@ -76,6 +78,7 @@ impl FileOperation {
             bytes_per_second: 0,
             turbo: false,
             is_cross_volume: false,
+            resolutions,
             cancel_flag: Arc::new(AtomicBool::new(false)),
             pause_flag: Arc::new(AtomicBool::new(false)),
             turbo_flag: Arc::new(AtomicBool::new(false)),
@@ -143,12 +146,12 @@ impl FileOperationManager {
         
         // Run blocking IO in a separate thread
         let result = tauri::async_runtime::spawn_blocking(move || {
-            let (op_type, sources, destination, initial_turbo) = {
+            let (op_type, sources, destination, initial_turbo, resolutions) = {
                 let mut locked = op_clone.lock().unwrap();
                 locked.status = OpStatus::Calculating;
                 let _ = app_clone.emit("file_op_event", locked.clone());
                 let turbo = locked.turbo_flag.load(Ordering::Relaxed);
-                (locked.op_type.clone(), locked.sources.clone(), locked.destination.clone(), turbo)
+                (locked.op_type.clone(), locked.sources.clone(), locked.destination.clone(), turbo, locked.resolutions.clone())
             };
 
             // Set initial thread priority based on turbo mode
@@ -160,8 +163,8 @@ impl FileOperationManager {
             }
 
             let op_result = match op_type {
-                FileOpType::Copy => Self::perform_copy(&app_clone, &op_clone, sources, destination, false),
-                FileOpType::Move => Self::perform_copy(&app_clone, &op_clone, sources, destination, true),
+                FileOpType::Copy => Self::perform_copy(&app_clone, &op_clone, sources, destination, false, resolutions),
+                FileOpType::Move => Self::perform_copy(&app_clone, &op_clone, sources, destination, true, resolutions),
                 FileOpType::Delete => Self::perform_delete(&app_clone, &op_clone, sources),
                 FileOpType::Trash => Self::perform_trash(&app_clone, &op_clone, sources),
             };
@@ -222,10 +225,34 @@ impl FileOperationManager {
                 }
             }
         }
-        let _ = app.emit("file_op_event", locked.clone());
+    }
+    
+    fn get_resolution(path: &std::path::Path, resolutions: &HashMap<String, ConflictAction>) -> Option<ConflictAction> {
+        let path_str = path.to_string_lossy().to_string();
+        if let Some(&action) = resolutions.get(&path_str) {
+            return Some(action);
+        }
+
+        // Check ancestors
+        let mut current = path.parent();
+        while let Some(parent) = current {
+            let parent_str = parent.to_string_lossy().to_string();
+            if let Some(&action) = resolutions.get(&parent_str) {
+                return Some(action);
+            }
+            current = parent.parent();
+        }
+        None
     }
 
-    fn perform_copy(app: &AppHandle, op: &Arc<Mutex<FileOperation>>, sources: Vec<PathBuf>, destination: Option<PathBuf>, is_move: bool) -> Result<(), String> {
+    fn perform_copy(
+        app: &AppHandle, 
+        op: &Arc<Mutex<FileOperation>>, 
+        sources: Vec<PathBuf>, 
+        destination: Option<PathBuf>, 
+        is_move: bool,
+        resolutions: Option<HashMap<String, ConflictAction>>
+    ) -> Result<(), String> {
         let target_dir = destination.ok_or("No destination provided for copy/move".to_string())?;
         
         let mut sources_to_copy = Vec::new();
@@ -233,20 +260,37 @@ impl FileOperationManager {
         let mut total_files = 0;
 
         // 1. Try Fast Move (Rename) for each source if is_move is true
+        // Note: For move with conflicts, we usually prefer the slow path if resolutions are present
+        // but if no resolutions exist for a top-level item, we can try fast-move.
         if is_move {
             for src in &sources {
                 if !src.exists() { continue; }
                 let file_name = src.file_name().ok_or("Invalid source name")?;
                 let dest = target_dir.join(file_name);
 
-                // Try atomic rename
+                // If dest exists, check for resolution before trying fast rename
+                if dest.exists() {
+                    if let Some(ref res_map) = resolutions {
+                        let res = Self::get_resolution(src, res_map);
+                        if res.is_some() {
+                             // If we have a resolution, we MUST use the slow path to apply it precisely
+                             sources_to_copy.push(src.clone());
+                             continue;
+                        }
+                    }
+                    // If no resolutions but dest exists, std::fs::rename will usually fail or overwrite depending on OS.
+                    // We'll fall back to slow path for safety.
+                    sources_to_copy.push(src.clone());
+                    continue;
+                }
+
+                // Try atomic rename for non-conflicting items
                 match std::fs::rename(src, &dest) {
                     Ok(_) => {
                         info!("Fast-moved: {} to {}", src.display(), dest.display());
                         continue; 
                     },
                     Err(_) => {
-                        // If rename fails (e.g. cross-volume), we need to do copy+delete
                         sources_to_copy.push(src.clone());
                     }
                 }
@@ -256,11 +300,10 @@ impl FileOperationManager {
         }
 
         if sources_to_copy.is_empty() && is_move {
-             // All sources were fast-moved
              return Ok(());
         }
 
-        // 2. Calculate size for remaining sources
+        // 2. Calculate size and build file list with resolution checks
         let mut files_to_process = Vec::new();
 
         for src in &sources_to_copy {
@@ -269,23 +312,70 @@ impl FileOperationManager {
             let dest_root = target_dir.join(file_name);
             
             if src.is_dir() {
-                for entry in walkdir::WalkDir::new(src) {
-                    let entry = entry.map_err(|e| e.to_string())?;
-                    if entry.path().is_dir() { continue; } 
+                let mut walker = walkdir::WalkDir::new(src).into_iter();
+                while let Some(entry) = walker.next() {
+                    let entry = match entry {
+                        Ok(e) => e,
+                        Err(e) => return Err(e.to_string()),
+                    };
                     
                     let relative = entry.path().strip_prefix(src).map_err(|e| e.to_string())?;
                     let dest_path = dest_root.join(relative);
-                    let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
+
+                    // Conflict Handling
+                    if dest_path.exists() {
+                        if let Some(ref res_map) = resolutions {
+                            match Self::get_resolution(entry.path(), res_map) {
+                                Some(ConflictAction::Skip) => {
+                                    if entry.path().is_dir() {
+                                        walker.skip_current_dir();
+                                    }
+                                    continue;
+                                },
+                                Some(ConflictAction::Replace) => {
+                                    // Proceed to copy (overwrite)
+                                },
+                                None => {
+                                    if entry.path().is_dir() {
+                                        // Merge directory: just continue walk
+                                    } else {
+                                        // Unresolved file conflict: skip by default for safety
+                                        continue;
+                                    }
+                                }
+                            }
+                        } else if entry.path().is_file() {
+                             // No resolutions provided but file exists: default to skip if we want to be safe,
+                             // but old behavior was overwrite. 
+                             // To fix the user bug, we MUST HONOR resolutions. 
+                             // If resolutions is None (e.g. standard drag-drop without dialog), 
+                             // we should either skip or overwrite. 
+                             // Let's stick to overwrite for standard ops, but skip if we were in a conflict session.
+                             // Actually, if a session was started, resolutions will be Some.
+                        }
+                    }
+
+                    if entry.path().is_dir() { continue; } 
                     
+                    let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
                     total_bytes += size;
                     total_files += 1;
                     files_to_process.push((entry.path().to_path_buf(), dest_path));
                 }
             } else {
+                 let dest_path = dest_root.clone();
+                 if dest_path.exists() {
+                     if let Some(ref res_map) = resolutions {
+                         match Self::get_resolution(src, res_map) {
+                             Some(ConflictAction::Skip) => continue,
+                             _ => {} // Replace or None (default to replace for files in this context? No, wait)
+                         }
+                     }
+                 }
                  let size = std::fs::metadata(src).map(|m| m.len()).unwrap_or(0);
                  total_bytes += size;
                  total_files += 1;
-                 files_to_process.push((src.clone(), dest_root));
+                 files_to_process.push((src.clone(), dest_path));
             }
         }
 
