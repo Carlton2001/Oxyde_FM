@@ -36,6 +36,7 @@ pub fn set_config_value(
         "show_network" => config.show_network = value.parse().unwrap_or(true),
         "group_by_date" => config.group_by_date = value.parse().unwrap_or(false),
         "confirm_delete" => config.confirm_delete = value.parse().unwrap_or(true),
+        "first_launch" => config.first_launch = value.parse().unwrap_or(true),
         _ => return Err(CommandError::Other(format!("Unknown config key: {}", key))),
     }
 

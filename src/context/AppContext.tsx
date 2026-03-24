@@ -25,6 +25,7 @@ export interface AppContextValue {
     showNetwork: boolean;
     confirmDelete: boolean;
     updateAvailable: boolean;
+    firstLaunch: boolean;
     peekStatus: {
         installed: boolean;
         enabled: boolean;
@@ -50,6 +51,7 @@ export interface AppContextValue {
     setShowNetwork: (show: boolean) => void;
     setConfirmDelete: (show: boolean) => void;
     setUpdateAvailable: (available: boolean) => void;
+    setFirstLaunch: (val: boolean) => void;
 
     // Translation
     t: TFunc;
@@ -132,6 +134,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
     const showCheckboxes = config?.show_checkboxes ?? (localStorage.getItem('fm_showCheckboxes') === 'true' || (localStorage.getItem('fm_showCheckboxes') === null && defaults.showCheckboxes));
     const showNetwork = config?.show_network ?? (localStorage.getItem('fm_showNetwork') === 'true' || (localStorage.getItem('fm_showNetwork') === null && defaults.showNetwork));
     const confirmDelete = config?.confirm_delete ?? (localStorage.getItem('fm_confirmDelete') === 'true' || (localStorage.getItem('fm_confirmDelete') === null && defaults.confirmDelete));
+    const firstLaunch = config?.first_launch ?? (localStorage.getItem('fm_first_launch') !== 'false');
     const [updateAvailable, setUpdateAvailable] = React.useState(false);
     const [isTrashEmpty, setIsTrashEmpty] = React.useState(true);
     const [peekStatus, setPeekStatus] = React.useState<AppContextValue['peekStatus']>(null);
@@ -254,6 +257,11 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
         setConfigValue('font_size', newSize);
     }, [setConfigValue]);
 
+    const setFirstLaunch = useCallback((val: boolean) => {
+        localStorage.setItem('fm_first_launch', val.toString());
+        setConfigValue('first_launch', val);
+    }, [setConfigValue]);
+
     const setSearchLimit = useCallback((limit: number) => {
         const newLimit = Math.max(10, Math.min(50000, limit));
         localStorage.setItem('fm_searchLimit', newLimit.toString());
@@ -281,7 +289,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
                     i--; // Adjust index after removal
                 }
             }
-            localStorage.setItem('fm_first_launch', 'true');
+            await setConfigValue('first_launch', true);
             await refreshConfig();
         } catch (e) {
             console.error('Failed to reset defaults', e);
@@ -354,6 +362,8 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
         setConfirmDelete,
         updateAvailable,
         setUpdateAvailable,
+        firstLaunch,
+        setFirstLaunch,
         peekStatus,
         isTrashEmpty,
         refreshTrashStatus,

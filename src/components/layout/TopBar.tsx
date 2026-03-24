@@ -9,6 +9,7 @@ import { getParent } from '../../utils/path';
 import './TopBar.css';
 import cx from 'classnames';
 import { PanelState, LayoutMode, DriveInfo } from '../../types';
+import { useApp } from '../../context/AppContext';
 
 interface TopBarProps {
     activePanel: PanelState;
@@ -103,6 +104,7 @@ export const TopBar: React.FC<TopBarProps> = ({
     isNukeOverride = false,
     isShiftPressed
 }) => {
+    const { firstLaunch, setFirstLaunch } = useApp();
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [settingsPage, setSettingsPage] = useState<'main' | 'themes' | 'languages' | 'dates' | 'compression'>('main');
 
@@ -122,15 +124,13 @@ export const TopBar: React.FC<TopBarProps> = ({
     };
 
     const toggleSettings = () => {
-        if (!settingsOpen) {
-            localStorage.setItem('fm_first_launch', 'false');
+        if (!settingsOpen && firstLaunch) {
+            setFirstLaunch(false);
         }
         setSettingsOpen(!settingsOpen);
         setSettingsPage('main');
         if (hamburgerOpen) setHamburgerOpen(false);
     };
-
-    const isFirstLaunch = localStorage.getItem('fm_first_launch') !== 'false';
 
     const closeHamburger = () => setHamburgerOpen(false);
     const toggleHamburger = () => {
@@ -175,7 +175,7 @@ export const TopBar: React.FC<TopBarProps> = ({
         <div className="header" data-tauri-drag-region>
             <div className="settings-container branding" onClick={(e) => e.stopPropagation()}>
                 <button
-                    className={cx("btn-icon", { "glow-pulse": isFirstLaunch && !settingsOpen })}
+                    className={cx("btn-icon", { "glow-pulse": firstLaunch && !settingsOpen })}
                     onClick={toggleSettings}
                     data-tooltip={t('settings' as any)}
                     data-tooltip-pos="bottom"

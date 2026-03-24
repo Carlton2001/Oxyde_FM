@@ -57,6 +57,8 @@ pub struct AppConfig {
     pub trash_drive_settings: Vec<TrashDriveSettings>,
     #[serde(default = "default_true")]
     pub confirm_delete: bool,
+    #[serde(default = "default_true")]
+    pub first_launch: bool,
 }
 
 fn default_true() -> bool { true }
@@ -134,6 +136,7 @@ impl Default for AppConfig {
             group_by_date: false,
             trash_drive_settings: Vec::new(),
             confirm_delete: true,
+            first_launch: true,
         }
     }
 }
