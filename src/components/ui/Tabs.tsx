@@ -1,6 +1,5 @@
 
 import React, { useRef } from 'react';
-import { v4 as uuidv4 } from 'uuid';
 import cx from 'classnames';
 import { X, Plus, Folder, Copy, Split, XCircle, ChevronLeft, ChevronRight, HardDrive, Trash, Network, Globe } from 'lucide-react';
 import { useTabs } from '../../context/TabsContext';
@@ -366,13 +365,12 @@ export const Tabs: React.FC<TabsProps> = ({
                         e.preventDefault();
                     }
                 }}
-                onMouseUp={(e) => {
+                onMouseUp={async (e) => {
                     // Middle click on empty space creates new tab
                     if (e.button === 1 && e.target === e.currentTarget) {
                         e.preventDefault();
-                        const id = uuidv4();
-                        handleCreateTab(id);
-                        onSwitch(id, 'C:\\');
+                        const id = await addTab('C:\\', { background: false });
+                        if (id) onSwitch(id, 'C:\\');
                     }
                 }}
             >
@@ -452,10 +450,9 @@ export const Tabs: React.FC<TabsProps> = ({
                         </div>
                     </div>
                 ))}
-                <div className="new-tab-btn" onClick={() => {
-                    const id = uuidv4();
-                    handleCreateTab(id);
-                    onSwitch(id, 'C:\\');
+                <div className="new-tab-btn" onClick={async () => {
+                    const id = await addTab('C:\\', { background: false });
+                    if (id) onSwitch(id, 'C:\\');
                 }} data-tooltip={t('new_tab') || "New Tab"}>
                     <Plus size={16} />
                 </div>

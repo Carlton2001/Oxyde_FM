@@ -198,32 +198,32 @@ impl FileOperationManager {
                 let tx_type = match locked.op_type {
                     FileOpType::Copy => Some(TransactionType::Copy),
                     FileOpType::Move => Some(TransactionType::Move),
-                    FileOpType::Trash => Some(TransactionType::Delete), // Treat Recycle Bin as "Delete" transaction
-                    FileOpType::Delete => None, // Permanent delete - no undo for now
+                    FileOpType::Trash => Some(TransactionType::Delete),
+                    FileOpType::Delete => None,
                 };
 
                 if let Some(t_type) = tx_type {
                     let sources_str: Vec<String> = locked.sources.iter().map(|p| p.to_string_lossy().to_string()).collect();
                     let target_str = locked.destination.as_ref().map(|p| p.to_string_lossy().to_string());
                     
-                    // For Trash, target is None/RecycleBin. For Move/Copy, it's valid.
-                    // Ideally we'd list *created* files for precise Undo.
-                    // Current simplified Undo just deletes dest or moves back.
-                    // We'll trust the transaction logic to infer based on sources + target.
-                    
                     let details = TransactionDetails {
                         paths: sources_str,
                         target_dir: target_str,
                         old_path: None,
                         new_path: None,
-                        created_files: None, // Could populate this if we tracked exact output paths
+                        created_files: None,
                     };
 
                     let tx = Transaction::new(t_type, details);
                     history.push(tx);
-                    let _ = app.emit("history_update", ()); // Notify frontend to refresh
+                    let _ = app.emit("history_update", ());
                 }
             }
+            
+            // Final emit to notify completion/error/cancel
+            let op_data = locked.clone();
+            drop(locked);
+            let _ = app.emit("file_op_event", op_data);
         }
     }
     

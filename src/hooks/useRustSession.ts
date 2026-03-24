@@ -48,27 +48,52 @@ export const useRustSession = () => {
     }, [refreshSession]);
 
     const activeTabNavigate = useCallback(async (panelId: PanelId, path: string, version?: number) => {
-        await invoke('active_tab_navigate', { panelId, path, version });
+        try {
+            await invoke('active_tab_navigate', { panelId, path, version });
+        } catch (e) {
+            console.error("activeTabNavigate failed:", e);
+        }
     }, []);
 
-    const createTab = useCallback(async (panelId: PanelId, path: string, background?: boolean) => {
-        await invoke('create_tab', { panelId, path, background });
+    const createTab = useCallback(async (panelId: PanelId, path: string, background?: boolean): Promise<string | undefined> => {
+        try {
+            return await invoke<string>('create_tab', { panelId, path, background });
+        } catch (e) {
+            console.error("createTab failed:", e);
+            return undefined;
+        }
     }, []);
 
     const closeTab = useCallback(async (tabId: string) => {
-        await invoke('close_tab', { tabId });
+        try {
+            await invoke('close_tab', { tabId });
+        } catch (e) {
+            console.error("closeTab failed:", e);
+        }
     }, []);
 
     const switchTab = useCallback(async (tabId: string) => {
-        await invoke('switch_tab', { tabId });
+        try {
+            await invoke('switch_tab', { tabId });
+        } catch (e) {
+            console.error("switchTab failed:", e);
+        }
     }, []);
 
     const duplicateTab = useCallback(async (tabId: string) => {
-        await invoke('duplicate_tab', { tabId });
+        try {
+            await invoke('duplicate_tab', { tabId });
+        } catch (e) {
+            console.error("duplicateTab failed:", e);
+        }
     }, []);
 
     const closeOtherTabs = useCallback(async (tabId: string) => {
-        await invoke('close_other_tabs', { tabId });
+        try {
+            await invoke('close_other_tabs', { tabId });
+        } catch (e) {
+            console.error("closeOtherTabs failed:", e);
+        }
     }, []);
 
     return {

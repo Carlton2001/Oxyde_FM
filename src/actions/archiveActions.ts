@@ -77,6 +77,22 @@ export const EXTRACT_TO_FOLDER_ACTION: ActionDefinition = {
     }
 };
 
+const getUniqueArchiveName = (base: string, format: string, existingNames: string[]): string => {
+    const namesLower = new Set(existingNames.map(n => n.toLowerCase()));
+    const ext = format === 'zst' ? '.tar.zst' : `.${format}`;
+    let currentName = `${base}${ext}`;
+
+    if (!namesLower.has(currentName.toLowerCase())) {
+        return base;
+    }
+
+    let counter = 2;
+    while (namesLower.has(`${base} (${counter})${ext}`.toLowerCase())) {
+        counter++;
+    }
+    return `${base} (${counter})`;
+};
+
 const compress = async (ctx: ActionContext, format: 'zip' | '7z' | 'tar' | 'zst') => {
     let selection = Array.from(ctx.activePanel.selected);
     const target = ctx['contextMenuTarget'];
@@ -90,21 +106,29 @@ const compress = async (ctx: ActionContext, format: 'zip' | '7z' | 'tar' | 'zst'
 
     const firstItem = selection[0];
     const parentDir = getParent(firstItem);
-    const baseName = selection.length === 1
-        ? firstItem.split('\\').pop()?.split('/').pop()?.split('.').shift()
-        : "Archive";
+    const existingNames = ctx.activePanel.files.map(f => f.name);
+
+    let defaultBase = selection.length === 1
+        ? (firstItem.split('\\').pop()?.split('/').pop()?.split('.').shift() || "Archive")
+        : (parentDir.split('\\').pop()?.split('/').pop() || "Archive");
+
+    // Suggest a unique name by default
+    defaultBase = getUniqueArchiveName(defaultBase, format, existingNames);
 
     // Ask user for name
     const userBaseName = await ctx.dialogs.prompt(
         ctx.t('enter_archive_name') || "Enter archive name",
         ctx.t('compress'),
-        baseName
+        defaultBase
     );
 
     if (!userBaseName) return; // Cancelled
 
-    const archiveName = format === 'zst' ? `${userBaseName}.tar.zst` : `${userBaseName}.${format}`;
-    const archivePath = `${parentDir}\\${archiveName}`;
+    // Double check uniqueness for the final user input (if they manually typed an existing name)
+    const finalBase = getUniqueArchiveName(userBaseName.trim(), format, existingNames);
+
+    const archiveName = format === 'zst' ? `${finalBase}.tar.zst` : `${finalBase}.${format}`;
+    const archivePath = `${parentDir}${parentDir.endsWith('\\') ? '' : '\\'}${archiveName}`;
 
     // Quality defaults from settings
     let quality = 'normal';

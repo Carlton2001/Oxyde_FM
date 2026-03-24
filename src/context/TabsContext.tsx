@@ -12,7 +12,7 @@ export interface UiTab extends Tab {
 interface TabsContextType {
     tabs: UiTab[];
     activeTabId: string;
-    addTab: (path: string, optionsOrId?: string | { id?: string, background?: boolean, index?: number }, background?: boolean) => Promise<void>;
+    addTab: (path: string, optionsOrId?: string | { id?: string, background?: boolean, index?: number }, background?: boolean) => Promise<string | undefined>;
     closeTab: (id: string, newActiveId?: string) => void;
     setActiveTab: (id: string, currentPanelState?: any) => void;
     updateTabPath: (id: string, path: string, version?: number) => void;
@@ -78,7 +78,7 @@ export const TabsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         await invoke('reorder_tabs', { sourceIndex, targetIndex });
     }, []);
 
-    const addTab = useCallback(async (path: string, optionsOrId?: string | { id?: string, background?: boolean, index?: number }, backgroundArg?: boolean) => {
+    const addTab = useCallback(async (path: string, optionsOrId?: string | { id?: string, background?: boolean, index?: number }, backgroundArg?: boolean): Promise<string | undefined> => {
         let background: boolean | undefined;
         let index: number | undefined;
 
@@ -92,11 +92,11 @@ export const TabsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
 
         // 1. Create the tab first
-        await createTab(activePanelId as PanelId, path, background);
+        const newId = await createTab(activePanelId as PanelId, path, background);
 
         // 2. If we need to position it somewhere specific, we MUST get the fresh length
         // from a direct session fetch, as the 'tabs' state from the context is stale here.
-        if (typeof index === 'number') {
+        if (newId && typeof index === 'number') {
             try {
                 const freshSession = await invoke<SessionState>('get_session_state');
                 const pId = activePanelId === 'left' ? 'left_panel' : 'right_panel';
@@ -111,6 +111,8 @@ export const TabsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 console.error("Failed to reorder new tab after creation:", e);
             }
         }
+
+        return newId;
     }, [createTab, activePanelId]);
 
     const closeTab = useCallback((id: string, _newActiveId?: string) => {

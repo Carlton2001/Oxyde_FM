@@ -169,7 +169,6 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
     const refreshTrashStatus = useCallback(async () => {
         try {
             const [usageSize, usageItems] = await invoke<[number, number]>('get_total_recycle_bin_usage');
-            console.log("Trash status refresh:", { usageSize, usageItems });
             setIsTrashEmpty(usageItems === 0);
             refreshDriveTrashConfigs();
         } catch (e) {
