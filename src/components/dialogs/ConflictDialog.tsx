@@ -136,10 +136,7 @@ export const ConflictDialog: React.FC<ConflictDialogProps> = ({ conflicts, onRes
     });
 
     const { position, handleMouseDown } = useDraggable({ 
-        initialPosition: { 
-            x: (window.innerWidth - size.width) / 2, 
-            y: (window.innerHeight - size.height) / 2 
-        }, 
+        initialPosition: { x: 0, y: 0 }, 
         dragRef 
     });
 
@@ -341,14 +338,11 @@ export const ConflictDialog: React.FC<ConflictDialogProps> = ({ conflicts, onRes
 
     const renderDetailedView = () => {
         return (
-            <div className="dialog-overlay conflict-overlay no-center" style={{ zIndex }}>
+            <div className="dialog-overlay conflict-overlay" style={{ zIndex }}>
                 <div
                     ref={dragRef}
                     className="dialog-window properties-dialog conflict-dialog hybrid"
                     style={{
-                        position: 'absolute',
-                        top: 0,
-                        left: 0,
                         width: `${size.width}px`,
                         height: `${size.height}px`,
                         transform: `translate(${position.x}px, ${position.y}px)`,
@@ -530,14 +524,11 @@ export const ConflictDialog: React.FC<ConflictDialogProps> = ({ conflicts, onRes
     };
 
     return viewMode === 'detailed' ? renderDetailedView() : (
-        <div className="dialog-overlay conflict-overlay simple no-center" style={{ zIndex }}>
+        <div className="dialog-overlay conflict-overlay simple" style={{ zIndex }}>
             <div
                 ref={dragRef}
                 className="dialog-window properties-dialog conflict-dialog simple"
                 style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
                     transform: `translate(${position.x}px, ${position.y}px)`,
                     transition: 'none'
                 }}

@@ -77,7 +77,7 @@ export const MapNetworkDriveDialog: React.FC<MapNetworkDriveDialogProps> = ({ on
         <div className="dialog-overlay" style={{ zIndex }}>
             <div
                 ref={dragRef}
-                className="dialog-window"
+                className="dialog-window overflow-visible"
                 onClick={(e) => e.stopPropagation()}
                 style={{
                     transform: `translate(${position.x}px, ${position.y}px)`,
@@ -108,7 +108,7 @@ export const MapNetworkDriveDialog: React.FC<MapNetworkDriveDialogProps> = ({ on
                     <div className="dialog-grid">
                         <div className="dialog-label">{t('drive' as any)}</div>
                         <div className="dialog-value">
-                            <div className="custom-unit-selector" ref={dropdownRef}>
+                            <div className="custom-unit-selector full-width" ref={dropdownRef}>
                                 <div
                                     className="unit-selected-value"
                                     onClick={() => setIsDropdownOpen(!isDropdownOpen)}
@@ -119,7 +119,9 @@ export const MapNetworkDriveDialog: React.FC<MapNetworkDriveDialogProps> = ({ on
                                 {isDropdownOpen && (
                                     <div className="unit-dropdown-list dropdown-scrollable">
                                         {availableLetters.map(l => {
-                                            const isUsed = drives?.some(d => d.path.toUpperCase().startsWith(l));
+                                            const usedDrive = drives?.find(d => d.path.toUpperCase().startsWith(l.toUpperCase()));
+                                            const isUsed = !!usedDrive;
+
                                             return (
                                                 <div
                                                     key={l}
@@ -127,7 +129,7 @@ export const MapNetworkDriveDialog: React.FC<MapNetworkDriveDialogProps> = ({ on
                                                         active: letter === l,
                                                         disabled: isUsed
                                                     })}
-                                                    style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' }}
+                                                    style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem' }}
                                                     onClick={() => {
                                                         if (!isUsed) {
                                                             setLetter(l);
@@ -135,10 +137,23 @@ export const MapNetworkDriveDialog: React.FC<MapNetworkDriveDialogProps> = ({ on
                                                         }
                                                     }}
                                                 >
-                                                    <span style={{ fontWeight: 600 }}>{l}</span>
-                                                    {isUsed && (
-                                                        <span style={{ fontSize: '0.7rem', opacity: 0.7, fontStyle: 'italic' }}>
-                                                            ({t('drive_in_use' as any)})
+                                                    <span style={{ fontWeight: 600, flexShrink: 0 }}>{l}</span>
+                                                    {isUsed && usedDrive && (
+                                                        <span style={{ 
+                                                            fontSize: '0.725rem', 
+                                                            opacity: 0.7, 
+                                                            fontStyle: 'italic',
+                                                            overflow: 'hidden',
+                                                            textOverflow: 'ellipsis',
+                                                            whiteSpace: 'nowrap',
+                                                            marginLeft: '0.5rem',
+                                                            flex: 1,
+                                                            textAlign: 'right'
+                                                        }}>
+                                                            {usedDrive.drive_type === 'remote' 
+                                                                ? (usedDrive.remote_path || (usedDrive.label === 'Local Disk' ? t('local_disk' as any) : usedDrive.label))
+                                                                : (usedDrive.label === 'Local Disk' ? t('local_disk' as any) : usedDrive.label)
+                                                            }
                                                         </span>
                                                     )}
                                                 </div>

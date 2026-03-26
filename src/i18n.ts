@@ -867,7 +867,7 @@ export const translations = {
         password: 'Mot de passe',
         username_hint: 'Exemple : SERVEUR\\Utilisateur ou DOMAINE\\Utilisateur',
         optional: 'Optionnel',
-        reconnect_at_signin: 'Se reconnecter lors de la connexion',
+        reconnect_at_signin: "Se reconnecter lors de l'ouverture de session",
         finish: 'Terminer',
         error_empty_path: 'Le chemin du dossier est requis.',
 

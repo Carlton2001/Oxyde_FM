@@ -34,7 +34,10 @@ export const InputDialog: React.FC<InputDialogProps> = ({
     onFocus
 }) => {
     const dragRef = useRef<HTMLDivElement>(null);
-    const { position, handleMouseDown } = useDraggable({ initialPosition: { x: 0, y: 0 }, dragRef });
+    const { position, handleMouseDown } = useDraggable({ 
+        initialPosition: { x: 0, y: 0 }, 
+        dragRef 
+    });
     const [value, setValue] = useState(initialValue);
     const inputRef = useRef<HTMLInputElement>(null);
 

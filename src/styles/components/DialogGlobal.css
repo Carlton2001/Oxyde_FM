@@ -36,6 +36,10 @@
     position: relative;
 }
 
+.dialog-window.overflow-visible {
+    overflow: visible !important;
+}
+
 @keyframes dialog-in {
     from {
         opacity: 0;
@@ -115,7 +119,7 @@
 .dialog-tabs {
     display: flex;
     gap: 0.25rem;
-    padding: 0 1rem;
+    padding: 0 1.25rem;
     background: var(--bg-color-soft, rgba(0, 0, 0, 0.02));
     border-bottom: 1px solid var(--border-color);
     flex-shrink: 0;
@@ -143,9 +147,15 @@
     background: transparent;
 }
 
-.dialog-tab:hover:not(.active) {
+.dialog-tab:hover:not(.active):not(:disabled) {
     color: var(--text-color);
     background: var(--hover-color);
+}
+
+.dialog-tab:disabled {
+    opacity: 0.35;
+    cursor: default;
+    pointer-events: none;
 }
 
 /* Content - Scrollable main area */

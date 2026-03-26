@@ -56,7 +56,10 @@ export const SearchDialog: React.FC<SearchDialogProps> = ({
     const unitDropdownRef = useRef<HTMLDivElement>(null);
 
     const dragRef = useRef<HTMLDivElement>(null);
-    const { position, handleMouseDown } = useDraggable({ initialPosition: { x: 0, y: 0 }, dragRef });
+    const { position, handleMouseDown } = useDraggable({ 
+        initialPosition: { x: 0, y: 0 }, 
+        dragRef 
+    });
 
     React.useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -64,9 +67,17 @@ export const SearchDialog: React.FC<SearchDialogProps> = ({
                 setIsUnitDropdownOpen(false);
             }
         };
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, []);
+
+        if (isUnitDropdownOpen) {
+            document.addEventListener('mousedown', handleClickOutside);
+        } else {
+            document.removeEventListener('mousedown', handleClickOutside);
+        }
+
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, [isUnitDropdownOpen]);
 
     const handleReset = () => {
         setQuery('');
@@ -101,15 +112,12 @@ export const SearchDialog: React.FC<SearchDialogProps> = ({
     };
 
     return (
-        <div className="dialog-overlay no-center" style={{ background: 'transparent', pointerEvents: 'none', zIndex }}>
+        <div className="dialog-overlay" onMouseDown={onFocus} style={{ background: 'transparent', pointerEvents: 'none', zIndex }}>
             <div
                 ref={dragRef}
                 className="dialog-window search-dialog"
                 onClick={(e) => e.stopPropagation()}
                 style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
                     transform: `translate(${position.x}px, ${position.y}px)`,
                     transition: 'none',
                     pointerEvents: 'auto'
