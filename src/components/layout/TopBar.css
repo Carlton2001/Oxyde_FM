@@ -202,7 +202,7 @@
     gap: 8px;
     padding: 6px 12px;
     border-radius: 6px;
-    cursor: pointer;
+    cursor: default;
     font-size: 0.8125rem;
     transition: opacity 0.1s ease;
     color: var(--text-color);

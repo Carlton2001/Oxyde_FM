@@ -1,0 +1,509 @@
+/* DuplicateSearchDialog.css */
+
+.duplicate-search-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    pointer-events: none;
+}
+
+.duplicate-search-dialog {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform-origin: center center;
+    transition: none;
+    pointer-events: auto;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--border-color);
+    max-width: 95vw;
+    max-height: 92vh;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+    background: var(--bg-color);
+    overflow: hidden;
+}
+
+.duplicate-search-dialog .duplicate-search-content {
+    padding: 0;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: row;
+    overflow: hidden;
+}
+
+/* Sidebar Styling */
+.duplicate-search-dialog .duplicates-sidebar {
+    width: 260px;
+    background: var(--surface-secondary);
+    border-right: 1px solid var(--border-color);
+    padding: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+    overflow-y: auto;
+}
+
+.duplicate-search-dialog .sidebar-section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.duplicate-search-dialog .sidebar-title {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.duplicate-search-dialog .vertical-list-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+/* Drive Buttons */
+.duplicate-search-dialog .drive-button {
+    padding: 0.6rem 0.8rem;
+    border-radius: 8px;
+    font-size: 0.8rem;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.1rem;
+    border: 1px solid var(--border-color);
+    background: var(--bg-color);
+    color: var(--text-color);
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    width: 100%;
+}
+
+.duplicate-search-dialog .drive-button:hover {
+    border-color: var(--accent-color);
+    background: rgba(var(--accent-color-rgb), 0.04);
+}
+
+.duplicate-search-dialog .drive-button.selected {
+    background: rgba(var(--accent-color-rgb), 0.12);
+    border-color: var(--accent-color);
+    box-shadow: 0 2px 8px rgba(var(--accent-color-rgb), 0.15);
+}
+
+.duplicate-search-dialog .drive-button.searching {
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+.duplicate-search-dialog .drive-info-row {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    width: 100%;
+}
+
+.duplicate-search-dialog .drive-icon-wrapper {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    opacity: 0.7;
+}
+
+.duplicate-search-dialog .selected .drive-icon-wrapper {
+    color: var(--accent-color);
+    opacity: 1;
+}
+
+.duplicate-search-dialog .drive-label-text {
+    font-weight: 600;
+    white-space: nowrap;
+    color: var(--text-color);
+    text-align: left;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.duplicate-search-dialog .drive-meta-row {
+    display: flex;
+    gap: 0.4rem;
+    width: 100%;
+    justify-content: flex-start;
+    margin-left: 1.6rem;
+    align-items: center;
+    margin-top: 0.1rem;
+}
+
+.duplicate-search-dialog .drive-badge {
+    font-size: 0.6rem;
+    padding: 0.15rem 0.45rem;
+    border-radius: 4px;
+    background: var(--surface-tertiary);
+    color: var(--text-muted);
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.duplicate-search-dialog .drive-badge.ssd {
+    background: #10b981;
+    color: #ffffff;
+}
+
+.duplicate-search-dialog .current-folder-path {
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 12rem;
+    white-space: nowrap;
+}
+
+.duplicate-search-dialog .location-warning {
+    font-size: 0.75rem;
+    color: #d97706;
+    background: #fffbeb;
+    padding: 0.75rem;
+    border-radius: 8px;
+    border: 1px solid #fef3c7;
+    margin-top: 0.5rem;
+    line-height: 1.4;
+}
+
+.duplicate-search-dialog .sidebar-separator {
+    height: 1px;
+    background: var(--border-color);
+    margin: 0.5rem 0;
+}
+
+.duplicate-search-dialog .checkbox-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.duplicate-search-dialog .sidebar-footer-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-top: 1rem;
+}
+
+.duplicate-search-dialog .sidebar-footer-actions .btn {
+    width: 100%;
+}
+
+/* Main Area Styling */
+.duplicate-search-dialog .duplicates-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-color);
+    min-width: 0;
+}
+
+.duplicate-search-dialog .main-results-header {
+    padding: 0.6rem 1rem;
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+}
+
+.duplicate-search-dialog .results-stats {
+    font-size: 0.825rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    padding-left: 1rem;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.1rem;
+}
+
+.duplicate-search-dialog .results-stats-primary {
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.duplicate-search-dialog .results-stats-secondary {
+    font-size: 0.75rem;
+    opacity: 0.8;
+}
+
+.duplicate-search-dialog .header-separator {
+    height: 1px;
+    background: var(--border-color);
+    width: 100%;
+}
+
+/* Progress Section */
+.duplicate-search-dialog .duplicates-progress-panel {
+    padding: 0.75rem 1rem;
+    background: rgba(var(--accent-color-rgb), 0.05);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.duplicate-search-dialog .progress-header {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.8rem;
+    margin-bottom: 0.4rem;
+}
+
+.duplicate-search-dialog .progress-stage {
+    font-weight: 700;
+    color: var(--accent-color);
+}
+
+.duplicate-search-dialog .progress-counter {
+    font-weight: 600;
+}
+
+.duplicate-search-dialog .progress-percentage {
+    margin-left: 0.5rem;
+    opacity: 0.7;
+}
+
+.duplicate-search-dialog .progress-bar-wrapper {
+    height: 8px;
+    background: var(--surface-secondary);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 0.4rem;
+}
+
+.duplicate-search-dialog .progress-bar-fill {
+    height: 100%;
+    background: var(--accent-color);
+    transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.duplicate-search-dialog .progress-bar-fill.pulse {
+    animation: pulse 1.5s infinite alternate;
+}
+
+.duplicate-search-dialog .progress-message {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Results Content */
+.duplicate-search-dialog .duplicates-results-container {
+    flex: 1;
+    overflow-y: auto;
+    position: relative;
+    padding: 1rem;
+}
+
+.duplicate-search-dialog .duplicates-list {
+    display: block;
+    width: 100%;
+    padding-bottom: 2rem;
+}
+
+/* Group Card Styling */
+.duplicate-search-dialog .duplicate-group-card {
+    background: var(--surface-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    margin-bottom: 1rem;
+    overflow: hidden;
+    transition: all 0.2s ease;
+}
+
+.duplicate-search-dialog .duplicate-group-card:hover {
+    border-color: rgba(var(--accent-color-rgb), 0.3);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.duplicate-search-dialog .duplicate-group-header {
+    padding: 0.75rem 1rem;
+    background: var(--surface-secondary);
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.2s ease;
+}
+
+.duplicate-search-dialog .duplicate-group-header:hover {
+    background: var(--hover-color);
+}
+
+.duplicate-search-dialog .duplicate-group-header.collapsed {
+    border-bottom-color: transparent;
+}
+
+.duplicate-search-dialog .group-header-info {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 0.875rem;
+    font-weight: 700;
+    color: var(--text-color);
+}
+
+.duplicate-search-dialog .group-badge {
+    font-size: 0.7rem;
+    padding: 2px 8px;
+    border-radius: 12px;
+    background: var(--accent-color);
+    color: #ffffff;
+    font-weight: 800;
+    min-width: 1.5rem;
+    text-align: center;
+}
+
+.duplicate-search-dialog .group-size {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+    background: var(--bg-color);
+    padding: 0.2rem 0.6rem;
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+}
+
+.duplicate-search-dialog .duplicate-group-files {
+    display: block;
+    background: var(--bg-color);
+}
+
+/* File Item Styling */
+.duplicate-search-dialog .duplicate-file-item {
+    padding: 0.75rem 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    border-bottom: 1px solid var(--border-color-soft, rgba(var(--border-color-rgb), 0.5));
+}
+
+.duplicate-search-dialog .duplicate-file-item:last-child {
+    border-bottom: none;
+}
+
+.duplicate-search-dialog .duplicate-file-item:hover {
+    background: var(--hover-color);
+}
+
+.duplicate-search-dialog .file-item-icon {
+    color: var(--accent-color);
+    flex-shrink: 0;
+}
+
+.duplicate-search-dialog .file-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+}
+
+.duplicate-search-dialog .file-name {
+    font-size: 0.825rem;
+    font-weight: 600;
+    color: var(--text-color);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.duplicate-search-dialog .file-path {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    opacity: 0.8;
+}
+
+/* Empty & Error States */
+.duplicate-search-dialog .duplicate-empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--text-muted);
+    gap: 1rem;
+}
+
+.duplicate-search-dialog .empty-hint {
+    font-size: 1rem;
+    opacity: 0.7;
+    max-width: 300px;
+    text-align: center;
+    line-height: 1.4;
+}
+
+.duplicate-search-dialog .duplicate-error-state {
+    color: var(--danger-color);
+    padding: 2.5rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    text-align: center;
+}
+
+.duplicate-search-dialog .load-more-container {
+    display: flex;
+    justify-content: center;
+    padding: 2rem;
+}
+
+.duplicate-search-dialog .load-more-btn {
+    padding: 0.6rem 2rem;
+    border-radius: 2rem;
+    font-weight: 600;
+}
+
+.duplicate-search-dialog .empty-icon {
+    margin-bottom: 1rem;
+    opacity: 0.5;
+}
+
+.duplicate-search-dialog .flex-grow {
+    flex: 1;
+}
+
+.duplicate-search-dialog .clear-filter-btn {
+    border-left: none !important;
+    background: transparent !important;
+}
+
+/* Resize Handle */
+.duplicate-search-dialog .resize-handle {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    width: 20px;
+    height: 20px;
+    cursor: nwse-resize;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    color: var(--text-muted);
+    opacity: 0.5;
+}
+
+@keyframes pulse {
+    from { opacity: 0.6; }
+    to { opacity: 1; }
+}

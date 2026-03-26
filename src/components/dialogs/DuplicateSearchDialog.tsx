@@ -8,6 +8,8 @@ import { FileEntry, DriveInfo } from '../../types';
 import { usePanelContext } from '../../context/PanelContext';
 import { formatSize } from '../../utils/format';
 import './SearchDialog.css';
+import './DuplicateSearchDialog.css';
+import cx from 'classnames';
 
 interface DuplicateSearchDialogProps {
     initialRoot: string;
@@ -158,36 +160,17 @@ export const DuplicateSearchDialog: React.FC<DuplicateSearchDialogProps> = ({
     };
 
     return (
-        <div style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            pointerEvents: 'none',
-            zIndex: zIndex || 1000
-        }}>
+        <div className="duplicate-search-overlay" style={{ zIndex: zIndex || 1000 }}>
             <div
                 ref={dragRef}
-                className="properties-dialog"
+                className="properties-dialog duplicate-search-dialog"
                 onClick={e => e.stopPropagation()}
                 style={{
-                    position: 'absolute',
-                    left: '50%',
-                    top: '50%',
-                    marginLeft: '-416px', // Half of default width (832)
-                    marginTop: '-350px',  // Half of default height (700)
+                    marginLeft: `calc(-1 * (${size.width}px / 2))`,
+                    marginTop: `calc(-1 * (${size.height}px / 2))`,
                     transform: `translate(${position.x}px, ${position.y}px)`,
                     width: `${size.width}px`,
                     height: `${size.height}px`,
-                    transition: 'none',
-                    pointerEvents: 'auto',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    border: '1px solid var(--border-color)',
-                    maxWidth: '95vw',
-                    maxHeight: '92vh',
-                    boxShadow: '0 10px 40px rgba(0,0,0,0.3)'
                 }}
             >
                 <div className="modal-header" onMouseDown={(e) => { handleMouseDown(e); onFocus?.(); }}>
@@ -200,12 +183,12 @@ export const DuplicateSearchDialog: React.FC<DuplicateSearchDialogProps> = ({
                     </button>
                 </div>
 
-                <div className="modal-content" style={{ padding: 0, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'row', overflow: 'hidden' }}>
+                <div className="modal-content duplicate-search-content">
                     {/* Sidebar: Control Panel */}
                     <div className="duplicates-sidebar">
                         {/* Locations Section */}
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                            <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        <div className="sidebar-section">
+                            <div className="sidebar-title">
                                 <Folder size={14} />
                                 {t('search_locations') || 'Search Locations'}
                             </div>
@@ -217,6 +200,10 @@ export const DuplicateSearchDialog: React.FC<DuplicateSearchDialogProps> = ({
                                         <button
                                             key={drive.path}
                                             type="button"
+                                            className={cx("drive-button", {
+                                                selected: isSelected,
+                                                searching: isSearchingDuplicates
+                                            })}
                                             onClick={() => {
                                                 if (isSelected) {
                                                     setSelectedSearchPaths(prev => prev.filter(p => p !== drive.path));
@@ -224,66 +211,25 @@ export const DuplicateSearchDialog: React.FC<DuplicateSearchDialogProps> = ({
                                                     setSelectedSearchPaths(prev => [...prev, drive.path]);
                                                 }
                                             }}
-                                            style={{
-                                                padding: '0.6rem 0.8rem',
-                                                borderRadius: '8px',
-                                                fontSize: '0.8rem',
-                                                display: 'flex',
-                                                flexDirection: 'column',
-                                                alignItems: 'flex-start',
-                                                gap: '0.1rem',
-                                                border: '1px solid var(--border-color)',
-                                                background: isSelected ? 'rgba(var(--accent-color-rgb), 0.12)' : 'var(--bg-color)',
-                                                borderColor: isSelected ? 'var(--accent-color)' : 'var(--border-color)',
-                                                color: 'var(--text-color)',
-                                                cursor: 'pointer',
-                                                transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-                                                opacity: isSearchingDuplicates ? 0.6 : 1,
-                                                pointerEvents: isSearchingDuplicates ? 'none' : 'auto',
-                                                boxShadow: isSelected ? '0 2px 8px rgba(var(--accent-color-rgb), 0.15)' : 'none',
-                                                width: '100%'
-                                            }}
                                         >
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', width: '100%' }}>
-                                                <div style={{
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    justifyContent: 'center',
-                                                    color: isSelected ? 'var(--accent-color)' : 'var(--text-muted)',
-                                                    opacity: isSelected ? 1 : 0.7
-                                                }}>
+                                            <div className="drive-info-row">
+                                                <div className="drive-icon-wrapper">
                                                     {drive.drive_type === 'removable' ? <Usb size={16} /> :
                                                         drive.drive_type === 'cdrom' ? <Disc size={16} /> :
                                                             <HardDrive size={16} />}
                                                 </div>
-                                                <span style={{ fontWeight: 600, whiteSpace: 'nowrap', color: 'var(--text-color)', textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                <span className="drive-label-text">
                                                     {drive.label.replace(/#Disk\s\d+/g, '').replace(/#\d+/g, '').trim()} ({drive.path.replace(/[\\/]$/, '')})
                                                 </span>
                                             </div>
-                                            <div style={{ display: 'flex', gap: '0.4rem', width: '100%', justifyContent: 'flex-start', marginLeft: '1.6rem', alignItems: 'center', marginTop: '0.1rem' }}>
+                                            <div className="drive-meta-row">
                                                 {drive.media_type && (
-                                                    <span style={{
-                                                        fontSize: '0.6rem',
-                                                        padding: '0.1rem 0.45rem',
-                                                        borderRadius: '4px',
-                                                        background: drive.media_type.includes('SSD') ? '#10b981' : 'var(--surface-secondary, rgba(0,0,0,0.06))',
-                                                        color: drive.media_type.includes('SSD') ? '#ffffff' : 'var(--text-muted)',
-                                                        fontWeight: 800,
-                                                        textTransform: 'uppercase'
-                                                    }}>
+                                                    <span className={cx("drive-badge", { ssd: drive.media_type.includes('SSD') })}>
                                                         {drive.media_type}
                                                     </span>
                                                 )}
                                                 {drive.physical_id !== undefined && (
-                                                    <span style={{
-                                                        fontSize: '0.6rem',
-                                                        padding: '0.1rem 0.45rem',
-                                                        borderRadius: '4px',
-                                                        background: 'var(--surface-secondary, rgba(0,0,0,0.06))',
-                                                        color: 'var(--text-muted)',
-                                                        fontWeight: 800,
-                                                        textTransform: 'uppercase'
-                                                    }}>
+                                                    <span className="drive-badge">
                                                         Disk #{drive.physical_id.toString().replace(/Disk\s*/i, '')}
                                                     </span>
                                                 )}
@@ -295,6 +241,7 @@ export const DuplicateSearchDialog: React.FC<DuplicateSearchDialogProps> = ({
                                 {initialRoot && !allDrives.some(d => d.path === initialRoot) && !initialRoot.startsWith('oxyde://') && !initialRoot.startsWith('trash://') && (
                                     <button
                                         type="button"
+                                        className={cx("drive-button", { selected: selectedSearchPaths.includes(initialRoot), searching: isSearchingDuplicates })}
                                         onClick={() => {
                                             if (selectedSearchPaths.includes(initialRoot)) {
                                                 setSelectedSearchPaths(prev => prev.filter(p => p !== initialRoot));
@@ -302,42 +249,17 @@ export const DuplicateSearchDialog: React.FC<DuplicateSearchDialogProps> = ({
                                                 setSelectedSearchPaths(prev => [...prev, initialRoot]);
                                             }
                                         }}
-                                        style={{
-                                            padding: '0.6rem 0.8rem',
-                                            borderRadius: '8px',
-                                            fontSize: '0.8rem',
-                                            display: 'flex',
-                                            flexDirection: 'column',
-                                            alignItems: 'flex-start',
-                                            gap: '0.1rem',
-                                            border: '1px solid var(--border-color)',
-                                            background: selectedSearchPaths.includes(initialRoot) ? 'rgba(var(--accent-color-rgb), 0.12)' : 'var(--bg-color)',
-                                            borderColor: selectedSearchPaths.includes(initialRoot) ? 'var(--accent-color)' : 'var(--border-color)',
-                                            color: 'var(--text-color)',
-                                            cursor: 'pointer',
-                                            transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-                                            opacity: isSearchingDuplicates ? 0.6 : 1,
-                                            pointerEvents: isSearchingDuplicates ? 'none' : 'auto',
-                                            boxShadow: selectedSearchPaths.includes(initialRoot) ? '0 2px 8px rgba(var(--accent-color-rgb), 0.15)' : 'none',
-                                            width: '100%'
-                                        }}
                                     >
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', width: '100%' }}>
-                                            <div style={{
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                justifyContent: 'center',
-                                                color: selectedSearchPaths.includes(initialRoot) ? 'var(--accent-color)' : 'var(--text-muted)',
-                                                opacity: selectedSearchPaths.includes(initialRoot) ? 1 : 0.7
-                                            }}>
+                                        <div className="drive-info-row">
+                                            <div className="drive-icon-wrapper">
                                                 <Folder size={16} />
                                             </div>
-                                            <span style={{ fontWeight: 600, color: 'var(--text-color)', textAlign: 'left' }}>
+                                            <span className="drive-label-text">
                                                 {t('current_folder')}
                                             </span>
                                         </div>
-                                        <div style={{ display: 'flex', gap: '0.4rem', width: '100%', justifyContent: 'flex-start', marginLeft: '1.6rem', alignItems: 'center', marginTop: '0.1rem' }}>
-                                            <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '12rem', whiteSpace: 'nowrap' }}>
+                                        <div className="drive-meta-row">
+                                            <span className="current-folder-path">
                                                 {initialRoot}
                                             </span>
                                         </div>
@@ -346,26 +268,17 @@ export const DuplicateSearchDialog: React.FC<DuplicateSearchDialogProps> = ({
                             </div>
 
                             {selectedSearchPaths.length > 1 && (
-                                <div style={{
-                                    fontSize: '0.75rem',
-                                    color: '#d97706',
-                                    background: '#fffbeb',
-                                    padding: '0.75rem',
-                                    borderRadius: '8px',
-                                    border: '1px solid #fef3c7',
-                                    marginTop: '0.5rem',
-                                    lineHeight: '1.4'
-                                }}>
+                                <div className="location-warning">
                                     {t('multiple_locations_warning')}
                                 </div>
                             )}
                         </div>
 
-                        <div style={{ height: '1px', background: 'var(--border-color)', margin: '0.5rem 0' }} />
+                        <div className="sidebar-separator" />
 
                         {/* Options Section */}
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                            <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        <div className="sidebar-section">
+                            <div className="sidebar-title">
                                 {t('scan_options')}
                             </div>
                             <div className="checkbox-list">
@@ -407,17 +320,16 @@ export const DuplicateSearchDialog: React.FC<DuplicateSearchDialogProps> = ({
                             </div>
                         </div>
 
-                        <div style={{ flex: 1 }} />
+                        <div className="flex-grow" />
 
                         {/* Action Buttons at bottom of sidebar */}
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '1rem' }}>
+                        <div className="sidebar-footer-actions">
                             {!isSearchingDuplicates ? (
                                 <button
                                     type="button"
                                     className="btn primary"
                                     onClick={handleFindDuplicates}
                                     disabled={selectedSearchPaths.length === 0}
-                                    style={{ width: '100%' }}
                                 >
                                     <Search size={14} />
                                     {t('find_duplicates') || 'Find Duplicates'}
@@ -427,7 +339,6 @@ export const DuplicateSearchDialog: React.FC<DuplicateSearchDialogProps> = ({
                                     type="button"
                                     className="btn danger"
                                     onClick={handleCancelDuplicates}
-                                    style={{ width: '100%' }}
                                 >
                                     <Loader2 size={14} className="spin" />
                                     {t('cancel') || 'Cancel'}
@@ -439,7 +350,7 @@ export const DuplicateSearchDialog: React.FC<DuplicateSearchDialogProps> = ({
                     {/* Main Area: Stats, Filter and Results */}
                     <div className="duplicates-main">
                         {/* Header Area: Group Count, File Count and Filter */}
-                        <div style={{ padding: '0.6rem 1rem', display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                        <div className="main-results-header">
                             <div style={{ flex: 1 }}>
                                 <div className="input-with-icon icon-left">
                                     <Search size={14} className="input-icon" />
@@ -453,9 +364,8 @@ export const DuplicateSearchDialog: React.FC<DuplicateSearchDialogProps> = ({
                                         <div className="input-actions-hint right">
                                             <button
                                                 type="button"
-                                                className="regex-badge-btn"
+                                                className="regex-badge-btn clear-filter-btn"
                                                 onClick={() => setFilterQuery('')}
-                                                style={{ borderLeft: 'none', background: 'transparent' }}
                                             >
                                                 <X size={14} />
                                             </button>
@@ -464,47 +374,35 @@ export const DuplicateSearchDialog: React.FC<DuplicateSearchDialogProps> = ({
                                 </div>
                             </div>
                             {duplicates.length > 0 && (
-                                <div style={{
-                                    fontSize: '0.825rem',
-                                    color: 'var(--text-secondary)',
-                                    whiteSpace: 'nowrap',
-                                    paddingLeft: '1rem',
-                                    display: 'flex',
-                                    flexDirection: 'column',
-                                    alignItems: 'flex-end',
-                                    gap: '0.1rem'
-                                }}>
-                                    <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{duplicates.length} {t('duplicate_groups')}</div>
-                                    <div style={{ fontSize: '0.75rem', opacity: 0.8 }}>{totalFileCount} {t('files')}</div>
+                                <div className="results-stats">
+                                    <div className="results-stats-primary">{duplicates.length} {t('duplicate_groups')}</div>
+                                    <div className="results-stats-secondary">{totalFileCount} {t('files')}</div>
                                 </div>
                             )}
                         </div>
 
                         {/* Horizontal Separator */}
-                        <div style={{ height: '1px', background: 'var(--border-color)', width: '100%' }} />
+                        <div className="header-separator" />
 
                         {/* Progress Bar (if active) */}
                         {isSearchingDuplicates && duplicatesProgress && (
-                            <div style={{ padding: '0.75rem 1rem', background: 'rgba(var(--accent-color-rgb), 0.05)', borderBottom: '1px solid var(--border-color)' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', marginBottom: '0.4rem' }}>
-                                    <span style={{ fontWeight: 700, color: 'var(--accent-color)' }}>{duplicatesProgress.stage}</span>
+                            <div className="duplicates-progress-panel">
+                                <div className="progress-header">
+                                    <span className="progress-stage">{duplicatesProgress.stage}</span>
                                     {duplicatesProgress.total > 0 && (
-                                        <span style={{ fontWeight: 600 }}>
+                                        <span className="progress-counter">
                                             {duplicatesProgress.current} / {duplicatesProgress.total}
-                                            <span style={{ marginLeft: '0.5rem', opacity: 0.7 }}>({Math.round((duplicatesProgress.current / duplicatesProgress.total) * 100)}%)</span>
+                                            <span className="progress-percentage">({Math.round((duplicatesProgress.current / duplicatesProgress.total) * 100)}%)</span>
                                         </span>
                                     )}
                                 </div>
-                                <div style={{ height: '8px', background: 'var(--surface-secondary)', borderRadius: '4px', overflow: 'hidden', marginBottom: '0.4rem' }}>
-                                    <div style={{
-                                        height: '100%',
-                                        background: 'var(--accent-color)',
-                                        width: duplicatesProgress.total > 0 ? `${(duplicatesProgress.current / duplicatesProgress.total) * 100}%` : '100%',
-                                        transition: 'width 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                                        animation: duplicatesProgress.total === 0 ? 'pulse 1.5s infinite alternate' : 'none'
-                                    }} />
+                                <div className="progress-bar-wrapper">
+                                    <div 
+                                        className={cx("progress-bar-fill", { pulse: duplicatesProgress.total === 0 })}
+                                        style={{ width: duplicatesProgress.total > 0 ? `${(duplicatesProgress.current / duplicatesProgress.total) * 100}%` : '100%' }} 
+                                    />
                                 </div>
-                                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                <div className="progress-message">
                                     {duplicatesProgress.message}
                                 </div>
                             </div>
@@ -513,43 +411,33 @@ export const DuplicateSearchDialog: React.FC<DuplicateSearchDialogProps> = ({
                         {/* Results Area */}
                         <div className="duplicates-results-container">
                             {duplicatesError ? (
-                                <div className="duplicates-empty-state" style={{ color: 'var(--danger-color)', padding: '2rem' }}>
+                                <div className="duplicate-error-state">
                                     <X size={48} style={{ opacity: 0.2, marginBottom: '1rem' }} />
                                     <div>{t('error') || 'Error'}: {duplicatesError}</div>
                                 </div>
                             ) : filteredDuplicates.length > 0 ? (
-                                <div className="duplicates-list" style={{
-                                    display: 'block',
-                                    width: '100%',
-                                    paddingBottom: '2rem'
-                                }}>
+                                <div className="duplicates-list">
                                     {filteredDuplicates.slice(0, displayedDuplicatesCount).map((group, gIdx) => {
                                         const isCollapsed = collapsedGroups.has(gIdx);
                                         return (
                                             <div key={gIdx} className="duplicate-group-card">
                                                 <div
-                                                    className={`duplicate-group-header ${isCollapsed ? 'collapsed' : ''}`}
+                                                    className={cx("duplicate-group-header", { collapsed: isCollapsed })}
                                                     onClick={() => toggleGroup(gIdx)}
                                                 >
-                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', fontWeight: 'bold' }}>
+                                                    <div className="group-header-info">
                                                         {isCollapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
                                                         <span>{t('group')} {gIdx + 1}</span>
-                                                        <span style={{
-                                                            fontSize: '11px',
-                                                            padding: '2px 8px',
-                                                            borderRadius: '10px',
-                                                            background: 'var(--accent-color)',
-                                                            color: '#ffffff'
-                                                        }}>
+                                                        <span className="group-badge">
                                                             {group.files.length}
                                                         </span>
                                                     </div>
-                                                    <div style={{ fontSize: '12px', fontWeight: 'bold' }}>
+                                                    <div className="group-size">
                                                         {formatSize(group.size, 1, t)}
                                                     </div>
                                                 </div>
                                                 {!isCollapsed && (
-                                                    <div style={{ display: 'block' }}>
+                                                    <div className="duplicate-group-files">
                                                         {group.files.map((file, fIdx) => {
                                                             const lastSlashIndex = Math.max(file.path.lastIndexOf('/'), file.path.lastIndexOf('\\'));
                                                             const dirPath = lastSlashIndex >= 0 ? file.path.substring(0, lastSlashIndex + 1) : '';
@@ -561,12 +449,12 @@ export const DuplicateSearchDialog: React.FC<DuplicateSearchDialogProps> = ({
                                                                     className="duplicate-file-item"
                                                                     data-tooltip={t('jump_to_folder') || 'Jump to Folder'}
                                                                 >
-                                                                    <FileIcon size={16} style={{ color: 'var(--accent-color)', flexShrink: 0 }} />
-                                                                    <div style={{ flex: 1, minWidth: 0, display: 'block' }}>
-                                                                        <div style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-color)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>
+                                                                    <FileIcon size={16} className="file-item-icon" />
+                                                                    <div className="file-info">
+                                                                        <div className="file-name">
                                                                             {fileName}
                                                                         </div>
-                                                                        <div style={{ fontSize: '11px', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>
+                                                                        <div className="file-path">
                                                                             {dirPath}
                                                                         </div>
                                                                     </div>
@@ -580,12 +468,11 @@ export const DuplicateSearchDialog: React.FC<DuplicateSearchDialogProps> = ({
                                     })}
 
                                     {displayedDuplicatesCount < filteredDuplicates.length && (
-                                        <div style={{ display: 'flex', justifyContent: 'center', padding: '20px' }}>
+                                        <div className="load-more-container">
                                             <button
                                                 type="button"
-                                                className="btn secondary"
+                                                className="btn secondary load-more-btn"
                                                 onClick={() => setDisplayedDuplicatesCount(prev => prev + 100)}
-                                                style={{ padding: '8px 25px', borderRadius: '20px' }}
                                             >
                                                 {t('load_more') || 'Load More'}
                                             </button>
@@ -593,13 +480,13 @@ export const DuplicateSearchDialog: React.FC<DuplicateSearchDialogProps> = ({
                                     )}
                                 </div>
                             ) : (
-                                <div className="duplicates-empty-state" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', opacity: 0.5 }}>
+                                <div className="duplicate-empty-state">
                                     {isSearchingDuplicates
                                         ? <Loader2 className="spin" size={40} />
                                         : (
                                             <>
-                                                <Search size={48} style={{ marginBottom: '1rem' }} />
-                                                <div style={{ fontSize: '1rem' }}>
+                                                <Search size={48} className="empty-icon" />
+                                                <div className="empty-hint">
                                                     {duplicates.length > 0 && filterQuery
                                                         ? (t('no_duplicates_found') || 'No matching duplicates found with current filter')
                                                         : (t('duplicate_start_hint') || 'Configure your search and click "Find Duplicates"')}
@@ -612,23 +499,7 @@ export const DuplicateSearchDialog: React.FC<DuplicateSearchDialogProps> = ({
                     </div>
 
                     {/* Resize handle */}
-                    <div
-                        onMouseDown={handleResizeStart}
-                        style={{
-                            position: 'absolute',
-                            right: 0,
-                            bottom: 0,
-                            width: '20px',
-                            height: '20px',
-                            cursor: 'nwse-resize',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            zIndex: 100,
-                            color: 'var(--text-muted)',
-                            opacity: 0.5
-                        }}
-                    >
+                    <div className="resize-handle" onMouseDown={handleResizeStart}>
                         <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
                             <path d="M11 1L1 11M11 5L5 11M11 9L9 11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
                         </svg>

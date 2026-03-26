@@ -44,9 +44,9 @@ export const useAutoFitColumns = ({
             const rootStyles = getComputedStyle(document.documentElement);
             const rootSize = parseFloat(rootStyles.fontSize) || 16;
             const HEADER_PADDING = rootSize * 1.5;
-            const COL_PADDING = rootSize;
+            const COL_PADDING = rootSize * 1.25; // Increased from rootSize (1.0) for better precision
             const SORT_ICON = 16;
-            const SAFETY_MARGIN = 10;
+            const SAFETY_MARGIN = 14; // Increased from 10
             const NAME_STRUCT = (rootSize * 3.75) + SAFETY_MARGIN;
 
             // ---------------------------------------------------------
