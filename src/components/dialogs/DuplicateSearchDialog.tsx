@@ -71,7 +71,6 @@ export const DuplicateSearchDialog: React.FC<DuplicateSearchDialogProps> = ({
     }, [duplicates]);
 
     const dragRef = useRef<HTMLDivElement>(null);
-    const { position, handleMouseDown } = useDraggable({ initialPosition: { x: 0, y: 0 }, dragRef });
     const { size, handleResizeStart } = useResizable({
         initialSize: (() => {
             const saved = localStorage.getItem('duplicate_search_dialog_size');
@@ -79,9 +78,26 @@ export const DuplicateSearchDialog: React.FC<DuplicateSearchDialogProps> = ({
         })()
     });
 
+    const { position, handleMouseDown, setPosition } = useDraggable({ 
+        initialPosition: (() => {
+            const saved = localStorage.getItem('duplicate_search_dialog_pos');
+            if (saved) return JSON.parse(saved);
+            // Default center
+            return { 
+                x: (window.innerWidth - size.width) / 2, 
+                y: (window.innerHeight - size.height) / 2 
+            };
+        })(),
+        dragRef 
+    });
+
     React.useEffect(() => {
         localStorage.setItem('duplicate_search_dialog_size', JSON.stringify(size));
     }, [size]);
+
+    React.useEffect(() => {
+        localStorage.setItem('duplicate_search_dialog_pos', JSON.stringify(position));
+    }, [position]);
 
     React.useEffect(() => {
         // Fetch drives
@@ -166,8 +182,6 @@ export const DuplicateSearchDialog: React.FC<DuplicateSearchDialogProps> = ({
                 className="properties-dialog duplicate-search-dialog"
                 onClick={e => e.stopPropagation()}
                 style={{
-                    marginLeft: `calc(-1 * (${size.width}px / 2))`,
-                    marginTop: `calc(-1 * (${size.height}px / 2))`,
                     transform: `translate(${position.x}px, ${position.y}px)`,
                     width: `${size.width}px`,
                     height: `${size.height}px`,
