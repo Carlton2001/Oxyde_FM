@@ -10,9 +10,11 @@ import '../../styles/components/Dialogs.css';
 interface MapNetworkDriveDialogProps {
     onClose: () => void;
     t: TFunc;
+    zIndex?: number;
+    onFocus?: () => void;
 }
 
-export const MapNetworkDriveDialog: React.FC<MapNetworkDriveDialogProps> = ({ onClose, t }) => {
+export const MapNetworkDriveDialog: React.FC<MapNetworkDriveDialogProps> = ({ onClose, t, zIndex, onFocus }) => {
     const dragRef = useRef<HTMLDivElement>(null);
     const { position, handleMouseDown } = useDraggable({ initialPosition: { x: 0, y: 0 }, dragRef });
     const { notify, drives } = useApp();
@@ -72,7 +74,7 @@ export const MapNetworkDriveDialog: React.FC<MapNetworkDriveDialogProps> = ({ on
     };
 
     return (
-        <div className="properties-overlay">
+        <div className="properties-overlay" style={{ zIndex }}>
             <div
                 ref={dragRef}
                 className="properties-dialog"
@@ -83,7 +85,7 @@ export const MapNetworkDriveDialog: React.FC<MapNetworkDriveDialogProps> = ({ on
                     width: '460px'
                 }}
             >
-                <div className="prop-header-bar" onMouseDown={handleMouseDown}>
+                <div className="prop-header-bar" onMouseDown={(e) => { handleMouseDown(e); onFocus?.(); }}>
                     <div className="prop-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                         <Network size={14} />
                         {t('map_network_drive' as any)}

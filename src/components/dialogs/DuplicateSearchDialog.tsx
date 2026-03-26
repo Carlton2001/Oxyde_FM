@@ -13,12 +13,16 @@ interface DuplicateSearchDialogProps {
     initialRoot: string;
     onClose: () => void;
     t: any;
+    zIndex?: number;
+    onFocus?: () => void;
 }
 
 export const DuplicateSearchDialog: React.FC<DuplicateSearchDialogProps> = ({
     initialRoot,
     onClose,
-    t
+    t,
+    zIndex,
+    onFocus
 }) => {
     const [duplicates, setDuplicates] = useState<{ size: number, files: FileEntry[] }[]>([]);
     const [isSearchingDuplicates, setIsSearchingDuplicates] = useState(false);
@@ -161,7 +165,7 @@ export const DuplicateSearchDialog: React.FC<DuplicateSearchDialogProps> = ({
             right: 0,
             bottom: 0,
             pointerEvents: 'none',
-            zIndex: 1000
+            zIndex: zIndex || 1000
         }}>
             <div
                 ref={dragRef}
@@ -186,7 +190,7 @@ export const DuplicateSearchDialog: React.FC<DuplicateSearchDialogProps> = ({
                     boxShadow: '0 10px 40px rgba(0,0,0,0.3)'
                 }}
             >
-                <div className="modal-header" onMouseDown={handleMouseDown}>
+                <div className="modal-header" onMouseDown={(e) => { handleMouseDown(e); onFocus?.(); }}>
                     <div className="modal-title">
                         <Copy size={16} />
                         <span>{t('duplicates') || 'Duplicate Search'}</span>
@@ -415,7 +419,7 @@ export const DuplicateSearchDialog: React.FC<DuplicateSearchDialogProps> = ({
                                     disabled={selectedSearchPaths.length === 0}
                                     style={{ width: '100%' }}
                                 >
-                                    <Search size={14} style={{ marginRight: '0.5rem' }} />
+                                    <Search size={14} />
                                     {t('find_duplicates') || 'Find Duplicates'}
                                 </button>
                             ) : (
@@ -425,7 +429,7 @@ export const DuplicateSearchDialog: React.FC<DuplicateSearchDialogProps> = ({
                                     onClick={handleCancelDuplicates}
                                     style={{ width: '100%' }}
                                 >
-                                    <Loader2 size={14} className="spin" style={{ marginRight: '0.5rem' }} />
+                                    <Loader2 size={14} className="spin" />
                                     {t('cancel') || 'Cancel'}
                                 </button>
                             )}

@@ -48,19 +48,19 @@
 .modal-header,
 .prop-header-bar,
 .about-header {
-    height: 2rem;
+    height: 2.75rem;
     width: 100%;
     display: flex;
     align-items: center;
     justify-content: flex-start;
     background: var(--header-bg);
-    border-bottom: 1px solid var(--border-color);
-    padding: 0 0.75rem;
+    border-bottom: 1px solid color-mix(in srgb, var(--border-color), transparent 40%);
+    padding: 0 1rem;
     color: var(--text-color);
-    font-size: 0.75rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
+    font-size: 0.875rem;
+    font-weight: 600;
+    text-transform: none;
+    letter-spacing: -0.01em;
     user-select: none;
     -webkit-user-select: none;
     border-top-left-radius: 0.5rem;
@@ -317,12 +317,12 @@
 @keyframes modal-in {
     from {
         opacity: 0;
-        transform: scale(0.95);
+        transform: translateY(8px);
     }
 
     to {
         opacity: 1;
-        transform: scale(1);
+        transform: translateY(0);
     }
 }
 
@@ -330,7 +330,34 @@
 
 .modal-header:hover,
 .prop-header-bar:hover {
-    background: var(--hover-color);
+    background: color-mix(in srgb, var(--header-bg), var(--hover-color) 40%);
+}
+
+.modal-header .btn-icon,
+.prop-header-bar .btn-icon {
+    width: 2rem;
+    height: 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0.375rem;
+    color: var(--text-muted);
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    margin-left: auto;
+    opacity: 0.7;
+}
+
+.modal-header .btn-icon:hover,
+.prop-header-bar .btn-icon:hover {
+    background-color: var(--hover-color);
+    color: var(--text-color);
+    opacity: 1;
+}
+
+.modal-header .btn-icon:active,
+.prop-header-bar .btn-icon:active {
+    background-color: color-mix(in srgb, var(--hover-color), var(--text-color) 10%);
+    transform: scale(0.95);
 }
 
 .modal-content {
@@ -626,7 +653,7 @@
     background: var(--surface-primary);
     color: var(--text-color);
     font-family: inherit;
-    font-size: 0.875rem;
+    font-size: 0.8125rem;
     font-weight: 500;
     user-select: text;
     cursor: text;

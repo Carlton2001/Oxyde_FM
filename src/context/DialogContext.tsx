@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useCallback, ReactNode, useRef } from 'react';
 import { useApp } from './AppContext';
 import { ConflictEntry } from '../types';
 
@@ -8,6 +8,7 @@ export interface DialogRequest {
     id: string;
     type: DialogType;
     props: any;
+    zIndex: number;
     resolve?: (value: any) => void;
 }
 
@@ -15,6 +16,7 @@ export interface DialogContextType {
     dialogs: DialogRequest[];
     openDialog: <T = any>(type: DialogType, props: any) => Promise<T>;
     closeDialog: (id: string, result?: any) => void;
+    focusDialog: (id: string) => void;
 
     // Quick helpers
     alert: (message: string, title?: string) => Promise<void>;
@@ -40,14 +42,48 @@ const DialogContext = createContext<DialogContextType | null>(null);
 
 export const DialogProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     const [dialogs, setDialogs] = useState<DialogRequest[]>([]);
+    const zIndexCounter = useRef(1000); // Start high to stay above base UI
     const { t } = useApp();
+
+    const getNextZIndex = useCallback(() => {
+        zIndexCounter.current += 1;
+        return zIndexCounter.current;
+    }, []);
 
     const openDialog = useCallback(<T = any>(type: DialogType, props: any): Promise<T> => {
         return new Promise((resolve) => {
-            const id = Math.random().toString(36).substring(7);
-            setDialogs(prev => [...prev, { id, type, props, resolve }]);
+            setDialogs(prev => {
+                // Check for duplicates
+                let existingIndex = -1;
+
+                if (type === 'properties' && props.paths) {
+                    const paths = props.paths as string[];
+                    existingIndex = prev.findIndex(d =>
+                        d.type === 'properties' &&
+                        Array.isArray(d.props.paths) &&
+                        d.props.paths.length === paths.length &&
+                        d.props.paths.every((p: string, i: number) => p === paths[i])
+                    );
+                } else if (['about', 'search', 'duplicates', 'mapNetworkDrive', 'disconnectNetworkDrive'].includes(type)) {
+                    existingIndex = prev.findIndex(d => d.type === type);
+                }
+
+                if (existingIndex !== -1) {
+                    // Update z-index of existing dialog without reordering
+                    const updated = [...prev];
+                    updated[existingIndex] = {
+                        ...updated[existingIndex],
+                        zIndex: getNextZIndex()
+                    };
+                    resolve(undefined as any);
+                    return updated;
+                }
+
+                const id = Math.random().toString(36).substring(7);
+                return [...prev, { id, type, props, zIndex: getNextZIndex(), resolve }];
+            });
         });
-    }, []);
+    }, [getNextZIndex]);
 
     const closeDialog = useCallback((id: string, result?: any) => {
         setDialogs(prev => {
@@ -58,6 +94,19 @@ export const DialogProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             return prev.filter(d => d.id !== id);
         });
     }, []);
+
+    const focusDialog = useCallback((id: string) => {
+        setDialogs(prev => {
+            const index = prev.findIndex(d => d.id === id);
+            if (index === -1) return prev;
+            const updated = [...prev];
+            updated[index] = {
+                ...updated[index],
+                zIndex: getNextZIndex()
+            };
+            return updated;
+        });
+    }, [getNextZIndex]);
 
     // Quick helpers implementation
     const alert = useCallback((message: string, title?: string) => {
@@ -152,13 +201,16 @@ export const DialogProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         return openDialog<void>('disconnectNetworkDrive', {});
     }, [openDialog]);
 
-    const propertiesPaths = dialogs.find(d => d.type === 'properties')?.props.paths || [];
+    const propertiesPaths = dialogs
+        .filter(d => d.type === 'properties')
+        .reduce((acc, d) => [...acc, ...(d.props.paths || [])], [] as string[]);
 
     return (
         <DialogContext.Provider value={{
             dialogs,
             openDialog,
             closeDialog,
+            focusDialog,
             alert,
             confirm,
             prompt,

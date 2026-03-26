@@ -17,9 +17,11 @@ interface PropertiesDialogProps {
     onClose: () => void;
     t: TFunc;
     notify: (message: string, type?: NotificationType) => void;
+    zIndex?: number;
+    onFocus?: () => void;
 }
 
-export const PropertiesDialog: React.FC<PropertiesDialogProps> = ({ paths, initialEntries, onClose, t, notify }) => {
+export const PropertiesDialog: React.FC<PropertiesDialogProps> = ({ paths, initialEntries, onClose, t, notify, zIndex, onFocus }) => {
     const dragRef = useRef<HTMLDivElement>(null);
     const { position, handleMouseDown } = useDraggable({ initialPosition: { x: 0, y: 0 }, dragRef });
     const [activeTab, setActiveTab] = useState('general');
@@ -123,7 +125,7 @@ export const PropertiesDialog: React.FC<PropertiesDialogProps> = ({ paths, initi
     const isDriveRoot = !!currentDrive;
 
     return (
-        <div className="modal-overlay" style={{ background: 'transparent', pointerEvents: 'none' }}>
+        <div className="properties-overlay" onClick={onClose} style={{ zIndex }}>
             <div
                 ref={dragRef}
                 className="properties-dialog"
@@ -134,7 +136,7 @@ export const PropertiesDialog: React.FC<PropertiesDialogProps> = ({ paths, initi
                     pointerEvents: 'auto'
                 }}
             >
-                <div className="prop-header-bar" onMouseDown={handleMouseDown}>
+                <div className="prop-header-bar" onMouseDown={(e) => { handleMouseDown(e); onFocus?.(); }}>
                     <div className="prop-title">{t('properties')}</div>
                     <button className="btn-icon" onClick={onClose}><X size={16} /></button>
                 </div>
@@ -461,7 +463,7 @@ export const PropertiesDialog: React.FC<PropertiesDialogProps> = ({ paths, initi
                         </button>
                         {properties?.is_media_device && (properties?.has_web_page || initialEntries?.[0]?.has_web_page) && (
                             <button className="btn" onClick={() => invoke('open_item', { path: paths[0] })}>
-                                <Globe size={14} style={{ marginRight: '6px' }} />
+                                <Globe size={14} />
                                 {t('view_device_webpage' as any)}
                             </button>
                         )}

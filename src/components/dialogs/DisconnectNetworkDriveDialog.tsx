@@ -10,9 +10,11 @@ import '../../styles/components/Dialogs.css';
 interface DisconnectNetworkDriveDialogProps {
     onClose: () => void;
     t: TFunc;
+    zIndex?: number;
+    onFocus?: () => void;
 }
 
-export const DisconnectNetworkDriveDialog: React.FC<DisconnectNetworkDriveDialogProps> = ({ onClose, t }) => {
+export const DisconnectNetworkDriveDialog: React.FC<DisconnectNetworkDriveDialogProps> = ({ onClose, t, zIndex, onFocus }) => {
     const dragRef = React.useRef<HTMLDivElement>(null);
     const { position, handleMouseDown } = useDraggable({ initialPosition: { x: 0, y: 0 }, dragRef });
     const { notify } = useApp();
@@ -75,7 +77,7 @@ export const DisconnectNetworkDriveDialog: React.FC<DisconnectNetworkDriveDialog
     };
 
     return (
-        <div className="properties-overlay">
+        <div className="properties-overlay" style={{ zIndex }}>
             <div
                 ref={dragRef}
                 className="properties-dialog"
@@ -87,7 +89,7 @@ export const DisconnectNetworkDriveDialog: React.FC<DisconnectNetworkDriveDialog
                     height: '460px'
                 }}
             >
-                <div className="prop-header-bar" onMouseDown={handleMouseDown}>
+                <div className="prop-header-bar" onMouseDown={(e) => { handleMouseDown(e); onFocus?.(); }}>
                     <div className="prop-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                         <ServerOff size={14} />
                         {t('disconnect_network_drive' as any)}

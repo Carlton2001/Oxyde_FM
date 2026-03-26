@@ -420,7 +420,7 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
 
         const index = visibleNodes.findIndex(vn => {
             const vnNorm = normalizePath(vn.node.path);
-            return vnNorm.toLowerCase() === lowerPath;
+            return vnNorm.toLowerCase() === lowerPath && !vn.node.isFavorite;
         });
         if (index !== -1 && listRef.current) {
             listRef.current.scrollToRow({ index, align: 'smart' });

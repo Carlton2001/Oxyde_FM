@@ -17,6 +17,8 @@ interface ConfirmDialogProps {
     isDanger?: boolean;
     sources?: string[];
     destination?: string;
+    zIndex?: number;
+    onFocus?: () => void;
 }
 
 export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
@@ -30,7 +32,9 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
     confirmLabel,
     isDanger = false,
     sources,
-    destination
+    destination,
+    zIndex,
+    onFocus
 }) => {
     const dragRef = useRef<HTMLDivElement>(null);
     const { position, handleMouseDown } = useDraggable({ initialPosition: { x: 0, y: 0 }, dragRef });
@@ -45,7 +49,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
     };
 
     return (
-        <div className="modal-overlay" onClick={onClose}>
+        <div className="modal-overlay" onClick={onClose} style={{ zIndex }}>
             <div
                 ref={dragRef}
                 className="modal"
@@ -55,9 +59,9 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
                     transition: 'none'
                 }}
             >
-                <div className="modal-header" onMouseDown={handleMouseDown}>
+                <div className="modal-header" onMouseDown={(e) => { handleMouseDown(e); onFocus?.(); }}>
                     <div className="modal-title">
-                        {isDanger && <AlertTriangle size={14} color="#ef4444" style={{ marginRight: '0.5rem' }} />}
+                        {isDanger && <AlertTriangle size={14} color="#ef4444" />}
                         <span>{title}</span>
                     </div>
                     <button className="btn-icon" onClick={onClose} style={{ marginLeft: '0.5rem' }}>

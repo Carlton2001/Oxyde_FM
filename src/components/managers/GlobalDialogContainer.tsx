@@ -27,7 +27,7 @@ import { check } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
 import { Github, RefreshCcw, ExternalLink } from 'lucide-react';
 
-const InlineAboutDialog: React.FC<{ onClose: () => void, t: any, theme: string, appVersion: string }> = ({ onClose, t, theme, appVersion }) => {
+const InlineAboutDialog: React.FC<{ onClose: () => void, t: any, theme: string, appVersion: string, zIndex?: number, onFocus?: () => void }> = ({ onClose, t, theme, appVersion, zIndex, onFocus }) => {
     const dragRef = useRef<HTMLDivElement>(null);
     const { position, handleMouseDown } = useDraggable({ initialPosition: { x: 0, y: 0 }, dragRef });
     const { updateAvailable, setUpdateAvailable } = useApp();
@@ -68,7 +68,7 @@ const InlineAboutDialog: React.FC<{ onClose: () => void, t: any, theme: string, 
     };
 
     return (
-        <div className="properties-overlay" onClick={onClose}>
+        <div className="properties-overlay" onClick={onClose} onMouseDown={onFocus} style={{ zIndex }}>
             <div
                 ref={dragRef}
                 className="about-dialog"
@@ -78,7 +78,7 @@ const InlineAboutDialog: React.FC<{ onClose: () => void, t: any, theme: string, 
                     transition: 'none'
                 }}
             >
-                <div className="about-header" onMouseDown={handleMouseDown}>
+                <div className="about-header" onMouseDown={(e) => { handleMouseDown(e); onFocus?.(); }}>
                     <span className="about-title">{t('about')}</span>
                     <button className="btn-icon" onClick={onClose}><X size={16} /></button>
                 </div>
@@ -162,7 +162,7 @@ const InlineAboutDialog: React.FC<{ onClose: () => void, t: any, theme: string, 
 };
 
 export const GlobalDialogContainer: React.FC = () => {
-    const { dialogs, closeDialog } = useDialogs();
+    const { dialogs, closeDialog, focusDialog } = useDialogs();
     const { t, theme } = useApp();
 
     if (dialogs.length === 0) return null;
@@ -170,8 +170,9 @@ export const GlobalDialogContainer: React.FC = () => {
     return (
         <>
             {dialogs.map(dialog => {
-                const { id, type, props } = dialog;
+                const { id, type, props, zIndex } = dialog;
                 const handleClose = (result?: any) => closeDialog(id, result);
+                const handleFocus = () => focusDialog(id);
 
                 switch (type) {
                     case 'alert':
@@ -185,6 +186,8 @@ export const GlobalDialogContainer: React.FC = () => {
                                 onClose={() => handleClose()}
                                 confirmLabel="OK"
                                 t={t}
+                                zIndex={zIndex}
+                                onFocus={handleFocus}
                             />
                         );
 
@@ -203,6 +206,8 @@ export const GlobalDialogContainer: React.FC = () => {
                                 sources={props.sources}
                                 destination={props.destination}
                                 t={t}
+                                zIndex={zIndex}
+                                onFocus={handleFocus}
                             />
                         );
 
@@ -220,6 +225,8 @@ export const GlobalDialogContainer: React.FC = () => {
                                 confirmLabel="OK"
                                 t={t}
                                 icon={props.icon || 'new_folder'}
+                                zIndex={zIndex}
+                                onFocus={handleFocus}
                             />
                         );
 
@@ -231,6 +238,8 @@ export const GlobalDialogContainer: React.FC = () => {
                                 paths={props.paths}
                                 t={t}
                                 notify={() => { }} // Notifications handled by App context listeners
+                                zIndex={zIndex}
+                                onFocus={handleFocus}
                             />
                         );
 
@@ -244,6 +253,8 @@ export const GlobalDialogContainer: React.FC = () => {
                                 t={t}
                                 operation={props.operation}
                                 totalCount={props.totalCount}
+                                zIndex={zIndex}
+                                onFocus={handleFocus}
                             />
                         );
 
@@ -255,6 +266,8 @@ export const GlobalDialogContainer: React.FC = () => {
                                 t={t}
                                 theme={theme}
                                 appVersion={import.meta.env.PACKAGE_VERSION}
+                                zIndex={zIndex}
+                                onFocus={handleFocus}
                             />
                         );
 
@@ -267,6 +280,8 @@ export const GlobalDialogContainer: React.FC = () => {
                                 t={t}
                                 onSearch={(options) => handleClose(options)}
                                 onClose={() => handleClose(null)}
+                                zIndex={zIndex}
+                                onFocus={handleFocus}
                             />
                         );
 
@@ -277,6 +292,8 @@ export const GlobalDialogContainer: React.FC = () => {
                                 initialRoot={props.initialRoot}
                                 t={t}
                                 onClose={() => handleClose(null)}
+                                zIndex={zIndex}
+                                onFocus={handleFocus}
                             />
                         );
 
@@ -286,6 +303,8 @@ export const GlobalDialogContainer: React.FC = () => {
                                 key={id}
                                 t={t}
                                 onClose={() => handleClose()}
+                                zIndex={zIndex}
+                                onFocus={handleFocus}
                             />
                         );
 
@@ -295,6 +314,8 @@ export const GlobalDialogContainer: React.FC = () => {
                                 key={id}
                                 t={t}
                                 onClose={() => handleClose()}
+                                zIndex={zIndex}
+                                onFocus={handleFocus}
                             />
                         );
 

@@ -332,6 +332,9 @@ export const translations = {
 
         // --- Storage & Drives ---
         local_disk: 'Local Disk',
+        removable_disk: 'Removable Disk',
+        cd_drive: 'CD Drive',
+        network_drive: 'Network Drive',
         disk_drive: 'Disk Drive',
         drives: 'Drives',
         drives_list: 'Drives list',
@@ -825,6 +828,9 @@ export const translations = {
 
         // --- Storage & Drives ---
         local_disk: 'Disque Local',
+        removable_disk: 'Disque Amovible',
+        cd_drive: 'Lecteur CD',
+        network_drive: 'Lecteur Réseau',
         disk_drive: 'Lecteur de Disque',
         drives: 'Lecteurs',
         drives_list: 'Liste des lecteurs',

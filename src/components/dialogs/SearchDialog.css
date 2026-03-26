@@ -1,8 +1,8 @@
 /* ===== SEARCH DIALOG - PROPER 2-COLUMN LAYOUT ===== */
 
 .search-dialog {
-    width: 45rem;
-    max-width: 90vw;
+    width: 43rem;
+    max-width: 95vw;
 }
 
 /* Tabs */
@@ -43,8 +43,7 @@
 
 /* Form Container */
 .search-form {
-    padding: 0;
-    /* Remove padding to allow edge-to-edge content where needed */
+    /* Remove redundant padding to allow prop-content to handle it */
     display: flex;
     flex-direction: column;
     flex: 1;
@@ -62,7 +61,7 @@
     grid-template-columns: auto 1fr;
     gap: 1rem 1.5rem;
     align-items: center;
-    padding: 1.5rem 2rem;
+    /* Padding handled by prop-content parent */
     /* Restore padding for general tab */
 }
 
@@ -111,7 +110,7 @@
     width: 100%;
     height: 2.25rem;
     padding: 0 0.75rem;
-    font-size: 0.875rem;
+    font-size: 0.8125rem;
     border: 1px solid var(--border-color);
     border-radius: 0.375rem;
     background: var(--surface-primary);
@@ -236,7 +235,7 @@
     min-width: 0;
     height: 2.25rem;
     padding: 0 0.75rem;
-    font-size: 0.875rem;
+    font-size: 0.8125rem;
     font-family: inherit;
     border: 1px solid var(--border-color);
     border-radius: 0.375rem;
@@ -263,7 +262,7 @@
     min-width: 0;
     height: 2.25rem;
     padding: 0 0.75rem;
-    font-size: 0.875rem;
+    font-size: 0.8125rem;
     font-family: inherit;
     border: 1px solid var(--border-color);
     border-radius: 0.375rem;
@@ -462,7 +461,7 @@
 .duplicates-tab-content {
     display: flex;
     flex-direction: column;
-    padding: 1.25rem 2rem;
+    /* Padding handled by prop-content parent */
     gap: 1.25rem;
     height: 32rem;
     /* Give it slightly more breathing room */

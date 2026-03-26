@@ -14,6 +14,8 @@ interface SearchDialogProps {
     onSearch: (options: SearchOptions) => void;
     onClose: () => void;
     t: any;
+    zIndex?: number;
+    onFocus?: () => void;
 }
 
 export const SearchDialog: React.FC<SearchDialogProps> = ({
@@ -22,7 +24,9 @@ export const SearchDialog: React.FC<SearchDialogProps> = ({
     initialActiveTab = 'general',
     onSearch,
     onClose,
-    t
+    t,
+    zIndex,
+    onFocus
 }) => {
     const [query, setQuery] = useState(initialOptions.query || '');
     const [root, setRoot] = useState(initialOptions.root || initialRoot);
@@ -96,7 +100,7 @@ export const SearchDialog: React.FC<SearchDialogProps> = ({
     };
 
     return (
-        <div className="modal-overlay" style={{ background: 'transparent', pointerEvents: 'none' }}>
+        <div className="modal-overlay" style={{ background: 'transparent', pointerEvents: 'none', zIndex }}>
             <div
                 ref={dragRef}
                 className="modal search-dialog"
@@ -107,7 +111,7 @@ export const SearchDialog: React.FC<SearchDialogProps> = ({
                     pointerEvents: 'auto'
                 }}
             >
-                <div className="modal-header" onMouseDown={handleMouseDown}>
+                <div className="modal-header" onMouseDown={(e) => { handleMouseDown(e); onFocus?.(); }}>
                     <div className="modal-title">
                         <Search size={16} />
                         <span>{t('search') || 'Advanced Search'}</span>
@@ -134,7 +138,7 @@ export const SearchDialog: React.FC<SearchDialogProps> = ({
                     </button>
                 </div>
 
-                <form className="modal-content search-form overflow-visible" onSubmit={handleExecuteSearch}>
+                <form className="prop-content search-form overflow-visible" onSubmit={handleExecuteSearch}>
                     {activeTab === 'general' ? (
                         <div className="search-tab-content">
                             <div className="input-group">
@@ -290,7 +294,7 @@ export const SearchDialog: React.FC<SearchDialogProps> = ({
                                 </div>
                             </div>
 
-                            <div className="separator-row"></div>
+
 
                             <div className="input-group">
                                 <label>{t('global_options')}</label>
@@ -381,7 +385,7 @@ export const SearchDialog: React.FC<SearchDialogProps> = ({
                             {t('cancel') || 'Cancel'}
                         </button>
                         <button className="btn primary" onClick={() => handleExecuteSearch()}>
-                            <Search size={14} style={{ marginRight: '0.5rem' }} />
+                            <Search size={14} />
                             {t('start_search') || 'Start Search'}
                         </button>
                     </div>

@@ -94,11 +94,11 @@ const ConflictDetailPanel: React.FC<ConflictDetailPanelProps> = ({ current, t, d
 
             <div className="detail-actions">
                 <button className="btn" onClick={() => onAction('skip')}>
-                    <Ban size={14} style={{ marginRight: '6px' }} />
+                    <Ban size={14} />
                     {t('skip' as any)}
                 </button>
                 <button className="btn primary" onClick={() => onAction('replace')}>
-                    <Check size={14} style={{ marginRight: '6px' }} />
+                    <Check size={14} />
                     {t('replace' as any)}
                 </button>
             </div>
@@ -113,9 +113,11 @@ interface ConflictDialogProps {
     t: TFunc;
     operation: 'copy' | 'move';
     totalCount: number;
+    zIndex?: number;
+    onFocus?: () => void;
 }
 
-export const ConflictDialog: React.FC<ConflictDialogProps> = ({ conflicts, onResolve, onCancel, t, operation, totalCount }) => {
+export const ConflictDialog: React.FC<ConflictDialogProps> = ({ conflicts, onResolve, onCancel, t, operation, totalCount, zIndex, onFocus }) => {
     const dragRef = useRef<HTMLDivElement>(null);
     const { position, handleMouseDown } = useDraggable({ initialPosition: { x: 0, y: 0 }, dragRef });
     const [currentIndex, setCurrentIndex] = useState(0);
@@ -332,7 +334,7 @@ export const ConflictDialog: React.FC<ConflictDialogProps> = ({ conflicts, onRes
 
     const renderDetailedView = () => {
         return (
-            <div className="conflict-overlay">
+            <div className="conflict-overlay" style={{ zIndex }}>
                 <div
                     ref={dragRef}
                     className="properties-dialog conflict-dialog hybrid"
@@ -344,7 +346,7 @@ export const ConflictDialog: React.FC<ConflictDialogProps> = ({ conflicts, onRes
                     }}
                 >
                     {/* Header */}
-                    <div className="prop-header-bar" onMouseDown={handleMouseDown}>
+                    <div className="prop-header-bar" onMouseDown={(e) => { handleMouseDown(e); onFocus?.(); }}>
                         <div className="prop-title">
                             {t('conflict_reso' as any) || 'Conflict Resolution'}
                         </div>
@@ -518,7 +520,7 @@ export const ConflictDialog: React.FC<ConflictDialogProps> = ({ conflicts, onRes
     };
 
     return viewMode === 'detailed' ? renderDetailedView() : (
-        <div className="conflict-overlay simple">
+        <div className="conflict-overlay simple" style={{ zIndex }}>
             <div
                 ref={dragRef}
                 className="properties-dialog conflict-dialog simple"
@@ -527,7 +529,7 @@ export const ConflictDialog: React.FC<ConflictDialogProps> = ({ conflicts, onRes
                     transition: 'none'
                 }}
             >
-                <div className="prop-header-bar" onMouseDown={handleMouseDown}>
+                <div className="prop-header-bar" onMouseDown={(e) => { handleMouseDown(e); onFocus?.(); }}>
                     <div className="prop-title">
                         {currentIndex + 1} / {conflicts.length} {t('conflict' as any)}
                     </div>

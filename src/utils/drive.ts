@@ -16,9 +16,19 @@ export const getDriveDisplayName = (drive: DriveInfo, t: any): string => {
         if (parts.length > 0) {
             return `${parts[parts.length - 1]} (${pathClean})`;
         }
+        return `${t('network_drive')} (${pathClean})`;
     }
 
-    return drive.label ? `${drive.label} (${pathClean})` : pathClean;
+    let label = drive.label;
+    if (!label || label === 'Local Disk') {
+        label = t('local_disk');
+    } else if (label === 'Removable Disk') {
+        label = t('removable_disk');
+    } else if (label === 'CD Drive') {
+        label = t('cd_drive');
+    }
+
+    return `${label} (${pathClean})`;
 };
 
 /**
@@ -34,7 +44,16 @@ export const getDriveTooltip = (drive: DriveInfo, t: any): string => {
     }
 
     const pathClean = drive.path.replace(/[/\\]+$/, '').replace(':', '');
-    return drive.label ? `${drive.label} (${pathClean})` : pathClean;
+    let label = drive.label;
+    if (!label || label === 'Local Disk') {
+        label = t('local_disk');
+    } else if (label === 'Removable Disk') {
+        label = t('removable_disk');
+    } else if (label === 'CD Drive') {
+        label = t('cd_drive');
+    }
+
+    return `${label} (${pathClean})`;
 };
 
 /**

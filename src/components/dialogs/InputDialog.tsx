@@ -15,6 +15,8 @@ interface InputDialogProps {
     placeholder?: string;
     confirmLabel?: string;
     icon?: 'rename' | 'new_folder' | 'default';
+    zIndex?: number;
+    onFocus?: () => void;
 }
 
 export const InputDialog: React.FC<InputDialogProps> = ({
@@ -27,7 +29,9 @@ export const InputDialog: React.FC<InputDialogProps> = ({
     initialValue = '',
     placeholder = '',
     confirmLabel,
-    icon = 'default'
+    icon = 'default',
+    zIndex,
+    onFocus
 }) => {
     const dragRef = useRef<HTMLDivElement>(null);
     const { position, handleMouseDown } = useDraggable({ initialPosition: { x: 0, y: 0 }, dragRef });
@@ -69,7 +73,7 @@ export const InputDialog: React.FC<InputDialogProps> = ({
     if (!isOpen) return null;
 
     return (
-        <div className="modal-overlay" onClick={onClose}>
+        <div className="modal-overlay" onClick={onClose} style={{ zIndex }}>
             <div
                 ref={dragRef}
                 className="modal"
@@ -80,7 +84,7 @@ export const InputDialog: React.FC<InputDialogProps> = ({
                     transition: 'none'
                 }}
             >
-                <div className="modal-header" onMouseDown={handleMouseDown}>
+                <div className="modal-header" onMouseDown={(e) => { handleMouseDown(e); onFocus?.(); }}>
                     <div className="modal-title">
                         {getIcon()}
                         <span style={{ marginLeft: '0.5rem' }}>{title}</span>
