@@ -53,6 +53,7 @@ interface SidebarProps {
     onTreeEmptyTrash?: () => void;
     onTreeRestoreAll?: () => void;
     onTrashProperties?: () => void;
+    onDragOver?: (path: string | null) => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -93,7 +94,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
     onRemoveFromFavorites,
     onTreeEmptyTrash,
     onTreeRestoreAll,
-    onTrashProperties
+    onTrashProperties,
+    onDragOver
 }) => {
     const { showNetwork } = useApp();
     const sidebarRef = React.useRef<HTMLDivElement>(null);
@@ -335,6 +337,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     onEmptyTrash={onTreeEmptyTrash}
                     onRestoreAll={onTreeRestoreAll}
                     onTrashProperties={onTrashProperties}
+                    onDragOver={onDragOver}
                 />
             )}
 

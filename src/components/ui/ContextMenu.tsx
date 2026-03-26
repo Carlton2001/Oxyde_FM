@@ -70,6 +70,7 @@ export interface ContextMenuProps {
     isTextSelected?: boolean;
     onSelectAll?: () => void;
     onTrashProperties?: () => void;
+    isQuickAccessShortcut?: boolean;
 }
 
 
@@ -111,6 +112,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = (props) => {
         isTextSelected: props.isTextSelected,
         isTrashEmpty,
         isNukeOverride,
+        isQuickAccessShortcut: props.isQuickAccessShortcut,
 
         canUndo: props.canUndo,
         undoLabel: props.undoLabel,
@@ -165,7 +167,8 @@ export const ContextMenu: React.FC<ContextMenuProps> = (props) => {
         props.onAddToFavorites, props.onRemoveFromFavorites, props.onSort, props.onSortDirection, props.isShiftPressed, props.isFavorite, mountedImages,
         openMapNetworkDriveDialog, openDisconnectNetworkDriveDialog,
         props.isInputContext, props.isTextSelected, props.onSelectAll, showNetwork, props.onTrashProperties,
-        isTrashEmpty, props.onRestoreAll, isNukeOverride, driveTrashConfigs
+        isTrashEmpty, props.onRestoreAll, isNukeOverride, driveTrashConfigs,
+        props.isQuickAccessShortcut
     ]);
 
     const items = useMemo(() => getMenuItems(menuContext), [menuContext]);

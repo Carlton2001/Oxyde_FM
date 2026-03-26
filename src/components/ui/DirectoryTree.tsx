@@ -2,7 +2,7 @@ import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import cx from 'classnames';
-import { ChevronRight, ChevronDown, HardDrive, Usb, Disc, Trash, Network, Folder, FolderOpen, Star, Globe } from 'lucide-react';
+import { ChevronRight, ChevronDown, HardDrive, Usb, Disc, Trash, Network, Folder, FolderOpen, Pin, Globe } from 'lucide-react';
 import { getDriveDisplayName, getDriveTooltip, shouldShowDriveCapacity } from '../../utils/drive';
 import { List, ListImperativeAPI } from 'react-window';
 import { AutoSizer } from 'react-virtualized-auto-sizer';
@@ -78,6 +78,7 @@ interface DirectoryTreeProps {
     onEmptyTrash?: () => void;
     onRestoreAll?: () => void;
     onTrashProperties?: () => void;
+    onDragOver?: (path: string | null) => void;
 }
 
 export interface DirectoryTreeHandle {
@@ -123,7 +124,8 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
     onRemoveFromFavorites,
     onEmptyTrash,
     onRestoreAll,
-    onTrashProperties
+    onTrashProperties,
+    onDragOver
 }, ref) => {
     const { useSystemIcons: contextUseSystemIcons, showHidden, showSystem, showNetwork } = useApp();
     const useSystemIcons = propUseSystemIcons ?? contextUseSystemIcons;
@@ -285,7 +287,7 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
                 nodes.push({
                     path: fav.path,
                     name: fav.name,
-                    hasSubdirs: true,
+                    hasSubdirs: false,
                     isFavorite: true
                 });
             });
@@ -348,7 +350,7 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
 
                 const normPath = normalizePath(node.path);
                 const lowerPath = normPath.toLowerCase();
-                if (expandedPaths.has(lowerPath)) {
+                if (expandedPaths.has(lowerPath) && !node.isFavorite) {
                     const children = treeData.get(normPath);
                     if (children) {
                         addNodes(children, level + 1);
@@ -428,6 +430,7 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
 
     const toggleExpand = useCallback(async (e: React.MouseEvent, node: TreeNode) => {
         e.stopPropagation();
+        if (node.isFavorite) return;
         const normPath = normalizePath(node.path);
         const lowerPath = normPath.toLowerCase();
 
@@ -472,7 +475,8 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
                 return fp === np;
             }),
             isNetworkComputer: node.isNetworkRoot || node.isNetwork || (node.path.startsWith('\\\\') && node.path.split('\\').filter(Boolean).length === 1),
-            isTrash: isTrash
+            isTrash: isTrash,
+            isQuickAccessShortcut: node.isFavorite
         });
     };
 
@@ -539,7 +543,7 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
         if (node.isTrash) return <Trash size="1rem" className={cx(driveClass)} />;
         if (node.isNetworkRoot) return <Globe size="1rem" className={cx(driveClass)} />;
         if (node.isNetwork) return <Network size="1rem" className={cx(driveClass)} />;
-        if (node.isFavorite) return <Star size="1rem" className="sidebar-favorite-icon" />;
+        if (node.isFavorite) return <Pin size="1rem" className="sidebar-favorite-icon" style={{ transform: 'rotate(45deg)' }} />;
         if (useSystemIcons) {
             return <AsyncFileIcon path={node.path} isDir={true} name={node.name} size={16} className="system-icon-img" />;
         }
@@ -572,7 +576,55 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
             if (c.isHidden) { return showHidden; }
             return true;
         });
-        const hasEffectiveChildren = visibleChildren ? visibleChildren.length > 0 : node.hasSubdirs;
+        const hasEffectiveChildren = node.isFavorite ? false : (visibleChildren ? visibleChildren.length > 0 : node.hasSubdirs);
+
+        if (node.isFavorite) {
+            return (
+                <div style={style} className="tree-node-row">
+                    <div
+                        className={cx('quick-access-node', {
+                            active: isActive,
+                            'context-active': contextMenu?.path.toLowerCase() === node.path.toLowerCase(),
+                            'drag-over': isDragOver
+                        })}
+                        data-path={node.path}
+                        onClick={(e) => {
+                            if (e.button !== 0) return;
+                            setSkipSyncInternal(true);
+                            onNavigate(node.path);
+                            setTimeout(() => setSkipSyncInternal(false), 500);
+                        }}
+                        onContextMenu={(e) => {
+                            handleContextMenu(e, node);
+                        }}
+                        onMouseEnter={() => {
+                            if (dragState) {
+                                if (dragOverNode !== node.path) setDragOverNode(node.path);
+                                if (onDragOver) onDragOver(node.path);
+                            }
+                        }}
+                        onMouseLeave={() => {
+                            setDragOverNode(null);
+                            if (onDragOver) onDragOver(null);
+                        }}
+                        onMouseUp={(e) => {
+                            if (onItemMiddleClick && e.button === 1) {
+                                onItemMiddleClick({ path: node.path, name: node.name, is_dir: true } as any);
+                            }
+                            if (dragState) {
+                                onDrop?.(e as any, node.path);
+                                setDragOverNode(null);
+                            }
+                        }}
+                    >
+                        <div className="tree-icon">
+                            <Pin size="0.875rem" style={{ transform: 'rotate(45deg)' }} />
+                        </div>
+                        <div className="tree-label">{node.name}</div>
+                    </div>
+                </div>
+            );
+        }
 
         return (
             <div style={style} className="tree-node-row">
@@ -589,13 +641,7 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
                     style={{ paddingLeft: `${level * 1 + 0.5}rem` }}
                     onClick={(e) => {
                         if (e.button !== 0) return;
-                        if (node.isFavorite) {
-                            setSkipSyncInternal(true);
-                            onNavigate(node.path);
-                            setTimeout(() => setSkipSyncInternal(false), 500);
-                        } else {
-                            onNavigate(node.path);
-                        }
+                        onNavigate(node.path);
                     }}
                     onDoubleClick={(e) => {
                         toggleExpand(e, node);
@@ -609,9 +655,13 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
                     onMouseEnter={() => {
                         if (dragState && dragOverNode !== node.path) {
                             setDragOverNode(node.path);
+                            if (onDragOver) onDragOver(node.path);
                         }
                     }}
-                    onMouseLeave={() => setDragOverNode(null)}
+                    onMouseLeave={() => {
+                        setDragOverNode(null);
+                        if (onDragOver) onDragOver(null);
+                    }}
                     onMouseUp={(e) => {
                         if (onItemMiddleClick && e.button === 1) {
                             onItemMiddleClick({ path: node.path, name: node.name, is_dir: true } as any);
@@ -639,10 +689,10 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
                 >
                     <div
                         className={cx('tree-chevron', { invisible: !hasEffectiveChildren })}
-                        onClick={(e) => {
+                        onClick={hasEffectiveChildren ? (e) => {
                             e.stopPropagation();
                             toggleExpand(e, node);
-                        }}
+                        } : undefined}
                     >
                         {hasEffectiveChildren && (
                             isExpanded ? <ChevronDown className="icon-sm" /> : <ChevronRight className="icon-sm" />
@@ -730,6 +780,7 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
                     onRemoveFromFavorites={() => { onRemoveFromFavorites?.(contextMenu.path); setContextMenu(null); }}
                     isNetworkComputer={contextMenu.isNetworkComputer}
                     isTrashContext={contextMenu.isTrash}
+                    isQuickAccessShortcut={contextMenu.isQuickAccessShortcut}
                     onOpenFile={(path) => { onNavigate(path); setContextMenu(null); }}
                     onEmptyTrash={() => { onEmptyTrash?.(); setContextMenu(null); }}
                     onRestoreAll={() => { onRestoreAll?.(); setContextMenu(null); }}

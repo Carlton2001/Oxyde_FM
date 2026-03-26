@@ -822,6 +822,11 @@
     overflow: hidden;
 }
 
+.col-size,
+.col-date {
+    font-variant-numeric: tabular-nums;
+}
+
 .file-info.col-size {
     justify-content: flex-end;
     text-align: right;

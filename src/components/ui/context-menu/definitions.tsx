@@ -3,10 +3,26 @@ import {
     Copy, Scissors, Trash2, ClipboardPaste,
     ChevronDown, ChevronUp, Undo2, Redo2,
     FolderPlus, Edit2, Settings, ExternalLink, RotateCcw,
-    Archive, Box, FileArchive, Star, ListOrdered, Check, MoreHorizontal, Globe, RefreshCw, Network, ServerOff
+    Archive, Box, FileArchive, Pin, PinOff, ListOrdered, Check, MoreHorizontal, Globe, RefreshCw, Network, ServerOff
 } from 'lucide-react';
 import { TFunc } from '../../../i18n';
 import { DriveInfo, SortConfig, SortField, SortDirection } from '../../../types';
+
+const RotatedPin = (props: any) => <Pin {...props} style={{ ...props.style, transform: 'rotate(45deg)' }} />;
+const RotatedPinOff = (props: any) => (
+    <div className={props.className} style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '1em', height: '1em' }}>
+        <Pin {...props} className="" style={{ ...props.style, transform: 'rotate(45deg)', opacity: 0.7 }} />
+        <div style={{
+            position: 'absolute',
+            width: '105%',
+            height: '1px',
+            backgroundColor: 'currentColor',
+            transform: 'rotate(45deg)',
+            pointerEvents: 'none',
+            borderRadius: '1px'
+        }} />
+    </div>
+);
 
 export interface MenuAction {
     id: string;
@@ -53,6 +69,7 @@ export interface MenuContext {
     isTextSelected?: boolean;
     isTrashEmpty?: boolean;
     isNukeOverride?: boolean;
+    isQuickAccessShortcut?: boolean;
 
     canUndo: boolean;
     undoLabel?: string;
@@ -105,8 +122,37 @@ export interface MenuContext {
 const BlankIcon = () => <div className="icon-md" style={{ width: '1rem', height: '1rem' }} />;
 
 export function getMenuItems(ctx: MenuContext): MenuItem[] {
-    const { target, isDir, isTreeContext, isTrashContext, isBackground, isDrive, canPaste, canUndo, undoLabel, canRedo, redoLabel, t, actions, isShiftPressed, isInputContext, isTextSelected, isNukeOverride, showNetwork = true } = ctx;
+    const { target, isDir, isTreeContext, isTrashContext, isBackground, isDrive, canPaste, canUndo, undoLabel, canRedo, redoLabel, t, actions, isShiftPressed, isInputContext, isTextSelected, isNukeOverride, showNetwork = true, isQuickAccessShortcut } = ctx;
     const items: MenuItem[] = [];
+
+    if (isQuickAccessShortcut && target) {
+        // Limited menu for Quick Access shortcuts
+        items.push({
+            id: 'open_file',
+            type: 'action',
+            label: t('open'),
+            icon: ExternalLink,
+            action: () => actions.onOpenFile?.(target)
+        });
+        if (actions.onOpenNewTab) {
+            items.push({
+                id: 'open_new_tab',
+                type: 'action',
+                label: t('open_in_new_tab'),
+                icon: ExternalLink,
+                action: () => actions.onOpenNewTab?.(target)
+            });
+        }
+        items.push({ id: 'sep_fav', type: 'separator' });
+        items.push({
+            id: 'favorite_toggle',
+            type: 'action',
+            label: t('remove_from_favorites' as any),
+            icon: RotatedPinOff,
+            action: () => actions.onRemoveFromFavorites?.()
+        });
+        return items;
+    }
 
     // --- Special Context: Input fields ---
     if (isInputContext) {
@@ -216,7 +262,7 @@ export function getMenuItems(ctx: MenuContext): MenuItem[] {
         });
     }
 
-    if (isTreeContext && !ctx.isNetworkComputer && target !== 'trash://') {
+    if (isTreeContext && !ctx.isNetworkComputer && !ctx.isFavorite && target !== 'trash://') {
         items.push({
             id: 'expand_all',
             type: 'action',
@@ -323,7 +369,7 @@ export function getMenuItems(ctx: MenuContext): MenuItem[] {
                 id: 'favorite_toggle',
                 type: 'action',
                 label: ctx.isFavorite ? t('remove_from_favorites' as any) : t('add_to_favorites' as any),
-                icon: Star,
+                icon: ctx.isFavorite ? RotatedPinOff : RotatedPin,
                 action: () => ctx.isFavorite ? actions.onRemoveFromFavorites?.() : actions.onAddToFavorites?.()
             });
         }

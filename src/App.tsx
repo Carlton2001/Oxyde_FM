@@ -569,6 +569,7 @@ function App() {
         redoLabel={actionService.get('file.redo')?.getLabel?.(actionContext)}
         onDuplicateSearch={handleDuplicateSearch}
         dragOverPath={dragOverPath}
+        setDragOverPath={setDragOverPath}
       />
       <ProgressOverlay
         progress={effectiveProgress as any}

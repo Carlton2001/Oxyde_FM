@@ -78,8 +78,8 @@ export const useNativeDragDrop = ({
             if (p && (isDir || isArchivePath(p) && isSupportedArchiveForAdding(p))) return { targetPath: p, overPath: p };
         }
 
-        // 2. Try Tree nodes
-        const treeEntry = target.closest('.tree-node-content');
+        // 2. Try Tree nodes (including Quick Access)
+        const treeEntry = target.closest('.tree-node-content, .quick-access-node');
         if (treeEntry) {
             const p = treeEntry.getAttribute('data-path');
             return { targetPath: p || null, overPath: p || null };

@@ -102,7 +102,7 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({
 
     const renderDateSubmenu = () => (
         <div className="settings-submenu" onClick={(e) => e.stopPropagation()}>
-            <div className="settings-label">{t('date_format' as any)}</div>
+            <div className="settings-label">{t('date_format')}</div>
             {[
                 { id: 'US', label: 'date_us' },
                 { id: 'European', label: 'date_european' },
@@ -125,7 +125,7 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({
 
     const renderCompressionSubmenu = () => (
         <div className="settings-submenu" onClick={(e) => e.stopPropagation()}>
-            <div className="settings-label">{t('compression_quality' as any)}</div>
+            <div className="settings-label">{t('compression_quality')}</div>
             <div className="settings-sub-label">ZIP</div>
             <div className="settings-quality-group">
                 {(['fast', 'normal', 'best'] as CompressionQuality[]).map(q => (
@@ -134,7 +134,7 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({
                         className={cx("quality-btn", { active: zipQuality === q })}
                         onClick={() => setZipQuality(q)}
                     >
-                        {t(`quality_${q}` as any)}
+                        {t(`quality_${q}`)}
                     </button>
                 ))}
             </div>
@@ -146,7 +146,7 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({
                         className={cx("quality-btn", { active: sevenZipQuality === q })}
                         onClick={() => setSevenZipQuality(q)}
                     >
-                        {t(`quality_${q}` as any)}
+                        {t(`quality_${q}`)}
                     </button>
                 ))}
             </div>
@@ -158,7 +158,7 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({
                         className={cx("quality-btn", { active: zstdQuality === q })}
                         onClick={() => setZstdQuality(q)}
                     >
-                        {t(`quality_${q}` as any)}
+                        {t(`quality_${q}`)}
                     </button>
                 ))}
             </div>
@@ -171,7 +171,7 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({
             <div className="settings-main-panel">
                 <div className="settings-columns">
                     <div className="settings-column">
-                        <div className="settings-label">{t('appearance' as any) || 'Appearance'}</div>
+                        <div className="settings-label">{t('appearance')}</div>
                         <div
                             className={cx("settings-item", { active: page === 'themes' })}
                             onClick={(e) => { e.stopPropagation(); onPageChange(page === 'themes' ? 'main' : 'themes'); }}
@@ -187,7 +187,7 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({
                             <div className="settings-item-icon-left">
                                 <div className="settings-font-icon-placeholder">A</div>
                             </div>
-                            <span className="settings-item-text">{t('font_size' as any)}</span>
+                            <span className="settings-item-text">{t('font_size')}</span>
                             <div className="settings-font-controls">
                                 <button
                                     className="font-btn"
@@ -198,7 +198,7 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({
                                 <span
                                     className="settings-font-display"
                                     onClick={() => setFontSize(16)}
-                                    data-tooltip={t('reset_to_default' as any, { val: '16px' })}
+                                    data-tooltip={t('reset_to_default', { val: '16px' })}
                                 >
                                     {fontSize}px
                                 </span>
@@ -214,7 +214,7 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({
                             <div className="settings-item-icon-left">
                                 <Grid2x2 size={16} className="icon-md" />
                             </div>
-                            <span className="settings-item-text">{t('show_grid_thumbnails' as any)}</span>
+                            <span className="settings-item-text">{t('show_grid_thumbnails')}</span>
                             <Toggle checked={showGridThumbnails} onChange={setShowGridThumbnails} />
                         </div>
                         <div className="settings-item" onClick={() => setUseSystemIcons(!useSystemIcons)}>
@@ -228,11 +228,11 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({
                             <div className="settings-item-icon-left">
                                 <CheckSquare size={16} className="icon-md" />
                             </div>
-                            <span className="settings-item-text">{t('show_checkboxes' as any)}</span>
+                            <span className="settings-item-text">{t('show_checkboxes')}</span>
                             <Toggle checked={showCheckboxes} onChange={setShowCheckboxes} />
                         </div>
                         <div className="settings-divider" />
-                        <div className="settings-label">{t('files' as any) || 'Files'}</div>
+                        <div className="settings-label">{t('files')}</div>
                         <div className="settings-item" onClick={() => setShowHidden(!showHidden)}>
                             <div className="settings-item-icon-left">
                                 <Eye size={16} className="icon-md" />
@@ -244,27 +244,27 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({
                             <div className="settings-item-icon-left">
                                 <Eye size={16} className="icon-md" />
                             </div>
-                            <span className="settings-item-text">{t('show_system' as any)}</span>
+                            <span className="settings-item-text">{t('show_system')}</span>
                             <Toggle checked={showSystem} onChange={setShowSystem} />
                         </div>
                         <div className="settings-item" onClick={() => setShowPreviews(!showPreviews)}>
                             <div className="settings-item-icon-left">
                                 <Eye size={16} className="icon-md" />
                             </div>
-                            <span className="settings-item-text">{t('show_previews' as any)}</span>
+                            <span className="settings-item-text">{t('show_previews')}</span>
                             <Toggle checked={showPreviews} onChange={setShowPreviews} />
                         </div>
                         <div className="settings-item" onClick={() => setShowNetwork(!showNetwork)}>
                             <div className="settings-item-icon-left">
                                 <Globe size={16} className="icon-md" />
                             </div>
-                            <span className="settings-item-text">{t('show_network' as any)}</span>
+                            <span className="settings-item-text">{t('show_network')}</span>
                             <Toggle checked={showNetwork} onChange={setShowNetwork} />
                         </div>
                     </div>
 
                     <div className="settings-column divider-left">
-                        <div className="settings-label">{t('region_language' as any) || 'Region & Language'}</div>
+                        <div className="settings-label">{t('region_language')}</div>
                         <div
                             className={cx("settings-item", { active: page === 'languages' })}
                             onClick={(e) => { e.stopPropagation(); onPageChange(page === 'languages' ? 'main' : 'languages'); }}
@@ -283,25 +283,25 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({
                             <div className="settings-item-icon-left">
                                 <Calendar size={16} className="icon-md" />
                             </div>
-                            <span className="settings-item-text">{t('date_format' as any)}</span>
+                            <span className="settings-item-text">{t('date_format')}</span>
                             <ChevronRight size={14} className="settings-item-icon-right icon-sm" />
                             {page === 'dates' && renderDateSubmenu()}
                         </div>
 
                         <div className="settings-divider" />
-                        <div className="settings-label">{t('performance' as any)}</div>
+                        <div className="settings-label">{t('performance')}</div>
                         <div className="settings-item" onClick={() => setDefaultTurboMode(!defaultTurboMode)}>
                             <div className="settings-item-icon-left">
                                 <Zap size={16} className="icon-md" />
                             </div>
-                            <span className="settings-item-text">{t('mode_turbo' as any)}</span>
+                            <span className="settings-item-text">{t('mode_turbo')}</span>
                             <Toggle checked={defaultTurboMode} onChange={setDefaultTurboMode} />
                         </div>
                         <div className="settings-item no-hover">
                             <div className="settings-item-icon-left">
                                 <Zap size={16} className="icon-md" />
                             </div>
-                            <span className="settings-item-text">{t('search_limit' as any)}</span>
+                            <span className="settings-item-text">{t('search_limit')}</span>
                             <div className="settings-font-controls">
                                 <button
                                     className="font-btn"
@@ -313,7 +313,7 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({
                                     className="settings-font-display"
                                     style={{ minWidth: '45px' }}
                                     onClick={() => setSearchLimit(3000)}
-                                    data-tooltip={t('reset_to_default' as any, { val: '3000' })}
+                                    data-tooltip={t('reset_to_default', { val: '3000' })}
                                 >
                                     {searchLimit}
                                 </span>
@@ -332,24 +332,24 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({
                             <div className="settings-item-icon-left">
                                 <Zap size={16} className="icon-md" />
                             </div>
-                            <span className="settings-item-text">{t('compression' as any)}</span>
+                            <span className="settings-item-text">{t('compression')}</span>
                             <ChevronRight size={14} className="settings-item-icon-right icon-sm" />
                             {page === 'compression' && renderCompressionSubmenu()}
                         </div>
 
                         <div className="settings-divider" />
-                        <div className="settings-label">{t('data_management' as any) || 'Data Management'}</div>
+                        <div className="settings-label">{t('data_management')}</div>
                         <div className="settings-item" onClick={() => {
                             confirm(
-                                t('clear_cache_desc' as any),
-                                t('clear_cache' as any),
+                                t('clear_cache_desc'),
+                                t('clear_cache'),
                                 true
                             ).then(async (confirmed) => {
                                 if (confirmed) {
                                     try {
                                         const { invoke } = await import('@tauri-apps/api/core');
                                         await invoke('clear_app_cache');
-                                        notify(t('clear_cache_success' as any), 'success');
+                                        notify(t('clear_cache_success'), 'success');
                                     } catch (e: any) {
                                         notify(`Error clearing cache: ${e}`, 'error');
                                     }
@@ -364,14 +364,14 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({
                         </div>
                         <div className="settings-item" onClick={() => {
                             confirm(
-                                t('reset_config_desc' as any),
-                                t('reset_config' as any),
+                                t('reset_config_desc'),
+                                t('reset_config'),
                                 true
                             ).then(async (confirmed) => {
                                 if (confirmed) {
                                     try {
                                         await resetToDefaults();
-                                        notify(t('reset_config_success' as any), 'success');
+                                        notify(t('reset_config_success'), 'success');
                                     } catch (e: any) {
                                         notify(`Error resetting config: ${e}`, 'error');
                                     }

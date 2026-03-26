@@ -6,6 +6,8 @@ import {
     CheckCircle, ExternalLink, Pencil
 } from 'lucide-react';
 
+const RotatedPin = (props: any) => <Pin {...props} style={{ ...props.style, transform: 'rotate(45deg)' }} />;
+
 export function getNativeIcon(verb?: string, label?: string): React.ComponentType<{ className?: string, size?: number | string }> | null {
     if (!verb && !label) return null;
 
@@ -30,7 +32,7 @@ export function getNativeIcon(verb?: string, label?: string): React.ComponentTyp
     if (v === 'share' || l.includes('partager') || l.includes('share')) return Share2;
     if (l.includes('scan') || l.includes('defender') || l.includes('antivirus') || l.includes('malware') || l.includes('eset') || l.includes('kaspersky') || l.includes('norton') || l.includes('bitdefender')) return ShieldCheck;
     if (v === 'cast' || l.includes('diffuser') || l.includes('cast')) return Cast;
-    if (v === 'pin' || l.includes('épingler') || l.includes('pin') || l.includes('accès rapide')) return Pin;
+    if (v === 'pin' || l.includes('épingler') || l.includes('pin') || l.includes('accès rapide')) return RotatedPin;
     if (v === 'format' || l.includes('formater') || l.includes('format')) return HardDrive;
 
     // Archiving (7-Zip, WinRAR, NanaZip)

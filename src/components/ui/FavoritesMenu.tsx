@@ -1,13 +1,28 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { Star } from 'lucide-react';
+import { Pin, ExternalLink } from 'lucide-react';
 import cx from 'classnames';
 import { useFavorites } from '../../hooks/useFavorites';
 import { useApp } from '../../context/AppContext';
 import './FavoritesMenu.css';
 import '../layout/PathBar.css';
 import { createPortal } from 'react-dom';
-import { Trash2 } from 'lucide-react';
+import { Trash2, PinOff } from 'lucide-react';
 import { ContextMenuView } from './context-menu/ContextMenuView';
+
+const RotatedPinOff = (props: any) => (
+    <div className={props.className} style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '1em', height: '1em' }}>
+        <Pin {...props} className="" style={{ ...props.style, transform: 'rotate(45deg)', opacity: 0.7 }} />
+        <div style={{
+            position: 'absolute',
+            width: '105%',
+            height: '1px',
+            backgroundColor: 'currentColor',
+            transform: 'rotate(45deg)',
+            pointerEvents: 'none',
+            borderRadius: '1px'
+        }} />
+    </div>
+);
 
 interface FavoritesMenuProps {
     onNavigate: (path: string) => void;
@@ -84,10 +99,33 @@ export const FavoritesMenu: React.FC<FavoritesMenuProps> = ({ onNavigate, onOpen
 
     const contextMenuItems: any[] = contextMenu ? [
         {
+            id: 'open',
+            type: 'action',
+            label: t('open'),
+            icon: ExternalLink,
+            action: () => {
+                onNavigate(contextMenu.path);
+                setIsOpen(false);
+                setContextMenu(null);
+            }
+        },
+        ...(onOpenNewTab ? [{
+            id: 'open_new_tab',
+            type: 'action',
+            label: t('open_in_new_tab'),
+            icon: ExternalLink,
+            action: () => {
+                onOpenNewTab(contextMenu.path);
+                setIsOpen(false);
+                setContextMenu(null);
+            }
+        }] : []),
+        { type: 'separator' },
+        {
             id: 'remove',
             type: 'action',
             label: t('remove_from_favorites' as any),
-            icon: Trash2,
+            icon: RotatedPinOff,
             action: async () => {
                 await removeFav(contextMenu.path);
                 setContextMenu(null);
@@ -112,7 +150,7 @@ export const FavoritesMenu: React.FC<FavoritesMenuProps> = ({ onNavigate, onOpen
                 data-tooltip={t('favorites')}
                 data-tooltip-pos="right"
             >
-                <Star size="0.875rem" />
+                <Pin size="0.875rem" style={{ transform: 'rotate(45deg)' }} />
             </div>
 
             {isOpen && favorites.length > 0 && createPortal(
@@ -133,7 +171,7 @@ export const FavoritesMenu: React.FC<FavoritesMenuProps> = ({ onNavigate, onOpen
                             onMouseDown={(e) => handleMouseDownItem(fav.path, e)}
                             onContextMenu={(e) => handleContextMenuRow(fav.path, e)}
                         >
-                            <Star size="0.875rem" className="file-icon folder" fill="currentColor" fillOpacity={0.2} />
+                            <Pin size="0.875rem" className="file-icon folder" fill="currentColor" fillOpacity={0.2} style={{ transform: 'rotate(45deg)' }} />
                             <span className="fav-name">{fav.name}</span>
                         </div>
                     ))}

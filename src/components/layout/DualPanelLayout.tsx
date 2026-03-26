@@ -114,8 +114,10 @@ interface DualPanelLayoutProps {
     onAddToFavorites?: (path: string) => void;
     onRemoveFromFavorites?: (path: string) => void;
     onDuplicateSearch?: () => void;
+    dragOverPath?: string | null;
+    setDragOverPath?: (path: string | null) => void;
+    dragOverPathApp?: string | null;
     onTrashProperties?: () => void;
-    dragOverPath: string | null;
     isTrashEmpty: boolean;
 }
 
@@ -199,6 +201,8 @@ export const DualPanelLayout: React.FC<DualPanelLayoutProps> = ({
     onAddToFavorites,
     onRemoveFromFavorites,
     onDuplicateSearch,
+    setDragOverPath,
+    dragOverPathApp,
     onTrashProperties,
     dragOverPath,
     isTrashEmpty
@@ -388,6 +392,7 @@ export const DualPanelLayout: React.FC<DualPanelLayoutProps> = ({
                         onTreeEmptyTrash={onEmptyTrash}
                         onTreeRestoreAll={onRestoreAll}
                         onTrashProperties={onTrashProperties}
+                        onDragOver={setDragOverPath}
                     />
                 )}
 

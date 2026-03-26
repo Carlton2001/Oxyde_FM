@@ -265,11 +265,13 @@ export const useFiles = (panelId: PanelId, path: string, sortConfig: SortConfig,
             setFiles([]);
             setSummary(null);
             setIsProtected(false);
-            prevParamsRef.current = { path, sortConfig, showHidden, showSystem };
+            setError(null);
         } else if (sortChanged) {
-            // Just update ref, don't clear files. Sorting will be handled by useMemo.
             prevParamsRef.current = { path, sortConfig, showHidden, showSystem };
-            return; // Skip re-fetch when only sort changed to preserve local state (like folder sizes)
+            return;
+        } else if (files.length > 0 && !silent && !error) {
+            // Already have data for this path and no filters changed, skip re-fetch
+            return;
         }
 
         if (!silent) setLoading(true);
@@ -337,23 +339,30 @@ export const useFiles = (panelId: PanelId, path: string, sortConfig: SortConfig,
 
                 setSummary(response.summary);
                 setIsComplete(response.is_complete);
+                
+                // Success: Mark these params as definitively loaded
+                prevParamsRef.current = { path, sortConfig, showHidden, showSystem };
             }
         } catch (err) {
+            if (requestId !== currentRequestIdRef.current) return;
+            
             const errStr = formatCommandError(err);
-            if (path !== prevParamsRef.current.path) return;
-
             const isUnmountError = (errStr.includes('os error 3') || errStr.toLowerCase().includes('not found'));
+            
             if (isUnmountError) {
                 setFiles([]);
                 setError(null);
-                return;
+                prevParamsRef.current = { path, sortConfig, showHidden, showSystem };
+            } else {
+                console.error(`Failed to list dir: ${path}`, err);
+                setError(errStr);
+                setFiles([]);
             }
-
-            console.error(`Failed to list dir: ${path}`, err);
-            setError(errStr);
-            setFiles([]);
         } finally {
-            if (!silent) setLoading(false);
+            // Only clear loading state if this is still the active request
+            if (requestId === currentRequestIdRef.current && !silent) {
+                setLoading(false);
+            }
         }
     }, [panelId, path, sortConfig, showHidden, showSystem, requestId]);
 

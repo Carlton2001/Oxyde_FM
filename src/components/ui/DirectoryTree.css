@@ -91,6 +91,41 @@
     font-weight: 600;
 }
 
+.quick-access-node {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0 0.5rem;
+    height: 1.75rem;
+    border-radius: 0;
+    cursor: default;
+    transition: background-color 0.1s ease;
+    user-select: none;
+    white-space: nowrap;
+    box-sizing: border-box;
+    min-width: calc(100% - 0.75rem);
+    width: max-content;
+    margin: 0 0.375rem;
+    padding-right: 1.5rem;
+    position: relative;
+    color: var(--text-color);
+}
+
+.quick-access-node:hover,
+.quick-access-node.drag-over {
+    background-color: var(--hover-color);
+}
+
+.quick-access-node.active {
+    background-color: color-mix(in srgb, var(--accent-color), transparent 85%);
+    box-shadow: inset 3px 0 0 0 var(--accent-color);
+    color: var(--text-color);
+}
+
+.quick-access-node.active .tree-icon {
+    color: var(--accent-color);
+}
+
 .tree-chevron {
     display: flex;
     align-items: center;
