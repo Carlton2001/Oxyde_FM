@@ -492,6 +492,7 @@
     position: absolute;
     right: 0;
     bottom: 0;
+    top: auto !important;
     width: 20px;
     height: 20px;
     cursor: nwse-resize;

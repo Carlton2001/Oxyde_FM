@@ -498,12 +498,13 @@ export const DuplicateSearchDialog: React.FC<DuplicateSearchDialogProps> = ({
                         </div>
                     </div>
 
-                    {/* Resize handle */}
-                    <div className="resize-handle" onMouseDown={handleResizeStart}>
-                        <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                            <path d="M11 1L1 11M11 5L5 11M11 9L9 11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                        </svg>
-                    </div>
+                </div>
+
+                {/* Resize handle */}
+                <div className="resize-handle" onMouseDown={handleResizeStart}>
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                        <path d="M11 1L1 11M11 5L5 11M11 9L9 11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                    </svg>
                 </div>
             </div>
         </div>
