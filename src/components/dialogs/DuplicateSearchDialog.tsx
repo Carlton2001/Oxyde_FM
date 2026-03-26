@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { X, Search, Copy, Loader2, HardDrive, Usb, Disc, ChevronRight, ChevronDown, Check } from 'lucide-react';
+import { X, Search, Folder, Copy, Loader2, HardDrive, Usb, Disc, ChevronRight, ChevronDown, Check } from 'lucide-react';
 import { useDraggable } from '../../hooks/useDraggable';
 import { useResizable } from '../../hooks/useResizable';
 import { invoke } from '@tauri-apps/api/core';
