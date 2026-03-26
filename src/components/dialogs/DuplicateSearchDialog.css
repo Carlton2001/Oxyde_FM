@@ -54,7 +54,7 @@
 
 .duplicate-search-dialog .sidebar-title {
     font-size: 0.75rem;
-    font-weight: 700;
+    font-weight: 500;
     color: var(--text-secondary);
     display: flex;
     align-items: center;
@@ -123,7 +123,7 @@
 }
 
 .duplicate-search-dialog .drive-label-text {
-    font-weight: 600;
+    font-weight: 500;
     white-space: nowrap;
     color: var(--text-color);
     text-align: left;
@@ -147,7 +147,7 @@
     border-radius: 4px;
     background: var(--surface-tertiary);
     color: var(--text-muted);
-    font-weight: 800;
+    font-weight: 500;
     text-transform: uppercase;
 }
 
@@ -227,7 +227,7 @@
 }
 
 .duplicate-search-dialog .results-stats-primary {
-    font-weight: 700;
+    font-weight: 500;
     color: var(--text-primary);
 }
 
@@ -257,12 +257,12 @@
 }
 
 .duplicate-search-dialog .progress-stage {
-    font-weight: 700;
+    font-weight: 500;
     color: var(--accent-color);
 }
 
 .duplicate-search-dialog .progress-counter {
-    font-weight: 600;
+    font-weight: 500;
 }
 
 .duplicate-search-dialog .progress-percentage {
@@ -350,7 +350,7 @@
     align-items: center;
     gap: 0.75rem;
     font-size: 0.875rem;
-    font-weight: 700;
+    font-weight: 500;
     color: var(--text-color);
 }
 
@@ -360,14 +360,14 @@
     border-radius: 12px;
     background: var(--accent-color);
     color: #ffffff;
-    font-weight: 800;
+    font-weight: 500;
     min-width: 1.5rem;
     text-align: center;
 }
 
 .duplicate-search-dialog .group-size {
     font-size: 0.75rem;
-    font-weight: 700;
+    font-weight: 500;
     color: var(--text-secondary);
     background: var(--bg-color);
     padding: 0.2rem 0.6rem;
@@ -414,7 +414,7 @@
 
 .duplicate-search-dialog .file-name {
     font-size: 0.825rem;
-    font-weight: 600;
+    font-weight: 500;
     color: var(--text-color);
     overflow: hidden;
     text-overflow: ellipsis;
@@ -469,7 +469,7 @@
 .duplicate-search-dialog .load-more-btn {
     padding: 0.6rem 2rem;
     border-radius: 2rem;
-    font-weight: 600;
+    font-weight: 500;
 }
 
 .duplicate-search-dialog .empty-icon {
