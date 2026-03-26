@@ -290,7 +290,7 @@ export const DuplicateSearchDialog: React.FC<DuplicateSearchDialogProps> = ({
                             )}
                         </div>
 
-                        <div className="sidebar-separator" />
+
 
                         {/* Options Section */}
                         <div className="sidebar-section">
@@ -298,42 +298,44 @@ export const DuplicateSearchDialog: React.FC<DuplicateSearchDialogProps> = ({
                                 <Settings2 size={14} />
                                 {t('scan_options') || 'Options d\'analyse'}
                             </div>
-                            <div className="checkbox-list">
-                                <label className="prop-checkbox">
-                                    <input
-                                        type="checkbox"
-                                        checked={searchOptions.byName}
-                                        onChange={() => setSearchOptions((prev: any) => ({ ...prev, byName: !prev.byName }))}
-                                    />
-                                    <div className="checkbox-visual">
-                                        {searchOptions.byName && <Check size={10} strokeWidth={4} />}
-                                    </div>
-                                    <span>{t('search_by_name')}</span>
-                                </label>
+                            <div className="options-card">
+                                <div className="checkbox-list">
+                                    <label className="prop-checkbox">
+                                        <input
+                                            type="checkbox"
+                                            checked={searchOptions.byName}
+                                            onChange={() => setSearchOptions((prev: any) => ({ ...prev, byName: !prev.byName }))}
+                                        />
+                                        <div className="checkbox-visual">
+                                            {searchOptions.byName && <Check size={10} strokeWidth={4} />}
+                                        </div>
+                                        <span>{t('search_by_name')}</span>
+                                    </label>
 
-                                <label className="prop-checkbox">
-                                    <input
-                                        type="checkbox"
-                                        checked={searchOptions.bySize}
-                                        onChange={() => setSearchOptions((prev: any) => ({ ...prev, bySize: !prev.bySize }))}
-                                    />
-                                    <div className="checkbox-visual">
-                                        {searchOptions.bySize && <Check size={10} strokeWidth={4} />}
-                                    </div>
-                                    <span>{t('search_by_size')}</span>
-                                </label>
+                                    <label className="prop-checkbox">
+                                        <input
+                                            type="checkbox"
+                                            checked={searchOptions.bySize}
+                                            onChange={() => setSearchOptions((prev: any) => ({ ...prev, bySize: !prev.bySize }))}
+                                        />
+                                        <div className="checkbox-visual">
+                                            {searchOptions.bySize && <Check size={10} strokeWidth={4} />}
+                                        </div>
+                                        <span>{t('search_by_size')}</span>
+                                    </label>
 
-                                <label className="prop-checkbox">
-                                    <input
-                                        type="checkbox"
-                                        checked={searchOptions.byContent}
-                                        onChange={() => setSearchOptions((prev: any) => ({ ...prev, byContent: !prev.byContent }))}
-                                    />
-                                    <div className="checkbox-visual">
-                                        {searchOptions.byContent && <Check size={10} strokeWidth={4} />}
-                                    </div>
-                                    <span>{t('search_by_content')}</span>
-                                </label>
+                                    <label className="prop-checkbox">
+                                        <input
+                                            type="checkbox"
+                                            checked={searchOptions.byContent}
+                                            onChange={() => setSearchOptions((prev: any) => ({ ...prev, byContent: !prev.byContent }))}
+                                        />
+                                        <div className="checkbox-visual">
+                                            {searchOptions.byContent && <Check size={10} strokeWidth={4} />}
+                                        </div>
+                                        <span>{t('search_by_content')}</span>
+                                    </label>
+                                </div>
                             </div>
                         </div>
 
