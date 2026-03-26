@@ -40,8 +40,9 @@
 
 /* Sidebar Styling */
 .duplicate-search-dialog .duplicates-sidebar {
-    width: 260px;
-    background: var(--bg-color);
+    min-width: 260px;
+    width: auto;
+    max-width: 350px;
     border-right: 1px solid var(--border-color);
     padding: 0.8rem;
     display: flex;
@@ -206,13 +207,15 @@
 
 .duplicate-search-dialog .sidebar-footer-actions {
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
+    justify-content: flex-end;
     gap: 0.5rem;
     margin-top: 0.5rem;
 }
 
 .duplicate-search-dialog .sidebar-footer-actions .btn {
-    width: 100%;
+    flex: 1; /* Both buttons take equal space */
+    min-width: fit-content;
 }
 
 /* Main Area Styling */

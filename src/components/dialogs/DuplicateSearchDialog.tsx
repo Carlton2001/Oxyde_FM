@@ -344,15 +344,24 @@ export const DuplicateSearchDialog: React.FC<DuplicateSearchDialogProps> = ({
                         {/* Action Buttons at bottom of sidebar */}
                         <div className="sidebar-footer-actions">
                             {!isSearchingDuplicates ? (
-                                <button
-                                    type="button"
-                                    className="btn primary"
-                                    onClick={handleFindDuplicates}
-                                    disabled={selectedSearchPaths.length === 0}
-                                >
-                                    <Search size={14} />
-                                    {t('find_duplicates') || 'Find Duplicates'}
-                                </button>
+                                <>
+                                    <button
+                                        type="button"
+                                        className="btn primary"
+                                        onClick={handleFindDuplicates}
+                                        disabled={selectedSearchPaths.length === 0}
+                                    >
+                                        <Search size={14} />
+                                        {t('search') || 'Rechercher'}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="btn secondary"
+                                        onClick={onClose}
+                                    >
+                                        {t('cancel') || 'Annuler'}
+                                    </button>
+                                </>
                             ) : (
                                 <button
                                     type="button"
@@ -360,7 +369,7 @@ export const DuplicateSearchDialog: React.FC<DuplicateSearchDialogProps> = ({
                                     onClick={handleCancelDuplicates}
                                 >
                                     <Loader2 size={14} className="spin" />
-                                    {t('cancel') || 'Cancel'}
+                                    {t('cancel') || 'Annuler'}
                                 </button>
                             )}
                         </div>
