@@ -79,33 +79,21 @@
     overflow: hidden;
 }
 
-.duplicate-search-dialog .drive-table-header {
-    display: flex;
-    padding: 0.5rem 0.75rem;
-    background: var(--header-bg);
-    border-bottom: 1px solid var(--border-color);
-    font-size: 0.6875rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    color: var(--text-muted);
-}
-
-.duplicate-search-dialog .drive-table-header .col-name { flex: 1; }
-.duplicate-search-dialog .drive-table-header .col-space { width: 5.5rem; text-align: right; }
-
 .duplicate-search-dialog .drive-table-body {
-    max-height: 20rem;
+    max-height: 25rem;
     overflow-y: auto;
 }
 
 .duplicate-search-dialog .drive-row {
     display: flex;
+    flex-direction: column;
     padding: 0.625rem 0.75rem;
     font-size: 0.8125rem;
     border-bottom: 1px solid var(--border-color);
     cursor: default;
-    align-items: center;
+    align-items: flex-start;
     transition: background 0.1s;
+    gap: 0.125rem;
 }
 
 .duplicate-search-dialog .drive-row:last-child { border-bottom: none; }
@@ -117,21 +105,42 @@
     color: var(--accent-color);
 }
 
-.duplicate-search-dialog .drive-row .col-name {
-    flex: 1;
+.duplicate-search-dialog .drive-row-content {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+}
+
+.duplicate-search-dialog .drive-main-info {
     display: flex;
     align-items: center;
     gap: 0.5rem;
+    width: 100%;
+}
+
+.duplicate-search-dialog .drive-meta-info {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding-left: 1.375rem; /* Icon (14px) + Gap (8px) = 22px approx 1.375rem */
+    width: 100%;
+}
+
+.duplicate-search-dialog .drive-label-text {
+    flex: 1;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    font-weight: 500;
 }
 
-.duplicate-search-dialog .drive-row .col-space {
-    width: 5.5rem;
-    text-align: right;
+.duplicate-search-dialog .drive-path-text {
     font-size: 0.75rem;
+    color: var(--text-muted);
     opacity: 0.8;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .duplicate-search-dialog .drive-tags {

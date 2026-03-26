@@ -212,10 +212,6 @@ export const DuplicateSearchDialog: React.FC<DuplicateSearchDialogProps> = ({
                             </div>
 
                             <div className="drive-table">
-                                <div className="drive-table-header">
-                                    <div className="col-name">{t('location') || 'Emplacement'}</div>
-                                    <div className="col-space">{t('available_space') || 'Espace'}</div>
-                                </div>
                                 <div className="drive-table-body scrollbar-custom">
                                     {allDrives.map(drive => {
                                         const isSelected = selectedSearchPaths.includes(drive.path);
@@ -234,22 +230,25 @@ export const DuplicateSearchDialog: React.FC<DuplicateSearchDialogProps> = ({
                                                     }
                                                 }}
                                             >
-                                                <div className="col-name">
-                                                    {getFileIcon(drive.label, true, { size: 14 }, useSystemIcons, drive.path)}
-                                                    <span className="drive-label-text">
-                                                        {drive.label.replace(/#Disk\s\d+/g, '').replace(/#\d+/g, '').trim()} ({drive.path.replace(/[\\/]$/, '')})
-                                                    </span>
-                                                    <div className="drive-tags">
+                                                <div className="drive-row-content">
+                                                    <div className="drive-main-info">
+                                                        {getFileIcon(drive.label, true, { size: 14 }, useSystemIcons, drive.path)}
+                                                        <span className="drive-label-text">
+                                                            {drive.label.replace(/#Disk\s\d+/g, '').replace(/#\d+/g, '').trim()} ({drive.path.replace(/[\\/]$/, '')})
+                                                        </span>
+                                                    </div>
+                                                    <div className="drive-meta-info">
                                                         {drive.media_type && (
                                                             <span className={cx("drive-badge", { ssd: drive.media_type.includes('SSD') })}>
                                                                 {drive.media_type.includes('SSD') ? 'SSD' : drive.media_type}
-                                                                {drive.physical_id !== undefined && ` #${drive.physical_id.toString().replace(/Disk\s*/i, '')}`}
+                                                            </span>
+                                                        )}
+                                                        {drive.physical_id !== undefined && (
+                                                            <span className="drive-badge">
+                                                                Disk #{drive.physical_id.toString().replace(/Disk\s*/i, '')}
                                                             </span>
                                                         )}
                                                     </div>
-                                                </div>
-                                                <div className="col-space">
-                                                    {formatSize(drive.free_bytes || 0, 1, t)}
                                                 </div>
                                             </div>
                                         );
@@ -266,14 +265,18 @@ export const DuplicateSearchDialog: React.FC<DuplicateSearchDialogProps> = ({
                                                 }
                                             }}
                                         >
-                                            <div className="col-name">
-                                                {getFileIcon('current', true, { size: 14 }, useSystemIcons, initialRoot)}
-                                                <span className="drive-label-text">
-                                                    {t('current_folder')} ({initialRoot})
-                                                </span>
-                                            </div>
-                                            <div className="col-space">
-                                                -
+                                            <div className="drive-row-content">
+                                                <div className="drive-main-info">
+                                                    {getFileIcon('current', true, { size: 14 }, useSystemIcons, initialRoot)}
+                                                    <span className="drive-label-text">
+                                                        {t('current_folder')}
+                                                    </span>
+                                                </div>
+                                                <div className="drive-meta-info">
+                                                    <span className="drive-path-text" data-tooltip={initialRoot}>
+                                                        {initialRoot}
+                                                    </span>
+                                                </div>
                                             </div>
                                         </div>
                                     )}
