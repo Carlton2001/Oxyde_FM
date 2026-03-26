@@ -87,7 +87,7 @@
     border: 1px solid var(--border-color);
     background: var(--bg-color);
     color: var(--text-color);
-    cursor: pointer;
+    cursor: default;
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     width: 100%;
 }
@@ -143,9 +143,10 @@
     gap: 0.4rem;
     width: 100%;
     justify-content: flex-start;
-    margin-left: 1.6rem;
+    padding-left: 1.6rem;
     align-items: center;
     margin-top: 0;
+    box-sizing: border-box;
 }
 
 .duplicate-search-dialog .drive-badge {
@@ -166,9 +167,12 @@
 .duplicate-search-dialog .current-folder-path {
     font-size: 0.8125rem;
     color: var(--text-muted);
-    word-break: break-all;
-    line-height: 1.4;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
     display: block;
+    box-sizing: border-box;
 }
 
 .duplicate-search-dialog .location-warning {
@@ -338,7 +342,7 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    cursor: pointer;
+    cursor: default;
     user-select: none;
     transition: background 0.2s ease;
 }
@@ -392,7 +396,7 @@
     display: flex;
     align-items: center;
     gap: 0.75rem;
-    cursor: pointer;
+    cursor: default;
     transition: all 0.15s ease;
     border-bottom: 1px solid var(--border-color-soft, rgba(var(--border-color-rgb), 0.5));
 }
@@ -403,6 +407,15 @@
 
 .duplicate-search-dialog .duplicate-file-item:hover {
     background: var(--hover-color);
+}
+
+.duplicate-search-dialog .file-item-icon,
+.duplicate-search-dialog .drive-icon-wrapper img,
+.duplicate-search-dialog .drive-icon-wrapper svg {
+    flex-shrink: 0;
+    width: 1rem;
+    height: 1rem;
+    object-fit: contain;
 }
 
 .duplicate-search-dialog .file-item-icon {
@@ -416,6 +429,8 @@
     display: flex;
     flex-direction: column;
     gap: 0.1rem;
+    align-items: flex-start;
+    text-align: left;
 }
 
 .duplicate-search-dialog .file-name {

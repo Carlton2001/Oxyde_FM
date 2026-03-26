@@ -1094,7 +1094,7 @@
     border-radius: 0.25rem;
     transition: all 0.1s;
     line-height: 1;
-    cursor: pointer;
+    cursor: default;
     opacity: 0.6;
 }
 
@@ -1210,7 +1210,7 @@
     justify-content: space-between;
     align-items: center;
     color: var(--text-color);
-    cursor: pointer;
+    cursor: default;
     user-select: none;
     border-bottom: 1px solid var(--border-color);
 }

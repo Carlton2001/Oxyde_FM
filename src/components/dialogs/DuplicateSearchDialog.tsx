@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { X, Search, Folder, Copy, Loader2, File as FileIcon, HardDrive, Usb, Disc, ChevronRight, ChevronDown, Check } from 'lucide-react';
+import { X, Search, Copy, Loader2, HardDrive, Usb, Disc, ChevronRight, ChevronDown, Check } from 'lucide-react';
 import { useDraggable } from '../../hooks/useDraggable';
 import { useResizable } from '../../hooks/useResizable';
 import { invoke } from '@tauri-apps/api/core';
@@ -7,6 +7,8 @@ import { listen } from '@tauri-apps/api/event';
 import { FileEntry, DriveInfo } from '../../types';
 import { usePanelContext } from '../../context/PanelContext';
 import { formatSize } from '../../utils/format';
+import { getFileIcon } from '../../utils/fileIcons';
+import { useApp } from '../../context/AppContext';
 import './SearchDialog.css';
 import './DuplicateSearchDialog.css';
 import cx from 'classnames';
@@ -26,6 +28,7 @@ export const DuplicateSearchDialog: React.FC<DuplicateSearchDialogProps> = ({
     zIndex,
     onFocus
 }) => {
+    const { useSystemIcons } = useApp();
     const [duplicates, setDuplicates] = useState<{ size: number, files: FileEntry[] }[]>([]);
     const [isSearchingDuplicates, setIsSearchingDuplicates] = useState(false);
     const [duplicatesError, setDuplicatesError] = useState<string | null>(null);
@@ -266,14 +269,14 @@ export const DuplicateSearchDialog: React.FC<DuplicateSearchDialogProps> = ({
                                     >
                                         <div className="drive-info-row">
                                             <div className="drive-icon-wrapper">
-                                                <Folder size={16} />
+                                                {getFileIcon('current', true, { size: 16 }, useSystemIcons, initialRoot)}
                                             </div>
                                             <span className="drive-label-text">
                                                 {t('current_folder')}
                                             </span>
                                         </div>
                                         <div className="drive-meta-row">
-                                            <span className="current-folder-path">
+                                            <span className="current-folder-path" data-tooltip={initialRoot}>
                                                 {initialRoot}
                                             </span>
                                         </div>
@@ -463,7 +466,7 @@ export const DuplicateSearchDialog: React.FC<DuplicateSearchDialogProps> = ({
                                                                     className="duplicate-file-item"
                                                                     data-tooltip={t('jump_to_folder') || 'Jump to Folder'}
                                                                 >
-                                                                    <FileIcon size={16} className="file-item-icon" />
+                                                                    {getFileIcon(file.name, file.is_dir, { size: 16 }, useSystemIcons, file.path)}
                                                                     <div className="file-info">
                                                                         <div className="file-name">
                                                                             {fileName}
