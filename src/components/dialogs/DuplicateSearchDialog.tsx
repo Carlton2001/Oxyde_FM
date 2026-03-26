@@ -230,13 +230,13 @@ export const DuplicateSearchDialog: React.FC<DuplicateSearchDialogProps> = ({
                                                     }
                                                 }}
                                             >
+                                                <div className="drive-row-icon">
+                                                    {getFileIcon(drive.label, true, { size: 14 }, useSystemIcons, drive.path)}
+                                                </div>
                                                 <div className="drive-row-content">
-                                                    <div className="drive-main-info">
-                                                        {getFileIcon(drive.label, true, { size: 14 }, useSystemIcons, drive.path)}
-                                                        <span className="drive-label-text">
-                                                            {drive.label.replace(/#Disk\s\d+/g, '').replace(/#\d+/g, '').trim()} ({drive.path.replace(/[\\/]$/, '')})
-                                                        </span>
-                                                    </div>
+                                                    <span className="drive-label-text">
+                                                        {drive.label.replace(/#Disk\s\d+/g, '').replace(/#\d+/g, '').trim()} ({drive.path.replace(/[\\/]$/, '')})
+                                                    </span>
                                                     <div className="drive-meta-info">
                                                         {drive.media_type && (
                                                             <span className={cx("drive-badge", { ssd: drive.media_type.includes('SSD') })}>
@@ -265,13 +265,13 @@ export const DuplicateSearchDialog: React.FC<DuplicateSearchDialogProps> = ({
                                                 }
                                             }}
                                         >
+                                            <div className="drive-row-icon">
+                                                {getFileIcon('current', true, { size: 14 }, useSystemIcons, initialRoot)}
+                                            </div>
                                             <div className="drive-row-content">
-                                                <div className="drive-main-info">
-                                                    {getFileIcon('current', true, { size: 14 }, useSystemIcons, initialRoot)}
-                                                    <span className="drive-label-text">
-                                                        {t('current_folder')}
-                                                    </span>
-                                                </div>
+                                                <span className="drive-label-text">
+                                                    {t('current_folder')}
+                                                </span>
                                                 <div className="drive-meta-info">
                                                     <span className="drive-path-text" data-tooltip={initialRoot}>
                                                         {initialRoot}
@@ -466,8 +466,10 @@ export const DuplicateSearchDialog: React.FC<DuplicateSearchDialogProps> = ({
                                                                     className="duplicate-file-item"
                                                                     data-tooltip={t('jump_to_folder') || 'Jump to Folder'}
                                                                 >
-                                                                    {getFileIcon(file.name, file.is_dir, { size: 16 }, useSystemIcons, file.path)}
-                                                                    <div className="file-info">
+                                               <div className="duplicate-record-icon">
+                    {getFileIcon(file.name, false, { size: 28 }, useSystemIcons, file.path)}
+                </div>
+                                                    <div className="file-info">
                                                                         <div className="file-name">
                                                                             {fileName}
                                                                         </div>
