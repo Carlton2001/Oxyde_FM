@@ -11,8 +11,6 @@
 
 .duplicate-search-dialog {
     position: absolute;
-    left: 0;
-    top: 0;
     transition: none;
     pointer-events: auto;
     display: flex;

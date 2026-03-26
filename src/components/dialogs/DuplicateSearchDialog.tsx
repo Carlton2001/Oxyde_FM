@@ -185,7 +185,8 @@ export const DuplicateSearchDialog: React.FC<DuplicateSearchDialogProps> = ({
                 className="properties-dialog duplicate-search-dialog"
                 onClick={e => e.stopPropagation()}
                 style={{
-                    transform: `translate(${position.x}px, ${position.y}px)`,
+                    left: `${position.x}px`,
+                    top: `${position.y}px`,
                     width: `${size.width}px`,
                     height: `${size.height}px`,
                 }}
