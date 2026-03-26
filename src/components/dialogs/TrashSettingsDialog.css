@@ -1,13 +1,10 @@
-.trash-settings-modal {
+.trash-settings-dialog {
     width: 28rem;
-    height: fit-content;
-    max-height: 90vh;
 }
 
 .ts-section {
     display: flex;
     flex-direction: column;
-    gap: 0.75rem;
     margin-bottom: 1.5rem;
 }
 
@@ -48,14 +45,8 @@
     margin-bottom: 0;
 }
 
-.ts-section-header {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    font-size: 0.8125rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    color: var(--text-muted);
+.ts-icon-accent {
+    color: var(--accent-color);
 }
 
 .ts-drive-table {
@@ -76,8 +67,14 @@
     color: var(--text-muted);
 }
 
-.ts-table-header .col-name { flex: 1; }
-.ts-table-header .col-space { width: 6rem; text-align: right; }
+.ts-table-header .col-name {
+    flex: 1;
+}
+
+.ts-table-header .col-space {
+    width: 6rem;
+    text-align: right;
+}
 
 .ts-table-body {
     max-height: 8rem;
@@ -93,9 +90,13 @@
     align-items: center;
 }
 
-.ts-drive-row:last-child { border-bottom: none; }
+.ts-drive-row:last-child {
+    border-bottom: none;
+}
 
-.ts-drive-row:hover { background: var(--hover-color); }
+.ts-drive-row:hover {
+    background: var(--hover-color);
+}
 
 .ts-drive-row.active {
     background: rgba(var(--accent-color-rgb), 0.15);
@@ -134,6 +135,13 @@
     align-items: center;
     justify-content: space-between;
     gap: 1rem;
+}
+
+/* Override dialog-grid for specific trash settings layout */
+.ts-control-row.dialog-grid {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
 }
 
 .ts-control-label {

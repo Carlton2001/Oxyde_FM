@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { X, Search, Folder, Copy, Loader2, HardDrive, Usb, Disc, ChevronRight, ChevronDown, Check, Database, Settings2 } from 'lucide-react';
+import { X, Search, Copy, Loader2, ChevronRight, ChevronDown, Check, Database, Settings2 } from 'lucide-react';
 import { useDraggable } from '../../hooks/useDraggable';
 import { useResizable } from '../../hooks/useResizable';
 import { invoke } from '@tauri-apps/api/core';
@@ -81,26 +81,17 @@ export const DuplicateSearchDialog: React.FC<DuplicateSearchDialogProps> = ({
         })()
     });
 
-    const { position, handleMouseDown, setPosition } = useDraggable({ 
-        initialPosition: (() => {
-            const saved = localStorage.getItem('duplicate_search_dialog_pos');
-            if (saved) return JSON.parse(saved);
-            // Default center
-            return { 
-                x: (window.innerWidth - size.width) / 2, 
-                y: (window.innerHeight - size.height) / 2 
-            };
-        })(),
+    const { position, handleMouseDown } = useDraggable({ 
+        initialPosition: { 
+            x: (window.innerWidth - size.width) / 2, 
+            y: (window.innerHeight - size.height) / 2 
+        },
         dragRef 
     });
 
     React.useEffect(() => {
         localStorage.setItem('duplicate_search_dialog_size', JSON.stringify(size));
     }, [size]);
-
-    React.useEffect(() => {
-        localStorage.setItem('duplicate_search_dialog_pos', JSON.stringify(position));
-    }, [position]);
 
     React.useEffect(() => {
         // Fetch drives
@@ -179,40 +170,44 @@ export const DuplicateSearchDialog: React.FC<DuplicateSearchDialogProps> = ({
     };
 
     return (
-        <div className="duplicate-search-overlay" style={{ zIndex: zIndex || 1000 }}>
+        <div className="dialog-overlay no-center" onMouseDown={onFocus} style={{ background: 'transparent', pointerEvents: 'none', zIndex: zIndex || 1000 }}>
             <div
                 ref={dragRef}
-                className="properties-dialog duplicate-search-dialog"
+                className="dialog-window duplicate-search-dialog"
                 onClick={e => e.stopPropagation()}
                 style={{
-                    left: `${position.x}px`,
-                    top: `${position.y}px`,
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    transform: `translate(${position.x}px, ${position.y}px)`,
                     width: `${size.width}px`,
                     height: `${size.height}px`,
+                    transition: 'none',
+                    pointerEvents: 'auto'
                 }}
             >
-                <div className="modal-header" onMouseDown={(e) => { handleMouseDown(e); onFocus?.(); }}>
-                    <div className="modal-title">
+                <div className="dialog-header" onMouseDown={(e) => { handleMouseDown(e); onFocus?.(); }}>
+                    <div className="dialog-title">
                         <Copy size={16} />
                         <span>{t('duplicates') || 'Duplicate Search'}</span>
                     </div>
-                    <button className="btn-icon" onClick={onClose}>
+                    <button className="dialog-close-btn btn-icon" onClick={onClose}>
                         <X size={16} />
                     </button>
                 </div>
 
-                <div className="modal-content duplicate-search-content">
+                <div className="dialog-content duplicate-search-content">
                     {/* Sidebar: Control Panel */}
-                    <div className="duplicates-sidebar">
-                        {/* Locations Section */}
+                    <div className="duplicates-sidebar scrollbar-custom">
+                            {/* Locations Section */}
                         <div className="sidebar-section">
-                            <div className="sidebar-title">
-                                <Database size={14} />
-                                {t('locations') || 'Emplacements'}
-                            </div>
+                        <div className="dialog-section-title">
+                            <Database size={14} />
+                            <span>{t('search_locations' as any)}</span>
+                        </div>
 
                             <div className="drive-table">
-                                <div className="drive-table-body scrollbar-custom">
+                                <div className="drive-table-body">
                                     {allDrives.map(drive => {
                                         const isSelected = selectedSearchPaths.includes(drive.path);
                                         return (
@@ -235,15 +230,32 @@ export const DuplicateSearchDialog: React.FC<DuplicateSearchDialogProps> = ({
                                                 </div>
                                                 <div className="drive-row-content">
                                                     <span className="drive-label-text">
-                                                        {drive.label.replace(/#Disk\s\d+/g, '').replace(/#\d+/g, '').trim()} ({drive.path.replace(/[\\/]$/, '')})
+                                                        {(() => {
+                                                            if (drive.remote_path) {
+                                                                const parts = drive.remote_path.split(/[\\/]/).filter(Boolean);
+                                                                return parts[parts.length - 1] || drive.remote_path;
+                                                            }
+                                                            return drive.label.replace(/#Disk\s\d+/g, '').replace(/#\d+/g, '').trim();
+                                                        })()} ({drive.path.replace(/[\\/]$/, '')})
                                                     </span>
                                                     <div className="drive-meta-info">
-                                                        {drive.media_type && (
-                                                            <span className={cx("drive-badge", { ssd: drive.media_type.includes('SSD') })}>
-                                                                {drive.media_type.includes('SSD') ? 'SSD' : drive.media_type}
+                                                        {(drive.media_type || drive.drive_type === 'remote') && (
+                                                            <span className={cx("drive-badge", { 
+                                                                ssd: drive.media_type?.includes('SSD'),
+                                                                hdd: drive.media_type?.includes('HDD'),
+                                                                usb: drive.media_type?.includes('USB') || drive.drive_type === 'removable',
+                                                                removable: drive.drive_type === 'removable',
+                                                                remote: drive.drive_type === 'remote',
+                                                                network: drive.drive_type === 'remote'
+                                                            })}>
+                                                                {drive.drive_type === 'remote' ? 'NETWORK' : (
+                                                                    drive.media_type?.includes('SSD') ? 'SSD' : (
+                                                                        drive.media_type?.includes('HDD') ? 'HDD' : drive.media_type
+                                                                    )
+                                                                )}
                                                             </span>
                                                         )}
-                                                        {drive.physical_id !== undefined && (
+                                                        {drive.physical_id !== undefined && drive.drive_type !== 'remote' && (
                                                             <span className="drive-badge">
                                                                 Disk #{drive.physical_id.toString().replace(/Disk\s*/i, '')}
                                                             </span>
@@ -254,32 +266,58 @@ export const DuplicateSearchDialog: React.FC<DuplicateSearchDialogProps> = ({
                                         );
                                     })}
 
-                                    {initialRoot && !allDrives.some(d => d.path === initialRoot) && !initialRoot.startsWith('oxyde://') && !initialRoot.startsWith('trash://') && (
-                                        <div
-                                            className={cx("drive-row", { active: selectedSearchPaths.includes(initialRoot), searching: isSearchingDuplicates })}
-                                            onClick={() => {
-                                                if (selectedSearchPaths.includes(initialRoot)) {
-                                                    setSelectedSearchPaths(prev => prev.filter(p => p !== initialRoot));
-                                                } else {
-                                                    setSelectedSearchPaths(prev => [...prev, initialRoot]);
-                                                }
-                                            }}
-                                        >
-                                            <div className="drive-row-icon">
-                                                {getFileIcon('current', true, { size: 14 }, useSystemIcons, initialRoot)}
-                                            </div>
-                                            <div className="drive-row-content">
-                                                <span className="drive-label-text">
-                                                    {t('current_folder')}
-                                                </span>
-                                                <div className="drive-meta-info">
-                                                    <span className="drive-path-text" data-tooltip={initialRoot}>
-                                                        {initialRoot}
+                                    {initialRoot && !allDrives.some(d => d.path === initialRoot) && !initialRoot.startsWith('oxyde://') && !initialRoot.startsWith('trash://') && (() => {
+                                        const rootDrive = allDrives.find(d => initialRoot.startsWith(d.path));
+                                        return (
+                                            <div
+                                                className={cx("drive-row", { active: selectedSearchPaths.includes(initialRoot), searching: isSearchingDuplicates })}
+                                                onClick={() => {
+                                                    if (selectedSearchPaths.includes(initialRoot)) {
+                                                        setSelectedSearchPaths(prev => prev.filter(p => p !== initialRoot));
+                                                    } else {
+                                                        setSelectedSearchPaths(prev => [...prev, initialRoot]);
+                                                    }
+                                                }}
+                                            >
+                                                <div className="drive-row-icon">
+                                                    {getFileIcon('current', true, { size: 14 }, useSystemIcons, initialRoot)}
+                                                </div>
+                                                <div className="drive-row-content">
+                                                    <span className="drive-label-text">
+                                                        {t('current_folder')}
                                                     </span>
+                                                    <div className="drive-meta-info" style={{ flexWrap: 'wrap', gap: '0.2rem' }}>
+                                                        {rootDrive && (rootDrive.media_type || rootDrive.drive_type === 'remote') && (
+                                                            <span className={cx("drive-badge", { 
+                                                                ssd: rootDrive.media_type?.includes('SSD'),
+                                                                hdd: rootDrive.media_type?.includes('HDD'),
+                                                                usb: rootDrive.media_type?.includes('USB') || rootDrive.drive_type === 'removable',
+                                                                removable: rootDrive.drive_type === 'removable',
+                                                                remote: rootDrive.drive_type === 'remote',
+                                                                network: rootDrive.drive_type === 'remote'
+                                                            })}>
+                                                                {rootDrive.drive_type === 'remote' ? 'NETWORK' : (
+                                                                    rootDrive.media_type?.includes('SSD') ? 'SSD' : (
+                                                                        rootDrive.media_type?.includes('HDD') ? 'HDD' : rootDrive.media_type
+                                                                    )
+                                                                )}
+                                                            </span>
+                                                        )}
+                                                        {rootDrive && rootDrive.physical_id !== undefined && rootDrive.drive_type !== 'remote' && (
+                                                            <span className="drive-badge">
+                                                                Disk #{rootDrive.physical_id.toString().replace(/Disk\s*/i, '')}
+                                                            </span>
+                                                        )}
+                                                        <div style={{ width: '100%', marginTop: '0.1rem' }}>
+                                                            <span className="drive-path-text" data-tooltip={initialRoot} style={{ display: 'block', opacity: 0.6, fontSize: '0.7rem' }}>
+                                                                {initialRoot}
+                                                            </span>
+                                                        </div>
+                                                    </div>
                                                 </div>
                                             </div>
-                                        </div>
-                                    )}
+                                        );
+                                    })()}
                                 </div>
                             </div>
 
@@ -294,13 +332,13 @@ export const DuplicateSearchDialog: React.FC<DuplicateSearchDialogProps> = ({
 
                         {/* Options Section */}
                         <div className="sidebar-section">
-                            <div className="sidebar-title">
-                                <Settings2 size={14} />
-                                {t('scan_options') || 'Options d\'analyse'}
-                            </div>
+                        <div className="dialog-section-title">
+                            <Settings2 size={14} />
+                            <span>{t('search_settings' as any)}</span>
+                        </div>
                             <div className="options-card">
                                 <div className="checkbox-list">
-                                    <label className="prop-checkbox">
+                                    <label className="dialog-checkbox">
                                         <input
                                             type="checkbox"
                                             checked={searchOptions.byName}
@@ -312,7 +350,7 @@ export const DuplicateSearchDialog: React.FC<DuplicateSearchDialogProps> = ({
                                         <span>{t('search_by_name')}</span>
                                     </label>
 
-                                    <label className="prop-checkbox">
+                                    <label className="dialog-checkbox">
                                         <input
                                             type="checkbox"
                                             checked={searchOptions.bySize}
@@ -324,7 +362,7 @@ export const DuplicateSearchDialog: React.FC<DuplicateSearchDialogProps> = ({
                                         <span>{t('search_by_size')}</span>
                                     </label>
 
-                                    <label className="prop-checkbox">
+                                    <label className="dialog-checkbox">
                                         <input
                                             type="checkbox"
                                             checked={searchOptions.byContent}
@@ -339,40 +377,6 @@ export const DuplicateSearchDialog: React.FC<DuplicateSearchDialogProps> = ({
                             </div>
                         </div>
 
-                        <div className="flex-grow" />
-
-                        {/* Action Buttons at bottom of sidebar */}
-                        <div className="sidebar-footer-actions">
-                            {!isSearchingDuplicates ? (
-                                <>
-                                    <button
-                                        type="button"
-                                        className="btn secondary"
-                                        onClick={onClose}
-                                    >
-                                        {t('cancel') || 'Annuler'}
-                                    </button>
-                                    <button
-                                        type="button"
-                                        className="btn primary"
-                                        onClick={handleFindDuplicates}
-                                        disabled={selectedSearchPaths.length === 0}
-                                    >
-                                        <Search size={14} />
-                                        {t('search') || 'Rechercher'}
-                                    </button>
-                                </>
-                            ) : (
-                                <button
-                                    type="button"
-                                    className="btn danger"
-                                    onClick={handleCancelDuplicates}
-                                >
-                                    <Loader2 size={14} className="spin" />
-                                    {t('cancel') || 'Annuler'}
-                                </button>
-                            )}
-                        </div>
                     </div>
 
                     {/* Main Area: Stats, Filter and Results */}
@@ -465,7 +469,7 @@ export const DuplicateSearchDialog: React.FC<DuplicateSearchDialogProps> = ({
                                                     </div>
                                                 </div>
                                                 {!isCollapsed && (
-                                                    <div className="duplicate-group-files">
+                                                    <div className="dialog-pill-list">
                                                         {group.files.map((file, fIdx) => {
                                                             const lastSlashIndex = Math.max(file.path.lastIndexOf('/'), file.path.lastIndexOf('\\'));
                                                             const dirPath = lastSlashIndex >= 0 ? file.path.substring(0, lastSlashIndex + 1) : '';
@@ -474,17 +478,17 @@ export const DuplicateSearchDialog: React.FC<DuplicateSearchDialogProps> = ({
                                                             return (
                                                                 <div key={fIdx}
                                                                     onClick={() => handleJumpToFolder(file.path)}
-                                                                    className="duplicate-file-item"
+                                                                    className="dialog-pill"
                                                                     data-tooltip={t('jump_to_folder') || 'Jump to Folder'}
                                                                 >
-                                               <div className="duplicate-record-icon">
+                                                                    <div className="dialog-pill-icon">
                     {getFileIcon(file.name, false, { size: 28 }, useSystemIcons, file.path)}
                 </div>
-                                                    <div className="file-info">
-                                                                        <div className="file-name">
+                                                    <div className="dialog-pill-info">
+                                                                        <div className="dialog-pill-title">
                                                                             {fileName}
                                                                         </div>
-                                                                        <div className="file-path">
+                                                                        <div className="dialog-pill-subtitle">
                                                                             {dirPath}
                                                                         </div>
                                                                     </div>
@@ -528,6 +532,38 @@ export const DuplicateSearchDialog: React.FC<DuplicateSearchDialogProps> = ({
                         </div>
                     </div>
 
+                </div>
+
+                <div className="dialog-footer">
+                    {!isSearchingDuplicates ? (
+                        <>
+                            <button
+                                type="button"
+                                className="btn secondary"
+                                onClick={onClose}
+                            >
+                                {t('cancel') || 'Annuler'}
+                            </button>
+                            <button
+                                type="button"
+                                className="btn primary"
+                                onClick={handleFindDuplicates}
+                                disabled={selectedSearchPaths.length === 0}
+                            >
+                                <Search size={14} />
+                                {t('search') || 'Rechercher'}
+                            </button>
+                        </>
+                    ) : (
+                        <button
+                            type="button"
+                            className="btn danger"
+                            onClick={handleCancelDuplicates}
+                        >
+                            <Loader2 size={14} className="spin" />
+                            {t('cancel') || 'Annuler'}
+                        </button>
+                    )}
                 </div>
 
                 {/* Resize handle */}

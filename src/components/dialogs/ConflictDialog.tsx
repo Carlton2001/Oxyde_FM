@@ -56,8 +56,8 @@ const ConflictDetailPanel: React.FC<ConflictDetailPanelProps> = ({ current, t, d
                     <div className="conflict-info-main">
                         <div className="conflict-name-row"><span className="name">{current.name}</span></div>
                         <div className="conflict-meta-row">
-                            <div className="meta-item"><span className="label">{t('size')} :</span> <span className={cx("value", { "highlight": isSourceLarger })}>{formatSize(current.source.size, 1, t)} {formatItemsCount(current.source)}</span></div>
-                            <div className="meta-item"><span className="label">{t('date')} :</span> <span className={cx("value", { "highlight": isSourceNewer })}>{formatDate(current.source.modified, dateFormat)}</span></div>
+                            <div className="meta-item"><span className="dialog-label label">{t('size')} :</span> <span className={cx("value", { "highlight": isSourceLarger })}>{formatSize(current.source.size, 1, t)} {formatItemsCount(current.source)}</span></div>
+                            <div className="meta-item"><span className="dialog-label label">{t('date')} :</span> <span className={cx("value", { "highlight": isSourceNewer })}>{formatDate(current.source.modified, dateFormat)}</span></div>
                         </div>
                         <div className="conflict-path-row">{getParent(current.source.path)}</div>
                     </div>
@@ -77,8 +77,8 @@ const ConflictDetailPanel: React.FC<ConflictDetailPanelProps> = ({ current, t, d
                     <div className="conflict-info-main">
                         <div className="conflict-name-row"><span className="name">{current.name}</span></div>
                         <div className="conflict-meta-row">
-                            <div className="meta-item"><span className="label">{t('size')} :</span> <span className={cx("value", { "highlight": isTargetLarger })}>{formatSize(current.target.size, 1, t)} {formatItemsCount(current.target)}</span></div>
-                            <div className="meta-item"><span className="label">{t('date')} :</span> <span className={cx("value", { "highlight": isTargetNewer })}>{formatDate(current.target.modified, dateFormat)}</span></div>
+                            <div className="meta-item"><span className="dialog-label label">{t('size')} :</span> <span className={cx("value", { "highlight": isTargetLarger })}>{formatSize(current.target.size, 1, t)} {formatItemsCount(current.target)}</span></div>
+                            <div className="meta-item"><span className="dialog-label label">{t('date')} :</span> <span className={cx("value", { "highlight": isTargetNewer })}>{formatDate(current.target.modified, dateFormat)}</span></div>
                         </div>
                         <div className="conflict-path-row">{getParent(current.target.path)}</div>
                     </div>
@@ -119,7 +119,6 @@ interface ConflictDialogProps {
 
 export const ConflictDialog: React.FC<ConflictDialogProps> = ({ conflicts, onResolve, onCancel, t, operation, totalCount, zIndex, onFocus }) => {
     const dragRef = useRef<HTMLDivElement>(null);
-    const { position, handleMouseDown } = useDraggable({ initialPosition: { x: 0, y: 0 }, dragRef });
     const [currentIndex, setCurrentIndex] = useState(0);
     const [resolutions, setResolutions] = useState<Record<string, ConflictAction>>({});
     const [viewMode, setViewMode] = useState<'simple' | 'detailed'>('simple');
@@ -134,6 +133,14 @@ export const ConflictDialog: React.FC<ConflictDialogProps> = ({ conflicts, onRes
             return saved ? JSON.parse(saved) : { width: 832, height: 576 };
         })(),
         minSize: { width: 760, height: 480 }
+    });
+
+    const { position, handleMouseDown } = useDraggable({ 
+        initialPosition: { 
+            x: (window.innerWidth - size.width) / 2, 
+            y: (window.innerHeight - size.height) / 2 
+        }, 
+        dragRef 
     });
 
     const [sidebarWidth, setSidebarWidth] = useState(400);
@@ -334,11 +341,14 @@ export const ConflictDialog: React.FC<ConflictDialogProps> = ({ conflicts, onRes
 
     const renderDetailedView = () => {
         return (
-            <div className="conflict-overlay" style={{ zIndex }}>
+            <div className="dialog-overlay conflict-overlay no-center" style={{ zIndex }}>
                 <div
                     ref={dragRef}
-                    className="properties-dialog conflict-dialog hybrid"
+                    className="dialog-window properties-dialog conflict-dialog hybrid"
                     style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
                         width: `${size.width}px`,
                         height: `${size.height}px`,
                         transform: `translate(${position.x}px, ${position.y}px)`,
@@ -346,37 +356,37 @@ export const ConflictDialog: React.FC<ConflictDialogProps> = ({ conflicts, onRes
                     }}
                 >
                     {/* Header */}
-                    <div className="prop-header-bar" onMouseDown={(e) => { handleMouseDown(e); onFocus?.(); }}>
-                        <div className="prop-title">
+                    <div className="dialog-header" onMouseDown={(e) => { handleMouseDown(e); onFocus?.(); }}>
+                        <div className="dialog-title">
                             {t('conflict_reso' as any) || 'Conflict Resolution'}
                         </div>
-                        <button className="btn-icon" onClick={onCancel}><X size={16} /></button>
+                        <button className="dialog-close-btn btn-icon" onClick={onCancel}><X size={16} /></button>
                     </div>
 
-                    <div className="search-tabs">
+                    <div className="dialog-tabs search-tabs">
                         <button 
-                            className={cx("search-tab", { active: activeFilter === 'all' })} 
+                            className={cx("dialog-tab search-tab", { active: activeFilter === 'all' })} 
                             onClick={() => setActiveFilter('all')}
                             disabled={counts.all === 0}
                         >
                             {t('all' as any)} {counts.all > 0 && <span className="tab-count">{counts.all}</span>}
                         </button>
                         <button 
-                            className={cx("search-tab", { active: activeFilter === 'identical' })} 
+                            className={cx("dialog-tab search-tab", { active: activeFilter === 'identical' })} 
                             onClick={() => setActiveFilter('identical')}
                             disabled={counts.identical === 0}
                         >
                             {t('identical')} {counts.identical > 0 && <span className="tab-count">{counts.identical}</span>}
                         </button>
                         <button 
-                            className={cx("search-tab", { active: activeFilter === 'newer' })} 
+                            className={cx("dialog-tab search-tab", { active: activeFilter === 'newer' })} 
                             onClick={() => setActiveFilter('newer')}
                             disabled={counts.newer === 0}
                         >
                             {t('newer')} {counts.newer > 0 && <span className="tab-count">{counts.newer}</span>}
                         </button>
                         <button 
-                            className={cx("search-tab", { active: activeFilter === 'older' })} 
+                            className={cx("dialog-tab search-tab", { active: activeFilter === 'older' })} 
                             onClick={() => setActiveFilter('older')}
                             disabled={counts.older === 0}
                         >
@@ -492,7 +502,7 @@ export const ConflictDialog: React.FC<ConflictDialogProps> = ({ conflicts, onRes
                     </div>
 
                     {/* Footer */}
-                    <div className="prop-footer">
+                    <div className="dialog-footer">
                         <button className="btn" onClick={() => setViewMode('simple')}>{t('back' as any) || 'Back'}</button>
                         <div style={{ flex: 1 }} />
                         <button 
@@ -520,26 +530,29 @@ export const ConflictDialog: React.FC<ConflictDialogProps> = ({ conflicts, onRes
     };
 
     return viewMode === 'detailed' ? renderDetailedView() : (
-        <div className="conflict-overlay simple" style={{ zIndex }}>
+        <div className="dialog-overlay conflict-overlay simple no-center" style={{ zIndex }}>
             <div
                 ref={dragRef}
-                className="properties-dialog conflict-dialog simple"
+                className="dialog-window properties-dialog conflict-dialog simple"
                 style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
                     transform: `translate(${position.x}px, ${position.y}px)`,
                     transition: 'none'
                 }}
             >
-                <div className="prop-header-bar" onMouseDown={(e) => { handleMouseDown(e); onFocus?.(); }}>
-                    <div className="prop-title">
+                <div className="dialog-header" onMouseDown={(e) => { handleMouseDown(e); onFocus?.(); }}>
+                    <div className="dialog-title">
                         {currentIndex + 1} / {conflicts.length} {t('conflict' as any)}
                     </div>
                     <div style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', opacity: 0.5, marginRight: '1rem' }}>
                         {t(operation as any)} : {totalCount} {totalCount > 1 ? t('items') : t('item')}
                     </div>
-                    <button className="btn-icon" onClick={onCancel}><X size={16} /></button>
+                    <button className="dialog-close-btn btn-icon" onClick={onCancel}><X size={16} /></button>
                 </div>
 
-                <div className="prop-content" style={{ padding: '1.25rem' }}>
+                <div className="dialog-content" style={{ padding: '1.25rem' }}>
                     <div className="conflict-message">
                         {t('conflict_msg' as any).replace('{name}', current.name)}
                     </div>
@@ -553,7 +566,7 @@ export const ConflictDialog: React.FC<ConflictDialogProps> = ({ conflicts, onRes
                     />
                 </div>
 
-                <div className="prop-footer">
+                <div className="dialog-footer">
                     <button className="btn" onClick={onCancel} style={{ marginRight: 'auto' }}>
                         {t('cancel_all' as any)}
                     </button>

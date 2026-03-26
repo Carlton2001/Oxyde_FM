@@ -17,17 +17,13 @@
     pointer-events: none;
 }
 
-.progress-content-minimal,
-.modal,
-.properties-dialog,
-.about-dialog {
+.progress-content-minimal {
     background-color: var(--bg-color);
     border: 1px solid var(--border-color);
     border-radius: 0.5rem;
     box-shadow: var(--menu-shadow);
     display: flex;
     flex-direction: column;
-    /* Removed overflow: hidden to allow dropdowns to exceed dialog bounds */
     pointer-events: auto;
 }
 
@@ -46,10 +42,7 @@
     transition: color 0.2s ease;
 }
 
-.progress-drag-handle,
-.modal-header,
-.prop-header-bar,
-.about-header {
+.progress-drag-handle {
     height: 2.75rem;
     width: 100%;
     display: flex;
@@ -92,7 +85,7 @@
 }
 
 .progress-details {
-    font-size: 0.8rem;
+    font-size: 0.8125rem;
     max-width: 100%;
     overflow: hidden;
     display: flex;
@@ -104,6 +97,12 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     width: 100%;
+}
+
+.confirm-dialog .progress-details {
+    padding: 0.75rem 1rem;
+    background: var(--surface-secondary);
+    border-bottom: 1px solid var(--border-color);
 }
 
 @keyframes fadeIn {
@@ -289,133 +288,56 @@
     opacity: 1;
 }
 
-/* Dialogs */
-.modal-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background-color: transparent;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: var(--z-overlay);
-    pointer-events: none;
+/* Dialog Widths */
+/* Specific dialog widths */
+
+.properties-dialog {
+    width: 28rem;
 }
 
-.modal,
-.properties-dialog,
 .about-dialog {
-    animation: modal-in 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    width: 31.25rem;
 }
 
-.modal {
-    width: 100%;
-    max-width: 25rem;
-    font-size: 0.75rem;
+/* Mini Dialogs (Confirm, Input, etc.) */
+.mini-dialog {
+    width: 25rem;
 }
 
-@keyframes modal-in {
-    from {
-        opacity: 0;
-        transform: translateY(8px);
-    }
-
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-/* Shared style handled above */
-
-.modal-header:hover,
-.prop-header-bar:hover {
-    background: color-mix(in srgb, var(--header-bg), var(--hover-color) 40%);
-}
-
-.modal-header .btn-icon,
-.prop-header-bar .btn-icon {
-    width: 2rem;
-    height: 2rem;
+.mini-dialog .dialog-content {
+    padding: 1.25rem;
     display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 0.375rem;
-    color: var(--text-muted);
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-    margin-left: auto;
-    opacity: 0.7;
-}
-
-.modal-header .btn-icon:hover,
-.prop-header-bar .btn-icon:hover {
-    background-color: var(--hover-color);
-    color: var(--text-color);
-    opacity: 1;
-}
-
-.modal-header .btn-icon:active,
-.prop-header-bar .btn-icon:active {
-    background-color: color-mix(in srgb, var(--hover-color), var(--text-color) 10%);
-    transform: scale(0.95);
-}
-
-.modal-content {
-    padding: 1.25rem 1rem;
-    flex: 1;
-    overflow-y: auto;
-}
-
-/* Ensure bottom rounding for modals with only content and no footer */
-.modal-content:last-child {
-    border-bottom-left-radius: 0.5rem;
-    border-bottom-right-radius: 0.5rem;
-}
-
-.modal-footer {
-    padding: 0.75rem 1rem;
-    border-top: 1px solid var(--border-color);
-    display: flex;
-    justify-content: flex-end;
-    gap: 0.5rem;
-    background: var(--bg-color);
-    flex-shrink: 0;
-    border-bottom-left-radius: 0.5rem;
-    border-bottom-right-radius: 0.5rem;
-}
-
-.prop-footer {
-    padding: 0.75rem 1rem;
-    border-top: 1px solid var(--border-color);
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 0.5rem;
-    background: var(--surface-primary);
-    border-radius: 0 0 0.5rem 0.5rem;
-    flex-shrink: 0;
-}
-
-.prop-footer.spaced {
-    justify-content: space-between;
-}
-
-.modal-header.stacked {
     flex-direction: column;
-    align-items: flex-start;
-    gap: 0.25rem;
+    gap: 0.75rem;
 }
 
-.modal-title,
-.prop-title {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    pointer-events: none;
+.mini-dialog .dialog-message {
+    font-size: 0.875rem;
+    font-weight: 500;
+    line-height: 1.5;
+    margin: 0;
 }
+
+.mini-dialog .dialog-sub-message {
+    font-size: 0.8125rem;
+    color: var(--text-muted);
+    line-height: 1.4;
+    margin: 0;
+}
+
+.mini-dialog .dialog-prompt-label {
+    font-size: 0.8125rem;
+    color: var(--text-muted);
+    margin-bottom: 0.375rem;
+}
+
+/* Overrides & Specifics */
+
+/* Content Overrides */
+
+
+
+/* Handled by .dialog-title */
 
 
 
@@ -471,38 +393,6 @@
 }
 
 /* Properties Dialog */
-.properties-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background-color: transparent;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: var(--z-overlay);
-    pointer-events: none;
-}
-
-.properties-dialog {
-    width: 28rem;
-    max-height: min(42rem, 90vh);
-    height: fit-content;
-    font-size: 0.75rem;
-    pointer-events: auto;
-}
-
-.prop-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0.75rem 1rem;
-    background: var(--header-bg);
-    border-bottom: 1px solid var(--border-color);
-    min-height: 3rem;
-    -webkit-app-region: no-drag;
-}
 
 /* Shared header bar for dialogs (ConfirmDialog, PropertiesDialog, etc.) */
 /* Handled by shared classes above */
@@ -511,97 +401,26 @@
 
 
 
-.prop-tabs {
-    display: flex;
-    gap: 0.25rem;
-    padding: 0 1rem;
-    background: var(--bg-color-soft, rgba(0, 0, 0, 0.02));
-    border-bottom: 1px solid var(--border-color);
-}
+/* Tab specific overrides can go here */
 
-.prop-tab {
-    padding: 0.75rem 1rem;
-    font-size: 0.8125rem;
-    font-weight: 500;
-    color: var(--text-muted);
-    background: none;
-    border: none;
-    border-bottom: 1px solid transparent;
-    cursor: default;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    transition: all 0.2s ease;
-    border-radius: 0;
-}
-
-.prop-tab.active {
-    color: var(--accent-color);
-    border-bottom-color: var(--accent-color);
-    background: transparent;
-    opacity: 1;
-}
-
-.prop-tab:hover:not(.active) {
-    color: var(--text-color);
-    background: var(--hover-color);
-}
-
-.prop-content {
-    padding: 1rem;
-    overflow-y: auto;
-    flex: 1 1 auto;
-    min-height: 0;
-}
-
-.prop-content.overflow-visible,
-.modal-content.overflow-visible,
 .overflow-visible {
     overflow: visible !important;
 }
 
-.prop-section {
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
-    margin-bottom: 1rem;
-}
 
-.prop-header-info {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    padding-bottom: 1rem;
-    border-bottom: 1px solid var(--border-color);
-}
 
 /* Fix alignment in property rows */
-.prop-grid {
-    display: grid;
-    grid-template-columns: auto 1fr;
-    gap: 0.5rem 1rem;
-    align-items: center;
-    line-height: normal;
-    /* Fixed baseline */
-}
-
-/* Divider row that spans both columns in the grid */
-.prop-divider-row {
-    grid-column: 1 / -1;
-    height: 1px;
-    background: var(--border-color);
-    margin: 0.5rem 0;
-}
+/* Grid specific overrides */
 
 /* Attributes row with inline static display */
-.prop-attrs-static {
+.dialog-attrs-static {
     display: flex;
     align-items: center;
     gap: 0.5rem;
     flex-wrap: wrap;
 }
 
-.prop-badge {
+.dialog-badge {
     padding: 2px 0.5rem;
     background: var(--surface-tertiary);
     border: 1px solid var(--border-color);
@@ -611,25 +430,25 @@
     color: var(--text-color);
 }
 
-.prop-badge.partial {
+.dialog-badge.partial {
     opacity: 0.7;
     font-style: italic;
 }
 
-.prop-text-muted {
+.dialog-text-muted {
     color: var(--text-muted);
     font-size: 0.8125rem;
 }
 
 /* File icon and name header section */
-.prop-main-info {
+.dialog-main-info {
     display: flex;
     align-items: center;
     gap: 1rem;
     padding-bottom: 1rem;
 }
 
-.prop-icon-large {
+.dialog-icon-large {
     width: 3rem;
     height: 3rem;
     flex-shrink: 0;
@@ -638,19 +457,14 @@
     justify-content: center;
 }
 
-.prop-icon-large svg {
+.dialog-icon-large svg {
     width: 3rem;
     height: 3rem;
 }
 
 /* Divider line between sections */
-.prop-divider {
-    height: 1px;
-    background: var(--border-color);
-    margin: 0 0 1rem 0;
-}
 
-.prop-name-input {
+.dialog-name-input {
     flex: 1;
     padding: 0.375rem 0.625rem;
     border: 1px solid var(--border-color);
@@ -667,37 +481,13 @@
 }
 
 /* Fix alignment in property rows */
-.prop-row {
+.dialog-row {
     display: flex;
     align-items: center;
     /* Vertically align label and value */
     gap: 0.75rem;
     min-height: 1.75rem;
     /* Increased for stabilization */
-}
-
-.prop-label {
-    color: var(--text-muted);
-    flex-shrink: 0;
-    display: flex;
-    /* Flex to align text if needed, though default is fine */
-    align-items: center;
-    /* Center label vertically */
-    white-space: nowrap;
-    min-height: 1.75rem;
-    /* Stabilize row height */
-    font-size: 0.8125rem;
-}
-
-.prop-value {
-    flex: 1;
-    user-select: text;
-    display: flex;
-    align-items: center;
-    min-height: 1.75rem;
-    /* Match label for stability */
-    font-variant-numeric: tabular-nums;
-    font-size: 0.8125rem;
 }
 
 /* Specific heights and alignments for dynamic contents to avoid jump */
@@ -708,7 +498,7 @@
     line-height: normal;
 }
 
-.prop-btn.xsmall {
+.dialog-btn.xsmall {
     height: 1.5rem;
     /* Force a smaller height that fits in 1.75rem container */
     padding: 0 0.5rem;
@@ -717,26 +507,26 @@
     margin: 0;
 }
 
-.prop-separator {
+.dialog-separator {
     height: 1px;
     background: var(--border-color);
     margin: 0.5rem 0;
 }
 
-.prop-attributes {
+.dialog-attributes {
     display: flex;
     gap: 1rem;
 }
 
 /* Styled Attributes Checkboxes */
-.prop-checkbox {
+.dialog-checkbox {
     display: flex;
     align-items: center;
     gap: 0.375rem;
     user-select: none;
 }
 
-.prop-checkbox input {
+.dialog-checkbox input {
     display: none;
     /* Hide default checkbox */
 }
@@ -753,17 +543,17 @@
     transition: all 0.1s;
 }
 
-.prop-checkbox:hover .checkbox-visual {
+.dialog-checkbox:hover .checkbox-visual {
     border-color: var(--accent-color);
 }
 
-.prop-checkbox input:checked+.checkbox-visual {
+.dialog-checkbox input:checked+.checkbox-visual {
     background: var(--accent-color);
     border-color: var(--accent-color);
     color: white;
 }
 
-.prop-checkbox input:disabled+.checkbox-visual {
+.dialog-checkbox input:disabled+.checkbox-visual {
     opacity: 0.5;
     cursor: not-allowed;
     background: var(--border-color);
@@ -774,7 +564,6 @@
 /* About Window Specifics */
 .about-dialog {
     width: 31.25rem;
-    max-width: 90vw;
 }
 
 /* Handled by shared classes above */
@@ -955,17 +744,6 @@
     margin-top: -2px;
 }
 
-.about-footer {
-    padding: 0.75rem 1rem;
-    border-top: 1px solid var(--border-color);
-    display: flex;
-    justify-content: flex-end;
-    gap: 0.5rem;
-    background: var(--surface-primary);
-    width: 100%;
-    margin-top: 0;
-    flex-shrink: 0;
-}
 
 /* Notifications */
 .notification-area {
@@ -1182,11 +960,6 @@
     overflow-y: auto;
 }
 
-
-
-
-
-
 .duplicates-main {
     flex: 1;
     display: flex;
@@ -1228,31 +1001,6 @@
     border-bottom: none;
 }
 
-.duplicate-file-item {
-    font-size: 0.8125rem;
-    color: var(--text-color);
-    display: flex;
-    gap: 0.75rem;
-    align-items: center;
-    padding: 0.5rem 0.75rem;
-    border-radius: 0.375rem;
-    transition: all 0.2s ease;
-    min-width: 0;
-    border: 1px solid transparent;
-    cursor: default;
-    margin: 1px;
-    border-bottom: 1px solid var(--border-color);
-}
-
-.duplicate-file-item:last-child {
-    border-bottom: none;
-}
-
-.duplicate-file-item:hover {
-    background: var(--hover-color);
-    border-color: var(--border-color);
-}
-
 .vertical-list-group,
 .checkbox-list {
     display: flex;
@@ -1262,51 +1010,6 @@
 
 .checkbox-list {
     gap: 1rem;
-}
-
-/* Factorised Shared List Styles */
-.duplicate-group-files {
-    display: flex;
-    flex-direction: column;
-    padding: 0.5rem;
-    gap: 0.25rem;
-}
-
-.duplicate-file-item.selected {
-    background: var(--accent-color-transparent, rgba(var(--accent-color-rgb), 0.1));
-    border: 1px solid var(--accent-color) !important;
-}
-
-.duplicate-file-icon-wrapper {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--accent-color);
-    opacity: 0.8;
-}
-
-.duplicate-file-path-container {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-}
-
-.duplicate-file-dir {
-    font-size: 0.7rem;
-    color: var(--text-muted);
-    text-overflow: ellipsis;
-    overflow: hidden;
-    white-space: nowrap;
-    margin-bottom: 0.1rem;
-    opacity: 0.8;
-}
-
-.duplicate-file-name {
-    font-weight: 500;
-    text-overflow: ellipsis;
-    overflow: hidden;
-    white-space: nowrap;
 }
 
 /* Shared Unit Selector & Custom Dropdowns */
@@ -1326,10 +1029,7 @@
     border-radius: 0.375rem;
     background: var(--surface-primary);
     color: var(--text-color);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    cursor: default;
+    /* Redundant structural rules removed - handled by DialogGlobal.css */
     transition: all 0.2s ease;
     position: relative;
     white-space: nowrap;
@@ -1408,49 +1108,27 @@
 
 /* ===== CONFLICT DIALOGS (UNIFIED) ===== */
 
-.conflict-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background-color: transparent;
-    z-index: 2000;
-    pointer-events: none;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
+/* Conflict dialog specific overlay settings */
 .conflict-overlay.simple {
     z-index: 1000;
 }
 
 /* Base Dialog classes */
 .conflict-dialog {
-    background-color: var(--surface-primary);
-    border: 1px solid var(--border-color);
-    border-radius: 0.5rem;
-    box-shadow: var(--menu-shadow);
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
     position: relative;
-    pointer-events: auto;
 }
 
 .conflict-dialog.simple {
     width: 42rem;
-    max-height: 90vh;
 }
 
 .conflict-dialog.hybrid {
-    width: 832px; /* Fixed default width or from state */
-    height: 576px; /* Fixed default height or from state */
+    width: 832px;
+    height: 576px;
 }
 
-.conflict-dialog.hybrid .prop-footer,
-.conflict-dialog.simple .prop-footer {
+.conflict-dialog.hybrid .dialog-footer,
+.conflict-dialog.simple .dialog-footer {
     padding: 0.75rem 1.5rem !important;
 }
 

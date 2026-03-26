@@ -2,53 +2,20 @@
 
 .search-dialog {
     width: 43rem;
-    max-width: 95vw;
 }
 
 /* Tabs */
-.search-tabs {
-    display: flex;
-    gap: 0.25rem;
-    padding: 0 1rem;
-    background: var(--search-tabs-bg, var(--bg-color-soft));
-    border-bottom: 1px solid var(--border-color);
-    border-top-left-radius: 0.5rem;
-    border-top-right-radius: 0.5rem;
-}
-
-.search-tab {
-    padding: 0.75rem 1rem;
-    font-size: 0.8125rem;
-    font-weight: 500;
-    color: var(--text-muted);
-    background: none;
-    border: none;
-    border-bottom: 1px solid transparent;
-    cursor: default;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    transition: all 0.2s ease;
-}
-
-.search-tab:hover {
-    color: var(--text-color);
-    background: var(--hover-color);
-}
-
-.search-tab.active {
-    color: var(--accent-color);
-    border-bottom-color: var(--accent-color);
-}
+/* Tab overrides for search specific colors or layout can go here */
 
 /* Form Container */
 .search-form {
-    /* Remove redundant padding to allow prop-content to handle it */
+    /* Padding handled by dialog-content parent */
     display: flex;
     flex-direction: column;
-    flex: 1;
-    min-height: 0;
-    overflow-y: auto;
+}
+
+.search-form.no-padding {
+    padding: 0 !important;
 }
 
 .search-form.overflow-visible {
@@ -61,7 +28,7 @@
     grid-template-columns: auto 1fr;
     gap: 1rem 1.5rem;
     align-items: center;
-    /* Padding handled by prop-content parent */
+    /* Padding handled by dialog-content parent */
     /* Restore padding for general tab */
 }
 
@@ -301,7 +268,7 @@
     align-items: center;
 }
 
-.prop-checkbox {
+.dialog-checkbox {
     display: flex;
     align-items: center;
     gap: 0.5rem;
@@ -311,7 +278,7 @@
     user-select: none;
 }
 
-.prop-checkbox input {
+.dialog-checkbox input {
     display: none;
 }
 
@@ -327,11 +294,11 @@
     transition: all 0.2s ease;
 }
 
-.prop-checkbox:hover .checkbox-visual {
+.dialog-checkbox:hover .checkbox-visual {
     border-color: var(--accent-color);
 }
 
-.prop-checkbox input:checked+.checkbox-visual {
+.dialog-checkbox input:checked+.checkbox-visual {
     background: var(--accent-color);
     border-color: var(--accent-color);
     color: white;
@@ -341,18 +308,20 @@
 .help-tab-content {
     display: block;
     /* Override grid for help */
-    max-height: 28rem;
+    flex: 1;
     overflow-y: auto;
     padding: 0;
     /* No padding on container to let separators stretch */
+    min-height: 380px;
+    max-height: 450px;
 }
 
 .help-section-title {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 1rem 2rem;
-    /* Horizontal padding matching general tab */
+    padding: 0.75rem 1.5rem;
+    /* Balanced horizontal padding */
     border-bottom: 1px solid var(--border-color);
     background: var(--bg-hover, rgba(0, 0, 0, 0.02));
 }
@@ -382,15 +351,15 @@
 .regex-help-list {
     display: flex;
     flex-direction: column;
+    padding: 0 1.25rem;
 }
 
 .regex-help-item {
     display: grid;
-    grid-template-columns: 4rem 10.5rem 1fr;
+    grid-template-columns: 4rem 10rem 1fr;
     align-items: center;
-    /* Aligné au centre verticalement */
     gap: 1.25rem;
-    padding: 0.4rem 2rem;
+    padding: 0.5rem 1.5rem;
     border-bottom: 1px solid var(--border-color);
     transition: background-color 0.1s ease;
 }

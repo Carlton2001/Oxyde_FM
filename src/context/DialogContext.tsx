@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useCallback, ReactNode, use
 import { useApp } from './AppContext';
 import { ConflictEntry } from '../types';
 
-export type DialogType = 'alert' | 'confirm' | 'prompt' | 'properties' | 'conflict' | 'about' | 'delete' | 'search' | 'duplicates' | 'mapNetworkDrive' | 'disconnectNetworkDrive';
+export type DialogType = 'alert' | 'confirm' | 'prompt' | 'properties' | 'conflict' | 'about' | 'delete' | 'search' | 'duplicates' | 'mapNetworkDrive' | 'disconnectNetworkDrive' | 'trashSettings';
 
 export interface DialogRequest {
     id: string;
@@ -36,6 +36,7 @@ export interface DialogContextType {
 
     openMapNetworkDriveDialog: () => Promise<void>;
     openDisconnectNetworkDriveDialog: () => Promise<void>;
+    openTrashSettingsDialog: () => void;
 }
 
 const DialogContext = createContext<DialogContextType | null>(null);
@@ -200,6 +201,10 @@ export const DialogProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     const openDisconnectNetworkDriveDialog = useCallback(() => {
         return openDialog<void>('disconnectNetworkDrive', {});
     }, [openDialog]);
+    
+    const openTrashSettingsDialog = useCallback(() => {
+        openDialog('trashSettings', {});
+    }, [openDialog]);
 
     const propertiesPaths = dialogs
         .filter(d => d.type === 'properties')
@@ -225,7 +230,8 @@ export const DialogProvider: React.FC<{ children: ReactNode }> = ({ children }) 
             closeAllDialogs,
             propertiesPaths,
             openMapNetworkDriveDialog,
-            openDisconnectNetworkDriveDialog
+            openDisconnectNetworkDriveDialog,
+            openTrashSettingsDialog
         }}>
             {children}
         </DialogContext.Provider>

@@ -11,6 +11,7 @@ import './styles/components/Utilities.css';
 import './styles/components/Buttons.css';
 import './styles/components/Inputs.css';
 import './styles/components/Dialogs.css';
+import './styles/components/DialogGlobal.css';
 import './styles/themes/github-light.css';
 import './styles/themes/github-dark.css';
 import './styles/themes/ayu-light.css';
@@ -91,7 +92,6 @@ function App() {
   const dragGhostRef = useRef<HTMLDivElement>(null);
   const [modifiers, setModifiers] = useState({ ctrl: false, shift: false, alt: false });
   const [showProgress, setShowProgress] = useState(false);
-  const [isTrashSettingsOpen, setIsTrashSettingsOpen] = useState(false);
   const activeOpRef = useRef(fileOps.activeOperation);
   activeOpRef.current = fileOps.activeOperation;
 
@@ -201,7 +201,7 @@ function App() {
 
   const [progress, setProgress] = useState<{ visible: boolean; message: string; cancellable?: boolean; cancelling?: boolean; task?: string; current?: number; total?: number; filename?: string; } | null>(null);
 
-  const openTrashSettings = useCallback(() => setIsTrashSettingsOpen(true), []);
+  const openTrashSettings = useCallback(() => dialogs.openTrashSettingsDialog(), [dialogs]);
 
   // Handlers Integration
   const handlers = useAppHandlers({
@@ -620,18 +620,6 @@ function App() {
         />
       )}
 
-      {isTrashSettingsOpen && (
-        <TrashSettingsDialog 
-          isOpen={isTrashSettingsOpen}
-          onClose={() => setIsTrashSettingsOpen(false)}
-          t={t as any}
-          drives={drives}
-          confirmDeleteGlobal={confirmDelete}
-          onUpdateGlobalConfirm={setConfirmDelete}
-          isTrashEmpty={isTrashEmpty}
-          refreshConfigs={refreshDriveTrashConfigs}
-        />
-      )}
 
       <div
         ref={dragGhostRef}

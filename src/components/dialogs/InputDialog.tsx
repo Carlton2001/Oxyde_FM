@@ -73,31 +73,30 @@ export const InputDialog: React.FC<InputDialogProps> = ({
     if (!isOpen) return null;
 
     return (
-        <div className="modal-overlay" onClick={onClose} style={{ zIndex }}>
+        <div className="dialog-overlay" onClick={onClose} style={{ zIndex }}>
             <div
                 ref={dragRef}
-                className="modal"
+                className="dialog-window mini-dialog"
                 onClick={(e) => e.stopPropagation()}
                 style={{
-                    width: '25rem',
                     transform: `translate(${position.x}px, ${position.y}px)`,
                     transition: 'none'
                 }}
             >
-                <div className="modal-header" onMouseDown={(e) => { handleMouseDown(e); onFocus?.(); }}>
-                    <div className="modal-title">
+                <div className="dialog-header" onMouseDown={(e) => { handleMouseDown(e); onFocus?.(); }}>
+                    <div className="dialog-title">
                         {getIcon()}
-                        <span style={{ marginLeft: '0.5rem' }}>{title}</span>
+                        <span>{title}</span>
                     </div>
-                    <button className="btn-icon" onClick={onClose}>
+                    <button className="dialog-close-btn btn-icon" onClick={onClose}>
                         <X size={16} />
                     </button>
                 </div>
 
-                <div className="modal-content">
+                <div className="dialog-content">
                     <form onSubmit={handleSubmit}>
                         {label && (
-                            <div style={{ marginBottom: '0.3125rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                            <div className="dialog-prompt-label">
                                 {label}
                             </div>
                         )}
@@ -108,12 +107,11 @@ export const InputDialog: React.FC<InputDialogProps> = ({
                             value={value}
                             onChange={(e) => setValue(e.target.value)}
                             placeholder={placeholder}
-                            style={{ width: '100%', boxSizing: 'border-box' }}
                         />
                     </form>
                 </div>
 
-                <div className="modal-footer">
+                <div className="dialog-footer">
                     <button type="button" className="btn secondary" onClick={onClose}>
                         {t('cancel' as any)}
                     </button>

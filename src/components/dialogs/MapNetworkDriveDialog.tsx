@@ -74,10 +74,10 @@ export const MapNetworkDriveDialog: React.FC<MapNetworkDriveDialogProps> = ({ on
     };
 
     return (
-        <div className="properties-overlay" style={{ zIndex }}>
+        <div className="dialog-overlay" style={{ zIndex }}>
             <div
                 ref={dragRef}
-                className="properties-dialog"
+                className="dialog-window"
                 onClick={(e) => e.stopPropagation()}
                 style={{
                     transform: `translate(${position.x}px, ${position.y}px)`,
@@ -85,17 +85,17 @@ export const MapNetworkDriveDialog: React.FC<MapNetworkDriveDialogProps> = ({ on
                     width: '460px'
                 }}
             >
-                <div className="prop-header-bar" onMouseDown={(e) => { handleMouseDown(e); onFocus?.(); }}>
-                    <div className="prop-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <div className="dialog-header" onMouseDown={(e) => { handleMouseDown(e); onFocus?.(); }}>
+                    <div className="dialog-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                         <Network size={14} />
                         {t('map_network_drive' as any)}
                     </div>
-                    <button className="btn-icon" onClick={onClose} style={{ marginLeft: 'auto' }}>
+                    <button className="dialog-close-btn btn-icon" onClick={onClose} style={{ marginLeft: 'auto' }}>
                         <X size={14} />
                     </button>
                 </div>
 
-                <div className="prop-content overflow-visible" style={{ padding: '1.25rem' }}>
+                <div className="dialog-content overflow-visible" style={{ padding: '1.25rem' }}>
                     <div style={{ marginBottom: '1.5rem' }}>
                         <p style={{ margin: '0 0 0.5rem 0', fontWeight: 600, fontSize: '0.85rem' }}>
                             {t('map_network_drive_desc' as any)}
@@ -105,9 +105,9 @@ export const MapNetworkDriveDialog: React.FC<MapNetworkDriveDialogProps> = ({ on
                         </p>
                     </div>
 
-                    <div className="prop-grid">
-                        <div className="prop-label">{t('drive' as any)}</div>
-                        <div className="prop-value">
+                    <div className="dialog-grid">
+                        <div className="dialog-label">{t('drive' as any)}</div>
+                        <div className="dialog-value">
                             <div className="custom-unit-selector" ref={dropdownRef}>
                                 <div
                                     className="unit-selected-value"
@@ -149,8 +149,8 @@ export const MapNetworkDriveDialog: React.FC<MapNetworkDriveDialogProps> = ({ on
                             </div>
                         </div>
 
-                        <div className="prop-label">{t('folder' as any)}</div>
-                        <div className="prop-value">
+                        <div className="dialog-label">{t('folder' as any)}</div>
+                        <div className="dialog-value">
                             <input
                                 type="text"
                                 className="input-field"
@@ -168,10 +168,10 @@ export const MapNetworkDriveDialog: React.FC<MapNetworkDriveDialogProps> = ({ on
                             />
                         </div>
 
-                        <div className="prop-divider-row" />
+                        <div className="dialog-divider-row" />
 
-                        <div className="prop-label">{t('username' as any)}</div>
-                        <div className="prop-value">
+                        <div className="dialog-label">{t('username' as any)}</div>
+                        <div className="dialog-value">
                             <input
                                 type="text"
                                 className="input-field"
@@ -181,8 +181,8 @@ export const MapNetworkDriveDialog: React.FC<MapNetworkDriveDialogProps> = ({ on
                             />
                         </div>
 
-                        <div className="prop-label">{t('password' as any)}</div>
-                        <div className="prop-value">
+                        <div className="dialog-label">{t('password' as any)}</div>
+                        <div className="dialog-value">
                             <input
                                 type="password"
                                 className="input-field"
@@ -193,7 +193,7 @@ export const MapNetworkDriveDialog: React.FC<MapNetworkDriveDialogProps> = ({ on
                     </div>
 
                     <div style={{ marginTop: '1.25rem' }}>
-                        <label className="prop-checkbox">
+                        <label className="dialog-checkbox">
                             <input
                                 type="checkbox"
                                 checked={reconnect}
@@ -207,8 +207,7 @@ export const MapNetworkDriveDialog: React.FC<MapNetworkDriveDialogProps> = ({ on
                     </div>
                 </div>
 
-                <div className="prop-footer spaced">
-                    <div />
+                <div className="dialog-footer">
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
                         <button className="btn" onClick={onClose} disabled={loading}>
                             {t('cancel')}

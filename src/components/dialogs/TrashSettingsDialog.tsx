@@ -24,6 +24,8 @@ interface TrashSettingsDialogProps {
     onUpdateGlobalConfirm: (value: boolean) => void;
     isTrashEmpty: boolean;
     refreshConfigs?: () => void;
+    zIndex?: number;
+    onFocus?: () => void;
 }
 
 export const TrashSettingsDialog: React.FC<TrashSettingsDialogProps> = ({
@@ -34,9 +36,15 @@ export const TrashSettingsDialog: React.FC<TrashSettingsDialogProps> = ({
     confirmDeleteGlobal,
     onUpdateGlobalConfirm,
     isTrashEmpty,
-    refreshConfigs
+    refreshConfigs,
+    zIndex,
+    onFocus
 }) => {
-    const [selectedDrivePath, setSelectedDrivePath] = useState<string | null>(drives[0]?.path || null);
+    const localDrives = useMemo(() => 
+        drives.filter(d => d.drive_type === 'fixed' || d.drive_type === 'removable'),
+    [drives]);
+
+    const [selectedDrivePath, setSelectedDrivePath] = useState<string | null>(localDrives[0]?.path || null);
     const [configs, setConfigs] = useState<Record<string, TrashSystemConfig>>({});
     const [initialConfigs, setInitialConfigs] = useState<Record<string, TrashSystemConfig>>({});
     const [units, setUnits] = useState<Record<string, 'mb' | 'percent'>>({});
@@ -45,10 +53,10 @@ export const TrashSettingsDialog: React.FC<TrashSettingsDialogProps> = ({
     const [totalUsage, setTotalUsage] = useState<{ size: number, items: number } | null>(null);
 
     useEffect(() => {
-        if (isOpen && drives.length > 0) {
+        if (isOpen && localDrives.length > 0) {
             fetchAllConfigs();
         }
-    }, [isOpen, drives]);
+    }, [isOpen, localDrives]);
 
     const fetchAllConfigs = async () => {
         setIsLoading(true);
@@ -60,7 +68,7 @@ export const TrashSettingsDialog: React.FC<TrashSettingsDialogProps> = ({
             setTotalUsage({ size: usageSize, items: usageItems });
 
             const results = await Promise.all(
-                drives.map(async (drive) => {
+                localDrives.map(async (drive) => {
                     try {
                         const config: TrashSystemConfig = await invoke('get_recycle_bin_config', { drivePath: drive.path });
                         return { path: drive.path, config };
@@ -84,8 +92,8 @@ export const TrashSettingsDialog: React.FC<TrashSettingsDialogProps> = ({
         } catch (err) {
             console.error("Failed to fetch all trash configs:", err);
         }
-        if (!selectedDrivePath && drives.length > 0) {
-            setSelectedDrivePath(drives[0].path);
+        if (!selectedDrivePath && localDrives.length > 0) {
+            setSelectedDrivePath(localDrives[0].path);
         }
         setIsLoading(false);
     };
@@ -130,8 +138,8 @@ export const TrashSettingsDialog: React.FC<TrashSettingsDialogProps> = ({
     };
 
     const selectedDriveInfo = useMemo(() => 
-        drives.find(d => d.path === selectedDrivePath), 
-    [drives, selectedDrivePath]);
+        localDrives.find(d => d.path === selectedDrivePath), 
+    [localDrives, selectedDrivePath]);
 
     const currentConfig = selectedDrivePath ? configs[selectedDrivePath] : null;
     const currentUnit = selectedDrivePath ? units[selectedDrivePath] : 'mb';
@@ -163,27 +171,27 @@ export const TrashSettingsDialog: React.FC<TrashSettingsDialogProps> = ({
     if (!isOpen) return null;
 
     return (
-        <div className="modal-overlay" style={{ background: 'transparent', pointerEvents: 'none' }}>
-            <div 
+        <div className="dialog-overlay" onMouseDown={onFocus} style={{ background: 'transparent', pointerEvents: 'none', zIndex }}>
+            <div
                 ref={dragRef}
-                className="properties-dialog trash-settings-modal" 
-                onClick={e => e.stopPropagation()}
+                className="dialog-window properties-dialog trash-settings-dialog"
+                onClick={(e) => e.stopPropagation()}
                 style={{
                     transform: `translate(${position.x}px, ${position.y}px)`,
                     transition: 'none',
                     pointerEvents: 'auto'
                 }}
             >
-                <div className="prop-header-bar" onMouseDown={handleMouseDown}>
-                    <div className="prop-title">{t('trash_properties' as any)}</div>
-                    <button className="btn-icon" onClick={onClose}><X size={16} /></button>
+                <div className="dialog-header" onMouseDown={(e) => { handleMouseDown(e); onFocus?.(); }}>
+                    <div className="dialog-title">{t('trash_properties' as any)}</div>
+                    <button className="dialog-close-btn btn-icon" onClick={onClose}><X size={16} /></button>
                 </div>
 
-                <div className="prop-content">
+                <div className="dialog-content">
                     {totalUsage && (
                         <div className="ts-total-usage">
                             <div className="ts-usage-info">
-                                <Trash className="icon-sm" style={{ color: 'var(--accent-color)' }} />
+                                <Trash className="icon-sm ts-icon-accent" />
                                 <div className="ts-usage-text">
                                     <span className="ts-usage-size">{formatSize(totalUsage.size, 1, t)}</span>
                                     <span className="ts-usage-count">({totalUsage.items} {totalUsage.items > 1 ? t('items' as any) : t('item' as any)})</span>
@@ -203,7 +211,7 @@ export const TrashSettingsDialog: React.FC<TrashSettingsDialogProps> = ({
                     )}
 
                     <div className="ts-section">
-                        <div className="ts-section-header">
+                        <div className="dialog-section-title">
                             <Database className="icon-xs" />
                             <span>{t('recycle_bin_location' as any)}</span>
                         </div>
@@ -214,7 +222,7 @@ export const TrashSettingsDialog: React.FC<TrashSettingsDialogProps> = ({
                                 <div className="col-space">{t('available_space' as any)}</div>
                             </div>
                             <div className="ts-table-body scrollbar-custom">
-                                {drives.map(drive => (
+                                {localDrives.map(drive => (
                                     <div 
                                         key={drive.path} 
                                         className={cx("ts-drive-row", { active: selectedDrivePath === drive.path })}
@@ -234,16 +242,16 @@ export const TrashSettingsDialog: React.FC<TrashSettingsDialogProps> = ({
                     </div>
 
                     <div className="ts-section">
-                        <div className="ts-section-header">
+                        <div className="dialog-section-title">
                             <Settings2 className="icon-xs" />
                             <span>{t('settings_for_selected_location' as any)}</span>
                         </div>
                         
                         <div className="ts-settings-card">
-                            <div className="ts-control-row">
+                            <div className="ts-control-row dialog-grid">
                                 <div className="ts-control-label">
-                                    <span className="ts-label-title">{t('custom_size' as any)}</span>
-                                    <span className="ts-label-desc">{t('max_capacity' as any)}</span>
+                                    <div className="dialog-label ts-label-title">{t('custom_size' as any)}</div>
+                                    <div className="dialog-value ts-label-desc">{t('max_capacity' as any)}</div>
                                 </div>
                                 <div className="ts-input-group">
                                     <input 
@@ -268,10 +276,10 @@ export const TrashSettingsDialog: React.FC<TrashSettingsDialogProps> = ({
 
                             <div className="ts-divider" />
 
-                            <div className="ts-control-row">
+                            <div className="ts-control-row dialog-grid">
                                 <div className="ts-control-label">
-                                    <span className="ts-label-title">{t('dont_move_to_trash' as any)}</span>
-                                    <span className="ts-label-desc">{t('delete_immediately_desc' as any)}</span>
+                                    <div className="dialog-label ts-label-title">{t('dont_move_to_trash' as any)}</div>
+                                    <div className="dialog-value ts-label-desc">{t('delete_immediately_desc' as any)}</div>
                                 </div>
                                 <Toggle 
                                     checked={currentConfig?.nuke_on_delete || false}
@@ -282,10 +290,8 @@ export const TrashSettingsDialog: React.FC<TrashSettingsDialogProps> = ({
                     </div>
 
                     <div className="ts-section global-options">
-                        <div className="ts-control-row">
-                            <div className="ts-control-label">
-                                <span className="ts-label-title">{t('display_delete_confirmation' as any)}</span>
-                            </div>
+                        <div className="ts-control-row dialog-grid">
+                                <div className="dialog-label ts-label-title">{t('display_delete_confirmation' as any)}</div>
                             <Toggle 
                                 checked={confirmDeleteGlobal}
                                 onChange={onUpdateGlobalConfirm}
@@ -294,13 +300,11 @@ export const TrashSettingsDialog: React.FC<TrashSettingsDialogProps> = ({
                     </div>
                 </div>
 
-                <div className="prop-footer">
-                    <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', width: '100%' }}>
+                <div className="dialog-footer">
                         <button className="btn" onClick={onClose}>{t('cancel')}</button>
                         <button className="btn primary" onClick={handleSave} disabled={isSaving || isLoading}>
                             {t('ok' as any)}
                         </button>
-                    </div>
                 </div>
             </div>
         </div>

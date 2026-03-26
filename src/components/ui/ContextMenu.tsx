@@ -152,6 +152,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = (props) => {
             onDisconnectDrive: props.onDisconnectDrive,
             onEmptyTrash: props.onEmptyTrash,
             onRestoreAll: props.onRestoreAll,
+            openMapNetworkDriveDialog,
             openDisconnectNetworkDriveDialog,
             onSelectAll: props.onSelectAll,
             onTrashProperties: props.onTrashProperties

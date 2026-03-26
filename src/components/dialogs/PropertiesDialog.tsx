@@ -125,10 +125,10 @@ export const PropertiesDialog: React.FC<PropertiesDialogProps> = ({ paths, initi
     const isDriveRoot = !!currentDrive;
 
     return (
-        <div className="properties-overlay" onClick={onClose} style={{ zIndex }}>
+        <div className="dialog-overlay" onClick={onClose} style={{ zIndex }}>
             <div
                 ref={dragRef}
-                className="properties-dialog"
+                className="dialog-window properties-dialog"
                 onClick={e => e.stopPropagation()}
                 style={{
                     transform: `translate(${position.x}px, ${position.y}px)`,
@@ -136,15 +136,15 @@ export const PropertiesDialog: React.FC<PropertiesDialogProps> = ({ paths, initi
                     pointerEvents: 'auto'
                 }}
             >
-                <div className="prop-header-bar" onMouseDown={(e) => { handleMouseDown(e); onFocus?.(); }}>
-                    <div className="prop-title">{t('properties')}</div>
-                    <button className="btn-icon" onClick={onClose}><X size={16} /></button>
+                <div className="dialog-header" onMouseDown={(e) => { handleMouseDown(e); onFocus?.(); }}>
+                    <div className="dialog-title">{t('properties')}</div>
+                    <button className="dialog-close-btn btn-icon" onClick={onClose}><X size={16} /></button>
                 </div>
 
                 {showTabs && (
-                    <div className="prop-tabs">
+                    <div className="dialog-tabs">
                         <button
-                            className={cx("prop-tab", { active: activeTab === 'general' })}
+                            className={cx("dialog-tab", { active: activeTab === 'general' })}
                             onClick={() => setActiveTab('general')}
                         >
                             <FileText size={14} />
@@ -153,7 +153,7 @@ export const PropertiesDialog: React.FC<PropertiesDialogProps> = ({ paths, initi
 
                         {isSingle && properties?.name.toLowerCase().endsWith('.lnk') && (
                             <button
-                                className={cx("prop-tab", { active: activeTab === 'shortcut' })}
+                                className={cx("dialog-tab", { active: activeTab === 'shortcut' })}
                                 onClick={() => setActiveTab('shortcut')}
                             >
                                 <Link size={14} />
@@ -163,229 +163,241 @@ export const PropertiesDialog: React.FC<PropertiesDialogProps> = ({ paths, initi
                     </div>
                 )}
 
-                <div className="prop-content">
+                <div className="dialog-content">
                     {loading ? (
-                        <div className="prop-loading">{t('loading' as any)}</div>
+                        <div className="dialog-loading">{t('loading' as any)}</div>
                     ) : (
                         <>
                             {activeTab === 'general' && (
                                 <>
-                                    <div className="prop-main-info">
-                                        <div className="prop-icon-large">
-                                            {isSingle ? getIcon(properties!.name, properties!.is_dir, properties!.path) : <Folder size={48} strokeWidth={1} />}
-                                        </div>
-                                        <div className="prop-name-input">
-                                            {isSingle ? (() => {
-                                                if (currentDrive) {
-                                                    const label = currentDrive.label || t('local_disk' as any);
-                                                    const letter = currentDrive.path.replace(/\\$/, '');
-                                                    return `${label} (${letter})`;
-                                                }
-                                                return properties!.original_path
-                                                    ? properties!.original_path.split('\\').pop() || properties!.name
-                                                    : properties!.name;
-                                            })() : `${summary!.count} items`}
-                                        </div>
-                                    </div>
-
-                                    {isSingle ? (
-                                        <div className="prop-grid">
-                                            <div className="prop-label">{t('type')}</div>
-                                            <div className="prop-value">
-                                                {properties!.is_media_device ? t('network_device' as any) : (isDriveRoot ? t('disk_drive' as any) : getFileTypeString(properties as any, t))}
+                                    <div className="dialog-grid">
+                                        <div className="dialog-main-info" style={{ gridColumn: '1 / -1' }}>
+                                            <div className="dialog-icon-large">
+                                                {isSingle ? getIcon(properties!.name, properties!.is_dir, properties!.path) : <Folder size={48} strokeWidth={1} />}
                                             </div>
+                                            <div className="dialog-name-input">
+                                                {isSingle ? (() => {
+                                                    if (currentDrive) {
+                                                        let label = currentDrive.label;
+                                                        if (currentDrive.drive_type === 'remote' && currentDrive.remote_path) {
+                                                            const parts = currentDrive.remote_path.split(/[\\/]/).filter(Boolean);
+                                                            label = parts[parts.length - 1] || currentDrive.remote_path;
+                                                        } else {
+                                                            label = label || t('local_disk' as any);
+                                                        }
+                                                        const letter = currentDrive.path.replace(/\\$/, '');
+                                                        return `${label} (${letter})`;
+                                                    }
+                                                    return properties!.original_path
+                                                        ? properties!.original_path.split('\\').pop() || properties!.name
+                                                        : properties!.name;
+                                                })() : `${summary!.count} items`}
+                                            </div>
+                                        </div>
 
-                                            {properties!.is_media_device ? (
-                                                <>
-                                                    <div className="prop-label">{t('manufacturer' as any)}</div>
-                                                    <div className="prop-value">{properties!.manufacturer || '-'}</div>
-
-                                                    <div className="prop-label">{t('model' as any)}</div>
-                                                    <div className="prop-value">{properties!.model_name || '-'}</div>
-
-                                                    <div className="prop-label">{t('model_number' as any)}</div>
-                                                    <div className="prop-value">{properties!.model_number || '-'}</div>
-
-                                                    <div className="prop-divider-row" />
-
-                                                    <div className="prop-label">{t('serial_number' as any)}</div>
-                                                    <div className="prop-value">{properties!.serial_number || '-'}</div>
-
-                                                    <div className="prop-label">{t('mac_address' as any)}</div>
-                                                    <div className="prop-value">{properties!.mac_address || '-'}</div>
-
-                                                    <div className="prop-label">{t('unique_id' as any)}</div>
-                                                    <div className="prop-value" style={{ wordBreak: 'break-all', fontSize: '0.65rem' }}>{properties!.unique_id || '-'}</div>
-
-                                                    <div className="prop-label">{t('ip_address' as any)}</div>
-                                                    <div className="prop-value">{properties!.ip_address || '-'}</div>
-
-                                                    {properties!.debug_props && properties!.debug_props.length > 0 && (
-                                                        <>
-                                                            <div className="prop-divider-row" />
-                                                            <div className="prop-label">Debug Data</div>
-                                                            <div className="prop-value" style={{ gridColumn: '1 / -1' }}>
-                                                                <textarea
-                                                                    readOnly
-                                                                    rows={5}
-                                                                    style={{ width: '100%', fontSize: '0.65rem', overflow: 'auto', backgroundColor: 'transparent', border: '1px solid var(--border-color)', color: 'var(--text-color)' }}
-                                                                    value={properties!.debug_props.join('\n')}
-                                                                />
-                                                            </div>
-                                                        </>
-                                                    )}
-                                                </>
-                                            ) : (!isDriveRoot && (
-                                                <>
-                                                    <div className="prop-label">{t('location')}</div>
-                                                    <div className="prop-value" data-tooltip={properties!.parent}>{properties!.parent}</div>
-                                                </>
-                                            ))}
-
-                                            {properties!.original_path && (
-                                                <div className="prop-label">{t('original_location')}</div>
-                                            )}
-                                            {properties!.original_path && (() => {
-                                                const parts = properties!.original_path.split('\\');
-                                                parts.pop(); // Remove filename
-                                                const dirPath = parts.join('\\');
-                                                return (
-                                                    <div className="prop-value" data-tooltip={dirPath}>
-                                                        {dirPath}
-                                                    </div>
-                                                );
-                                            })()}
-
-                                            {properties!.deleted_time && (
-                                                <div className="prop-label">{t('date_deleted')}</div>
-                                            )}
-                                            {properties!.deleted_time && (
-                                                <div className="prop-value">
-                                                    {formatDate(properties!.deleted_time, dateFormat, '-')}
+                                        {isSingle ? (
+                                            <>
+                                                <div className="dialog-label">{t('type')}</div>
+                                                <div className="dialog-value">
+                                                    {properties!.is_media_device ? t('network_device' as any) : (isDriveRoot ? t('disk_drive' as any) : getFileTypeString(properties as any, t))}
                                                 </div>
-                                            )}
 
-                                            {isDriveRoot && currentDrive && currentDrive.total_bytes !== undefined ? (
-                                                <>
-                                                    {currentDrive.drive_type === 'remote' && currentDrive.remote_path && (
-                                                        <>
-                                                            <div className="prop-label">{t('network_path' as any)}</div>
-                                                            <div className="prop-value">
-                                                                <input
-                                                                    type="text"
-                                                                    className="prop-name-input"
-                                                                    readOnly
-                                                                    value={currentDrive.remote_path}
-                                                                    style={{ height: '24px', fontSize: '0.8rem', padding: '0 8px' }}
-                                                                    onClick={(e) => (e.target as HTMLInputElement).select()}
-                                                                />
-                                                            </div>
-                                                        </>
-                                                    )}
-                                                    <div className="prop-label">{t('used_space')}</div>
-                                                    <div className="prop-value">
-                                                        {formatSize(currentDrive.total_bytes! - (currentDrive.free_bytes || 0), 1, t)}
-                                                    </div>
+                                                {properties!.is_media_device ? (
+                                                    <>
+                                                        <div className="dialog-label">{t('manufacturer' as any)}</div>
+                                                        <div className="dialog-value">{properties!.manufacturer || '-'}</div>
 
-                                                    <div className="prop-label">{t('free_space')}</div>
-                                                    <div className="prop-value">
-                                                        {formatSize(currentDrive.free_bytes || 0, 1, t)}
-                                                    </div>
+                                                        <div className="dialog-label">{t('model' as any)}</div>
+                                                        <div className="dialog-value">{properties!.model_name || '-'}</div>
 
-                                                    <div className="prop-label">{t('capacity')}</div>
-                                                    <div className="prop-value">
-                                                        {formatSize(currentDrive.total_bytes!, 1, t)}
-                                                    </div>
+                                                        <div className="dialog-label">{t('model_number' as any)}</div>
+                                                        <div className="dialog-value">{properties!.model_number || '-'}</div>
 
-                                                    <div style={{ gridColumn: '1 / -1', padding: '0.5rem 0' }}>
-                                                        <DiskUsageChart
-                                                            total={currentDrive.total_bytes!}
-                                                            free={currentDrive.free_bytes || 0}
-                                                            inline={true}
-                                                            showText={false}
-                                                            t={t}
-                                                        />
+                                                        <div className="dialog-divider-row" />
+
+                                                        <div className="dialog-label">{t('serial_number' as any)}</div>
+                                                        <div className="dialog-value">{properties!.serial_number || '-'}</div>
+
+                                                        <div className="dialog-label">{t('mac_address' as any)}</div>
+                                                        <div className="dialog-value">{properties!.mac_address || '-'}</div>
+
+                                                        <div className="dialog-label">{t('unique_id' as any)}</div>
+                                                        <div className="dialog-value" style={{ wordBreak: 'break-all', fontSize: '0.65rem' }}>{properties!.unique_id || '-'}</div>
+
+                                                        <div className="dialog-label">{t('ip_address' as any)}</div>
+                                                        <div className="dialog-value">{properties!.ip_address || '-'}</div>
+
+                                                        {properties!.debug_props && properties!.debug_props.length > 0 && (
+                                                            <>
+                                                                <div className="dialog-divider-row"
+ />
+                                                                <div className="dialog-label">Debug Data</div>
+                                                                <div className="dialog-value" style={{ gridColumn: '1 / -1' }}>
+                                                                    <textarea
+                                                                        readOnly
+                                                                        rows={5}
+                                                                        style={{ width: '100%', fontSize: '0.65rem', overflow: 'auto', backgroundColor: 'transparent', border: '1px solid var(--border-color)', color: 'var(--text-color)' }}
+                                                                        value={properties!.debug_props.join('\n')}
+                                                                    />
+                                                                </div>
+                                                            </>
+                                                        )}
+                                                    </>
+                                                ) : (!isDriveRoot && (
+                                                    <>
+                                                        <div className="dialog-label">{t('location')}</div>
+                                                        <div className="dialog-value" data-tooltip={properties!.parent}>{properties!.parent}</div>
+                                                    </>
+                                                ))}
+
+                                                {properties!.original_path && (
+                                                    <div className="dialog-label">{t('original_location')}</div>
+                                                )}
+                                                {properties!.original_path && (() => {
+                                                    const parts = properties!.original_path.split('\\');
+                                                    parts.pop(); // Remove filename
+                                                    const dirPath = parts.join('\\');
+                                                    return (
+                                                        <div className="dialog-value" data-tooltip={dirPath}>
+                                                            {dirPath}
+                                                        </div>
+                                                    );
+                                                })()}
+
+                                                {properties!.deleted_time && (
+                                                    <div className="dialog-label">{t('date_deleted')}</div>
+                                                )}
+                                                {properties!.deleted_time && (
+                                                    <div className="dialog-value">
+                                                        {formatDate(properties!.deleted_time, dateFormat, '-')}
                                                     </div>
-                                                </>
-                                            ) : (
-                                                <>
-                                                    {!properties!.is_media_device && (
-                                                        <>
-                                                            <div className="prop-label">{t('size')}</div>
-                                                            <div className="prop-value">
-                                                                {properties!.is_dir ? (
-                                                                    (localCalculated || properties!.is_calculated) ? (
-                                                                        (localCalculated?.size ?? properties!.size) === 0
-                                                                            ? t('empty_dir' as any)
-                                                                            : formatSize(localCalculated?.size ?? properties!.size, 1, t)
-                                                                    ) : (
-                                                                        calcLoading ? (
-                                                                            <span className="calc-status">{t('calculating' as any)}</span>
-                                                                        ) : (
-                                                                            <button className="prop-btn xsmall" onClick={handleCalculate}>
-                                                                                <ChartBarBig size={12} className="prop-btn-icon" /> {t('calculate_size' as any)}
-                                                                            </button>
-                                                                        )
-                                                                    )
+                                                )}
+
+                                                {/* Section spécifique aux disques */}
+                                                {isDriveRoot && currentDrive && currentDrive.total_bytes !== undefined && (
+                                                    <>
+                                                        {currentDrive.drive_type === 'remote' && currentDrive.remote_path && (
+                                                            <>
+                                                                <div className="dialog-label">{t('network_path' as any)}</div>
+                                                                <div className="dialog-value">
+                                                                    <input
+                                                                        type="text"
+                                                                        className="dialog-name-input"
+                                                                        readOnly
+                                                                        value={currentDrive.remote_path}
+                                                                        style={{ height: '24px', fontSize: '0.8rem', padding: '0 8px' }}
+                                                                        onClick={(e) => (e.target as HTMLInputElement).select()}
+                                                                    />
+                                                                </div>
+                                                            </>
+                                                        )}
+                                                        <div className="dialog-label">{t('used_space')}</div>
+                                                        <div className="dialog-value">
+                                                            {formatSize(currentDrive.total_bytes! - (currentDrive.free_bytes || 0), 1, t)}
+                                                        </div>
+
+                                                        <div className="dialog-label">{t('free_space')}</div>
+                                                        <div className="dialog-value">
+                                                            {formatSize(currentDrive.free_bytes || 0, 1, t)}
+                                                        </div>
+
+                                                        <div className="dialog-label">{t('capacity')}</div>
+                                                        <div className="dialog-value">
+                                                            {formatSize(currentDrive.total_bytes!, 1, t)}
+                                                        </div>
+
+                                                        <div className="dialog-divider-row" style={{ gridColumn: '1 / -1', margin: '0.5rem 0' }} />
+                                                        <div className="usage-chart-row" style={{ gridColumn: '1 / -1' }}>
+                                                            <DiskUsageChart
+                                                                total={currentDrive.total_bytes!}
+                                                                free={currentDrive.free_bytes || 0}
+                                                                inline={true}
+                                                                showText={false}
+                                                                t={t}
+                                                            />
+                                                        </div>
+                                                    </>
+                                                )}
+
+                                                {/* Section spécifique aux fichiers/dossiers (non disques) */}
+                                                {!isDriveRoot && !properties!.is_media_device && (
+                                                    <>
+                                                        <div className="dialog-label">{t('size')}</div>
+                                                        <div className="dialog-value">
+                                                            {properties!.is_dir ? (
+                                                                (localCalculated || properties!.is_calculated) ? (
+                                                                    (localCalculated?.size ?? properties!.size) === 0
+                                                                        ? t('empty_dir' as any)
+                                                                        : formatSize(localCalculated?.size ?? properties!.size, 1, t)
                                                                 ) : (
-                                                                    formatSize(properties!.size, 1, t)
-                                                                )}
-                                                            </div>
-
-                                                            {isSingle && properties!.is_dir && (
-                                                                <>
-                                                                    <div className="prop-label">{t('contains')}</div>
-                                                                    <div className="prop-value">
-                                                                        {showCounts ? (
-                                                                            <>{filesCount} {t(filesCount === 1 ? 'file' as any : 'files' as any)}, {foldersCount} {t(foldersCount === 1 ? 'folder' as any : 'folders' as any)}</>
-                                                                        ) : (
-                                                                            <span className="prop-text-muted">—</span>
-                                                                        )}
-                                                                    </div>
-                                                                </>
+                                                                    calcLoading ? (
+                                                                        <span className="calc-status">{t('calculating' as any)}</span>
+                                                                    ) : (
+                                                                         <button className="dialog-btn xsmall" onClick={handleCalculate}>
+                                                                            <ChartBarBig size={12} className="dialog-btn-icon" /> {t('calculate_size' as any)}
+                                                                        </button>
+                                                                    )
+                                                                )
+                                                            ) : (
+                                                                formatSize(properties!.size, 1, t)
                                                             )}
-                                                        </>
-                                                    )}
-                                                </>
-                                            )}
+                                                        </div>
 
-                                            {!properties!.is_media_device && (
-                                                <>
-                                                    <div className="prop-divider-row" />
+                                                        {properties!.is_dir && (
+                                                            <>
+                                                                <div className="dialog-label">{t('contains')}</div>
+                                                                <div className="dialog-value">
+                                                                    {showCounts ? (
+                                                                        <>{filesCount} {t(filesCount === 1 ? 'file' as any : 'files' as any)}, {foldersCount} {t(foldersCount === 1 ? 'folder' as any : 'folders' as any)}</>
+                                                                    ) : (
+                                                                        <span className="dialog-text-muted">—</span>
+                                                                    )}
+                                                                </div>
+                                                            </>
+                                                        )}
+                                                    </>
+                                                )}
 
-                                                    <div className="prop-label">{t('created')}</div>
-                                                    <div className="prop-value">{formatDate(properties!.created, dateFormat, '-')}</div>
+                                                {/* Dates (toujours affichées pour un élément unique, disque ou fichier) */}
+                                                {!properties!.is_media_device && (
+                                                    <>
+                                                        <div className="dialog-divider-row" style={{ gridColumn: '1 / -1', margin: '0.5rem 0' }} />
 
-                                                    <div className="prop-label">{t('modified')}</div>
-                                                    <div className="prop-value">{formatDate(properties!.modified, dateFormat, '-')}</div>
+                                                        <div className="dialog-label">{t('created')}</div>
+                                                        <div className="dialog-value">{formatDate(properties!.created, dateFormat, '-')}</div>
 
-                                                    <div className="prop-label">{t('accessed')}</div>
-                                                    <div className="prop-value">{formatDate(properties!.accessed, dateFormat, '-')}</div>
-                                                </>
-                                            )}
-                                        </div>
-                                    ) : (
-                                        <div className="prop-grid">
-                                            <div className="prop-label">{t('location')}</div>
-                                            <div className="prop-value">
-                                                {summary!.parent_path ? summary!.parent_path : t('multiple_locations' as any)}
-                                            </div>
+                                                        <div className="dialog-label">{t('modified')}</div>
+                                                        <div className="dialog-value">{formatDate(properties!.modified, dateFormat, '-')}</div>
 
-                                            <div className="prop-label">{t('contains')}</div>
-                                            <div className="prop-value">
-                                                {summary!.files_count} {t(summary!.files_count === 1 ? 'file' as any : 'files' as any)}, {summary!.folders_count} {t(summary!.folders_count === 1 ? 'folder' as any : 'folders' as any)}
-                                            </div>
+                                                        <div className="dialog-label">{t('accessed')}</div>
+                                                        <div className="dialog-value">{formatDate(properties!.accessed, dateFormat, '-')}</div>
+                                                    </>
+                                                )}
+                                            </>
+                                        ) : (
+                                            <>
+                                                <div className="dialog-label">{t('location')}</div>
+                                                <div className="dialog-value">
+                                                    {summary!.parent_path ? summary!.parent_path : t('multiple_locations' as any)}
+                                                </div>
 
-                                            <div className="prop-label">{t('total_size')}</div>
-                                            <div className="prop-value">{formatSize(summary!.total_size, 1, t)}</div>
-                                        </div>
-                                    )}
+                                                <div className="dialog-label">{t('contains')}</div>
+                                                <div className="dialog-value">
+                                                    {summary!.files_count} {t(summary!.files_count === 1 ? 'file' as any : 'files' as any)}, {summary!.folders_count} {t(summary!.folders_count === 1 ? 'folder' as any : 'folders' as any)}
+                                                </div>
+
+                                                <div className="dialog-label">{t('total_size')}</div>
+                                                <div className="dialog-value">{formatSize(summary!.total_size, 1, t)}</div>
+                                            </>
+                                        )}
+                                    </div>
                                 </>
                             )}
 
+
                             {activeTab === 'shortcut' && properties?.shortcut && (
-                                <div className="prop-grid">
-                                    <div className="prop-label">{t('target' as any)}</div>
+                                <div className="dialog-grid">
+                                    <div className="dialog-label">{t('target' as any)}</div>
                                     <input
                                         type="text"
                                         className="input-field"
@@ -396,7 +408,7 @@ export const PropertiesDialog: React.FC<PropertiesDialogProps> = ({ paths, initi
                                         })}
                                     />
 
-                                    <div className="prop-label">{t('arguments' as any)}</div>
+                                    <div className="dialog-label">{t('arguments' as any)}</div>
                                     <input
                                         type="text"
                                         className="input-field"
@@ -407,7 +419,7 @@ export const PropertiesDialog: React.FC<PropertiesDialogProps> = ({ paths, initi
                                         })}
                                     />
 
-                                    <div className="prop-label">{t('working_dir' as any)}</div>
+                                    <div className="dialog-label">{t('working_dir' as any)}</div>
                                     <input
                                         type="text"
                                         className="input-field"
@@ -418,7 +430,7 @@ export const PropertiesDialog: React.FC<PropertiesDialogProps> = ({ paths, initi
                                         })}
                                     />
 
-                                    <div className="prop-label">{t('description' as any)}</div>
+                                    <div className="dialog-label">{t('description' as any)}</div>
                                     <input
                                         type="text"
                                         className="input-field"
@@ -429,9 +441,9 @@ export const PropertiesDialog: React.FC<PropertiesDialogProps> = ({ paths, initi
                                         })}
                                     />
 
-                                    <div className="prop-divider-row" />
+                                    <div className="dialog-divider-row" />
 
-                                    <div className="prop-label">{t('run_window' as any)}</div>
+                                    <div className="dialog-label">{t('run_window' as any)}</div>
                                     <select
                                         className="select-field"
                                         value={properties.shortcut.run_window}
@@ -448,7 +460,7 @@ export const PropertiesDialog: React.FC<PropertiesDialogProps> = ({ paths, initi
                             )}
 
                             {activeTab === 'shortcut' && !properties?.shortcut && (
-                                <div className="prop-placeholder">
+                                <div className="dialog-placeholder">
                                     {t('shortcut_edit_hint' as any)}
                                 </div>
                             )}
@@ -456,7 +468,7 @@ export const PropertiesDialog: React.FC<PropertiesDialogProps> = ({ paths, initi
                     )}
                 </div>
 
-                <div className="prop-footer spaced">
+                <div className="dialog-footer">
                     <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                         <button className="btn" onClick={() => invoke('show_system_properties', { path: paths[0] })}>
                             {t('system_properties')}

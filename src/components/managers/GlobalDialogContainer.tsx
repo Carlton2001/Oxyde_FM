@@ -10,6 +10,7 @@ import { SearchDialog } from '../dialogs/SearchDialog';
 import { DuplicateSearchDialog } from '../dialogs/DuplicateSearchDialog';
 import { MapNetworkDriveDialog } from '../dialogs/MapNetworkDriveDialog';
 import { DisconnectNetworkDriveDialog } from '../dialogs/DisconnectNetworkDriveDialog';
+import { TrashSettingsDialog } from '../dialogs/TrashSettingsDialog';
 import { X } from 'lucide-react';
 import { openUrl } from '@tauri-apps/plugin-opener';
 
@@ -68,21 +69,21 @@ const InlineAboutDialog: React.FC<{ onClose: () => void, t: any, theme: string, 
     };
 
     return (
-        <div className="properties-overlay" onClick={onClose} onMouseDown={onFocus} style={{ zIndex }}>
+        <div className="dialog-overlay properties-overlay" onClick={onClose} onMouseDown={onFocus} style={{ zIndex }}>
             <div
                 ref={dragRef}
-                className="about-dialog"
+                className="dialog-window about-dialog"
                 onClick={(e) => e.stopPropagation()}
                 style={{
                     transform: `translate(${position.x}px, ${position.y}px)`,
                     transition: 'none'
                 }}
             >
-                <div className="about-header" onMouseDown={(e) => { handleMouseDown(e); onFocus?.(); }}>
-                    <span className="about-title">{t('about')}</span>
-                    <button className="btn-icon" onClick={onClose}><X size={16} /></button>
+                <div className="dialog-header about-header" onMouseDown={(e) => { handleMouseDown(e); onFocus?.(); }}>
+                    <span className="dialog-title about-title">{t('about')}</span>
+                    <button className="dialog-close-btn btn-icon" onClick={onClose}><X size={16} /></button>
                 </div>
-                <div className="about-content">
+                <div className="dialog-content about-content">
                     <div className="about-logo">
                         <img src="/logo.svg" alt="Oxyde Logo" className="about-logo-img" />
                     </div>
@@ -153,7 +154,7 @@ const InlineAboutDialog: React.FC<{ onClose: () => void, t: any, theme: string, 
                         </div>
                     </div>
                 </div>
-                <div className="about-footer">
+                <div className="dialog-footer about-footer">
                     <button className="btn primary" onClick={onClose}>OK</button>
                 </div>
             </div>
@@ -163,7 +164,7 @@ const InlineAboutDialog: React.FC<{ onClose: () => void, t: any, theme: string, 
 
 export const GlobalDialogContainer: React.FC = () => {
     const { dialogs, closeDialog, focusDialog } = useDialogs();
-    const { t, theme } = useApp();
+    const { t, theme, drives, confirmDelete, setConfirmDelete, isTrashEmpty, refreshDriveTrashConfigs } = useApp();
 
     if (dialogs.length === 0) return null;
 
@@ -314,6 +315,23 @@ export const GlobalDialogContainer: React.FC = () => {
                                 key={id}
                                 t={t}
                                 onClose={() => handleClose()}
+                                zIndex={zIndex}
+                                onFocus={handleFocus}
+                            />
+                        );
+                        
+                    case 'trashSettings':
+                        return (
+                            <TrashSettingsDialog
+                                key={id}
+                                isOpen={true}
+                                onClose={() => handleClose()}
+                                t={t as any}
+                                drives={drives}
+                                confirmDeleteGlobal={confirmDelete}
+                                onUpdateGlobalConfirm={setConfirmDelete}
+                                isTrashEmpty={isTrashEmpty}
+                                refreshConfigs={refreshDriveTrashConfigs}
                                 zIndex={zIndex}
                                 onFocus={handleFocus}
                             />

@@ -49,27 +49,27 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
     };
 
     return (
-        <div className="modal-overlay" onClick={onClose} style={{ zIndex }}>
+        <div className="dialog-overlay" onClick={onClose} style={{ zIndex }}>
             <div
                 ref={dragRef}
-                className="modal"
+                className="dialog-window mini-dialog confirm-dialog"
                 onClick={(e) => e.stopPropagation()}
                 style={{
                     transform: `translate(${position.x}px, ${position.y}px)`,
                     transition: 'none'
                 }}
             >
-                <div className="modal-header" onMouseDown={(e) => { handleMouseDown(e); onFocus?.(); }}>
-                    <div className="modal-title">
-                        {isDanger && <AlertTriangle size={14} color="#ef4444" />}
+                <div className="dialog-header" onMouseDown={(e) => { handleMouseDown(e); onFocus?.(); }}>
+                    <div className="dialog-title">
+                        {isDanger && <AlertTriangle size={14} className="icon-danger" />}
                         <span>{title}</span>
                     </div>
-                    <button className="btn-icon" onClick={onClose} style={{ marginLeft: '0.5rem' }}>
+                    <button className="dialog-close-btn btn-icon" onClick={onClose}>
                         <X size={16} />
                     </button>
                 </div>
                 {(sources || destination) && (
-                    <div className="progress-details" style={{ padding: '0.75rem 1rem', background: 'var(--surface-secondary)', borderBottom: '1px solid var(--border-color)' }}>
+                    <div className="progress-details">
                         {sources && sources.length > 0 && (
                             <div>{t('source_dir' as any)}: {renderSources()}</div>
                         )}
@@ -78,15 +78,15 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
                         )}
                     </div>
                 )}
-
+                
                 {(message || subMessage) && (
-                    <div className="modal-content" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.875rem' }}>
-                        {message && <p style={{ margin: 0, fontWeight: 500, lineHeight: 1.4 }}>{message}</p>}
-                        {subMessage && <p style={{ margin: 0, fontSize: '0.8125rem', color: 'var(--text-muted)', lineHeight: 1.4 }}>{subMessage}</p>}
+                    <div className="dialog-content">
+                        {message && <p className="dialog-message">{message}</p>}
+                        {subMessage && <p className="dialog-sub-message">{subMessage}</p>}
                     </div>
                 )}
 
-                <div className="modal-footer">
+                <div className="dialog-footer">
                     <button className="btn secondary" onClick={onClose}>
                         {t('cancel')}
                     </button>

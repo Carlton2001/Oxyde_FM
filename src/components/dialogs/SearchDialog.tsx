@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { X, Search, Folder, Target, ChevronDown, Regex, Code, ExternalLink, Check } from 'lucide-react';
+import cx from 'classnames';
 import { useDraggable } from '../../hooks/useDraggable';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { SearchOptions } from '../../types';
@@ -100,37 +101,40 @@ export const SearchDialog: React.FC<SearchDialogProps> = ({
     };
 
     return (
-        <div className="modal-overlay" style={{ background: 'transparent', pointerEvents: 'none', zIndex }}>
+        <div className="dialog-overlay no-center" style={{ background: 'transparent', pointerEvents: 'none', zIndex }}>
             <div
                 ref={dragRef}
-                className="modal search-dialog"
+                className="dialog-window search-dialog"
                 onClick={(e) => e.stopPropagation()}
                 style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
                     transform: `translate(${position.x}px, ${position.y}px)`,
                     transition: 'none',
                     pointerEvents: 'auto'
                 }}
             >
-                <div className="modal-header" onMouseDown={(e) => { handleMouseDown(e); onFocus?.(); }}>
-                    <div className="modal-title">
+                <div className="dialog-header" onMouseDown={(e) => { handleMouseDown(e); onFocus?.(); }}>
+                    <div className="dialog-title">
                         <Search size={16} />
                         <span>{t('search') || 'Advanced Search'}</span>
                     </div>
-                    <button className="btn-icon" onClick={onClose}>
+                    <button className="dialog-close-btn btn-icon" onClick={onClose}>
                         <X size={16} />
                     </button>
                 </div>
 
-                <div className="search-tabs">
+                <div className="dialog-tabs search-tabs">
                     <button
-                        className={`search-tab ${activeTab === 'general' ? 'active' : ''}`}
+                        className={cx("dialog-tab search-tab", { active: activeTab === 'general' })}
                         onClick={() => setActiveTab('general')}
                     >
                         <Target size={14} />
                         {t('settings') || 'Settings'}
                     </button>
                     <button
-                        className={`search-tab ${activeTab === 'help' ? 'active' : ''}`}
+                        className={cx("dialog-tab search-tab", { active: activeTab === 'help' })}
                         onClick={() => setActiveTab('help')}
                     >
                         <Regex size={14} />
@@ -138,7 +142,10 @@ export const SearchDialog: React.FC<SearchDialogProps> = ({
                     </button>
                 </div>
 
-                <form className="prop-content search-form overflow-visible" onSubmit={handleExecuteSearch}>
+                <form 
+                    className={cx("dialog-content search-form overflow-visible", { "no-padding": activeTab === 'help' })} 
+                    onSubmit={handleExecuteSearch}
+                >
                     {activeTab === 'general' ? (
                         <div className="search-tab-content">
                             <div className="input-group">
@@ -181,7 +188,7 @@ export const SearchDialog: React.FC<SearchDialogProps> = ({
                             <div className="input-group" style={{ marginTop: '-0.5rem', marginBottom: '0.5rem' }}>
                                 <label></label>
                                 <div className="checkbox-row">
-                                    <label className="prop-checkbox">
+                                    <label className="dialog-checkbox">
                                         <input
                                             type="checkbox"
                                             checked={isRecursive}
@@ -193,7 +200,7 @@ export const SearchDialog: React.FC<SearchDialogProps> = ({
                                         <span>{t('search_subfolders')}</span>
                                     </label>
 
-                                    <label className="prop-checkbox">
+                                    <label className="dialog-checkbox">
                                         <input
                                             type="checkbox"
                                             checked={searchInArchives}
@@ -299,7 +306,7 @@ export const SearchDialog: React.FC<SearchDialogProps> = ({
                             <div className="input-group">
                                 <label>{t('global_options')}</label>
                                 <div className="checkbox-row">
-                                    <label className="prop-checkbox">
+                                    <label className="dialog-checkbox">
                                         <input
                                             type="checkbox"
                                             checked={isCaseSensitive}
@@ -311,7 +318,7 @@ export const SearchDialog: React.FC<SearchDialogProps> = ({
                                         <span>{t('case_sensitive')}</span>
                                     </label>
 
-                                    <label className="prop-checkbox">
+                                    <label className="dialog-checkbox">
                                         <input
                                             type="checkbox"
                                             checked={ignoreAccents}
@@ -374,7 +381,7 @@ export const SearchDialog: React.FC<SearchDialogProps> = ({
                     )}
                 </form>
 
-                <div className="modal-footer" style={{ justifyContent: 'space-between' }}>
+                <div className="dialog-footer" style={{ justifyContent: 'space-between' }}>
                     <div className="footer-left">
                         <button className="btn secondary" onClick={handleReset}>
                             {t('reset') || 'Reset'}

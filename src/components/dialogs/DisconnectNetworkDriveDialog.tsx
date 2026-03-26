@@ -77,10 +77,10 @@ export const DisconnectNetworkDriveDialog: React.FC<DisconnectNetworkDriveDialog
     };
 
     return (
-        <div className="properties-overlay" style={{ zIndex }}>
+        <div className="dialog-overlay" style={{ zIndex }}>
             <div
                 ref={dragRef}
-                className="properties-dialog"
+                className="dialog-window"
                 onClick={(e) => e.stopPropagation()}
                 style={{
                     transform: `translate(${position.x}px, ${position.y}px)`,
@@ -89,23 +89,23 @@ export const DisconnectNetworkDriveDialog: React.FC<DisconnectNetworkDriveDialog
                     height: '460px'
                 }}
             >
-                <div className="prop-header-bar" onMouseDown={(e) => { handleMouseDown(e); onFocus?.(); }}>
-                    <div className="prop-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <div className="dialog-header" onMouseDown={(e) => { handleMouseDown(e); onFocus?.(); }}>
+                    <div className="dialog-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                         <ServerOff size={14} />
                         {t('disconnect_network_drive' as any)}
                     </div>
-                    <button className="btn-icon" onClick={onClose} style={{ marginLeft: 'auto' }}>
+                    <button className="dialog-close-btn btn-icon" onClick={onClose} style={{ marginLeft: 'auto' }}>
                         <X size={14} />
                     </button>
                 </div>
 
-                <div className="prop-content" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem', flex: 1, minHeight: 0 }}>
+                <div className="dialog-content" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem', flex: 1, minHeight: 0 }}>
                     <p style={{ margin: 0, fontSize: '0.8125rem', opacity: 0.8 }}>
                         {t('disconnect_network_drive_desc' as any)}
                     </p>
 
                     <div className="network-drives-container" style={{ flex: 1, minHeight: 0, border: '1px solid var(--border-color)', borderRadius: '0.5rem', background: 'var(--surface-primary)', display: 'flex', flexDirection: 'column' }}>
-                        <div className="duplicate-group-files" style={{ padding: '0.75rem', overflowY: 'auto', flex: 1 }}>
+                        <div className="dialog-pill-list" style={{ padding: '0.75rem', overflowY: 'auto', flex: 1 }}>
                             {loading ? (
                                 <div style={{ padding: '3rem', textAlign: 'center', opacity: 0.5 }}><Loader2 className="animate-spin" /></div>
                             ) : drives.length === 0 ? (
@@ -118,25 +118,25 @@ export const DisconnectNetworkDriveDialog: React.FC<DisconnectNetworkDriveDialog
                                     return (
                                         <div
                                             key={d.path}
-                                            className={cx("duplicate-file-item", { selected: isSelected })}
+                                            className={cx("dialog-pill", { selected: isSelected })}
                                             onClick={() => toggleSelection(d.path)}
                                         >
-                                            <div className="prop-checkbox" style={{ pointerEvents: 'none' }}>
+                                            <div className="dialog-checkbox" style={{ pointerEvents: 'none' }}>
                                                 <input type="checkbox" checked={isSelected} readOnly />
                                                 <div className="checkbox-visual">
                                                     {isSelected && <Check size={10} strokeWidth={3} />}
                                                 </div>
                                             </div>
 
-                                            <div className="duplicate-file-icon-wrapper" style={{ color: isSelected ? 'var(--accent-color)' : 'var(--text-muted)' }}>
+                                            <div className="dialog-pill-icon" style={{ color: isSelected ? 'var(--accent-color)' : 'var(--text-muted)' }}>
                                                 <HardDrive size={18} strokeWidth={1.5} />
                                             </div>
 
-                                            <div className="duplicate-file-path-container">
-                                                <div className="duplicate-file-name" style={{ fontSize: '0.8125rem', fontWeight: isSelected ? 600 : 500 }}>
+                                            <div className="dialog-pill-info">
+                                                <div className="dialog-pill-title">
                                                     {d.path}
                                                 </div>
-                                                <div className="duplicate-file-dir" style={{ opacity: isSelected ? 0.8 : 0.6 }}>
+                                                <div className="dialog-pill-subtitle" style={{ opacity: isSelected ? 0.8 : 0.6 }}>
                                                     {d.remote_path || d.label}
                                                 </div>
                                             </div>
@@ -148,8 +148,7 @@ export const DisconnectNetworkDriveDialog: React.FC<DisconnectNetworkDriveDialog
                     </div>
                 </div>
 
-                <div className="prop-footer spaced">
-                    <div />
+                <div className="dialog-footer">
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
                         <button className="btn" onClick={onClose} disabled={disconnectLoading}>
                             {t('cancel')}
