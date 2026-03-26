@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { X, Search, Folder, Copy, Loader2, HardDrive, Usb, Disc, ChevronRight, ChevronDown, Check } from 'lucide-react';
+import { X, Search, Folder, Copy, Loader2, HardDrive, Usb, Disc, ChevronRight, ChevronDown, Check, Database, Settings2 } from 'lucide-react';
 import { useDraggable } from '../../hooks/useDraggable';
 import { useResizable } from '../../hooks/useResizable';
 import { invoke } from '@tauri-apps/api/core';
@@ -207,82 +207,77 @@ export const DuplicateSearchDialog: React.FC<DuplicateSearchDialogProps> = ({
                         {/* Locations Section */}
                         <div className="sidebar-section">
                             <div className="sidebar-title">
-                                <Folder size={14} />
-                                {t('locations') || 'Locations'}
+                                <Database size={14} />
+                                {t('locations') || 'Emplacements'}
                             </div>
 
-                            <div className="vertical-list-group">
-                                {allDrives.map(drive => {
-                                    const isSelected = selectedSearchPaths.includes(drive.path);
-                                    return (
-                                        <button
-                                            key={drive.path}
-                                            type="button"
-                                            className={cx("drive-button", {
-                                                selected: isSelected,
-                                                searching: isSearchingDuplicates
-                                            })}
+                            <div className="drive-table">
+                                <div className="drive-table-header">
+                                    <div className="col-name">{t('location') || 'Emplacement'}</div>
+                                    <div className="col-space">{t('available_space') || 'Espace'}</div>
+                                </div>
+                                <div className="drive-table-body scrollbar-custom">
+                                    {allDrives.map(drive => {
+                                        const isSelected = selectedSearchPaths.includes(drive.path);
+                                        return (
+                                            <div
+                                                key={drive.path}
+                                                className={cx("drive-row", {
+                                                    active: isSelected,
+                                                    searching: isSearchingDuplicates
+                                                })}
+                                                onClick={() => {
+                                                    if (isSelected) {
+                                                        setSelectedSearchPaths(prev => prev.filter(p => p !== drive.path));
+                                                    } else {
+                                                        setSelectedSearchPaths(prev => [...prev, drive.path]);
+                                                    }
+                                                }}
+                                            >
+                                                <div className="col-name">
+                                                    {getFileIcon(drive.label, true, { size: 14 }, useSystemIcons, drive.path)}
+                                                    <span className="drive-label-text">
+                                                        {drive.label.replace(/#Disk\s\d+/g, '').replace(/#\d+/g, '').trim()} ({drive.path.replace(/[\\/]$/, '')})
+                                                    </span>
+                                                    <div className="drive-tags">
+                                                        {drive.media_type && (
+                                                            <span className={cx("drive-badge", { ssd: drive.media_type.includes('SSD') })}>
+                                                                {drive.media_type.includes('SSD') ? 'SSD' : drive.media_type}
+                                                                {drive.physical_id !== undefined && ` #${drive.physical_id.toString().replace(/Disk\s*/i, '')}`}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                <div className="col-space">
+                                                    {formatSize(drive.free_bytes || 0, 1, t)}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+
+                                    {initialRoot && !allDrives.some(d => d.path === initialRoot) && !initialRoot.startsWith('oxyde://') && !initialRoot.startsWith('trash://') && (
+                                        <div
+                                            className={cx("drive-row", { active: selectedSearchPaths.includes(initialRoot), searching: isSearchingDuplicates })}
                                             onClick={() => {
-                                                if (isSelected) {
-                                                    setSelectedSearchPaths(prev => prev.filter(p => p !== drive.path));
+                                                if (selectedSearchPaths.includes(initialRoot)) {
+                                                    setSelectedSearchPaths(prev => prev.filter(p => p !== initialRoot));
                                                 } else {
-                                                    setSelectedSearchPaths(prev => [...prev, drive.path]);
+                                                    setSelectedSearchPaths(prev => [...prev, initialRoot]);
                                                 }
                                             }}
                                         >
-                                            <div className="drive-info-row">
-                                                <div className="drive-icon-wrapper">
-                                                    {drive.drive_type === 'removable' ? <Usb size={16} /> :
-                                                        drive.drive_type === 'cdrom' ? <Disc size={16} /> :
-                                                            <HardDrive size={16} />}
-                                                </div>
+                                            <div className="col-name">
+                                                {getFileIcon('current', true, { size: 14 }, useSystemIcons, initialRoot)}
                                                 <span className="drive-label-text">
-                                                    {drive.label.replace(/#Disk\s\d+/g, '').replace(/#\d+/g, '').trim()} ({drive.path.replace(/[\\/]$/, '')})
+                                                    {t('current_folder')} ({initialRoot})
                                                 </span>
                                             </div>
-                                            <div className="drive-meta-row">
-                                                {drive.media_type && (
-                                                    <span className={cx("drive-badge", { ssd: drive.media_type.includes('SSD') })}>
-                                                        {drive.media_type}
-                                                    </span>
-                                                )}
-                                                {drive.physical_id !== undefined && (
-                                                    <span className="drive-badge">
-                                                        Disk #{drive.physical_id.toString().replace(/Disk\s*/i, '')}
-                                                    </span>
-                                                )}
+                                            <div className="col-space">
+                                                -
                                             </div>
-                                        </button>
-                                    );
-                                })}
-
-                                {initialRoot && !allDrives.some(d => d.path === initialRoot) && !initialRoot.startsWith('oxyde://') && !initialRoot.startsWith('trash://') && (
-                                    <button
-                                        type="button"
-                                        className={cx("drive-button", { selected: selectedSearchPaths.includes(initialRoot), searching: isSearchingDuplicates })}
-                                        onClick={() => {
-                                            if (selectedSearchPaths.includes(initialRoot)) {
-                                                setSelectedSearchPaths(prev => prev.filter(p => p !== initialRoot));
-                                            } else {
-                                                setSelectedSearchPaths(prev => [...prev, initialRoot]);
-                                            }
-                                        }}
-                                    >
-                                        <div className="drive-info-row">
-                                            <div className="drive-icon-wrapper">
-                                                {getFileIcon('current', true, { size: 16 }, useSystemIcons, initialRoot)}
-                                            </div>
-                                            <span className="drive-label-text">
-                                                {t('current_folder')}
-                                            </span>
                                         </div>
-                                        <div className="drive-meta-row">
-                                            <span className="current-folder-path" data-tooltip={initialRoot}>
-                                                {initialRoot}
-                                            </span>
-                                        </div>
-                                    </button>
-                                )}
+                                    )}
+                                </div>
                             </div>
 
                             {selectedSearchPaths.length > 1 && (
@@ -297,7 +292,8 @@ export const DuplicateSearchDialog: React.FC<DuplicateSearchDialogProps> = ({
                         {/* Options Section */}
                         <div className="sidebar-section">
                             <div className="sidebar-title">
-                                {t('scan_options')}
+                                <Settings2 size={14} />
+                                {t('scan_options') || 'Options d\'analyse'}
                             </div>
                             <div className="checkbox-list">
                                 <label className="prop-checkbox">
