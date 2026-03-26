@@ -204,7 +204,7 @@ export const DuplicateSearchDialog: React.FC<DuplicateSearchDialogProps> = ({
                         <div className="sidebar-section">
                             <div className="sidebar-title">
                                 <Folder size={14} />
-                                {t('search_locations') || 'Search Locations'}
+                                {t('locations') || 'Locations'}
                             </div>
 
                             <div className="vertical-list-group">

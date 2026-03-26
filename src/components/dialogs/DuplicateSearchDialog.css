@@ -23,6 +23,12 @@
     box-shadow: 0 10px 40px rgba(0,0,0,0.3);
     background: var(--bg-color);
     overflow: hidden;
+    font-family: 'Inter', system-ui, sans-serif;
+}
+
+.duplicate-search-dialog button,
+.duplicate-search-dialog input {
+    font-family: inherit;
 }
 
 .duplicate-search-dialog .duplicate-search-content {
@@ -129,6 +135,7 @@
     text-align: left;
     overflow: hidden;
     text-overflow: ellipsis;
+    font-size: 0.8125rem;
 }
 
 .duplicate-search-dialog .drive-meta-row {
@@ -157,12 +164,11 @@
 }
 
 .duplicate-search-dialog .current-folder-path {
-    font-size: 0.65rem;
+    font-size: 0.8125rem;
     color: var(--text-muted);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 12rem;
-    white-space: nowrap;
+    word-break: break-all;
+    line-height: 1.4;
+    display: block;
 }
 
 .duplicate-search-dialog .location-warning {
