@@ -68,6 +68,11 @@ body {
   user-select: none;
 }
 
+input, select, textarea, button {
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
 body.resizing {
   cursor: col-resize !important;
 }

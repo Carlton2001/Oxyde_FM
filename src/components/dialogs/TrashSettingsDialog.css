@@ -40,7 +40,7 @@
 }
 
 .ts-usage-count {
-    font-size: 0.75rem;
+    font-size: 0.8125rem;
     color: var(--text-muted);
 }
 
@@ -52,7 +52,7 @@
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    font-size: 0.75rem;
+    font-size: 0.8125rem;
     font-weight: 700;
     text-transform: uppercase;
     color: var(--text-muted);
@@ -115,7 +115,7 @@
 .ts-drive-row .col-space {
     width: 6rem;
     text-align: right;
-    font-size: 0.75rem;
+    font-size: 0.8125rem;
     opacity: 0.8;
 }
 
@@ -143,13 +143,13 @@
 }
 
 .ts-label-title {
-    font-size: 0.875rem;
+    font-size: 0.8125rem;
     font-weight: 500;
     color: var(--text-color);
 }
 
 .ts-label-desc {
-    font-size: 0.75rem;
+    font-size: 0.8125rem;
     color: var(--text-muted);
 }
 

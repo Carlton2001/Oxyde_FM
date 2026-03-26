@@ -386,7 +386,7 @@ export const SearchDialog: React.FC<SearchDialogProps> = ({
                         </button>
                         <button className="btn primary" onClick={() => handleExecuteSearch()}>
                             <Search size={14} />
-                            {t('start_search') || 'Start Search'}
+                            {t('search') || 'Rechercher'}
                         </button>
                     </div>
                 </div>

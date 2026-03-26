@@ -43,6 +43,7 @@
     min-width: 260px;
     width: auto;
     max-width: 350px;
+    background: var(--bg-color);
     border-right: 1px solid var(--border-color);
     padding: 0.8rem;
     display: flex;
@@ -151,8 +152,16 @@
     width: 100%;
 }
 
+.duplicate-search-dialog .file-path {
+    font-size: 0.8125rem;
+    color: var(--text-muted);
+    opacity: 0.8;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
 .duplicate-search-dialog .drive-path-text {
-    font-size: 0.75rem;
+    font-size: 0.8125rem;
     color: var(--text-muted);
     opacity: 0.8;
     overflow: hidden;
@@ -175,6 +184,7 @@
     color: var(--text-muted);
     font-weight: 500;
     text-transform: uppercase;
+    font-variant-numeric: tabular-nums;
 }
 
 .duplicate-search-dialog .drive-badge.ssd {
@@ -183,7 +193,7 @@
 }
 
 .duplicate-search-dialog .location-warning {
-    font-size: 0.75rem;
+    font-size: 0.8125rem;
     color: #d97706;
     background: #fffbeb;
     padding: 0.75rem;
@@ -235,7 +245,7 @@
 }
 
 .duplicate-search-dialog .results-stats {
-    font-size: 0.825rem;
+    font-size: 0.8125rem;
     color: var(--text-secondary);
     white-space: nowrap;
     padding-left: 1rem;
@@ -243,6 +253,11 @@
     flex-direction: column;
     align-items: flex-end;
     gap: 0.1rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.duplicate-search-dialog .group-size {
+    font-variant-numeric: tabular-nums;
 }
 
 .duplicate-search-dialog .results-stats-primary {
@@ -251,7 +266,7 @@
 }
 
 .duplicate-search-dialog .results-stats-secondary {
-    font-size: 0.75rem;
+    font-size: 0.8125rem;
     opacity: 0.8;
 }
 
@@ -443,7 +458,7 @@
 }
 
 .duplicate-search-dialog .file-name {
-    font-size: 0.825rem;
+    font-size: 0.8125rem;
     font-weight: 500;
     color: var(--text-color);
     overflow: hidden;

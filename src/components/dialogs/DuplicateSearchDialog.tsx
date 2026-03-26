@@ -347,19 +347,19 @@ export const DuplicateSearchDialog: React.FC<DuplicateSearchDialogProps> = ({
                                 <>
                                     <button
                                         type="button"
+                                        className="btn secondary"
+                                        onClick={onClose}
+                                    >
+                                        {t('cancel') || 'Annuler'}
+                                    </button>
+                                    <button
+                                        type="button"
                                         className="btn primary"
                                         onClick={handleFindDuplicates}
                                         disabled={selectedSearchPaths.length === 0}
                                     >
                                         <Search size={14} />
                                         {t('search') || 'Rechercher'}
-                                    </button>
-                                    <button
-                                        type="button"
-                                        className="btn secondary"
-                                        onClick={onClose}
-                                    >
-                                        {t('cancel') || 'Annuler'}
                                     </button>
                                 </>
                             ) : (
