@@ -475,36 +475,97 @@ export const useAppHandlers = ({
             e.preventDefault();
             e.stopPropagation();
         }
+
         setActivePanelId(id);
         const panel = id === 'left' ? left : right;
 
-        if (entry) {
-            if (!panel.selected.has(entry.path)) {
-                panel.handleSelect(entry.path, false, false);
+        // Determine if this was likely a keyboard-triggered event (null e, 0,0 or no detail)
+        const isProbablyKeyboard = !e || (e.clientX <= 2 && e.clientY <= 2) || (e.nativeEvent && (e.nativeEvent as any).detail === 0);
+
+        // If from keyboard and no entry provided, try to find the actual DOM-focused item FIRST
+        let effectiveEntry = entry;
+        if (!effectiveEntry && isProbablyKeyboard) {
+            // Priority 1: Check if there's an element in the TARGET panel that has .keyboard-focused
+            const focusedEl = document.querySelector(`.panel[data-panel-id="${id}"] .keyboard-focused`);
+            if (focusedEl) {
+                const path = focusedEl.getAttribute('data-path');
+                if (path) {
+                    effectiveEntry = panel.files.find((f: FileEntry) => f.path === path) || 
+                                     panel.searchResults?.find((f: FileEntry) => f.path === path);
+                }
             }
+            
+            // Priority 2: Use current selection if no DOM element was found but selection exists
+            if (!effectiveEntry && panel.selected.size > 0) {
+                const firstPath = Array.from(panel.selected)[0];
+                effectiveEntry = panel.files.find((f: FileEntry) => f.path === firstPath) || 
+                                 panel.searchResults?.find((f: FileEntry) => f.path === firstPath);
+            }
+        }
+
+        if (effectiveEntry) {
+            if (!panel.selected.has(effectiveEntry.path)) {
+                panel.handleSelect(effectiveEntry.path, false, false);
+            }
+
+            // Use provided coordinates OR find focused element OR center
+            let x = (e && e.clientX > 2) ? e.clientX : 0;
+            let y = (e && e.clientY > 2) ? e.clientY : 0;
+
+            if (x === 0 || y === 0) {
+                // Try searching for the element in the target panel
+                // We use stable data-panel-id and try focus class first, then data-path
+                let element = document.querySelector(`.panel[data-panel-id="${id}"] .keyboard-focused`);
+                
+                if (!element) {
+                    // Fallback to path-based search if the class is missing or not yet in DOM
+                    const entryPathLower = effectiveEntry.path.toLowerCase().replace(/[\\/]+$/, '').replace(/^(file:\/\/\/|file:\/\/)/, '');
+                    const allItems = Array.from(document.querySelectorAll(`.panel[data-panel-id="${id}"] .file-item[data-path]`));
+                    element = allItems.find(el => {
+                        const p = el.getAttribute('data-path')?.toLowerCase().replace(/[\\/]+$/, '').replace(/^(file:\/\/\/|file:\/\/)/, '');
+                        return p === entryPathLower;
+                    }) as HTMLElement || null;
+                }
+
+                if (element) {
+                    const rect = element.getBoundingClientRect();
+                    x = Math.round(rect.left + rect.width / 2);
+                    y = Math.round(rect.top + rect.height / 2);
+                } else {
+                    // Final recourse: center of the panel
+                    const panelEl = document.querySelector(`.panel[data-panel-id="${id}"]`);
+                    if (panelEl) {
+                        const rect = panelEl.getBoundingClientRect();
+                        x = Math.round(rect.left + rect.width / 2);
+                        y = Math.round(rect.top + rect.height / 2);
+                    } else {
+                        x = Math.round(window.innerWidth / 2);
+                        y = Math.round(window.innerHeight / 2);
+                    }
+                }
+            }
+
             setContextMenu({
-                x: e ? e.clientX : (window.innerWidth / 2),
-                y: e ? e.clientY : (window.innerHeight / 2),
-                target: entry.path,
+                x,
+                y,
+                target: effectiveEntry.path,
                 panelId: id,
-                isDir: entry.is_dir,
+                isDir: effectiveEntry.is_dir,
                 isBackground: false,
                 isTrash: panel.path?.startsWith('trash://'),
-                isDrive: (entry as any).isDrive,
-                driveType: (entry as any).driveType,
-                isMediaDevice: entry.is_media_device,
-                isNetworkComputer: (entry.path.startsWith('\\\\') && entry.path.split('\\').filter(Boolean).length === 1) && !entry.is_media_device,
-                hasWebPage: entry.has_web_page,
-                isFavorite: entry.is_dir ? favorites.some(f => {
+                isDrive: (effectiveEntry as any).isDrive,
+                driveType: (effectiveEntry as any).driveType,
+                isMediaDevice: effectiveEntry.is_media_device,
+                isNetworkComputer: (effectiveEntry.path.startsWith('\\\\') && effectiveEntry.path.split('\\').filter(Boolean).length === 1) && !effectiveEntry.is_media_device,
+                hasWebPage: effectiveEntry.has_web_page,
+                isFavorite: effectiveEntry.is_dir ? favorites.some(f => {
                     const fp = f.path.replace(/[\\/]+$/, '').toLowerCase();
-                    const ep = entry.path.replace(/[\\/]+$/, '').toLowerCase();
+                    const ep = effectiveEntry!.path.replace(/[\\/]+$/, '').toLowerCase();
                     return fp === ep;
                 }) : false
             });
         } else {
             const isTrash = panel.path?.startsWith('trash://');
-
-            // Background context menu - check if we are at the root of a drive
             const path = panel.path;
             const isDriveRoot = /^[a-zA-Z]:[\\/]?$/.test(path);
             let driveType: DriveInfo['drive_type'] | undefined;
@@ -520,9 +581,12 @@ export const useAppHandlers = ({
                 }
             }
 
+            const x = (e && e.clientX > 2) ? Math.round(e.clientX) : Math.round(window.innerWidth / 2);
+            const y = (e && e.clientY > 2) ? Math.round(e.clientY) : Math.round(window.innerHeight / 2);
+
             setContextMenu({
-                x: e ? e.clientX : (window.innerWidth / 2),
-                y: e ? e.clientY : (window.innerHeight / 2),
+                x,
+                y,
                 target: path,
                 panelId: id,
                 isDir: true,

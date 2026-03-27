@@ -533,9 +533,9 @@ export const CONTEXT_MENU_ACTION: ActionDefinition = {
             const fileEntry = activePanel.files.find(f => f.path === targetPath) || activePanel.searchResults?.find(f => f.path === targetPath);
 
             // Try to find the element and its position
-            // Escape backslashes for querySelector
-            const escapedPath = targetPath.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-            const element = document.querySelector(`.panel.active [data-path="${escapedPath}"]`);
+            // Prefer the current keyboard-focused indicator for maximum accuracy
+            const element = document.querySelector('.panel.active .keyboard-focused') || 
+                          document.querySelector(`.panel.active [data-path="${targetPath.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"]`);
 
             if (element) {
                 const rect = element.getBoundingClientRect();

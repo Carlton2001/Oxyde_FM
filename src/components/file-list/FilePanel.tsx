@@ -530,6 +530,7 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
         <div
             ref={panelRef}
             className={cx("panel", layout, { active: isActive, 'drag-over': isDragTarget })}
+            data-panel-id={panelId}
             onClick={() => onActivate()}
             onMouseMove={(e) => {
                 if (panelRef.current) {
@@ -707,6 +708,8 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
                         updateCurrentScroll={updateCurrentScroll}
                         isProtected={isProtected}
                         activeFilters={activeFilters}
+                        currentPath={currentPath}
+                        onNavigate={onNavigate}
                     />
                 </div>
             </div>

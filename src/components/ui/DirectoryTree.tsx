@@ -452,6 +452,107 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
         });
     }, [loadPathContent]);
 
+    const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+        if (!visibleNodes.length) return;
+
+        const currentIndex = visibleNodes.findIndex(vn => vn.node.path.toLowerCase() === currentPath.toLowerCase());
+
+        const isNavigable = (index: number) => {
+            if (index < 0 || index >= visibleNodes.length) return false;
+            const vn = visibleNodes[index];
+            if (vn.node.isSpacer || vn.node.isFavorite || vn.node.isTrash || vn.node.isNetworkRoot || vn.node.isNetwork) return false;
+            return true;
+        };
+
+        if (!isNavigable(currentIndex)) return;
+
+        switch (e.key) {
+            case 'ArrowDown':
+                e.preventDefault();
+                if (isNavigable(currentIndex + 1)) {
+                    onNavigate(visibleNodes[currentIndex + 1].node.path);
+                }
+                break;
+            case 'ArrowUp':
+                e.preventDefault();
+                if (isNavigable(currentIndex - 1)) {
+                    onNavigate(visibleNodes[currentIndex - 1].node.path);
+                }
+                break;
+            case 'ArrowRight':
+                e.preventDefault();
+                if (currentIndex !== -1) {
+                    const node = visibleNodes[currentIndex].node;
+                    if (node.hasSubdirs && !expandedPaths.has(node.path.toLowerCase())) {
+                        toggleExpand(e as any, node);
+                    } else if (expandedPaths.has(node.path.toLowerCase())) {
+                        if (isNavigable(currentIndex + 1)) {
+                            onNavigate(visibleNodes[currentIndex + 1].node.path);
+                        }
+                    }
+                }
+                break;
+            case 'ArrowLeft':
+                e.preventDefault();
+                if (currentIndex !== -1) {
+                    const node = visibleNodes[currentIndex].node;
+                    if (expandedPaths.has(node.path.toLowerCase())) {
+                        toggleExpand(e as any, node);
+                    } else {
+                        const parentPath = getParent(node.path);
+                        if (parentPath) onNavigate(parentPath);
+                    }
+                }
+                break;
+            case 'Enter':
+                e.preventDefault();
+                if (currentIndex !== -1) {
+                    onNavigate(visibleNodes[currentIndex].node.path);
+                }
+                break;
+            case 'ContextMenu':
+            case 'Apps':
+                e.preventDefault();
+                e.stopPropagation();
+                if (currentIndex !== -1) {
+                    const node = visibleNodes[currentIndex].node;
+                    const element = Array.from((e.currentTarget as HTMLElement).querySelectorAll('.tree-node-content'))
+                        .find(el => el.getAttribute('data-path') === node.path);
+                    
+                    if (element) {
+                        const rect = element.getBoundingClientRect();
+                        handleContextMenu({
+                            clientX: rect.left + rect.width / 2,
+                            clientY: rect.top + rect.height / 2,
+                            preventDefault: () => { },
+                            stopPropagation: () => { }
+                        } as any, node);
+                    } else {
+                        // Fallback: try finding any active/selected item
+                        const anyActive = (e.currentTarget as HTMLElement).querySelector('.tree-node-content.active');
+                        if (anyActive) {
+                            const rect = anyActive.getBoundingClientRect();
+                            handleContextMenu({
+                                clientX: rect.left + rect.width / 2,
+                                clientY: rect.top + rect.height / 2,
+                                preventDefault: () => { },
+                                stopPropagation: () => { }
+                            } as any, node);
+                        } else {
+                            const panelRect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                            handleContextMenu({
+                                clientX: panelRect.left + panelRect.width / 2,
+                                clientY: panelRect.top + panelRect.height / 2,
+                                preventDefault: () => { },
+                                stopPropagation: () => { }
+                            } as any, node);
+                        }
+                    }
+                }
+                break;
+        }
+    }, [visibleNodes, currentPath, expandedPaths, toggleExpand, onNavigate]);
+
     const handleContextMenu = (e: React.MouseEvent, node: TreeNode) => {
         e.preventDefault();
         e.stopPropagation();
@@ -709,7 +810,12 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
     if (minimized) return null;
 
     return (
-        <div className={cx("directory-tree", { "is-loading": isExpanding })}>
+        <div 
+            className={cx("directory-tree", { "is-loading": isExpanding })}
+            onKeyDown={handleKeyDown}
+            tabIndex={0}
+            style={{ outline: 'none' }}
+        >
             <AutoSizer renderProp={({ height, width }: any) => {
                 if (height === undefined || width === undefined) return null;
                 return (

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useImperativeHandle, useCallback } from 'react';
-import { List, Grid, RowComponentProps, CellComponentProps } from 'react-window';
+import { List, Grid } from 'react-window';
 import { AutoSizer } from 'react-virtualized-auto-sizer';
 import cx from 'classnames';
 import { Check, Loader2, ChevronDown, ChevronRight, Ban, X, Search } from 'lucide-react';
@@ -12,6 +12,7 @@ import { RenameInput } from './RenameInput';
 import { getFileTypeString } from '../../utils/format';
 import { getColumnMode, getVisibleColumns } from '../../config/columnDefinitions';
 import { getDateCategoryForFile, DATE_CATEGORIES, DateCategoryKey } from './DateFilterMenu';
+import { getParent } from '../../utils/path';
 
 // --- Error Boundary for the virtualized list ---
 class ErrorBoundary extends React.Component<{ children: React.ReactNode; fallback: React.ReactNode }, { hasError: boolean }> {
@@ -62,6 +63,8 @@ interface VirtualizedFileListProps {
     updateCurrentScroll?: (offset: number) => void;
     isProtected?: boolean;
     activeFilters?: ActiveFilters;
+    currentPath?: string;
+    onNavigate?: (path: string) => void;
 }
 
 export interface VirtualizedFileListHandle {
@@ -100,6 +103,8 @@ interface SharedItemProps {
     isNetworkView?: boolean;
     activeFilters?: ActiveFilters;
     showCheckboxes: boolean;
+    currentIndex: number;
+    index?: number;
 }
 
 export interface ActiveFilters {
@@ -144,7 +149,8 @@ const DetailsRowContent = React.memo(({ entry, style, sharedProps }: { entry: Fi
     const { isSelected, isRenaming, handlers, itemClassName, tooltipText } = useFileItemState({
         ...sharedProps,
         entry,
-        showCheckboxes
+        showCheckboxes,
+        isFocused: sharedProps.currentIndex === sharedProps.index // Using index passed from List
     });
 
     const isDragOver = sharedProps.dragOverPath === entry.path;
@@ -204,11 +210,11 @@ const DetailsRowContent = React.memo(({ entry, style, sharedProps }: { entry: Fi
     );
 });
 
-const DetailsRow = React.memo((props: RowComponentProps<SharedItemProps>) => {
+const DetailsRow = React.memo((props: any) => {
     const { index, style, entries } = props;
     const entry = entries[index];
     if (!entry) return null;
-    return <DetailsRowContent entry={entry} style={style} sharedProps={props} />;
+    return <DetailsRowContent entry={entry} style={style} sharedProps={{ ...props, index }} />;
 });
 
 // --- Grid Cell sub-component for hook safety ---
@@ -218,7 +224,8 @@ const GridCellContent = React.memo(({ entry, style, sharedProps }: { entry: File
     const { isSelected, isRenaming, handlers, itemClassName, tooltipText } = useFileItemState({
         ...sharedProps,
         entry,
-        showCheckboxes
+        showCheckboxes,
+        isFocused: sharedProps.currentIndex === sharedProps.index // Using index passed from Grid
     });
 
     const isDragOver = sharedProps.dragOverPath === entry.path;
@@ -277,12 +284,12 @@ const GridCellContent = React.memo(({ entry, style, sharedProps }: { entry: File
     );
 });
 
-const GridCell = React.memo((props: CellComponentProps<SharedItemProps>) => {
+const GridCell = React.memo((props: any) => {
     const { columnIndex, rowIndex, style, entries, columnCount = 1 } = props;
     const index = rowIndex * columnCount + columnIndex;
     const entry = entries[index];
     if (!entry) return null;
-    return <GridCellContent entry={entry} style={style} sharedProps={props} />;
+    return <GridCellContent entry={entry} style={style} sharedProps={{ ...props, index }} />;
 });
 
 // --- Grouped Details Row Components ---
@@ -381,7 +388,8 @@ const GroupedFileRow = React.memo(({ entry, style, sharedProps }: { entry: FileE
     const { isSelected, isRenaming, handlers, itemClassName, tooltipText } = useFileItemState({
         ...sharedProps,
         entry,
-        showCheckboxes
+        showCheckboxes,
+        isFocused: sharedProps.currentIndex === (sharedProps as any).index
     });
 
     const isDragOver = sharedProps.dragOverPath === entry.path;
@@ -441,7 +449,7 @@ const GroupedFileRow = React.memo(({ entry, style, sharedProps }: { entry: FileE
     );
 });
 
-const GroupedDetailsRow = React.memo((props: RowComponentProps<GroupedSharedProps>) => {
+const GroupedDetailsRow = React.memo((props: any) => {
     const { index, style, groupedItems, collapsedGroups, onToggleGroup, t, activeFilters } = props;
 
     const item = groupedItems[index];
@@ -468,12 +476,14 @@ const GroupedDetailsRow = React.memo((props: RowComponentProps<GroupedSharedProp
     }
 
     // File item 
-    return <GroupedFileRow entry={item.entry} style={style} sharedProps={props} />;
+    // For grouped items, we need to find the actual file index in the 'entries' array to compare with currentIndex
+    const fileIndex = props.entries.indexOf(item.entry);
+    return <GroupedFileRow entry={item.entry} style={style} sharedProps={{ ...props, index: fileIndex }} />;
 });
 
 
 
-const GroupedGridRowComponent = React.memo((props: RowComponentProps<GroupedGridSharedProps>) => {
+const GroupedGridRowComponent = React.memo((props: any) => {
     const { index, style, groupedGridItems, collapsedGroups, onToggleGroup, t, activeFilters, columnCount, columnWidth, gridGap, gridRowHeight } = props;
 
     const item = groupedGridItems[index];
@@ -507,9 +517,10 @@ const GroupedGridRowComponent = React.memo((props: RowComponentProps<GroupedGrid
             gridTemplateColumns: `repeat(${columnCount}, ${columnWidth}px)`,
             gap: `${gridGap}px`,
         }}>
-            {item.entries.map(entry => (
-                <GroupedGridItem key={entry.path} entry={entry} sharedProps={props} gridRowHeight={gridRowHeight} />
-            ))}
+            {item.entries.map((entry: FileEntry) => {
+                const fileIndex = props.entries.indexOf(entry);
+                return <GroupedGridItem key={entry.path} entry={entry} sharedProps={{ ...props, index: fileIndex }} gridRowHeight={gridRowHeight} />;
+            })}
         </div>
     );
 });
@@ -520,7 +531,8 @@ const GroupedGridItem = React.memo<{ entry: FileEntry; sharedProps: SharedItemPr
     const { isSelected, isRenaming, handlers, itemClassName, tooltipText } = useFileItemState({
         ...sharedProps,
         entry,
-        showCheckboxes
+        showCheckboxes,
+        isFocused: sharedProps.currentIndex === (sharedProps as any).index
     });
 
     const isDragOver = sharedProps.dragOverPath === entry.path;
@@ -570,16 +582,6 @@ const GroupedGridItem = React.memo<{ entry: FileEntry; sharedProps: SharedItemPr
     );
 });
 
-interface GroupedGridSharedProps extends SharedItemProps {
-    groupedGridItems: GroupedGridRowItem[];
-    collapsedGroups: Set<DateCategoryKey>;
-    onToggleGroup: (category: DateCategoryKey) => void;
-    columnCount: number;
-    columnWidth: number;
-    gridGap: number;
-    gridRowHeight: number;
-}
-
 // --- Main Component ---
 export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, VirtualizedFileListProps>((props, ref) => {
     const {
@@ -594,10 +596,103 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
         groupByDate = false,
         initialScrollOffset = 0, updateCurrentScroll,
         isProtected = false,
-        activeFilters
+        activeFilters,
+        currentPath, onNavigate
     } = props;
 
     const { dateFormat, showCheckboxes } = useApp();
+    const columnCountRef = useRef(1);
+
+    const currentIndex = useMemo(() => {
+        if (selected.size === 0) return -1;
+        // Search in the original files array or searchResults if present
+        return files.findIndex(f => selected.has(f.path));
+    }, [files, selected]);
+
+    const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+        if (!files.length || renamingPath) return;
+
+        const selectIndex = (index: number) => {
+            const entry = files[index];
+            if (entry) {
+                onItemClick(entry, {
+                    ctrlKey: false,
+                    shiftKey: false,
+                    button: 0,
+                    preventDefault: () => { },
+                    stopPropagation: () => { }
+                } as any);
+            }
+        };
+
+        const colCount = viewMode === 'grid' ? columnCountRef.current : 1;
+
+        switch (e.key) {
+            case 'ArrowDown':
+                e.preventDefault();
+                if (currentIndex === -1) selectIndex(0);
+                else if (currentIndex + colCount < files.length) selectIndex(currentIndex + colCount);
+                break;
+            case 'ArrowUp':
+                e.preventDefault();
+                if (currentIndex === -1) selectIndex(files.length - 1);
+                else if (currentIndex - colCount >= 0) selectIndex(currentIndex - colCount);
+                break;
+            case 'ArrowRight':
+                if (viewMode === 'grid') {
+                    e.preventDefault();
+                    if (currentIndex < files.length - 1) selectIndex(currentIndex + 1);
+                }
+                break;
+            case 'ArrowLeft':
+                if (viewMode === 'grid') {
+                    e.preventDefault();
+                    if (currentIndex > 0) selectIndex(currentIndex - 1);
+                }
+                break;
+            case 'Enter':
+                e.preventDefault();
+                if (currentIndex !== -1) {
+                    const focusedEntry = files[currentIndex];
+                    if (focusedEntry) onItemDoubleClick(focusedEntry);
+                }
+                break;
+            case 'Backspace':
+                e.preventDefault();
+                if (currentPath && onNavigate) {
+                    const parentPath = getParent(currentPath);
+                    if (parentPath) onNavigate(parentPath);
+                }
+                break;
+            case 'ContextMenu':
+            case 'Apps':
+                e.preventDefault();
+                e.stopPropagation();
+                if ((e as any).nativeEvent) {
+                    (e as any).nativeEvent.stopPropagation();
+                    (e as any).nativeEvent.stopImmediatePropagation();
+                }
+                // On Windows/WebView2, pressing ContextMenu key fires a 'contextmenu' DOM event
+                // with the MOUSE CURSOR coordinates (not 0,0). FilePanel catches it and overwrites
+                // the correct position. Block it at document capture level before it reaches anything.
+                {
+                    const blockContextMenu = (ev: Event) => {
+                        ev.preventDefault();
+                        ev.stopPropagation();
+                        ev.stopImmediatePropagation();
+                        document.removeEventListener('contextmenu', blockContextMenu, true);
+                    };
+                    document.addEventListener('contextmenu', blockContextMenu, true);
+                }
+                if (currentIndex !== -1) {
+                    const entry = files[currentIndex];
+                    if (entry) {
+                        onItemContextMenu(entry, null as any);
+                    }
+                }
+                break;
+        }
+    }, [files, selected, currentIndex, renamingPath, viewMode, onItemClick, onItemDoubleClick, onItemContextMenu, currentPath, onNavigate]);
     const [rootFontSize, setRootFontSize] = useState(16);
 
     useEffect(() => {
@@ -759,7 +854,7 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
         onRenameTextChange, onRenameCommit, onRenameCancel, getIcon,
         totalItemsSize, showHistogram, isTrashView, onItemMiddleClick,
         dateFormat, diffPaths, viewMode, rootFontSize, isNetworkView, activeFilters,
-        showCheckboxes
+        showCheckboxes, currentIndex
     };
 
     const groupedSharedProps: GroupedSharedProps = {
@@ -772,13 +867,15 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
 
     return (
         <div
+            onKeyDown={handleKeyDown}
+            tabIndex={0}
+            style={{ width: '100%', height: '100%', overflowX: 'auto', overflowY: 'hidden', outline: 'none' }}
             className={cx("virtualized-list", {
                 "details": !isGrid,
                 "grid": isGrid,
                 "search-mode": !!searchResults,
                 "trash-mode": isTrashView
             })}
-            style={{ width: '100%', height: '100%', overflowX: 'auto', overflowY: 'hidden' }}
         >
             <AutoSizer renderProp={({ height, width }: { height: number | undefined; width: number | undefined }) => {
                 if (!height || !width) return null;
@@ -817,6 +914,7 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
                                 const minColumnWidth = rootFontSize * 6.0;
                                 const horizontalPadding = rootFontSize * 2.5;
                                 const columnCount = Math.max(1, Math.floor((width - horizontalPadding) / (minColumnWidth + gridGap)));
+                                columnCountRef.current = columnCount;
                                 const columnWidth = (width - horizontalPadding - (columnCount - 1) * gridGap) / columnCount;
 
                                 // Flatten data into rows
@@ -850,12 +948,14 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
                                 };
 
                                 return (
+                                    // @ts-ignore
                                     <List
                                         key={`grid-grouped-${rootFontSize}-${columnCount}`}
                                         className="virtualized-scroller grid"
                                         rowCount={items.length}
                                         rowHeight={getGridRowHeight}
                                         rowComponent={GroupedGridRowComponent as any}
+                                        // @ts-ignore
                                         rowProps={{ 
                                             ...sharedProps, 
                                             groupedGridItems: items, 
@@ -876,12 +976,14 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
                             if (!isGrid && (groupByDate || hasActiveFilters) && groupedDetailItems.length > 0) {
                                 const finalWidth = Math.max(width, totalColumnWidth);
                                 return (
+                                    // @ts-ignore
                                     <List
                                         key={`list-grouped-${rootFontSize}`}
                                         className="virtualized-scroller details"
                                         rowCount={groupedDetailItems.length}
                                         rowHeight={getGroupedRowHeight}
                                         rowComponent={GroupedDetailsRow as any}
+                                        // @ts-ignore
                                         rowProps={groupedSharedProps}
                                         listRef={listRef}
                                         style={{ height, width: finalWidth, overflowY: 'auto', overflowX: 'hidden' }}
@@ -894,6 +996,7 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
                                 const minColumnWidth = rootFontSize * 6.0;
                                 const horizontalPadding = rootFontSize * 2.5;
                                 const columnCount = Math.max(1, Math.floor((width - horizontalPadding) / (minColumnWidth + gridGap)));
+                                columnCountRef.current = columnCount;
                                 const columnWidth = (width - horizontalPadding - (columnCount - 1) * gridGap) / columnCount;
 
                                 const filtersHeight = hasActiveFilters ? (rootFontSize * 2.35) : 0;
@@ -904,6 +1007,7 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
                                                 <FiltersRow activeFilters={activeFilters} t={t} style={{ position: 'relative', zIndex: 20, marginBottom: '0.5rem' }} />
                                             </div>
                                         )}
+                                        {/* @ts-ignore */}
                                         <Grid
                                             key={`grid-${columnCount}-${rootFontSize}`}
                                             className="virtualized-scroller grid"
@@ -912,6 +1016,7 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
                                             rowCount={Math.ceil(files.length / columnCount)}
                                             rowHeight={gridRowHeightBase + gridGap}
                                             cellComponent={GridCell as any}
+                                            // @ts-ignore
                                             cellProps={{ ...sharedProps, columnCount }}
                                             gridRef={gridRef}
                                             style={{ height: height - filtersHeight, width, overflowY: 'auto', overflowX: 'hidden' }}
@@ -923,12 +1028,14 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
 
                             const finalWidth = Math.max(width, totalColumnWidth);
                             return (
+                                // @ts-ignore
                                 <List
                                     key={`list-${rootFontSize}`}
                                     className="virtualized-scroller details"
                                     rowCount={files.length}
                                     rowHeight={listRowHeight}
                                     rowComponent={DetailsRow as any}
+                                    // @ts-ignore
                                     rowProps={sharedProps}
                                     listRef={listRef}
                                     style={{ height, width: finalWidth, overflowY: 'auto', overflowX: 'hidden' }}

@@ -18,9 +18,9 @@ export const useGlobalShortcuts = (context: ActionContext, tabs: any[], activeTa
 
     useEffect(() => {
         const handleKeyDown = async (e: KeyboardEvent) => {
-            // Ignore if input/textarea is focused
+            // Ignore if input/textarea is focused or if default was already prevented
             const target = e.target as HTMLElement;
-            if (target.matches('input, textarea, [contenteditable="true"]')) {
+            if (e.defaultPrevented || target.matches('input, textarea, [contenteditable="true"]')) {
                 return;
             }
 
@@ -107,7 +107,7 @@ export const useGlobalShortcuts = (context: ActionContext, tabs: any[], activeTa
             }
         };
 
-        window.addEventListener('keydown', handleKeyDown, true);
-        return () => window.removeEventListener('keydown', handleKeyDown, true);
+        window.addEventListener('keydown', handleKeyDown, false);
+        return () => window.removeEventListener('keydown', handleKeyDown, false);
     }, [getActionId, handleTabSwitch]); // handleTabSwitch is typically stable
 };

@@ -406,8 +406,19 @@ export const ContextMenuView: React.FC<ContextMenuViewProps> = ({ items, x, y, o
                 onClose();
             }
         };
+        const handleKeys = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                e.stopPropagation();
+                onClose();
+            }
+        };
         document.addEventListener('mousedown', handleDown, true);
-        return () => document.removeEventListener('mousedown', handleDown, true);
+        document.addEventListener('keydown', handleKeys, true);
+        return () => {
+            document.removeEventListener('mousedown', handleDown, true);
+            document.removeEventListener('keydown', handleKeys, true);
+        };
     }, [onClose]);
 
     return createPortal(

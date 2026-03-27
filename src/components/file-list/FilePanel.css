@@ -468,6 +468,10 @@
     color: var(--text-color);
 }
 
+.panel.active .file-item.keyboard-focused:not(.selected) {
+    background-color: color-mix(in srgb, var(--accent-color), transparent 92%);
+    box-shadow: inset 3px 0 0 0 color-mix(in srgb, var(--accent-color), transparent 50%);
+}
 
 .panel:not(.active) .file-item.selected {
     background-color: color-mix(in srgb, var(--accent-color), transparent 94%);

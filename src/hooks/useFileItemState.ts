@@ -29,6 +29,7 @@ interface UseFileItemStateProps {
     onFileDragStart: (entry: FileEntry) => void;
     onItemMiddleClick?: (entry: FileEntry) => void;
     showCheckboxes: boolean;
+    isFocused?: boolean;
 }
 
 export interface FileItemState {
@@ -56,7 +57,7 @@ export function useFileItemState(props: UseFileItemStateProps): FileItemState {
         isDragging, dragOverPath, cutPathsSet, diffPaths,
         isTrashView, dateFormat, t,
         onItemClick, onItemDoubleClick, onItemContextMenu,
-        onFileDragStart, onItemMiddleClick
+        onFileDragStart, onItemMiddleClick, isFocused
     } = props;
 
     const isSelected = selected.has(entry.path) || pendingSelection.has(entry.path);
@@ -81,6 +82,7 @@ export function useFileItemState(props: UseFileItemStateProps): FileItemState {
     const itemClassName = useMemo(() => {
         const parts: string[] = ['file-item'];
         if (isSelected) parts.push('selected');
+        if (isFocused) parts.push('keyboard-focused');
         if (entry.is_hidden) parts.push('hidden');
         if (entry.is_system) parts.push('system-file');
         if (isDropTarget) parts.push('drop-target');
@@ -89,7 +91,7 @@ export function useFileItemState(props: UseFileItemStateProps): FileItemState {
         if (isDiff) parts.push('diff');
         if (isProtected) parts.push('protected');
         return parts.join(' ');
-    }, [isSelected, entry.is_hidden, entry.is_system, isDropTarget, isCut, isRenaming, isDiff, isProtected]);
+    }, [isSelected, isFocused, entry.is_hidden, entry.is_system, isDropTarget, isCut, isRenaming, isDiff, isProtected]);
 
     const handlers = useMemo(() => ({
         onClick: (e: React.MouseEvent) => onItemClick(entry, e),
