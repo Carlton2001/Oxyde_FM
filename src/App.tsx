@@ -140,7 +140,7 @@ function App() {
     // Signal that the app is ready and should be shown
     const timer = setTimeout(() => {
       invoke('app_ready').catch(console.error);
-    }, 150); // Small delay to ensure styles and fonts are well applied
+    }, 50); // Minimal delay to ensure styles and fonts are well applied
     return () => clearTimeout(timer);
   }, []);
 

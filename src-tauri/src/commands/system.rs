@@ -766,27 +766,83 @@ pub fn execute_native_menu_item(window: tauri::Window, path: String, id: i32, is
 pub async fn get_mounted_images() -> Result<Vec<String>, CommandError> {
     #[cfg(target_os = "windows")]
     {
-        use std::process::Command;
-        use std::os::windows::process::CommandExt;
-
-        let script = "Get-Volume | Get-DiskImage -ErrorAction SilentlyContinue | Select-Object -ExpandProperty ImagePath";
-
-        let output = Command::new("powershell")
-            .arg("-NoProfile")
-            .arg("-Command")
-            .arg(script)
-            .creation_flags(0x08000000)
-            .output()
-            .map_err(|e| CommandError::SystemError(e.to_string()))?;
-
-        let res = String::from_utf8_lossy(&output.stdout);
+        use windows::core::{BSTR, HSTRING};
+        use windows::Win32::System::Variant::VARIANT;
         let mut paths = Vec::new();
-        for line in res.lines() {
-            let path = line.trim();
-            if !path.is_empty() {
-                paths.push(path.to_string());
+
+        unsafe {
+            use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED};
+            use windows::Win32::System::Variant::VariantClear;
+            use windows::Win32::System::Wmi::{IWbemLocator, WbemLocator, WBEM_FLAG_FORWARD_ONLY, WBEM_FLAG_RETURN_IMMEDIATELY, WBEM_GENERIC_FLAG_TYPE};
+
+            // 1. Initialize COM
+            let hr = CoInitializeEx(None, COINIT_MULTITHREADED);
+            if hr.is_err() {
+                if hr.0 as u32 != 0x80010106 { // RPC_E_CHANGED_MODE
+                    return Err(CommandError::SystemError(format!("COM Init failed: 0x{:08x}", hr.0)));
+                }
             }
+
+            // 2. Create WbemLocator
+            let locator: IWbemLocator = match CoCreateInstance(&WbemLocator, None, CLSCTX_INPROC_SERVER) {
+                Ok(l) => l,
+                Err(e) => {
+                    CoUninitialize();
+                    return Err(CommandError::SystemError(format!("WbemLocator creation failed: {}", e)));
+                }
+            };
+
+            // 3. Connect to the server
+            let ns = BSTR::from("root\\Microsoft\\Windows\\Storage");
+            let services = match locator.ConnectServer(&ns, &BSTR::default(), &BSTR::default(), &BSTR::default(), 0, &BSTR::default(), None) {
+                Ok(s) => s,
+                Err(e) => {
+                    CoUninitialize();
+                    return Err(CommandError::SystemError(format!("ConnectServer failed: {}", e)));
+                }
+            };
+
+            // 4. Exec Query
+            let query_lang = BSTR::from("WQL");
+            let query = BSTR::from("SELECT ImagePath FROM MSFT_DiskImage");
+            let flags = WBEM_GENERIC_FLAG_TYPE(WBEM_FLAG_FORWARD_ONLY.0 | WBEM_FLAG_RETURN_IMMEDIATELY.0);
+            let enumerator = match services.ExecQuery(&query_lang, &query, flags, None) {
+                Ok(e) => e,
+                Err(e) => {
+                    CoUninitialize();
+                    return Err(CommandError::SystemError(format!("ExecQuery failed: {}", e)));
+                }
+            };
+
+            // 5. Enumerate
+            loop {
+                use windows::Win32::System::Wmi::IWbemClassObject;
+                let mut obj: [Option<IWbemClassObject>; 1] = [None];
+                let mut returned = 0u32;
+                
+                let _ = enumerator.Next(-1, &mut obj, &mut returned);
+                if returned == 0 { break; }
+
+                if let Some(obj) = &obj[0] {
+                    let mut variant = VARIANT::default();
+                    let prop_name = HSTRING::from("ImagePath");
+                    if obj.Get(windows::core::PCWSTR(prop_name.as_ptr()), 0, &mut variant, None, None).is_ok() {
+                        use windows::Win32::System::Variant::VT_BSTR;
+                        if variant.Anonymous.Anonymous.vt == VT_BSTR {
+                            let bstr_ptr = &variant.Anonymous.Anonymous.Anonymous.bstrVal;
+                            let path_str = bstr_ptr.to_string();
+                            if !path_str.is_empty() {
+                                paths.push(path_str);
+                            }
+                        }
+                        let _ = VariantClear(&mut variant);
+                    }
+                }
+            }
+
+            CoUninitialize();
         }
+
         Ok(paths)
     }
     #[cfg(not(target_os = "windows"))]

@@ -232,8 +232,8 @@ export const useFiles = (panelId: PanelId, path: string, sortConfig: SortConfig,
                     flush();
                     setIsComplete(true);
                 } else if (!timeout) {
-                    // Increased from 150ms to 200ms for smoother UI
-                    timeout = setTimeout(flush, 200);
+                    // Reduced from 200ms to 80ms for quicker feedback
+                    timeout = setTimeout(flush, 80);
                 }
             }
         });

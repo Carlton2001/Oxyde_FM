@@ -83,6 +83,7 @@ features = [
     "Win32_System_IO",
     "Win32_Globalization",
     "Win32_NetworkManagement_WNet",
+    "Win32_System_Wmi",
 ]
 
 
