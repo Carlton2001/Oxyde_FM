@@ -1,0 +1,3 @@
+src/components/layout/DualPanelLayout.tsx(219,5): error TS6133: 'dragOverPathApp' is declared but its value is never read.
+src/components/ui/context-menu/definitions.tsx(6,37): error TS6133: 'PinOff' is declared but its value is never read.
+src/components/ui/DirectoryTree.tsx(782,56): error TS2339: Property 'isQuickAccessShortcut' does not exist on type '{ x: number; y: number; path: string; name: string; isExpanded: boolean; isDrive?: boolean | undefined; driveType?: "fixed" | "removable" | "remote" | "cdrom" | "unknown" | undefined; isReadOnly?: boolean | undefined; isFavorite?: boolean | undefined; isNetworkComputer?: boolean | undefined; isTrash?: boolean | unde...'.

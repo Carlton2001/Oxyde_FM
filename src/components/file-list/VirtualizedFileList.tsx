@@ -4,7 +4,7 @@ import { AutoSizer } from 'react-virtualized-auto-sizer';
 import cx from 'classnames';
 import { Check, Loader2, ChevronDown, ChevronRight, Ban, X, Search } from 'lucide-react';
 
-import { FileEntry, ViewMode, ColumnWidths, DateFormat } from '../../types';
+import { FileEntry, ViewMode, ColumnWidths, DateFormat, SIZE_CATEGORIES } from '../../types';
 import { TFunc } from '../../i18n';
 import { useApp } from '../../context/AppContext';
 import { useFileItemState } from '../../hooks/useFileItemState';
@@ -12,7 +12,6 @@ import { RenameInput } from './RenameInput';
 import { getFileTypeString } from '../../utils/format';
 import { getColumnMode, getVisibleColumns } from '../../config/columnDefinitions';
 import { getDateCategoryForFile, DATE_CATEGORIES, DateCategoryKey } from './DateFilterMenu';
-import { SIZE_CATEGORIES } from './SizeFilterMenu';
 
 // --- Error Boundary for the virtualized list ---
 class ErrorBoundary extends React.Component<{ children: React.ReactNode; fallback: React.ReactNode }, { hasError: boolean }> {

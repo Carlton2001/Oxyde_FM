@@ -293,7 +293,15 @@ export const PathBar: React.FC<PathBarProps> = ({ path, onNavigate, className, i
                 const drivePath = part.endsWith(":") ? part + "\\" : part;
                 const drive = drives.find(d => d.path.toUpperCase().startsWith(drivePath.toUpperCase()));
                 if (drive && drive.label) {
-                    name = `${drive.label} (${name})`;
+                    let label = drive.label;
+                    if (label === 'Local Disk' && t) {
+                        label = t('local_disk');
+                    } else if (label === 'Removable Disk' && t) {
+                        label = t('removable_disk');
+                    } else if (label === 'CD Drive' && t) {
+                        label = t('cd_drive');
+                    }
+                    name = `${label} (${name})`;
                 }
             }
 

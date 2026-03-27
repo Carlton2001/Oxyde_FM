@@ -3,7 +3,7 @@ import { Sidebar } from '../layout/Sidebar';
 import { FilePanel } from '../file-list/FilePanel';
 import { TopBar } from '../layout/TopBar';
 import cx from 'classnames';
-import { PanelState, DriveInfo, FileEntry, SortField, ColumnWidths, ViewMode } from '../../types';
+import { PanelState, DriveInfo, FileEntry, SortField, ColumnWidths, ViewMode, SizeCategoryKey } from '../../types';
 import { Tabs } from '../ui/Tabs';
 import { TFunc } from '../../i18n';
 import { useApp } from '../../context/AppContext';
@@ -17,6 +17,20 @@ interface FullPanelState extends PanelState {
     updateCurrentScroll?: (offset: number) => void;
     setGroupByDate: (val: boolean) => void;
     isProtected: boolean;
+    // Filters
+    extensionFilter: Set<string> | null;
+    setExtensionFilter: (val: Set<string> | null | ((prev: Set<string> | null) => Set<string> | null)) => void;
+    sizeFilter: Set<SizeCategoryKey> | null;
+    setSizeFilter: (val: Set<SizeCategoryKey> | null | ((prev: Set<SizeCategoryKey> | null) => Set<SizeCategoryKey> | null)) => void;
+    dateFilter: Set<string> | null;
+    setDateFilter: (val: Set<string> | null | ((prev: Set<string> | null) => Set<string> | null)) => void;
+    nameFilter: string | null;
+    setNameFilter: (val: string | null) => void;
+    locationFilter: string | null;
+    setLocationFilter: (val: string | null) => void;
+    deletedDateFilter: Set<string> | null;
+    setDeletedDateFilter: (val: Set<string> | null | ((prev: Set<string> | null) => Set<string> | null)) => void;
+    clearAllFilters: () => void;
 }
 
 interface DualPanelLayoutProps {
@@ -202,7 +216,6 @@ export const DualPanelLayout: React.FC<DualPanelLayoutProps> = ({
     onRemoveFromFavorites,
     onDuplicateSearch,
     setDragOverPath,
-    dragOverPathApp,
     onTrashProperties,
     dragOverPath,
     isTrashEmpty
@@ -473,6 +486,19 @@ export const DualPanelLayout: React.FC<DualPanelLayoutProps> = ({
                             groupByDate={left.groupByDate}
                             onGroupByDateChange={leftHandlers.onGroupByDateChange}
                             isProtected={left.isProtected}
+                            extensionFilter={left.extensionFilter}
+                            setExtensionFilter={left.setExtensionFilter}
+                            sizeFilter={left.sizeFilter}
+                            setSizeFilter={left.setSizeFilter}
+                            dateFilter={left.dateFilter}
+                            setDateFilter={left.setDateFilter}
+                            nameFilter={left.nameFilter}
+                            setNameFilter={left.setNameFilter}
+                            locationFilter={left.locationFilter}
+                            setLocationFilter={left.setLocationFilter}
+                            deletedDateFilter={left.deletedDateFilter}
+                            setDeletedDateFilter={left.setDeletedDateFilter}
+                            clearAllFilters={left.clearAllFilters}
                         />
 
                         {layout === 'dual' && (
@@ -529,6 +555,19 @@ export const DualPanelLayout: React.FC<DualPanelLayoutProps> = ({
                                 groupByDate={right.groupByDate}
                                 onGroupByDateChange={rightHandlers.onGroupByDateChange}
                                 isProtected={right.isProtected}
+                                extensionFilter={right.extensionFilter}
+                                setExtensionFilter={right.setExtensionFilter}
+                                sizeFilter={right.sizeFilter}
+                                setSizeFilter={right.setSizeFilter}
+                                dateFilter={right.dateFilter}
+                                setDateFilter={right.setDateFilter}
+                                nameFilter={right.nameFilter}
+                                setNameFilter={right.setNameFilter}
+                                locationFilter={right.locationFilter}
+                                setLocationFilter={right.setLocationFilter}
+                                deletedDateFilter={right.deletedDateFilter}
+                                setDeletedDateFilter={right.setDeletedDateFilter}
+                                clearAllFilters={right.clearAllFilters}
                             />
                         )}
                     </div>

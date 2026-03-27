@@ -24,6 +24,17 @@ export type FileEntry = {
     drive_label?: string;
 };
 
+export const SIZE_CATEGORIES = {
+    empty: { min: 0, max: 0, key: 'size_empty' },
+    tiny: { min: 1, max: 10 * 1024, key: 'size_tiny' },             // 1 B to 10 KB
+    small: { min: 10 * 1024 + 1, max: 1024 * 1024, key: 'size_small' }, // 10 KB to 1 MB
+    medium: { min: 1024 * 1024 + 1, max: 100 * 1024 * 1024, key: 'size_medium' }, // 1 MB to 100 MB
+    large: { min: 100 * 1024 * 1024 + 1, max: 1024 * 1024 * 1024, key: 'size_large' }, // 100 MB to 1 GB
+    huge: { min: 1024 * 1024 * 1024 + 1, max: Infinity, key: 'size_huge' }, // > 1 GB
+};
+
+export type SizeCategoryKey = keyof typeof SIZE_CATEGORIES;
+
 export type ColumnMode = 'normal' | 'search' | 'trash' | 'network';
 export type ViewMode = 'grid' | 'details';
 export type Theme = 'github-light' | 'github-dark' | 'ayu-light' | 'ayu-dark' | 'one-light' | 'one-dark' | 'monokai' | 'solarized-light' | 'solarized-dark' | 'windows-light' | 'windows-dark' | 'oxyde-light' | 'oxyde-dark';
@@ -64,6 +75,14 @@ export interface PanelState {
     setFileCalculating: (path: string, isCalculating: boolean) => void;
     navigate: (path: string) => void;
     groupByDate: boolean;
+
+    // Filter State
+    extensionFilter: Set<string> | null;
+    sizeFilter: Set<SizeCategoryKey> | null;
+    dateFilter: Set<string> | null;
+    nameFilter: string | null;
+    locationFilter: string | null;
+    deletedDateFilter: Set<string> | null;
 }
 
 export interface ClipboardState {

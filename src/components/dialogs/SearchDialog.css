@@ -330,7 +330,8 @@
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    font-weight: 600;
+    font-size: 0.875rem;
+    font-weight: 500;
     color: var(--text-color);
 }
 
@@ -387,7 +388,7 @@
 }
 
 .regex-label {
-    font-weight: 600;
+    font-weight: 500;
     color: var(--text-color);
     font-size: 0.75rem;
     white-space: nowrap;

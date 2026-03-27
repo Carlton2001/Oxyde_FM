@@ -3,17 +3,7 @@ import cx from 'classnames';
 import { Check } from 'lucide-react';
 import { TFunc } from '../../i18n';
 
-// Definition of our size brackets in bytes
-export const SIZE_CATEGORIES = {
-    empty: { min: 0, max: 0, key: 'size_empty' },
-    tiny: { min: 1, max: 10 * 1024, key: 'size_tiny' },             // 1 B to 10 KB
-    small: { min: 10 * 1024 + 1, max: 1024 * 1024, key: 'size_small' }, // 10 KB to 1 MB
-    medium: { min: 1024 * 1024 + 1, max: 100 * 1024 * 1024, key: 'size_medium' }, // 1 MB to 100 MB
-    large: { min: 100 * 1024 * 1024 + 1, max: 1024 * 1024 * 1024, key: 'size_large' }, // 100 MB to 1 GB
-    huge: { min: 1024 * 1024 * 1024 + 1, max: Infinity, key: 'size_huge' }, // > 1 GB
-};
-
-export type SizeCategoryKey = keyof typeof SIZE_CATEGORIES;
+import { SIZE_CATEGORIES, SizeCategoryKey } from '../../types';
 
 export const getSizeCategoryForFile = (size: number): SizeCategoryKey => {
     if (size === 0) return 'empty';

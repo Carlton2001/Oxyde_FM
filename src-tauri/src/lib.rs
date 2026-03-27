@@ -178,6 +178,7 @@ pub fn run() {
             commands::session::reorder_tabs,
             commands::session::set_active_panel,
             commands::session::update_sort_config,
+            commands::session::swap_panels,
             // Config Commands
             commands::config::get_config,
             commands::config::set_config_value,

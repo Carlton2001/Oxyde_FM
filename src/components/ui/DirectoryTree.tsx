@@ -475,8 +475,7 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
                 return fp === np;
             }),
             isNetworkComputer: node.isNetworkRoot || node.isNetwork || (node.path.startsWith('\\\\') && node.path.split('\\').filter(Boolean).length === 1),
-            isTrash: isTrash,
-            isQuickAccessShortcut: node.isFavorite
+            isTrash: isTrash
         });
     };
 
@@ -780,7 +779,6 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
                     onRemoveFromFavorites={() => { onRemoveFromFavorites?.(contextMenu.path); setContextMenu(null); }}
                     isNetworkComputer={contextMenu.isNetworkComputer}
                     isTrashContext={contextMenu.isTrash}
-                    isQuickAccessShortcut={contextMenu.isQuickAccessShortcut}
                     onOpenFile={(path) => { onNavigate(path); setContextMenu(null); }}
                     onEmptyTrash={() => { onEmptyTrash?.(); setContextMenu(null); }}
                     onRestoreAll={() => { onRestoreAll?.(); setContextMenu(null); }}

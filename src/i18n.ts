@@ -983,7 +983,7 @@ export const translations = {
         // --- Misc / Tools ---
         main_tools: 'Outils principaux',
         tools: 'Outils',
-        swap_panels: 'Échanger les chemins',
+        swap_panels: 'Échanger les panneaux',
         sync_panels: 'Mirroir',
         compare_panels: 'Comparer les fichiers',
         compare_no_diff: 'Aucune différence trouvée',

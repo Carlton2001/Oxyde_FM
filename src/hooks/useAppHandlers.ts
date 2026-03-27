@@ -285,10 +285,13 @@ export const useAppHandlers = ({
     }, [left, right, activePanelId, notify, t]);
 
     const handleSwapPanels = useCallback(() => {
-        const lp = left.path;
-        const rp = right.path;
-        left.navigate(rp);
-        right.navigate(lp);
+        const leftState = left.getPanelState();
+        const rightState = right.getPanelState();
+        left.setPanelState(rightState);
+        right.setPanelState(leftState);
+        invoke('swap_panels').catch(e => {
+            console.error("Backend panel swap failed:", e);
+        });
     }, [left, right]);
 
     const handleSyncPanels = useCallback(() => {

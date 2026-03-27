@@ -6,7 +6,6 @@ import { useApp } from '../../context/AppContext';
 import './FavoritesMenu.css';
 import '../layout/PathBar.css';
 import { createPortal } from 'react-dom';
-import { Trash2, PinOff } from 'lucide-react';
 import { ContextMenuView } from './context-menu/ContextMenuView';
 
 const RotatedPinOff = (props: any) => (

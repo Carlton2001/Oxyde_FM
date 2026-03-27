@@ -204,7 +204,7 @@
     background: transparent;
     color: var(--text-muted);
     font-size: 0.6875rem;
-    font-weight: 600;
+    font-weight: 400;
     cursor: pointer;
     transition: all 0.1s;
     display: flex;

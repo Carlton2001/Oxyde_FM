@@ -303,3 +303,49 @@ pub fn update_sort_config(
     state.save(&app)?;
     Ok(())
 }
+#[tauri::command]
+pub fn swap_panels(
+    app: AppHandle,
+    state: State<'_, SessionManager>,
+) -> Result<(), CommandError> {
+    let mut session_guard = lock_session(&state)?;
+    let session = &mut *session_guard;
+    
+    // 1. Identify active tabs on both sides
+    let l_active_id = session.left_panel.active_tab_id.clone();
+    let r_active_id = session.right_panel.active_tab_id.clone();
+
+    // 2. Perform the content exchange between active tabs
+    // We use a temporary scope to satisfy the borrow checker when accessing both panels' tabs
+    {
+        let l_tab = session.left_panel.tabs.iter_mut().find(|t| t.id == l_active_id);
+        let r_tab = session.right_panel.tabs.iter_mut().find(|t| t.id == r_active_id);
+
+        if let (Some(lt), Some(rt)) = (l_tab, r_tab) {
+            std::mem::swap(&mut lt.path, &mut rt.path);
+            std::mem::swap(&mut lt.version, &mut rt.version);
+        }
+    }
+
+    // 3. Swap panel-level states (search, sort, cache)
+    std::mem::swap(&mut session.left_panel.search_context, &mut session.right_panel.search_context);
+    std::mem::swap(&mut session.left_panel.sort_config, &mut session.right_panel.sort_config);
+    std::mem::swap(&mut session.left_panel.cached_results, &mut session.right_panel.cached_results);
+
+    // 4. Update tab_ids in search contexts to match their new physical owner
+    if let Some(ctx) = &mut session.left_panel.search_context {
+        ctx.tab_id = l_active_id;
+    }
+    if let Some(ctx) = &mut session.right_panel.search_context {
+        ctx.tab_id = r_active_id;
+    }
+
+    // 5. Update watchers for both panels (they now monitor the new paths)
+    session.left_panel.update_watcher(&app);
+    session.right_panel.update_watcher(&app);
+    
+    app.emit("session_changed", session.clone()).map_err(|e| CommandError::SystemError(e.to_string()))?;
+    drop(session_guard);
+    state.save(&app)?;
+    Ok(())
+}

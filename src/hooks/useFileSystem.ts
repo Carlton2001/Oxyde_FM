@@ -430,6 +430,20 @@ export const useFiles = (panelId: PanelId, path: string, sortConfig: SortConfig,
         setFiles(prev => prev.map(f => f.path === p ? { ...f, is_calculating: isCalculating } : f));
     }, []);
 
-    return { files, sortedFiles, summary, isComplete, loading, error, isProtected, refresh, updateFileSize, setFileCalculating };
+    return {
+        files,
+        sortedFiles,
+        summary,
+        isComplete,
+        loading,
+        error,
+        isProtected,
+        refresh,
+        setFiles,
+        setSummary,
+        setIsComplete,
+        updateFileSize,
+        setFileCalculating
+    };
 };
 

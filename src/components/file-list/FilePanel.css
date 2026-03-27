@@ -155,7 +155,7 @@
 }
 
 .search-results-query {
-    font-weight: 600;
+    font-weight: 500;
     color: var(--accent-color);
     max-width: 250px;
     overflow: hidden;
@@ -256,13 +256,14 @@
     border-right: 1px solid var(--border-color);
     border-bottom-left-radius: 6px;
     border-bottom-right-radius: 6px;
-    margin-bottom: 0.5rem;
+    margin-top: 0.2rem;
+    margin-bottom: 0.3rem;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
 .active-filters-label {
     font-size: 0.75rem;
-    font-weight: 600;
+    font-weight: 500;
     color: var(--text-color);
     letter-spacing: 0.02em;
     white-space: nowrap;
@@ -289,11 +290,11 @@
 }
 
 .filter-pill {
-    padding: 2px 8px;
+    padding: 0.2rem 0.5rem;
     background: var(--surface-primary);
     border: 1px solid var(--border-color);
     border-radius: 0.25rem;
-    font-size: 0.6875rem;
+    font-size: 0.75rem;
     font-weight: 500;
     color: var(--text-color);
     white-space: nowrap;
@@ -318,6 +319,7 @@
     /* Per user request: Curseur par défaut */
     transition: background-color 0.1s ease, color 0.1s ease;
     flex-shrink: 0;
+    margin-left: auto;
 }
 
 .clear-filters-x-btn:hover {
@@ -1001,7 +1003,7 @@
 
 .file-extension {
     font-size: 0.625rem;
-    font-weight: 600;
+    font-weight: 500;
     color: var(--text-muted);
     text-transform: uppercase;
     margin-top: 0.125rem;
@@ -1271,14 +1273,14 @@
 
 .group-header-label {
     font-size: 0.75rem;
-    font-weight: 600;
+    font-weight: 500;
     color: var(--text-color);
     letter-spacing: 0.02em;
 }
 
 .group-header-count {
-    font-size: 0.6875rem;
-    font-weight: 500;
+    font-size: 0.75rem;
+    font-weight: 400;
     color: var(--text-muted);
     opacity: 0.8;
     padding: 1px 6px;

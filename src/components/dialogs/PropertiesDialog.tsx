@@ -183,7 +183,7 @@ export const PropertiesDialog: React.FC<PropertiesDialogProps> = ({ paths, initi
                                                             const parts = currentDrive.remote_path.split(/[\\/]/).filter(Boolean);
                                                             label = parts[parts.length - 1] || currentDrive.remote_path;
                                                         } else {
-                                                            label = label || t('local_disk' as any);
+                                                            label = (!label || label === 'Local Disk') ? t('local_disk' as any) : label;
                                                         }
                                                         const letter = currentDrive.path.replace(/\\$/, '');
                                                         return `${label} (${letter})`;

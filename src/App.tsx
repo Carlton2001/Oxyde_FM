@@ -52,7 +52,6 @@ import { NotificationArea } from './components/ui/NotificationArea';
 import { ProgressOverlay } from './components/ui/ProgressOverlay';
 import { Tooltip } from './components/ui/Tooltip';
 import { DirectoryTreeHandle } from './components/ui/DirectoryTree';
-import { TrashSettingsDialog } from './components/dialogs/TrashSettingsDialog';
 import { PanelId, DriveInfo } from './types';
 
 function App() {
@@ -62,8 +61,8 @@ function App() {
     notifications, notify, dismissNotification, drives, mountedImages,
     useSystemIcons, refreshDrives,
     zipQuality, sevenZipQuality, zstdQuality, defaultTurboMode,
-    setUpdateAvailable, peekStatus, confirmDelete, setConfirmDelete,
-    isTrashEmpty, refreshTrashStatus, driveTrashConfigs, refreshDriveTrashConfigs
+    setUpdateAvailable, peekStatus, confirmDelete,
+    isTrashEmpty, refreshTrashStatus, driveTrashConfigs
   } = useApp();
   const { registerKeybinding } = useKeybindings();
 

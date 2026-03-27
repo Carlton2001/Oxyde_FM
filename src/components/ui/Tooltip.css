@@ -6,14 +6,32 @@
     border: 1px solid var(--border-color, #444);
     border-radius: 0.375rem;
     font-size: 0.75rem;
-    white-space: normal; /* Allow wrapping for long paths */
-    word-break: break-all; /* Ensure long paths can break anywhere */
+    white-space: normal;
+    /* Allow wrapping for long paths */
+    word-break: break-all;
+    /* Ensure long paths can break anywhere */
     text-align: left;
     z-index: 10000;
     pointer-events: none;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-    max-width: min(90vw, 50rem); /* Max 800px, but never more than 90% of window width */
+    max-width: min(90vw, 50rem);
+    /* Max 800px, but never more than 90% of window width */
     animation: tooltip-fade-in 150ms ease-out;
+}
+
+.tooltip-portal strong {
+    font-weight: 500;
+    /* Ajustez la valeur ici (500, 600, etc.) */
+    color: var(--accent-color);
+    /* Optionnel : donner une couleur au nom */
+}
+
+/* Uniquement pour les tooltips simples (une seule ligne) */
+.tooltip-portal:not(.multiline) {
+    font-weight: 500;
+    padding: 0.25rem 0.5rem;
+    /* Plus compact */
+    /* ... vos autres styles ... */
 }
 
 .tooltip-portal.multiline {

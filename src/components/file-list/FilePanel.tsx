@@ -13,13 +13,14 @@ import { useSelectionMarquee } from '../../hooks/useSelectionMarquee';
 import { SelectionMarquee } from './SelectionMarquee';
 import { VirtualizedFileList, VirtualizedFileListHandle } from './VirtualizedFileList';
 import { ExtensionFilterMenu } from './ExtensionFilterMenu';
-import { SizeFilterMenu, getSizeCategoryForFile, SizeCategoryKey } from './SizeFilterMenu';
+import { SizeFilterMenu, getSizeCategoryForFile } from './SizeFilterMenu';
 import { DateFilterMenu, getDateCategoryForFile, DateCategoryKey } from './DateFilterMenu';
 import { NameFilterMenu } from './NameFilterMenu';
 import { LocationFilterMenu } from './LocationFilterMenu';
 import { useApp } from '../../context/AppContext';
 import { useFileStats } from '../../hooks/useFileStats';
 import { getVisibleColumns, getColumnMode, buildGridTemplate, getOtherColumnsWidthSum, getFlexibleColumn, calculateIdealFlexWidth } from '../../config/columnDefinitions';
+import { SizeCategoryKey } from '../../types';
 import './FilePanel.css';
 
 interface FilePanelProps {
@@ -76,6 +77,21 @@ interface FilePanelProps {
     groupByDate: boolean;
     onGroupByDateChange: (val: boolean) => void;
     isProtected?: boolean;
+
+    // Filter Props
+    extensionFilter: Set<string> | null;
+    setExtensionFilter: (val: Set<string> | null | ((prev: Set<string> | null) => Set<string> | null)) => void;
+    sizeFilter: Set<SizeCategoryKey> | null;
+    setSizeFilter: (val: Set<SizeCategoryKey> | null | ((prev: Set<SizeCategoryKey> | null) => Set<SizeCategoryKey> | null)) => void;
+    dateFilter: Set<string> | null;
+    setDateFilter: (val: Set<string> | null | ((prev: Set<string> | null) => Set<string> | null)) => void;
+    nameFilter: string | null;
+    setNameFilter: (val: string | null) => void;
+    locationFilter: string | null;
+    setLocationFilter: (val: string | null) => void;
+    deletedDateFilter: Set<string> | null;
+    setDeletedDateFilter: (val: Set<string> | null | ((prev: Set<string> | null) => Set<string> | null)) => void;
+    clearAllFilters: () => void;
 }
 
 export const FilePanel: React.FC<FilePanelProps> = React.memo(({
@@ -88,7 +104,10 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
     onRename, showHistogram: propShowHistogram, isTrashView = false, isNetworkView = false,
     useSystemIcons: propUseSystemIcons, onItemMiddleClick, diffPaths, searchLimitReached,
     panelId, onViewModeChange, loading, initialScrollOffset, updateCurrentScroll,
-    groupByDate, onGroupByDateChange, isProtected
+    groupByDate, onGroupByDateChange, isProtected,
+    extensionFilter, setExtensionFilter, sizeFilter, setSizeFilter, dateFilter, setDateFilter,
+    nameFilter, setNameFilter, locationFilter, setLocationFilter,
+    deletedDateFilter, setDeletedDateFilter, clearAllFilters
 }) => {
     const { useSystemIcons: contextUseSystemIcons, searchLimit, showGridThumbnails, notify, showNetwork, showCheckboxes } = useApp();
     const useSystemIcons = propUseSystemIcons ?? contextUseSystemIcons;
@@ -104,25 +123,10 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
     const [showScrollTop, setShowScrollTop] = useState(false);
     const [mouseNearScrollbar, setMouseNearScrollbar] = useState(false);
 
-    const [extensionFilter, setExtensionFilter] = useState<Set<string> | null>(null);
-    const [sizeFilter, setSizeFilter] = useState<Set<SizeCategoryKey> | null>(null);
-    const [dateFilter, setDateFilter] = useState<Set<string> | null>(null);
-    const [nameFilter, setNameFilter] = useState<string | null>(null);
-    const [locationFilter, setLocationFilter] = useState<string | null>(null);
-    const [deletedDateFilter, setDeletedDateFilter] = useState<Set<string> | null>(null);
     const [filterMenuAnchor, setFilterMenuAnchor] = useState<{ x: number, y: number } | null>(null);
     const [activeFilterMenu, setActiveFilterMenu] = useState<'extension' | 'size' | 'date' | 'name' | 'location' | 'deletedDate' | null>(null);
 
 
-
-    const clearAllFilters = useCallback(() => {
-        setExtensionFilter(null);
-        setSizeFilter(null);
-        setDateFilter(null);
-        setNameFilter(null);
-        setLocationFilter(null);
-        setDeletedDateFilter(null);
-    }, []);
 
     const removeExtensionFilter = useCallback((ext: string) => {
         setExtensionFilter(prev => {
@@ -131,7 +135,7 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
             next.delete(ext);
             return next.size > 0 ? next : null;
         });
-    }, []);
+    }, [setExtensionFilter]);
 
     const removeSizeFilter = useCallback((cat: SizeCategoryKey) => {
         setSizeFilter(prev => {
@@ -140,7 +144,7 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
             next.delete(cat);
             return next.size > 0 ? next : null;
         });
-    }, []);
+    }, [setSizeFilter]);
 
     const removeDateFilter = useCallback((cat: string) => {
         setDateFilter(prev => {
@@ -149,7 +153,7 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
             next.delete(cat);
             return next.size > 0 ? next : null;
         });
-    }, []);
+    }, [setDateFilter]);
 
     const removeDeletedDateFilter = useCallback((cat: string) => {
         setDeletedDateFilter(prev => {
@@ -158,7 +162,7 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
             next.delete(cat);
             return next.size > 0 ? next : null;
         });
-    }, []);
+    }, [setDeletedDateFilter]);
 
     const activeFilters = useMemo(() => ({
         extensions: extensionFilter || new Set<string>(),
@@ -174,7 +178,7 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
         onRemoveDeletedDate: removeDeletedDateFilter,
         onRemoveName: () => setNameFilter(null),
         onRemoveLocation: () => setLocationFilter(null)
-    }), [extensionFilter, sizeFilter, deletedDateFilter, dateFilter, nameFilter, locationFilter, clearAllFilters, removeExtensionFilter, removeSizeFilter, removeDateFilter, removeDeletedDateFilter]);
+    }), [extensionFilter, sizeFilter, deletedDateFilter, dateFilter, nameFilter, locationFilter, clearAllFilters, removeExtensionFilter, removeSizeFilter, removeDateFilter, removeDeletedDateFilter, setNameFilter, setLocationFilter]);
 
     const currentMode = isTrashView ? 'trash' : (searchResults ? 'search' : 'normal');
 
