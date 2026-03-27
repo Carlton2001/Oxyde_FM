@@ -14,7 +14,7 @@
 .menu-item {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-start;
     gap: 8px;
     padding: 6px 12px;
     border-radius: 6px;
@@ -72,7 +72,7 @@
 .menu-item-main {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-start;
     gap: 8px;
     padding: 6px 8px 6px 12px;
     font-size: 0.8125rem;

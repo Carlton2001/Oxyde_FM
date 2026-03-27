@@ -199,7 +199,19 @@ export const PropertiesDialog: React.FC<PropertiesDialogProps> = ({ paths, initi
                                             <>
                                                 <div className="dialog-label">{t('type')}</div>
                                                 <div className="dialog-value">
-                                                    {properties!.is_media_device ? t('network_device' as any) : (isDriveRoot ? t('disk_drive' as any) : getFileTypeString(properties as any, t))}
+                                                    {properties!.is_media_device 
+                                                        ? t('network_device' as any) 
+                                                        : (isDriveRoot && currentDrive 
+                                                            ? (() => {
+                                                                switch (currentDrive.drive_type) {
+                                                                    case 'fixed': return t('local_disk' as any);
+                                                                    case 'removable': return t('removable_disk' as any);
+                                                                    case 'remote': return t('network_drive' as any);
+                                                                    case 'cdrom': return t('cd_drive' as any);
+                                                                    default: return t('disk_drive' as any);
+                                                                }
+                                                            })()
+                                                            : getFileTypeString(properties as any, t))}
                                                 </div>
 
                                                 {properties!.is_media_device ? (
