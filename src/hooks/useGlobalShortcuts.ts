@@ -57,6 +57,7 @@ export const useGlobalShortcuts = (context: ActionContext, tabs: any[], activeTa
             else if (e.code === 'Delete') key = 'Delete';
             else if (e.code === 'F2') key = 'F2';
             else if (e.code === 'Enter') key = 'Enter';
+            else if (e.code === 'ContextMenu') key = 'ContextMenu';
             else if (e.code === 'Backspace') key = 'Backspace';
             else if (key.length === 1) key = key.toUpperCase();
 

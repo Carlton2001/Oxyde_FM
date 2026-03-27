@@ -479,6 +479,7 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
         onActivate,
         isDragging,
         renamingPath,
+        isActive,
         cancelRename
     );
 
@@ -661,7 +662,6 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
                         if (isDragging || isMarqueeRef.current) return;
                         const isFileItem = (e.target as HTMLElement).closest('.file-item');
                         if (!isFileItem) {
-                            onClearSelection();
                             onActivate();
                             if (renamingPath) cancelRename();
                         }

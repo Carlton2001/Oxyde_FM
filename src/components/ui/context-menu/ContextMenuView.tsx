@@ -102,8 +102,11 @@ const ContextMenuItemRow: React.FC<ContextMenuItemProps> = ({ item, onClose }) =
                     <div className="menu-item-main"
                         onClick={isSplit ? handleClick : undefined}
                         onMouseEnter={isSplit ? () => setSubmenuOpen(false) : undefined}>
-                        {item.icon && <item.icon className="icon-md" />}
-                        <span className="win-item-label">{item.label}</span>
+                        <div className="menu-item-left">
+                            {item.icon && <item.icon className="icon-md" />}
+                            <span className="win-item-label">{item.label}</span>
+                        </div>
+                        {item.shortcut && <span className="menu-item-shortcut">{item.shortcut}</span>}
                     </div>
                     {isSplit && <div className="submenu-divider" />}
                     <div className="menu-item-arrow"
@@ -127,8 +130,11 @@ const ContextMenuItemRow: React.FC<ContextMenuItemProps> = ({ item, onClose }) =
                 </>
             ) : (
                 <>
-                    {item.icon && <item.icon className="icon-md" />}
-                    <span className="win-item-label">{item.label}</span>
+                    <div className="menu-item-left">
+                        {item.icon && <item.icon className="icon-md" />}
+                        <span className="win-item-label">{item.label}</span>
+                    </div>
+                    {item.shortcut && <span className="menu-item-shortcut">{item.shortcut}</span>}
                 </>
             )}
         </div>
@@ -237,8 +243,10 @@ const NativeMenuItemRow: React.FC<{ item: MenuItem; onClose: () => void }> = ({ 
             onMouseDown={(e) => e.preventDefault()}
         >
             <div className="menu-item-main">
-                {item.icon && <item.icon className="icon-md" />}
-                <span className="win-item-label">{item.label}</span>
+                <div className="menu-item-left">
+                    {item.icon && <item.icon className="icon-md" />}
+                    <span className="win-item-label">{item.label}</span>
+                </div>
             </div>
             <div className="menu-item-arrow">
                 <ChevronRight className="icon-sm" />
@@ -318,8 +326,10 @@ const RecursiveWinItem: React.FC<{ item: WinMenuItem, onExecute: (id: number) =>
                 onMouseDown={(e) => e.preventDefault()}
             >
                 <div className="menu-item-main">
-                    {Icon ? <Icon className="icon-md" /> : <div className="icon-md" />}
-                    <span className="win-item-label">{item.label}</span>
+                    <div className="menu-item-left">
+                        {Icon ? <Icon className="icon-md" /> : <div className="icon-md" />}
+                        <span className="win-item-label">{item.label}</span>
+                    </div>
                 </div>
                 <div className="menu-item-arrow">
                     <ChevronRight className="icon-sm" />
@@ -346,8 +356,10 @@ const RecursiveWinItem: React.FC<{ item: WinMenuItem, onExecute: (id: number) =>
 
     return (
         <div className="menu-item" onClick={(e) => { e.stopPropagation(); onExecute(item.id); }} onMouseDown={(e) => e.preventDefault()}>
-            {Icon ? <Icon className="icon-md" /> : <div className="icon-md" />}
-            <span className="win-item-label">{item.label}</span>
+            <div className="menu-item-left">
+                {Icon ? <Icon className="icon-md" /> : <div className="icon-md" />}
+                <span className="win-item-label">{item.label}</span>
+            </div>
         </div>
     );
 }

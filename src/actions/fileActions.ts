@@ -2,7 +2,7 @@ import { ActionDefinition, ActionContext } from '../types/actions';
 import { invoke } from '@tauri-apps/api/core';
 import {
     Copy, Scissors, ClipboardPaste, Trash2, Edit2,
-    FolderPlus, Info, Undo, Redo, ExternalLink
+    FolderPlus, Info, Undo, Redo, ExternalLink, Menu
 } from 'lucide-react';
 import { formatCommandError } from '../utils/error';
 import { getParent } from '../utils/path';
@@ -513,6 +513,44 @@ export const PEEK_ACTION: ActionDefinition = {
                 console.error("Failed to open Peek:", e);
                 ctx.notify(String(e), 'error');
             }
+        }
+    }
+};
+
+export const CONTEXT_MENU_ACTION: ActionDefinition = {
+    id: 'file.context_menu',
+    label: 'context_menu',
+    icon: Menu,
+    shortcut: 'ContextMenu',
+    handler: async (ctx: ActionContext) => {
+        const { activePanel, onContextMenu, activePanelId } = ctx;
+        if (!onContextMenu) return;
+
+        const selection = Array.from(activePanel.selected);
+
+        if (selection.length > 0) {
+            const targetPath = selection[0];
+            const fileEntry = activePanel.files.find(f => f.path === targetPath) || activePanel.searchResults?.find(f => f.path === targetPath);
+
+            // Try to find the element and its position
+            // Escape backslashes for querySelector
+            const escapedPath = targetPath.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+            const element = document.querySelector(`.panel.active [data-path="${escapedPath}"]`);
+
+            if (element) {
+                const rect = element.getBoundingClientRect();
+                // We mock a MouseEvent-like object for coordinates
+                onContextMenu({
+                    clientX: rect.left + rect.width / 2,
+                    clientY: rect.top + rect.height / 2,
+                    preventDefault: () => { },
+                    stopPropagation: () => { }
+                } as any, activePanelId, fileEntry);
+            } else {
+                onContextMenu(null, activePanelId, fileEntry);
+            }
+        } else {
+            onContextMenu(null, activePanelId);
         }
     }
 };

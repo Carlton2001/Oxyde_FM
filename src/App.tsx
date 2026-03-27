@@ -272,13 +272,13 @@ function App() {
     notify, t: t as any, dialogs, settings: { zipQuality, sevenZipQuality, zstdQuality, defaultTurboMode, confirmDelete }, setProgress,
     contextMenuTarget: contextMenu?.target, isDir: contextMenu?.isDir, isDrive: contextMenu?.isDrive, refreshDrives, mountedImages,
     tabs, activeTabId, setActiveTab, closeTab, refreshBothPanels,
-    modifiers, peekStatus, driveTrashConfigs
+    modifiers, peekStatus, driveTrashConfigs, setContextMenu, onContextMenu: handleContextMenu
   }), [
     activePanelId, left, right, fileOps, clipboard, copy, cut, clearClipboard, copyToSystem, refreshClipboard,
     notify, t, dialogs, zipQuality, sevenZipQuality, zstdQuality, defaultTurboMode, setProgress,
     contextMenu?.target, contextMenu?.isDir, contextMenu?.isDrive, refreshDrives,
     tabs, activeTabId, setActiveTab, closeTab, refreshBothPanels,
-    modifiers, peekStatus, driveTrashConfigs
+    modifiers, peekStatus, driveTrashConfigs, setContextMenu, handleContextMenu
   ]);
 
   useGlobalShortcuts(actionContext, tabs, activeTabId, handleTabSwitch);

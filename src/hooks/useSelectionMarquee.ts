@@ -25,10 +25,12 @@ export const useSelectionMarquee = (
     onActivate: () => void,
     isDragging: boolean,
     renamingPath: string | null,
+    isActive: boolean,
     cancelRename: () => void
 ) => {
     const [selectionRect, setSelectionRect] = useState<Rect | null>(null);
     const [pendingSelection, setPendingSelection] = useState<Set<string>>(new Set());
+    const wasActiveAtMouseDown = useRef(isActive);
     const isMarqueeRef = useRef(false);
     const pendingSelectionRef = useRef<Set<string>>(new Set());
     const itemRectsCache = useRef<ItemRect[]>([]);
@@ -39,6 +41,8 @@ export const useSelectionMarquee = (
 
         const isFileItem = (e.target as HTMLElement).closest('.file-item');
         if (isFileItem) return;
+
+        wasActiveAtMouseDown.current = isActive;
 
         if (renamingPath) cancelRename();
         onActivate();
@@ -155,7 +159,7 @@ export const useSelectionMarquee = (
             if (isMarqueeRef.current) {
                 onSelectMultiple(Array.from(pendingSelectionRef.current), mu.ctrlKey);
             } else {
-                if (!mu.ctrlKey) onClearSelection();
+                if (!mu.ctrlKey && wasActiveAtMouseDown.current) onClearSelection();
             }
 
             setPendingSelection(new Set());
@@ -168,7 +172,7 @@ export const useSelectionMarquee = (
 
         window.addEventListener('mousemove', onMouseMove);
         window.addEventListener('mouseup', onMouseUp);
-    }, [containerRef, isDragging, renamingPath, cancelRename, onActivate, onSelectMultiple, onClearSelection]);
+    }, [containerRef, isDragging, renamingPath, cancelRename, onActivate, onSelectMultiple, onClearSelection, isActive]);
 
     return {
         selectionRect,

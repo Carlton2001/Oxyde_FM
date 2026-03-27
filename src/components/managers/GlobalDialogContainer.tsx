@@ -166,6 +166,28 @@ export const GlobalDialogContainer: React.FC = () => {
     const { dialogs, closeDialog, focusDialog } = useDialogs();
     const { t, theme, drives, confirmDelete, setConfirmDelete, isTrashEmpty, refreshDriveTrashConfigs } = useApp();
 
+    React.useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape' && dialogs.length > 0) {
+                // Find dialog with highest zIndex
+                const topDialog = [...dialogs].sort((a, b) => b.zIndex - a.zIndex)[0];
+                if (topDialog) {
+                    // Close with appropriate default result for the type
+                    let result: any = undefined;
+                    if (topDialog.type === 'confirm') result = false;
+                    if (topDialog.type === 'prompt') result = null;
+                    if (topDialog.type === 'search') result = null;
+                    if (topDialog.type === 'conflict') result = null;
+
+                    closeDialog(topDialog.id, result);
+                }
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [dialogs, closeDialog]);
+
     if (dialogs.length === 0) return null;
 
     return (

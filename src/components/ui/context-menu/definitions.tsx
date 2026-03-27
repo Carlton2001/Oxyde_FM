@@ -162,7 +162,8 @@ export function getMenuItems(ctx: MenuContext): MenuItem[] {
             label: t('cut'),
             icon: Scissors,
             action: () => actions.onCut(),
-            disabled: !isTextSelected
+            disabled: !isTextSelected,
+            shortcut: 'Ctrl+X'
         });
         items.push({
             id: 'copy',
@@ -170,14 +171,16 @@ export function getMenuItems(ctx: MenuContext): MenuItem[] {
             label: t('copy'),
             icon: Copy,
             action: () => actions.onCopy(),
-            disabled: !isTextSelected
+            disabled: !isTextSelected,
+            shortcut: 'Ctrl+C'
         });
         items.push({
             id: 'paste',
             type: 'action',
             label: t('paste'),
             icon: ClipboardPaste,
-            action: () => actions.onPaste()
+            action: () => actions.onPaste(),
+            shortcut: 'Ctrl+V'
         });
         items.push({ id: 'sep_input_1', type: 'separator' });
         items.push({
@@ -185,7 +188,8 @@ export function getMenuItems(ctx: MenuContext): MenuItem[] {
             type: 'action',
             label: t('select_all' as any) || 'Select All',
             icon: BlankIcon,
-            action: () => actions.onSelectAll?.()
+            action: () => actions.onSelectAll?.(),
+            shortcut: 'Ctrl+A'
         });
 
         return items;
@@ -216,7 +220,8 @@ export function getMenuItems(ctx: MenuContext): MenuItem[] {
                 type: 'action',
                 label: t('refresh'),
                 icon: RefreshCw,
-                action: () => actions.onRefresh?.()
+                action: () => actions.onRefresh?.(),
+                shortcut: 'F5'
             });
         }
         if (actions.onOpenNewTab) {
@@ -290,7 +295,8 @@ export function getMenuItems(ctx: MenuContext): MenuItem[] {
                 type: 'action',
                 label: t('open'),
                 icon: ExternalLink,
-                action: () => actions.onOpenFile?.(target)
+                action: () => actions.onOpenFile?.(target),
+                shortcut: 'Enter'
             });
             if (actions.onOpenNewTab) {
                 items.push({
@@ -318,7 +324,8 @@ export function getMenuItems(ctx: MenuContext): MenuItem[] {
                     type: 'action',
                     label: t('open'),
                     icon: ExternalLink,
-                    action: () => actions.onOpenFile?.(target)
+                    action: () => actions.onOpenFile?.(target),
+                    shortcut: 'Enter'
                 });
             }
         }
@@ -392,7 +399,8 @@ export function getMenuItems(ctx: MenuContext): MenuItem[] {
             type: 'action',
             label: undoLabel || t('undo'),
             icon: Undo2,
-            action: () => actions.onUndo()
+            action: () => actions.onUndo(),
+            shortcut: 'Ctrl+Z'
         });
     }
     if (canRedo && !ctx.isNetworkComputer) {
@@ -401,7 +409,8 @@ export function getMenuItems(ctx: MenuContext): MenuItem[] {
             type: 'action',
             label: redoLabel || t('redo'),
             icon: Redo2,
-            action: () => actions.onRedo()
+            action: () => actions.onRedo(),
+            shortcut: 'Ctrl+Y'
         });
     }
 
@@ -415,7 +424,8 @@ export function getMenuItems(ctx: MenuContext): MenuItem[] {
                 type: 'action',
                 label: t('new_folder'),
                 icon: FolderPlus,
-                action: () => actions.onNewFolder()
+                action: () => actions.onNewFolder(),
+                shortcut: 'Ctrl+Shift+N'
             });
         }
 
@@ -466,7 +476,8 @@ export function getMenuItems(ctx: MenuContext): MenuItem[] {
                 type: 'action',
                 label: t('cut'),
                 icon: Scissors,
-                action: () => actions.onCut()
+                action: () => actions.onCut(),
+                shortcut: 'Ctrl+X'
             });
             const copySubmenu: MenuItem[] = [
                 { id: 'copy_name', type: 'action', label: t('copy_name' as any), icon: Copy, action: () => actions.onCopyName() },
@@ -478,7 +489,8 @@ export function getMenuItems(ctx: MenuContext): MenuItem[] {
                 label: t('copy'),
                 icon: Copy,
                 children: copySubmenu,
-                action: () => actions.onCopy()
+                action: () => actions.onCopy(),
+                shortcut: 'Ctrl+C'
             });
         }
 
@@ -488,7 +500,8 @@ export function getMenuItems(ctx: MenuContext): MenuItem[] {
                 type: 'action',
                 label: t('paste'),
                 icon: ClipboardPaste,
-                action: () => actions.onPaste()
+                action: () => actions.onPaste(),
+                shortcut: 'Ctrl+V'
             });
         }
 
@@ -498,7 +511,8 @@ export function getMenuItems(ctx: MenuContext): MenuItem[] {
                 type: 'action',
                 label: t('rename'),
                 icon: Edit2,
-                action: () => actions.onRename()
+                action: () => actions.onRename(),
+                shortcut: 'F2'
             });
         }
     }
@@ -524,7 +538,8 @@ export function getMenuItems(ctx: MenuContext): MenuItem[] {
                 icon: Trash2,
                 action: () => actions.onDelete(),
                 color: 'var(--error-color)',
-                danger: true
+                danger: true,
+                shortcut: 'Del'
             });
         }
         
@@ -558,7 +573,8 @@ export function getMenuItems(ctx: MenuContext): MenuItem[] {
                 type: 'action',
                 label: t('properties'),
                 icon: Settings,
-                action: () => actions.onTrashProperties?.()
+                action: () => actions.onTrashProperties?.(),
+                shortcut: 'Alt+Enter'
             });
         }
     } else {
@@ -570,7 +586,8 @@ export function getMenuItems(ctx: MenuContext): MenuItem[] {
                 icon: Trash2,
                 action: () => actions.onDelete(),
                 color: 'var(--error-color)',
-                danger: true
+                danger: true,
+                shortcut: (isShiftPressed || isNukeOverride) ? 'Shift+Del' : 'Del'
             });
         }
     }
@@ -589,7 +606,8 @@ export function getMenuItems(ctx: MenuContext): MenuItem[] {
                 } else {
                     actions.onProperties();
                 }
-            }
+            },
+            shortcut: 'Alt+Enter'
         });
     }
 

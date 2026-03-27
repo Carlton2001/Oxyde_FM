@@ -14,12 +14,27 @@
 .menu-item {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 8px;
     padding: 6px 12px;
     border-radius: 6px;
     font-size: 0.8125rem;
     line-height: 1.2;
     min-height: 30px;
+}
+
+.menu-item-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.menu-item-shortcut {
+    margin-left: auto;
+    padding-left: 20px;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    opacity: 0.6;
 }
 
 .menu-item:hover:not(.disabled) {
@@ -57,6 +72,7 @@
 .menu-item-main {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 8px;
     padding: 6px 8px 6px 12px;
     font-size: 0.8125rem;
@@ -125,6 +141,4 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    display: block;
-    width: 100%;
-}
+}

@@ -470,9 +470,11 @@ export const useAppHandlers = ({
         }
     }, [notify, t, refreshDrives, dialogs]);
 
-    const handleContextMenu = useCallback((e: React.MouseEvent, id: PanelId, entry?: FileEntry) => {
-        e.preventDefault();
-        e.stopPropagation();
+    const handleContextMenu = useCallback((e: React.MouseEvent | null, id: PanelId, entry?: FileEntry) => {
+        if (e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
         setActivePanelId(id);
         const panel = id === 'left' ? left : right;
 
@@ -481,8 +483,8 @@ export const useAppHandlers = ({
                 panel.handleSelect(entry.path, false, false);
             }
             setContextMenu({
-                x: e.clientX,
-                y: e.clientY,
+                x: e ? e.clientX : (window.innerWidth / 2),
+                y: e ? e.clientY : (window.innerHeight / 2),
                 target: entry.path,
                 panelId: id,
                 isDir: entry.is_dir,
@@ -519,8 +521,8 @@ export const useAppHandlers = ({
             }
 
             setContextMenu({
-                x: e.clientX,
-                y: e.clientY,
+                x: e ? e.clientX : (window.innerWidth / 2),
+                y: e ? e.clientY : (window.innerHeight / 2),
                 target: path,
                 panelId: id,
                 isDir: true,
@@ -536,7 +538,7 @@ export const useAppHandlers = ({
                 isNetworkComputer: (path.startsWith('\\\\') && path.split('\\').filter(Boolean).length === 1) || path.toLowerCase() === 'network'
             });
         }
-    }, [left, right, setActivePanelId, setContextMenu, drives]);
+    }, [left, right, setActivePanelId, setContextMenu, drives, favorites]);
 
     return {
         refreshBothPanels,

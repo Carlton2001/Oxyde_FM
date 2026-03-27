@@ -68,6 +68,8 @@ export interface ActionContext {
     refreshBothPanels?: () => void;
     refreshTreePath?: (path: string) => void;
     driveTrashConfigs?: Record<string, { nukeOnDelete: boolean }>;
+    setContextMenu?: (menu: any) => void;
+    onContextMenu?: (e: any, id: PanelId, entry?: any) => void;
 
     // Tab Management
     tabs?: import('../hooks/useRustSession').Tab[];
