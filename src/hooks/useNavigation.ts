@@ -34,7 +34,14 @@ export const useNavigation = (initialPath: string = "C:\\") => {
                 newHistory[prev.historyIndex] = { ...newHistory[prev.historyIndex], selected: currentSelection };
             }
 
-            newHistory.push({ path: newPath, selected: [] });
+            // Replace history instead of pushing if both are searches (prevents spamming history on live search typing)
+            const isReplacingSearch = prev.path.startsWith('search://') && newPath.startsWith('search://');
+            
+            if (isReplacingSearch) {
+                newHistory[prev.historyIndex] = { path: newPath, selected: [] };
+            } else {
+                newHistory.push({ path: newPath, selected: [] });
+            }
 
             // Limit history size to prevent unbounded growth
             const MAX_HISTORY = 100;

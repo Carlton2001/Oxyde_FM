@@ -5,7 +5,7 @@ use log::info;
 use glob::Pattern;
 use regex::{Regex, RegexBuilder};
 use std::time::SystemTime;
-use walkdir::WalkDir;
+use jwalk::WalkDir;
 use tauri::{AppHandle, State, Emitter, Manager};
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -583,32 +583,43 @@ pub async fn start_search(
             }
         }
 
-        let mut walker = WalkDir::new(&root_path);
-        if !is_recursive {
-            walker = walker.max_depth(1);
-        }
+        let max_depth = if !is_recursive { 1 } else { usize::MAX };
+        let num_threads = if is_target_ssd { 16 } else { 2 };
         
+        let filtered_walker = jwalk::WalkDir::new(&root_path)
+            .skip_hidden(!show_hidden)
+            .max_depth(max_depth)
+            .parallelism(jwalk::Parallelism::RayonNewPool(num_threads))
+            .process_read_dir(move |_depth, _path, _state, children| {
+                if !show_system {
+                    children.retain(|res| {
+                        if let Ok(entry) = res {
+                            if entry.file_type().is_dir() {
+                                let name = entry.file_name().to_string_lossy().to_ascii_lowercase();
+                                if name == "windows" 
+                                    || name == "programdata" 
+                                    || name == "$recycle.bin" 
+                                    || name == "system volume information"
+                                    || name == "winsxs" 
+                                {
+                                    return false; // Skip massive system directories completely
+                                }
+                            }
+                        }
+                        true
+                    });
+                }
+            })
+            .into_iter();
+
         let mut total_results = Vec::new();
         let mut batch_start_idx: usize = 0;
         let mut last_emit = std::time::Instant::now();
         let mut files_processed: u64 = 0;
 
-        let filtered_walker = walker.into_iter().filter_entry(move |e| {
-            if e.depth() == 0 { return true; }
-            // If the user wants to see hidden files, we don't prune hidden directories
-            if !show_hidden {
-                if let Ok(metadata) = e.metadata() {
-                    let name = e.file_name().to_str().unwrap_or("");
-                    let (hidden, _, _) = crate::utils::get_file_attributes(&metadata, name);
-                    if hidden { return false; }
-                }
-            }
-            true
-        });
-
         for entry in filtered_walker.filter_map(|e| e.ok()) {
             if cancel_thread.load(Ordering::Relaxed) { break; }
-            if entry.depth() == 0 { continue; } // Skip the root directory itself
+            if entry.depth == 0 { continue; } // Skip the root directory itself
             
             files_processed += 1;
             // On network drives, any sleep (even small) destroys throughput due to latency
@@ -660,7 +671,7 @@ pub async fn start_search(
 
                     // 4. Content Filter
                     if let Some(ref c_reg) = content_regex_pattern {
-                        if is_dir || !file_contains_content(path, c_reg, should_ignore_accents, is_target_ssd) {
+                        if is_dir || !file_contains_content(&path, c_reg, should_ignore_accents, is_target_ssd) {
                             continue;
                         }
                     }
@@ -689,10 +700,10 @@ pub async fn start_search(
             }
             
             // 5. Archive Search (independent of filename match)
-            if should_search_archives && is_archive(path) {
+            if should_search_archives && is_archive(&path) {
                 if let Ok(metadata) = entry.metadata() {
                     if !metadata.is_dir() {
-                        let internal_results = search_in_archive(path, &search_params, &cancel_thread);
+                        let internal_results = search_in_archive(&path, &search_params, &cancel_thread);
                         for res in internal_results {
                             total_results.push(res);
                             if total_results.len() >= search_limit { break; }

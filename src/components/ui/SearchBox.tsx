@@ -34,23 +34,48 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
 }) => {
     const [isFocused, setIsFocused] = React.useState(false);
     const inputRef = React.useRef<HTMLInputElement>(null);
+    const debounceTimer = React.useRef<any>(null);
+
+    // Auto-search effect
+    React.useEffect(() => {
+        if (debounceTimer.current) {
+            clearTimeout(debounceTimer.current);
+        }
+        
+        // Only auto-submit if there's a query and the box is focused 
+        // (to prevent infinite loops on mount or external resets)
+        if (query && isFocused) {
+            debounceTimer.current = setTimeout(() => {
+                if (query.trim().length > 0) {
+                    onSubmit();
+                }
+            }, 350); // 350ms debounce
+        }
+        
+        return () => {
+            if (debounceTimer.current) clearTimeout(debounceTimer.current);
+        };
+    }, [query, isFocused]);
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            onSubmit();
-        }
         if (e.key === 'Escape') {
             onClear();
         }
     };
 
     return (
-        <div className={cx("search-box", className, { 
-            "auto-expand": autoExpand, 
-            "focused": isFocused,
-            "has-text": !!query
-        })}>
+        <div 
+            className={cx("search-box", className, { 
+                "auto-expand": autoExpand, 
+                "focused": isFocused,
+                "has-text": !!query
+            })}
+            onMouseEnter={() => {
+                if (autoExpand && !isFocused) {
+                    inputRef.current?.focus();
+                }
+            }}
+        >
             <input
                 ref={inputRef}
                 type="text"
@@ -77,7 +102,7 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                     </button>
                 ) : (
                     <>
-                        {query && (
+                        {query ? (
                             <button
                                 className="clear-search-btn"
                                 onMouseDown={(e) => e.preventDefault()}
@@ -86,28 +111,25 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                             >
                                 <X size={14} />
                             </button>
-                        )}
-                        <button
-                            className="search-submit-btn"
-                            onMouseDown={(e) => e.preventDefault()}
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                if (autoExpand) {
-                                    if (!isFocused && !query) {
-                                        inputRef.current?.focus();
-                                    } else if (query) {
-                                        onSubmit();
-                                    } else {
-                                        inputRef.current?.blur();
+                        ) : (
+                            <button
+                                className="search-submit-btn"
+                                onMouseDown={(e) => e.preventDefault()}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (autoExpand) {
+                                        if (!isFocused) {
+                                            inputRef.current?.focus();
+                                        } else {
+                                            inputRef.current?.blur();
+                                        }
                                     }
-                                } else {
-                                    onSubmit();
-                                }
-                            }}
-                            data-tooltip={searchTitle}
-                        >
-                            <Search size={14} />
-                        </button>
+                                }}
+                                data-tooltip={searchTitle}
+                            >
+                                <Search size={14} />
+                            </button>
+                        )}
                     </>
                 )}
             </div>

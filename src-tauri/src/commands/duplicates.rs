@@ -7,11 +7,11 @@ use std::io::{Read, BufReader};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
-use walkdir::WalkDir;
+use jwalk::WalkDir;
 use tauri::{State, AppHandle, Emitter};
 use dashmap::DashMap;
 
-use crate::utils::hardware::get_physical_disk_id;
+use crate::utils::hardware::{get_physical_disk_id, is_ssd};
 
 #[derive(Clone, Serialize)]
 pub struct DuplicatesProgress {
@@ -120,7 +120,14 @@ pub async fn find_duplicates(
 
             if !root_path.exists() { return; }
             
-            for entry in WalkDir::new(root_path).into_iter().filter_map(|e| e.ok()) {
+            let is_target_ssd = is_ssd(&root_path);
+            let num_threads = if is_target_ssd { 16 } else { 2 };
+            
+            for entry in WalkDir::new(root_path)
+                .parallelism(jwalk::Parallelism::RayonNewPool(num_threads))
+                .into_iter()
+                .filter_map(|e| e.ok()) 
+            {
                 if cancel_flag.load(Ordering::Relaxed) { break; }
                 if entry.file_type().is_file() {
                     if let Ok(metadata) = entry.metadata() {
