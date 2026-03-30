@@ -1,0 +1,218 @@
+/* Progress Overlay */
+.progress-overlay {
+    position: fixed;
+    bottom: 2rem;
+    right: 2rem;
+    top: auto;
+    left: auto;
+    background-color: transparent;
+    display: flex;
+    align-items: flex-end;
+    justify-content: flex-end;
+    z-index: var(--z-overlay);
+    pointer-events: none;
+}
+
+.progress-content-minimal {
+    background-color: var(--bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 0.5rem;
+    box-shadow: var(--menu-shadow);
+    display: flex;
+    flex-direction: column;
+    pointer-events: auto;
+}
+
+.progress-content-minimal {
+    min-width: 20rem;
+    padding: 0.75rem 1.5rem 0.5rem;
+    align-items: flex-start;
+    gap: 0.25rem;
+    animation: fadeIn 0.2s ease-out;
+}
+
+.progress-title-span {
+    flex: 1;
+}
+
+.progress-body {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    margin-top: 0.25rem;
+}
+
+.progress-bg-graph {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 0;
+    opacity: 0.2;
+    pointer-events: none;
+    overflow: hidden;
+    border-radius: inherit;
+}
+
+.progress-bg-graph svg {
+    display: block;
+}
+
+.progress-bar-track {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: rgba(var(--accent-color-rgb), 0.1);
+    z-index: 2;
+}
+
+.progress-bar-fill {
+    height: 100%;
+    background: var(--accent-color);
+    transition: width 0.4s ease-out;
+}
+
+.progress-action-name {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-color);
+    white-space: nowrap;
+    transition: color 0.2s ease;
+}
+
+.progress-drag-handle {
+    height: 2.75rem;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    background: var(--header-bg);
+    border-bottom: 1px solid color-mix(in srgb, var(--border-color), transparent 40%);
+    padding: 0 1rem;
+    color: var(--text-color);
+    font-size: 0.875rem;
+    font-weight: 600;
+    text-transform: none;
+    letter-spacing: -0.01em;
+    user-select: none;
+    -webkit-user-select: none;
+    border-top-left-radius: 0.5rem;
+    border-top-right-radius: 0.5rem;
+}
+
+.progress-drag-handle {
+    margin: -0.75rem -1.5rem 0.5rem -1.5rem;
+    padding: 0 1rem;
+    width: calc(100% + 3rem);
+    border-radius: 0.5rem 0.5rem 0 0;
+    transition: background 0.2s ease;
+}
+
+.progress-drag-handle:hover {
+    background: rgba(var(--accent-color-rgb), 0.08);
+}
+
+.progress-controls-row {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.progress-action-name:hover {
+    color: var(--accent-color);
+}
+
+.progress-details {
+    font-size: 0.8125rem;
+    max-width: 100%;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.progress-details > div {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    width: 100%;
+}
+
+.confirm-dialog .progress-details {
+    padding: 0.75rem 1rem;
+    background: var(--surface-secondary);
+    border-bottom: 1px solid var(--border-color);
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(1.25rem);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Progress Overlay Buttons */
+.progress-btn-control {
+    border: none;
+    background: transparent;
+    color: var(--text-color);
+    opacity: 0.6;
+    padding: 0.25rem;
+    border-radius: 0.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.progress-btn-control.pause-btn {
+    gap: 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    padding: 0.25rem 0.5rem;
+}
+
+.progress-btn-control.pause-btn.paused {
+    background: var(--accent-color);
+    color: var(--selected-text);
+    opacity: 1;
+    box-shadow: 0 2px 0.5rem rgba(var(--accent-color-rgb), 0.3);
+}
+
+.progress-btn-control.stop-btn:hover {
+    color: #ef4444;
+    background-color: rgba(239, 68, 68, 0.12);
+    opacity: 1;
+}
+
+.progress-btn-control:hover {
+    background-color: var(--hover-color);
+    opacity: 1;
+}
+
+.progress-btn-control.turbo-toggle-btn {
+    transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.2s, opacity 0.2s;
+}
+
+.progress-btn-control.turbo-toggle-btn:hover {
+    transform: scale(1.1);
+    background-color: var(--hover-color);
+    opacity: 1;
+}
+
+.progress-btn-control.turbo-toggle-btn.turbo-active {
+    opacity: 1;
+    color: #fbbf24;
+    filter: drop-shadow(0 0 0.25rem rgba(251, 191, 36, 0.4));
+}

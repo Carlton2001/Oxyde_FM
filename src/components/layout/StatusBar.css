@@ -69,7 +69,7 @@
 
 .view-btn.active {
     background-color: var(--accent-color);
-    color: #ffffff;
+    color: var(--selected-text);
     /* Always white on accent */
     opacity: 1;
 }

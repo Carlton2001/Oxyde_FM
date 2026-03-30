@@ -156,7 +156,7 @@
 
 .calendar-day.selected {
     background: var(--accent-color);
-    color: white;
+    color: var(--selected-text);
     font-weight: 700;
 }
 

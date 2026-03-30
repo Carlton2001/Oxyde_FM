@@ -1,7 +1,7 @@
 import React, { useRef, useEffect } from 'react';
-import cx from 'classnames';
-import { Check } from 'lucide-react';
 import { TFunc } from '../../i18n';
+import { FilterMenuCheckbox } from './FilterMenuCheckbox';
+import './FilterMenu.css';
 
 import { SIZE_CATEGORIES, SizeCategoryKey } from '../../types';
 
@@ -85,46 +85,34 @@ export const SizeFilterMenu: React.FC<SizeFilterMenuProps> = ({
     const handleClearAll = () => onChange(new Set());
 
     return (
-        <div style={{ zIndex: 10001, pointerEvents: 'auto', fontSize: '0.75rem' }}>
+        <div className="filter-menu-wrapper">
             <div
                 ref={menuRef}
-                className="context-menu"
-                style={{
-                    position: 'fixed',
-                    left: `${position.left}px`,
-                    top: `${position.top}px`,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    minWidth: '200px'
-                }}
+                className="context-menu filter-menu-inner"
+                style={{ left: `${position.left}px`, top: `${position.top}px`, minWidth: '200px' }}
             >
-                <div style={{ padding: '4px 8px', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', borderBottom: '1px solid var(--border-color)', marginBottom: '4px' }}>
+                <div className="filter-menu-title">
                     {t('filter_by_size' as any) || 'Filter by size'}
                 </div>
 
-                <div style={{ flex: 1, padding: '4px 0' }}>
+                <div className="filter-menu-list">
                     {categoryKeys.map(cat => {
                         const info = SIZE_CATEGORIES[cat];
                         const isChecked = selectedSizes === null || selectedSizes.has(cat);
                         const label = t(info.key as any) || cat;
                         return (
-                            <div
+                            <FilterMenuCheckbox
                                 key={cat}
-                                className={cx("context-menu-item")}
+                                checked={isChecked}
+                                label={label}
                                 onClick={() => handleToggle(cat)}
-                                style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 12px' }}
-                            >
-                                <div style={{ width: '14px', height: '14px', border: '1px solid var(--border-color)', borderRadius: '3px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: isChecked ? 'var(--accent-color)' : 'transparent', borderColor: isChecked ? 'var(--accent-color)' : 'var(--border-color)' }}>
-                                    {isChecked && <Check size={10} color="#fff" strokeWidth={3} />}
-                                </div>
-                                <span>{label}</span>
-                            </div>
+                            />
                         );
                     })}
                 </div>
-                <div style={{ borderTop: '1px solid var(--border-color)', marginTop: '4px', paddingTop: '4px', display: 'flex', gap: '4px', paddingBottom: '4px', paddingLeft: '8px', paddingRight: '8px' }}>
-                    <button className="btn ghost" style={{ flex: 1, fontSize: '0.7rem', padding: '2px 4px' }} onClick={handleSelectAll}>{t('all' as any) || 'All'}</button>
-                    <button className="btn ghost" style={{ flex: 1, fontSize: '0.7rem', padding: '2px 4px' }} onClick={handleClearAll}>{t('none' as any) || 'None'}</button>
+                <div className="filter-menu-footer">
+                    <button className="btn ghost" onClick={handleSelectAll}>{t('all' as any) || 'All'}</button>
+                    <button className="btn ghost" onClick={handleClearAll}>{t('none' as any) || 'None'}</button>
                 </div>
             </div>
         </div>

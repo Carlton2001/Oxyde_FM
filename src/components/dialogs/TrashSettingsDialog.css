@@ -214,7 +214,7 @@
 
 .ts-unit-toggle button.active {
     background: var(--accent-color);
-    color: #fff;
+    color: var(--selected-text);
 }
 
 .ts-divider {

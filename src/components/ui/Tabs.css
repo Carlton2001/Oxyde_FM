@@ -168,7 +168,7 @@
 .tab-close.disabled {
     visibility: hidden;
     pointer-events: none;
-    opacity: 0 !important;
+    opacity: 0;
 }
 
 .tab-close:hover {

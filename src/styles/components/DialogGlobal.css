@@ -254,7 +254,7 @@
 .dialog-pill.active,
 .dialog-pill.selected {
     background: var(--accent-color-transparent, rgba(var(--accent-color-rgb), 0.1));
-    border-color: var(--accent-color) !important;
+    border-color: var(--accent-color);
 }
 
 .dialog-pill-icon {

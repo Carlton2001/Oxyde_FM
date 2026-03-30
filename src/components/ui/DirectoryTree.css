@@ -252,7 +252,7 @@
 }
 
 .virtualized-scroller.details {
-    padding: 0 0 1rem 0 !important;
+    padding: 0 0 1rem 0;
 }
 
 /* Ensure AutoSizer fills container */
@@ -287,12 +287,12 @@
 
 .tree-eject-btn:hover {
     background: var(--accent-color);
-    color: white;
+    color: var(--selected-text);
     opacity: 1;
 }
 
 .tree-node-content.active .tree-eject-btn {
-    color: white;
+    color: var(--selected-text);
     opacity: 0.8;
 }
 

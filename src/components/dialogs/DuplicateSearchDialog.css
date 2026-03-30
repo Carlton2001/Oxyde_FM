@@ -133,24 +133,24 @@
 
 .duplicate-search-dialog .drive-badge.ssd {
     background: #10b981;
-    color: #ffffff;
+    color: var(--selected-text);
 }
 
 .duplicate-search-dialog .drive-badge.hdd {
     background: #3b82f6;
-    color: #ffffff;
+    color: var(--selected-text);
 }
 
 .duplicate-search-dialog .drive-badge.usb,
 .duplicate-search-dialog .drive-badge.removable {
     background: #f59e0b;
-    color: #ffffff;
+    color: var(--selected-text);
 }
 
 .duplicate-search-dialog .drive-badge.remote,
 .duplicate-search-dialog .drive-badge.network {
     background: #818cf8;
-    color: #ffffff;
+    color: var(--selected-text);
 }
 
 .duplicate-search-dialog .location-warning {
@@ -177,7 +177,7 @@
 }
 
 .duplicate-search-dialog .dialog-checkbox {
-    display: flex !important;
+    display: flex;
     align-items: center;
     gap: 0.5rem;
     white-space: nowrap;
@@ -351,7 +351,7 @@
     padding: 2px 8px;
     border-radius: 12px;
     background: var(--accent-color);
-    color: #ffffff;
+    color: var(--selected-text);
     font-weight: 500;
     min-width: 1.5rem;
     text-align: center;
@@ -422,8 +422,8 @@
 }
 
 .duplicate-search-dialog .clear-filter-btn {
-    border-left: none !important;
-    background: transparent !important;
+    border-left: none;
+    background: transparent;
 }
 
 /* Resize Handle */
@@ -431,7 +431,7 @@
     position: absolute;
     right: 0;
     bottom: 0;
-    top: auto !important;
+    top: auto;
     width: 20px;
     height: 20px;
     cursor: nwse-resize;

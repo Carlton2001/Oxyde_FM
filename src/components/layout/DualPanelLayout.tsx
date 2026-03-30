@@ -409,10 +409,7 @@ export const DualPanelLayout: React.FC<DualPanelLayoutProps> = ({
                     />
                 )}
 
-                <div
-                    className="panel-container"
-                    style={{ flexDirection: 'column' }}
-                >
+                <div className="panel-container">
                     {layout === 'standard' && onTabSwitch && (
                         <Tabs
                             onSwitch={onTabSwitch}
@@ -430,7 +427,6 @@ export const DualPanelLayout: React.FC<DualPanelLayoutProps> = ({
                     )}
                     <div
                         className={cx("panels-container", { "dual-view": layout === 'dual' })}
-                        style={{ display: 'flex', flex: 1, overflow: 'hidden', width: '100%' }}
                     >
                         <FilePanel
                             files={left.files}

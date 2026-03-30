@@ -40,6 +40,15 @@
   --z-overlay: 10000;
   --z-context: 20000;
 
+  /* Spacing Scale (4px base) */
+  --space-1: 0.25rem;   /*  4px */
+  --space-2: 0.5rem;    /*  8px */
+  --space-3: 0.75rem;   /* 12px */
+  --space-4: 1rem;      /* 16px */
+  --space-5: 1.25rem;   /* 20px */
+  --space-6: 1.5rem;    /* 24px */
+  --space-8: 2rem;      /* 32px */
+
   /* Surfaces & Visuals */
   --surface-tertiary: color-mix(in srgb, var(--text-color), transparent 75%);
   --scrollbar-size: 0.875rem;
@@ -138,15 +147,34 @@ svg {
 
 .panel-container {
   display: flex;
+  flex-direction: column;
   flex: 1;
   overflow: hidden;
   height: 100%;
 }
 
-/* Global Animation Utility */
+.panels-container {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  width: 100%;
+}
+
+/* Global Animation Utilities */
 @keyframes spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+@keyframes menuFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-0.25rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 

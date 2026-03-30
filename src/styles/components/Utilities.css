@@ -75,3 +75,15 @@
     overflow: hidden;
     text-overflow: ellipsis;
 }
+
+.flex-spacer {
+    flex: 1;
+}
+
+.mt-auto {
+    margin-top: auto;
+}
+
+.mr-auto {
+    margin-right: auto;
+}
