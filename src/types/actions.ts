@@ -46,7 +46,7 @@ export interface ActionContext {
     fileOps: FileOperations;
     clipboard: ClipboardOperations;
     notify: (message: string, type?: NotificationType, duration?: number) => void;
-    t: (key: string) => string;
+    t: (key: string, params?: Record<string, string | number>) => string;
 
     // UI State Setters (Temporary hooks until full refactor)
     // Dialog Context

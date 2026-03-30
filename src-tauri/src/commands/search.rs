@@ -5,7 +5,6 @@ use log::info;
 use glob::Pattern;
 use regex::{Regex, RegexBuilder};
 use std::time::SystemTime;
-use jwalk::WalkDir;
 use tauri::{AppHandle, State, Emitter, Manager};
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};

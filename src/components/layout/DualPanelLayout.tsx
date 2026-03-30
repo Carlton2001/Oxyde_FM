@@ -325,6 +325,23 @@ export const DualPanelLayout: React.FC<DualPanelLayoutProps> = ({
     const handleLeftDragStart = useMemo(() => makeDragStartHandler('left'), [makeDragStartHandler]);
     const handleRightDragStart = useMemo(() => makeDragStartHandler('right'), [makeDragStartHandler]);
 
+    const getFurthestDescendant = useCallback((panel: FullPanelState) => {
+        if (!panel.history || panel.historyIndex === undefined || panel.historyIndex >= panel.history.length - 1) return null;
+        let furthest = null;
+        for (let i = panel.historyIndex + 1; i < panel.history.length; i++) {
+            const hPath = panel.history[i].path;
+            if (hPath.toLowerCase().startsWith(panel.path.toLowerCase() + '\\') || hPath.toLowerCase() === panel.path.toLowerCase()) {
+                furthest = hPath;
+            } else {
+                break;
+            }
+        }
+        return furthest;
+    }, []);
+
+    const leftForwardPath = useMemo(() => getFurthestDescendant(left), [left, getFurthestDescendant]);
+    const rightForwardPath = useMemo(() => getFurthestDescendant(right), [right, getFurthestDescendant]);
+
     return (
         <div className="app">
             <TopBar
@@ -507,6 +524,7 @@ export const DualPanelLayout: React.FC<DualPanelLayoutProps> = ({
                             deletedDateFilter={left.deletedDateFilter}
                             setDeletedDateFilter={left.setDeletedDateFilter}
                             clearAllFilters={left.clearAllFilters}
+                            forwardPath={leftForwardPath}
                         />
 
                         {layout === 'dual' && (
@@ -576,6 +594,7 @@ export const DualPanelLayout: React.FC<DualPanelLayoutProps> = ({
                                 deletedDateFilter={right.deletedDateFilter}
                                 setDeletedDateFilter={right.setDeletedDateFilter}
                                 clearAllFilters={right.clearAllFilters}
+                                forwardPath={rightForwardPath}
                             />
                         )}
                     </div>

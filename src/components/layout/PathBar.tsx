@@ -21,9 +21,10 @@ interface PathBarProps {
     panelId: string;
     t?: TFunc;
     favorites?: QuickAccessItem[];
+    forwardPath?: string | null;
 }
 
-export const PathBar: React.FC<PathBarProps> = ({ path, onNavigate, className, isDragging, onDrop, drives, showHidden = false, panelId, t, favorites }) => {
+export const PathBar: React.FC<PathBarProps> = ({ path, onNavigate, className, isDragging, onDrop, drives, showHidden = false, panelId, t, favorites, forwardPath }) => {
     const { useSystemIcons } = useApp();
     
     const isFavorite = useMemo(() => {
@@ -255,6 +256,7 @@ export const PathBar: React.FC<PathBarProps> = ({ path, onNavigate, className, i
                 name: t ? t('recycle_bin' as any) : 'Recycle Bin',
                 fullPath: 'trash://',
                 isLast: true,
+                isGhost: false,
                 isTrash: true
             }];
         }
@@ -264,6 +266,7 @@ export const PathBar: React.FC<PathBarProps> = ({ path, onNavigate, className, i
                 name: t ? t('network_vincinity' as any) : 'Network Neighborhood',
                 fullPath: '__network_vincinity__',
                 isLast: true,
+                isGhost: false,
                 isNetwork: true
             }];
         }
@@ -287,13 +290,24 @@ export const PathBar: React.FC<PathBarProps> = ({ path, onNavigate, className, i
                 name: displayName,
                 fullPath: path,
                 isLast: true,
+                isGhost: false,
                 isSearch: true
             }];
         }
 
-        const parts = path.split('\\').filter(p => p.length > 0);
+        let pathToParse = path;
+        let isForwardPathConfigured = false;
+        let currentPartsLen = 0;
+
+        if (forwardPath && forwardPath.toLowerCase().startsWith(path.toLowerCase() + '\\')) {
+            pathToParse = forwardPath;
+            currentPartsLen = path.split('\\').filter(p => p.length > 0).length;
+            isForwardPathConfigured = true;
+        }
+
+        const parts = pathToParse.split('\\').filter(p => p.length > 0);
         let currentPath = "";
-        const isUNC = path.startsWith('\\\\');
+        const isUNC = pathToParse.startsWith('\\\\');
 
         return parts.map((part, index) => {
             if (isUNC) {
@@ -330,65 +344,109 @@ export const PathBar: React.FC<PathBarProps> = ({ path, onNavigate, className, i
             const isDrive = !isUNC && index === 0 && part.includes(':');
             const isNetworkServer = isUNC && index === 0;
 
+            const currentIndex = isForwardPathConfigured ? currentPartsLen - 1 : parts.length - 1;
+
             return {
                 name,
                 fullPath: currentPath,
                 isLast: index === parts.length - 1,
+                isGhost: index !== currentIndex,
                 isTrash: false,
                 isDrive,
                 isNetwork: isUNC,
                 isNetworkServer
             };
         });
-    }, [path, drives, isTrashPath, t]);
+    }, [path, forwardPath, drives, isTrashPath, t]);
 
     const scrollRef = useRef<HTMLDivElement>(null);
-    const [hasOverflow, setHasOverflow] = useState(false);
+    const [overflowState, setOverflowState] = useState<'none' | 'left' | 'right' | 'both'>('none');
 
-    const scrollToLastItem = useCallback(() => {
+    const updateOverflow = useCallback(() => {
+        if (!scrollRef.current) return;
+        const { scrollWidth, clientWidth, scrollLeft } = scrollRef.current;
+        if (scrollWidth <= clientWidth + 2) {
+            setOverflowState('none');
+            return;
+        }
+
+        const isAtLeft = scrollLeft <= 2;
+        const isAtRight = scrollLeft + clientWidth >= scrollWidth - 2;
+
+        if (isAtLeft && !isAtRight) setOverflowState('right');
+        else if (!isAtLeft && isAtRight) setOverflowState('left');
+        else if (!isAtLeft && !isAtRight) setOverflowState('both');
+        else setOverflowState('none');
+    }, []);
+
+    const scrollToActiveItem = useCallback(() => {
         if (scrollRef.current) {
-            // Use requestAnimationFrame to ensure the browser has finished layout
             requestAnimationFrame(() => {
                 if (!scrollRef.current) return;
-                const { scrollWidth, clientWidth } = scrollRef.current;
-                setHasOverflow(scrollWidth > clientWidth);
-                // Force scroll to the extreme right
-                scrollRef.current.scrollLeft = scrollRef.current.scrollWidth;
+                
+                const container = scrollRef.current;
+                const activeEl = container.querySelector('.path-segment.active-segment') as HTMLElement;
+                
+                if (activeEl) {
+                    const maxScrollLeft = container.scrollWidth - container.clientWidth;
+                    
+                    const containerRect = container.getBoundingClientRect();
+                    const activeRect = activeEl.getBoundingClientRect();
+                    
+                    // Predict the position if we scroll all the way to the right
+                    const scrollDiff = maxScrollLeft - container.scrollLeft;
+                    const futureLeft = activeRect.left - scrollDiff;
+                    const futureRight = activeRect.right - scrollDiff;
+                    
+                    // Does it stay fully visible if we stick right?
+                    if (futureLeft >= containerRect.left && futureRight <= containerRect.right) {
+                        container.scrollLeft = maxScrollLeft;
+                    } else {
+                        // Center it
+                        const activeCenter = activeRect.left + activeRect.width / 2;
+                        const containerCenter = containerRect.left + containerRect.width / 2;
+                        container.scrollLeft += (activeCenter - containerCenter);
+                    }
+                } else {
+                    container.scrollLeft = container.scrollWidth;
+                }
+                
+                updateOverflow();
             });
         }
-    }, []);
+    }, [updateOverflow]);
 
     // Check overflow and scroll on path change, mode change and window resize
     useEffect(() => {
-        scrollToLastItem();
+        scrollToActiveItem();
         
         // Immediate and delayed triggers to handle both DOM changes and CSS transitions (0.15s)
-        const timer1 = setTimeout(scrollToLastItem, 10);
-        const timer2 = setTimeout(scrollToLastItem, 200);
-        const timer3 = setTimeout(scrollToLastItem, 500); // Final safety check
+        const timer1 = setTimeout(scrollToActiveItem, 10);
+        const timer2 = setTimeout(scrollToActiveItem, 200);
+        const timer3 = setTimeout(scrollToActiveItem, 500); // Final safety check
 
-        window.addEventListener('resize', scrollToLastItem);
+        window.addEventListener('resize', scrollToActiveItem);
         
         // Also observe the element size itself, because TopBar actions appearing 
         // will change the pathbar width without a window resize event.
         let observer: ResizeObserver | null = null;
         if (scrollRef.current) {
             observer = new ResizeObserver(() => {
-                scrollToLastItem();
+                scrollToActiveItem();
                 // Double check after a small delay to handle parent transitions
-                setTimeout(scrollToLastItem, 160);
+                setTimeout(scrollToActiveItem, 160);
             });
             observer.observe(scrollRef.current);
         }
 
         return () => {
-            window.removeEventListener('resize', scrollToLastItem);
+            window.removeEventListener('resize', scrollToActiveItem);
             clearTimeout(timer1);
             clearTimeout(timer2);
             clearTimeout(timer3);
             if (observer) observer.disconnect();
         };
-    }, [path, isEditing, scrollToLastItem]);
+    }, [path, isEditing, scrollToActiveItem]);
 
     // Manual Drag handling
     const isDragRef = useRef(false);
@@ -453,11 +511,15 @@ export const PathBar: React.FC<PathBarProps> = ({ path, onNavigate, className, i
                             return <Icon size="1rem" className="path-icon header-icon" />;
                         })()
                     )}
-                    <div className={cx("breadcrumb-list", { overflowing: hasOverflow })} ref={scrollRef}>
+                    <div className={cx("breadcrumb-list", `overflow-${overflowState}`)} ref={scrollRef} onScroll={updateOverflow}>
                         {breadcrumbs.map((crumb, i) => (
                             <React.Fragment key={i}>
                                 <div
-                                    className={cx("path-segment", { "drop-target": isDragging && dragTarget === crumb.fullPath })}
+                                    className={cx("path-segment", { 
+                                        "drop-target": isDragging && dragTarget === crumb.fullPath,
+                                        "ghost": crumb.isGhost,
+                                        "active-segment": !crumb.isGhost
+                                    })}
                                     data-path={crumb.fullPath}
                                     onClick={(e) => {
                                         e.stopPropagation();
@@ -491,7 +553,7 @@ export const PathBar: React.FC<PathBarProps> = ({ path, onNavigate, className, i
                                 </div>
                                 {!crumb.isLast && (
                                     <div
-                                        className={cx("path-separator", { active: menuOpen?.path === crumb.fullPath })}
+                                        className={cx("path-separator", { active: menuOpen?.path === crumb.fullPath, ghost: crumb.isGhost })}
                                         onClick={(e) => handleSeparatorClick(e, crumb.fullPath)}
                                         onMouseDown={(e) => e.stopPropagation()}
                                         onMouseUp={(e) => e.stopPropagation()}

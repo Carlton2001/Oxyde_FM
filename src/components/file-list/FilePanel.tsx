@@ -93,6 +93,7 @@ interface FilePanelProps {
     deletedDateFilter: Set<string> | null;
     setDeletedDateFilter: (val: Set<string> | null | ((prev: Set<string> | null) => Set<string> | null)) => void;
     clearAllFilters: () => void;
+    forwardPath?: string | null;
 }
 
 export const FilePanel: React.FC<FilePanelProps> = React.memo(({
@@ -108,7 +109,7 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
     groupByDate, onGroupByDateChange, isProtected, favorites,
     extensionFilter, setExtensionFilter, sizeFilter, setSizeFilter, dateFilter, setDateFilter,
     nameFilter, setNameFilter, locationFilter, setLocationFilter,
-    deletedDateFilter, setDeletedDateFilter, clearAllFilters
+    deletedDateFilter, setDeletedDateFilter, clearAllFilters, forwardPath
 }) => {
     const { useSystemIcons: contextUseSystemIcons, searchLimit, showGridThumbnails, notify, showNetwork, showCheckboxes } = useApp();
     const useSystemIcons = propUseSystemIcons ?? contextUseSystemIcons;
@@ -568,6 +569,7 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
                                 panelId={panelId}
                                 t={t}
                                 favorites={favorites}
+                                forwardPath={forwardPath}
                             />
                         </div>
                     )}

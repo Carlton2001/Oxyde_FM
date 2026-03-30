@@ -140,6 +140,20 @@ export const TopBar: React.FC<TopBarProps> = ({
         }).catch(err => console.error("Failed to get home dir", err));
     }, []);
 
+    const forwardPath = React.useMemo(() => {
+        if (!activePanel.history || activePanel.historyIndex === undefined || activePanel.historyIndex >= activePanel.history.length - 1) return null;
+        let furthest = null;
+        for (let i = activePanel.historyIndex + 1; i < activePanel.history.length; i++) {
+            const hPath = activePanel.history[i].path;
+            if (hPath.toLowerCase().startsWith(activePanel.path.toLowerCase() + '\\') || hPath.toLowerCase() === activePanel.path.toLowerCase()) {
+                furthest = hPath;
+            } else {
+                break;
+            }
+        }
+        return furthest;
+    }, [activePanel.history, activePanel.historyIndex, activePanel.path]);
+
     const closeSettings = () => {
         setSettingsOpen(false);
         setSettingsPage('main');
@@ -361,6 +375,7 @@ export const TopBar: React.FC<TopBarProps> = ({
                         panelId={activePanelId}
                         t={t}
                         favorites={favorites}
+                        forwardPath={forwardPath}
                     />
                 </div>
             ) : (

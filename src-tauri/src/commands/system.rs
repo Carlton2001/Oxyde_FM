@@ -777,10 +777,8 @@ pub async fn get_mounted_images() -> Result<Vec<String>, CommandError> {
 
             // 1. Initialize COM
             let hr = CoInitializeEx(None, COINIT_MULTITHREADED);
-            if hr.is_err() {
-                if hr.0 as u32 != 0x80010106 { // RPC_E_CHANGED_MODE
-                    return Err(CommandError::SystemError(format!("COM Init failed: 0x{:08x}", hr.0)));
-                }
+            if hr.is_err() && hr.0 as u32 != 0x80010106 { // RPC_E_CHANGED_MODE
+                return Err(CommandError::SystemError(format!("COM Init failed: 0x{:08x}", hr.0)));
             }
 
             // 2. Create WbemLocator
