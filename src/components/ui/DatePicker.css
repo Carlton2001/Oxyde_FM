@@ -156,7 +156,7 @@
 
 .calendar-day.selected {
     background: var(--accent-color);
-    color: white;
+    color: var(--selected-text);
     font-weight: 700;
 }
 
@@ -193,7 +193,7 @@
 }
 
 .btn-icon.xs {
-    width: 1.25rem !important;
-    height: 1.25rem !important;
-    padding: 0 !important;
+    width: 1.25rem;
+    height: 1.25rem;
+    padding: 0;
 }

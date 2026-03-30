@@ -111,13 +111,13 @@
 }
 
 .window-controls .btn-icon.danger:hover {
-    background-color: #c42b1c;
-    color: white;
+    background-color: var(--danger-bg);
+    color: var(--selected-text);
 }
 
 .win-btn.close:hover {
-    background-color: #c42b1c;
-    color: white;
+    background-color: var(--danger-bg);
+    color: var(--selected-text);
 }
 
 .path-bar-container {
@@ -184,17 +184,6 @@
     animation: menuFadeIn 0.15s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-@keyframes menuFadeIn {
-    from {
-        opacity: 0;
-        transform: translateY(-4px);
-    }
-
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
 
 .hamburger-item {
     display: flex;
@@ -276,8 +265,7 @@
     animation: submenuFadeIn 0.15s cubic-bezier(0.16, 1, 0.3, 1);
     z-index: 100;
 
-    /* CRITICAL: Reset color inheritance from active parent item */
-    color: var(--text-color) !important;
+    color: var(--text-color);
 }
 
 @keyframes submenuFadeIn {
@@ -310,8 +298,11 @@
 }
 
 /* --- SETTINGS MENU SYSTEM (CLEAN STATES) --- */
+/* Scoped under .settings-main-panel and .settings-submenu to win specificity
+   without relying on !important */
 
-.settings-item {
+.settings-main-panel .settings-item,
+.settings-submenu .settings-item {
     display: flex;
     align-items: center;
     gap: 0.75rem;
@@ -322,31 +313,31 @@
     margin-bottom: 1px;
     position: relative;
     cursor: default;
-    /* transition: background-color 0.1s; REMOVED to prevent blinking during re-renders */
     user-select: none;
-
-    /* 1. NORMAL STATE */
-    background-color: transparent !important;
-    color: var(--text-color) !important;
+    background-color: transparent;
+    color: var(--text-color);
 }
 
-.settings-item svg {
-    color: inherit !important;
-    stroke: currentColor !important;
-    opacity: 1 !important;
+.settings-main-panel .settings-item svg,
+.settings-submenu .settings-item svg {
+    color: inherit;
+    stroke: currentColor;
+    opacity: 1;
     flex-shrink: 0;
 }
 
 /* 2. HOVER STATE */
-.settings-item:hover:not(.no-hover):not(.active) {
-    background-color: var(--hover-color) !important;
-    color: var(--text-color) !important;
+.settings-main-panel .settings-item:hover:not(.no-hover):not(.active),
+.settings-submenu .settings-item:hover:not(.no-hover):not(.active) {
+    background-color: var(--hover-color);
+    color: var(--text-color);
 }
 
 /* 3. SELECTED / ACTIVE STATE */
-.settings-item.active {
-    background-color: var(--accent-color) !important;
-    color: var(--selected-text) !important;
+.settings-main-panel .settings-item.active,
+.settings-submenu .settings-item.active {
+    background-color: var(--accent-color);
+    color: var(--selected-text);
 }
 
 /* --- LAYOUT UTILITIES --- */
@@ -374,9 +365,10 @@
     margin-left: 0.5rem;
 }
 
-.settings-item.active .settings-item-icon-right {
+.settings-main-panel .settings-item.active .settings-item-icon-right,
+.settings-submenu .settings-item.active .settings-item-icon-right {
     opacity: 1;
-    color: inherit !important;
+    color: inherit;
 }
 
 .settings-item-text {
@@ -491,7 +483,7 @@
 
 .quality-btn.active {
     background: var(--accent-color);
-    color: white;
+    color: var(--selected-text);
     border-color: var(--accent-color);
 }
 
@@ -563,7 +555,7 @@
 
 .drive-chip.active {
     background-color: var(--accent-color);
-    color: #ffffff;
+    color: var(--selected-text);
     border-color: transparent;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }

@@ -1,6 +1,7 @@
 import React from 'react';
 import { X, CheckCircle, XCircle, AlertCircle, Info, Loader2 } from 'lucide-react';
 import cx from 'classnames';
+import '../../styles/components/Notification.css';
 
 export interface Notification {
     id: string;

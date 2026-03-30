@@ -1,0 +1,156 @@
+/* About Dialog */
+.about-dialog {
+    width: 31.25rem;
+}
+
+.about-title {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.about-content {
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.25rem;
+    max-height: 70vh;
+    overflow-y: auto;
+}
+
+.about-logo {
+    flex-shrink: 0;
+}
+
+.about-logo-img {
+    width: 5rem;
+    height: 5rem;
+    filter: drop-shadow(0 0.25rem 0.5rem rgba(0, 0, 0, 0.1));
+}
+
+.about-text-group {
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    flex-shrink: 0;
+}
+
+.about-app-name {
+    font-size: 1.5rem;
+    font-weight: 700;
+    letter-spacing: -0.03125rem;
+}
+
+.about-tagline {
+    font-size: 0.875rem;
+    color: var(--text-muted);
+}
+
+.about-version {
+    font-size: 0.75rem;
+    opacity: 0.6;
+    margin-top: 0.25rem;
+}
+
+.about-credits {
+    width: 100%;
+    border-top: 1px solid var(--border-color);
+    padding-top: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    flex-shrink: 0;
+}
+
+.credits-label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    font-weight: 600;
+    text-align: center;
+}
+
+.credits-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    width: 100%;
+    max-width: 20rem;
+    margin: 0 auto;
+}
+
+.credit-card {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    padding: 0.625rem 1rem;
+    background: var(--surface-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 0.5rem;
+    transition: all 0.2s;
+    text-decoration: none;
+    min-height: 3.375rem;
+    box-sizing: border-box;
+}
+
+.credit-card:hover {
+    border-color: var(--accent-color);
+    box-shadow: 0 0.25rem 0.75rem rgba(0, 0, 0, 0.1);
+}
+
+.credit-card-logo {
+    width: auto;
+    height: 2rem;
+    max-width: 100%;
+    object-fit: contain;
+    display: block;
+}
+
+.credit-card-logo.invert-icon {
+    filter: invert(1);
+}
+
+.rust-logo-group {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+}
+
+.rust-logo-group .credit-card-logo {
+    height: 2.125rem;
+    width: auto;
+}
+
+.rust-brand-text {
+    font-weight: 700;
+    font-size: 1.375rem;
+    color: var(--text-color);
+    letter-spacing: 0.02em;
+    line-height: 1;
+    margin-top: -2px;
+}
+
+.lucide-logo-group {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+}
+
+.lucide-logo-group .credit-card-logo {
+    height: 1.875rem;
+    width: auto;
+}
+
+.lucide-brand-text {
+    font-weight: 600;
+    font-size: 1.375rem;
+    color: var(--text-color);
+    font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    letter-spacing: -0.02em;
+    line-height: 1;
+    margin-top: -2px;
+}

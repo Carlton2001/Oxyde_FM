@@ -1,8 +1,7 @@
 import React, { useRef, useEffect } from 'react';
-import cx from 'classnames';
-import { Check } from 'lucide-react';
-
 import { TFunc } from '../../i18n';
+import { FilterMenuCheckbox } from './FilterMenuCheckbox';
+import './FilterMenu.css';
 
 interface ExtensionFilterMenuProps {
     x: number;
@@ -79,46 +78,33 @@ export const ExtensionFilterMenu: React.FC<ExtensionFilterMenuProps> = ({
     const handleClearAll = () => onChange(new Set()); // This will hide all files
 
     return (
-        <div style={{ zIndex: 10001, pointerEvents: 'auto', fontSize: '0.75rem' }}>
+        <div className="filter-menu-wrapper">
             <div
                 ref={menuRef}
-                className="context-menu"
-                style={{
-                    position: 'fixed',
-                    left: `${position.left}px`,
-                    top: `${position.top}px`,
-                    maxHeight: '300px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    minWidth: '150px'
-                }}
+                className="context-menu filter-menu-inner"
+                style={{ left: `${position.left}px`, top: `${position.top}px`, maxHeight: '300px', minWidth: '150px' }}
             >
-                <div style={{ padding: '4px 8px', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', borderBottom: '1px solid var(--border-color)', marginBottom: '4px' }}>
+                <div className="filter-menu-title">
                     {t('filter_by_ext' as any) || 'Filter by extension'}
                 </div>
 
-                <div style={{ overflowY: 'auto', flex: 1, padding: '4px 0' }}>
+                <div className="filter-menu-list scrollable">
                     {availableExtensions.map(ext => {
                         const isChecked = selectedExtensions === null || selectedExtensions.has(ext);
                         const displayExt = ext === '' ? `(${t('none_fem' as any) || 'None'})` : ext.toUpperCase();
                         return (
-                            <div
+                            <FilterMenuCheckbox
                                 key={ext}
-                                className={cx("context-menu-item")}
+                                checked={isChecked}
+                                label={displayExt}
                                 onClick={() => handleToggle(ext)}
-                                style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 12px' }}
-                            >
-                                <div style={{ width: '14px', height: '14px', border: '1px solid var(--border-color)', borderRadius: '3px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: isChecked ? 'var(--accent-color)' : 'transparent', borderColor: isChecked ? 'var(--accent-color)' : 'var(--border-color)' }}>
-                                    {isChecked && <Check size={10} color="#fff" strokeWidth={3} />}
-                                </div>
-                                <span>{displayExt}</span>
-                            </div>
+                            />
                         );
                     })}
                 </div>
-                <div style={{ borderTop: '1px solid var(--border-color)', marginTop: '4px', paddingTop: '4px', display: 'flex', gap: '4px', paddingBottom: '4px', paddingLeft: '8px', paddingRight: '8px' }}>
-                    <button className="btn ghost" style={{ flex: 1, fontSize: '0.7rem', padding: '2px 4px' }} onClick={handleSelectAll}>{t('all' as any) || 'All'}</button>
-                    <button className="btn ghost" style={{ flex: 1, fontSize: '0.7rem', padding: '2px 4px' }} onClick={handleClearAll}>{t('none' as any) || 'None'}</button>
+                <div className="filter-menu-footer">
+                    <button className="btn ghost" onClick={handleSelectAll}>{t('all' as any) || 'All'}</button>
+                    <button className="btn ghost" onClick={handleClearAll}>{t('none' as any) || 'None'}</button>
                 </div>
             </div>
         </div>

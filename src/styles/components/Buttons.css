@@ -25,7 +25,7 @@
 }
 
 .btn.danger:focus {
-    --btn-focus-shadow: rgba(239, 68, 68, 0.4);
+    --btn-focus-shadow: color-mix(in srgb, var(--error-color), transparent 60%);
 }
 
 .btn.primary:focus {
@@ -49,7 +49,7 @@
 /* Primary Accent Button */
 .btn.primary {
     background: var(--accent-color);
-    color: #ffffff;
+    color: var(--selected-text);
     border: 1px solid var(--accent-color);
 }
 
@@ -66,7 +66,7 @@
 /* Danger Button */
 .btn.danger {
     background: var(--error-color, #ef4444);
-    color: #ffffff;
+    color: var(--selected-text);
     border: 1px solid var(--error-color, #ef4444);
 }
 

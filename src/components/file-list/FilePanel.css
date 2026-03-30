@@ -625,7 +625,7 @@
 
 .file-list.details .file-item,
 .virtualized-list.details .file-item {
-    display: grid !important;
+    display: grid;
     grid-template-columns: var(--grid-template);
     align-items: stretch;
     height: 1.75rem;
@@ -643,8 +643,8 @@
 .file-list.details.trash-mode .file-item,
 .virtualized-list.details.trash-mode .file-item,
 .file-header.trash-mode {
-    display: grid !important;
-    grid-template-columns: var(--grid-template) !important;
+    display: grid;
+    grid-template-columns: var(--grid-template);
 }
 
 .file-list.details .file-item>*:not(.size-histogram-bar),
@@ -656,7 +656,7 @@
 
 .file-list.details.search-mode .file-item,
 .virtualized-list.details.search-mode .file-item {
-    display: grid !important;
+    display: grid;
     grid-template-columns: var(--grid-template);
 }
 
@@ -667,7 +667,7 @@
 }
 
 .file-header {
-    display: grid !important;
+    display: grid;
     grid-template-columns: var(--grid-template);
     align-items: center;
     height: 2rem;
@@ -755,11 +755,11 @@
 
 /* Protected Items Style (Admin Rights) */
 .file-item.protected .file-icon {
-    color: #ff3b30 !important;
+    color: var(--protected-color);
 }
 
 .file-item.protected .system-icon-img {
-    filter: brightness(0.18) sepia(1) saturate(30) !important;
+    filter: brightness(0.18) sepia(1) saturate(30);
 }
 
 .file-item.protected .file-name {
@@ -804,11 +804,11 @@
 }
 
 .file-item.diff .file-name {
-    color: #ff4d4d !important;
+    color: var(--diff-color);
 }
 
 .file-item.diff .file-info {
-    color: #ff4d4d !important;
+    color: var(--diff-color) !important;
     opacity: 0.8;
 }
 
@@ -823,7 +823,7 @@
     display: flex;
     align-items: center;
     height: 100%;
-    min-width: 0 !important;
+    min-width: 0;
     overflow: hidden;
 }
 
@@ -955,13 +955,13 @@
     height: 1.4rem;
     /* More compact than the 1.75rem row */
     padding: 0 0.375rem;
-    background-color: var(--bg-color) !important;
-    color: var(--text-color) !important;
-    border: 1px solid var(--accent-color) !important;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    border: 1px solid var(--accent-color);
     /* Subtle border without the heavy halo */
     font-family: inherit;
     font-size: 0.8125rem;
-    outline: none !important;
+    outline: none;
     box-sizing: border-box;
     border-radius: 0.25rem;
     margin: 0;
@@ -980,10 +980,10 @@
     height: 1.8rem;
     font-size: 0.8125rem;
     position: relative;
-    border: 1px solid var(--accent-color) !important;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15) !important;
+    border: 1px solid var(--accent-color);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
     z-index: 10;
-    background-color: var(--bg-color) !important;
+    background-color: var(--bg-color);
 }
 
 .grid-name-wrapper {
@@ -1092,7 +1092,7 @@
     height: 2rem;
     border-radius: 0.375rem;
     background-color: var(--accent-color);
-    color: white;
+    color: var(--selected-text);
     border: none;
     box-shadow: 0 0.25rem 0.75rem rgba(0, 0, 0, 0.3);
     display: flex;
@@ -1178,7 +1178,7 @@
 .checkbox-indicator.indeterminate {
     background-color: var(--accent-color);
     border-color: var(--accent-color);
-    color: white;
+    color: var(--selected-text);
 }
 
 /* Grid checkbox positioning & premium styling */
@@ -1228,7 +1228,7 @@
 }
 
 .group-header.details {
-    display: grid !important;
+    display: grid;
     grid-template-columns: var(--grid-template);
     height: 2rem;
     padding: 0;
@@ -1239,8 +1239,8 @@
 }
 
 .group-header.is-filters {
-    background: transparent !important;
-    border-bottom: none !important;
+    background: transparent;
+    border-bottom: none;
     height: 1.85rem;
     /* Match original filter bar height if needed */
 }
@@ -1304,10 +1304,10 @@
 /* Grouped grid scroller */
 /* Pass to triple class to ensure it wins over .virtualized-scroller.grid (specificity) */
 .virtualized-scroller.grid.grouped-grid-scroller {
-    padding-top: 0 !important;
-    padding-bottom: 0.5rem !important;
-    padding-left: 0.75rem !important;
-    padding-right: 0.75rem !important;
+    padding-top: 0;
+    padding-bottom: 0.5rem;
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
 }
 
 /* Separator between view-switcher groups */

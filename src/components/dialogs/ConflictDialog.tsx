@@ -9,7 +9,7 @@ import { getParent } from '../../utils/path';
 import { formatSize, formatDate } from '../../utils/format';
 import { getFileIcon } from '../../utils/fileIcons';
 import { useApp } from '../../context/AppContext';
-import '../../styles/components/Dialogs.css';
+import './ConflictDialog.css';
 import '../ui/SearchBox.css';
 import './SearchDialog.css';
 
@@ -386,7 +386,7 @@ export const ConflictDialog: React.FC<ConflictDialogProps> = ({ conflicts, onRes
                         >
                             {t('older')} {counts.older > 0 && <span className="tab-count">{counts.older}</span>}
                         </button>
-                        <div style={{ flex: 1 }} />
+                        <div className="flex-spacer" />
                         <div className="hybrid-search-container">
                             <div className="input-with-icon icon-right hybrid-search-bar">
                                 <Search size={14} className="input-icon right" />
@@ -403,7 +403,7 @@ export const ConflictDialog: React.FC<ConflictDialogProps> = ({ conflicts, onRes
                     {/* Main Content Area */}
                     <div className="hybrid-main-grid" style={{ gridTemplateColumns: `${sidebarWidth}px 6px 1fr` }}>
                         {/* Sidebar */}
-                        <div className="hybrid-sidebar" style={{ minWidth: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                        <div className="hybrid-sidebar">
                             <div className="hybrid-list">
                                 {filteredConflicts.map((c, idx) => {
                                     const res = resolutions[c.source.path];
@@ -477,7 +477,7 @@ export const ConflictDialog: React.FC<ConflictDialogProps> = ({ conflicts, onRes
                         />
 
                         {/* Detail Column */}
-                        <div className="hybrid-detail" style={{ minWidth: 0, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+                        <div className="hybrid-detail">
                             {displayEntry ? (
                                 <ConflictDetailPanel 
                                     current={displayEntry} 
@@ -498,9 +498,9 @@ export const ConflictDialog: React.FC<ConflictDialogProps> = ({ conflicts, onRes
                     {/* Footer */}
                     <div className="dialog-footer">
                         <button className="btn" onClick={() => setViewMode('simple')}>{t('back' as any) || 'Back'}</button>
-                        <div style={{ flex: 1 }} />
-                        <button 
-                            className={cx("btn", { primary: isAllResolved })} 
+                        <div className="flex-spacer" />
+                        <button
+                            className={cx("btn", { primary: isAllResolved })}
                             onClick={handleApplyDecisions}
                         >
                             {resolvedCount > 0 
@@ -537,13 +537,13 @@ export const ConflictDialog: React.FC<ConflictDialogProps> = ({ conflicts, onRes
                     <div className="dialog-title">
                         {currentIndex + 1} / {conflicts.length} {t('conflict' as any)}
                     </div>
-                    <div style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', opacity: 0.5, marginRight: '1rem' }}>
+                    <div className="conflict-dialog-op-meta">
                         {t(operation as any)} : {totalCount} {totalCount > 1 ? t('items') : t('item')}
                     </div>
                     <button className="dialog-close-btn btn-icon" onClick={onCancel}><X size={16} /></button>
                 </div>
 
-                <div className="dialog-content" style={{ padding: '1.25rem' }}>
+                <div className="dialog-content">
                     <div className="conflict-message">
                         {t('conflict_msg' as any).replace('{name}', current.name)}
                     </div>
@@ -558,7 +558,7 @@ export const ConflictDialog: React.FC<ConflictDialogProps> = ({ conflicts, onRes
                 </div>
 
                 <div className="dialog-footer">
-                    <button className="btn" onClick={onCancel} style={{ marginRight: 'auto' }}>
+                    <button className="btn mr-auto" onClick={onCancel}>
                         {t('cancel_all' as any)}
                     </button>
                     {isMultiple && (
@@ -569,19 +569,19 @@ export const ConflictDialog: React.FC<ConflictDialogProps> = ({ conflicts, onRes
                     )}
                     {isMultiple ? (
                         <>
-                            <button className="btn" onClick={() => handleBulkAction('skip')} style={{ minWidth: '8rem' }}>
+                            <button className="btn btn-wide" onClick={() => handleBulkAction('skip')}>
                                 {t('skip_all' as any) || 'Tout ignorer'}
                             </button>
-                            <button className="btn primary" onClick={() => handleBulkAction('replace')} style={{ minWidth: '8rem' }}>
+                            <button className="btn primary btn-wide" onClick={() => handleBulkAction('replace')}>
                                 {t('replace_all' as any) || 'Tout remplacer'}
                             </button>
                         </>
                     ) : (
                         <>
-                            <button className="btn" onClick={() => handleAction('skip')} style={{ minWidth: '7rem' }}>
+                            <button className="btn btn-wide-sm" onClick={() => handleAction('skip')}>
                                 {t('skip' as any)}
                             </button>
-                            <button className="btn primary" onClick={() => handleAction('replace')} style={{ minWidth: '7rem' }}>
+                            <button className="btn primary btn-wide-sm" onClick={() => handleAction('replace')}>
                                 {t('replace' as any)}
                             </button>
                         </>

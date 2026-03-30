@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Pause, Play, Square, Zap, Shield } from 'lucide-react';
 import { useDraggable } from '../../hooks/useDraggable';
 import { formatSize } from '../../utils/format';
+import './ProgressOverlay.css';
 
 export interface ProgressState {
     visible: boolean;
@@ -126,19 +127,8 @@ export const ProgressOverlay: React.FC<ProgressOverlayProps> = ({ progress, t, o
         const areaD = `${d} L ${points[points.length - 1].x},${height} L 0,${height} Z`;
 
         return (
-            <div style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                right: 0,
-                bottom: 0,
-                zIndex: 0,
-                opacity: 0.2,
-                pointerEvents: 'none',
-                overflow: 'hidden',
-                borderRadius: 'inherit'
-            }}>
-                <svg width="100%" height="100%" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" style={{ display: 'block' }}>
+            <div className="progress-bg-graph">
+                <svg width="100%" height="100%" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
                     <defs>
                         <linearGradient id="speedGradientBg" x1="0" y1="0" x2="0" y2="1">
                             <stop offset="0%" stopColor="var(--accent-color)" stopOpacity="0.4" />
@@ -165,17 +155,12 @@ export const ProgressOverlay: React.FC<ProgressOverlayProps> = ({ progress, t, o
             transform: `translate(${position.x}px, ${position.y}px)`,
             transition: 'none' // Disable transition during drag or generally for better responsiveness
         }}>
-            <div ref={dragRef} className="progress-content-minimal" style={{
-                minWidth: '20rem',
-                position: 'relative',
-                overflow: 'hidden',
-                paddingBottom: '0.5rem' // Bottom padding for breathing room
-            }}>
+            <div ref={dragRef} className="progress-content-minimal">
                 <div
                     className="progress-drag-handle flex-row justify-between items-center"
                     onMouseDown={handleMouseDown}
                 >
-                    <span className="text-ellipsis" style={{ flex: 1 }}>
+                    <span className="text-ellipsis progress-title-span">
                         {progress.cancelling ? t('cancelling' as any) :
                             isCompleted ? t('completed') :
                                 progress.message}
@@ -186,9 +171,6 @@ export const ProgressOverlay: React.FC<ProgressOverlayProps> = ({ progress, t, o
                             <button
                                 onClick={() => onToggleTurbo?.(!progress.turbo)}
                                 className={`progress-btn-control turbo-toggle-btn ${progress.turbo ? 'turbo-active' : ''}`}
-                                style={{
-                                    color: progress.turbo ? '#fbbf24' : 'var(--text-muted)',
-                                }}
                                 data-tooltip={progress.turbo ? t('mode_turbo' as any) : t('mode_discret' as any)}
                             >
                                 {progress.turbo ? <Zap size={16} fill="#fbbf24" strokeWidth={1} /> : <Shield size={16} strokeWidth={1.5} />}
@@ -225,7 +207,7 @@ export const ProgressOverlay: React.FC<ProgressOverlayProps> = ({ progress, t, o
                 </div>
                 {renderBackgroundGraph()}
 
-                <div style={{ position: 'relative', zIndex: 1, width: '100%', marginTop: '0.25rem' }}>
+                <div className="progress-body">
                     {/* Operation name now in title bar */}
 
                     <div className="progress-details flex-col gap-xs text-sm w-full">
@@ -261,21 +243,8 @@ export const ProgressOverlay: React.FC<ProgressOverlayProps> = ({ progress, t, o
                 </div>
 
                 {/* Progress Bar at the absolute bottom */}
-                <div style={{
-                    position: 'absolute',
-                    bottom: 0,
-                    left: 0,
-                    right: 0,
-                    height: '1px',
-                    background: 'rgba(var(--accent-color-rgb), 0.1)',
-                    zIndex: 2
-                }}>
-                    <div style={{
-                        width: `${percent}%`,
-                        height: '100%',
-                        background: 'var(--accent-color)',
-                        transition: 'width 0.4s ease-out'
-                    }} />
+                <div className="progress-bar-track">
+                    <div className="progress-bar-fill" style={{ width: `${percent}%` }} />
                 </div>
             </div>
         </div>

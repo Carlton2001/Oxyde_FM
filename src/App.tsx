@@ -11,6 +11,8 @@ import './styles/components/Utilities.css';
 import './styles/components/Buttons.css';
 import './styles/components/Inputs.css';
 import './styles/components/Dialogs.css';
+import './styles/components/AboutDialog.css';
+import './styles/components/Notification.css';
 import './styles/components/DialogGlobal.css';
 import './styles/themes/github-light.css';
 import './styles/themes/github-dark.css';

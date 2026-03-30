@@ -15,11 +15,11 @@
 }
 
 .search-form.no-padding {
-    padding: 0 !important;
+    padding: 0;
 }
 
 .search-form.overflow-visible {
-    overflow: visible !important;
+    overflow: visible;
 }
 
 
@@ -118,7 +118,7 @@
 }
 
 .input-with-icon.no-icon input {
-    padding-left: 0.75rem !important;
+    padding-left: 0.75rem;
 }
 
 .input-with-icon.icon-right input {
@@ -177,7 +177,7 @@
 
 .regex-badge-btn.active {
     background: var(--accent-color);
-    color: white;
+    color: var(--selected-text);
     border-color: var(--accent-color);
 }
 
@@ -301,7 +301,7 @@
 .dialog-checkbox input:checked+.checkbox-visual {
     background: var(--accent-color);
     border-color: var(--accent-color);
-    color: white;
+    color: var(--selected-text);
 }
 
 /* Help Tab */

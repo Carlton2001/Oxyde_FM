@@ -1,4 +1,5 @@
 import React, { useRef } from 'react';
+import '../../styles/components/AboutDialog.css';
 import { useDialogs } from '../../context/DialogContext';
 import { useApp } from '../../context/AppContext';
 import { useDraggable } from '../../hooks/useDraggable';

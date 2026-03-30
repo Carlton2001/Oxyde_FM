@@ -1,0 +1,69 @@
+.filter-menu-wrapper {
+    z-index: 10001;
+    pointer-events: auto;
+    font-size: 0.75rem;
+}
+
+.filter-menu-inner {
+    position: fixed;
+    display: flex;
+    flex-direction: column;
+}
+
+.filter-menu-title {
+    padding: 4px 8px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 4px;
+}
+
+.filter-menu-list {
+    flex: 1;
+    padding: 4px 0;
+}
+
+.filter-menu-list.scrollable {
+    overflow-y: auto;
+}
+
+.filter-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 12px;
+}
+
+.filter-checkbox {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+    border: 1px solid var(--border-color);
+    border-radius: 3px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    color: transparent;
+}
+
+.filter-checkbox.checked {
+    background: var(--accent-color);
+    border-color: var(--accent-color);
+    color: var(--selected-text);
+}
+
+.filter-menu-footer {
+    border-top: 1px solid var(--border-color);
+    margin-top: 4px;
+    padding: 4px 8px;
+    display: flex;
+    gap: 4px;
+}
+
+.filter-menu-footer .btn {
+    flex: 1;
+    font-size: 0.7rem;
+    padding: 2px 4px;
+}

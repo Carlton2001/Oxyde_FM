@@ -172,6 +172,7 @@ export const useFiles = (panelId: PanelId, path: string, sortConfig: SortConfig,
                     oldFile.is_hidden === newFile.is_hidden &&
                     oldFile.is_system === newFile.is_system
                 ) {
+                    // No change in core properties, return the old object to prevent unnecessary re-renders
                     return oldFile;
                 }
                 hasChanges = true;
@@ -269,8 +270,8 @@ export const useFiles = (panelId: PanelId, path: string, sortConfig: SortConfig,
         } else if (sortChanged) {
             prevParamsRef.current = { path, sortConfig, showHidden, showSystem };
             return;
-        } else if (files.length > 0 && !silent && !error) {
-            // Already have data for this path and no filters changed, skip re-fetch
+        } else if (files.length > 0 && silent && !error) {
+            // Only skip background refreshes if we already have data
             return;
         }
 

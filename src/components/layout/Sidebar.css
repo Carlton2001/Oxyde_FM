@@ -148,7 +148,7 @@
 
 .minimized-eject-btn:hover {
     background: var(--accent-color);
-    color: white !important;
+    color: var(--selected-text);
     border-color: var(--accent-color);
     transform: scale(1.1);
 }
