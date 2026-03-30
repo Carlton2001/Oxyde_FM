@@ -424,7 +424,8 @@ export const COPY_PATH_ACTION: ActionDefinition = {
         if (selection.length > 0) {
             const paths = selection.join('\n');
             await ctx.clipboard.copyToSystem(paths);
-            ctx.notify(`${ctx.t('copy_path')}: ${selection.length}`, 'success', 2000);
+            const key = selection.length > 1 ? 'path_copied_plural' : 'path_copied';
+            ctx.notify(ctx.t(key as any, { count: selection.length }), 'success', 2000);
         }
     }
 };
@@ -437,7 +438,8 @@ export const COPY_NAME_ACTION: ActionDefinition = {
         if (selection.length > 0) {
             const names = selection.map(p => p.split('\\').pop() || '').join('\n');
             await ctx.clipboard.copyToSystem(names);
-            ctx.notify(`${ctx.t('copy_name')}: ${selection.length}`, 'success', 2000);
+            const key = selection.length > 1 ? 'name_copied_plural' : 'name_copied';
+            ctx.notify(ctx.t(key as any, { count: selection.length }), 'success', 2000);
         }
     }
 };

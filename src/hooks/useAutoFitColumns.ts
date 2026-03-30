@@ -118,8 +118,7 @@ export const useAutoFitColumns = ({
             const typeCache: Record<string, number> = {};
             const sizeCache: Record<string, number> = {};
 
-            const sampleDate = formatDate(Date.now(), dateFormat);
-            const sampleDateWidth = context.measureText(sampleDate).width;
+            // Date widths will be measured dynamically within the loop
 
             for (const f of subset) {
                 const nw = context.measureText(f.name).width;
@@ -141,8 +140,15 @@ export const useAutoFitColumns = ({
                     if (sw > maxSizeText) maxSizeText = sw;
                 }
 
-                if (sampleDateWidth > maxDateText) maxDateText = sampleDateWidth;
-                if (isTrashView && sampleDateWidth > maxDeletedDateText) maxDeletedDateText = sampleDateWidth;
+                const fDateStr = formatDate(f.modified || 0, dateFormat);
+                const dw = context.measureText(fDateStr).width;
+                if (dw > maxDateText) maxDateText = dw;
+
+                if (isTrashView) {
+                    const fDelDateStr = formatDate(f.deleted_time || 0, dateFormat);
+                    const ddw = context.measureText(fDelDateStr).width;
+                    if (ddw > maxDeletedDateText) maxDeletedDateText = ddw;
+                }
 
                 if (searchResults || isTrashView) {
                     const loc = isTrashView ? (f.original_path || '') : ((getParent(f.path) || f.path) || '');
