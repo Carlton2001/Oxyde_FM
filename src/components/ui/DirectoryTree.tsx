@@ -688,6 +688,7 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
                             'drag-over': isDragOver
                         })}
                         data-path={node.path}
+                        data-tooltip={node.path}
                         onClick={(e) => {
                             if (e.button !== 0) return;
                             setSkipSyncInternal(true);
@@ -771,8 +772,8 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
                             setDragOverNode(null);
                         }
                     }}
-                    draggable
-                    onDragStart={(e) => {
+                    draggable={!isRootDrive}
+                    onDragStart={isRootDrive ? undefined : (e) => {
                         e.preventDefault();
                         if (onDragStart) {
                             onDragStart('left', [{ path: node.path, name: node.name, is_dir: true } as any]);
@@ -783,7 +784,7 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
                         label: node.label,
                         drive_type: node.driveType,
                         remote_path: node.remotePath
-                    } as any, t) : (node.isTrash || node.isNetworkRoot ? node.name : undefined)}
+                    } as any, t) : (node.isTrash || node.isNetworkRoot ? node.name : node.path)}
                     data-tooltip-total={node.driveType && shouldShowDriveCapacity({ drive_type: node.driveType } as any) ? node.totalBytes : undefined}
                     data-tooltip-free={node.driveType && shouldShowDriveCapacity({ drive_type: node.driveType } as any) ? node.freeBytes : undefined}
                 >

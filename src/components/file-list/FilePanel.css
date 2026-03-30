@@ -24,7 +24,9 @@
 }
 
 .panel.dual {
-    transition: background-color 0.2s, border-top-color 0.2s;
+    transition:
+        background-color 0.2s,
+        border-top-color 0.2s;
     border-top: 1px solid transparent;
 }
 
@@ -82,7 +84,9 @@
     display: flex;
     align-items: center;
     height: 100%;
-    transition: width 0.2s, max-width 0.2s;
+    transition:
+        width 0.2s,
+        max-width 0.2s;
     min-width: 0;
 }
 
@@ -98,7 +102,6 @@
 .search-module .search-box {
     height: 1.875rem;
 }
-
 
 .search-status-header {
     display: flex;
@@ -176,7 +179,9 @@
     border: 1px solid var(--border-color);
     background: var(--surface-tertiary);
     color: var(--text-color);
-    transition: background-color 0.1s ease-in-out, border-color 0.1s ease-in-out;
+    transition:
+        background-color 0.1s ease-in-out,
+        border-color 0.1s ease-in-out;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -233,7 +238,9 @@
 
 .active-filters-bar.details {
     display: grid;
-    grid-template-columns: var(--col-selection-width, 0.5rem) var(--col-name-width, 1fr) var(--col-type-width, 80px) var(--col-size-width, 80px) var(--col-date-width, 150px);
+    grid-template-columns: var(--col-selection-width, 0.5rem) var(--col-name-width,
+            1fr) var(--col-type-width, 80px) var(--col-size-width, 80px) var(--col-date-width,
+            150px);
     width: max-content;
     /* Strictly matches the sum of columns */
 }
@@ -317,7 +324,9 @@
     border-radius: 0.25rem;
     cursor: default;
     /* Per user request: Curseur par défaut */
-    transition: background-color 0.1s ease, color 0.1s ease;
+    transition:
+        background-color 0.1s ease,
+        color 0.1s ease;
     flex-shrink: 0;
     margin-left: auto;
 }
@@ -382,8 +391,6 @@
     pointer-events: none;
 }
 
-
-
 /* Grid View Specific Icon Sizing */
 .file-list.grid .file-icon,
 .virtualized-list.grid .file-icon,
@@ -409,8 +416,6 @@
     object-fit: contain;
     transition: transform 0.15s ease-out;
 }
-
-
 
 /* Base File Item (Shared) */
 .file-list {
@@ -460,8 +465,6 @@
     opacity: 1;
 }
 
-
-
 .panel.active .file-item.selected {
     background-color: color-mix(in srgb, var(--accent-color), transparent 85%);
     box-shadow: inset 3px 0 0 0 var(--accent-color);
@@ -480,14 +483,22 @@
 .file-name {
     font-size: 0.8125rem;
     font-weight: 500;
-    line-height: normal;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    display: block;
+    display: flex;
+    align-items: center;
     width: 100%;
+    height: 100%;
+    overflow: hidden;
     position: relative;
     z-index: 1;
+}
+
+.file-name-text {
+    display: inline-block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding-block: 0.2rem;
 }
 
 /* Grid View Overrides */
@@ -515,7 +526,8 @@
     border-radius: 0.625rem;
     position: relative;
     overflow: hidden;
-    transition: border-color 0.15s ease-out,
+    transition:
+        border-color 0.15s ease-out,
         transform 0.1s ease-out;
     user-select: none;
     cursor: default;
@@ -560,7 +572,6 @@
     /* This can be used for secondary selection effects later */
 }
 
-
 .file-view-container {
     flex: 1;
     display: flex;
@@ -578,13 +589,11 @@
     box-sizing: border-box;
     overflow: hidden;
     text-overflow: ellipsis;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
-    -webkit-box-orient: vertical;
+    white-space: nowrap;
+    display: block;
     word-break: break-all;
     line-height: 1.2;
-    max-height: 2.4em;
+    max-height: 1.2em;
 }
 
 .file-list.grid .file-extension,
@@ -613,8 +622,6 @@
     min-width: 0;
     flex: 0 1 auto;
 }
-
-
 
 /* Details View Overrides */
 .file-list.details {
@@ -688,8 +695,6 @@
     grid-template-columns: var(--grid-template);
 }
 
-
-
 .header-selection-gutter {
     position: absolute;
     left: 0;
@@ -708,8 +713,6 @@
 .header-selection-gutter:hover {
     background-color: var(--hover-color);
 }
-
-
 
 .file-name-group {
     display: flex;
@@ -857,8 +860,6 @@
     margin-bottom: 0.25rem;
 }
 
-
-
 .panel.active .file-item.selected .file-info {
     color: var(--text-muted);
 }
@@ -894,7 +895,7 @@
 }
 
 .resize-handle::after {
-    content: '';
+    content: "";
     position: absolute;
     left: 2px;
     transform: none;
@@ -904,7 +905,9 @@
     border-radius: 1px;
     background-color: var(--border-color);
     opacity: 0.5;
-    transition: background-color 0.15s, opacity 0.15s;
+    transition:
+        background-color 0.15s,
+        opacity 0.15s;
 }
 
 /* Ensure resize handles are always accessible but don't force width */
@@ -989,8 +992,7 @@
 .grid-name-wrapper {
     position: relative;
     width: 100%;
-    min-height: 2.5em;
-    /* Increased for two lines of text */
+    min-height: 1.25rem;
     display: flex;
     justify-content: center;
     align-items: center;
@@ -1055,13 +1057,12 @@
 }
 
 .virtualized-scroller.grid {
-    padding: 0.5rem 0 0.5rem 0 !important;
+    padding: 0.5rem 0 5rem 0 !important;
 }
 
 .virtualized-scroller.details {
-    padding: 0 0 0.5rem 0 !important;
+    padding: 0 0 5rem 0 !important;
 }
-
 
 /* Footer Layout (Fixed Status Bar) */
 .panel-footer {
@@ -1098,7 +1099,10 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: transform 0.2s, background-color 0.2s, opacity 0.2s;
+    transition:
+        transform 0.2s,
+        background-color 0.2s,
+        opacity 0.2s;
     animation: scrollFadeIn 0.2s ease-out;
     pointer-events: auto;
     z-index: 60;
@@ -1131,7 +1135,9 @@
     align-items: center;
     gap: 0.5rem;
     padding: 0.5rem 1rem;
-    background: linear-gradient(90deg, rgba(255, 193, 7, 0.15), rgba(255, 152, 0, 0.1));
+    background: linear-gradient(90deg,
+            rgba(255, 193, 7, 0.15),
+            rgba(255, 152, 0, 0.1));
     border-bottom: 1px solid rgba(255, 193, 7, 0.3);
     color: var(--text-color);
     font-size: 0.8125rem;
@@ -1189,7 +1195,9 @@
     width: auto;
     height: auto;
     opacity: 0;
-    transition: opacity 0.15s ease-out, transform 0.1s ease-out;
+    transition:
+        opacity 0.15s ease-out,
+        transform 0.1s ease-out;
     z-index: 10;
     padding: 0;
     background: transparent;

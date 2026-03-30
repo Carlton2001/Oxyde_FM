@@ -12,6 +12,7 @@ interface FullPanelState extends PanelState {
     goUp: () => void;
     goBack: () => void;
     goForward: () => void;
+    goToIndex: (index: number) => void;
     setViewMode: (mode: ViewMode) => void;
     currentEntry?: { scrollOffset?: number };
     updateCurrentScroll?: (offset: number) => void;
@@ -106,6 +107,8 @@ interface DualPanelLayoutProps {
     onEmptyTrash?: () => void;
     // Clipboard / Edit Actions
     handleCopy: () => void;
+    handleCopyName: () => void;
+    handleCopyPath: () => void;
     handleCut: () => void;
     handlePaste: () => void;
     handleDelete: () => void;
@@ -133,6 +136,7 @@ interface DualPanelLayoutProps {
     dragOverPathApp?: string | null;
     onTrashProperties?: () => void;
     isTrashEmpty: boolean;
+    favorites: import('../../types').QuickAccessItem[];
 }
 
 export const DualPanelLayout: React.FC<DualPanelLayoutProps> = ({
@@ -194,6 +198,8 @@ export const DualPanelLayout: React.FC<DualPanelLayoutProps> = ({
     onRestoreSelected,
     onEmptyTrash,
     handleCopy,
+    handleCopyName,
+    handleCopyPath,
     handleCut,
     handlePaste,
     handleDelete,
@@ -218,7 +224,8 @@ export const DualPanelLayout: React.FC<DualPanelLayoutProps> = ({
     setDragOverPath,
     onTrashProperties,
     dragOverPath,
-    isTrashEmpty
+    isTrashEmpty,
+    favorites
 }) => {
     const { driveTrashConfigs } = useApp();
     const activePanel = activePanelId === 'left' ? left : right;
@@ -332,9 +339,12 @@ export const DualPanelLayout: React.FC<DualPanelLayoutProps> = ({
                 onNavigateUp={() => activePanel.goUp()}
                 onNavigateBack={() => activePanel.goBack()}
                 onNavigateForward={() => activePanel.goForward()}
+                onNavigateToIndex={(i) => activePanel.goToIndex(i)}
                 onUndo={handleUndo}
                 onRedo={handleRedo}
                 onCopy={handleCopy}
+                onCopyName={handleCopyName}
+                onCopyPath={handleCopyPath}
                 onCut={handleCut}
                 onDelete={handleDelete}
                 onPaste={handlePaste}
@@ -362,6 +372,7 @@ export const DualPanelLayout: React.FC<DualPanelLayoutProps> = ({
                 isComparing={isComparing}
                 onAdvancedSearch={() => openAdvancedSearch(activePanelId)}
                 onDuplicateSearch={onDuplicateSearch || (() => { })}
+                favorites={favorites}
             />
 
             <div className="main-area">
@@ -482,6 +493,7 @@ export const DualPanelLayout: React.FC<DualPanelLayoutProps> = ({
                             groupByDate={left.groupByDate}
                             onGroupByDateChange={leftHandlers.onGroupByDateChange}
                             isProtected={left.isProtected}
+                            favorites={favorites}
                             extensionFilter={left.extensionFilter}
                             setExtensionFilter={left.setExtensionFilter}
                             sizeFilter={left.sizeFilter}
@@ -551,9 +563,9 @@ export const DualPanelLayout: React.FC<DualPanelLayoutProps> = ({
                                 groupByDate={right.groupByDate}
                                 onGroupByDateChange={rightHandlers.onGroupByDateChange}
                                 isProtected={right.isProtected}
+                                favorites={favorites}
                                 extensionFilter={right.extensionFilter}
-                                setExtensionFilter={right.setExtensionFilter}
-                                sizeFilter={right.sizeFilter}
+                                setExtensionFilter={right.setExtensionFilter}                                sizeFilter={right.sizeFilter}
                                 setSizeFilter={right.setSizeFilter}
                                 dateFilter={right.dateFilter}
                                 setDateFilter={right.setDateFilter}

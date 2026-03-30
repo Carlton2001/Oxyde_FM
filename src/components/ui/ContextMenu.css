@@ -48,8 +48,8 @@
 }
 
 .menu-item.danger:hover:not(.disabled) {
-    background-color: var(--danger-bg, rgba(239, 68, 68, 0.15));
-    color: var(--danger-text, #ef4444);
+    background-color: var(--hover-color);
+    color: var(--error-color, #ef4444);
 }
 
 .menu-item.disabled {

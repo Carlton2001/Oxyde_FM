@@ -21,17 +21,14 @@
 
 .tooltip-portal strong {
     font-weight: 500;
-    /* Ajustez la valeur ici (500, 600, etc.) */
     color: var(--accent-color);
-    /* Optionnel : donner une couleur au nom */
 }
 
 /* Uniquement pour les tooltips simples (une seule ligne) */
 .tooltip-portal:not(.multiline) {
     font-weight: 500;
     padding: 0.25rem 0.5rem;
-    /* Plus compact */
-    /* ... vos autres styles ... */
+    white-space: nowrap;
 }
 
 .tooltip-portal.multiline {

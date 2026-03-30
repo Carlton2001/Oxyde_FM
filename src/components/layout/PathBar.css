@@ -59,6 +59,8 @@
     scrollbar-width: none;
     -ms-overflow-style: none;
     min-width: 0;
+    padding-right: 0.75rem;
+    /* Gap between last item and spacer */
 }
 
 .breadcrumb-list::-webkit-scrollbar {
@@ -71,10 +73,20 @@
 }
 
 .breadcrumb-spacer {
-    flex: 1;
+    flex: 1 0 1rem;
+    /* Grow to fill, but never shrink below 1rem */
     height: 100%;
     cursor: text;
-    min-width: 1rem;
+}
+
+.path-favorite-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding-left: 0.5rem;
+    color: var(--accent-color);
+    flex-shrink: 0;
+    opacity: 0.5;
 }
 
 .path-segment {
@@ -165,4 +177,3 @@
     color: var(--text-muted);
     text-align: center;
 }
-

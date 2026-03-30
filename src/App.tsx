@@ -273,13 +273,13 @@ function App() {
     fileOps, clipboard: { clipboard, copy, cut, clearClipboard, copyToSystem, refreshClipboard },
     notify, t: t as any, dialogs, settings: { zipQuality, sevenZipQuality, zstdQuality, defaultTurboMode, confirmDelete }, setProgress,
     contextMenuTarget: contextMenu?.target, isDir: contextMenu?.isDir, isDrive: contextMenu?.isDrive, refreshDrives, mountedImages,
-    tabs, activeTabId, setActiveTab, closeTab, refreshBothPanels,
+    tabs, activeTabId, setActiveTab, closeTab, addTab, refreshBothPanels, layout,
     modifiers, peekStatus, driveTrashConfigs, setContextMenu, onContextMenu: handleContextMenu
   }), [
     activePanelId, left, right, fileOps, clipboard, copy, cut, clearClipboard, copyToSystem, refreshClipboard,
     notify, t, dialogs, zipQuality, sevenZipQuality, zstdQuality, defaultTurboMode, setProgress,
     contextMenu?.target, contextMenu?.isDir, contextMenu?.isDrive, refreshDrives,
-    tabs, activeTabId, setActiveTab, closeTab, refreshBothPanels,
+    tabs, activeTabId, setActiveTab, closeTab, addTab, refreshBothPanels, layout,
     modifiers, peekStatus, driveTrashConfigs, setContextMenu, handleContextMenu
   ]);
 
@@ -563,7 +563,7 @@ function App() {
           } as any);
         }}
         canPaste={!!clipboard && clipboard.paths.length > 0} canUndo={fileOps.canUndo} canRedo={fileOps.canRedo}
-        handleCopy={() => handleAction('file.copy', actionContext)} handleCut={() => handleAction('file.cut', actionContext)}
+        handleCopy={() => handleAction('file.copy', actionContext)} handleCopyName={() => handleAction('file.copy_name', actionContext)} handleCopyPath={() => handleAction('file.copy_path', actionContext)} handleCut={() => handleAction('file.cut', actionContext)}
         handlePaste={() => handleAction('file.paste', actionContext)} handleDelete={() => handleAction('file.delete', actionContext)}
         handleUndo={handleUndo} handleRedo={handleRedo}
         undoLabel={actionService.get('file.undo')?.getLabel?.(actionContext)}
@@ -571,6 +571,7 @@ function App() {
         onDuplicateSearch={handleDuplicateSearch}
         dragOverPath={dragOverPath}
         setDragOverPath={setDragOverPath}
+        favorites={favorites}
       />
       <ProgressOverlay
         progress={effectiveProgress as any}

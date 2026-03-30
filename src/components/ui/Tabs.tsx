@@ -1,5 +1,5 @@
 
-import React, { useRef } from 'react';
+import React, { useRef, useLayoutEffect } from 'react';
 import cx from 'classnames';
 import { X, Plus, Folder, Copy, Split, XCircle, ChevronLeft, ChevronRight, HardDrive, Trash, Network, Globe } from 'lucide-react';
 import { useTabs } from '../../context/TabsContext';
@@ -273,13 +273,29 @@ export const Tabs: React.FC<TabsProps> = ({
 
 
     // We need a local context menu for tabs.
-    const [menu, setMenu] = React.useState<{ x: number, y: number, tabId: string } | null>(null);
+    const [menu, setMenu] = React.useState<{ anchorCenterX: number, top: number, tabId: string } | null>(null);
+    const tabMenuRef = useRef<HTMLDivElement>(null);
 
     const onContextMenu = (e: React.MouseEvent, tabId: string) => {
         e.preventDefault();
         e.stopPropagation();
-        setMenu({ x: e.clientX, y: e.clientY, tabId });
+        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+        setMenu({ anchorCenterX: rect.left + rect.width / 2, top: rect.bottom + 4, tabId });
     };
+
+    useLayoutEffect(() => {
+        if (menu && tabMenuRef.current) {
+            const { width, height } = tabMenuRef.current.getBoundingClientRect();
+            const PAD = 8;
+            let left = menu.anchorCenterX - width / 2;
+            left = Math.max(PAD, Math.min(left, window.innerWidth - width - PAD));
+            let top = menu.top;
+            if (top + height > window.innerHeight - PAD) top = Math.max(PAD, window.innerHeight - height - PAD);
+            tabMenuRef.current.style.left = `${left}px`;
+            tabMenuRef.current.style.top = `${top}px`;
+            tabMenuRef.current.style.visibility = 'visible';
+        }
+    }, [menu]);
 
     React.useEffect(() => {
         const closeMenu = (e: MouseEvent) => {
@@ -483,10 +499,12 @@ export const Tabs: React.FC<TabsProps> = ({
 
             {menu && (
                 <div
+                    ref={tabMenuRef}
                     className="tab-context-menu"
                     style={{
-                        left: menu.x,
-                        top: menu.y,
+                        left: menu.anchorCenterX,
+                        top: menu.top,
+                        visibility: 'hidden',
                     }}
                     onClick={(e) => e.stopPropagation()}
                 >

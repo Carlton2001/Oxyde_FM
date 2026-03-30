@@ -134,6 +134,13 @@
     gap: 0.25rem;
     padding: 0;
     flex-shrink: 0;
+    overflow: hidden;
+    max-width: 30rem;
+    transition: max-width 200ms ease;
+}
+
+.toolbar-actions:empty {
+    max-width: 0;
 }
 
 .toolbar-actions:not(:empty):after {
@@ -143,6 +150,21 @@
     background-color: var(--border-color);
     margin: 0 0.4rem;
     align-self: center;
+}
+
+.toolbar-actions > * {
+    animation: toolbar-btn-in 150ms ease-out both;
+}
+
+@keyframes toolbar-btn-in {
+    from {
+        opacity: 0;
+        transform: translateX(-6px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
 }
 
 .app-tools-container {

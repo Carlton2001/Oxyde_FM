@@ -414,8 +414,6 @@ export function getMenuItems(ctx: MenuContext): MenuItem[] {
         });
     }
 
-    items.push({ id: 'sep_system', type: 'separator' });
-
     // --- 4. Content Creation & Transformation ---
     if (!isTrashContext) {
         if (isBackground && !ctx.isNetworkComputer) {
@@ -465,8 +463,6 @@ export function getMenuItems(ctx: MenuContext): MenuItem[] {
             }
         }
     }
-
-    items.push({ id: 'sep_creation', type: 'separator' });
 
     // --- 5. Clipboard & Modification ---
     if (!isTrashContext) {
@@ -616,7 +612,7 @@ export function getMenuItems(ctx: MenuContext): MenuItem[] {
         items.push({ id: 'sep_sort', type: 'separator' });
         const sortItems: MenuItem[] = [
             { id: 'sort_name', type: 'action', label: t('name'), icon: ctx.sortConfig.field === 'name' ? Check : BlankIcon, action: () => actions.onSort?.('name') },
-            { id: 'sort_ext', type: 'action', label: t('extension' as any), icon: ctx.sortConfig.field === 'type' ? Check : BlankIcon, action: () => actions.onSort?.('type') },
+            { id: 'sort_ext', type: 'action', label: t('sort_ext' as any), icon: ctx.sortConfig.field === 'type' ? Check : BlankIcon, action: () => actions.onSort?.('type') },
             { id: 'sort_size', type: 'action', label: t('size'), icon: ctx.sortConfig.field === 'size' ? Check : BlankIcon, action: () => actions.onSort?.('size') },
             { id: 'sort_date', type: 'action', label: t('date'), icon: ctx.sortConfig.field === 'date' ? Check : BlankIcon, action: () => actions.onSort?.('date') },
             { id: 'sep_sort_dir', type: 'separator' },

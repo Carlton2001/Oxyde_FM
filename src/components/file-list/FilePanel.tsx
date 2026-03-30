@@ -77,6 +77,7 @@ interface FilePanelProps {
     groupByDate: boolean;
     onGroupByDateChange: (val: boolean) => void;
     isProtected?: boolean;
+    favorites?: import('../../types').QuickAccessItem[];
 
     // Filter Props
     extensionFilter: Set<string> | null;
@@ -104,7 +105,7 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
     onRename, showHistogram: propShowHistogram, isTrashView = false, isNetworkView = false,
     useSystemIcons: propUseSystemIcons, onItemMiddleClick, diffPaths, searchLimitReached,
     panelId, onViewModeChange, loading, initialScrollOffset, updateCurrentScroll,
-    groupByDate, onGroupByDateChange, isProtected,
+    groupByDate, onGroupByDateChange, isProtected, favorites,
     extensionFilter, setExtensionFilter, sizeFilter, setSizeFilter, dateFilter, setDateFilter,
     nameFilter, setNameFilter, locationFilter, setLocationFilter,
     deletedDateFilter, setDeletedDateFilter, clearAllFilters
@@ -165,10 +166,10 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
     }, [setDeletedDateFilter]);
 
     const activeFilters = useMemo(() => ({
-        extensions: extensionFilter || new Set<string>(),
-        sizes: sizeFilter || new Set<string>(),
-        deletedDates: deletedDateFilter || new Set<string>(),
-        date: dateFilter || new Set<string>(),
+        extensions: extensionFilter,
+        sizes: sizeFilter,
+        deletedDates: deletedDateFilter,
+        date: dateFilter,
         name: nameFilter,
         location: locationFilter,
         onClearAll: clearAllFilters,
@@ -177,8 +178,12 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
         onRemoveDate: removeDateFilter,
         onRemoveDeletedDate: removeDeletedDateFilter,
         onRemoveName: () => setNameFilter(null),
-        onRemoveLocation: () => setLocationFilter(null)
-    }), [extensionFilter, sizeFilter, deletedDateFilter, dateFilter, nameFilter, locationFilter, clearAllFilters, removeExtensionFilter, removeSizeFilter, removeDateFilter, removeDeletedDateFilter, setNameFilter, setLocationFilter]);
+        onRemoveLocation: () => setLocationFilter(null),
+        onClearExtensions: () => setExtensionFilter(null),
+        onClearSizes: () => setSizeFilter(null),
+        onClearDate: () => setDateFilter(null),
+        onClearDeletedDates: () => setDeletedDateFilter(null),
+    }), [extensionFilter, sizeFilter, deletedDateFilter, dateFilter, nameFilter, locationFilter, clearAllFilters, removeExtensionFilter, removeSizeFilter, removeDateFilter, removeDeletedDateFilter, setNameFilter, setLocationFilter, setExtensionFilter, setSizeFilter, setDateFilter, setDeletedDateFilter]);
 
     const currentMode = isTrashView ? 'trash' : (searchResults ? 'search' : 'normal');
 
@@ -562,6 +567,7 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
                                 showHidden={showHidden}
                                 panelId={panelId}
                                 t={t}
+                                favorites={favorites}
                             />
                         </div>
                     )}
@@ -605,7 +611,7 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
                                 <button
                                     className="clear-search-premium-btn"
                                     onClick={onCancelSearch}
-                                    title={t('stop' as any)}
+                                    data-tooltip={t('stop' as any)}
                                 >
                                     <Square size={10} fill="currentColor" />
                                     <span>{t('stop' as any)}</span>
@@ -667,7 +673,7 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
                             if (renamingPath) cancelRename();
                         }
                     }}
-                    onContextMenu={(e) => { e.preventDefault(); onContextMenu(e); onActivate(); }}
+                    onContextMenu={(e) => { e.preventDefault(); onClearSelection(); onContextMenu(e); onActivate(); }}
                     ref={containerRef}
                     onMouseDown={handleListMouseDown}
                 >

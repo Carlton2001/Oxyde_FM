@@ -147,22 +147,42 @@ export const Sidebar: React.FC<SidebarProps> = ({
     }, [minimized]);
 
 
+    const COLLAPSE_THRESHOLD = 80; // px — dragging past this collapses the sidebar
+
     const handleMouseDown = React.useCallback((e: React.MouseEvent) => {
         e.preventDefault();
         isResizingRef.current = true;
         document.body.style.cursor = 'col-resize';
         document.body.style.userSelect = 'none';
 
-        // Add will-change for GPU acceleration during resize
         if (sidebarRef.current) {
             sidebarRef.current.style.willChange = 'width';
+            sidebarRef.current.classList.add('resizing');
         }
 
-        const handleMouseMove = (moveEvent: MouseEvent) => {
-            if (isResizingRef.current && sidebarRef.current) {
-                const newWidth = Math.max(150, Math.min(window.innerWidth / 2, moveEvent.clientX));
-                sidebarRef.current.style.width = `${newWidth}px`;
+        const stopResize = () => {
+            isResizingRef.current = false;
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+            if (sidebarRef.current) {
+                sidebarRef.current.style.willChange = '';
+                sidebarRef.current.classList.remove('resizing');
             }
+            window.removeEventListener('mousemove', handleMouseMove);
+            window.removeEventListener('mouseup', handleMouseUp);
+        };
+
+        const handleMouseMove = (moveEvent: MouseEvent) => {
+            if (!isResizingRef.current || !sidebarRef.current) return;
+
+            if (moveEvent.clientX < COLLAPSE_THRESHOLD) {
+                stopResize();
+                onToggle();
+                return;
+            }
+
+            const newWidth = Math.max(150, Math.min(window.innerWidth / 2, moveEvent.clientX));
+            sidebarRef.current.style.width = `${newWidth}px`;
         };
 
         const handleMouseUp = (upEvent: MouseEvent) => {
@@ -170,28 +190,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 const finalWidth = Math.max(150, Math.min(window.innerWidth / 2, upEvent.clientX));
                 setWidth(finalWidth);
                 localStorage.setItem('sidebarWidth', String(finalWidth));
-                isResizingRef.current = false;
-                document.body.style.cursor = '';
-                document.body.style.userSelect = '';
-
-                if (sidebarRef.current) {
-                    sidebarRef.current.style.willChange = '';
-                }
             }
-
-            window.removeEventListener('mousemove', handleMouseMove);
-            window.removeEventListener('mouseup', handleMouseUp);
+            stopResize();
         };
 
         window.addEventListener('mousemove', handleMouseMove);
         window.addEventListener('mouseup', handleMouseUp);
-    }, []);
+    }, [onToggle]);
 
     return (
         <div
             ref={sidebarRef}
             className={cx("sidebar", { reduced: minimized })}
-            style={{ width: minimized ? undefined : width }}
+            style={{ width: minimized ? '2.5rem' : width }}
         >
             <div className="sidebar-header">
                 {!minimized && (

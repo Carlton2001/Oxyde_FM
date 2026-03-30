@@ -56,7 +56,7 @@ export const ExtensionFilterMenu: React.FC<ExtensionFilterMenuProps> = ({
             const newSet = new Set(availableExtensions);
             newSet.delete(ext);
             // If deleting makes it empty, just restore null? Actually, if unchecking the only checked one, we empty it?
-            onChange(newSet.size === 0 ? null : newSet);
+            onChange(newSet.size === 0 ? new Set() : newSet);
         } else {
             const newSet = new Set(selectedExtensions);
             if (newSet.has(ext)) {
@@ -64,11 +64,10 @@ export const ExtensionFilterMenu: React.FC<ExtensionFilterMenuProps> = ({
             } else {
                 newSet.add(ext);
             }
-            // If all are selected, or none are selected, just reset to null
-            if (newSet.size === availableExtensions.length || newSet.size === 0) {
-                onChange(null);
+            if (newSet.size === availableExtensions.length) {
+                onChange(null); // All selected = no filter
             } else {
-                onChange(newSet);
+                onChange(newSet); // Includes empty Set = "Aucun"
             }
         }
     };

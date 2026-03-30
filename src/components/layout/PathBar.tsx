@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { ChevronRight, Folder, Trash, HardDrive, Usb, Disc, Copy, Network, Globe } from 'lucide-react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from 'react';
+import { ChevronRight, Folder, Trash, HardDrive, Usb, Disc, Copy, Network, Globe, Pin } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import cx from 'classnames';
 import './PathBar.css';
-import { DriveInfo, FileEntry, DirResponse } from '../../types';
+import { DriveInfo, FileEntry, DirResponse, QuickAccessItem } from '../../types';
 import { TFunc } from '../../i18n';
 import { useApp } from '../../context/AppContext';
 import { AsyncFileIcon } from '../ui/AsyncFileIcon';
@@ -20,10 +20,18 @@ interface PathBarProps {
     showHidden?: boolean;
     panelId: string;
     t?: TFunc;
+    favorites?: QuickAccessItem[];
 }
 
-export const PathBar: React.FC<PathBarProps> = ({ path, onNavigate, className, isDragging, onDrop, drives, showHidden = false, panelId, t }) => {
+export const PathBar: React.FC<PathBarProps> = ({ path, onNavigate, className, isDragging, onDrop, drives, showHidden = false, panelId, t, favorites }) => {
     const { useSystemIcons } = useApp();
+    
+    const isFavorite = useMemo(() => {
+        if (!favorites || !path) return false;
+        const normPath = path.toLowerCase().replace(/[\\/]+$/, '');
+        return favorites.some(f => f.path.toLowerCase().replace(/[\\/]+$/, '') === normPath);
+    }, [path, favorites]);
+
     // Special handling for trash path
     const isTrashPath = path?.startsWith('trash://') || path?.startsWith('trash:\\\\');
     const isSearchPath = path?.startsWith('search://') || path?.startsWith('search:\\\\');
@@ -77,6 +85,20 @@ export const PathBar: React.FC<PathBarProps> = ({ path, onNavigate, className, i
         }
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, [menuOpen, contextMenuOpen]);
+
+    useLayoutEffect(() => {
+        if (contextMenuOpen && contextMenuRef.current) {
+            const { width, height } = contextMenuRef.current.getBoundingClientRect();
+            const PAD = 8;
+            let left = contextMenuOpen.x - width / 2;
+            left = Math.max(PAD, Math.min(left, window.innerWidth - width - PAD));
+            let top = contextMenuOpen.y;
+            if (top + height > window.innerHeight - PAD) top = Math.max(PAD, window.innerHeight - height - PAD);
+            contextMenuRef.current.style.left = `${left}px`;
+            contextMenuRef.current.style.top = `${top}px`;
+            contextMenuRef.current.style.visibility = 'visible';
+        }
+    }, [contextMenuOpen]);
 
     const fetchSubDirectories = useCallback(async (folderPath: string) => {
         setLoadingSubDirs(true);
@@ -336,13 +358,14 @@ export const PathBar: React.FC<PathBarProps> = ({ path, onNavigate, className, i
         }
     }, []);
 
-    // Check overflow and scroll on path change and window resize
+    // Check overflow and scroll on path change, mode change and window resize
     useEffect(() => {
         scrollToLastItem();
         
         // Immediate and delayed triggers to handle both DOM changes and CSS transitions (0.15s)
         const timer1 = setTimeout(scrollToLastItem, 10);
         const timer2 = setTimeout(scrollToLastItem, 200);
+        const timer3 = setTimeout(scrollToLastItem, 500); // Final safety check
 
         window.addEventListener('resize', scrollToLastItem);
         
@@ -362,9 +385,10 @@ export const PathBar: React.FC<PathBarProps> = ({ path, onNavigate, className, i
             window.removeEventListener('resize', scrollToLastItem);
             clearTimeout(timer1);
             clearTimeout(timer2);
+            clearTimeout(timer3);
             if (observer) observer.disconnect();
         };
-    }, [path, scrollToLastItem]);
+    }, [path, isEditing, scrollToLastItem]);
 
     // Manual Drag handling
     const isDragRef = useRef(false);
@@ -455,7 +479,12 @@ export const PathBar: React.FC<PathBarProps> = ({ path, onNavigate, className, i
                                         e.preventDefault();
                                         e.stopPropagation();
                                         setMenuOpen(null);
-                                        setContextMenuOpen({ path: crumb.fullPath, x: e.clientX, y: e.clientY });
+                                        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                                        setContextMenuOpen({
+                                            path: crumb.fullPath,
+                                            x: rect.left + rect.width / 2,
+                                            y: rect.bottom + 4
+                                        });
                                     }}
                                 >
                                     {crumb.name}
@@ -488,6 +517,11 @@ export const PathBar: React.FC<PathBarProps> = ({ path, onNavigate, className, i
                             }
                         }}
                     />
+                    {isFavorite && (
+                        <div className="path-favorite-icon">
+                            <Pin size="0.875rem" fill="var(--accent-color)" stroke="var(--accent-color)" style={{ transform: 'rotate(45deg)' }} />
+                        </div>
+                    )}
                 </>
             )}
 
@@ -535,7 +569,8 @@ export const PathBar: React.FC<PathBarProps> = ({ path, onNavigate, className, i
                     style={{
                         position: 'fixed',
                         top: contextMenuOpen.y,
-                        left: contextMenuOpen.x
+                        left: contextMenuOpen.x,
+                        visibility: 'hidden'
                     }}
                 >
                     <div

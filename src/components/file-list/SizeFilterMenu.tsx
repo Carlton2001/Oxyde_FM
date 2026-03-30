@@ -65,7 +65,7 @@ export const SizeFilterMenu: React.FC<SizeFilterMenuProps> = ({
         if (selectedSizes === null) {
             const newSet = new Set(categoryKeys);
             newSet.delete(cat);
-            onChange(newSet.size === 0 ? null : newSet);
+            onChange(newSet.size === 0 ? new Set() : newSet);
         } else {
             const newSet = new Set(selectedSizes);
             if (newSet.has(cat)) {
@@ -73,10 +73,10 @@ export const SizeFilterMenu: React.FC<SizeFilterMenuProps> = ({
             } else {
                 newSet.add(cat);
             }
-            if (newSet.size === categoryKeys.length || newSet.size === 0) {
-                onChange(null);
+            if (newSet.size === categoryKeys.length) {
+                onChange(null); // All selected = no filter
             } else {
-                onChange(newSet);
+                onChange(newSet); // Includes empty Set = "Aucun"
             }
         }
     };

@@ -94,7 +94,7 @@ export const DateFilterMenu: React.FC<DateFilterMenuProps> = ({
         if (selectedDates === null) {
             const newSet = new Set(categoryKeys);
             newSet.delete(cat);
-            onChange(newSet.size === 0 ? null : newSet);
+            onChange(newSet.size === 0 ? new Set() : newSet);
         } else {
             const newSet = new Set(selectedDates);
             if (newSet.has(cat)) {
@@ -102,10 +102,10 @@ export const DateFilterMenu: React.FC<DateFilterMenuProps> = ({
             } else {
                 newSet.add(cat);
             }
-            if (newSet.size === categoryKeys.length || newSet.size === 0) {
-                onChange(null);
+            if (newSet.size === categoryKeys.length) {
+                onChange(null); // All selected = no filter
             } else {
-                onChange(newSet);
+                onChange(newSet); // Includes empty Set = "Aucun"
             }
         }
     };

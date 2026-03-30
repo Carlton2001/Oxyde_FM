@@ -53,6 +53,19 @@ export const useNavigation = (initialPath: string = "C:\\") => {
         });
     }, []);
 
+    const goToIndex = useCallback((targetIndex: number, currentSelection?: string[]) => {
+        setState(prev => {
+            if (targetIndex < 0 || targetIndex >= prev.history.length || targetIndex === prev.historyIndex) return prev;
+            const newHistory = [...prev.history];
+            if (currentSelection !== undefined && newHistory[prev.historyIndex]) {
+                newHistory[prev.historyIndex] = { ...newHistory[prev.historyIndex], selected: currentSelection };
+            }
+            const entry = newHistory[targetIndex];
+            if (!entry) return prev;
+            return { ...prev, path: entry.path, history: newHistory, historyIndex: targetIndex, version: prev.version + 1 };
+        });
+    }, []);
+
     const goBack = useCallback((currentSelection?: string[]) => {
         setState(prev => {
             if (prev.historyIndex > 0) {
@@ -155,6 +168,7 @@ export const useNavigation = (initialPath: string = "C:\\") => {
         historyIndex: state.historyIndex,
         currentEntry: state.history[state.historyIndex],
         navigate,
+        goToIndex,
         goBack,
         goForward,
         goUp,

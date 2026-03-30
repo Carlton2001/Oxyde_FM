@@ -18,7 +18,7 @@ export const usePanel = (initialPath: string, panelId?: string, activeTabId?: st
     }, [panelId]);
 
     // Navigation
-    const { path, history, historyIndex, currentEntry, navigate, goBack, goForward, goUp, updateCurrentSelection, updateCurrentScroll, setNavigationState, version } = useNavigation(initialPath);
+    const { path, history, historyIndex, currentEntry, navigate, goToIndex, goBack, goForward, goUp, updateCurrentSelection, updateCurrentScroll, setNavigationState, version } = useNavigation(initialPath);
 
     useEffect(() => {
         if (panelId) {
@@ -251,6 +251,7 @@ export const usePanel = (initialPath: string, panelId?: string, activeTabId?: st
     const handleGoBack = useCallback(() => goBack(Array.from(selected)), [goBack, selected]);
     const handleGoForward = useCallback(() => goForward(Array.from(selected)), [goForward, selected]);
     const handleGoUp = useCallback(() => goUp(Array.from(selected)), [goUp, selected]);
+    const handleGoToIndex = useCallback((idx: number) => goToIndex(idx, Array.from(selected)), [goToIndex, selected]);
 
     return useMemo(() => ({
         // State
@@ -291,6 +292,7 @@ export const usePanel = (initialPath: string, panelId?: string, activeTabId?: st
         goBack: handleGoBack,
         goForward: handleGoForward,
         goUp: handleGoUp,
+        goToIndex: handleGoToIndex,
         refresh,
 
         setViewMode,
@@ -330,7 +332,7 @@ export const usePanel = (initialPath: string, panelId?: string, activeTabId?: st
         summary, isComplete, currentSearchRoot, currentEntry,
         colWidths, mode, isTrashView, isNetworkView, lastSelectedPath, groupByDate,
         extensionFilter, sizeFilter, dateFilter, nameFilter, locationFilter, deletedDateFilter,
-        navigate, goBack, goForward, goUp, refresh,
+        navigate, goBack, goForward, goUp, goToIndex, refresh,
         setViewMode, setGroupByDate, setSortConfig, setColWidths,
         setExtensionFilter, setSizeFilter, setDateFilter, setNameFilter, setLocationFilter, setDeletedDateFilter, clearAllFilters,
         setSearchQuery, setSearchResults, setIsSearching, setSearchLimitReached,

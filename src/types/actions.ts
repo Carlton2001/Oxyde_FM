@@ -68,6 +68,7 @@ export interface ActionContext {
     refreshBothPanels?: () => void;
     refreshTreePath?: (path: string) => void;
     driveTrashConfigs?: Record<string, { nukeOnDelete: boolean }>;
+    layout?: import('./index').LayoutMode;
     setContextMenu?: (menu: any) => void;
     onContextMenu?: (e: any, id: PanelId, entry?: any) => void;
 
@@ -75,6 +76,7 @@ export interface ActionContext {
     tabs?: import('../hooks/useRustSession').Tab[];
     activeTabId?: string;
     setActiveTab?: (id: string) => void;
+    addTab?: (path: string, optionsOrId?: string | { id?: string, background?: boolean, index?: number }, background?: boolean) => Promise<string | undefined>;
     closeTab?: (id: string) => void;
 
     // Allow extensions

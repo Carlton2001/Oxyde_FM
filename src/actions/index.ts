@@ -2,12 +2,14 @@ import { actionService } from '../services/ActionService';
 import * as fileActions from './fileActions';
 import * as archiveActions from './archiveActions';
 import * as driveActions from './driveActions';
+import * as tabActions from './tabActions';
 
 export const initializeActions = () => {
     const allActions = {
         ...fileActions,
         ...archiveActions,
-        ...driveActions
+        ...driveActions,
+        ...tabActions
     };
 
     Object.values(allActions).forEach(action => {
@@ -22,3 +24,4 @@ export const initializeActions = () => {
 export * from './fileActions';
 export * from './archiveActions';
 export * from './driveActions';
+export * from './tabActions';

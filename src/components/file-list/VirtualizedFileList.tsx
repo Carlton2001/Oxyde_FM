@@ -108,10 +108,10 @@ interface SharedItemProps {
 }
 
 export interface ActiveFilters {
-    extensions: Set<string>;
-    sizes: Set<string>;
-    date: Set<string>;
-    deletedDates: Set<string>;
+    extensions: Set<string> | null;
+    sizes: Set<string> | null;
+    date: Set<string> | null;
+    deletedDates: Set<string> | null;
     name: string | null;
     location: string | null;
     onRemoveExtension: (ext: string) => void;
@@ -120,6 +120,10 @@ export interface ActiveFilters {
     onRemoveDeletedDate: (date: any) => void;
     onRemoveName: () => void;
     onRemoveLocation: () => void;
+    onClearExtensions: () => void;
+    onClearSizes: () => void;
+    onClearDate: () => void;
+    onClearDeletedDates: () => void;
     onClearAll: () => void;
 }
 
@@ -169,9 +173,6 @@ const DetailsRowContent = React.memo(({ entry, style, sharedProps }: { entry: Fi
             draggable={!isRenaming}
             onDragStart={handlers.onDragStart}
             onMouseDown={handlers.onMouseDown}
-            data-tooltip={tooltipText}
-            data-tooltip-multiline
-            data-tooltip-image-path={entry.path}
         >
             {showHistogram && (
                 <div className="size-histogram-bar" style={{ width: `${(entry.size / totalItemsSize) * 100}%` }} />
@@ -194,7 +195,13 @@ const DetailsRowContent = React.memo(({ entry, style, sharedProps }: { entry: Fi
                                 {isRenaming ? (
                                     <RenameInput renameText={renameText} onRenameTextChange={onRenameTextChange} onRenameCommit={onRenameCommit} onRenameCancel={onRenameCancel} />
                                 ) : (
-                                    <span className="file-name">{entry.name}</span>
+                                    <span className="file-name">
+                                        <span className="file-name-text"
+                                            data-tooltip={tooltipText}
+                                            data-tooltip-multiline
+                                            data-tooltip-image-path={entry.path}
+                                        >{entry.name}</span>
+                                    </span>
                                 )}
                             </div>
                         </div>
@@ -309,52 +316,100 @@ const FiltersRow = React.memo(({ activeFilters, t, style }: { activeFilters: Act
                         <span>{t('active_filters' as any) || 'Active filters'}</span>
                     </div>
                     <div className="active-filters-pills">
-                        {activeFilters.extensions.size > 0 && (
+                        {activeFilters.extensions !== null && (
                             <div className="filter-pill-group">
-                                {Array.from(activeFilters.extensions).map(ext => (
-                                    <span key={ext} className="filter-pill" onClick={() => activeFilters.onRemoveExtension(ext)}>
-                                        {t('type')}: {ext === '' ? `(${t('none_fem' as any)})` : ext.toUpperCase()} <X size={10} style={{ marginLeft: '4px' }} />
-                                    </span>
-                                ))}
+                                {activeFilters.extensions.size === 0
+                                    ? (
+                                        <span className="filter-pill" onClick={activeFilters.onClearExtensions}>
+                                            {t('type')}: {t('none' as any) || 'Aucun'} <X size={10} style={{ marginLeft: '4px' }} />
+                                        </span>
+                                    ) : activeFilters.extensions.size === 1
+                                    ? Array.from(activeFilters.extensions).map(ext => (
+                                        <span key={ext} className="filter-pill" onClick={() => activeFilters.onRemoveExtension(ext)}>
+                                            {t('type')}: {ext === '' ? `(${t('none_fem' as any)})` : ext.toUpperCase()} <X size={10} style={{ marginLeft: '4px' }} />
+                                        </span>
+                                    ))
+                                    : (
+                                        <span className="filter-pill" onClick={() => Array.from(activeFilters.extensions!).forEach(ext => activeFilters.onRemoveExtension(ext))}>
+                                            {t('type')}: {activeFilters.extensions.size} <X size={10} style={{ marginLeft: '4px' }} />
+                                        </span>
+                                    )
+                                }
                             </div>
                         )}
-                        {activeFilters.sizes.size > 0 && (
+                        {activeFilters.sizes !== null && (
                             <div className="filter-pill-group">
-                                {Array.from(activeFilters.sizes).map(size => {
-                                    const info = (SIZE_CATEGORIES as any)[size];
-                                    const label = info ? t(info.key as any) : size;
-                                    return (
-                                        <span key={size} className="filter-pill" onClick={() => activeFilters.onRemoveSize(size)}>
-                                            {t('size')}: {label} <X size={10} style={{ marginLeft: '4px' }} />
+                                {activeFilters.sizes.size === 0
+                                    ? (
+                                        <span className="filter-pill" onClick={activeFilters.onClearSizes}>
+                                            {t('size')}: {t('none' as any) || 'Aucun'} <X size={10} style={{ marginLeft: '4px' }} />
                                         </span>
-                                    );
-                                })}
+                                    ) : activeFilters.sizes.size === 1
+                                    ? Array.from(activeFilters.sizes).map(size => {
+                                        const info = (SIZE_CATEGORIES as any)[size];
+                                        const label = info ? t(info.key as any) : size;
+                                        return (
+                                            <span key={size} className="filter-pill" onClick={() => activeFilters.onRemoveSize(size)}>
+                                                {t('size')}: {label} <X size={10} style={{ marginLeft: '4px' }} />
+                                            </span>
+                                        );
+                                    })
+                                    : (
+                                        <span className="filter-pill" onClick={() => Array.from(activeFilters.sizes!).forEach(size => activeFilters.onRemoveSize(size))}>
+                                            {t('size')}: {activeFilters.sizes.size} <X size={10} style={{ marginLeft: '4px' }} />
+                                        </span>
+                                    )
+                                }
                             </div>
                         )}
-                        {activeFilters.deletedDates.size > 0 && (
+                        {activeFilters.deletedDates !== null && (
                             <div className="filter-pill-group">
-                                {Array.from(activeFilters.deletedDates).map(date => {
-                                    const key = (DATE_CATEGORIES as any)[date];
-                                    const label = key ? t(key as any) : date;
-                                    return (
-                                        <span key={date} className="filter-pill" onClick={() => activeFilters.onRemoveDeletedDate(date)}>
-                                            {t('deleted_date')}: {label} <X size={10} style={{ marginLeft: '4px' }} />
+                                {activeFilters.deletedDates.size === 0
+                                    ? (
+                                        <span className="filter-pill" onClick={activeFilters.onClearDeletedDates}>
+                                            {t('deleted_date')}: {t('none' as any) || 'Aucun'} <X size={10} style={{ marginLeft: '4px' }} />
                                         </span>
-                                    );
-                                })}
+                                    ) : activeFilters.deletedDates.size === 1
+                                    ? Array.from(activeFilters.deletedDates).map(date => {
+                                        const key = (DATE_CATEGORIES as any)[date];
+                                        const label = key ? t(key as any) : date;
+                                        return (
+                                            <span key={date} className="filter-pill" onClick={() => activeFilters.onRemoveDeletedDate(date)}>
+                                                {t('deleted_date')}: {label} <X size={10} style={{ marginLeft: '4px' }} />
+                                            </span>
+                                        );
+                                    })
+                                    : (
+                                        <span className="filter-pill" onClick={() => Array.from(activeFilters.deletedDates!).forEach(date => activeFilters.onRemoveDeletedDate(date))}>
+                                            {t('deleted_date')}: {activeFilters.deletedDates.size} <X size={10} style={{ marginLeft: '4px' }} />
+                                        </span>
+                                    )
+                                }
                             </div>
                         )}
-                        {activeFilters.date.size > 0 && (
+                        {activeFilters.date !== null && (
                             <div className="filter-pill-group">
-                                {Array.from(activeFilters.date).map(date => {
-                                    const key = (DATE_CATEGORIES as any)[date];
-                                    const label = key ? t(key as any) : date;
-                                    return (
-                                        <span key={date} className="filter-pill" onClick={() => activeFilters.onRemoveDate(date)}>
-                                            {t('date')}: {label} <X size={10} style={{ marginLeft: '4px' }} />
+                                {activeFilters.date.size === 0
+                                    ? (
+                                        <span className="filter-pill" onClick={activeFilters.onClearDate}>
+                                            {t('date')}: {t('none' as any) || 'Aucun'} <X size={10} style={{ marginLeft: '4px' }} />
                                         </span>
-                                    );
-                                })}
+                                    ) : activeFilters.date.size === 1
+                                    ? Array.from(activeFilters.date).map(date => {
+                                        const key = (DATE_CATEGORIES as any)[date];
+                                        const label = key ? t(key as any) : date;
+                                        return (
+                                            <span key={date} className="filter-pill" onClick={() => activeFilters.onRemoveDate(date)}>
+                                                {t('date')}: {label} <X size={10} style={{ marginLeft: '4px' }} />
+                                            </span>
+                                        );
+                                    })
+                                    : (
+                                        <span className="filter-pill" onClick={() => Array.from(activeFilters.date!).forEach(date => activeFilters.onRemoveDate(date))}>
+                                            {t('date')}: {activeFilters.date.size} <X size={10} style={{ marginLeft: '4px' }} />
+                                        </span>
+                                    )
+                                }
                             </div>
                         )}
                         {activeFilters.name && (
@@ -372,7 +427,7 @@ const FiltersRow = React.memo(({ activeFilters, t, style }: { activeFilters: Act
                             </div>
                         )}
                     </div>
-                    <button className="clear-filters-x-btn" onClick={activeFilters.onClearAll} title={t('remove_all_filters' as any)}>
+                    <button className="clear-filters-x-btn" onClick={activeFilters.onClearAll} data-tooltip={t('remove_all_filters' as any)}>
                         <X size={14} />
                     </button>
                 </div>
@@ -408,9 +463,6 @@ const GroupedFileRow = React.memo(({ entry, style, sharedProps }: { entry: FileE
             draggable={!isRenaming}
             onDragStart={handlers.onDragStart}
             onMouseDown={handlers.onMouseDown}
-            data-tooltip={tooltipText}
-            data-tooltip-multiline
-            data-tooltip-image-path={entry.path}
         >
             {showHistogram && (
                 <div className="size-histogram-bar" style={{ width: `${(entry.size / totalItemsSize) * 100}%` }} />
@@ -433,7 +485,13 @@ const GroupedFileRow = React.memo(({ entry, style, sharedProps }: { entry: FileE
                                 {isRenaming ? (
                                     <RenameInput renameText={renameText} onRenameTextChange={onRenameTextChange} onRenameCommit={onRenameCommit} onRenameCancel={onRenameCancel} />
                                 ) : (
-                                    <span className="file-name">{entry.name}</span>
+                                    <span className="file-name">
+                                        <span className="file-name-text"
+                                            data-tooltip={tooltipText}
+                                            data-tooltip-multiline
+                                            data-tooltip-image-path={entry.path}
+                                        >{entry.name}</span>
+                                    </span>
                                 )}
                             </div>
                         </div>
@@ -651,10 +709,12 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
                 }
                 break;
             case 'Enter':
-                e.preventDefault();
-                if (currentIndex !== -1) {
-                    const focusedEntry = files[currentIndex];
-                    if (focusedEntry) onItemDoubleClick(focusedEntry);
+                if (!e.ctrlKey && !e.altKey && !e.shiftKey) {
+                    e.preventDefault();
+                    if (currentIndex !== -1) {
+                        const focusedEntry = files[currentIndex];
+                        if (focusedEntry) onItemDoubleClick(focusedEntry);
+                    }
                 }
                 break;
             case 'Backspace':
@@ -770,10 +830,10 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
 
     const hasActiveFilters = useMemo(() => {
         if (!activeFilters) return false;
-        return activeFilters.extensions.size > 0 ||
-               activeFilters.sizes.size > 0 ||
-               activeFilters.date.size > 0 ||
-               activeFilters.deletedDates.size > 0 ||
+        return activeFilters.extensions !== null ||
+               activeFilters.sizes !== null ||
+               activeFilters.date !== null ||
+               activeFilters.deletedDates !== null ||
                !!activeFilters.name ||
                !!activeFilters.location;
     }, [activeFilters]);

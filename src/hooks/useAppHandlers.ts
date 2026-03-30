@@ -480,7 +480,7 @@ export const useAppHandlers = ({
         const panel = id === 'left' ? left : right;
 
         // Determine if this was likely a keyboard-triggered event (null e, 0,0 or no detail)
-        const isProbablyKeyboard = !e || (e.clientX <= 2 && e.clientY <= 2) || (e.nativeEvent && (e.nativeEvent as any).detail === 0);
+        const isProbablyKeyboard = !e || e.button === -1 || (e.clientX <= 2 && e.clientY <= 2);
 
         // If from keyboard and no entry provided, try to find the actual DOM-focused item FIRST
         let effectiveEntry = entry;

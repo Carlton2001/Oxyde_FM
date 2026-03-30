@@ -169,6 +169,7 @@ export const FavoritesMenu: React.FC<FavoritesMenuProps> = ({ onNavigate, onOpen
                             onClick={(e) => handleSelect(fav.path, e)}
                             onMouseDown={(e) => handleMouseDownItem(fav.path, e)}
                             onContextMenu={(e) => handleContextMenuRow(fav.path, e)}
+                            data-tooltip={fav.path}
                         >
                             <Pin size="0.875rem" className="file-icon folder" fill="currentColor" fillOpacity={0.2} style={{ transform: 'rotate(45deg)' }} />
                             <span className="fav-name">{fav.name}</span>
