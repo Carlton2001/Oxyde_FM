@@ -383,7 +383,7 @@ export const PathBar: React.FC<PathBarProps> = ({ path, onNavigate, className, i
         if (scrollRef.current) {
             requestAnimationFrame(() => {
                 if (!scrollRef.current) return;
-                
+
                 const container = scrollRef.current;
                 const activeEl = container.querySelector('.path-segment.active-segment') as HTMLElement;
                 
@@ -447,6 +447,21 @@ export const PathBar: React.FC<PathBarProps> = ({ path, onNavigate, className, i
             if (observer) observer.disconnect();
         };
     }, [path, isEditing, scrollToActiveItem]);
+
+    // Horizontal scroll with mouse wheel
+    useEffect(() => {
+        const el = scrollRef.current;
+        if (!el) return;
+        const handleWheel = (e: WheelEvent) => {
+            if (e.deltaY !== 0) {
+                e.preventDefault();
+                el.scrollLeft += e.deltaY;
+                updateOverflow();
+            }
+        };
+        el.addEventListener('wheel', handleWheel, { passive: false });
+        return () => el.removeEventListener('wheel', handleWheel);
+    }, [updateOverflow]);
 
     // Manual Drag handling
     const isDragRef = useRef(false);

@@ -60,6 +60,7 @@
     -ms-overflow-style: none;
     min-width: 0;
     padding-right: 0.75rem;
+    scroll-behavior: smooth;
     /* Gap between last item and spacer */
 }
 
@@ -112,7 +113,7 @@
 }
 
 .path-segment.ghost {
-    opacity: 0.5;
+    opacity: 0.6;
 }
 
 .path-segment.ghost:hover {
@@ -125,7 +126,7 @@
 
 .path-separator {
     color: var(--text-muted);
-    opacity: 0.5;
+    opacity: 0.6;
     margin: 2px 0;
     display: flex;
     align-items: center;
@@ -138,7 +139,7 @@
 }
 
 .path-separator.ghost {
-    opacity: 0.3;
+    opacity: 0.6;
 }
 
 .path-separator:hover,
