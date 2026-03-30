@@ -11,6 +11,7 @@ node_modules/
 .vscode/
 .idea/
 .agents/
+.claude/
 .aiignore
 .antigravityignore
 *.suo
