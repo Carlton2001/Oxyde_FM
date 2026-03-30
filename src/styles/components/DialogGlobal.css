@@ -37,7 +37,7 @@
 }
 
 .dialog-window.overflow-visible {
-    overflow: visible !important;
+    overflow: visible;
 }
 
 @keyframes dialog-in {

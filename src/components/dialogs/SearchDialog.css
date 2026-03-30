@@ -15,11 +15,11 @@
 }
 
 .search-form.no-padding {
-    padding: 0 !important;
+    padding: 0;
 }
 
 .search-form.overflow-visible {
-    overflow: visible !important;
+    overflow: visible;
 }
 
 
