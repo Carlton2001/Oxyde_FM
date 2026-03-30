@@ -176,7 +176,7 @@
 
 /* Protected Folders (Admin Rights) */
 .tree-node-content.protected .tree-icon {
-    color: #ff3b30;
+    color: var(--protected-color);
 }
 
 .tree-node-content.protected .system-icon-img {
@@ -239,7 +239,7 @@
 }
 
 .drive-progress-fill.warning {
-    background-color: #f59e0b;
+    background-color: var(--warning-color);
 }
 
 .drive-progress-fill.danger {

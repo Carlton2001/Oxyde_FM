@@ -755,7 +755,7 @@
 
 /* Protected Items Style (Admin Rights) */
 .file-item.protected .file-icon {
-    color: #ff3b30;
+    color: var(--protected-color);
 }
 
 .file-item.protected .system-icon-img {
@@ -804,11 +804,11 @@
 }
 
 .file-item.diff .file-name {
-    color: #ff4d4d;
+    color: var(--diff-color);
 }
 
 .file-item.diff .file-info {
-    color: #ff4d4d !important;
+    color: var(--diff-color) !important;
     opacity: 0.8;
 }
 

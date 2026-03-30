@@ -49,6 +49,13 @@
   --space-6: 1.5rem;    /* 24px */
   --space-8: 2rem;      /* 32px */
 
+  /* Semantic Colors */
+  --danger-bg: #c42b1c;        /* Windows close button / destructive hover */
+  --protected-color: #ff3b30;  /* Admin-protected files/folders */
+  --diff-color: #ff4d4d;       /* Diff/changed files */
+  --warning-color: #f59e0b;    /* Disk usage warning, caution states */
+  --turbo-color: #fbbf24;      /* Turbo mode active */
+
   /* Surfaces & Visuals */
   --surface-tertiary: color-mix(in srgb, var(--text-color), transparent 75%);
   --scrollbar-size: 0.875rem;

@@ -213,6 +213,6 @@
 
 .progress-btn-control.turbo-toggle-btn.turbo-active {
     opacity: 1;
-    color: #fbbf24;
-    filter: drop-shadow(0 0 0.25rem rgba(251, 191, 36, 0.4));
+    color: var(--turbo-color);
+    filter: drop-shadow(0 0 0.25rem color-mix(in srgb, var(--turbo-color), transparent 60%));
 }

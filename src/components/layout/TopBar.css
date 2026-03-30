@@ -111,12 +111,12 @@
 }
 
 .window-controls .btn-icon.danger:hover {
-    background-color: #c42b1c;
+    background-color: var(--danger-bg);
     color: var(--selected-text);
 }
 
 .win-btn.close:hover {
-    background-color: #c42b1c;
+    background-color: var(--danger-bg);
     color: var(--selected-text);
 }
 
