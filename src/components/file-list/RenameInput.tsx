@@ -32,8 +32,9 @@ export const RenameInput: React.FC<RenameInputProps> = React.memo(({
         onClick={(e) => e.stopPropagation()}
         onDoubleClick={(e) => e.stopPropagation()}
         onFocus={(e) => {
+            const isDir = className?.includes('grid-mode') ? false : (e.target as any).closest('.file-item')?.getAttribute('data-is-dir') === 'true';
             const dotIndex = renameText.lastIndexOf('.');
-            if (dotIndex > 0) {
+            if (!isDir && dotIndex > 0) {
                 e.target.setSelectionRange(0, dotIndex);
             } else {
                 e.target.select();
