@@ -25,7 +25,7 @@
 }
 
 .btn.danger:focus {
-    --btn-focus-shadow: rgba(239, 68, 68, 0.4);
+    --btn-focus-shadow: color-mix(in srgb, var(--error-color), transparent 60%);
 }
 
 .btn.primary:focus {

@@ -176,11 +176,11 @@
 
 /* Protected Folders (Admin Rights) */
 .tree-node-content.protected .tree-icon {
-    color: #ff3b30 !important;
+    color: #ff3b30;
 }
 
 .tree-node-content.protected .system-icon-img {
-    filter: brightness(0.18) sepia(1) saturate(30) !important;
+    filter: brightness(0.18) sepia(1) saturate(30);
 }
 
 .tree-label {
@@ -243,7 +243,7 @@
 }
 
 .drive-progress-fill.danger {
-    background-color: #ef4444;
+    background-color: var(--error-color);
 }
 
 .icon-tree-lg {

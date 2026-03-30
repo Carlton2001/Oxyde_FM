@@ -191,8 +191,8 @@
 }
 
 .progress-btn-control.stop-btn:hover {
-    color: #ef4444;
-    background-color: rgba(239, 68, 68, 0.12);
+    color: var(--error-color);
+    background-color: color-mix(in srgb, var(--error-color), transparent 88%);
     opacity: 1;
 }
 

@@ -86,7 +86,7 @@
 }
 
 .dialog-title svg.icon-danger {
-    color: #ef4444;
+    color: var(--error-color);
 }
 
 .dialog-close-btn {

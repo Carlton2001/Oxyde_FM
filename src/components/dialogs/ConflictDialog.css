@@ -120,9 +120,9 @@
 }
 
 .delta-badge.newer.warning {
-    background: color-mix(in srgb, #ef4444, transparent 85%);
-    color: #ef4444;
-    border-color: color-mix(in srgb, #ef4444, transparent 70%);
+    background: color-mix(in srgb, var(--error-color), transparent 85%);
+    color: var(--error-color);
+    border-color: color-mix(in srgb, var(--error-color), transparent 70%);
 }
 
 .delta-badge.larger {
@@ -250,8 +250,8 @@
 }
 
 .inherited-resolution-badge.skip {
-    background: rgba(239, 68, 68, 0.1);
-    color: #ef4444;
+    background: color-mix(in srgb, var(--error-color), transparent 90%);
+    color: var(--error-color);
 }
 
 /* Hybrid View */
@@ -422,7 +422,7 @@
 }
 
 .status-icon-res.skip {
-    color: #ef4444;
+    color: var(--error-color);
 }
 
 .status-icon-res.inherited {
@@ -461,7 +461,7 @@
 }
 
 .status-dot.older {
-    background: #ef4444;
+    background: var(--error-color);
     opacity: 0.8;
 }
 
