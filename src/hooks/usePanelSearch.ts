@@ -42,9 +42,12 @@ export const usePanelSearch = ({
     path, panelId, activeTabId, searchLimit, initialPath
 }: UsePanelSearchOptions): PanelSearchState => {
     const [searchQuery, setSearchQuery] = useState('');
+    const searchQueryRef = useRef('');
     const [searchResults, setSearchResults] = useState<FileEntry[] | null>(null);
     const [isSearching, setIsSearching] = useState(false);
     const [searchLimitReached, setSearchLimitReached] = useState(false);
+
+    searchQueryRef.current = searchQuery;
 
     const pid = useMemo(() => panelId?.replace('panel-', '') || 'left', [panelId]);
 
@@ -121,12 +124,15 @@ export const usePanelSearch = ({
                 }
             }
             // Reset UI state when leaving search
-            if (searchResults !== null) {
+            if (searchResults !== null || searchQueryRef.current !== '') {
                 setSearchResults(null);
                 setIsSearching(false);
                 setSearchLimitReached(false);
+                setSearchQuery('');
                 searchBufferRef.current = [];
                 purgeIconCache();
+                // Clear tab query cache so it doesn't restore on tab switch
+                if (activeTabId) tabSearchQueryCache.current.delete(activeTabId);
             }
             return;
         }

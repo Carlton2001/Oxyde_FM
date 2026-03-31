@@ -160,8 +160,17 @@ pub async fn list_dir(
                 // If it's a directory, check if it's protected (Access Denied)
                 if file_entry.is_dir {
                     // Try to peek into the directory. If it fails with permission error, it's protected.
-                    // We don't use read_dir fully, just check if it's possible.
-                    if let Err(e) = fs::read_dir(&path) {
+                    // We also check if it contains ANY sub-folder to show the chevron in the UI.
+                    if let Ok(read_dir) = fs::read_dir(&path) {
+                         for sub_entry in read_dir.flatten() {
+                             if let Ok(sub_meta) = sub_entry.metadata() {
+                                 if sub_meta.is_dir() {
+                                     file_entry.folders_count = Some(1);
+                                     break; // Stop at first folder found
+                                 }
+                             }
+                         }
+                    } else if let Err(e) = fs::read_dir(&path) {
                          let kind = e.kind();
                          if kind == std::io::ErrorKind::PermissionDenied || kind == std::io::ErrorKind::NotFound {
                              file_entry.is_protected = true;

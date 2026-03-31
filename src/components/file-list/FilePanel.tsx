@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useCallback, useEffect, useMemo, useLayoutEffect } from 'react';
 import cx from 'classnames';
 import { ArrowUp, X, Search, Square } from 'lucide-react';
 import { FilePanelHeader } from './FilePanelHeader';
@@ -18,6 +18,7 @@ import { DateFilterMenu, getDateCategoryForFile, DateCategoryKey } from './DateF
 import { NameFilterMenu } from './NameFilterMenu';
 import { LocationFilterMenu } from './LocationFilterMenu';
 import { useApp } from '../../context/AppContext';
+import { useAutoFitColumns } from '../../hooks/useAutoFitColumns';
 import { useFileStats } from '../../hooks/useFileStats';
 import { getVisibleColumns, getColumnMode, buildGridTemplate, getOtherColumnsWidthSum, getFlexibleColumn, calculateIdealFlexWidth } from '../../config/columnDefinitions';
 import { SizeCategoryKey } from '../../types';
@@ -208,30 +209,30 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
     const mode = useMemo(() => getColumnMode(!!isTrashView, !!searchResults, isNetworkView), [isTrashView, searchResults, isNetworkView]);
 
     /**
-     * Re-calculates and applies the 'Name' column width based on the current panel width.
-     * This ensures the column fills available space while respecting other column sizes.
+     * Lightweight live-resize sync: only adjusts the Name (flex) column to fill available space.
+     * Fixed columns are left untouched during active resize for performance (60fps re-renders).
+     * Full proportional recalibration happens via autoFit once resize ends.
      */
     const syncFlexColumn = useCallback((currentPanelWidth: number) => {
         if (viewMode !== 'details' || !onResizeMultiple) return;
 
         const visibleCols = getVisibleColumns(mode);
         const flexCol = getFlexibleColumn(visibleCols);
-        if (!flexCol) return;
+        if (!flexCol) {
+            lastPanelWidthRef.current = currentPanelWidth;
+            return;
+        }
 
         const otherColsSum = getOtherColumnsWidthSum(
             visibleCols,
             colWidthsRef.current as unknown as Record<string, number>,
             flexCol.key
         );
-
         const idealWidth = calculateIdealFlexWidth(currentPanelWidth, otherColsSum, flexCol.minWidth);
-
-        // Prevent unnecessary state updates if the change is negligible
         const currentFlexWidth = colWidthsRef.current[flexCol.key as keyof ColumnWidths] || flexCol.defaultWidth;
         if (Math.abs(idealWidth - currentFlexWidth) > 2) {
             onResizeMultiple({ [flexCol.key]: idealWidth });
         }
-
         lastPanelWidthRef.current = currentPanelWidth;
     }, [viewMode, onResizeMultiple, mode]);
 
@@ -246,20 +247,55 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
         }
     }, [mode]);
 
-    // Observer to handle panel/window resizing
-    React.useLayoutEffect(() => {
+    // Auto-fit instance (same as double-click on separator)
+    const displayFiles = useMemo(() => searchResults ?? files, [searchResults, files]);
+    const autoFit = useAutoFitColumns({
+        panelRef: containerRef,
+        files: displayFiles,
+        searchResults: !!searchResults,
+        isTrashView: !!isTrashView,
+        t,
+        onResizeMultiple,
+        onResize,
+    });
+    const autoFitRef = useRef(autoFit);
+    autoFitRef.current = autoFit;
+
+    // Trigger auto-fit when path changes and files are loaded
+    const lastAutoFitPathRef = useRef<string>('');
+    useEffect(() => {
+        if (viewMode !== 'details' || !displayFiles.length) return;
+        if (lastAutoFitPathRef.current === currentPath) return;
+        lastAutoFitPathRef.current = currentPath;
+        const timer = setTimeout(() => autoFitRef.current(), 50);
+        return () => clearTimeout(timer);
+    }, [currentPath, displayFiles.length, viewMode]);
+
+    // ResizeObserver: proportional sync during resize + autoFit for structural panel changes (>= 30px)
+    // Uses refs to avoid recreating the observer on every render (which would cause choppy updates).
+    const resizeEndTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    useLayoutEffect(() => {
         if (viewMode !== 'details' || !containerRef.current) return;
 
         const resizeObserver = new ResizeObserver(entries => {
             const width = entries[0]?.contentRect.width;
-            if (width && width > 0 && Math.abs(width - lastPanelWidthRef.current) > 2) {
-                syncFlexColumn(width);
+            if (!width || width <= 0) return;
+            const delta = Math.abs(width - lastPanelWidthRef.current);
+            if (delta > 2) syncFlexRef.current(width);
+            // Only arm autoFit for structural panel resizes (sidebar toggle, layout change)
+            // Column drag causes < 5px, sidebar toggle causes 100+px
+            if (delta >= 30) {
+                if (resizeEndTimerRef.current) clearTimeout(resizeEndTimerRef.current);
+                resizeEndTimerRef.current = setTimeout(() => autoFitRef.current(), 250);
             }
         });
 
         resizeObserver.observe(containerRef.current);
-        return () => resizeObserver.disconnect();
-    }, [viewMode, syncFlexColumn]);
+        return () => {
+            resizeObserver.disconnect();
+            if (resizeEndTimerRef.current) clearTimeout(resizeEndTimerRef.current);
+        };
+    }, [viewMode]);
 
     const availableExtensions = React.useMemo(() => {
         const exts = new Set<string>();

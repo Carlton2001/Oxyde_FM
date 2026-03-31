@@ -45,6 +45,7 @@ export const useAutoFitColumns = ({
             const rootSize = parseFloat(rootStyles.fontSize) || 16;
             const HEADER_PADDING = rootSize * 1.5;
             const COL_PADDING = rootSize * 1.25; // Increased from rootSize (1.0) for better precision
+            const DATE_PADDING = rootSize * 1.5; // Dates with seconds need slightly more room
             const SORT_ICON = 16;
             const SAFETY_MARGIN = 14; // Increased from 10
             const NAME_STRUCT = (rootSize * 3.75) + SAFETY_MARGIN;
@@ -131,7 +132,7 @@ export const useAutoFitColumns = ({
                 const tw = typeCache[typeStr];
                 if (tw > maxTypeText) maxTypeText = tw;
 
-                if (!f.is_dir) {
+                if (!f.is_dir || f.is_calculated) {
                     const sizeStr = formatSize(f.size, 1, t);
                     if (sizeCache[sizeStr] === undefined) {
                         sizeCache[sizeStr] = context.measureText(sizeStr).width;
@@ -150,6 +151,7 @@ export const useAutoFitColumns = ({
                     if (ddw > maxDeletedDateText) maxDeletedDateText = ddw;
                 }
 
+
                 if (searchResults || isTrashView) {
                     const loc = isTrashView ? (f.original_path || '') : ((getParent(f.path) || f.path) || '');
                     const lw = context.measureText(loc).width;
@@ -160,7 +162,7 @@ export const useAutoFitColumns = ({
             maxName = Math.max(maxName, Math.ceil(maxNameText + NAME_STRUCT));
             maxType = Math.max(maxType, Math.ceil(maxTypeText + COL_PADDING));
             maxSize = Math.max(maxSize, Math.ceil(maxSizeText + COL_PADDING));
-            maxDate = Math.max(maxDate, Math.ceil(maxDateText + COL_PADDING));
+            maxDate = Math.max(maxDate, Math.ceil(maxDateText + DATE_PADDING));
             maxLocation = Math.max(maxLocation, Math.ceil(maxLocationText + COL_PADDING));
 
             // ---------------------------------------------------------
@@ -177,7 +179,7 @@ export const useAutoFitColumns = ({
             };
 
             if (isTrashView) {
-                updates.deletedDate = Math.max(maxDeletedDate, Math.ceil(maxDeletedDateText + COL_PADDING));
+                updates.deletedDate = Math.max(maxDeletedDate, Math.ceil(maxDeletedDateText + DATE_PADDING));
             }
 
             if (searchResults || isTrashView) {

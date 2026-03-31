@@ -33,32 +33,28 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
     className
 }) => {
     const [isFocused, setIsFocused] = React.useState(false);
+    const isFocusedRef = React.useRef(false);
+    isFocusedRef.current = isFocused;
     const inputRef = React.useRef<HTMLInputElement>(null);
     const debounceTimer = React.useRef<any>(null);
 
-    // Auto-search effect
+    // Auto-search effect: only runs when query changes, NOT when focus changes.
+    // isFocused is read via ref to guard against submitting on mount or external query restore.
     React.useEffect(() => {
-        if (debounceTimer.current) {
-            clearTimeout(debounceTimer.current);
-        }
-        
-        // Only auto-submit if there's a query and the box is focused 
-        // (to prevent infinite loops on mount or external resets)
-        if (query && isFocused) {
+        if (debounceTimer.current) clearTimeout(debounceTimer.current);
+
+        if (query && isFocusedRef.current) {
             debounceTimer.current = setTimeout(() => {
-                if (query.trim().length > 0) {
-                    onSubmit();
-                }
-            }, 350); // 350ms debounce
+                if (query.trim().length > 0) onSubmit();
+            }, 350);
         }
-        
-        return () => {
-            if (debounceTimer.current) clearTimeout(debounceTimer.current);
-        };
-    }, [query, isFocused]);
+
+        return () => { if (debounceTimer.current) clearTimeout(debounceTimer.current); };
+    }, [query]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === 'Escape') {
+            inputRef.current?.blur();
             onClear();
         }
     };
@@ -71,7 +67,7 @@ export const SearchBox: React.FC<SearchBoxProps> = ({
                 "has-text": !!query
             })}
             onMouseEnter={() => {
-                if (autoExpand && !isFocused) {
+                if (autoExpand && !isFocused && !query) {
                     inputRef.current?.focus();
                 }
             }}

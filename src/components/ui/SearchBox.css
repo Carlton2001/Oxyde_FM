@@ -90,14 +90,14 @@
 .advanced-search-btn {
     background: transparent;
     border: none;
-    color: var(--text-muted);
+    color: var(--text-color);
     padding: 0.25rem;
     display: flex;
     align-items: center;
     justify-content: center;
     border-radius: 0.25rem;
     transition: all 0.15s ease;
-    opacity: 0.7;
+    opacity: 1;
 }
 
 .search-submit-btn:hover,
@@ -107,12 +107,6 @@
     color: var(--text-color);
     background: var(--hover-color);
     opacity: 1;
-}
-
-
-.search-submit-btn {
-    color: var(--accent-color);
-    opacity: 0.9;
 }
 
 .search-box .spinner {
@@ -138,7 +132,7 @@
 .search-stop-btn .stop-icon {
     position: absolute;
     display: none;
-    color: var(--error-color, #ef4444);
+    color: var(--text-muted);
 }
 
 .search-stop-btn:hover {

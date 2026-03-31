@@ -1322,3 +1322,36 @@
 .view-switcher .btn-icon[data-tooltip]::before {
     content: none;
 }
+
+/* Folder Subdirectory Badge for Grid View (Icon-only) */
+.folder-grid-badge {
+    position: absolute;
+    top: 55%;
+    right: 0.5rem;
+    transform: translateY(-50%) translateX(25%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--accent-color);
+    opacity: 0.5;
+    z-index: 5;
+    pointer-events: none;
+}
+
+.file-item.grid.selected {
+    color: var(--selected-text);
+    opacity: 1;
+}
+
+/* Details View Folder Chevron */
+.folder-has-subdirs {
+    opacity: 0.5;
+    margin-left: 0.5rem;
+    flex-shrink: 0;
+    color: var(--text-muted);
+}
+
+.file-item.selected {
+    opacity: 0.6;
+    color: inherit;
+}

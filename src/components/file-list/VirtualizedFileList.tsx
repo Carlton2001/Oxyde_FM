@@ -201,6 +201,9 @@ const DetailsRowContent = React.memo(({ entry, style, sharedProps }: { entry: Fi
                                             data-tooltip-multiline
                                             data-tooltip-image-path={entry.path}
                                         >{entry.name}</span>
+                                        {entry.is_dir && !isNetworkView && entry.folders_count !== undefined && entry.folders_count > 0 && (
+                                            <ChevronRight size={14} className="folder-has-subdirs" />
+                                        )}
                                     </span>
                                 )}
                             </div>
@@ -226,7 +229,7 @@ const DetailsRow = React.memo((props: any) => {
 
 // --- Grid Cell sub-component for hook safety ---
 const GridCellContent = React.memo(({ entry, style, sharedProps }: { entry: FileEntry, style: React.CSSProperties, sharedProps: SharedItemProps }) => {
-    const { getIcon, rootFontSize, t, renameText, onRenameTextChange, onRenameCommit, onRenameCancel, showCheckboxes } = sharedProps;
+    const { getIcon, rootFontSize, t, renameText, onRenameTextChange, onRenameCommit, onRenameCancel, showCheckboxes, isNetworkView } = sharedProps;
 
     const { isSelected, isRenaming, handlers, itemClassName, tooltipText } = useFileItemState({
         ...sharedProps,
@@ -266,6 +269,11 @@ const GridCellContent = React.memo(({ entry, style, sharedProps }: { entry: File
             <div className="grid-item-inner">
                 <div className="file-icon-large">
                     {getIcon(entry, rootFontSize * 3)}
+                    {entry.is_dir && !isNetworkView && entry.folders_count !== undefined && entry.folders_count > 0 && (
+                        <div className="folder-grid-badge">
+                            <ChevronRight size={10} strokeWidth={3} />
+                        </div>
+                    )}
                 </div>
                 <div className="file-name-container">
                     {isRenaming ? (
@@ -491,6 +499,9 @@ const GroupedFileRow = React.memo(({ entry, style, sharedProps }: { entry: FileE
                                             data-tooltip-multiline
                                             data-tooltip-image-path={entry.path}
                                         >{entry.name}</span>
+                                        {entry.is_dir && !isNetworkView && entry.folders_count !== undefined && entry.folders_count > 0 && (
+                                            <ChevronRight size={14} className="folder-has-subdirs" />
+                                        )}
                                     </span>
                                 )}
                             </div>
@@ -584,7 +595,7 @@ const GroupedGridRowComponent = React.memo((props: any) => {
 });
 
 const GroupedGridItem = React.memo<{ entry: FileEntry; sharedProps: SharedItemProps; gridRowHeight: number }>(({ entry, sharedProps, gridRowHeight }) => {
-    const { getIcon, rootFontSize, t, renameText, onRenameTextChange, onRenameCommit, onRenameCancel, showCheckboxes } = sharedProps;
+    const { getIcon, rootFontSize, t, renameText, onRenameTextChange, onRenameCommit, onRenameCancel, showCheckboxes, isNetworkView } = sharedProps;
 
     const { isSelected, isRenaming, handlers, itemClassName, tooltipText } = useFileItemState({
         ...sharedProps,
@@ -615,6 +626,11 @@ const GroupedGridItem = React.memo<{ entry: FileEntry; sharedProps: SharedItemPr
             <div className="grid-item-inner">
                 <div className="file-icon-large">
                     {getIcon(entry, rootFontSize * 3)}
+                    {entry.is_dir && !isNetworkView && entry.folders_count !== undefined && entry.folders_count > 0 && (
+                        <div className="folder-grid-badge">
+                            <ChevronRight size={10} strokeWidth={3} />
+                        </div>
+                    )}
                 </div>
                 <div className="file-name-container">
                     {isRenaming ? (

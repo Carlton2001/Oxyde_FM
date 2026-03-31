@@ -64,7 +64,8 @@ function App() {
     useSystemIcons, refreshDrives,
     zipQuality, sevenZipQuality, zstdQuality, defaultTurboMode,
     setUpdateAvailable, peekStatus, confirmDelete,
-    isTrashEmpty, refreshTrashStatus, driveTrashConfigs
+    isTrashEmpty, refreshTrashStatus, driveTrashConfigs,
+    fontSize, setFontSize
   } = useApp();
   const { registerKeybinding } = useKeybindings();
 
@@ -271,16 +272,18 @@ function App() {
   const actionContext: ActionContext = useMemo(() => ({
     activePanelId, activePanel: activePanelId === 'left' ? left : right, otherPanel: activePanelId === 'left' ? right : left,
     fileOps, clipboard: { clipboard, copy, cut, clearClipboard, copyToSystem, refreshClipboard },
-    notify, t: t as any, dialogs, settings: { zipQuality, sevenZipQuality, zstdQuality, defaultTurboMode, confirmDelete }, setProgress,
+    notify, t: t as any, dialogs, settings: { zipQuality, sevenZipQuality, zstdQuality, defaultTurboMode, confirmDelete, fontSize, setFontSize }, setProgress,
     contextMenuTarget: contextMenu?.target, isDir: contextMenu?.isDir, isDrive: contextMenu?.isDrive, refreshDrives, mountedImages,
     tabs, activeTabId, setActiveTab, closeTab, addTab, refreshBothPanels, layout,
-    modifiers, peekStatus, driveTrashConfigs, setContextMenu, onContextMenu: handleContextMenu
+    modifiers, peekStatus, driveTrashConfigs, setContextMenu, onContextMenu: handleContextMenu,
+    setActivePanelId
   }), [
     activePanelId, left, right, fileOps, clipboard, copy, cut, clearClipboard, copyToSystem, refreshClipboard,
     notify, t, dialogs, zipQuality, sevenZipQuality, zstdQuality, defaultTurboMode, setProgress,
     contextMenu?.target, contextMenu?.isDir, contextMenu?.isDrive, refreshDrives,
     tabs, activeTabId, setActiveTab, closeTab, addTab, refreshBothPanels, layout,
-    modifiers, peekStatus, driveTrashConfigs, setContextMenu, handleContextMenu
+    modifiers, peekStatus, driveTrashConfigs, setContextMenu, handleContextMenu,
+    fontSize, setFontSize, setActivePanelId
   ]);
 
   useGlobalShortcuts(actionContext, tabs, activeTabId, handleTabSwitch);

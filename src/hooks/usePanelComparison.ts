@@ -104,7 +104,7 @@ export const usePanelComparison = ({
         }
     };
 
-    const handleCalculateAllSizes = async () => {
+    const handleCalculateAllSizes = async (onDone?: () => void) => {
         const panel = getPanel(activePanelId);
         const folderTargets = panel.files.filter(f => f.is_dir).map(f => f.path);
 
@@ -124,6 +124,9 @@ export const usePanelComparison = ({
                 const result = await invoke<{ size: number }>('calculate_folder_size', { path });
                 panel.updateFileSize(path, result.size);
             }));
+
+            // Trigger callback if provided
+            if (onDone) onDone();
         } catch (e) {
             console.error(`Failed to calculate all sizes`, e);
             notify(t('error') + ': ' + e, 'error');

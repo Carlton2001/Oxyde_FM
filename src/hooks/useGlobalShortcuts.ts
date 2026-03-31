@@ -18,14 +18,26 @@ export const useGlobalShortcuts = (context: ActionContext, tabs: any[], activeTa
 
     useEffect(() => {
         const handleKeyDown = async (e: KeyboardEvent) => {
-            // Ignore if input/textarea is focused or if default was already prevented
             const target = e.target as HTMLElement;
-            if (e.defaultPrevented || target.matches('input, textarea, [contenteditable="true"]')) {
+            const isInput = target.matches('input, textarea, [contenteditable="true"]');
+            const isCtrlF = (e.ctrlKey && (e.key === 'f' || e.key === 'F'));
+
+            // 0. Block standard browser shortcuts (Save, Print, Find Next, Refresh, etc.)
+            // to prevent WebView2/Edge overrides in production.
+            if (e.ctrlKey && ['s', 'S', 'p', 'P', 'g', 'G', 'l', 'L', 'r', 'R'].includes(e.key)) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+            if (e.key === 'F5') {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+
+            if (e.defaultPrevented || (isInput && !isCtrlF)) {
                 return;
             }
 
-            // 1. Specialized Tab Switching logic
-            const isTab = (e.code === 'Tab' || e.key === 'Tab');
+            const isTab = (e.key === 'Tab');
             const isPageDown = (e.code === 'PageDown' || e.key === 'PageDown');
             const isPageUp = (e.code === 'PageUp' || e.key === 'PageUp');
             const isNext = (e.ctrlKey && isTab && !e.shiftKey) || (e.ctrlKey && isPageDown);
@@ -41,6 +53,21 @@ export const useGlobalShortcuts = (context: ActionContext, tabs: any[], activeTa
                 let nextIndex = isNext ? (currentIndex + 1) % currentTabs.length : (currentIndex - 1 + currentTabs.length) % currentTabs.length;
                 handleTabSwitch(currentTabs[nextIndex].id);
                 return;
+            }
+
+            // 1b. Panel Switching logic (Tab only, without Ctrl)
+            if (isTab && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+                // Only if in Dual Panel mode
+                const currentContext = contextRef.current;
+                if (currentContext.layout === 'dual') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const nextPanelId = currentContext.activePanelId === 'left' ? 'right' : 'left';
+                    if (currentContext.setActivePanelId) {
+                        currentContext.setActivePanelId(nextPanelId);
+                    }
+                    return;
+                }
             }
 
             // 2. Construct shortcut string
@@ -71,7 +98,7 @@ export const useGlobalShortcuts = (context: ActionContext, tabs: any[], activeTa
                 return;
             }
 
-            if (combo === 'Ctrl+F') {
+            if (combo === 'Ctrl+F' || (e.ctrlKey && (e.key === 'f' || e.key === 'F'))) {
                 e.preventDefault();
                 e.stopPropagation();
                 // Find the active search input:
@@ -82,6 +109,29 @@ export const useGlobalShortcuts = (context: ActionContext, tabs: any[], activeTa
                 if (searchInput) {
                     searchInput.focus();
                     searchInput.select();
+                }
+                return;
+            }
+
+            if (combo === 'F5') {
+                e.preventDefault();
+                e.stopPropagation();
+                if (contextRef.current.refreshBothPanels) {
+                    contextRef.current.refreshBothPanels();
+                }
+                return;
+            }
+
+            if (combo === 'Ctrl+=' || combo === 'Ctrl++' || combo === 'Ctrl+-') {
+                e.preventDefault();
+                e.stopPropagation();
+                // We need to look up the current font size from context
+                // but since it's inside contextRef, we can access it
+                const currentSize = (contextRef.current as any).settings?.fontSize || 16;
+                const delta = (combo === 'Ctrl+=' || combo === 'Ctrl++') ? 1 : -1;
+                const setFontSize = (contextRef.current as any).settings?.setFontSize;
+                if (setFontSize) {
+                    setFontSize(currentSize + delta);
                 }
                 return;
             }
