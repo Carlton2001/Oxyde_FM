@@ -37,11 +37,13 @@ pub fn render_file_list(view: &OxydeApp, pane_id: String, handle: Entity<OxydeAp
 
     let selected_paths = active_tab.selected_paths.clone();
 
+    let is_active_pane = view.state.active_pane_id == pane_id;
+
     let mut container = div()
         .flex_1()
         .flex()
         .flex_col()
-        .bg(theme.background)
+        .bg(if is_active_pane { theme.active_background } else { theme.background })
         .overflow_hidden()
         .relative()
         .child(
@@ -111,7 +113,7 @@ pub fn render_file_list(view: &OxydeApp, pane_id: String, handle: Entity<OxydeAp
                                                 .items_center()
                                                 .h(px(ROW_HEIGHT))
                                                 .w(px(total_w))
-                                                .bg(if is_selected { theme.selected } else { theme.background })
+                                                .bg(if is_selected { theme.selected } else if is_active_pane { theme.active_background } else { theme.background })
                                                 .when(!is_selected, |s| s.hover(|s| s.bg(theme.hover)))
                                                 .on_mouse_down(MouseButton::Left, {
                                                     let p = path.clone();

@@ -9,12 +9,16 @@ pub mod selection;
 pub mod filters;
 pub mod layout;
 
+#[allow(unused_imports)]
 pub use navigation::*;
+#[allow(unused_imports)]
 pub use selection::*;
+#[allow(unused_imports)]
 pub use filters::*;
+#[allow(unused_imports)]
 pub use layout::*;
 
-actions!(oxyde, [Ouvrir, Copier, Couper, Coller, Renommer, Supprimer]);
+actions!(oxyde, [Ouvrir, Copier, Couper, Coller, Renommer, Supprimer, ToutSelectionner]);
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum DragTarget {
@@ -45,6 +49,7 @@ pub enum ContextMenuContent {
 pub struct OxydeApp {
     pub state: WorkspaceState,
     pub handle: Option<Entity<Self>>,
+    pub focus_handle: FocusHandle,
     pub(crate) sidebar_scroll: UniformListScrollHandle,
     pub(crate) sidebar_scroll_h: ScrollHandle,
     pub(crate) breadcrumb_scroll: UniformListScrollHandle,
@@ -73,10 +78,17 @@ pub struct OxydeApp {
 }
 
 impl OxydeApp {
-    pub fn empty(_cx: &mut Context<Self>) -> Self {
+    pub fn bind_keys(cx: &mut App) {
+        cx.bind_keys([
+            KeyBinding::new("ctrl-a", ToutSelectionner, None),
+        ]);
+    }
+
+    pub fn empty(cx: &mut Context<Self>) -> Self {
         Self {
             state: WorkspaceState::new(),
             handle: None,
+            focus_handle: cx.focus_handle(),
             sidebar_scroll: UniformListScrollHandle::new(),
             sidebar_scroll_h: ScrollHandle::new(),
             breadcrumb_scroll: UniformListScrollHandle::new(),
@@ -111,6 +123,8 @@ impl Render for OxydeApp {
         use crate::ui::components::sidebar::render_sidebar;
         use crate::ui::style::TNUM;
 
+        _window.focus(&self.focus_handle);
+
         let handle = self.handle.clone().expect("handle set");
 
         let size = _window.viewport_size();
@@ -135,7 +149,17 @@ impl Render for OxydeApp {
             .font_family("Inter")
             .flex()
             .text_size(px(13.0))
-            .font_weight(FontWeight::LIGHT);
+            .font_weight(FontWeight::LIGHT)
+            .on_action({
+                let h = handle.clone();
+                move |_: &ToutSelectionner, _, cx| {
+                    let _ = h.update(cx, |this, cx| {
+                        let pane_id = this.state.active_pane_id.clone();
+                        this.select_all(&pane_id, cx);
+                    });
+                }
+            })
+            .track_focus(&self.focus_handle);
         
         root.text_style().get_or_insert_with(Default::default).font_features = Some(TNUM.clone());
         
@@ -365,8 +389,11 @@ impl Render for OxydeApp {
                     let h = handle.clone();
                     let pos = pos;
                     
-                    let (items, header) = match content {
+                    match content {
                         ContextMenuContent::Items(items, header_type) => {
+                            let scroll_handle = self.context_menu_scroll.clone();
+                            let is_v_dragging = matches!(self.drag_target, Some(DragTarget::ContextMenuV { .. }));
+
                             let header = header_type.as_ref().map(|ht| {
                                 match ht {
                                     ContextMenuHeader::TypeSelectAll { pane_id } => {
@@ -498,7 +525,7 @@ impl Render for OxydeApp {
                                     }
                                 }
                             });
-                            (items.iter().map(|it| {
+                            let items = items.iter().map(|it| {
                                 let on_click = it.on_click.clone();
                                 crate::ui::components::dropdown::DropdownItem {
                                     label: it.label.clone(),
@@ -506,44 +533,68 @@ impl Render for OxydeApp {
                                     stay_open: it.stay_open,
                                     on_click: std::rc::Rc::new(move |window, app| { (on_click)(window, app); })
                                 }
-                            }).collect(), header)
+                            }).collect();
+                            
+                            this.child(
+                                deferred(
+                                    anchored()
+                                        .position(pos)
+                                        .child(
+                                            cx.new(|_| GenericDropdown {
+                                                h_app: h.clone(),
+                                                items,
+                                                scroll_handle,
+                                                width: None,
+                                                max_height: 480.0,
+                                                on_close: {
+                                                    let h = h.clone();
+                                                    std::rc::Rc::new(move |_, cx| {
+                                                        let _ = h.update(cx, |this, _| { this.context_menu = None; });
+                                                    })
+                                                },
+                                                on_drag: {
+                                                    std::rc::Rc::new(move |this, tid, vh, ch, _| {
+                                                        this.drag_target = Some(DragTarget::ContextMenuV { viewport_h: vh, content_h: ch, track_id: tid });
+                                                    })
+                                                },
+                                                is_dragging: is_v_dragging,
+                                                header,
+                                            })
+                                        )
+                                )
+                            )
                         },
                         ContextMenuContent::NameFilter { input } => {
-                            (vec![], Some(input.clone().into_any_element()))
-                        }
-                    };
-
-                    let scroll_handle = self.context_menu_scroll.clone();
-                    let is_v_dragging = matches!(self.drag_target, Some(DragTarget::ContextMenuV { .. }));
-                    
-                    this.child(
-                        deferred(
-                            anchored()
-                                .position(pos)
-                                .child(
-                                    cx.new(|_| GenericDropdown {
-                                        h_app: h.clone(),
-                                        items,
-                                        scroll_handle,
-                                        width: None,
-                                        max_height: 480.0,
-                                        on_close: {
-                                            let h = h.clone();
-                                            std::rc::Rc::new(move |_, cx| {
-                                                let _ = h.update(cx, |this, _| { this.context_menu = None; });
+                            this.child(
+                                deferred(
+                                    anchored()
+                                        .position(pos)
+                                        .child(
+                                            cx.new(|_| GenericDropdown {
+                                                h_app: h.clone(),
+                                                items: vec![],
+                                                scroll_handle: self.context_menu_scroll.clone(),
+                                                width: None,
+                                                max_height: 480.0,
+                                                on_close: {
+                                                    let h = h.clone();
+                                                    std::rc::Rc::new(move |_, cx| {
+                                                        let _ = h.update(cx, |this, _| { this.context_menu = None; });
+                                                    })
+                                                },
+                                                on_drag: {
+                                                    std::rc::Rc::new(move |this, tid, vh, ch, _| {
+                                                        this.drag_target = Some(DragTarget::ContextMenuV { viewport_h: vh, content_h: ch, track_id: tid });
+                                                    })
+                                                },
+                                                is_dragging: false,
+                                                header: Some(input.clone().into_any_element()),
                                             })
-                                        },
-                                        on_drag: {
-                                            std::rc::Rc::new(move |this, tid, vh, ch, _| {
-                                                this.drag_target = Some(DragTarget::ContextMenuV { viewport_h: vh, content_h: ch, track_id: tid });
-                                            })
-                                        },
-                                        is_dragging: is_v_dragging,
-                                        header,
-                                    })
+                                        )
                                 )
-                        )
-                    )
+                            )
+                        }
+                    }
                 })
         );
 

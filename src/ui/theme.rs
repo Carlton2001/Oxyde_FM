@@ -4,6 +4,7 @@ use gpui::Render;
 #[derive(Debug, Clone, Copy)]
 pub struct OxydeTheme {
     pub background: Hsla,      // Fond principal (FileList)
+    pub active_background: Hsla, // Fond du panneau actif
     pub sidebar: Hsla,         // Sidebar et panneaux latéraux
     pub header: Hsla,          // TopBar / TabBar
     pub surface: Hsla,         // Éléments de surface (Dropdowns, Modals)
@@ -21,6 +22,7 @@ impl OxydeTheme {
     pub fn dark() -> Self {
         Self {
             background: rgb(0x0c0c0c).into(),
+            active_background: rgb(0x161719).into(),
             sidebar: rgb(0x1f2023).into(),
             header: rgb(0x1f2023).into(),
             surface: rgb(0x38393d).into(),

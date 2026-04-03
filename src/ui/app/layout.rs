@@ -257,6 +257,11 @@ impl OxydeApp {
                             let p_id_cap = p_id.clone();
                             move |_, cx| { let _ = h.update(cx, |this, cx| this.switch_tab(&p_id_cap, t_ix, cx)); }
                         })
+                        .on_middle_click({
+                            let h = h.clone();
+                            let p_id_cap = p_id.clone();
+                            move |_, cx| { let _ = h.update(cx, |this, cx| this.close_tab(&p_id_cap, t_ix, cx)); }
+                        })
                         .when(tabs_count > 1, |s| {
                             let h = h.clone();
                             let p_id_cap = p_id.clone();

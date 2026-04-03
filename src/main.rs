@@ -13,6 +13,7 @@ fn main() {
         assets.load_fonts(cx).expect("fonts could not be loaded");
         cx.set_global(crate::ui::theme::OxydeTheme::dark());
         crate::ui::components::input::bind_keys(cx);
+        OxydeApp::bind_keys(cx);
         let app = cx.new(|cx| OxydeApp::empty(cx));
         let _ = app.update(cx, |this, _| {
             this.handle = Some(app.clone());

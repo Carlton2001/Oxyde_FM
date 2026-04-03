@@ -132,4 +132,16 @@ impl OxydeApp {
             cx.notify();
         }
     }
+
+    pub fn select_all(&mut self, pane_id: &str, cx: &mut Context<Self>) {
+        if let Some(pane) = self.state.find_pane_mut(pane_id) {
+            let tab = pane.active_tab_mut();
+            tab.selected_paths.clear();
+            let all_paths: Vec<String> = tab.filtered_files().iter().map(|f| f.path.clone()).collect();
+            for path in all_paths {
+                tab.selected_paths.insert(path);
+            }
+            cx.notify();
+        }
+    }
 }
