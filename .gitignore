@@ -1,0 +1,23 @@
+# Rust/Cargo
+/target
+Cargo.lock
+
+# Oxyde-GPUI Specific Filters
+AGENTS.md
+.perso/
+.claude/
+reference_zed/
+
+# IDE/Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Windows
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log

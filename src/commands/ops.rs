@@ -1,0 +1,1540 @@
+use crate::models::{get_file_entry_from_path, ConflictEntry, ConflictResponse, TrashEntry, CommandError, Transaction, TransactionType, TransactionDetails, HistoryManager};
+use serde::{Serialize, Deserialize};
+use windows::Win32::System::Registry::{RegOpenKeyExW, RegQueryValueExW, RegSetValueExW, HKEY_CURRENT_USER, KEY_READ, KEY_WRITE, REG_DWORD};
+use windows::Win32::Storage::FileSystem::GetVolumeNameForVolumeMountPointW;
+use windows::Win32::UI::Shell::{SHChangeNotify, SHCNE_ASSOCCHANGED, SHCNF_FLUSH};
+use windows::core::PCWSTR;
+use crate::utils::path_security::validate_path;
+use std::path::{PathBuf};
+use std::sync::{Arc};
+use std::collections::HashMap;
+use crate::models::ConflictAction;
+use std::sync::atomic::{AtomicBool, Ordering};
+use log::{info, warn};
+
+use crate::systems::file_ops::{FileOperation, FileOperationManager, FileOpType};
+
+// Legacy FileOpState struct - keeping for now just in case, or removing if unused?
+// If the whole file uses the new system, we can remove it.
+// But cancel implementation was using it.
+// Let's remove it if I replace all usages.
+// pub struct FileOpState... removed
+
+
+pub fn cancel_file_operation(manager: &FileOperationManager, id: String) -> Result<(), CommandError> {
+    manager.cancel_operation(&id);
+    Ok(())
+}
+
+pub fn pause_file_operation(manager: &FileOperationManager, id: String) -> Result<(), CommandError> {
+    if let Some(op) = manager.get_operation(&id) {
+        // We need a way to pause. The lock inside FileOperation needs to be toggled.
+        // But FileOperationManager::get_operation returns a CLONE of FileOperation struct (snapshot).
+        // Wait, the struct holds Arc<AtomicBool>, so cloning the struct CLONES THE ARC.
+        // So modifying the atomic bool in the clone affects the running task. 
+        op.pause_flag.store(true, Ordering::Relaxed);
+        Ok(())
+    } else {
+        Err(CommandError::Other("Operation not found".to_string()))
+    }
+}
+
+pub fn resume_file_operation(manager: &FileOperationManager, id: String) -> Result<(), CommandError> {
+    if let Some(op) = manager.get_operation(&id) {
+        op.pause_flag.store(false, Ordering::Relaxed);
+        Ok(())
+    } else {
+        Err(CommandError::Other("Operation not found".to_string()))
+    }
+}
+
+pub fn toggle_turbo(manager: &FileOperationManager, id: String, enabled: bool) -> Result<(), CommandError> {
+    manager.set_turbo(&id, enabled);
+    Ok(())
+}
+
+pub fn get_op_status(manager: &FileOperationManager, id: String) -> Result<Option<FileOperation>, CommandError> {
+    Ok(manager.get_operation(&id))
+}
+
+struct RestorationPaths {
+    crate_path: PathBuf,
+    corrected_path: PathBuf,
+}
+
+fn get_restoration_paths(item: &trash::TrashItem) -> RestorationPaths {
+    let crate_path = item.original_path();
+    let mut corrected_path = crate_path.clone();
+
+    let trash_path = PathBuf::from(&item.id);
+    if let Some(ext) = trash_path.extension() {
+        let ext_str = ext.to_string_lossy().to_lowercase();
+        if ext_str == "lnk" || ext_str == "url" {
+            let name = corrected_path
+                .file_name()
+                .map(|n| n.to_string_lossy().to_lowercase())
+                .unwrap_or_default();
+            if !name.ends_with(&format!(".{}", ext_str)) {
+                let mut new_name = corrected_path
+                    .file_name()
+                    .unwrap_or_default()
+                    .to_os_string();
+                new_name.push(".");
+                new_name.push(ext);
+                corrected_path.set_file_name(new_name);
+            }
+        }
+    }
+
+    RestorationPaths {
+        crate_path,
+        corrected_path,
+    }
+}
+
+/// List all items in the Windows Recycle Bin
+pub fn list_trash() -> Result<Vec<TrashEntry>, CommandError> {
+    let trash_items = trash::os_limited::list().map_err(|e| CommandError::TrashError(e.to_string()))?;
+
+    let mut entries: Vec<TrashEntry> = trash_items
+        .into_iter()
+        .map(|item| {
+            let original_path = item.original_path();
+            let mut name = original_path
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_else(|| original_path.to_string_lossy().to_string());
+
+            // On Windows, Shell API sometimes returns names without .lnk even if original_path had it.
+            // Check the real trash file extension to be sure.
+            let trash_path = PathBuf::from(&item.id);
+            if let Some(ext) = trash_path.extension() {
+                let ext_str = ext.to_string_lossy().to_lowercase();
+                if (ext_str == "lnk" || ext_str == "url")
+                    && !name.to_lowercase().ends_with(&format!(".{}", ext_str))
+                {
+                    name.push_str(&format!(".{}", ext_str));
+                }
+            }
+            let deleted_time = (item.time_deleted.max(0) as u64) * 1000;
+
+            // Convert OsString id to PathBuf for metadata access
+            let trash_path = PathBuf::from(&item.id);
+
+            // Check if it's a directory
+            let is_dir = std::fs::metadata(&trash_path)
+                .map(|m| m.is_dir())
+                .unwrap_or(false);
+
+            let size = if is_dir {
+                0
+            } else {
+                std::fs::metadata(&trash_path).map(|m| m.len()).unwrap_or(0)
+            };
+
+            // Get the file's modification time
+            let modified = std::fs::metadata(&trash_path)
+                .and_then(|m| m.modified())
+                .map(|t| {
+                    t.duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_millis() as u64
+                })
+                .unwrap_or(deleted_time);
+
+            TrashEntry {
+                name,
+                // Use the internal trash path (item.id) as unique identifier
+                path: trash_path.to_string_lossy().to_string(),
+                original_path: original_path.to_string_lossy().to_string(),
+                is_dir,
+                size,
+                deleted_time,
+                modified,
+            }
+        })
+        .collect();
+
+    // Sort by name (folders first, then files)
+    entries.sort_by(|a, b| {
+        if a.is_dir == b.is_dir {
+            a.name.to_lowercase().cmp(&b.name.to_lowercase())
+        } else {
+            b.is_dir.cmp(&a.is_dir)
+        }
+    });
+
+    Ok(entries)
+}
+
+/// Empty the Recycle Bin (permanently delete all items)
+pub async fn empty_trash() -> Result<(), CommandError> {
+    info!("Emptying recycle bin...");
+    
+    #[cfg(target_os = "windows")]
+    {
+        use windows::core::PCWSTR;
+        use windows::Win32::UI::Shell::{SHEmptyRecycleBinW, SHERB_NOCONFIRMATION, SHERB_NOPROGRESSUI, SHERB_NOSOUND};
+        use windows::Win32::Foundation::HWND;
+
+        unsafe {
+            SHEmptyRecycleBinW(Some(HWND::default()), PCWSTR::default(), SHERB_NOCONFIRMATION | SHERB_NOPROGRESSUI | SHERB_NOSOUND)
+                .map_err(|e| CommandError::TrashError(format!("Failed to empty recycle bin: {}", e)))?;
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        trash::os_limited::purge_all(trash::os_limited::list().map_err(|e| CommandError::TrashError(e.to_string()))?)
+            .map_err(|e| CommandError::TrashError(e.to_string()))?;
+    }
+
+    Ok(())
+}
+
+/// Permanently delete specific items from the Recycle Bin
+pub async fn purge_recycle_bin(paths: Vec<String>) -> Result<(), CommandError> {
+    let trash_items = trash::os_limited::list().map_err(|e| CommandError::TrashError(e.to_string()))?;
+
+    let normalize = |p: &std::path::Path| -> String {
+        p.to_string_lossy()
+            .to_lowercase()
+            .replace("/", "\\")
+            .trim_start_matches("\\\\?\\")
+            .to_string()
+    };
+
+    use std::collections::HashMap;
+    let mut items_to_purge = Vec::new();
+    let trash_map: HashMap<String, trash::TrashItem> = trash_items
+        .into_iter()
+        .map(|item| (normalize(&PathBuf::from(&item.id)), item))
+        .collect();
+
+    for path_str in paths {
+        let path = PathBuf::from(&path_str);
+        let normalized_target = normalize(&path);
+
+        if let Some(item) = trash_map.get(&normalized_target) {
+            items_to_purge.push(item.clone());
+        }
+    }
+
+    if !items_to_purge.is_empty() {
+        #[cfg(target_os = "windows")]
+        {
+            use windows::Win32::UI::Shell::{SHFileOperationW, SHFILEOPSTRUCTW, FO_DELETE, FOF_NOCONFIRMATION, FOF_NOERRORUI, FOF_SILENT};
+            use windows::core::PCWSTR;
+            use windows::Win32::Foundation::HWND;
+
+            let mut buffer: Vec<u16> = Vec::new();
+            for item in &items_to_purge {
+                let path_str = PathBuf::from(item.id.clone()).to_string_lossy().replace("/", "\\");
+                buffer.extend(path_str.encode_utf16());
+                buffer.push(0);
+            }
+            buffer.push(0);
+
+            let mut sh_op = SHFILEOPSTRUCTW {
+                hwnd: HWND(std::ptr::null_mut()),
+                wFunc: FO_DELETE,
+                pFrom: PCWSTR(buffer.as_ptr()),
+                pTo: PCWSTR(std::ptr::null()),
+                fFlags: (FOF_NOCONFIRMATION.0 | FOF_NOERRORUI.0 | FOF_SILENT.0) as u16,
+                fAnyOperationsAborted: Default::default(),
+                hNameMappings: std::ptr::null_mut(),
+                lpszProgressTitle: PCWSTR(std::ptr::null()),
+            };
+
+            unsafe {
+                let _ = SHFileOperationW(&mut sh_op);
+            }
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            trash::os_limited::purge_all(items_to_purge).map_err(|e| CommandError::TrashError(e.to_string()))?;
+        }
+    }
+
+    Ok(())
+}
+
+pub async fn check_conflicts(
+    paths: Vec<String>,
+    target_dir: String,
+) -> Result<ConflictResponse, CommandError> {
+    let mut conflicts = Vec::new();
+    let target_base = validate_path(&target_dir)?;
+
+    let mut is_cross_volume = false;
+    let mut total_size = 0;
+    let mut total_files = 0;
+    let mut likely_large = false;
+
+    let target_root = target_base.components().next();
+    let start_time = std::time::Instant::now();
+
+    for path_str in paths {
+        let source_path = validate_path(&path_str)?;
+
+        // Cross-volume check
+        if let Some(t_root) = target_root {
+            if let Some(s_root) = source_path.components().next() {
+                if t_root != s_root {
+                    is_cross_volume = true;
+                }
+            }
+        }
+
+        // Quick capped estimation walk
+        if !likely_large {
+            if source_path.is_dir() {
+                for entry in walkdir::WalkDir::new(&source_path).into_iter().filter_map(|e| e.ok()) {
+                    if entry.file_type().is_file() {
+                        total_size += entry.metadata().map(|m| m.len()).unwrap_or(0);
+                        total_files += 1;
+                    }
+                    // Cap at 200 items or 50ms to keep UI responsive
+                    if total_files > 200 || start_time.elapsed().as_millis() > 50 {
+                        likely_large = true;
+                        break;
+                    }
+                }
+            } else {
+                total_size += std::fs::metadata(&source_path).map(|m| m.len()).unwrap_or(0);
+                total_files += 1;
+            }
+        }
+
+        // Conflict check
+        if let Some(file_name) = source_path.file_name() {
+            let target_path = target_base.join(file_name);
+            if target_path.exists() {
+                // Initial top-level conflict found
+                add_conflict_recursive(&source_path, &target_path, &mut conflicts)?;
+            }
+        }
+    }
+
+    Ok(ConflictResponse {
+        conflicts,
+        total_size,
+        total_files,
+        is_cross_volume,
+        likely_large,
+    })
+}
+
+fn add_conflict_recursive(
+    source_path: &std::path::Path,
+    target_path: &std::path::Path,
+    conflicts: &mut Vec<ConflictEntry>,
+) -> Result<(), CommandError> {
+    let mut source_entry = get_file_entry_from_path(source_path)?;
+    let mut target_entry = get_file_entry_from_path(target_path)?;
+
+    if source_entry.is_dir {
+        // Calculate size and item count for the folder itself
+        let mut s = 0;
+        let mut f: u64 = 0;
+        let mut i = 0;
+        for entry in walkdir::WalkDir::new(source_path).into_iter().filter_map(|e| e.ok()) {
+            if entry.file_type().is_dir() {
+                f += 1;
+            } else {
+                i += 1;
+                s += entry.metadata().map(|m| m.len()).unwrap_or(0);
+            }
+        }
+        f = f.saturating_sub(1);
+        source_entry.size = s;
+        source_entry.folders_count = Some(f);
+        source_entry.files_count = Some(i);
+
+        // Do the same for target folder
+        let mut ts = 0;
+        let mut tf: u64 = 0;
+        let mut ti = 0;
+        for entry in walkdir::WalkDir::new(target_path).into_iter().filter_map(|e| e.ok()) {
+            if entry.file_type().is_dir() {
+                tf += 1;
+            } else {
+                ti += 1;
+                ts += entry.metadata().map(|m| m.len()).unwrap_or(0);
+            }
+        }
+        tf = tf.saturating_sub(1);
+        target_entry.size = ts;
+        target_entry.folders_count = Some(tf);
+        target_entry.files_count = Some(ti);
+        
+        // Add the folder conflict itself
+        conflicts.push(ConflictEntry {
+            name: source_path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default(),
+            source: source_entry,
+            target: target_entry,
+        });
+
+        // Now recursively check children for conflicts
+        for entry in std::fs::read_dir(source_path)? {
+            let entry = entry?;
+            let entry_path = entry.path();
+            let entry_name = entry.file_name();
+            let target_child_path = target_path.join(&entry_name);
+            
+            if target_child_path.exists() {
+                add_conflict_recursive(&entry_path, &target_child_path, conflicts)?;
+            }
+        }
+    } else {
+        // Individual file conflict
+        conflicts.push(ConflictEntry {
+            name: source_path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default(),
+            source: source_entry,
+            target: target_entry,
+        });
+    }
+    
+    Ok(())
+}
+
+
+
+
+
+#[cfg(target_os = "windows")]
+fn get_recycle_bin_capacity_estimate(path_str: &str, config: &crate::models::AppConfig) -> u64 {
+    use windows::Win32::Storage::FileSystem::GetDiskFreeSpaceExW;
+    use windows::core::PCWSTR;
+    use std::path::{Path, Component, Prefix};
+
+    let path = Path::new(path_str);
+    let mut drive_path = None;
+
+    for component in path.components() {
+        if let Component::Prefix(prefix) = component {
+            match prefix.kind() {
+                Prefix::VerbatimDisk(d) | Prefix::Disk(d) => {
+                    drive_path = Some(format!("{}:\\", d as char));
+                }
+                Prefix::UNC(server, share) | Prefix::VerbatimUNC(server, share) => {
+                    drive_path = Some(format!("\\\\{}\\{}\\", server.to_string_lossy(), share.to_string_lossy()));
+                }
+                _ => {}
+            }
+            break;
+        }
+    }
+
+    let drive_path = match drive_path {
+        Some(d) => d,
+        None => return 4 * 1024 * 1024 * 1024, // Fallback 4GB
+    };
+
+    let wide_drive: Vec<u16> = drive_path.encode_utf16().chain(std::iter::once(0)).collect();
+    let mut capacity: Option<u64> = None;
+    
+    // 1. Primary Source: Windows Registry (BitBucket)
+    unsafe {
+        use windows::Win32::Storage::FileSystem::GetVolumeNameForVolumeMountPointW;
+        use windows::Win32::System::Registry::{RegOpenKeyExW, RegQueryValueExW, HKEY_CURRENT_USER, KEY_READ, REG_DWORD};
+        
+        let mut volume_name = [0u16; 50];
+        if GetVolumeNameForVolumeMountPointW(PCWSTR(wide_drive.as_ptr()), &mut volume_name).is_ok() {
+            let vol_string = String::from_utf16_lossy(&volume_name);
+            let vol_trimmed = vol_string.trim_matches(char::from(0));
+            if let Some(start) = vol_trimmed.find("Volume{") {
+                let guid_part = &vol_trimmed[start + 6..]; 
+                if let Some(end) = guid_part.find('}') {
+                    let guid_str = &guid_part[..=end];
+                    
+                    let key_path = format!("Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\BitBucket\\Volume\\{}", guid_str);
+                    let wide_key: Vec<u16> = key_path.encode_utf16().chain(std::iter::once(0)).collect();
+                    
+                    let mut hkey = windows::Win32::System::Registry::HKEY::default();
+                    if RegOpenKeyExW(HKEY_CURRENT_USER, PCWSTR(wide_key.as_ptr()), Some(0), KEY_READ, &mut hkey).0 == 0 {
+                        let mut data = 0u32;
+                        let mut data_size = std::mem::size_of::<u32>() as u32;
+                        let mut key_type = windows::Win32::System::Registry::REG_VALUE_TYPE(0);
+                        let wide_value: Vec<u16> = "MaxCapacity".encode_utf16().chain(std::iter::once(0)).collect();
+                        
+                        let result = RegQueryValueExW(
+                            hkey, 
+                            PCWSTR(wide_value.as_ptr()), 
+                            None, 
+                            Some(&mut key_type as *mut _), 
+                            Some(&mut data as *mut _ as *mut u8), 
+                            Some(&mut data_size as *mut _)
+                        );
+                        if result.0 == 0 && key_type == REG_DWORD {
+                            capacity = Some((data as u64) * 1024 * 1024);
+                        }
+                        let _ = windows::Win32::System::Registry::RegCloseKey(hkey);
+                    }
+                }
+            }
+        }
+    }
+
+    if let Some(cap) = capacity {
+        if cap > 0 {
+             return cap;
+        }
+    }
+
+    // 2. Secondary Fallback: Oxyde App Configuration (Used for portable/special setups if any)
+    if let Some(setting) = config.trash_drive_settings.iter().find(|s| s.drive_path == drive_path) {
+        if setting.max_size_mb > 0 {
+            return setting.max_size_mb * 1024 * 1024;
+        }
+    }
+
+    if let Some(cap) = capacity {
+        if cap > 0 {
+             return cap;
+        }
+    }
+
+    // 3. Last Fallback: 5% of Total Disk Space
+    let wide_drive: Vec<u16> = path_str.encode_utf16().chain(std::iter::once(0)).collect();
+    let mut total_bytes = 0u64;
+    unsafe {
+        let _ = GetDiskFreeSpaceExW(
+            PCWSTR(wide_drive.as_ptr()),
+            None,
+            Some(&mut total_bytes),
+            None
+        );
+    }
+    
+    if total_bytes > 0 {
+        return (total_bytes as f64 * 0.05) as u64;
+    }
+    
+    4 * 1024 * 1024 * 1024 // Final fallback 4GB
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TrashSystemConfig {
+    pub drive_path: String,
+    pub max_size_mb: u64,
+    pub nuke_on_delete: bool,
+}
+
+pub async fn get_recycle_bin_config(drive_path: String) -> Result<TrashSystemConfig, CommandError> {
+    let wide_drive: Vec<u16> = drive_path.encode_utf16().chain(std::iter::once(0)).collect();
+    let mut max_size_mb = 0u64;
+    let mut nuke_on_delete = false;
+
+    unsafe {
+        let mut volume_name = [0u16; 50];
+        if GetVolumeNameForVolumeMountPointW(PCWSTR(wide_drive.as_ptr()), &mut volume_name).is_ok() {
+            let vol_string = String::from_utf16_lossy(&volume_name);
+            let vol_trimmed = vol_string.trim_matches(char::from(0));
+            if let Some(start) = vol_trimmed.find("Volume{") {
+                let guid_part = &vol_trimmed[start + 6..]; 
+                if let Some(end) = guid_part.find('}') {
+                    let guid_str = &guid_part[..=end];
+                    let key_path = format!("Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\BitBucket\\Volume\\{}", guid_str);
+                    let wide_key: Vec<u16> = key_path.encode_utf16().chain(std::iter::once(0)).collect();
+                    
+                    let mut hkey = windows::Win32::System::Registry::HKEY::default();
+                    if RegOpenKeyExW(HKEY_CURRENT_USER, PCWSTR(wide_key.as_ptr()), Some(0), KEY_READ, &mut hkey).0 == 0 {
+                        // Read MaxCapacity
+                        let mut data = 0u32;
+                        let mut data_size = std::mem::size_of::<u32>() as u32;
+                        let mut key_type = windows::Win32::System::Registry::REG_VALUE_TYPE::default();
+                        let wide_cap: Vec<u16> = "MaxCapacity".encode_utf16().chain(std::iter::once(0)).collect();
+                        if RegQueryValueExW(hkey, PCWSTR(wide_cap.as_ptr()), None, Some(&mut key_type as *mut _), Some(&mut data as *mut _ as *mut u8), Some(&mut data_size as *mut _)).0 == 0 {
+                            max_size_mb = data as u64;
+                        }
+
+                        // Read NukeOnDelete
+                        let wide_nuke: Vec<u16> = "NukeOnDelete".encode_utf16().chain(std::iter::once(0)).collect();
+                        if RegQueryValueExW(hkey, PCWSTR(wide_nuke.as_ptr()), None, Some(&mut key_type as *mut _), Some(&mut data as *mut _ as *mut u8), Some(&mut data_size as *mut _)).0 == 0 {
+                            nuke_on_delete = data == 1;
+                        }
+                        let _ = windows::Win32::System::Registry::RegCloseKey(hkey);
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(TrashSystemConfig { drive_path, max_size_mb, nuke_on_delete })
+}
+
+pub async fn set_recycle_bin_config(config_state: &crate::models::ConfigManager, config: TrashSystemConfig) -> Result<(), CommandError> {
+    let wide_drive: Vec<u16> = config.drive_path.encode_utf16().chain(std::iter::once(0)).collect();
+
+    unsafe {
+        let mut volume_name = [0u16; 50];
+        if GetVolumeNameForVolumeMountPointW(PCWSTR(wide_drive.as_ptr()), &mut volume_name).is_ok() {
+            let vol_string = String::from_utf16_lossy(&volume_name);
+            let vol_trimmed = vol_string.trim_matches(char::from(0));
+            if let Some(start) = vol_trimmed.find("Volume{") {
+                let guid_part = &vol_trimmed[start + 6..]; 
+                if let Some(end) = guid_part.find('}') {
+                    let guid_str = &guid_part[..=end];
+                    let key_path = format!("Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\BitBucket\\Volume\\{}", guid_str);
+                    let wide_key: Vec<u16> = key_path.encode_utf16().chain(std::iter::once(0)).collect();
+                    
+                    let mut hkey = windows::Win32::System::Registry::HKEY::default();
+                    if RegOpenKeyExW(HKEY_CURRENT_USER, PCWSTR(wide_key.as_ptr()), Some(0), KEY_WRITE, &mut hkey).is_ok() {
+                        // Set MaxCapacity
+                        let data_cap = config.max_size_mb as u32;
+                        let wide_cap: Vec<u16> = "MaxCapacity".encode_utf16().chain(std::iter::once(0)).collect();
+                        let slice_cap = std::slice::from_raw_parts(&data_cap as *const u32 as *const u8, std::mem::size_of::<u32>());
+                        let _ = RegSetValueExW(hkey, PCWSTR(wide_cap.as_ptr()), Some(0), REG_DWORD, Some(slice_cap));
+
+                        // Set NukeOnDelete
+                        let data_nuke = if config.nuke_on_delete { 1u32 } else { 0u32 };
+                        let wide_nuke: Vec<u16> = "NukeOnDelete".encode_utf16().chain(std::iter::once(0)).collect();
+                        let slice_nuke = std::slice::from_raw_parts(&data_nuke as *const u32 as *const u8, std::mem::size_of::<u32>());
+                        let _ = RegSetValueExW(hkey, PCWSTR(wide_nuke.as_ptr()), Some(0), REG_DWORD, Some(slice_nuke));
+
+                        let _ = windows::Win32::System::Registry::RegCloseKey(hkey);
+                        
+                        // Notify Shell of changes (SHChangeNotify)
+                        SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_FLUSH, None, None);
+                    }
+                }
+            }
+        }
+    }
+
+    // Update Internal Oxyde Config as well
+    {
+        use crate::models::TrashDriveSettings;
+        let mut app_config = config_state.0.lock().map_err(|_| CommandError::SystemError("Lock failed".into()))?;
+        
+        // Find existing or add new
+        if let Some(setting) = app_config.trash_drive_settings.iter_mut().find(|s| s.drive_path == config.drive_path) {
+            setting.max_size_mb = config.max_size_mb;
+            setting.use_trash = !config.nuke_on_delete;
+        } else {
+            app_config.trash_drive_settings.push(TrashDriveSettings {
+                drive_path: config.drive_path,
+                max_size_mb: config.max_size_mb,
+                use_trash: !config.nuke_on_delete,
+            });
+        }
+    }
+
+    Ok(())
+}
+
+#[cfg(not(target_os = "windows"))]
+fn get_recycle_bin_capacity_estimate(_path_str: &str, _config: &crate::models::AppConfig) -> u64 {
+    4 * 1024 * 1024 * 1024
+}
+
+fn calculate_recursive_size(path: &std::path::Path, limit: u64) -> u64 {
+    let mut current_size = 0;
+    let mut stack = vec![path.to_path_buf()];
+
+    while let Some(current_path) = stack.pop() {
+        if current_size > limit {
+            return current_size;
+        }
+        if current_path.is_file() {
+            if let Ok(m) = std::fs::metadata(&current_path) {
+                current_size += m.len();
+            }
+        } else if current_path.is_dir() {
+            if let Ok(entries) = std::fs::read_dir(&current_path) {
+                for entry in entries.flatten() {
+                    stack.push(entry.path());
+                }
+            }
+        }
+    }
+    current_size
+}
+
+#[cfg(target_os = "windows")]
+fn get_nuke_on_delete_estimate(path_str: &str, config: &crate::models::AppConfig) -> bool {
+    use windows::core::PCWSTR;
+    use std::path::{Path, Component, Prefix};
+
+    let path = Path::new(path_str);
+    let mut drive_path = None;
+
+    for component in path.components() {
+        if let Component::Prefix(prefix) = component {
+            match prefix.kind() {
+                Prefix::VerbatimDisk(d) | Prefix::Disk(d) => {
+                    drive_path = Some(format!("{}:\\", d as char));
+                }
+                Prefix::UNC(server, share) | Prefix::VerbatimUNC(server, share) => {
+                    drive_path = Some(format!("\\\\{}\\{}\\", server.to_string_lossy(), share.to_string_lossy()));
+                }
+                _ => {}
+            }
+            break;
+        }
+    }
+
+    let drive_path = match drive_path {
+        Some(d) => d,
+        None => return false,
+    };
+
+    // 1. Primary Source: Windows Registry (BitBucket)
+    unsafe {
+        use windows::Win32::Storage::FileSystem::GetVolumeNameForVolumeMountPointW;
+        use windows::Win32::System::Registry::{RegOpenKeyExW, RegQueryValueExW, HKEY_CURRENT_USER, KEY_READ, REG_DWORD};
+        
+        let mut volume_name = [0u16; 50];
+        let wide_drive: Vec<u16> = drive_path.encode_utf16().chain(std::iter::once(0)).collect();
+        if GetVolumeNameForVolumeMountPointW(PCWSTR(wide_drive.as_ptr()), &mut volume_name).is_ok() {
+            let vol_string = String::from_utf16_lossy(&volume_name);
+            let vol_trimmed = vol_string.trim_matches(char::from(0));
+            if let Some(start) = vol_trimmed.find("Volume{") {
+                let guid_part = &vol_trimmed[start + 6..]; 
+                if let Some(end) = guid_part.find('}') {
+                    let guid_str = &guid_part[..=end];
+                    
+                    let key_path = format!("Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\BitBucket\\Volume\\{}", guid_str);
+                    let wide_key: Vec<u16> = key_path.encode_utf16().chain(std::iter::once(0)).collect();
+                    
+                    let mut hkey = windows::Win32::System::Registry::HKEY::default();
+                    if RegOpenKeyExW(HKEY_CURRENT_USER, PCWSTR(wide_key.as_ptr()), Some(0), KEY_READ, &mut hkey).0 == 0 {
+                        let mut data = 0u32;
+                        let mut data_size = std::mem::size_of::<u32>() as u32;
+                        let mut key_type = windows::Win32::System::Registry::REG_VALUE_TYPE(0);
+                        let wide_value: Vec<u16> = "NukeOnDelete".encode_utf16().chain(std::iter::once(0)).collect();
+                        
+                        let result = RegQueryValueExW(
+                            hkey, 
+                            PCWSTR(wide_value.as_ptr()), 
+                            None, 
+                            Some(&mut key_type as *mut _), 
+                            Some(&mut data as *mut _ as *mut u8), 
+                            Some(&mut data_size as *mut _)
+                        );
+                        if result.0 == 0 && key_type == REG_DWORD {
+                             let _ = windows::Win32::System::Registry::RegCloseKey(hkey);
+                             return data == 1;
+                        }
+                        let _ = windows::Win32::System::Registry::RegCloseKey(hkey);
+                    }
+                }
+            }
+        }
+    }
+
+    // 2. Secondary Fallback: Oxyde App Configuration
+    if let Some(setting) = config.trash_drive_settings.iter().find(|s| s.drive_path == drive_path) {
+        return !setting.use_trash;
+    }
+
+    false // Default: use trash
+}
+
+#[cfg(not(target_os = "windows"))]
+fn get_nuke_on_delete_estimate(_path_str: &str, _config: &crate::models::AppConfig) -> bool {
+    false
+}
+
+pub async fn get_total_recycle_bin_usage() -> Result<(u64, u64), CommandError> {
+    #[cfg(target_os = "windows")]
+    {
+        use windows::Win32::UI::Shell::{SHQueryRecycleBinW, SHQUERYRBINFO};
+        use windows::Win32::Storage::FileSystem::GetLogicalDriveStringsW;
+        use windows::core::PCWSTR;
+
+        let mut total_size = 0u64;
+        let mut total_items = 0u64;
+
+        unsafe {
+            let mut buffer = [0u16; 260];
+            let len = GetLogicalDriveStringsW(Some(&mut buffer));
+            if len > 0 {
+                let drive_strings = String::from_utf16_lossy(&buffer[..len as usize]);
+                for drive_path in drive_strings.split('\0').filter(|s| !s.is_empty()) {
+                    let wide_path: Vec<u16> = drive_path.encode_utf16().chain(std::iter::once(0)).collect();
+                    
+                    let mut info = SHQUERYRBINFO {
+                        cbSize: std::mem::size_of::<SHQUERYRBINFO>() as u32,
+                        i64Size: 0,
+                        i64NumItems: 0,
+                    };
+
+                    if SHQueryRecycleBinW(PCWSTR(wide_path.as_ptr()), &mut info).is_ok() {
+                        total_size += info.i64Size as u64;
+                        total_items += info.i64NumItems as u64;
+                    }
+                }
+            }
+        }
+
+        Ok((total_size, total_items))
+    }
+    #[cfg(not(target_os = "windows"))]
+    Ok((0, 0))
+}
+
+pub async fn delete_items(
+    manager: &FileOperationManager, 
+    history: Arc<HistoryManager>,
+    config_state: &crate::models::ConfigManager, 
+    paths: Vec<String>, 
+    turbo: Option<bool>
+) -> Result<String, CommandError> {
+    info!("Moving items to trash: {:?}", paths);
+    
+    if paths.is_empty() {
+        return Err(CommandError::Other("Aucun fichier à supprimer".to_string()));
+    }
+
+    let config_snapshot = {
+        let config = config_state.0.lock().map_err(|_| CommandError::SystemError("Lock failed".into()))?;
+        config.clone()
+    };
+
+    // 1. Determine if we should use Trash or Permanent based on Oxyde Settings / Registry
+    // If any item is on a drive that has "NukeOnDelete" enabled, we use purge instead of trash.
+    // Actually, we could split the operation, but usually if multiple items are deleted, 
+    // and one is on a "nuke" drive, it's safer to check per-item.
+    // However, the function returns a single op ID.
+    // Let's check the first item to decide the mode, similar to previous logic.
+    let should_nuke = get_nuke_on_delete_estimate(&paths[0], &config_snapshot);
+
+    if should_nuke {
+        return purge_items(manager, history, paths, turbo).await;
+    }
+
+    // 2. Validate and calculate sizes in a single pass
+    let mut total_size = 0u64;
+    let mut drive_caps: std::collections::HashMap<String, u64> = std::collections::HashMap::new();
+    let mut paths_validated = Vec::new();
+
+    for path_str in &paths {
+        let path = PathBuf::from(path_str);
+        if !path.exists() {
+            return Err(CommandError::PathError(path_str.clone()));
+        }
+
+        // Get or cache capacity for this drive
+        let drive_key = match path.components().next() {
+            Some(std::path::Component::Prefix(p)) => format!("{:?}", p),
+            _ => path_str.clone(),
+        };
+
+        let cap = if let Some(&c) = drive_caps.get(&drive_key) {
+            c
+        } else {
+            let c = get_recycle_bin_capacity_estimate(path_str, &config_snapshot);
+            drive_caps.insert(drive_key, c);
+            c
+        };
+
+        // Single recursive size calculation
+        let size = calculate_recursive_size(&path, cap);
+        total_size += size;
+
+        if total_size >= cap {
+            return Err(CommandError::TrashFull("Fichiers trop volumineux pour la corbeille.".to_string()));
+        }
+
+        paths_validated.push(path);
+    }
+
+    // Lock is already released as we work with config_snapshot
+    
+    let mut op = FileOperation::new(FileOpType::Trash, paths_validated, None, None);
+    if let Some(t) = turbo {
+        op.turbo = t;
+        op.turbo_flag.store(t, Ordering::Relaxed);
+    }
+    let id = manager.queue_operation(history, op);
+    Ok(id)
+}
+
+pub async fn purge_items(
+    manager: &FileOperationManager, 
+    history: Arc<HistoryManager>,
+    paths: Vec<String>, 
+    turbo: Option<bool>
+) -> Result<String, CommandError> {
+    info!("Permanently deleting items: {:?}", paths);
+    let mut paths_validated = Vec::new();
+    for p in paths {
+        paths_validated.push(validate_path(&p)?);
+    }
+    
+    let mut op = FileOperation::new(FileOpType::Delete, paths_validated, None, None);
+    if let Some(t) = turbo {
+        op.turbo = t;
+        op.turbo_flag.store(t, Ordering::Relaxed);
+    }
+    let id = manager.queue_operation(history.clone(), op);
+    Ok(id)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn copy_items(
+    manager: &FileOperationManager, 
+    history: Arc<HistoryManager>,
+    paths: Vec<String>, 
+    target_dir: String, 
+    turbo: Option<bool>,
+    total_size: Option<u64>,
+    total_files: Option<usize>,
+    is_cross_volume: Option<bool>,
+    resolutions: Option<HashMap<String, ConflictAction>>,
+) -> Result<String, CommandError> {
+    let target_dir_validated = validate_path(&target_dir)?;
+    let paths_validated: Vec<PathBuf> = paths.iter()
+        .map(|p| validate_path(p))
+        .collect::<Result<Vec<PathBuf>, CommandError>>()?;
+
+    let mut op = FileOperation::new(FileOpType::Copy, paths_validated, Some(target_dir_validated), resolutions);
+    if let Some(t) = turbo {
+        op.turbo = t;
+        op.turbo_flag.store(t, Ordering::Relaxed);
+    }
+    if let Some(s) = total_size { op.total_bytes = s; }
+    if let Some(f) = total_files { op.total_files = f; }
+    if let Some(cv) = is_cross_volume { op.is_cross_volume = cv; }
+    
+    let id = manager.queue_operation(history.clone(), op);
+    
+    Ok(id)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn move_items(
+    manager: &FileOperationManager, 
+    history: Arc<HistoryManager>,
+    paths: Vec<String>, 
+    target_dir: String, 
+    turbo: Option<bool>,
+    total_size: Option<u64>,
+    total_files: Option<usize>,
+    is_cross_volume: Option<bool>,
+    resolutions: Option<HashMap<String, ConflictAction>>,
+) -> Result<String, CommandError> {
+    let target_dir_validated = validate_path(&target_dir)?;
+    let paths_validated: Vec<PathBuf> = paths.iter()
+        .map(|p| validate_path(p))
+        .collect::<Result<Vec<PathBuf>, CommandError>>()?;
+    
+    let mut op = FileOperation::new(FileOpType::Move, paths_validated, Some(target_dir_validated), resolutions);
+    if let Some(t) = turbo {
+        op.turbo = t;
+        op.turbo_flag.store(t, Ordering::Relaxed);
+    }
+    if let Some(s) = total_size { op.total_bytes = s; }
+    if let Some(f) = total_files { op.total_files = f; }
+    if let Some(cv) = is_cross_volume { op.is_cross_volume = cv; }
+    
+    let id = manager.queue_operation(history.clone(), op);
+
+    Ok(id)
+}
+
+pub async fn restore_items(paths: Vec<String>) -> Result<Vec<String>, CommandError> {
+    info!("Restoring items: {:?}", paths);
+    let trash_items = trash::os_limited::list().map_err(|e| CommandError::TrashError(e.to_string()))?;
+
+    let mut restoration_tasks = Vec::new();
+    let mut restored_paths = Vec::new();
+
+    let normalize = |p: &std::path::Path| -> String {
+        p.to_string_lossy()
+            .to_lowercase()
+            .replace("/", "\\")
+            .trim_start_matches("\\\\?\\")
+            .to_string()
+    };
+
+    for path_str in paths {
+        let path = PathBuf::from(&path_str);
+        let normalized_target = normalize(&path);
+
+        info!(
+            "Looking for target by id or original path: {}",
+            normalized_target
+        );
+
+        // Match by internal trash id OR original path
+        let found = trash_items.iter().find(|item| {
+            let item_id = normalize(&PathBuf::from(&item.id));
+            if item_id == normalized_target {
+                return true;
+            }
+
+            let original_path = normalize(&item.original_path());
+            if original_path == normalized_target {
+                return true;
+            }
+
+            // Special case for shortcuts/urls where extension might be missing in original_path
+            if normalized_target.ends_with(".lnk") || normalized_target.ends_with(".url") {
+                let stem = normalized_target
+                    .rsplit_once('.')
+                    .map(|(s, _)| s)
+                    .unwrap_or(&normalized_target);
+                if original_path == stem {
+                    return true;
+                }
+            }
+
+            false
+        });
+
+        if let Some(item) = found {
+            info!("Found match: {:?}", item.original_path());
+            restoration_tasks.push((item.clone(), path));
+        } else {
+            warn!("No match found for: {}", path_str);
+        }
+    }
+
+    if restoration_tasks.is_empty() {
+        warn!("No matching items found to restore.");
+        return Err(CommandError::TrashError("No matching items found in Recycle Bin".to_string()));
+    }
+
+    for (item, intended_path) in restoration_tasks {
+        let original_path = item.original_path(); // Capture original_path before restore
+        let original_path_str = original_path.to_string_lossy().to_string();
+        
+        trash::os_limited::restore_all(vec![item.clone()]).map_err(|e| CommandError::TrashError(e.to_string()))?;
+        restored_paths.push(original_path_str);
+
+        // Check if we restored by ID (from Trash View) or by Original Path (Undo)
+        // If intended_path matches the internal trash ID, we should NOT try to rename the result to intended_path.
+        let intended_normalized = normalize(&intended_path);
+        let id_normalized = normalize(&PathBuf::from(&item.id));
+
+        if intended_normalized == id_normalized {
+            continue;
+        }
+
+        // After restore, if it didn't land at intended_path, check for truncated landing
+        if !intended_path.exists() {
+            if original_path.exists() { // Use the captured original_path
+                info!(
+                    "Fixing extension after restore (original_path exists): {:?} -> {:?}",
+                    original_path, intended_path
+                );
+                let _ = std::fs::rename(&original_path, &intended_path);
+            } else {
+                // Try corrected path as well just in case
+                let res_paths = get_restoration_paths(&item);
+                if res_paths.crate_path != intended_path && res_paths.crate_path.exists() {
+                    info!(
+                        "Fixing extension after restore (res_paths exists): {:?} -> {:?}",
+                        res_paths.crate_path, intended_path
+                    );
+                    let _ = std::fs::rename(&res_paths.crate_path, &intended_path);
+                }
+            }
+        }
+    }
+
+    Ok(restored_paths)
+}
+
+/// Move items from trash to a target directory safely
+/// Uses temp directory as intermediate to avoid overwriting files at original location
+pub async fn move_from_trash(history: &HistoryManager, paths: Vec<String>, target_dir: String) -> Result<(), CommandError> {
+    let trash_items = trash::os_limited::list().map_err(|e| CommandError::TrashError(e.to_string()))?;
+
+    let normalize = |p: &std::path::Path| -> String {
+        p.to_string_lossy()
+            .to_lowercase()
+            .replace("/", "\\")
+            .trim_start_matches("\\\\?\\")
+            .to_string()
+    };
+
+    let target_base = validate_path(&target_dir)?;
+
+    // Create a unique temp directory for this operation
+    let temp_dir = std::env::temp_dir().join(format!("biluf_trash_restore_{}", std::process::id()));
+    if !temp_dir.exists() {
+        std::fs::create_dir_all(&temp_dir)?;
+    }
+
+    let mut restored_files = Vec::new();
+
+    for path_str in &paths {
+        let path = validate_path(path_str)?;
+        let normalized_target = normalize(&path);
+
+        // Find the trash item by internal ID
+        let found = trash_items.iter().find(|item| {
+            let item_id = normalize(&PathBuf::from(&item.id));
+            item_id == normalized_target
+        });
+
+        if let Some(item) = found {
+            let res_paths = get_restoration_paths(item);
+            let original_name = res_paths
+                .corrected_path
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_else(|| item.name.clone());
+
+            let original_path = res_paths.crate_path.clone();
+
+            // Check if a file with the same name exists at original location
+            let conflict_at_original =
+                res_paths.crate_path.exists() || res_paths.corrected_path.exists();
+            let mut backup_path: Option<PathBuf> = None;
+
+            // If there's a conflict, temporarily move the existing file
+            if conflict_at_original {
+                backup_path = Some(temp_dir.join(format!("backup_{}", original_name)));
+                let options = fs_extra::dir::CopyOptions::new().overwrite(true);
+                fs_extra::move_items(&[&original_path], &temp_dir, &options)
+                    .map_err(|e| CommandError::IoError(format!("Failed to backup existing file: {}", e)))?;
+                // Rename the backup to include prefix
+                let moved_to = temp_dir.join(&original_name);
+                if moved_to.exists() {
+                    std::fs::rename(&moved_to, backup_path.as_ref().ok_or(CommandError::Other("Backup path missing".to_string()))?)
+                        .map_err(|e| CommandError::IoError(format!("Failed to rename backup: {}", e)))?;
+                }
+            }
+
+            // Restore the item from trash (goes to original location)
+            trash::os_limited::restore_all(vec![item.clone()]).map_err(|e| CommandError::TrashError(e.to_string()))?;
+
+            // Determine where it actually landed and ensure extension is correct
+            let actual_restored_path = if res_paths.corrected_path.exists() {
+                res_paths.corrected_path
+            } else if res_paths.crate_path.exists() {
+                if res_paths.crate_path != res_paths.corrected_path {
+                    let _ = std::fs::rename(&res_paths.crate_path, &res_paths.corrected_path);
+                    res_paths.corrected_path
+                } else {
+                    res_paths.crate_path
+                }
+            } else {
+                res_paths.crate_path
+            };
+
+            // Move from original location to target
+            let dest_path = target_base.join(&original_name);
+
+            if actual_restored_path.exists() && actual_restored_path != dest_path {
+                let options = fs_extra::dir::CopyOptions::new().overwrite(true);
+                fs_extra::move_items(&[&actual_restored_path], &target_base, &options)
+                    .map_err(|e| CommandError::IoError(e.to_string()))?;
+            }
+            
+            if dest_path.exists() {
+                restored_files.push(dest_path.to_string_lossy().to_string());
+            }
+
+            // Restore the backup if there was a conflict
+            if let Some(backup) = backup_path {
+                if backup.exists() {
+                    let options = fs_extra::dir::CopyOptions::new().overwrite(true);
+                    // Move back to original location with original name
+                    let restore_target = if original_path.exists() {
+                        // If something took the crate_path, we still try to restore the backup
+                        original_path
+                    } else {
+                        // Prefer the path it was originally at
+                        actual_restored_path
+                    };
+                    let parent = restore_target.parent().unwrap_or(&restore_target);
+                    std::fs::rename(&backup, &restore_target)
+                        .or_else(|_| {
+                            fs_extra::move_items(&[&backup], parent, &options)
+                                .map(|_| ())
+                                .map_err(|e| {
+                                    std::io::Error::other(e.to_string())
+                                })
+                        })
+                        .map_err(|e| CommandError::IoError(format!("Failed to restore backup: {}", e)))?;
+                }
+            }
+        }
+    }
+
+    // Clean up temp dir
+    let _ = std::fs::remove_dir_all(&temp_dir);
+
+    // Record History
+    let abs_restored: Vec<String> = restored_files.to_vec();
+    let target_abs = target_base.to_string_lossy().to_string();
+
+    if !abs_restored.is_empty() {
+        let tx_details = TransactionDetails {
+            paths: vec![], // Source paths in trash are not reliable for redo usually
+            target_dir: Some(target_abs),
+            old_path: None,
+            new_path: None,
+            created_files: Some(abs_restored),
+        };
+        history.push(Transaction::new(TransactionType::Restore, tx_details));
+    }
+
+    Ok(())
+}
+
+pub fn get_history(history: &HistoryManager) -> Result<crate::models::history::HistoryState, CommandError> {
+    Ok(history.get_state())
+}
+
+fn fast_trash(paths: Vec<PathBuf>) -> Result<(), CommandError> {
+    if paths.is_empty() { return Ok(()); }
+    
+    #[cfg(target_os = "windows")]
+    {
+        use windows::Win32::UI::Shell::{SHFileOperationW, SHFILEOPSTRUCTW, FO_DELETE, FOF_ALLOWUNDO, FOF_NOCONFIRMATION, FOF_NOERRORUI, FOF_SILENT};
+        use windows::core::PCWSTR;
+        use windows::Win32::Foundation::HWND;
+
+        // Heuristic: Check size before calling Shell if single large file or small set
+        // to avoid triggering UAC for something that will fail anyway.
+        let mut total_size = 0;
+        let mut count = 0;
+        for p in &paths {
+            if let Ok(m) = std::fs::metadata(p) {
+                if m.is_file() {
+                    total_size += m.len();
+                } else {
+                    // Quick check for directories: if it's already > 4GB or we already counted 500 files, stop counting
+                    // and just assume it might be large.
+                    total_size += 1024 * 1024; // Dummy average for dir entry
+                }
+            }
+            count += 1;
+            if total_size > 4 * 1024 * 1024 * 1024 || count > 1000 {
+                return Err(CommandError::TrashFull("Items potentially too large for Recycle Bin.".to_string()));
+            }
+        }
+
+        // 4GB is a very safe "might be too large" threshold for default Recycle Bin settings on many drives.
+        if total_size > 4 * 1024 * 1024 * 1024 {
+             return Err(CommandError::TrashFull("Fichiers trop volumineux pour la corbeille.".to_string()));
+        }
+
+        let mut buffer: Vec<u16> = Vec::new();
+        for src in paths {
+            let path_str = src.to_string_lossy().replace("/", "\\");
+            buffer.extend(path_str.encode_utf16());
+            buffer.push(0);
+        }
+        buffer.push(0);
+
+        let mut sh_op = SHFILEOPSTRUCTW {
+            hwnd: HWND(std::ptr::null_mut()),
+            wFunc: FO_DELETE,
+            pFrom: PCWSTR(buffer.as_ptr()),
+            pTo: PCWSTR(std::ptr::null()),
+            fFlags: (FOF_ALLOWUNDO.0 | FOF_NOCONFIRMATION.0 | FOF_NOERRORUI.0 | FOF_SILENT.0) as u16,
+            fAnyOperationsAborted: Default::default(),
+            hNameMappings: std::ptr::null_mut(),
+            lpszProgressTitle: PCWSTR(std::ptr::null()),
+        };
+
+        unsafe {
+            let result = SHFileOperationW(&mut sh_op);
+            if result != 0 {
+                if result == 0x4C7 || result == 0x80070005u32 as i32 { // 0x4C7 = Aborted, 0x80070005 = Access Denied (often after UAC refuse)
+                    return Err(CommandError::TrashFull("Opération corbeille impossible ou annulée.".to_string()));
+                }
+                return Err(CommandError::TrashError(format!("Windows Shell Error (0x{:X}).", result)));
+            }
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        trash::delete_all(paths).map_err(|e| CommandError::TrashError(e.to_string()))?;
+    }
+    
+    Ok(())
+}
+pub async fn undo_last_action(history: &HistoryManager) -> Result<Option<Transaction>, CommandError> {
+    let transaction = history.pop_undo();
+    
+    if let Some(ref tx) = transaction {
+        info!("Undoing transaction: {:?}", tx.op_type);
+        match tx.op_type {
+            TransactionType::Copy => {
+                if let Some(ref target_dir) = tx.details.target_dir {
+                    let mut files_to_delete = Vec::new();
+                    for src_path in &tx.details.paths {
+                        let path = PathBuf::from(&src_path);
+                        if let Some(name) = path.file_name() {
+                            let dest_path = PathBuf::from(&target_dir).join(name);
+                            if dest_path.exists() {
+                                files_to_delete.push(dest_path);
+                            }
+                        }
+                    }
+                    if !files_to_delete.is_empty() {
+                         fast_trash(files_to_delete)?;
+                    }
+                }
+            },
+            TransactionType::Move => {
+                if let Some(ref target_dir) = tx.details.target_dir {
+                     let mut files_to_copy_delete = Vec::new();
+                     let mut total_size = 0;
+                     let target_path_base = PathBuf::from(&target_dir);
+ 
+                     for src_path_str in &tx.details.paths {
+                         let src_path = PathBuf::from(src_path_str);
+                         if let Some(name) = src_path.file_name() {
+                             let current_loc = target_path_base.join(name);
+                             if current_loc.exists() {
+                                 match std::fs::rename(&current_loc, &src_path) {
+                                     Ok(_) => {
+                                         info!("Undo Move: Fast-moved back {:?} to {:?}", current_loc, src_path);
+                                     },
+                                     Err(_) => {
+                                          if let Ok((collected, size)) = collect_files(&[current_loc], src_path.parent().unwrap_or(&src_path)) {
+                                             files_to_copy_delete.extend(collected);
+                                             total_size += size;
+                                         }
+                                     }
+                                 }
+                             }
+                         }
+                     }
+                     if !files_to_copy_delete.is_empty() {
+                         let cancel_flag = Arc::new(AtomicBool::new(false));
+                         perform_copy_with_progress(files_to_copy_delete, total_size, "undo_move", true, cancel_flag)?;
+                     }
+                }
+            },
+            TransactionType::Delete => {
+                restore_items(tx.details.paths.clone()).await?;
+            },
+            TransactionType::Rename => {
+                if let (Some(old), Some(new)) = (tx.details.old_path.as_ref(), tx.details.new_path.as_ref()) {
+                    let old_pb = PathBuf::from(old);
+                    let new_pb = PathBuf::from(new);
+                    if new_pb.exists() {
+                        std::fs::rename(new_pb, old_pb).map_err(|e| CommandError::IoError(e.to_string()))?;
+                    }
+                }
+            },
+            TransactionType::NewFolder => {
+                let mut files_to_delete = Vec::new();
+                for path_str in &tx.details.paths {
+                    let path = PathBuf::from(path_str);
+                    if path.exists() {
+                        files_to_delete.push(path);
+                    }
+                }
+                if !files_to_delete.is_empty() {
+                    fast_trash(files_to_delete)?;
+                }
+            },
+            TransactionType::Restore => {
+                if let Some(ref created) = tx.details.created_files {
+                    let mut files_to_delete = Vec::new();
+                    for path_str in created {
+                        let path = PathBuf::from(path_str);
+                        if path.exists() {
+                            files_to_delete.push(path);
+                        }
+                    }
+                    if !files_to_delete.is_empty() {
+                         fast_trash(files_to_delete)?;
+                    }
+                }
+            },
+        }
+        history.push_redo(tx.clone());
+    }
+    Ok(transaction)
+}
+
+pub async fn redo_last_action(history: &HistoryManager) -> Result<Option<Transaction>, CommandError> {
+    let transaction = history.pop_redo();
+
+    if let Some(ref tx) = transaction {
+        info!("Redoing transaction: {:?}", tx.op_type);
+        match tx.op_type {
+            TransactionType::Delete => {
+                let paths: Vec<PathBuf> = tx.details.paths.iter().map(PathBuf::from).collect();
+                fast_trash(paths)?;
+            },
+            TransactionType::Restore => {
+                if let Some(ref target_dir) = tx.details.target_dir {
+                    let paths = tx.details.paths.clone();
+                    move_from_trash(history, paths, target_dir.clone()).await?;
+                }
+            },
+            TransactionType::Copy => {
+                if let Some(ref target_dir) = tx.details.target_dir {
+                     let target_base = PathBuf::from(target_dir);
+                     let paths: Vec<PathBuf> = tx.details.paths.iter().map(PathBuf::from).collect();
+                     if let Ok((files, total_bytes)) = collect_files(&paths, &target_base) {
+                          let cancel_flag = Arc::new(AtomicBool::new(false));
+                          perform_copy_with_progress(files, total_bytes, "redo_copy", false, cancel_flag)?;
+                     }
+                }
+            },
+            TransactionType::Move => {
+                if let Some(ref target_dir) = tx.details.target_dir {
+                     let mut files_to_copy_delete = Vec::new();
+                     let mut total_size = 0;
+                     let target_path_base = PathBuf::from(&target_dir);
+                     let paths: Vec<PathBuf> = tx.details.paths.iter().map(PathBuf::from).collect();
+ 
+                     for src_path in paths {
+                         if src_path.exists() {
+                             let file_name = src_path.file_name().unwrap_or_default();
+                             let dest_path = target_path_base.join(file_name);
+                             
+                             match std::fs::rename(&src_path, &dest_path) {
+                                 Ok(_) => {
+                                     info!("Redo Move: Fast-moved {:?} to {:?}", src_path, dest_path);
+                                 },
+                                 Err(_) => {
+                                     if let Ok((collected, size)) = collect_files(&[src_path], &target_path_base) {
+                                         files_to_copy_delete.extend(collected);
+                                         total_size += size;
+                                     }
+                                 }
+                             }
+                         }
+                     }
+ 
+                     if !files_to_copy_delete.is_empty() {
+                          let cancel_flag = Arc::new(AtomicBool::new(false));
+                          perform_copy_with_progress(files_to_copy_delete, total_size, "redo_move", true, cancel_flag)?;
+                     }
+                }
+            },
+            TransactionType::Rename => {
+                if let (Some(old), Some(new)) = (tx.details.old_path.as_ref(), tx.details.new_path.as_ref()) {
+                    let old_pb = PathBuf::from(old);
+                    let new_pb = PathBuf::from(new);
+                    if old_pb.exists() {
+                        std::fs::rename(old_pb, new_pb).map_err(|e| CommandError::IoError(e.to_string()))?;
+                    }
+                }
+            },
+            TransactionType::NewFolder => {
+                for path_str in &tx.details.paths {
+                    let path = PathBuf::from(path_str);
+                    if !path.exists() {
+                        std::fs::create_dir_all(path).map_err(|e| CommandError::IoError(e.to_string()))?;
+                    }
+                }
+            },
+        }
+        history.push_undo_raw(tx.clone());
+    }
+    Ok(transaction)
+}
+
+// Helper to collect files and calculate size recursively
+fn collect_files(paths: &[PathBuf], target_base: &std::path::Path) -> Result<(Vec<(PathBuf, PathBuf)>, u64), CommandError> {
+    use walkdir::WalkDir;
+    let mut total_bytes: u64 = 0;
+    let mut files_to_copy: Vec<(PathBuf, PathBuf)> = Vec::new();
+
+    for path in paths {
+        if !path.exists() { continue; }
+
+        let file_name = path.file_name().ok_or(CommandError::PathError("Invalid path".to_string()))?;
+        let dest_root = target_base.join(file_name);
+
+        if path.is_dir() {
+            for entry in WalkDir::new(path) {
+                let entry = entry.map_err(|e| CommandError::IoError(e.to_string()))?;
+                let entry_path = entry.path();
+                
+                let relative = entry_path.strip_prefix(path).map_err(|_| CommandError::PathError("Strip prefix failed".to_string()))?;
+                let dest_path = dest_root.join(relative);
+
+                if entry_path.is_dir() {
+                    files_to_copy.push((entry_path.to_path_buf(), dest_path));
+                } else {
+                    let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
+                    total_bytes += size;
+                    files_to_copy.push((entry_path.to_path_buf(), dest_path));
+                }
+            }
+        } else {
+            let size = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
+            total_bytes += size;
+            files_to_copy.push((path.clone(), dest_root));
+        }
+    }
+    Ok((files_to_copy, total_bytes))
+}
+
+// Helper to perform copy with progress
+fn perform_copy_with_progress(
+    files: Vec<(PathBuf, PathBuf)>, 
+    _total_bytes: u64, 
+    _task_name: &str,
+    move_op: bool, // If true, delete source after copy
+    cancel_flag: Arc<AtomicBool>
+) -> Result<(), CommandError> {
+    use std::fs;
+    use std::io::{Read, Write};
+    // use std::time::Instant;
+
+    let mut _processed_global: u64 = 0;
+    // let mut last_emit = Instant::now();
+    // let _op_id = format!("{}_op", task_name);
+
+    for (source, dest) in &files {
+         if cancel_flag.load(Ordering::Relaxed) {
+             return Ok(());
+         }
+
+         if source.is_dir() {
+             if !dest.exists() {
+                  fs::create_dir_all(dest).map_err(|e| CommandError::IoError(e.to_string()))?;
+             }
+             continue;
+         }
+
+         if let Some(parent) = dest.parent() {
+             if !parent.exists() {
+                 fs::create_dir_all(parent).map_err(|e| CommandError::IoError(e.to_string()))?;
+             }
+         }
+
+         let mut file_in = fs::File::open(source).map_err(|e| CommandError::IoError(e.to_string()))?;
+         let mut file_out = fs::File::create(dest).map_err(|e| CommandError::IoError(e.to_string()))?;
+         
+         let mut buffer = [0u8; 81920]; 
+         loop {
+             if cancel_flag.load(Ordering::Relaxed) {
+                 drop(file_out);
+                 let _ = fs::remove_file(dest);
+                 return Ok(());
+             }
+
+             let n = file_in.read(&mut buffer).map_err(|e| CommandError::IoError(e.to_string()))?;
+             if n == 0 { break; }
+             file_out.write_all(&buffer[..n]).map_err(|e| CommandError::IoError(e.to_string()))?;
+             
+             _processed_global += n as u64;
+         }
+
+          if move_op && !source.is_dir() {
+              let _ = fs::remove_file(source);
+          }
+    }
+    
+    if move_op {
+        let mut dirs: Vec<_> = files.iter().filter(|(s, _)| s.is_dir()).map(|(s, _)| s).collect();
+        dirs.sort_by_key(|d| std::cmp::Reverse(d.components().count()));
+        for d in dirs {
+            let _ = fs::remove_dir(d);
+        }
+    }
+    
+    Ok(())
+}
