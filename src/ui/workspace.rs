@@ -1,5 +1,5 @@
-use oxyde_lib::models::{DriveInfo, FileEntry, SidebarNode};
-use oxyde_lib::commands::system::get_drives;
+use oxyde_lib::models::{DriveInfo, FileEntry, SidebarNode, QuickAccessItem};
+use oxyde_lib::commands::system::{get_drives, get_quick_access_items};
 use oxyde_lib::commands::io::list_dir;
 use oxyde_lib::commands::sidebar::get_sidebar_nodes;
 use gpui::{UniformListScrollHandle, ScrollHandle};
@@ -22,6 +22,9 @@ pub enum SortDirection {
 #[derive(Clone, Debug)]
 pub enum SidebarItem {
     Header(String),
+    Pinned {
+        item: QuickAccessItem,
+    },
     Drive {
         drive: DriveInfo,
         is_expanded: bool,
@@ -508,6 +511,7 @@ impl LayoutNode {
 }
 
 pub struct WorkspaceState {
+    pub pinned_items: Vec<QuickAccessItem>,
     pub drives: Vec<DriveInfo>,
     pub layout: LayoutNode,
     pub active_pane_id: String,
@@ -518,6 +522,7 @@ pub struct WorkspaceState {
 impl WorkspaceState {
     pub fn new() -> Self {
         let drives = get_drives(Some(true));
+        let pinned_items = get_quick_access_items().unwrap_or_default();
         let default_tab = TabState::new("tab-0".to_string(), "C:/".to_string());
         
         let mut initial_pane = PaneState::new(default_tab);
@@ -533,6 +538,7 @@ impl WorkspaceState {
             tab.list_scroll = UniformListScrollHandle::new();        }
 
         let mut state = Self {
+            pinned_items,
             drives,
             layout: LayoutNode::Pane(Box::new(initial_pane)),
             active_pane_id: pane_id,
@@ -543,6 +549,7 @@ impl WorkspaceState {
         state.refresh_sidebar();
         state
     }
+
 
     #[allow(dead_code)]
     pub fn active_pane_id(&self) -> String {
@@ -748,6 +755,16 @@ impl WorkspaceState {
 
     pub fn refresh_sidebar(&mut self) {
         let mut new_items = Vec::new();
+        
+        if !self.pinned_items.is_empty() {
+            new_items.push(SidebarItem::Header("ACCÈS RAPIDE".to_string()));
+            for item in &self.pinned_items {
+                new_items.push(SidebarItem::Pinned {
+                    item: item.clone(),
+                });
+            }
+        }
+
         new_items.push(SidebarItem::Header("LECTEURS".to_string()));
 
         let rt = tokio::runtime::Runtime::new().expect("rt");
