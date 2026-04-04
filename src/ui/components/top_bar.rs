@@ -46,7 +46,6 @@ pub fn render_top_bar(view: &OxydeApp, pane_id: String, handle: Entity<OxydeApp>
                     if can_go_back {
                         let p_id = pane_id.clone();
                         btn = btn
-                            .cursor_pointer()
                             .hover(|s| s.bg(rgb(0x1a1a1a)).rounded_md())
                             .tooltip(Tooltip::with_meta("Précédent", "Alt+Gauche"))
                             .on_mouse_down(MouseButton::Left, {
@@ -75,7 +74,6 @@ pub fn render_top_bar(view: &OxydeApp, pane_id: String, handle: Entity<OxydeApp>
                     if can_go_forward {
                         let p_id = pane_id.clone();
                         btn = btn
-                            .cursor_pointer()
                             .hover(|s| s.bg(rgb(0x1a1a1a)).rounded_md())
                             .tooltip(Tooltip::with_meta("Suivant", "Alt+Droite"))
                             .on_mouse_down(MouseButton::Left, {
@@ -128,7 +126,6 @@ pub fn render_top_bar(view: &OxydeApp, pane_id: String, handle: Entity<OxydeApp>
                                     .child(
                                         div()
                                             .id(SharedString::from(format!("chevron-btn-{}-{}", p_id, index)))
-                                            .cursor_pointer()
                                             .hover(|s| s.bg(rgb(0x1a1a1a)).rounded_md())
                                             .px_1()
                                             .mx_0()
@@ -230,7 +227,6 @@ pub fn render_top_bar(view: &OxydeApp, pane_id: String, handle: Entity<OxydeApp>
                         let target_path = level_path.clone();
                         elements.push(
                             div()
-                                .cursor_pointer()
                                 .hover(|s| s.text_color(rgb(0xdddddd)))
                                 .on_mouse_down(MouseButton::Left, {
                                     let h = handle.clone();

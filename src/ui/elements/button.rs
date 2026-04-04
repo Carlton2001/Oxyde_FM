@@ -91,7 +91,6 @@ impl RenderOnce for Button {
             .bg(bg)
             .border_1()
             .border_color(border_color)
-            .cursor_pointer()
             .hover(|style| style.bg(theme.hover).border_color(theme.accent.opacity(0.5)))
             .active(|style| style.bg(theme.selected).border_color(theme.accent))
             .when_some(self.on_click, |container, on_click| {

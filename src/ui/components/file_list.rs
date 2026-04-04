@@ -99,7 +99,7 @@ pub fn render_file_list(view: &OxydeApp, pane_id: String, handle: Entity<OxydeAp
                         .flex_col()
                         .child(render_headers(view, pane_id.clone(), handle.clone(), name_w, type_w, size_w, date_w, theme))
                         .child(
-                             uniform_list(
+                            uniform_list(
                                 SharedString::from(format!("file-list-{}", pane_id)),
                                 files.len(),
                                 {
@@ -182,6 +182,8 @@ pub fn render_file_list(view: &OxydeApp, pane_id: String, handle: Entity<OxydeAp
                                                               }
                                                               this.context_menu = Some((pos, ContextMenuContent::Items(super::oxyde_context_menu_items(h_inner_inner.clone()), None)));
                                                               this.context_menu_scroll = UniformListScrollHandle::new();
+                                                               this.tooltip_request = None;
+                                                               this.tooltip_timer = None;
                                                               cx.notify();
                                                           });
                                                      }
@@ -206,8 +208,7 @@ pub fn render_file_list(view: &OxydeApp, pane_id: String, handle: Entity<OxydeAp
                                                                 .h_full()
                                                                 .px(px(8.0))
                                                                 .flex()
-                                                                .items_center()
-                                                                .on_mouse_move({
+                                                                .items_center()                                                                .on_mouse_move({
                                                                     let h = h.clone();
                                                                     let file_name = file_name.clone();
                                                                     let is_dir = is_dir;
@@ -221,11 +222,13 @@ pub fn render_file_list(view: &OxydeApp, pane_id: String, handle: Entity<OxydeAp
                                                                             let type_str = if is_dir { "Dossier".to_string() } else { std::path::Path::new(&name).extension().and_then(|e| e.to_str()).map(|s| s.to_uppercase()).unwrap_or("Fichier".to_string()) };
                                                                             let size_str = format_size(file_size, is_dir, file_is_calculated);
                                                                             let date_str = format_date(file_modified);
-                                                                            let data = crate::ui::app::TooltipData {
+                                                                            
+                                                                            let mut data = crate::ui::app::TooltipData {
                                                                                 name,
                                                                                 type_str,
                                                                                 size_str,
                                                                                 date_str,
+                                                                                full_path: None,
                                                                                 position: e.position,
                                                                             };
 
@@ -240,6 +243,8 @@ pub fn render_file_list(view: &OxydeApp, pane_id: String, handle: Entity<OxydeAp
                                                                                     async move {
                                                                                         cx.background_executor().timer(std::time::Duration::from_millis(500)).await;
                                                                                         let _ = h_inner.update(&mut cx, |this, cx| {
+                                                                                            // Capture CURRENT mouse position from our global tracker
+                                                                                            data.position = this.mouse_pos;
                                                                                             this.tooltip_request = Some(data);
                                                                                             this.tooltip_timer = None;
                                                                                             cx.notify();
@@ -250,6 +255,7 @@ pub fn render_file_list(view: &OxydeApp, pane_id: String, handle: Entity<OxydeAp
                                                                         });
                                                                     }
                                                                 })
+
                                                                 .child(svg().path(if is_dir { "icons/folder.svg" } else { "icons/file.svg" }).size_4().flex_none().mr_2().text_color(if is_dir { theme.accent } else { theme.text_muted }))
                                                                 .child(
                                                                     div()

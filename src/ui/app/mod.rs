@@ -54,6 +54,7 @@ pub struct TooltipData {
     pub type_str: String,
     pub size_str: String,
     pub date_str: String,
+    pub full_path: Option<String>,
     pub position: Point<Pixels>,
 }
 
@@ -99,15 +100,19 @@ impl Element for ManualTooltipElement {
         window: &mut Window,
         cx: &mut App,
     ) -> Self::PrepaintState {
-        let view = Tooltip::for_file(
-            self.data.name.clone(),
-            self.data.type_str.clone(),
-            self.data.size_str.clone(),
-            self.data.date_str.clone(),
-        )(window, cx);
+        let view = if let Some(path) = self.data.full_path.as_ref() {
+            Tooltip::for_path(self.data.name.clone(), path.clone())(window, cx)
+        } else {
+            Tooltip::for_file(
+                self.data.name.clone(),
+                self.data.type_str.clone(),
+                self.data.size_str.clone(),
+                self.data.date_str.clone(),
+            )(window, cx)
+        };
         window.set_tooltip(AnyTooltip {
             view,
-            mouse_position: self.data.position,
+            mouse_position: window.mouse_position(),
             check_visible_and_update: std::rc::Rc::new(|_, _, _| true),
         });
     }
@@ -156,6 +161,7 @@ pub struct OxydeApp {
     pub dragging_tab: Option<(String, usize)>,
     pub tooltip_request: Option<TooltipData>,
     pub tooltip_timer: Option<Task<()>>,
+    pub mouse_pos: Point<Pixels>,
 }
 
 impl OxydeApp {
@@ -197,6 +203,7 @@ impl OxydeApp {
             dragging_tab: None,
             tooltip_request: None,
             tooltip_timer: None,
+            mouse_pos: Point::default(),
         }
     }
 }
@@ -254,6 +261,7 @@ impl Render for OxydeApp {
                         move |e: &MouseMoveEvent, phase, _, cx| {
                             if phase != DispatchPhase::Capture && phase != DispatchPhase::Bubble { return; }
                             let _ = handle_move.update(cx, |this: &mut OxydeApp, cx: &mut Context<OxydeApp>| {
+                                this.mouse_pos = e.position;
                                 if let Some(target) = this.drag_target.clone() {
                                     let pos = e.position;
                                     match target {

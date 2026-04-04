@@ -47,6 +47,18 @@ pub fn render_sidebar(view: &OxydeApp, handle: Entity<OxydeApp>, _cx: &mut Conte
         .child(
             div()
                 .size_full()
+                .on_mouse_move({
+                    let h = handle.clone();
+                    move |_, _, cx| {
+                        let _ = h.update(cx, |this, cx| {
+                            if this.tooltip_request.is_some() || this.tooltip_timer.is_some() {
+                                this.tooltip_request = None;
+                                this.tooltip_timer = None;
+                                cx.notify();
+                            }
+                        });
+                    }
+                })
                 .child(
                     div()
                         .absolute()
@@ -85,58 +97,67 @@ pub fn render_sidebar(view: &OxydeApp, handle: Entity<OxydeApp>, _cx: &mut Conte
                                                         .rounded_md()
                                                         .flex()
                                                         .items_center()
-                                                        .cursor_pointer()
                                                         .hover(|s| s.bg(theme.hover))
-                                                        .child(
-                                                            div()
-                                                                .w_4()
-                                                                .h_4()
-                                                                .mr_1()
-                                                        )
-                                                        .child(
-                                                            div()
-                                                                .flex_1()
-                                                                .flex()
-                                                                .items_center()
-                                                                .on_mouse_down(MouseButton::Left, {
-                                                                    let p = path.clone();
-                                                                    let h_inner_inner = h_inner.clone();
-                                                                    move |e, _, cx| {
-                                                                        if e.click_count != 2 {
-                                                                            let _ = h_inner_inner.update(cx, |this, cx| {
-                                                                                let p_id = this.state.active_pane_id.clone();
-                                                                                this.navigate_to(&p_id, p.clone(), cx);
-                                                                            });
-                                                                        }
+                                                        .on_mouse_move({
+                                                            let h = h_inner.clone();
+                                                            let name = item.name.clone();
+                                                            let path_cap = path.clone();
+                                                            move |e, _, cx| {
+                                                                cx.stop_propagation();
+                                                                let _ = h.update(cx, |this, cx| {
+                                                                    let mut data = crate::ui::app::TooltipData {
+                                                                        name: name.clone(),
+                                                                        type_str: "".to_string(),
+                                                                        size_str: "".to_string(),
+                                                                        date_str: "".to_string(),
+                                                                        full_path: Some(path_cap.clone()),
+                                                                        position: e.position,
+                                                                    };
+
+                                                                    if this.tooltip_request.is_some() {
+                                                                        this.tooltip_request = Some(data);
+                                                                        cx.notify();
+                                                                    } else if this.tooltip_timer.is_none() {
+                                                                        let h_inner = h.clone();
+                                                                        this.tooltip_timer = Some(cx.spawn(move |_, cx: &mut AsyncApp| {
+                                                                            let mut cx = cx.clone();
+                                                                            let h_inner = h_inner.clone();
+                                                                            async move {
+                                                                                cx.background_executor().timer(std::time::Duration::from_millis(500)).await;
+                                                                                let _ = h_inner.update(&mut cx, |this, cx| {
+                                                                                    data.position = this.mouse_pos;
+                                                                                    this.tooltip_request = Some(data);
+                                                                                    this.tooltip_timer = None;
+                                                                                    cx.notify();
+                                                                                });
+                                                                            }
+                                                                        }));
                                                                     }
-                                                                })
-                                                                .on_mouse_down(MouseButton::Middle, {
-                                                                    let p = path.clone();
-                                                                    let h_inner_inner = h_inner.clone();
-                                                                    move |_, _, cx| {
-                                                                        let _ = h_inner_inner.update(cx, |view, cx| {
-                                                                            let p_id = view.state.active_pane_id.clone();
-                                                                            view.add_tab(&p_id, p.clone(), false, cx);
-                                                                        });
-                                                                    }
-                                                                })
-                                                                .child(
-                                                                    div()
-                                                                        .w_4()
-                                                                        .h_4()
-                                                                        .mr_2()
-                                                                        .flex_shrink_0()
-                                                                        .child(svg().path("icons/folder.svg").text_color(theme.accent).size_full())
-                                                                )
-                                                                .child(
-                                                                    div()
-                                                                        .flex_1()
-                                                                        .text_ellipsis()
-                                                                        .overflow_hidden()
-                                                                        .text_color(theme.text)
-                                                                        .child(item.name.clone())
-                                                                )
-                                                        )
+                                                                });
+                                                            }
+                                                        })
+                                                        .on_mouse_down(MouseButton::Left, {
+                                                            let p = path.clone();
+                                                            let h_inner_inner = h_inner.clone();
+                                                            move |e, _, cx| {
+                                                                if e.click_count != 2 {
+                                                                    let _ = h_inner_inner.update(cx, |this, cx| {
+                                                                        let p_id = this.state.active_pane_id.clone();
+                                                                        this.navigate_to(&p_id, p.clone(), cx);
+                                                                    });
+                                                                }
+                                                            }
+                                                        })
+                                                        .on_mouse_down(MouseButton::Middle, {
+                                                            let p = path.clone();
+                                                            let h_inner_inner = h_inner.clone();
+                                                            move |_, _, cx| {
+                                                                let _ = h_inner_inner.update(cx, |view, cx| {
+                                                                    let p_id = view.state.active_pane_id.clone();
+                                                                    view.add_tab(&p_id, p.clone(), false, cx);
+                                                                });
+                                                            }
+                                                        })
                                                         .on_mouse_down(MouseButton::Right, {
                                                             let h_right = h_inner.clone();
                                                             move |e, _, cx| {
@@ -144,10 +165,31 @@ pub fn render_sidebar(view: &OxydeApp, handle: Entity<OxydeApp>, _cx: &mut Conte
                                                                 let _ = h_right.update(cx, |this, cx| {
                                                                     this.context_menu = Some((pos, ContextMenuContent::Items(super::oxyde_context_menu_items(h_right.clone()), None)));
                                                                     this.context_menu_scroll = UniformListScrollHandle::new();
+                                                                    this.tooltip_request = None;
+                                                                    this.tooltip_timer = None;
                                                                     cx.notify();
                                                                 });
                                                             }
                                                         })
+                                                        .child(
+                                                            div()
+                                                                .w_4()
+                                                                .h_4()
+                                                                .mr_2()
+                                                                .flex()
+                                                                .items_center()
+                                                                .justify_center()
+                                                                .flex_shrink_0()
+                                                                .child(svg().path("icons/star.svg").size_4().text_color(theme.accent))
+                                                        )
+                                                        .child(
+                                                            div()
+                                                                .flex_1()
+                                                                .text_ellipsis()
+                                                                .overflow_hidden()
+                                                                .text_color(theme.text)
+                                                                .child(item.name.clone())
+                                                        )
                                                         .into_any_element()
                                                 }
                                                 SidebarItem::Drive { drive, is_expanded } => {
@@ -159,8 +201,68 @@ pub fn render_sidebar(view: &OxydeApp, handle: Entity<OxydeApp>, _cx: &mut Conte
                                                         .rounded_md()
                                                         .flex()
                                                         .items_center()
-                                                        .cursor_pointer()
                                                         .hover(|s| s.bg(theme.hover))
+                                                        .on_mouse_move({
+                                                            let h = h_inner.clone();
+                                                            let label = drive.label.clone();
+                                                            let path_cap = path.clone();
+                                                            move |e, _, cx| {
+                                                                cx.stop_propagation();
+                                                                let _ = h.update(cx, |this, cx| {
+                                                                    let mut data = crate::ui::app::TooltipData {
+                                                                        name: label.clone(),
+                                                                        type_str: "".to_string(),
+                                                                        size_str: "".to_string(),
+                                                                        date_str: "".to_string(),
+                                                                        full_path: Some(path_cap.clone()),
+                                                                        position: e.position,
+                                                                    };
+
+                                                                    if this.tooltip_request.is_some() {
+                                                                        this.tooltip_request = Some(data);
+                                                                        cx.notify();
+                                                                    } else if this.tooltip_timer.is_none() {
+                                                                        let h_inner = h.clone();
+                                                                        this.tooltip_timer = Some(cx.spawn(move |_, cx: &mut AsyncApp| {
+                                                                            let mut cx = cx.clone();
+                                                                            let h_inner = h_inner.clone();
+                                                                            async move {
+                                                                                cx.background_executor().timer(std::time::Duration::from_millis(500)).await;
+                                                                                let _ = h_inner.update(&mut cx, |this, cx| {
+                                                                                    data.position = this.mouse_pos;
+                                                                                    this.tooltip_request = Some(data);
+                                                                                    this.tooltip_timer = None;
+                                                                                    cx.notify();
+                                                                                });
+                                                                            }
+                                                                        }));
+                                                                    }
+                                                                });
+                                                            }
+                                                        })
+                                                        .on_mouse_down(MouseButton::Middle, {
+                                                            let p = path.clone();
+                                                            let h_inner_inner = h_inner.clone();
+                                                            move |_, _, cx| {
+                                                                let _ = h_inner_inner.update(cx, |view, cx| {
+                                                                    let p_id = view.state.active_pane_id.clone();
+                                                                    view.add_tab(&p_id, p.clone(), false, cx);
+                                                                });
+                                                            }
+                                                        })
+                                                        .on_mouse_down(MouseButton::Right, {
+                                                            let h_right = h_inner.clone();
+                                                            move |e, _, cx| {
+                                                                let pos = e.position;
+                                                                let _ = h_right.update(cx, |this, cx| {
+                                                                    this.context_menu = Some((pos, ContextMenuContent::Items(super::oxyde_context_menu_items(h_right.clone()), None)));
+                                                                    this.context_menu_scroll = UniformListScrollHandle::new();
+                                                                    this.tooltip_request = None;
+                                                                    this.tooltip_timer = None;
+                                                                    cx.notify();
+                                                                });
+                                                            }
+                                                        })
                                                         .child(
                                                             div()
                                                                 .w_4()
@@ -199,23 +301,16 @@ pub fn render_sidebar(view: &OxydeApp, handle: Entity<OxydeApp>, _cx: &mut Conte
                                                                         }
                                                                     }
                                                                 })
-                                                                .on_mouse_down(MouseButton::Middle, {
-                                                                    let p = path.clone();
-                                                                    let h_inner_inner = h_inner.clone();
-                                                                    move |_, _, cx| {
-                                                                        let _ = h_inner_inner.update(cx, |view, cx| {
-                                                                            let p_id = view.state.active_pane_id.clone();
-                                                                            view.add_tab(&p_id, p.clone(), false, cx);
-                                                                        });
-                                                                    }
-                                                                })
                                                                 .child(
                                                                     div()
                                                                         .w_4()
                                                                         .h_4()
                                                                         .mr_2()
+                                                                        .flex()
+                                                                        .items_center()
+                                                                        .justify_center()
                                                                         .flex_shrink_0()
-                                                                        .child(svg().path("icons/hard-drive.svg").text_color(theme.accent).size_full())
+                                                                        .child(svg().path("icons/hard-drive.svg").size_4().text_color(theme.accent))
                                                                 )
                                                                 .child(
                                                                     div()
@@ -226,17 +321,6 @@ pub fn render_sidebar(view: &OxydeApp, handle: Entity<OxydeApp>, _cx: &mut Conte
                                                                         .child(format!("{} ({})", drive.label, drive.path))
                                                                 )
                                                         )
-                                                        .on_mouse_down(MouseButton::Right, {
-                                                            let h_right = h_inner.clone();
-                                                            move |e, _, cx| {
-                                                                let pos = e.position;
-                                                                let _ = h_right.update(cx, |this, cx| {
-                                                                    this.context_menu = Some((pos, ContextMenuContent::Items(super::oxyde_context_menu_items(h_right.clone()), None)));
-                                                                    this.context_menu_scroll = UniformListScrollHandle::new();
-                                                                    cx.notify();
-                                                                });
-                                                            }
-                                                        })
                                                         .into_any_element()
                                                 }
                                                 SidebarItem::Directory { node, depth, is_expanded } => {
@@ -249,9 +333,59 @@ pub fn render_sidebar(view: &OxydeApp, handle: Entity<OxydeApp>, _cx: &mut Conte
                                                         .rounded_md()
                                                         .flex()
                                                         .items_center()
-                                                        .cursor_pointer()
                                                         .text_color(theme.text)
                                                         .hover(|s| s.bg(theme.hover))
+                                                        .on_mouse_move({
+                                                            let h = h_inner.clone();
+                                                            let name = node.name.clone();
+                                                            let path_cap = path.clone();
+                                                            move |e, _, cx| {
+                                                                cx.stop_propagation();
+                                                                let _ = h.update(cx, |this, cx| {
+                                                                    let mut data = crate::ui::app::TooltipData {
+                                                                        name: name.clone(),
+                                                                        type_str: "".to_string(),
+                                                                        size_str: "".to_string(),
+                                                                        date_str: "".to_string(),
+                                                                        full_path: Some(path_cap.clone()),
+                                                                        position: e.position,
+                                                                    };
+
+                                                                    if this.tooltip_request.is_some() {
+                                                                        this.tooltip_request = Some(data);
+                                                                        cx.notify();
+                                                                    } else if this.tooltip_timer.is_none() {
+                                                                        let h_inner = h.clone();
+                                                                        this.tooltip_timer = Some(cx.spawn(move |_, cx: &mut AsyncApp| {
+                                                                            let mut cx = cx.clone();
+                                                                            let h_inner = h_inner.clone();
+                                                                            async move {
+                                                                                cx.background_executor().timer(std::time::Duration::from_millis(500)).await;
+                                                                                let _ = h_inner.update(&mut cx, |this, cx| {
+                                                                                    data.position = this.mouse_pos;
+                                                                                    this.tooltip_request = Some(data);
+                                                                                    this.tooltip_timer = None;
+                                                                                    cx.notify();
+                                                                                });
+                                                                            }
+                                                                        }));
+                                                                    }
+                                                                });
+                                                            }
+                                                        })
+                                                        .on_mouse_down(MouseButton::Right, {
+                                                            let h_right = h_inner.clone();
+                                                            move |e, _, cx| {
+                                                                let pos = e.position;
+                                                                let _ = h_right.update(cx, |this, cx| {
+                                                                    this.context_menu = Some((pos, ContextMenuContent::Items(super::oxyde_context_menu_items(h_right.clone()), None)));
+                                                                    this.context_menu_scroll = UniformListScrollHandle::new();
+                                                                    this.tooltip_request = None;
+                                                                    this.tooltip_timer = None;
+                                                                    cx.notify();
+                                                                });
+                                                            }
+                                                        })
                                                         .child(
                                                             div()
                                                                 .w_4()
@@ -313,8 +447,11 @@ pub fn render_sidebar(view: &OxydeApp, handle: Entity<OxydeApp>, _cx: &mut Conte
                                                                         .w_4()
                                                                         .h_4()
                                                                         .mr_2()
+                                                                        .flex()
+                                                                        .items_center()
+                                                                        .justify_center()
                                                                         .flex_shrink_0()
-                                                                        .child(svg().path("icons/folder.svg").text_color(rgb(0xe0b000)).size_full())
+                                                                        .child(svg().path("icons/folder.svg").size_4().text_color(theme.accent))
                                                                 )
                                                                 .child(
                                                                     div()
@@ -324,17 +461,6 @@ pub fn render_sidebar(view: &OxydeApp, handle: Entity<OxydeApp>, _cx: &mut Conte
                                                                         .child(node.name.clone())
                                                                 )
                                                         )
-                                                        .on_mouse_down(MouseButton::Right, {
-                                                            let h_right = h_inner.clone();
-                                                            move |e, _, cx| {
-                                                                let pos = e.position;
-                                                                let _ = h_right.update(cx, |this, cx| {
-                                                                    this.context_menu = Some((pos, ContextMenuContent::Items(super::oxyde_context_menu_items(h_right.clone()), None)));
-                                                                    this.context_menu_scroll = UniformListScrollHandle::new();
-                                                                    cx.notify();
-                                                                });
-                                                            }
-                                                        })
                                                         .into_any_element()
                                                 }
                                             }
