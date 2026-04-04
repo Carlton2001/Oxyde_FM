@@ -16,8 +16,9 @@ fn main() {
         crate::ui::components::input::bind_keys(cx);
         OxydeApp::bind_keys(cx);
         let app = cx.new(|cx| OxydeApp::empty(cx));
-        let _ = app.update(cx, |this, _| {
+        let _ = app.update(cx, |this, cx| {
             this.handle = Some(app.clone());
+            this.start_watcher_task(cx);
         });
         cx.open_window(
             WindowOptions {
@@ -31,6 +32,11 @@ fn main() {
                 let focus_handle = app.read(cx).focus_handle.clone();
                 window.on_next_frame(move |window, _| {
                     window.focus(&focus_handle);
+                    // On charge l'icône PNG (pour Windows)
+                    let assets = crate::ui::assets::EmbeddedAssetSource::new();
+                    if let Ok(Some(icon_bytes)) = assets.load("icons/logo.png") {
+                        oxyde_lib::platform::platform().set_application_icon(&icon_bytes);
+                    }
                 });
                 app
             },

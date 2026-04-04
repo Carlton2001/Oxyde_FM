@@ -1,5 +1,6 @@
 pub mod sidebar;
 pub mod top_bar;
+pub mod action_bar;
 pub mod file_list;
 pub mod scrollbar;
 pub mod tabs;

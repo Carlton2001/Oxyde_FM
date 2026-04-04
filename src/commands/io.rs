@@ -496,6 +496,12 @@ fn get_shortcut_info(_path: &std::path::Path) -> Option<crate::models::ShortcutI
     None
 }
 
+/// Retourne le chemin cible d'un raccourci (.lnk sur Windows, .desktop sur Linux).
+pub fn resolve_shortcut_target(path: &str) -> Option<String> {
+    get_shortcut_info(std::path::Path::new(path)).map(|info| info.target)
+        .or_else(|| crate::platform::platform().resolve_shortcut(path))
+}
+
 pub async fn get_files_summary(paths: Vec<String>) -> Result<FileSummary, CommandError> {
     let mut total_size = 0;
     let mut files_count = 0;

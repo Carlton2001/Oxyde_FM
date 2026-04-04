@@ -1,24 +1,50 @@
 use gpui::*;
 use gpui::prelude::*;
-use crate::ui::app::OxydeApp;
+use crate::ui::app::{OxydeApp, FileDragData};
 // use gpui_component::{button::{Button, ButtonVariants}, IconName, Size as ComponentSize, Sizable};
 use crate::ui::components::dropdown::IconName;
 use crate::ui::components::tooltip::Tooltip;
+use crate::ui::theme::ThemeContext;
 
 use oxyde_lib::models::FileEntry;
+
+/// Returns the display label for a drive letter segment (e.g. "C:" → "Disque local (C:)").
+/// Falls back to the raw part if no matching drive is found in sidebar_items.
+fn drive_display(part: &str, view: &OxydeApp) -> String {
+    use crate::ui::workspace::SidebarItem;
+    let part_upper = part.to_uppercase();
+    for item in &view.state.sidebar_items {
+        if let SidebarItem::Drive { drive, .. } = item {
+            if drive.path.to_uppercase().starts_with(&part_upper) && !drive.label.is_empty() {
+                return format!("{} ({})", drive.label, part);
+            }
+        }
+    }
+    part.to_string()
+}
 
 pub fn render_top_bar(view: &OxydeApp, pane_id: String, handle: Entity<OxydeApp>, _cx: &mut Context<OxydeApp>) -> impl IntoElement {
     let pane = view.state.layout.find_pane(&pane_id).expect("pane exists");
     let active_tab = pane.active_tab();
     let current_path = active_tab.path.clone();
+    let theme = *_cx.theme();
 
     let path_parts: Vec<&str> = current_path
         .split(|c| c == '/' || c == '\\')
         .filter(|s: &&str| !s.is_empty())
         .collect();
+    let total_parts = path_parts.len();
 
     let can_go_back = !active_tab.back_stack.is_empty();
     let can_go_forward = !active_tab.forward_stack.is_empty();
+
+    // Shared constants for consistent look
+    let icon_active   = theme.text_muted;
+    let icon_disabled = rgba(0xffffff18).into();
+    let hover_bg: Hsla  = rgba(0xffffff0a).into();
+    let crumb_sep: Hsla    = rgba(0xffffff44).into(); // chevrons — dim separator
+    let crumb_parent: Hsla = rgba(0xffffffaa).into(); // parent segments — readable but recessed
+    let crumb_current = theme.text;              // current segment — full brightness
 
     div()
         .h(px(32.0))
@@ -26,27 +52,28 @@ pub fn render_top_bar(view: &OxydeApp, pane_id: String, handle: Entity<OxydeApp>
         .flex()
         .items_center()
         .px_4()
-        .bg(rgb(0x0c0c0c))
+        .bg(theme.background)
         .border_b_1()
-        .border_color(rgb(0x1f1f1f))
+        .border_color(theme.border)
         .child(
             div()
                 .flex()
                 .items_center()
+                .gap_1()
                 .child({
                     let mut btn = div()
                         .id("back-btn")
                         .w_6()
                         .h_6()
-                        .mr_2()
                         .flex()
                         .items_center()
-                        .justify_center();
+                        .justify_center()
+                        .rounded_md();
 
                     if can_go_back {
                         let p_id = pane_id.clone();
                         btn = btn
-                            .hover(|s| s.bg(rgb(0x1a1a1a)).rounded_md())
+                            .hover(move |s| s.bg(hover_bg))
                             .tooltip(Tooltip::with_meta("Précédent", "Alt+Gauche"))
                             .on_mouse_down(MouseButton::Left, {
                                 let h = handle.clone();
@@ -57,24 +84,46 @@ pub fn render_top_bar(view: &OxydeApp, pane_id: String, handle: Entity<OxydeApp>
                     btn.child(
                         svg()
                             .path("icons/arrow-left.svg")
-                            .text_color(if can_go_back { rgb(0x888888) } else { rgb(0x333333) })
+                            .text_color(if can_go_back { icon_active } else { icon_disabled })
                             .size_4()
                     )
+                })
+                .child({
+                    div()
+                        .id("refresh-btn")
+                        .w_6()
+                        .h_6()
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .rounded_md()
+                        .hover(move |s| s.bg(hover_bg))
+                        .tooltip(Tooltip::text("Actualiser"))
+                        .on_mouse_down(MouseButton::Left, {
+                            let h = handle.clone();
+                            move |_, _, cx| { let _ = h.update(cx, |this, cx| this.refresh_all(cx)); }
+                        })
+                        .child(
+                            svg()
+                                .path("icons/refresh.svg")
+                                .text_color(icon_active)
+                                .size_4()
+                        )
                 })
                 .child({
                     let mut btn = div()
                         .id("forward-btn")
                         .w_6()
                         .h_6()
-                        .mr_4()
                         .flex()
                         .items_center()
-                        .justify_center();
+                        .justify_center()
+                        .rounded_md();
 
                     if can_go_forward {
                         let p_id = pane_id.clone();
                         btn = btn
-                            .hover(|s| s.bg(rgb(0x1a1a1a)).rounded_md())
+                            .hover(move |s| s.bg(hover_bg))
                             .tooltip(Tooltip::with_meta("Suivant", "Alt+Droite"))
                             .on_mouse_down(MouseButton::Left, {
                                 let h = handle.clone();
@@ -85,22 +134,33 @@ pub fn render_top_bar(view: &OxydeApp, pane_id: String, handle: Entity<OxydeApp>
                     btn.child(
                         svg()
                             .path("icons/arrow-right.svg")
-                            .text_color(if can_go_forward { rgb(0x888888) } else { rgb(0x333333) })
+                            .text_color(if can_go_forward { icon_active } else { icon_disabled })
                             .size_4()
                     )
                 })
+        )
+        // Separator
+        .child(
+            div()
+                .w(px(1.0))
+                .h(px(16.0))
+                .mx_3()
+                .bg(theme.border)
         )
         .child(
             div()
                 .flex()
                 .items_center()
-                .text_color(rgb(0x666666))
+                .flex_1()
+                .overflow_hidden()
                 .children({
                     let mut accumulated_path = String::new();
-                    let mut elements = Vec::new();
+                    let mut elements: Vec<AnyElement> = Vec::new();
 
                     for (index, part) in path_parts.iter().enumerate() {
                         let p_id = pane_id.clone();
+                        let is_last = index == total_parts - 1;
+
                         if index == 0 && part.ends_with(':') {
                             accumulated_path = format!("{}/", part);
                         } else {
@@ -112,134 +172,188 @@ pub fn render_top_bar(view: &OxydeApp, pane_id: String, handle: Entity<OxydeApp>
 
                         let level_path = accumulated_path.clone();
 
+                        // Chevron separator (not before first element)
                         if index > 0 {
-                             let mut parent_path = level_path.clone();
-                             if parent_path.ends_with(part) {
-                                  parent_path = parent_path[..parent_path.len() - part.len()].to_string();
-                             }
+                            let mut parent_path = level_path.clone();
+                            if parent_path.ends_with(part) {
+                                parent_path = parent_path[..parent_path.len() - part.len()].to_string();
+                            }
+                            let parent_path_cap = parent_path.clone();
 
-                             let parent_path_cap = parent_path.clone();
-
-                             elements.push(
-                                div()
-                                    .relative()
-                                    .child(
-                                        div()
-                                            .id(SharedString::from(format!("chevron-btn-{}-{}", p_id, index)))
-                                            .hover(|s| s.bg(rgb(0x1a1a1a)).rounded_md())
-                                            .px_1()
-                                            .mx_0()
-                                            .child(svg().path("icons/chevron-right.svg").size_4().text_color(rgb(0x888888)))
-                                            .on_mouse_down(MouseButton::Left, {
-                                                let handle = handle.clone();
-                                                let p_id_cap = p_id.clone();
-                                                let path_cap = parent_path_cap.clone();
-                                                let idx_cap = index;
-                                                move |_, _, cx: &mut App| {
-                                                    let handle = handle.clone();
-                                                    let p_id_cap = p_id_cap.clone();
-                                                    let path_cap = path_cap.clone();
-                                                    cx.spawn(move |cx: &mut AsyncApp| {
-                                                        let cx = cx.clone();
-                                                        let handle = handle.clone();
-                                                        let p_id_cap = p_id_cap.clone();
-                                                        let path_cap = path_cap.clone();
-                                                        let idx_cap = idx_cap;
-                                                        async move {
-                                                            if let Ok(dirs) = oxyde_lib::commands::io::list_dir(path_cap.clone(), None, None, None, None).await {
-                                                                 let _ = cx.update(|cx| {
-                                                                     let _ = handle.update(cx, |this, cx| {
-                                                                         let filtered_entries: Vec<FileEntry> = dirs.entries.into_iter().filter(|e| e.is_dir).collect();
-                                                                         this.breadcrumb_menu = Some((p_id_cap, path_cap, idx_cap, filtered_entries));
-                                                                         cx.notify();
-                                                                     });
-                                                                 });
-                                                            }
+                            elements.push(
+                               div()
+                                   .relative()
+                                   .child(
+                                       div()
+                                           .id(SharedString::from(format!("chevron-btn-{}-{}", p_id, index)))
+                                           .h(px(24.0))
+                                           .w(px(18.0))
+                                           .flex()
+                                           .items_center()
+                                           .justify_center()
+                                           .rounded_md()
+                                           .hover(move |s| s.bg(hover_bg))
+                                           .child(svg().path("icons/chevron-right.svg").size_3().text_color(crumb_sep))
+                                           .on_mouse_down(MouseButton::Left, {
+                                               let handle = handle.clone();
+                                               let p_id_cap = p_id.clone();
+                                               let path_cap = parent_path_cap.clone();
+                                               let idx_cap = index;
+                                               move |_, _, cx: &mut App| {
+                                                   let handle = handle.clone();
+                                                   let p_id_cap = p_id_cap.clone();
+                                                   let path_cap = path_cap.clone();
+                                                   cx.spawn(move |cx: &mut AsyncApp| {
+                                                       let cx = cx.clone();
+                                                       let handle = handle.clone();
+                                                       let p_id_cap = p_id_cap.clone();
+                                                       let path_cap = path_cap.clone();
+                                                       let idx_cap = idx_cap;
+                                                       async move {
+                                                           if let Ok(dirs) = oxyde_lib::commands::io::list_dir(path_cap.clone(), None, None, None, None).await {
+                                                                let _ = cx.update(|cx| {
+                                                                    let _ = handle.update(cx, |this, cx| {
+                                                                        let filtered_entries: Vec<FileEntry> = dirs.entries.into_iter().filter(|e| e.is_dir).collect();
+                                                                        this.breadcrumb_menu = Some((p_id_cap, path_cap, idx_cap, filtered_entries));
+                                                                        cx.notify();
+                                                                    });
+                                                                });
+                                                           }
+                                                       }
+                                                   }).detach();
+                                               }
+                                           })
+                                   )
+                                   .child({
+                                       let breadcrumb_menu = view.breadcrumb_menu.clone();
+                                       div()
+                                            .when_some(breadcrumb_menu, |this: Div, (m_pane_id, menu_path, _, dirs): (String, String, usize, Vec<FileEntry>)| {
+                                                if m_pane_id == p_id && menu_path == parent_path_cap {
+                                                    let items = dirs.into_iter()
+                                                        .map(|entry| {
+                                                        let h = handle.clone();
+                                                        let p_id = p_id.clone();
+                                                        let entry_path = entry.path.clone();
+                                                        crate::ui::components::dropdown::DropdownItem {
+                                                            label: entry.name.clone(),
+                                                            icon: Some(IconName::FolderOpen),
+                                                            stay_open: false,
+                                                            on_click: std::rc::Rc::new(move |_, app| {
+                                                                let _ = h.update(app, |this, cx| {
+                                                                    this.navigate_to(&p_id, entry_path.clone(), cx);
+                                                                    this.breadcrumb_menu = None;
+                                                                });
+                                                            }),
                                                         }
-                                                    }).detach();
+                                                    }).collect();
+
+                                                    this.child(
+                                                        deferred(
+                                                            anchored()
+                                                                .anchor(Corner::BottomLeft)
+                                                                .child(
+                                                                    _cx.new(|_| crate::ui::components::dropdown::GenericDropdown {
+                                                                        h_app: handle.clone(),
+                                                                        items,
+                                                                        scroll_handle: view.breadcrumb_scroll.clone(),
+                                                                        width: None,
+                                                                        max_height: 360.0,
+                                                                        header: None,
+                                                                        on_close: {
+                                                                            let h = handle.clone();
+                                                                            std::rc::Rc::new(move |_, app| {
+                                                                                let _ = h.update(app, |this, _| {
+                                                                                    this.breadcrumb_menu = None;
+                                                                                });
+                                                                            })
+                                                                        },
+                                                                        on_drag: std::rc::Rc::new(|this, tid, vh, ch, _| {
+                                                                           this.drag_target = Some(crate::ui::app::DragTarget::BreadcrumbV {
+                                                                               viewport_h: vh,
+                                                                               content_h: ch,
+                                                                               track_id: tid
+                                                                           });
+                                                                        }),
+                                                                        is_dragging: matches!(view.drag_target, Some(crate::ui::app::DragTarget::BreadcrumbV { .. })),
+                                                                    })
+                                                                )
+                                                        )
+                                                    )
+                                                } else {
+                                                    this
                                                 }
                                             })
-                                    )
-                                    .child({
-                                        let breadcrumb_menu = view.breadcrumb_menu.clone();
-                                        div()
-                                             .when_some(breadcrumb_menu, |this: Div, (m_pane_id, menu_path, _, dirs): (String, String, usize, Vec<FileEntry>)| {
-                                                 if m_pane_id == p_id && menu_path == parent_path_cap {
-                                                     let items = dirs.into_iter()
-                                                         .map(|entry| {
-                                                         let h = handle.clone();
-                                                         let p_id = p_id.clone();
-                                                         let entry_path = entry.path.clone();
-                                                         crate::ui::components::dropdown::DropdownItem {
-                                                             label: entry.name.clone(),
-                                                             icon: Some(IconName::FolderOpen),
-                                                             stay_open: false,
-                                                             on_click: std::rc::Rc::new(move |_, app| {
-                                                                 let _ = h.update(app, |this, cx| {
-                                                                     this.navigate_to(&p_id, entry_path.clone(), cx);
-                                                                     this.breadcrumb_menu = None;
-                                                                 });
-                                                             }),
-                                                         }
-                                                     }).collect();
-
-                                                     this.child(
-                                                         deferred(
-                                                             anchored()
-                                                                 .anchor(Corner::BottomLeft)
-                                                                 .child(
-                                                                     _cx.new(|_| crate::ui::components::dropdown::GenericDropdown {
-                                                                         h_app: handle.clone(),
-                                                                         items,
-                                                                         scroll_handle: view.breadcrumb_scroll.clone(),
-                                                                         width: None,
-                                                                         max_height: 360.0,
-                                                                         header: None,
-                                                                         on_close: {
-                                                                             let h = handle.clone();
-                                                                             std::rc::Rc::new(move |_, app| {
-                                                                                 let _ = h.update(app, |this, _| {
-                                                                                     this.breadcrumb_menu = None;
-                                                                                 });
-                                                                             })
-                                                                         },
-                                                                         on_drag: std::rc::Rc::new(|this, tid, vh, ch, _| {
-                                                                            this.drag_target = Some(crate::ui::app::DragTarget::BreadcrumbV { 
-                                                                                viewport_h: vh, 
-                                                                                content_h: ch, 
-                                                                                track_id: tid 
-                                                                            });
-                                                                         }),
-                                                                         is_dragging: matches!(view.drag_target, Some(crate::ui::app::DragTarget::BreadcrumbV { .. })),
-                                                                     })
-                                                                 )
-                                                         )
-                                                     )
-                                                 } else {
-                                                     this
-                                                 }
-                                             })
-                                    })
-                                    .into_any_element()
-                             );
+                                   })
+                                   .into_any_element()
+                            );
                         }
 
+                        // Breadcrumb segment label
                         let target_path = level_path.clone();
-                        elements.push(
-                            div()
-                                .hover(|s| s.text_color(rgb(0xdddddd)))
-                                .on_mouse_down(MouseButton::Left, {
-                                    let h = handle.clone();
-                                    let p_id_cap = p_id.clone();
-                                    move |_, _, cx| {
-                                        let _ = h.update(cx, |this: &mut OxydeApp, cx| {
-                                            this.navigate_to(&p_id_cap, target_path.clone(), cx);
-                                        });
-                                    }
-                                })
-                                .child(part.to_string())
-                                .into_any_element()
-                        );
+                        let seg_color = if is_last { crumb_current } else { crumb_parent };
+
+                        let display_label = if index == 0 && part.ends_with(':') {
+                            drive_display(part, view)
+                        } else {
+                            part.to_string()
+                        };
+
+                        let seg = div()
+                            .id(SharedString::from(format!("breadcrumb-{}-{}", p_id, index)))
+                            .h(px(24.0))
+                            .px(px(6.0))
+                            .flex()
+                            .items_center()
+                            .rounded_md()
+                            .text_color(seg_color)
+                            .when(is_last, |d| d.font_weight(FontWeight::MEDIUM))
+                            .when(!is_last, |d| {
+                                d.hover(move |s| s.text_color(theme.text_muted).bg(hover_bg))
+                                 .on_mouse_down(MouseButton::Left, {
+                                     let h = handle.clone();
+                                     let p_id_cap = p_id.clone();
+                                     let nav_path = target_path.clone();
+                                     move |_, _, cx| {
+                                         let _ = h.update(cx, |this: &mut OxydeApp, cx| {
+                                             this.navigate_to(&p_id_cap, nav_path.clone(), cx);
+                                         });
+                                     }
+                                 })
+                            })
+                            .drag_over::<FileDragData>({
+                                let h_over = handle.clone();
+                                let tgt = target_path.clone();
+                                move |style, data, _, cx| {
+                                    let default_copy = data.paths.first()
+                                        .map(|s| crate::ui::app::drives_differ(s, &tgt))
+                                        .unwrap_or(false);
+                                    let _ = h_over.update(cx, |this, cx| {
+                                        if this.drag_target_default_copy != default_copy {
+                                            this.drag_target_default_copy = default_copy;
+                                            this.update_drag_copy_mode(cx);
+                                        }
+                                    });
+                                    style.bg(rgba(0x0078d430)).text_color(rgb(0xffffff))
+                                }
+                            })
+                            .on_drop({
+                                let h_drop = handle.clone();
+                                let tgt = target_path.clone();
+                                move |data: &FileDragData, _, cx| {
+                                    let paths = data.paths.clone();
+                                    let target = tgt.clone();
+                                    let _ = h_drop.update(cx, |this, cx| {
+                                        if this.drag_copy_mode {
+                                            this.execute_file_copy(paths, target, cx);
+                                        } else {
+                                            this.execute_file_move(paths, target, cx);
+                                        }
+                                    });
+                                }
+                            })
+                            .child(display_label);
+
+                        elements.push(seg.into_any_element());
                     }
                     elements
                 })

@@ -1,5 +1,5 @@
 use gpui::*;
-use crate::ui::app::{OxydeApp, DragTarget, ContextMenuContent};
+use crate::ui::app::{OxydeApp, DragTarget, ContextMenuContent, FileDragData, FileDragPreview};
 use crate::ui::workspace::SidebarItem;
 use crate::ui::components::scrollbar::{render_scrollbar, ScrollbarAxis};
 use crate::ui::theme::{OxydeTheme, ThemeContext, PixelsExt};
@@ -61,10 +61,15 @@ pub fn render_sidebar(view: &OxydeApp, handle: Entity<OxydeApp>, _cx: &mut Conte
                 })
                 .child(
                     div()
+                        .h(px(16.0))
+                )
+                .child(
+                    div()
                         .absolute()
+                        .top(px(16.0))
+                        .bottom_0()
                         .left(view.sidebar_scroll_h.offset().x)
                         .w(px(content_w))
-                        .h_full()
                         .child({
                             uniform_list(
                                 "sidebar-list",
@@ -180,7 +185,7 @@ pub fn render_sidebar(view: &OxydeApp, handle: Entity<OxydeApp>, _cx: &mut Conte
                                                                 .items_center()
                                                                 .justify_center()
                                                                 .flex_shrink_0()
-                                                                .child(svg().path("icons/star.svg").size_4().text_color(theme.accent))
+                                                                .child(svg().path("icons/pin.svg").size_4().text_color(theme.accent))
                                                         )
                                                         .child(
                                                             div()
@@ -190,6 +195,37 @@ pub fn render_sidebar(view: &OxydeApp, handle: Entity<OxydeApp>, _cx: &mut Conte
                                                                 .text_color(theme.text)
                                                                 .child(item.name.clone())
                                                         )
+                                                        .drag_over::<FileDragData>({
+                                                            let h_over = h_inner.clone();
+                                                            let tgt = path.clone();
+                                                            move |style, data, _, cx| {
+                                                                let default_copy = data.paths.first()
+                                                                    .map(|s| crate::ui::app::drives_differ(s, &tgt))
+                                                                    .unwrap_or(false);
+                                                                let _ = h_over.update(cx, |this, cx| {
+                                                                    if this.drag_target_default_copy != default_copy {
+                                                                        this.drag_target_default_copy = default_copy;
+                                                                        this.update_drag_copy_mode(cx);
+                                                                    }
+                                                                });
+                                                                style.bg(rgba(0x0078d440))
+                                                            }
+                                                        })
+                                                        .on_drop({
+                                                            let h_drop = h_inner.clone();
+                                                            let drop_path = path.clone();
+                                                            move |data: &FileDragData, _, cx| {
+                                                                let paths = data.paths.clone();
+                                                                let target = drop_path.clone();
+                                                                let _ = h_drop.update(cx, |this, cx| {
+                                                                    if this.drag_copy_mode {
+                                                                        this.execute_file_copy(paths, target, cx);
+                                                                    } else {
+                                                                        this.execute_file_move(paths, target, cx);
+                                                                    }
+                                                                });
+                                                            }
+                                                        })
                                                         .into_any_element()
                                                 }
                                                 SidebarItem::Drive { drive, is_expanded } => {
@@ -321,12 +357,44 @@ pub fn render_sidebar(view: &OxydeApp, handle: Entity<OxydeApp>, _cx: &mut Conte
                                                                         .child(format!("{} ({})", drive.label, drive.path))
                                                                 )
                                                         )
+                                                        .drag_over::<FileDragData>({
+                                                            let h_over = h_inner.clone();
+                                                            let tgt = path.clone();
+                                                            move |style, data, _, cx| {
+                                                                let default_copy = data.paths.first()
+                                                                    .map(|s| crate::ui::app::drives_differ(s, &tgt))
+                                                                    .unwrap_or(false);
+                                                                let _ = h_over.update(cx, |this, cx| {
+                                                                    if this.drag_target_default_copy != default_copy {
+                                                                        this.drag_target_default_copy = default_copy;
+                                                                        this.update_drag_copy_mode(cx);
+                                                                    }
+                                                                });
+                                                                style.bg(rgba(0x0078d440))
+                                                            }
+                                                        })
+                                                        .on_drop({
+                                                            let h_drop = h_inner.clone();
+                                                            let drop_path = path.clone();
+                                                            move |data: &FileDragData, _, cx| {
+                                                                let paths = data.paths.clone();
+                                                                let target = drop_path.clone();
+                                                                let _ = h_drop.update(cx, |this, cx| {
+                                                                    if this.drag_copy_mode {
+                                                                        this.execute_file_copy(paths, target, cx);
+                                                                    } else {
+                                                                        this.execute_file_move(paths, target, cx);
+                                                                    }
+                                                                });
+                                                            }
+                                                        })
                                                         .into_any_element()
                                                 }
                                                 SidebarItem::Directory { node, depth, is_expanded } => {
                                                     let path = node.path.clone();
                                                     let h_inner = h.clone();
                                                     div()
+                                                        .id(SharedString::from(format!("sidebar-dir-{}", path)))
                                                         .h(px(SIDEBAR_ROW_H))
                                                         .pl(px(8.0 + (*depth as f32 * 12.0)))
                                                         .pr_3()
@@ -461,6 +529,58 @@ pub fn render_sidebar(view: &OxydeApp, handle: Entity<OxydeApp>, _cx: &mut Conte
                                                                         .child(node.name.clone())
                                                                 )
                                                         )
+                                                        .on_drag(
+                                                            FileDragData { paths: vec![path.clone()], source_pane_id: "sidebar".to_string() },
+                                                            {
+                                                                let drag_path = path.clone();
+                                                                let h_drag = h_inner.clone();
+                                                                move |_, cursor_offset, _, cx| {
+                                                                    let app = h_drag.clone();
+                                                                    let paths = vec![drag_path.clone()];
+                                                                    cx.new(|cx| FileDragPreview::new(paths, cursor_offset, app, cx))
+                                                                }
+                                                            }
+                                                        )
+                                                        .drag_over::<FileDragData>({
+                                                            let drag_path = path.clone();
+                                                            let h_over = h_inner.clone();
+                                                            let tgt = path.clone();
+                                                            move |style, data, _, cx| {
+                                                                // Don't highlight if dragging onto itself
+                                                                if data.paths == vec![drag_path.clone()] {
+                                                                    return style;
+                                                                }
+                                                                let default_copy = data.paths.first()
+                                                                    .map(|s| crate::ui::app::drives_differ(s, &tgt))
+                                                                    .unwrap_or(false);
+                                                                let _ = h_over.update(cx, |this, cx| {
+                                                                    if this.drag_target_default_copy != default_copy {
+                                                                        this.drag_target_default_copy = default_copy;
+                                                                        this.update_drag_copy_mode(cx);
+                                                                    }
+                                                                });
+                                                                style.bg(rgba(0x0078d440))
+                                                            }
+                                                        })
+                                                        .on_drop({
+                                                            let h_drop = h_inner.clone();
+                                                            let drop_path = path.clone();
+                                                            move |data: &FileDragData, _, cx| {
+                                                                // Prevent dropping a directory onto itself
+                                                                if data.paths == vec![drop_path.clone()] {
+                                                                    return;
+                                                                }
+                                                                let paths = data.paths.clone();
+                                                                let target = drop_path.clone();
+                                                                let _ = h_drop.update(cx, |this, cx| {
+                                                                    if this.drag_copy_mode {
+                                                                        this.execute_file_copy(paths, target, cx);
+                                                                    } else {
+                                                                        this.execute_file_move(paths, target, cx);
+                                                                    }
+                                                                });
+                                                            }
+                                                        })
                                                         .into_any_element()
                                                 }
                                             }

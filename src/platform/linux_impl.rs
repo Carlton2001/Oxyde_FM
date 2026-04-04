@@ -1,0 +1,182 @@
+use crate::models::{DriveInfo, QuickAccessItem};
+use super::Platform;
+
+pub struct LinuxPlatform;
+
+impl LinuxPlatform {
+    pub fn new() -> Self { Self }
+}
+
+impl Platform for LinuxPlatform {
+    fn name(&self) -> &'static str { "linux" }
+
+    fn list_drives(&self, _skip_hardware_info: bool) -> Vec<DriveInfo> {
+        // Systèmes de fichiers virtuels à ignorer
+        const SKIP_FS: &[&str] = &[
+            "proc", "sysfs", "devtmpfs", "devpts", "tmpfs", "cgroup", "cgroup2",
+            "pstore", "bpf", "tracefs", "debugfs", "hugetlbfs", "mqueue",
+            "fusectl", "configfs", "ramfs", "overlay", "aufs", "squashfs",
+            "efivarfs", "securityfs", "autofs",
+        ];
+
+        let content = std::fs::read_to_string("/proc/mounts").unwrap_or_default();
+        let mut drives: Vec<DriveInfo> = content
+            .lines()
+            .filter_map(|line| {
+                let mut parts = line.splitn(4, ' ');
+                let device    = parts.next()?;
+                let mount     = parts.next()?;
+                let fs_type   = parts.next()?;
+                let options   = parts.next().unwrap_or("");
+
+                if SKIP_FS.contains(&fs_type) { return None; }
+                if mount.starts_with("/proc")
+                    || mount.starts_with("/sys")
+                    || mount.starts_with("/dev/pts")
+                    || mount.starts_with("/run")
+                { return None; }
+
+                let label = if mount == "/" {
+                    "Root".to_string()
+                } else {
+                    std::path::Path::new(mount)
+                        .file_name()
+                        .map(|n| n.to_string_lossy().to_string())
+                        .unwrap_or_else(|| mount.to_string())
+                };
+
+                let drive_type = if device.starts_with("//") || device.starts_with("cifs") || fs_type == "nfs" || fs_type == "nfs4" || fs_type == "smbfs" {
+                    "remote"
+                } else if device.starts_with("/dev/sr") || device.starts_with("/dev/cdrom") || fs_type == "iso9660" || fs_type == "udf" {
+                    "cdrom"
+                } else if device.starts_with("/dev/sd") || device.starts_with("/dev/nvme") || device.starts_with("/dev/mmcblk") || device.starts_with("/dev/vd") {
+                    "fixed"
+                } else {
+                    "fixed"
+                }.to_string();
+
+                let is_readonly = options.split(',').any(|o| o == "ro");
+
+                Some(DriveInfo {
+                    path: mount.to_string(),
+                    label,
+                    drive_type,
+                    is_readonly,
+                    // TODO: remplir via statvfs (nécessite la crate `nix`)
+                    total_bytes: 0,
+                    free_bytes: 0,
+                    media_type: None,
+                    physical_id: None,
+                    remote_path: if device.starts_with("//") { Some(device.to_string()) } else { None },
+                })
+            })
+            .collect();
+
+        if drives.is_empty() {
+            drives.push(DriveInfo {
+                path: "/".to_string(),
+                label: "Root".to_string(),
+                drive_type: "fixed".to_string(),
+                is_readonly: false,
+                total_bytes: 0,
+                free_bytes: 0,
+                media_type: None,
+                physical_id: None,
+                remote_path: None,
+            });
+        }
+
+        drives
+    }
+
+    fn open_item(&self, path: &str) -> Result<(), String> {
+        std::process::Command::new("xdg-open")
+            .arg(path)
+            .spawn()
+            .map(|_| ())
+            .map_err(|e| e.to_string())
+    }
+
+    fn get_quick_access_items(&self) -> Vec<QuickAccessItem> {
+        // Format GTK bookmarks : "file:///chemin/vers/dossier [Nom optionnel]"
+        let home = dirs::home_dir().unwrap_or_default();
+        let bookmarks_path = home.join(".config/gtk-3.0/bookmarks");
+
+        let content = match std::fs::read_to_string(&bookmarks_path) {
+            Ok(c) => c,
+            Err(_) => return vec![QuickAccessItem { name: "Dossier personnel".to_string(), path: home.to_string_lossy().to_string() }],
+        };
+
+        content
+            .lines()
+            .filter_map(|line| {
+                let line = line.trim();
+                if line.is_empty() { return None; }
+
+                let mut parts = line.splitn(2, ' ');
+                let uri  = parts.next()?;
+                let name_hint = parts.next();
+
+                let path = uri.strip_prefix("file://")?;
+                let decoded = percent_encoding::percent_decode_str(path)
+                    .decode_utf8_lossy()
+                    .to_string();
+
+                let name = name_hint
+                    .map(|n| n.to_string())
+                    .unwrap_or_else(|| {
+                        std::path::Path::new(&decoded)
+                            .file_name()
+                            .map(|n| n.to_string_lossy().to_string())
+                            .unwrap_or_else(|| decoded.clone())
+                    });
+
+                Some(QuickAccessItem { name, path: decoded })
+            })
+            .collect()
+    }
+
+    fn get_accent_color(&self) -> String {
+        // TODO: lire depuis les settings GTK / KDE
+        "#0078d4".to_string()
+    }
+
+    fn resolve_shortcut(&self, path: &str) -> Option<String> {
+        // Fichiers .desktop (freedesktop.org)
+        let p = std::path::Path::new(path);
+        if p.extension()?.eq_ignore_ascii_case("desktop") {
+            let content = std::fs::read_to_string(p).ok()?;
+            // Cherche d'abord Path= (répertoire de travail), puis Exec=
+            for line in content.lines() {
+                if let Some(val) = line.strip_prefix("Path=") {
+                    let val = val.trim();
+                    if !val.is_empty() {
+                        return Some(val.to_string());
+                    }
+                }
+            }
+            for line in content.lines() {
+                if let Some(exec) = line.strip_prefix("Exec=") {
+                    // Supprime les codes de champs (%u, %f, %F, etc.)
+                    let cmd = exec.trim().split_whitespace().next()?;
+                    let cmd = cmd.trim_end_matches(|c: char| c == '%' || c.is_ascii_uppercase());
+                    if !cmd.is_empty() {
+                        return Some(cmd.to_string());
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    fn show_properties_dialog(&self, path: &str) {
+        // Tentative via `gio info` ou `nautilus --properties` selon l'environnement
+        let _ = std::process::Command::new("gio")
+            .args(["open", path])
+            .spawn();
+    }
+
+    fn set_application_icon(&self, _icon_bytes: &[u8]) {
+        // TODO
+    }
+}

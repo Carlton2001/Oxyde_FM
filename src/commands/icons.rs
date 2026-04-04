@@ -1,3 +1,5 @@
+#![cfg(target_os = "windows")]
+
 use image::RgbaImage;
 use std::io::Cursor;
 use std::os::windows::ffi::OsStrExt;

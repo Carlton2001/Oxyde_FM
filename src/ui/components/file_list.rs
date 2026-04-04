@@ -1,7 +1,7 @@
 use gpui::*;
 use gpui::prelude::*;
 use oxyde_lib::models::FileEntry;
-use crate::ui::app::{OxydeApp, DragTarget, ContextMenuContent};
+use crate::ui::app::{OxydeApp, DragTarget, ContextMenuContent, FileDragData, FileDragPreview};
 use crate::ui::style::{ROW_HEIGHT, format_size, format_date};
 use crate::ui::components::scrollbar::{render_scrollbar, ScrollbarAxis, ZED_TRACK_WIDTH};
 use crate::ui::theme::{OxydeTheme, ThemeContext, PixelsExt};
@@ -148,11 +148,49 @@ pub fn render_file_list(view: &OxydeApp, pane_id: String, handle: Entity<OxydeAp
                                                         let shift = e.modifiers.shift;
                                                         let _ = h_inner_inner.update(cx, |this, cx| {
                                                             this.state.active_pane_id = p_id_cap.clone();
-                                                            this.toggle_selection(&p_id_cap, p.clone(), multi, shift, cx);
+                                                            // If file is already part of a multi-selection and no modifier
+                                                            // is held, preserve the selection so dragging all files works.
+                                                            // on_click will narrow the selection if no drag happens.
+                                                            let preserve = !multi && !shift && this.state
+                                                                .find_pane(&p_id_cap)
+                                                                .map(|pane| {
+                                                                    let sel = &pane.active_tab().selected_paths;
+                                                                    sel.len() > 1 && sel.contains(&p)
+                                                                })
+                                                                .unwrap_or(false);
+                                                            if !preserve {
+                                                                this.toggle_selection(&p_id_cap, p.clone(), multi, shift, cx);
+                                                            }
                                                         });
                                                         if e.click_count == 2 && is_dir {
                                                             let _ = h_inner_inner.update(cx, |v, cx| v.navigate_to(&p_id_cap, p.clone(), cx));
                                                         }
+                                                    }
+                                                })
+                                                .on_click({
+                                                    let h = h.clone();
+                                                    let p = path.clone();
+                                                    let p_id_cap = p_id.clone();
+                                                    move |event, _, cx| {
+                                                        // Only narrow when no modifier: click without drag on a
+                                                        // multi-selected file should deselect the others.
+                                                        if event.modifiers().control || event.modifiers().shift {
+                                                            return;
+                                                        }
+                                                        let _ = h.update(cx, |this, cx| {
+                                                            let is_multi = this.state.find_pane(&p_id_cap)
+                                                                .map(|pane| pane.active_tab().selected_paths.len() > 1)
+                                                                .unwrap_or(false);
+                                                            if is_multi {
+                                                                if let Some(pane) = this.state.find_pane_mut(&p_id_cap) {
+                                                                    let tab = pane.active_tab_mut();
+                                                                    tab.selected_paths.clear();
+                                                                    tab.selected_paths.insert(p.clone());
+                                                                    tab.selection_anchor = Some(p.clone());
+                                                                }
+                                                                cx.notify();
+                                                            }
+                                                        });
                                                     }
                                                 })
                                                 .on_mouse_down(MouseButton::Middle, {
@@ -188,6 +226,58 @@ pub fn render_file_list(view: &OxydeApp, pane_id: String, handle: Entity<OxydeAp
                                                           });
                                                      }
                                                  })
+                                                .on_drag({
+                                                    let drag_paths = if is_selected && !selected_paths.is_empty() {
+                                                        selected_paths.iter().cloned().collect::<Vec<_>>()
+                                                    } else {
+                                                        vec![path.clone()]
+                                                    };
+                                                    FileDragData { paths: drag_paths.clone(), source_pane_id: p_id.clone() }
+                                                }, {
+                                                    let drag_paths = if is_selected && !selected_paths.is_empty() {
+                                                        selected_paths.iter().cloned().collect::<Vec<_>>()
+                                                    } else {
+                                                        vec![path.clone()]
+                                                    };
+                                                    let h_drag = h.clone();
+                                                    move |_, cursor_offset, _window, cx| {
+                                                        let app = h_drag.clone();
+                                                        let paths = drag_paths.clone();
+                                                        cx.new(|cx| FileDragPreview::new(paths, cursor_offset, app, cx))
+                                                    }
+                                                })
+                                                .when(is_dir, |row| {
+                                                    let h_drop = h.clone();
+                                                    let target_path = path.clone();
+                                                    row
+                                                        .drag_over::<FileDragData>({
+                                                            let h_over = h.clone();
+                                                            let tgt = path.clone();
+                                                            move |style, data, _, cx| {
+                                                                let default_copy = data.paths.first()
+                                                                    .map(|s| crate::ui::app::drives_differ(s, &tgt))
+                                                                    .unwrap_or(false);
+                                                                let _ = h_over.update(cx, |this, cx| {
+                                                                    if this.drag_target_default_copy != default_copy {
+                                                                        this.drag_target_default_copy = default_copy;
+                                                                        this.update_drag_copy_mode(cx);
+                                                                    }
+                                                                });
+                                                                style.bg(rgba(0x0078d440))
+                                                            }
+                                                        })
+                                                        .on_drop(move |data: &FileDragData, _, cx| {
+                                                            let paths = data.paths.clone();
+                                                            let target = target_path.clone();
+                                                            let _ = h_drop.update(cx, |this, cx| {
+                                                                if this.drag_copy_mode {
+                                                                    this.execute_file_copy(paths, target, cx);
+                                                                } else {
+                                                                    this.execute_file_move(paths, target, cx);
+                                                                }
+                                                            });
+                                                        })
+                                                })
                                                 .child(
                                                     div()
                                                         .w(px(name_w))
@@ -297,6 +387,46 @@ pub fn render_file_list(view: &OxydeApp, pane_id: String, handle: Entity<OxydeAp
                                             initial_selection: this.state.find_pane(&p_id_cap).map(|p| p.active_tab().selected_paths.clone()).unwrap_or_default(),
                                         });
                                         cx.notify();
+                                    });
+                                }
+                            })
+                            .drag_over::<FileDragData>({
+                                let p_id_cap = pane_id.clone();
+                                let h_over = handle.clone();
+                                let current_path = active_tab.path.clone();
+                                move |style, data, _, cx| {
+                                    if data.source_pane_id != p_id_cap {
+                                        let default_copy = data.paths.first()
+                                            .map(|s| crate::ui::app::drives_differ(s, &current_path))
+                                            .unwrap_or(false);
+                                        let _ = h_over.update(cx, |this, cx| {
+                                            if this.drag_target_default_copy != default_copy {
+                                                this.drag_target_default_copy = default_copy;
+                                                this.update_drag_copy_mode(cx);
+                                            }
+                                        });
+                                        style.bg(rgba(0x0078d420))
+                                    } else {
+                                        style
+                                    }
+                                }
+                            })
+                            .on_drop({
+                                let h = handle.clone();
+                                let p_id_cap = pane_id.clone();
+                                move |data: &FileDragData, _, cx| {
+                                    let paths = data.paths.clone();
+                                    let _ = h.update(cx, |this, cx| {
+                                        let target = this.state.find_pane(&p_id_cap)
+                                            .map(|p| p.active_tab().path.clone())
+                                            .unwrap_or_default();
+                                        if !target.is_empty() {
+                                            if this.drag_copy_mode {
+                                                this.execute_file_copy(paths, target, cx);
+                                            } else {
+                                                this.execute_file_move(paths, target, cx);
+                                            }
+                                        }
                                     });
                                 }
                             })

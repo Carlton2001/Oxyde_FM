@@ -135,7 +135,6 @@ impl RenderOnce for Tab {
             .bg(bg_color)
             .flex()
             .items_center()
-            .text_sm()
             .text_color(text_color)
             .group("tab");
             

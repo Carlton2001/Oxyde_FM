@@ -1,3 +1,5 @@
+#![cfg(target_os = "windows")]
+
 use crate::models::NetResource;
 use windows::Win32::NetworkManagement::WNet::{
     WNetOpenEnumW, WNetEnumResourceW, WNetCloseEnum, WNetAddConnection2W, WNetCancelConnection2W,

@@ -190,14 +190,7 @@ pub fn get_drives(skip_hardware_info: Option<bool>) -> Vec<DriveInfo> {
     }
     #[cfg(not(target_os = "windows"))]
     {
-        vec![DriveInfo {
-            path: "/".to_string(),
-            label: "Root".to_string(),
-            drive_type: "fixed".to_string(),
-            is_readonly: false,
-            total_bytes: 0,
-            free_bytes: 0,
-        }]
+        crate::platform::platform().list_drives(skip_hardware_info)
     }
 }
 
@@ -290,7 +283,7 @@ pub async fn open_item(path: String) -> Result<(), CommandError> {
     }
     #[cfg(not(target_os = "windows"))]
     {
-        // fallback for linux/mac if needed later
+        crate::platform::platform().open_item(&normalized_path).map_err(CommandError::SystemError)?;
     }
     Ok(())
 }
@@ -928,7 +921,7 @@ pub fn get_quick_access_items() -> Result<Vec<QuickAccessItem>, CommandError> {
     }
     #[cfg(not(target_os = "windows"))]
     {
-        Ok(Vec::new())
+        Ok(crate::platform::platform().get_quick_access_items())
     }
 }
 

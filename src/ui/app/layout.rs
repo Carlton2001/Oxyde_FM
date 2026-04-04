@@ -1,6 +1,6 @@
 use gpui::*;
 pub use gpui::prelude::*;
-use crate::ui::app::{OxydeApp, DragTarget};
+use crate::ui::app::{OxydeApp, DragTarget, FileDragData};
 pub use crate::ui::theme::{PixelsExt, ThemeContext};
 
 impl OxydeApp {
@@ -209,6 +209,7 @@ impl OxydeApp {
     pub(crate) fn render_pane(&self, pane: &crate::ui::workspace::PaneState, handle: Entity<Self>, cx: &mut Context<Self>) -> AnyElement {
         use crate::ui::components::tabs::{TabBar, Tab, TabPosition, TabDragPreview};
         use crate::ui::components::top_bar::render_top_bar;
+        use crate::ui::components::action_bar::render_action_bar;
         use crate::ui::components::file_list::render_file_list;
 
         let h = handle.clone();
@@ -246,6 +247,7 @@ impl OxydeApp {
                     };
 
                     let label_cap = label.clone();
+                    let tab_path = tab_data.path.clone();
                     let is_dragging = self.dragging_tab == Some((p_id.clone(), t_ix));
                     
                     let tab = Tab::new(SharedString::from(format!("tab-{}-{}", p_id, t_ix)), label.clone())
@@ -282,6 +284,42 @@ impl OxydeApp {
                         div()
                             .relative()
                             .child(tab)
+                            // File Drop Zone (drop files onto tab to move them to that tab's directory)
+                            .child(
+                                div()
+                                    .absolute()
+                                    .inset_0()
+                                    .drag_over::<FileDragData>({
+                                        let h_over = h.clone();
+                                        let tgt = tab_path.clone();
+                                        move |style, data, _, cx| {
+                                            let default_copy = data.paths.first()
+                                                .map(|s| crate::ui::app::drives_differ(s, &tgt))
+                                                .unwrap_or(false);
+                                            let _ = h_over.update(cx, |this, cx| {
+                                                if this.drag_target_default_copy != default_copy {
+                                                    this.drag_target_default_copy = default_copy;
+                                                    this.update_drag_copy_mode(cx);
+                                                }
+                                            });
+                                            style.bg(rgba(0x0078d430))
+                                        }
+                                    })
+                                    .on_drop({
+                                        let h = h.clone();
+                                        let target = tab_path.clone();
+                                        move |data: &FileDragData, _, cx| {
+                                            let paths = data.paths.clone();
+                                            let _ = h.update(cx, |this, cx| {
+                                                if this.drag_copy_mode {
+                                                    this.execute_file_copy(paths, target.clone(), cx);
+                                                } else {
+                                                    this.execute_file_move(paths, target.clone(), cx);
+                                                }
+                                            });
+                                        }
+                                    })
+                            )
                             // Left Drop Zone
                             .child(
                                 div()
@@ -522,6 +560,7 @@ impl OxydeApp {
             .child({
                 div().id(SharedString::from(format!("pane-content-{}", p_id.clone()))).size_full().flex().flex_col().relative()
                     .child(render_top_bar(self, p_id.clone(), handle.clone(), cx))
+                    .child(render_action_bar(self, handle.clone(), cx))
                     .child(render_file_list(self, p_id.clone(), handle.clone(), cx))
                     // Visual highlights for splits
                     .when(self.highlight_split_pane == Some(p_id.clone()), |s| {

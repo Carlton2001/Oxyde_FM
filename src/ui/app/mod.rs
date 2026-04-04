@@ -1,6 +1,6 @@
 use gpui::*;
 pub use gpui::prelude::*;
-pub use crate::ui::theme::{PixelsExt, ThemeContext};
+pub use crate::ui::theme::{PixelsExt, ThemeContext, OxydeTheme};
 pub use crate::ui::workspace::WorkspaceState;
 pub use oxyde_lib::models::FileEntry;
 
@@ -20,7 +20,7 @@ pub use layout::*;
 
 use crate::ui::components::tooltip::Tooltip;
 
-actions!(oxyde, [Ouvrir, Copier, Couper, Coller, Renommer, Supprimer, ToutSelectionner]);
+actions!(oxyde, [Ouvrir, Copier, Couper, Coller, Renommer, Supprimer, ToutSelectionner, Annuler, Refaire]);
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum DragTarget {
@@ -46,6 +46,135 @@ pub enum ContextMenuHeader {
 pub enum ContextMenuContent {
     Items(Vec<crate::ui::components::dropdown::DropdownItem>, Option<ContextMenuHeader>),
     NameFilter { input: Entity<crate::ui::components::input::TextInput> },
+}
+
+/// Returns true if `src` and `dst` are on different drives/volumes.
+/// On Windows this compares the root prefix (e.g. "C:" vs "D:").
+pub fn drives_differ(src: &str, dst: &str) -> bool {
+    let src_root = std::path::Path::new(src).components().next();
+    let dst_root = std::path::Path::new(dst).components().next();
+    src_root != dst_root
+}
+
+#[derive(Clone)]
+pub struct FileDragData {
+    pub paths: Vec<String>,
+    #[allow(dead_code)]
+    pub source_pane_id: String,
+}
+
+pub struct FileDragPreview {
+    pub paths: Vec<String>,
+    pub cursor_offset: Point<Pixels>,
+    pub app_handle: Entity<OxydeApp>,
+    _subscription: Subscription,
+}
+
+impl FileDragPreview {
+    pub fn new(
+        paths: Vec<String>,
+        cursor_offset: Point<Pixels>,
+        app_handle: Entity<OxydeApp>,
+        cx: &mut Context<Self>,
+    ) -> Self {
+        let sub = cx.observe(&app_handle, |_, _entity, cx| cx.notify());
+        Self { paths, cursor_offset, app_handle, _subscription: sub }
+    }
+}
+
+fn drag_op_pill(key_hint: &str, label: &str, active: bool, theme: &OxydeTheme) -> impl IntoElement {
+    div()
+        .flex()
+        .items_center()
+        .gap(px(4.0))
+        .px(px(6.0))
+        .py(px(3.0))
+        .rounded_md()
+        .bg(if active { theme.accent } else { theme.header })
+        .when(!key_hint.is_empty(), |d| {
+            d.child(
+                div()
+                    .text_size(px(9.0))
+                    .font_weight(FontWeight::BOLD)
+                    .text_color(if active { theme.background } else { theme.text_muted })
+                    .child(key_hint.to_string())
+            )
+        })
+        .child(
+            div()
+                .text_size(px(11.0))
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(if active { theme.background } else { theme.text_muted })
+                .child(label.to_string())
+        )
+}
+
+impl Render for FileDragPreview {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let is_copy = self.app_handle.read(cx).drag_copy_mode;
+        let theme = *cx.theme();
+
+        let (icon_path, name_label) = if self.paths.len() == 1 {
+            let p = std::path::Path::new(&self.paths[0]);
+            let is_dir = p.is_dir();
+            let name = p.file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("Fichier")
+                .to_string();
+            (if is_dir { "icons/folder.svg" } else { "icons/file.svg" }, name)
+        } else {
+            ("icons/file.svg", format!("{} éléments", self.paths.len()))
+        };
+
+        // Root is 0×0; the visible ghost is absolutely positioned at cursor + (12, 4).
+        div()
+            .relative()
+            .child(
+                div()
+                    .absolute()
+                    .left(self.cursor_offset.x + px(12.0))
+                    .top(self.cursor_offset.y + px(4.0))
+                    .px(px(10.0))
+                    .py(px(8.0))
+                    .rounded_md()
+                    .bg(theme.surface)
+                    .border_1()
+                    .border_color(theme.accent)
+                    .flex()
+                    .flex_col()
+                    .gap(px(6.0))
+                    .whitespace_nowrap()
+                    .child(
+                        // File icon + name row
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(px(6.0))
+                            .child(
+                                svg()
+                                    .path(icon_path)
+                                    .size(px(14.0))
+                                    .flex_none()
+                                    .text_color(theme.accent)
+                            )
+                            .child(
+                                div()
+                                    .text_color(theme.text)
+                                    .text_size(px(12.0))
+                                    .font_weight(FontWeight::MEDIUM)
+                                    .child(name_label)
+                            )
+                    )
+                    .child(
+                        // Operation pills row
+                        div()
+                            .flex()
+                            .gap(px(4.0))
+                            .child(drag_op_pill("+Ctrl", "Copier", is_copy, &theme))
+                            .child(drag_op_pill("+Shift", "Déplacer", !is_copy, &theme))
+                    )
+            )
+    }
 }
 
 #[derive(Clone)]
@@ -133,6 +262,7 @@ impl Element for ManualTooltipElement {
 pub struct OxydeApp {
     pub state: WorkspaceState,
     pub handle: Option<Entity<Self>>,
+    pub history: std::sync::Arc<oxyde_lib::models::HistoryManager>,
     pub focus_handle: FocusHandle,
     pub(crate) sidebar_scroll: UniformListScrollHandle,
     pub(crate) sidebar_scroll_h: ScrollHandle,
@@ -162,19 +292,51 @@ pub struct OxydeApp {
     pub tooltip_request: Option<TooltipData>,
     pub tooltip_timer: Option<Task<()>>,
     pub mouse_pos: Point<Pixels>,
+    #[allow(dead_code)]
+    pub file_ops: std::sync::Arc<oxyde_lib::systems::file_ops::FileOperationManager>,
+    pub watcher_changes: std::sync::Arc<std::sync::Mutex<std::collections::VecDeque<String>>>,
+    pub _path_watchers: std::collections::HashMap<String, Box<dyn std::any::Any>>,
+    pub _watcher_task: Option<Task<()>>,
+    /// Effective drag operation: true = copy, false = move.
+    /// Derived from `drag_modifier_copy` (if Some) or `drag_target_default_copy` otherwise.
+    pub drag_copy_mode: bool,
+    /// Modifier override: Some(true) = Ctrl (always copy), Some(false) = Shift (always move),
+    /// None = auto (determined by whether source and target are on different drives).
+    pub drag_modifier_copy: Option<bool>,
+    /// Drive-based default for the currently hovered drop target:
+    /// true if source and target are on different drives → default to copy.
+    pub drag_target_default_copy: bool,
 }
 
 impl OxydeApp {
     pub fn bind_keys(cx: &mut App) {
         cx.bind_keys([
             KeyBinding::new("ctrl-a", ToutSelectionner, None),
+            KeyBinding::new("ctrl-z", Annuler, None),
+            KeyBinding::new("ctrl-y", Refaire, None),
+            KeyBinding::new("ctrl-shift-z", Refaire, None),
         ]);
+    }
+
+    pub fn execute_undo(&mut self, cx: &mut Context<Self>) {
+        let history = self.history.clone();
+        let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
+        let _ = rt.block_on(oxyde_lib::commands::ops::undo_last_action(&history));
+        cx.notify();
+    }
+
+    pub fn execute_redo(&mut self, cx: &mut Context<Self>) {
+        let history = self.history.clone();
+        let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
+        let _ = rt.block_on(oxyde_lib::commands::ops::redo_last_action(&history));
+        cx.notify();
     }
 
     pub fn empty(cx: &mut Context<Self>) -> Self {
         Self {
             state: WorkspaceState::new(),
             handle: None,
+            history: std::sync::Arc::new(oxyde_lib::models::HistoryManager::new()),
             focus_handle: cx.focus_handle(),
             sidebar_scroll: UniformListScrollHandle::new(),
             sidebar_scroll_h: ScrollHandle::new(),
@@ -204,7 +366,270 @@ impl OxydeApp {
             tooltip_request: None,
             tooltip_timer: None,
             mouse_pos: Point::default(),
+            file_ops: std::sync::Arc::new(oxyde_lib::systems::file_ops::FileOperationManager::new()),
+            watcher_changes: std::sync::Arc::new(std::sync::Mutex::new(std::collections::VecDeque::new())),
+            _path_watchers: std::collections::HashMap::new(),
+            _watcher_task: None,
+            drag_copy_mode: false,
+            drag_modifier_copy: None,
+            drag_target_default_copy: false,
         }
+    }
+
+    /// Recompute `drag_copy_mode` from modifier override and drive-based default.
+    /// Notifies if the value changed.
+    pub fn update_drag_copy_mode(&mut self, cx: &mut Context<Self>) {
+        let new_mode = self.drag_modifier_copy.unwrap_or(self.drag_target_default_copy);
+        if self.drag_copy_mode != new_mode {
+            self.drag_copy_mode = new_mode;
+            cx.notify();
+        }
+    }
+
+    pub fn execute_file_move(&mut self, paths: Vec<String>, target_dir: String, cx: &mut Context<Self>) {
+        use oxyde_lib::models::transaction::{Transaction, TransactionType, TransactionDetails};
+
+        // Skip if source and destination are the same directory
+        let all_same = paths.iter().all(|p| {
+            std::path::Path::new(p).parent()
+                .and_then(|par| par.to_str())
+                .map(|par| {
+                    let norm_par = par.replace('\\', "/").trim_end_matches('/').to_string();
+                    let norm_dst = target_dir.replace('\\', "/").trim_end_matches('/').to_string();
+                    norm_par == norm_dst
+                })
+                .unwrap_or(false)
+        });
+        if all_same {
+            return;
+        }
+
+        // Prevent moving a folder into itself or one of its own descendants.
+        // Path::starts_with does component-level matching so "C:\foo" won't
+        // accidentally match "C:\foobar".
+        let dst = std::path::Path::new(&target_dir);
+        if paths.iter().any(|p| dst.starts_with(std::path::Path::new(p))) {
+            return;
+        }
+
+        let mut moved: Vec<String> = Vec::new();
+        for path in &paths {
+            let src = std::path::Path::new(path);
+            if let Some(file_name) = src.file_name() {
+                let dst = std::path::Path::new(&target_dir).join(file_name);
+                let ok = if std::fs::rename(src, &dst).is_ok() {
+                    true
+                } else if src.is_dir() {
+                    let opts = fs_extra::dir::CopyOptions::new();
+                    fs_extra::dir::move_dir(src, std::path::Path::new(&target_dir), &opts).is_ok()
+                } else {
+                    let opts = fs_extra::file::CopyOptions::new();
+                    fs_extra::file::move_file(src, &dst, &opts).is_ok()
+                };
+                if ok {
+                    moved.push(path.clone());
+                }
+            }
+        }
+
+        if !moved.is_empty() {
+            self.history.push(Transaction::new(
+                TransactionType::Move,
+                TransactionDetails {
+                    paths: moved,
+                    target_dir: Some(target_dir),
+                    old_path: None,
+                    new_path: None,
+                    created_files: None,
+                },
+            ));
+            // Refresh sidebar so has_subdirs and directory tree reflect the new state.
+            self.state.refresh_sidebar();
+            self.reconcile_watchers();
+        }
+
+        cx.notify();
+    }
+
+    pub fn execute_file_copy(&mut self, paths: Vec<String>, target_dir: String, cx: &mut Context<Self>) {
+        use oxyde_lib::models::transaction::{Transaction, TransactionType, TransactionDetails};
+
+        let all_same = paths.iter().all(|p| {
+            std::path::Path::new(p).parent()
+                .and_then(|par| par.to_str())
+                .map(|par| {
+                    let norm_par = par.replace('\\', "/").trim_end_matches('/').to_string();
+                    let norm_dst = target_dir.replace('\\', "/").trim_end_matches('/').to_string();
+                    norm_par == norm_dst
+                })
+                .unwrap_or(false)
+        });
+        if all_same {
+            return;
+        }
+
+        // Prevent copying a folder into itself or one of its own descendants.
+        let dst = std::path::Path::new(&target_dir);
+        if paths.iter().any(|p| dst.starts_with(std::path::Path::new(p))) {
+            return;
+        }
+
+        let mut copied: Vec<String> = Vec::new();
+        for path in &paths {
+            let src = std::path::Path::new(path);
+            if let Some(file_name) = src.file_name() {
+                let dst = std::path::Path::new(&target_dir).join(file_name);
+                let ok = if src.is_dir() {
+                    let opts = fs_extra::dir::CopyOptions::new();
+                    fs_extra::dir::copy(src, std::path::Path::new(&target_dir), &opts).is_ok()
+                } else {
+                    let opts = fs_extra::file::CopyOptions::new();
+                    fs_extra::file::copy(src, &dst, &opts).is_ok()
+                };
+                if ok {
+                    copied.push(path.clone());
+                }
+            }
+        }
+
+        if !copied.is_empty() {
+            self.history.push(Transaction::new(
+                TransactionType::Copy,
+                TransactionDetails {
+                    paths: copied,
+                    target_dir: Some(target_dir),
+                    old_path: None,
+                    new_path: None,
+                    created_files: None,
+                },
+            ));
+            self.state.refresh_sidebar();
+            self.reconcile_watchers();
+        }
+
+        cx.notify();
+    }
+
+    /// Rebuild the set of directory watchers to cover every open tab across all panes,
+    /// plus the expanded directories visible in the sidebar tree.
+    /// Watchers are keyed by path so identical paths across multiple tabs share one handle.
+    pub fn reconcile_watchers(&mut self) {
+        use notify::{Config, Event, RecommendedWatcher, RecursiveMode, Watcher};
+        use crate::ui::workspace::SidebarItem;
+
+        // Collect every unique path that should be watched.
+        let mut needed: std::collections::HashSet<String> = std::collections::HashSet::new();
+        self.state.layout.visit_panes(&mut |p| {
+            for tab in &p.tabs {
+                if !tab.path.is_empty() {
+                    needed.insert(tab.path.clone());
+                }
+            }
+        });
+        for item in &self.state.sidebar_items {
+            if let SidebarItem::Directory { node, .. } = item {
+                needed.insert(node.path.clone());
+            }
+        }
+
+        // Drop watchers whose path is no longer needed.
+        self._path_watchers.retain(|p, _| needed.contains(p));
+
+        // Create watchers for newly-needed paths.
+        let changes = self.watcher_changes.clone();
+        for path in needed {
+            if self._path_watchers.contains_key(&path) {
+                continue;
+            }
+            let path_for_cb = path.clone();
+            let ch = changes.clone();
+            let watcher = RecommendedWatcher::new(
+                move |res: notify::Result<Event>| {
+                    if res.is_ok() {
+                        if let Ok(mut q) = ch.lock() {
+                            if !q.contains(&path_for_cb) {
+                                q.push_back(path_for_cb.clone());
+                            }
+                        }
+                    }
+                },
+                Config::default(),
+            );
+            if let Ok(mut w) = watcher {
+                let p = std::path::PathBuf::from(&path);
+                if p.exists() && w.watch(&p, RecursiveMode::NonRecursive).is_ok() {
+                    self._path_watchers.insert(path, Box::new(w));
+                }
+            }
+        }
+    }
+
+    /// Refresh the file list of a specific tab without disturbing its scroll / selection / filters.
+    pub fn refresh_tab_files(&mut self, pane_id: &str, tab_idx: usize, path: String, cx: &mut Context<Self>) {
+        let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
+        if let Ok(response) = rt.block_on(oxyde_lib::commands::io::list_dir(path, None, None, None, None)) {
+            if let Some(pane) = self.state.find_pane_mut(pane_id) {
+                if let Some(tab) = pane.tabs.get_mut(tab_idx) {
+                    tab.files = response.entries;
+                    tab.sort_files();
+                    tab.update_cache();
+                }
+            }
+            cx.notify();
+        }
+    }
+
+    pub fn start_watcher_task(&mut self, cx: &mut Context<Self>) {
+        let changes = self.watcher_changes.clone();
+        let h = self.handle.clone().expect("handle set");
+        self._watcher_task = Some(cx.spawn(move |_, cx: &mut AsyncApp| {
+            let mut cx = cx.clone();
+            async move {
+                loop {
+                    cx.background_executor().timer(std::time::Duration::from_millis(500)).await;
+                    let changed: Vec<String> = if let Ok(mut q) = changes.lock() {
+                        q.drain(..).collect()
+                    } else {
+                        vec![]
+                    };
+                    if !changed.is_empty() {
+                        let _ = h.update(&mut cx, |this, cx| {
+                            use crate::ui::workspace::SidebarItem;
+
+                            // Check if any watched sidebar directory changed → rebuild the tree.
+                            let sidebar_changed = this.state.sidebar_items.iter().any(|item| {
+                                if let SidebarItem::Directory { node, .. } = item {
+                                    changed.contains(&node.path)
+                                } else {
+                                    false
+                                }
+                            });
+                            if sidebar_changed {
+                                this.state.refresh_sidebar();
+                                this.reconcile_watchers();
+                            }
+
+                            // Reload every affected tab (active = full refresh, inactive = files only).
+                            let mut reloads: Vec<(String, usize, String, bool)> = Vec::new();
+                            this.state.layout.visit_panes(&mut |p| {
+                                for (idx, tab) in p.tabs.iter().enumerate() {
+                                    if changed.contains(&tab.path) {
+                                        reloads.push((p.id.clone(), idx, tab.path.clone(), idx == p.active_tab_index));
+                                    }
+                                }
+                            });
+                            for (pane_id, tab_idx, path, is_active) in reloads {
+                                if is_active {
+                                    this.load_path_sync(&pane_id, path, cx);
+                                } else {
+                                    this.refresh_tab_files(&pane_id, tab_idx, path, cx);
+                                }
+                            }
+                        });
+                    }
+                }
+            }
+        }));
     }
 }
 
@@ -244,6 +669,36 @@ impl Render for OxydeApp {
                     let _ = h.update(cx, |this, cx| {
                         let pane_id = this.state.active_pane_id.clone();
                         this.select_all(&pane_id, cx);
+                    });
+                }
+            })
+            .on_action({
+                let h = handle.clone();
+                move |_: &Annuler, _, cx| {
+                    let _ = h.update(cx, |this, cx| this.execute_undo(cx));
+                }
+            })
+            .on_action({
+                let h = handle.clone();
+                move |_: &Refaire, _, cx| {
+                    let _ = h.update(cx, |this, cx| this.execute_redo(cx));
+                }
+            })
+            .on_modifiers_changed({
+                let h = handle.clone();
+                move |e: &ModifiersChangedEvent, _, cx| {
+                    let modifier = if e.modifiers.control {
+                        Some(true)   // Ctrl → always copy
+                    } else if e.modifiers.shift {
+                        Some(false)  // Shift → always move
+                    } else {
+                        None         // auto → determined by drive context
+                    };
+                    let _ = h.update(cx, |this, cx| {
+                        if this.drag_modifier_copy != modifier {
+                            this.drag_modifier_copy = modifier;
+                            this.update_drag_copy_mode(cx);
+                        }
                     });
                 }
             })

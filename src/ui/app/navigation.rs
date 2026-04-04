@@ -40,6 +40,7 @@ impl OxydeApp {
 
     pub fn add_tab(&mut self, pane_id: &str, path: String, activate: bool, cx: &mut Context<Self>) {
         self.state.add_tab(pane_id, path, activate);
+        self.reconcile_watchers();
         cx.notify();
     }
 
@@ -57,6 +58,7 @@ impl OxydeApp {
         self.state.close_tab_id(pane_id, tab_idx);
         self.tooltip_request = None;
         self.tooltip_timer = None;
+        self.reconcile_watchers();
         cx.notify();
     }
 
@@ -73,15 +75,33 @@ impl OxydeApp {
             self.tooltip_timer = None;
             cx.notify();
             let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
-            if let Ok(response) = rt.block_on(list_dir(path, None, None, None, None)) {
+            if let Ok(response) = rt.block_on(list_dir(path.clone(), None, None, None, None)) {
                 if let Some(pane) = self.state.find_pane_mut(pane_id) {
                     let tab = pane.active_tab_mut();
                     tab.files = response.entries;
                     tab.sort_files();
                     tab.update_cache();
-                    tab.list_scroll = UniformListScrollHandle::new();                }
+                    tab.list_scroll = UniformListScrollHandle::new();
+                }
             }
+            self.reconcile_watchers();
             cx.notify();
         }
+    }
+    pub fn refresh_all(&mut self, cx: &mut Context<Self>) {
+        // Refresh Sidebar (Drives, Pinned, etc)
+        self.state.refresh_sidebar();
+
+        // Refresh all open panes (their active tabs)
+        let mut reloads = Vec::new();
+        self.state.layout.visit_panes(&mut |p| {
+            reloads.push((p.id.clone(), p.active_tab().path.clone()));
+        });
+
+        for (pane_id, path) in reloads {
+            self.load_path_sync(&pane_id, path, cx);
+        }
+
+        cx.notify();
     }
 }

@@ -2,6 +2,7 @@ pub mod commands;
 pub mod models;
 pub mod utils;
 pub mod systems;
+pub mod platform;
 
 use std::sync::Mutex;
 use crate::models::SnapRect;
