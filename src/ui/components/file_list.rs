@@ -7,37 +7,33 @@ use crate::ui::components::scrollbar::{render_scrollbar, ScrollbarAxis, ZED_TRAC
 use crate::ui::theme::{OxydeTheme, ThemeContext, PixelsExt};
 use crate::ui::workspace::{SortColumn, SortDirection};
 
-const TYPE_WIDTH: f32 = 100.0;
-const SIZE_WIDTH: f32 = 100.0;
-const DATE_WIDTH: f32 = 180.0;
-
-pub fn render_file_list(view: &OxydeApp, pane_id: String, handle: Entity<OxydeApp>, _cx: &mut Context<OxydeApp>) -> impl IntoElement {
+pub fn render_file_list(view: &OxydeApp, pane_id: String, handle: Entity<OxydeApp>, cx: &mut Context<OxydeApp>) -> impl IntoElement {
     let p_id_cap = pane_id.clone();
-    let theme = _cx.theme();
+    let theme = cx.theme();
     let pane = view.state.layout.find_pane(&pane_id).expect("pane exists");
     let active_tab = pane.active_tab();
     let files = active_tab.filtered_files().to_vec();
     let count = files.len() as f32;
-    let _list_scroll = active_tab.list_scroll.clone();
     
     let pane_size = view.pane_sizes.get(&pane_id).cloned().unwrap_or(Size { width: view.list_width, height: view.list_height });
-    
+    let pane_viewport_w = pane_size.width.max(1.0);
+
     let list_container_h = (pane_size.height - 64.0).max(1.0);
     let v_v_h = (list_container_h - 28.0).max(1.0);
     let content_h = (count * ROW_HEIGHT).max(1.0);
-    
-    let pane_viewport_w = pane_size.width.max(1.0);
-    let fixed_w = TYPE_WIDTH + SIZE_WIDTH + DATE_WIDTH;
+
+    let type_w = active_tab.type_col_width;
+    let size_w = active_tab.size_col_width;
+    let date_w = active_tab.date_col_width;
+
+    let fixed_w = type_w + size_w + date_w;
     let name_w = (pane_viewport_w - fixed_w - 28.0).max(80.0);
     let total_w = name_w + fixed_w;
 
-
+    let is_active_pane = view.state.active_pane_id == pane_id;
     let is_dragging_v = matches!(view.drag_target, Some(DragTarget::FileListV { ref pane_id, .. }) if pane_id == &p_id_cap);
-    let _is_dragging_h = matches!(view.drag_target, Some(DragTarget::FileListH { ref pane_id, .. }) if pane_id == &p_id_cap);
 
     let selected_paths = active_tab.selected_paths.clone();
-
-    let is_active_pane = view.state.active_pane_id == pane_id;
 
     let mut container = div()
         .flex_1()
@@ -88,7 +84,7 @@ pub fn render_file_list(view: &OxydeApp, pane_id: String, handle: Entity<OxydeAp
                         .h_full()
                         .flex()
                         .flex_col()
-                        .child(render_headers(view, pane_id.clone(), handle.clone(), name_w, theme))
+                        .child(render_headers(view, pane_id.clone(), handle.clone(), name_w, type_w, size_w, date_w, theme))
                         .child(
                              uniform_list(
                                 SharedString::from(format!("file-list-{}", pane_id)),
@@ -98,6 +94,7 @@ pub fn render_file_list(view: &OxydeApp, pane_id: String, handle: Entity<OxydeAp
                                     let h_inner = handle.clone();
                                     let p_id_for_list = pane_id.clone();
                                     let selected_paths = selected_paths.clone();
+                                    let is_active_pane = is_active_pane;
                                     move |range, _, cx| {
                                         range.map(|i| {
                                             let theme = OxydeTheme::global(cx);
@@ -166,16 +163,16 @@ pub fn render_file_list(view: &OxydeApp, pane_id: String, handle: Entity<OxydeAp
                                                 .child(
                                                     div()
                                                         .w(px(name_w))
-                                                        .px_4()
+                                                        .px(px(8.0))
                                                         .flex()
                                                         .items_center()
                                                         .overflow_hidden()
                                                         .child(svg().path(if is_dir { "icons/folder.svg" } else { "icons/file.svg" }).size_4().flex_none().mr_2().text_color(if is_dir { theme.accent } else { theme.text_muted }))
                                                         .child(div().flex_1().overflow_hidden().text_ellipsis().font_weight(FontWeight::MEDIUM).text_color(theme.text).child(file.name.clone()))
                                                 )
-                                                .child(div().w(px(TYPE_WIDTH)).px_3().text_color(theme.text_muted).text_ellipsis().text_size(px(12.0)).child(if is_dir { "Dossier".to_string() } else { std::path::Path::new(&file.name).extension().and_then(|e| e.to_str()).map(|s| s.to_uppercase()).unwrap_or("Fichier".to_string()) }))
-                                                .child(div().w(px(SIZE_WIDTH)).px_3().flex().justify_end().text_color(theme.text_muted).text_ellipsis().text_size(px(12.0)).child(format_size(file.size, is_dir, file.is_calculated)))
-                                                .child(div().w(px(DATE_WIDTH)).px_3().text_color(theme.text_muted).text_ellipsis().text_size(px(12.0)).child(format_date(file.modified)))
+                                                .child(div().w(px(type_w)).px(px(8.0)).text_color(theme.text_muted).text_ellipsis().text_size(px(12.0)).child(if is_dir { "Dossier".to_string() } else { std::path::Path::new(&file.name).extension().and_then(|e| e.to_str()).map(|s| s.to_uppercase()).unwrap_or("Fichier".to_string()) }))
+                                                .child(div().w(px(size_w)).px(px(8.0)).flex().justify_end().text_color(theme.text_muted).text_ellipsis().text_size(px(12.0)).child(format_size(file.size, is_dir, file.is_calculated)))
+                                                .child(div().w(px(date_w)).px(px(8.0)).text_color(theme.text_muted).text_ellipsis().text_size(px(12.0)).child(format_date(file.modified)))
                                         }).collect::<Vec<_>>()
                                     }
                                 }
@@ -204,13 +201,14 @@ pub fn render_file_list(view: &OxydeApp, pane_id: String, handle: Entity<OxydeAp
                                         });
                                         cx.notify();
                                     });
-                                        }
-                                        })                            .track_scroll(active_tab.list_scroll.clone())
+                                }
+                            })
+                            .track_scroll(active_tab.list_scroll.clone())
                             .size_full()
                         )
                 )
         )
-        // 3. Gutters interactifs (au-dessus)
+        // 3. Gutters interactifs
         .child(
             div()
                 .absolute()
@@ -222,6 +220,7 @@ pub fn render_file_list(view: &OxydeApp, pane_id: String, handle: Entity<OxydeAp
                     let h = handle.clone();
                     let p_id_cap = pane_id.clone();
                     move |e, _, cx| {
+                        cx.stop_propagation();
                         let pos = e.position;
                         let modifiers = e.modifiers;
                         let _ = h.update(cx, |this, cx| {
@@ -242,8 +241,9 @@ pub fn render_file_list(view: &OxydeApp, pane_id: String, handle: Entity<OxydeAp
                             });
                             cx.notify();
                             });
-                            }
-                            })        )
+                    }
+                })
+        )
         .child(
             div()
                 .absolute()
@@ -276,8 +276,9 @@ pub fn render_file_list(view: &OxydeApp, pane_id: String, handle: Entity<OxydeAp
                             });
                             cx.notify();
                             });
-                            }
-                            })        )
+                    }
+                })
+        )
     ;
 
     // Selection Rectangle
@@ -332,17 +333,54 @@ pub fn render_file_list(view: &OxydeApp, pane_id: String, handle: Entity<OxydeAp
     container
 }
 
-fn render_headers(view: &OxydeApp, pane_id: String, handle: Entity<OxydeApp>, name_w: f32, theme: &OxydeTheme) -> impl IntoElement {
+fn render_headers(view: &OxydeApp, pane_id: String, handle: Entity<OxydeApp>, name_w: f32, type_w: f32, size_w: f32, date_w: f32, theme: &OxydeTheme) -> impl IntoElement {
     let pane = view.state.layout.find_pane(&pane_id).expect("pane exists");
     let tab = pane.active_tab();
     let current_col = tab.sort_column;
     let current_dir = tab.sort_direction;
 
-    div().flex().items_center().h(px(ROW_HEIGHT)).text_color(theme.text_muted).font_weight(FontWeight::BOLD).pl(px(8.0)).pr(px(8.0))
-        .child(header_cell("Nom", name_w, current_col == SortColumn::Name, current_dir, theme, {
+    // Check filters
+    let name_filtered = !tab.filter_name.is_empty();
+    
+    let type_filtered = if tab.filter_types.is_empty() { false } else {
+        let mut all_types = std::collections::HashSet::new();
+        for f in &tab.files {
+            if f.is_dir { all_types.insert("Dossier".to_string()); }
+            else if let Some(ext) = std::path::Path::new(&f.name).extension().and_then(|e| e.to_str()) {
+                all_types.insert(ext.to_uppercase());
+            }
+        }
+        !all_types.iter().all(|t| tab.filter_types.contains(t))
+    };
+
+    let size_filtered = if tab.filter_sizes.is_empty() { false } else {
+        use crate::ui::workspace::SizeCategory;
+        let categories = [SizeCategory::Minuscule, SizeCategory::Petit, SizeCategory::Moyen, SizeCategory::Grand, SizeCategory::Huge];
+        let mut present = std::collections::HashSet::new();
+        for f in &tab.files {
+            for cat in &categories {
+                if cat.matches(f.size) { present.insert(*cat); break; }
+            }
+        }
+        !present.iter().all(|c| tab.filter_sizes.contains(c))
+    };
+
+    let date_filtered = if tab.filter_dates.is_empty() { false } else {
+        use crate::ui::workspace::DateCategory;
+        let categories = [DateCategory::Aujourdhui, DateCategory::Hier, DateCategory::CetteSemaine, DateCategory::LaSemaineDerniere, DateCategory::PlusAncien];
+        let mut present = std::collections::HashSet::new();
+        for f in &tab.files {
+            for cat in &categories {
+                if cat.matches(f.modified) { present.insert(*cat); break; }
+            }
+        }
+        !present.iter().all(|c| tab.filter_dates.contains(c))
+    };
+
+    div().flex().items_center().h(px(ROW_HEIGHT)).text_color(theme.text_muted).font_weight(FontWeight::BOLD)
+        .child(header_cell("Nom", name_w, current_col == SortColumn::Name, current_dir, name_filtered, theme, {
             let h = handle.clone(); let pid = pane_id.clone(); move |_, _, cx| { let _ = h.update(cx, |this, cx| this.toggle_sort(&pid, SortColumn::Name, cx)); }
         })
-        .when(!tab.filter_name.is_empty(), |s| s.child(div().ml_1().child(svg().path("icons/filter.svg").size_3().text_color(theme.accent))))
         .on_mouse_down(MouseButton::Right, {
             let h = handle.clone();
             let pid = pane_id.clone();
@@ -351,20 +389,8 @@ fn render_headers(view: &OxydeApp, pane_id: String, handle: Entity<OxydeApp>, na
                 let _ = h.update(cx, |this, cx| this.open_name_filter(&pid, pos, window, cx));
             }
         }))
-        .child(header_cell("Type", TYPE_WIDTH, current_col == SortColumn::Type, current_dir, theme, {
+        .child(header_cell("Type", type_w, current_col == SortColumn::Type, current_dir, type_filtered, theme, {
             let h = handle.clone(); let pid = pane_id.clone(); move |_, _, cx| { let _ = h.update(cx, |this, cx| this.toggle_sort(&pid, SortColumn::Type, cx)); }
-        })
-        .when(!tab.filter_types.is_empty(), |s| {
-            // Check if every present type is in the filter list
-            let mut all_types = std::collections::HashSet::new();
-            for f in &tab.files {
-                if f.is_dir { all_types.insert("Dossier".to_string()); }
-                else if let Some(ext) = std::path::Path::new(&f.name).extension().and_then(|e| e.to_str()) {
-                    all_types.insert(ext.to_uppercase());
-                }
-            }
-            let is_full = all_types.iter().all(|t| tab.filter_types.contains(t));
-            s.when(!is_full, |s| s.child(div().ml_1().child(svg().path("icons/filter.svg").size_3().text_color(theme.accent))))
         })
         .on_mouse_down(MouseButton::Right, {
              let h = handle.clone();
@@ -374,20 +400,8 @@ fn render_headers(view: &OxydeApp, pane_id: String, handle: Entity<OxydeApp>, na
                  let _ = h.update(cx, |this, cx| this.open_type_filter_menu(&pid, pos, cx));
              }
         }))
-        .child(header_cell("Taille", SIZE_WIDTH, current_col == SortColumn::Size, current_dir, theme, {
+        .child(header_cell("Taille", size_w, current_col == SortColumn::Size, current_dir, size_filtered, theme, {
             let h = handle.clone(); let pid = pane_id.clone(); move |_, _, cx| { let _ = h.update(cx, |this, cx| this.toggle_sort(&pid, SortColumn::Size, cx)); }
-        })
-        .when(!tab.filter_sizes.is_empty(), |s| {
-            use crate::ui::workspace::SizeCategory;
-            let categories = [SizeCategory::Minuscule, SizeCategory::Petit, SizeCategory::Moyen, SizeCategory::Grand, SizeCategory::Huge];
-            let mut present = std::collections::HashSet::new();
-            for f in &tab.files {
-                for cat in &categories {
-                    if cat.matches(f.size) { present.insert(*cat); break; }
-                }
-            }
-            let is_full = present.iter().all(|c| tab.filter_sizes.contains(c));
-            s.when(!is_full, |s| s.child(div().ml_1().child(svg().path("icons/filter.svg").size_3().text_color(theme.accent))))
         })
         .on_mouse_down(MouseButton::Right, {
              let h = handle.clone();
@@ -397,20 +411,8 @@ fn render_headers(view: &OxydeApp, pane_id: String, handle: Entity<OxydeApp>, na
                  let _ = h.update(cx, |this, cx| this.open_size_filter_menu(&pid, pos, cx));
              }
         }))
-        .child(header_cell("Modifié le", DATE_WIDTH, current_col == SortColumn::Modified, current_dir, theme, {
+        .child(header_cell("Modifié le", date_w, current_col == SortColumn::Modified, current_dir, date_filtered, theme, {
             let h = handle.clone(); let pid = pane_id.clone(); move |_, _, cx| { let _ = h.update(cx, |this, cx| this.toggle_sort(&pid, SortColumn::Modified, cx)); }
-        })
-        .when(!tab.filter_dates.is_empty(), |s| {
-            use crate::ui::workspace::DateCategory;
-            let categories = [DateCategory::Aujourdhui, DateCategory::Hier, DateCategory::CetteSemaine, DateCategory::LaSemaineDerniere, DateCategory::PlusAncien];
-            let mut present = std::collections::HashSet::new();
-            for f in &tab.files {
-                for cat in &categories {
-                    if cat.matches(f.modified) { present.insert(*cat); break; }
-                }
-            }
-            let is_full = present.iter().all(|c| tab.filter_dates.contains(c));
-            s.when(!is_full, |s| s.child(div().ml_1().child(svg().path("icons/filter.svg").size_3().text_color(theme.accent))))
         })
         .on_mouse_down(MouseButton::Right, {
              let h = handle.clone();
@@ -420,6 +422,95 @@ fn render_headers(view: &OxydeApp, pane_id: String, handle: Entity<OxydeApp>, na
                  let _ = h.update(cx, |this, cx| this.open_date_filter_menu(&pid, pos, cx));
              }
         }))
+}
+
+fn header_cell(label: &str, width: f32, is_active: bool, direction: SortDirection, is_filtered: bool, theme: &OxydeTheme, on_click: impl Fn(&MouseDownEvent, &mut Window, &mut App) + 'static) -> Div {
+    div()
+        .w(px(width))
+        .px(px(8.0))
+        .h_full()
+        .flex()
+        .items_center()
+        .child(div().flex_1().overflow_hidden().text_ellipsis().child(label.to_string()))
+        .child(
+            div()
+                .ml_1()
+                .when(is_filtered, |s| s.child(svg().path("icons/filter.svg").size_3().text_color(theme.accent)))
+        )
+        .child(
+            div()
+                .w(px(16.0))
+                .flex()
+                .justify_center()
+                .when(is_active, |s| {
+                    s.child(
+                        svg()
+                            .path(if direction == SortDirection::Ascending { "icons/arrow-up.svg" } else { "icons/arrow-down.svg" })
+                            .size_3()
+                            .text_color(theme.accent)
+                    )
+                })
+        )
+        .hover(|s| s.bg(rgba(0xffffff05)))
+        .on_mouse_down(MouseButton::Left, on_click)
+}
+
+pub fn get_type_filter_items(h: Entity<OxydeApp>, pid: String, tab_files: Vec<FileEntry>, current_filters: std::collections::HashSet<String>, pos: Point<Pixels>) -> Vec<crate::ui::components::dropdown::DropdownItem> {
+    use crate::ui::components::dropdown::{DropdownItem, IconName};
+    
+    let mut exts = std::collections::HashSet::new();
+    let mut dirs_present = false;
+    for f in &tab_files {
+        if f.is_dir { dirs_present = true; }
+        else if let Some(e) = std::path::Path::new(&f.name).extension().and_then(|e| e.to_str()) { exts.insert(e.to_uppercase()); }
+    }
+    let mut sorted_exts: Vec<String> = exts.into_iter().collect();
+    sorted_exts.sort();
+
+    let mut items = Vec::new();
+    
+    // Dossiers
+    if dirs_present {
+        let h_dir = h.clone();
+        let pid_dir = pid.clone();
+        let is_sel = current_filters.contains("Dossier");
+        
+        items.push(DropdownItem {
+            label: "Dossier".to_string(),
+            icon: Some(if is_sel { IconName::Check } else { IconName::Square }),
+            stay_open: true,
+            on_click: std::rc::Rc::new(move |_, app| {
+                let pid_cap = pid_dir.clone();
+                let _ = h_dir.update(app, |this, cx| {
+                    this.toggle_filter_type(&pid_cap, "Dossier".to_string(), cx);
+                    this.open_type_filter_menu(&pid_cap, pos, cx);
+                });
+            })
+        });
+    }
+
+    for ext in sorted_exts {
+        let h_ext = h.clone();
+        let pid_ext = pid.clone();
+        let e_cap = ext.clone();
+        let is_sel = current_filters.contains(&e_cap);
+
+        items.push(DropdownItem {
+            label: ext,
+            icon: Some(if is_sel { IconName::Check } else { IconName::Square }),
+            stay_open: true,
+            on_click: std::rc::Rc::new(move |_, app| {
+                let pid_cap = pid_ext.clone();
+                let e_inner = e_cap.clone();
+                let _ = h_ext.update(app, |this, cx| {
+                    this.toggle_filter_type(&pid_cap, e_inner, cx);
+                    this.open_type_filter_menu(&pid_cap, pos, cx);
+                });
+            })
+        });
+    }
+    
+    items
 }
 
 pub fn get_date_filter_items(handle: Entity<OxydeApp>, pane_id: String, files: Vec<oxyde_lib::models::FileEntry>, current_filters: std::collections::HashSet<crate::ui::workspace::DateCategory>, pos: Point<Pixels>) -> Vec<crate::ui::components::dropdown::DropdownItem> {
@@ -516,90 +607,6 @@ pub fn get_size_filter_items(handle: Entity<OxydeApp>, pane_id: String, files: V
                     this.open_size_filter_menu(&pid_inner, pos, cx);
                 });
             }),
-        });
-    }
-    
-    items
-}
-
-fn header_cell(label: &str, width: f32, is_active: bool, direction: SortDirection, theme: &OxydeTheme, on_click: impl Fn(&MouseDownEvent, &mut Window, &mut App) + 'static) -> Div {
-    div()
-        .w(px(width))
-        .px_4()
-        .h_full()
-        .flex()
-        .items_center()
-        .child(div().flex_1().overflow_hidden().text_ellipsis().child(label.to_string()))
-        .when(is_active, |s| {
-            s.child(
-                div()
-                    .ml_1()
-                    .flex()
-                    .items_center()
-                    .child(
-                        svg()
-                            .path(if direction == SortDirection::Ascending { "icons/arrow-up.svg" } else { "icons/arrow-down.svg" })
-                            .size_3()
-                            .text_color(theme.accent)
-                    )
-            )
-        })
-        .hover(|s| s.bg(rgba(0xffffff05)))
-        .on_mouse_down(MouseButton::Left, on_click)
-}
-
-pub fn get_type_filter_items(h: Entity<OxydeApp>, pid: String, tab_files: Vec<FileEntry>, current_filters: std::collections::HashSet<String>, pos: Point<Pixels>) -> Vec<crate::ui::components::dropdown::DropdownItem> {
-    use crate::ui::components::dropdown::{DropdownItem, IconName};
-    
-    let mut exts = std::collections::HashSet::new();
-    let mut dirs_present = false;
-    for f in &tab_files {
-        if f.is_dir { dirs_present = true; }
-        else if let Some(e) = std::path::Path::new(&f.name).extension().and_then(|e| e.to_str()) { exts.insert(e.to_uppercase()); }
-    }
-    let mut sorted_exts: Vec<String> = exts.into_iter().collect();
-    sorted_exts.sort();
-
-    let mut items = Vec::new();
-    
-    // Dossiers
-    if dirs_present {
-        let h_dir = h.clone();
-        let pid_dir = pid.clone();
-        let is_sel = current_filters.contains("Dossier");
-        
-        items.push(DropdownItem {
-            label: "Dossier".to_string(),
-            icon: Some(if is_sel { IconName::Check } else { IconName::Square }),
-            stay_open: true,
-            on_click: std::rc::Rc::new(move |_, app| {
-                let pid_cap = pid_dir.clone();
-                let _ = h_dir.update(app, |this, cx| {
-                    this.toggle_filter_type(&pid_cap, "Dossier".to_string(), cx);
-                    this.open_type_filter_menu(&pid_cap, pos, cx);
-                });
-            })
-        });
-    }
-
-    for ext in sorted_exts {
-        let h_ext = h.clone();
-        let pid_ext = pid.clone();
-        let e_cap = ext.clone();
-        let is_sel = current_filters.contains(&e_cap);
-
-        items.push(DropdownItem {
-            label: ext,
-            icon: Some(if is_sel { IconName::Check } else { IconName::Square }),
-            stay_open: true,
-            on_click: std::rc::Rc::new(move |_, app| {
-                let pid_cap = pid_ext.clone();
-                let e_inner = e_cap.clone();
-                let _ = h_ext.update(app, |this, cx| {
-                    this.toggle_filter_type(&pid_cap, e_inner, cx);
-                    this.open_type_filter_menu(&pid_cap, pos, cx);
-                });
-            })
         });
     }
     

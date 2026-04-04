@@ -1,24 +1,24 @@
 use std::borrow::Cow;
-use std::path::PathBuf;
 use gpui::{AssetSource, SharedString, Result};
+use rust_embed::RustEmbed;
 
-pub struct FileAssetSource {
-    base_path: PathBuf,
-}
+#[derive(RustEmbed)]
+#[folder = "assets/"]
+struct Assets;
 
-impl FileAssetSource {
-    pub fn new(base_path: impl Into<PathBuf>) -> Self {
-        Self {
-            base_path: base_path.into(),
-        }
+pub struct EmbeddedAssetSource;
+
+impl EmbeddedAssetSource {
+    pub fn new() -> Self {
+        Self
     }
 
     pub fn load_fonts(&self, cx: &gpui::App) -> Result<()> {
-        let font_paths = self.list("fonts")?;
         let mut embedded_fonts = Vec::new();
-        for font_path in font_paths {
-            if font_path.ends_with(".ttf") || font_path.ends_with(".otf") {
-                if let Some(font_bytes) = self.load(&font_path)? {
+        // List fonts from the embedded assets
+        for path in Assets::iter() {
+            if path.starts_with("fonts/") && (path.ends_with(".ttf") || path.ends_with(".otf")) {
+                if let Some(font_bytes) = self.load(&path)? {
                     embedded_fonts.push(font_bytes);
                 }
             }
@@ -28,28 +28,27 @@ impl FileAssetSource {
     }
 }
 
-impl AssetSource for FileAssetSource {
+impl AssetSource for EmbeddedAssetSource {
     fn load(&self, path: &str) -> Result<Option<Cow<'static, [u8]>>> {
-        let full_path = self.base_path.join(path);
-        if full_path.exists() {
-            let bytes = std::fs::read(full_path)?;
-            Ok(Some(Cow::Owned(bytes)))
-        } else {
-            Ok(None)
+        // Rust-embed handles paths with standard separators, even on Windows
+        match Assets::get(path) {
+            Some(file) => Ok(Some(file.data)),
+            None => Ok(None),
         }
     }
 
     fn list(&self, path: &str) -> Result<Vec<SharedString>> {
-        let full_path = self.base_path.join(path);
         let mut result = Vec::new();
-        if full_path.is_dir() {
-            for entry in std::fs::read_dir(full_path)? {
-                let entry = entry?;
-                if let Some(name) = entry.file_name().to_str() {
-                    // Prepend the requested path to build the relative path needed for load()
-                    let relative_path = format!("{}/{}", path, name);
-                    result.push(SharedString::from(relative_path));
-                }
+        let prefix = if path.is_empty() {
+            "".to_string()
+        } else {
+            let p = path.trim_end_matches('/');
+            format!("{}/", p)
+        };
+
+        for embedded_path in Assets::iter() {
+            if embedded_path.starts_with(&prefix) {
+                result.push(SharedString::from(embedded_path.to_string()));
             }
         }
         Ok(result)

@@ -123,8 +123,6 @@ impl Render for OxydeApp {
         use crate::ui::components::sidebar::render_sidebar;
         use crate::ui::style::TNUM;
 
-        _window.focus(&self.focus_handle);
-
         let handle = self.handle.clone().expect("handle set");
 
         let size = _window.viewport_size();
@@ -401,7 +399,7 @@ impl Render for OxydeApp {
                                         let h_inner = h.clone();
                                         
                                         // Dynamic label and action based on current state
-                                        let (label, should_select) = if let Some(pane) = self.state.find_pane(&pid_cap) {
+                                        let (label, should_clear) = if let Some(pane) = self.state.find_pane(&pid_cap) {
                                             let tab = pane.active_tab();
                                             let mut all_present = std::collections::HashSet::new();
                                             for f in &tab.files {
@@ -411,8 +409,8 @@ impl Render for OxydeApp {
                                                 }
                                             }
                                             let is_full = !all_present.is_empty() && all_present.iter().all(|t| tab.filter_types.contains(t));
-                                            if is_full { ("Tout décocher", false) } else { ("Tout cocher", true) }
-                                        } else { ("Tout cocher", true) };
+                                            if is_full || tab.filter_types.is_empty() { ("Tout cocher", false) } else { ("Tout décocher", true) }
+                                        } else { ("Tout cocher", false) };
 
                                         crate::ui::elements::button::Button::new(SharedString::from(format!("select-all-type-{}", pid_cap)))
                                             .label(label)
@@ -420,9 +418,11 @@ impl Render for OxydeApp {
                                             .on_click(move |_, cx| {
                                                 let pid_inner = pid_cap.clone();
                                                 let _ = h_inner.update(cx, |this, cx| {
-                                                    if let Some(pane) = this.state.find_pane_mut(&pid_inner) {
-                                                        let tab = pane.active_tab_mut();
-                                                        if should_select {
+                                                    if should_clear {
+                                                        this.clear_filter_types(&pid_inner, cx);
+                                                    } else {
+                                                        if let Some(pane) = this.state.find_pane_mut(&pid_inner) {
+                                                            let tab = pane.active_tab_mut();
                                                             let all_files = tab.files.clone();
                                                             for f in &all_files {
                                                                 if f.is_dir { tab.filter_types.insert("Dossier".to_string()); }
@@ -430,8 +430,6 @@ impl Render for OxydeApp {
                                                                     tab.filter_types.insert(ext.to_uppercase());
                                                                 }
                                                             }
-                                                        } else {
-                                                            this.clear_filter_types(&pid_inner, cx);
                                                         }
                                                     }
                                                     this.open_type_filter_menu(&pid_inner, pos, cx);
@@ -443,7 +441,7 @@ impl Render for OxydeApp {
                                         let pid_cap = pane_id.clone();
                                         let h_inner = h.clone();
                                         
-                                        let (label, should_select) = if let Some(p) = self.state.find_pane(&pid_cap) {
+                                        let (label, should_clear) = if let Some(p) = self.state.find_pane(&pid_cap) {
                                             use crate::ui::workspace::SizeCategory;
                                             let tab = p.active_tab();
                                             let categories = [SizeCategory::Minuscule, SizeCategory::Petit, SizeCategory::Moyen, SizeCategory::Grand, SizeCategory::Huge];
@@ -454,8 +452,8 @@ impl Render for OxydeApp {
                                                 }
                                             }
                                             let is_full = !present.is_empty() && present.iter().all(|c| tab.filter_sizes.contains(c));
-                                            if is_full { ("Tout décocher", false) } else { ("Tout cocher", true) }
-                                        } else { ("Tout cocher", true) };
+                                            if is_full || tab.filter_sizes.is_empty() { ("Tout cocher", false) } else { ("Tout décocher", true) }
+                                        } else { ("Tout cocher", false) };
 
                                         crate::ui::elements::button::Button::new(SharedString::from(format!("select-all-size-{}", pid_cap)))
                                             .label(label)
@@ -463,17 +461,17 @@ impl Render for OxydeApp {
                                             .on_click(move |_, cx| {
                                                 let pid_inner = pid_cap.clone();
                                                 let _ = h_inner.update(cx, |this, cx| {
-                                                    if let Some(p) = this.state.find_pane_mut(&pid_inner) {
-                                                        use crate::ui::workspace::SizeCategory;
-                                                        let tab = p.active_tab_mut();
-                                                        if should_select {
+                                                    if should_clear {
+                                                        this.clear_filter_sizes(&pid_inner, cx);
+                                                    } else {
+                                                        if let Some(p) = this.state.find_pane_mut(&pid_inner) {
+                                                            use crate::ui::workspace::SizeCategory;
+                                                            let tab = p.active_tab_mut();
                                                             tab.filter_sizes.insert(SizeCategory::Minuscule);
                                                             tab.filter_sizes.insert(SizeCategory::Petit);
                                                             tab.filter_sizes.insert(SizeCategory::Moyen);
                                                             tab.filter_sizes.insert(SizeCategory::Grand);
                                                             tab.filter_sizes.insert(SizeCategory::Huge);
-                                                        } else {
-                                                            this.clear_filter_sizes(&pid_inner, cx);
                                                         }
                                                     }
                                                     this.open_size_filter_menu(&pid_inner, pos, cx);
@@ -485,7 +483,7 @@ impl Render for OxydeApp {
                                         let pid_cap = pane_id.clone();
                                         let h_inner = h.clone();
                                         
-                                        let (label, should_select) = if let Some(p) = self.state.find_pane(&pid_cap) {
+                                        let (label, should_clear) = if let Some(p) = self.state.find_pane(&pid_cap) {
                                             use crate::ui::workspace::DateCategory;
                                             let tab = p.active_tab();
                                             let categories = [DateCategory::Aujourdhui, DateCategory::Hier, DateCategory::CetteSemaine, DateCategory::LaSemaineDerniere, DateCategory::PlusAncien];
@@ -496,8 +494,8 @@ impl Render for OxydeApp {
                                                 }
                                             }
                                             let is_full = !present.is_empty() && present.iter().all(|c| tab.filter_dates.contains(c));
-                                            if is_full { ("Tout décocher", false) } else { ("Tout cocher", true) }
-                                        } else { ("Tout cocher", true) };
+                                            if is_full || tab.filter_dates.is_empty() { ("Tout cocher", false) } else { ("Tout décocher", true) }
+                                        } else { ("Tout cocher", false) };
 
                                         crate::ui::elements::button::Button::new(SharedString::from(format!("select-all-date-{}", pid_cap)))
                                             .label(label)
@@ -505,17 +503,17 @@ impl Render for OxydeApp {
                                             .on_click(move |_, cx| {
                                                 let pid_inner = pid_cap.clone();
                                                 let _ = h_inner.update(cx, |this, cx| {
-                                                    if let Some(p) = this.state.find_pane_mut(&pid_inner) {
-                                                        use crate::ui::workspace::DateCategory;
-                                                        let tab = p.active_tab_mut();
-                                                        if should_select {
+                                                    if should_clear {
+                                                        this.clear_filter_dates(&pid_inner, cx);
+                                                    } else {
+                                                        if let Some(p) = this.state.find_pane_mut(&pid_inner) {
+                                                            use crate::ui::workspace::DateCategory;
+                                                            let tab = p.active_tab_mut();
                                                             tab.filter_dates.insert(DateCategory::Aujourdhui);
                                                             tab.filter_dates.insert(DateCategory::Hier);
                                                             tab.filter_dates.insert(DateCategory::CetteSemaine);
                                                             tab.filter_dates.insert(DateCategory::LaSemaineDerniere);
                                                             tab.filter_dates.insert(DateCategory::PlusAncien);
-                                                        } else {
-                                                            this.clear_filter_dates(&pid_inner, cx);
                                                         }
                                                     }
                                                     this.open_date_filter_menu(&pid_inner, pos, cx);

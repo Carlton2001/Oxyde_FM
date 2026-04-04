@@ -27,13 +27,26 @@ pub struct TextInput {
     on_change: Box<dyn Fn(&str, &mut Window, &mut App)>,
     on_enter: Box<dyn Fn(&mut Window, &mut App)>,
     on_escape: Box<dyn Fn(&mut Window, &mut App)>,
+    cursor_visible: bool,
+    blink_epoch: usize,
 }
 
 impl TextInput {
-    pub fn new(cx: &mut Context<Self>, placeholder: impl Into<SharedString>, initial_text: String, on_change: impl Fn(&str, &mut Window, &mut App) + 'static, on_enter: impl Fn(&mut Window, &mut App) + 'static, on_escape: impl Fn(&mut Window, &mut App) + 'static) -> Self {
+    pub fn new(cx: &mut Context<Self>, placeholder: impl Into<SharedString>, initial_text: String, on_change: impl Fn(&str, &mut Window, &mut App) + 'static, on_enter: impl Fn(&mut Window, &mut App) + 'static, on_escape: impl Fn(&mut Window, &mut App) + 'static, window: &mut Window) -> Self {
         let len = initial_text.len();
+        let focus_handle = cx.focus_handle();
+        
+        cx.on_focus(&focus_handle, window, |this, _, cx| {
+            this.reset_blinking(cx);
+        }).detach();
+
+        cx.on_focus_out(&focus_handle, window, |this, _, _, _| {
+            this.blink_epoch += 1;
+            this.cursor_visible = true;
+        }).detach();
+
         Self {
-            focus_handle: cx.focus_handle(),
+            focus_handle,
             content: initial_text,
             placeholder: placeholder.into(),
             selected_range: len..len,
@@ -42,7 +55,36 @@ impl TextInput {
             on_change: Box::new(on_change),
             on_enter: Box::new(on_enter),
             on_escape: Box::new(on_escape),
+            cursor_visible: true,
+            blink_epoch: 0,
         }
+    }
+
+    fn blink_cursors(&mut self, epoch: usize, cx: &mut Context<Self>) {
+        if epoch == self.blink_epoch {
+            let this_weak = cx.weak_entity();
+            cx.spawn(move |_, cx: &mut AsyncApp| {
+                let mut cx = cx.clone();
+                async move {
+                    cx.background_executor().timer(std::time::Duration::from_millis(500)).await;
+                    let _ = this_weak.update(&mut cx, |this, cx| {
+                        if epoch == this.blink_epoch {
+                            this.cursor_visible = !this.cursor_visible;
+                            cx.notify();
+                            this.blink_cursors(epoch, cx);
+                        }
+                    });
+                }
+            }).detach();
+        }
+    }
+
+    fn reset_blinking(&mut self, cx: &mut Context<Self>) {
+        self.blink_epoch += 1;
+        self.cursor_visible = true; // Rétablit la visibilité immédiate
+        cx.notify();
+        let epoch = self.blink_epoch;
+        self.blink_cursors(epoch, cx);
     }
 
     fn backspace(&mut self, _: &Backspace, window: &mut Window, cx: &mut Context<Self>) {
@@ -55,7 +97,7 @@ impl TextInput {
             self.selected_range = self.selected_range.start..self.selected_range.start;
         }
         (self.on_change)(&self.content, window, cx);
-        cx.notify();
+        self.reset_blinking(cx);
     }
 
     fn delete(&mut self, _: &Delete, window: &mut Window, cx: &mut Context<Self>) {
@@ -67,7 +109,7 @@ impl TextInput {
              self.selected_range = self.selected_range.start..self.selected_range.start;
         }
         (self.on_change)(&self.content, window, cx);
-        cx.notify();
+        self.reset_blinking(cx);
     }
 
     fn enter(&mut self, _: &Enter, window: &mut Window, cx: &mut Context<Self>) {
@@ -82,7 +124,7 @@ impl TextInput {
         if self.selected_range.start > 0 {
             let prev = self.content.grapheme_indices(true).rev().find(|(i, _)| *i < self.selected_range.start).map(|(i, _)| i).unwrap_or(0);
             self.selected_range = prev..prev;
-            cx.notify();
+            self.reset_blinking(cx);
         }
     }
 
@@ -90,7 +132,7 @@ impl TextInput {
         if self.selected_range.end < self.content.len() {
             let next = self.content.grapheme_indices(true).find(|(i, _)| *i > self.selected_range.start).map(|(i, _)| i).unwrap_or(self.content.len());
             self.selected_range = next..next;
-            cx.notify();
+            self.reset_blinking(cx);
         }
     }
 }
@@ -110,7 +152,7 @@ impl EntityInputHandler for TextInput {
         let new_pos = range.start + new_text.len();
         self.selected_range = new_pos..new_pos;
         (self.on_change)(&self.content, window, cx);
-        cx.notify();
+        self.reset_blinking(cx);
     }
     fn replace_and_mark_text_in_range(&mut self, range: Option<std::ops::Range<usize>>, new_text: &str, _: Option<std::ops::Range<usize>>, window: &mut Window, cx: &mut Context<Self>) {
         self.replace_text_in_range(range, new_text, window, cx);
@@ -154,6 +196,7 @@ impl Render for TextInput {
                     .flex_1()
                     .flex()
                     .items_center()
+                    .cursor(CursorStyle::IBeam)
                     .child(TextInputElement { input: cx.entity() })
             )
             .when(!self.content.is_empty(), |s: Div| {
@@ -235,8 +278,8 @@ impl Element for TextInputElement {
 
             line.paint(bounds.origin + point(px(0.0), y_offset), line_h, window, cx).unwrap();
             
-            if focus_handle.is_focused(window) {
-                let input = input_handle.read(cx);
+            let input = input_handle.read(cx);
+            if focus_handle.is_focused(window) && input.cursor_visible {
                 let cursor_x = line.x_for_index(input.selected_range.start);
                 let cursor_h = line_h * 0.8;
                 let cursor_y = bounds.top() + y_offset + (line_h - cursor_h) / 2.0;

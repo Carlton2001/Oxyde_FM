@@ -148,13 +148,17 @@ impl OxydeApp {
                         this.update_filter_name(&pid_esc, "".to_string(), cx);
                         this.context_menu = None;
                     });
-                }
+                },
+                window
             )
         });
         
-        window.focus(&input.read(cx).focus_handle);
-        
-        self.context_menu = Some((pos, ContextMenuContent::NameFilter { input }));
+        self.context_menu = Some((pos, ContextMenuContent::NameFilter { input: input.clone() }));
         cx.notify();
+
+        let focus_handle = input.read(cx).focus_handle.clone();
+        cx.on_next_frame(window, move |_, window, _| {
+            window.focus(&focus_handle);
+        });
     }
 }

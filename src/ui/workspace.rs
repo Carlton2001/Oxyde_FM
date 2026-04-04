@@ -121,6 +121,9 @@ pub struct TabState {
     pub selected_paths: std::collections::HashSet<String>,
     pub selection_anchor: Option<String>,
     pub cached_filtered_files: Vec<FileEntry>,
+    pub type_col_width: f32,
+    pub size_col_width: f32,
+    pub date_col_width: f32,
 }
 
 impl TabState {
@@ -142,10 +145,57 @@ impl TabState {
             selected_paths: std::collections::HashSet::new(),
             selection_anchor: None,
             cached_filtered_files: Vec::new(),
+            type_col_width: 100.0,
+            size_col_width: 100.0,
+            date_col_width: 180.0,
         }
     }
 
     pub fn update_cache(&mut self) {
+        // 1. Check if "full" filters should be cleared to simplify logic and UI
+        
+        // Type filter
+        if !self.filter_types.is_empty() {
+            let mut all_present = std::collections::HashSet::new();
+            for f in &self.files {
+                if f.is_dir { all_present.insert("Dossier".to_string()); }
+                else if let Some(ext) = std::path::Path::new(&f.name).extension().and_then(|e| e.to_str()) {
+                    all_present.insert(ext.to_uppercase());
+                }
+            }
+            if !all_present.is_empty() && all_present.iter().all(|t| self.filter_types.contains(t)) {
+                self.filter_types.clear();
+            }
+        }
+
+        // Size filter
+        if !self.filter_sizes.is_empty() {
+            let categories = [SizeCategory::Minuscule, SizeCategory::Petit, SizeCategory::Moyen, SizeCategory::Grand, SizeCategory::Huge];
+            let mut present = std::collections::HashSet::new();
+            for f in &self.files {
+                for cat in &categories {
+                    if cat.matches(f.size) { present.insert(*cat); break; }
+                }
+            }
+            if !present.is_empty() && present.iter().all(|c| self.filter_sizes.contains(c)) {
+                self.filter_sizes.clear();
+            }
+        }
+
+        // Date filter
+        if !self.filter_dates.is_empty() {
+            let categories = [DateCategory::Aujourdhui, DateCategory::Hier, DateCategory::CetteSemaine, DateCategory::LaSemaineDerniere, DateCategory::PlusAncien];
+            let mut present = std::collections::HashSet::new();
+            for f in &self.files {
+                for cat in &categories {
+                    if cat.matches(f.modified) { present.insert(*cat); break; }
+                }
+            }
+            if !present.is_empty() && present.iter().all(|c| self.filter_dates.contains(c)) {
+                self.filter_dates.clear();
+            }
+        }
+
         if !self.filter_types.is_empty() || !self.filter_name.is_empty() || !self.filter_sizes.is_empty() || !self.filter_dates.is_empty() {
              self.cached_filtered_files = self.files.iter().filter(|f| {
                 let matches_type = if self.filter_types.is_empty() { true } else {
@@ -166,6 +216,35 @@ impl TabState {
         } else {
             self.cached_filtered_files = self.files.clone();
         }
+        self.recalculate_column_widths();
+    }
+
+    pub fn recalculate_column_widths(&mut self) {
+        use crate::ui::style::{format_size, format_date};
+        let measure = |txt: &str| {
+            txt.len() as f32 * 6.5
+        };
+
+        let mut max_type_w = measure("Type");
+        let mut max_size_w = measure("Taille");
+        let mut max_date_w = measure("Modifié le");
+
+        // We use the full files list instead of cached_filtered_files 
+        // to keep columns stable while the user interacts with filters.
+        for f in &self.files {
+            let type_str = if f.is_dir { "Dossier".to_string() } else { std::path::Path::new(&f.name).extension().and_then(|e| e.to_str()).map(|s| s.to_uppercase()).unwrap_or("Fichier".to_string()) };
+            max_type_w = max_type_w.max(measure(&type_str));
+
+            let size_str = format_size(f.size, f.is_dir, f.is_calculated);
+            max_size_w = max_size_w.max(measure(&size_str));
+
+            let date_str = format_date(f.modified);
+            max_date_w = max_date_w.max(measure(&date_str));
+        }
+
+        self.type_col_width = (max_type_w + 36.0).max(70.0);
+        self.size_col_width = (max_size_w + 36.0).max(70.0);
+        self.date_col_width = (max_date_w + 36.0).max(130.0);
     }
 
     pub fn filtered_files(&self) -> &[FileEntry] {
