@@ -7,6 +7,7 @@ use crate::ui::components::scrollbar::{render_scrollbar, ScrollbarAxis, ZED_TRAC
 use crate::ui::theme::{OxydeTheme, ThemeContext, PixelsExt};
 use crate::ui::workspace::{SortColumn, SortDirection};
 
+
 pub fn render_file_list(view: &OxydeApp, pane_id: String, handle: Entity<OxydeApp>, cx: &mut Context<OxydeApp>) -> impl IntoElement {
     let p_id_cap = pane_id.clone();
     let theme = cx.theme();
@@ -76,6 +77,18 @@ pub fn render_file_list(view: &OxydeApp, pane_id: String, handle: Entity<OxydeAp
         .child(
             div()
                 .size_full()
+                .on_mouse_move({
+                    let h = handle.clone();
+                    move |_, _, cx| {
+                        let _ = h.update(cx, |this, cx| {
+                            if this.tooltip_request.is_some() || this.tooltip_timer.is_some() {
+                                this.tooltip_request = None;
+                                this.tooltip_timer = None;
+                                cx.notify();
+                            }
+                        });
+                    }
+                })
                 .child(
                     div()
                         .absolute()
@@ -106,12 +119,25 @@ pub fn render_file_list(view: &OxydeApp, pane_id: String, handle: Entity<OxydeAp
                                             let h = h_inner.clone();
 
                                             div()
+                                                .id(SharedString::from(format!("file-row-{}", path.to_string())))
                                                 .flex()
                                                 .items_center()
                                                 .h(px(ROW_HEIGHT))
                                                 .w(px(total_w))
                                                 .bg(if is_selected { theme.selected } else if is_active_pane { theme.active_background } else { theme.background })
                                                 .when(!is_selected, |s| s.hover(|s| s.bg(theme.hover)))
+                                                .on_mouse_move({
+                                                    let h = h.clone();
+                                                    move |_, _, cx| {
+                                                        let _ = h.update(cx, |this, cx| {
+                                                            if this.tooltip_request.is_some() || this.tooltip_timer.is_some() {
+                                                                this.tooltip_request = None;
+                                                                this.tooltip_timer = None;
+                                                                cx.notify();
+                                                            }
+                                                        });
+                                                    }
+                                                })
                                                 .on_mouse_down(MouseButton::Left, {
                                                     let p = path.clone();
                                                     let h_inner_inner = h.clone();
@@ -163,12 +189,77 @@ pub fn render_file_list(view: &OxydeApp, pane_id: String, handle: Entity<OxydeAp
                                                 .child(
                                                     div()
                                                         .w(px(name_w))
-                                                        .px(px(8.0))
+                                                        .h_full()
                                                         .flex()
                                                         .items_center()
                                                         .overflow_hidden()
-                                                        .child(svg().path(if is_dir { "icons/folder.svg" } else { "icons/file.svg" }).size_4().flex_none().mr_2().text_color(if is_dir { theme.accent } else { theme.text_muted }))
-                                                        .child(div().flex_1().overflow_hidden().text_ellipsis().font_weight(FontWeight::MEDIUM).text_color(theme.text).child(file.name.clone()))
+                                                        .child({
+                                                            let path_str = path.clone();
+                                                            let file_name = file.name.clone();
+                                                            let is_dir = is_dir;
+                                                            let file_size = file.size;
+                                                            let file_is_calculated = file.is_calculated;
+                                                            let file_modified = file.modified;
+                                                            
+                                                            div()
+                                                                .id(SharedString::from(format!("file-content-{}", path_str)))
+                                                                .h_full()
+                                                                .px(px(8.0))
+                                                                .flex()
+                                                                .items_center()
+                                                                .on_mouse_move({
+                                                                    let h = h.clone();
+                                                                    let file_name = file_name.clone();
+                                                                    let is_dir = is_dir;
+                                                                    let file_size = file_size;
+                                                                    let file_is_calculated = file_is_calculated;
+                                                                    let file_modified = file_modified;
+                                                                    move |e, _, cx| {
+                                                                        cx.stop_propagation();
+                                                                        let _ = h.update(cx, |this, cx| {
+                                                                            let name = file_name.clone();
+                                                                            let type_str = if is_dir { "Dossier".to_string() } else { std::path::Path::new(&name).extension().and_then(|e| e.to_str()).map(|s| s.to_uppercase()).unwrap_or("Fichier".to_string()) };
+                                                                            let size_str = format_size(file_size, is_dir, file_is_calculated);
+                                                                            let date_str = format_date(file_modified);
+                                                                            let data = crate::ui::app::TooltipData {
+                                                                                name,
+                                                                                type_str,
+                                                                                size_str,
+                                                                                date_str,
+                                                                                position: e.position,
+                                                                            };
+
+                                                                            if this.tooltip_request.is_some() {
+                                                                                this.tooltip_request = Some(data);
+                                                                                cx.notify();
+                                                                            } else if this.tooltip_timer.is_none() {
+                                                                                let h_inner = h.clone();
+                                                                                this.tooltip_timer = Some(cx.spawn(move |_, cx: &mut AsyncApp| {
+                                                                                    let mut cx = cx.clone();
+                                                                                    let h_inner = h_inner.clone();
+                                                                                    async move {
+                                                                                        cx.background_executor().timer(std::time::Duration::from_millis(500)).await;
+                                                                                        let _ = h_inner.update(&mut cx, |this, cx| {
+                                                                                            this.tooltip_request = Some(data);
+                                                                                            this.tooltip_timer = None;
+                                                                                            cx.notify();
+                                                                                        });
+                                                                                    }
+                                                                                }));
+                                                                            }
+                                                                        });
+                                                                    }
+                                                                })
+                                                                .child(svg().path(if is_dir { "icons/folder.svg" } else { "icons/file.svg" }).size_4().flex_none().mr_2().text_color(if is_dir { theme.accent } else { theme.text_muted }))
+                                                                .child(
+                                                                    div()
+                                                                        .overflow_hidden()
+                                                                        .text_ellipsis()
+                                                                        .font_weight(FontWeight::MEDIUM)
+                                                                        .text_color(theme.text)
+                                                                        .child(file.name.clone())
+                                                                )
+                                                        })
                                                 )
                                                 .child(div().w(px(type_w)).px(px(8.0)).text_color(theme.text_muted).text_ellipsis().text_size(px(12.0)).child(if is_dir { "Dossier".to_string() } else { std::path::Path::new(&file.name).extension().and_then(|e| e.to_str()).map(|s| s.to_uppercase()).unwrap_or("Fichier".to_string()) }))
                                                 .child(div().w(px(size_w)).px(px(8.0)).flex().justify_end().text_color(theme.text_muted).text_ellipsis().text_size(px(12.0)).child(format_size(file.size, is_dir, file.is_calculated)))
@@ -322,7 +413,7 @@ pub fn render_file_list(view: &OxydeApp, pane_id: String, handle: Entity<OxydeAp
     // Horizontal scrollbar overlay
     container = container.child(
         div().absolute().left_0().bottom_0().right(px(ZED_TRACK_WIDTH)).h(px(ZED_TRACK_WIDTH))
-            .child(render_scrollbar(handle.clone(), ScrollbarAxis::Horizontal, pane_viewport_w, total_w + 28.0, active_tab.list_scroll_h.offset().x.as_f32(), matches!(view.drag_target, Some(DragTarget::FileListH { ref pane_id, .. }) if pane_id == &p_id_cap), format!("h-{}", pane_suffix), None, {
+            .child(render_scrollbar(handle.clone(), ScrollbarAxis::Horizontal, pane_viewport_w, total_w + 28.0, -active_tab.list_scroll_h.offset().x.as_f32(), matches!(view.drag_target, Some(DragTarget::FileListH { ref pane_id, .. }) if pane_id == &p_id_cap), format!("h-{}", pane_suffix), None, {
                 let p_id = p_id_cap.clone();
                 move |this, track_id, v_w, c_w, _| {
                     this.drag_target = Some(DragTarget::FileListH { pane_id: p_id.clone(), viewport_w: v_w, content_w: c_w, track_id });

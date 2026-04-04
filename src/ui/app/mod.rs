@@ -18,6 +18,8 @@ pub use filters::*;
 #[allow(unused_imports)]
 pub use layout::*;
 
+use crate::ui::components::tooltip::Tooltip;
+
 actions!(oxyde, [Ouvrir, Copier, Couper, Coller, Renommer, Supprimer, ToutSelectionner]);
 
 #[derive(Debug, PartialEq, Clone)]
@@ -44,6 +46,83 @@ pub enum ContextMenuHeader {
 pub enum ContextMenuContent {
     Items(Vec<crate::ui::components::dropdown::DropdownItem>, Option<ContextMenuHeader>),
     NameFilter { input: Entity<crate::ui::components::input::TextInput> },
+}
+
+#[derive(Clone)]
+pub struct TooltipData {
+    pub name: String,
+    pub type_str: String,
+    pub size_str: String,
+    pub date_str: String,
+    pub position: Point<Pixels>,
+}
+
+struct ManualTooltipElement {
+    data: TooltipData,
+}
+
+impl IntoElement for ManualTooltipElement {
+    type Element = Self;
+    fn into_element(self) -> Self::Element {
+        self
+    }
+}
+
+impl Element for ManualTooltipElement {
+    type RequestLayoutState = ();
+    type PrepaintState = ();
+
+    fn id(&self) -> Option<ElementId> {
+        None
+    }
+
+    fn source_location(&self) -> Option<&'static std::panic::Location<'static>> {
+        None
+    }
+
+    fn request_layout(
+        &mut self,
+        _id: Option<&GlobalElementId>,
+        _inspector_id: Option<&InspectorElementId>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> (LayoutId, Self::RequestLayoutState) {
+        (window.request_layout(Style::default(), None, cx), ())
+    }
+
+    fn prepaint(
+        &mut self,
+        _id: Option<&GlobalElementId>,
+        _inspector_id: Option<&InspectorElementId>,
+        _bounds: Bounds<Pixels>,
+        _request_layout: &mut Self::RequestLayoutState,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Self::PrepaintState {
+        let view = Tooltip::for_file(
+            self.data.name.clone(),
+            self.data.type_str.clone(),
+            self.data.size_str.clone(),
+            self.data.date_str.clone(),
+        )(window, cx);
+        window.set_tooltip(AnyTooltip {
+            view,
+            mouse_position: self.data.position,
+            check_visible_and_update: std::rc::Rc::new(|_, _, _| true),
+        });
+    }
+
+    fn paint(
+        &mut self,
+        _id: Option<&GlobalElementId>,
+        _inspector_id: Option<&InspectorElementId>,
+        _bounds: Bounds<Pixels>,
+        _request_layout: &mut Self::RequestLayoutState,
+        _prepaint: &mut Self::PrepaintState,
+        _window: &mut Window,
+        _cx: &mut App,
+    ) {
+    }
 }
 
 pub struct OxydeApp {
@@ -75,6 +154,8 @@ pub struct OxydeApp {
     pub context_menu: Option<(Point<Pixels>, ContextMenuContent)>,
     pub(crate) context_menu_scroll: UniformListScrollHandle,
     pub dragging_tab: Option<(String, usize)>,
+    pub tooltip_request: Option<TooltipData>,
+    pub tooltip_timer: Option<Task<()>>,
 }
 
 impl OxydeApp {
@@ -113,7 +194,9 @@ impl OxydeApp {
             breadcrumb_menu: None,
             context_menu: None,
             context_menu_scroll: UniformListScrollHandle::new(),
-            dragging_tab: None
+            dragging_tab: None,
+            tooltip_request: None,
+            tooltip_timer: None,
         }
     }
 }
@@ -595,6 +678,10 @@ impl Render for OxydeApp {
                     }
                 })
         );
+
+        if let Some(req) = self.tooltip_request.as_ref() {
+            root = root.child(ManualTooltipElement { data: req.clone() });
+        }
 
         root
     }

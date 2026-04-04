@@ -5,6 +5,7 @@ pub mod scrollbar;
 pub mod tabs;
 pub mod dropdown;
 pub mod input;
+pub mod tooltip;
 
 use gpui::*;
 

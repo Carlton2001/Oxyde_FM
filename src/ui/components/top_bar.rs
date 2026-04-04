@@ -3,6 +3,7 @@ use gpui::prelude::*;
 use crate::ui::app::OxydeApp;
 // use gpui_component::{button::{Button, ButtonVariants}, IconName, Size as ComponentSize, Sizable};
 use crate::ui::components::dropdown::IconName;
+use crate::ui::components::tooltip::Tooltip;
 
 use oxyde_lib::models::FileEntry;
 
@@ -34,6 +35,7 @@ pub fn render_top_bar(view: &OxydeApp, pane_id: String, handle: Entity<OxydeApp>
                 .items_center()
                 .child({
                     let mut btn = div()
+                        .id("back-btn")
                         .w_6()
                         .h_6()
                         .mr_2()
@@ -46,6 +48,7 @@ pub fn render_top_bar(view: &OxydeApp, pane_id: String, handle: Entity<OxydeApp>
                         btn = btn
                             .cursor_pointer()
                             .hover(|s| s.bg(rgb(0x1a1a1a)).rounded_md())
+                            .tooltip(Tooltip::with_meta("Précédent", "Alt+Gauche"))
                             .on_mouse_down(MouseButton::Left, {
                                 let h = handle.clone();
                                 move |_, _, cx| { let _ = h.update(cx, |v: &mut OxydeApp, cx| v.go_back(&p_id, cx)); }
@@ -61,6 +64,7 @@ pub fn render_top_bar(view: &OxydeApp, pane_id: String, handle: Entity<OxydeApp>
                 })
                 .child({
                     let mut btn = div()
+                        .id("forward-btn")
                         .w_6()
                         .h_6()
                         .mr_4()
@@ -73,6 +77,7 @@ pub fn render_top_bar(view: &OxydeApp, pane_id: String, handle: Entity<OxydeApp>
                         btn = btn
                             .cursor_pointer()
                             .hover(|s| s.bg(rgb(0x1a1a1a)).rounded_md())
+                            .tooltip(Tooltip::with_meta("Suivant", "Alt+Droite"))
                             .on_mouse_down(MouseButton::Left, {
                                 let h = handle.clone();
                                 move |_, _, cx| { let _ = h.update(cx, |v: &mut OxydeApp, cx| v.go_forward(&p_id, cx)); }

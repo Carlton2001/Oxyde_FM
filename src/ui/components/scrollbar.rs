@@ -38,7 +38,7 @@ pub fn render_scrollbar(
     let m_thumb_size = min_thumb_size.unwrap_or(ZED_THUMB_MIN_SIZE);
     let thumb_size = (viewport_size * ratio).max(m_thumb_size);
     let max_offset = (content_size - viewport_size).max(1.0);
-    let scroll_ratio = (current_scroll.abs() / max_offset.max(1.0)).clamp(0.0, 1.0);
+    let scroll_ratio = (current_scroll.max(0.0) / max_offset).clamp(0.0, 1.0);
     let thumb_pos = scroll_ratio * (viewport_size - thumb_size);
 
     let mut thumb = div()
@@ -107,7 +107,8 @@ pub fn render_scrollbar(
                         let ratio = (viewport_size / content_size.max(1.0)).min(1.0);
                         let m_thumb_size = min_thumb_size.unwrap_or(ZED_THUMB_MIN_SIZE);
                         let t_size = (viewport_size * ratio).max(m_thumb_size);
-                        let t_pos = (current_scroll.abs() / max_offset) * (viewport_size - t_size);
+                        let scroll_ratio = (current_scroll.max(0.0) / max_offset).clamp(0.0, 1.0);
+                        let t_pos = scroll_ratio * (viewport_size - t_size);
                         
                         let grab_offset = if mouse_in_track >= t_pos && mouse_in_track <= t_pos + t_size {
                             mouse_in_track - t_pos
