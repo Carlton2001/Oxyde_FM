@@ -1,251 +1,190 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::fs;
-use std::time::SystemTime;
-use std::io::BufWriter;
-use image::{imageops::FilterType, GenericImageView};
-use image::codecs::jpeg::JpegEncoder;
+use image::{imageops::FilterType, GenericImageView, RgbaImage};
 use crate::models::CommandError;
 
-use once_cell::sync::Lazy;
-use std::sync::{Mutex, Condvar};
+/// Target thumbnail size in pixels (longest side).
+const THUMB_SIZE: u32 = 256;
 
-/// Simple concurrency limiter using Mutex + Condvar (std::sync::Semaphore is unstable).
-/// Limits concurrent thumbnail generation threads to MAX_CONCURRENT.
-struct ConcurrencyLimiter {
-    state: Mutex<u32>,
-    cvar: Condvar,
-    max: u32,
+#[cfg(target_os = "windows")]
+pub fn get_thumbnail_raw(path: String) -> Result<RgbaImage, CommandError> {
+    shell_thumbnail_raw(&path)
 }
 
-impl ConcurrencyLimiter {
-    fn new(max: u32) -> Self {
-        Self { state: Mutex::new(0), cvar: Condvar::new(), max }
-    }
-    fn acquire(&self) {
-        let mut count = self.state.lock().unwrap();
-        while *count >= self.max {
-            count = self.cvar.wait(count).unwrap();
-        }
-        *count += 1;
-    }
-    fn release(&self) {
-        let mut count = self.state.lock().unwrap();
-        *count -= 1;
-        self.cvar.notify_one();
-    }
-}
-
-static THUMB_LIMITER: Lazy<ConcurrencyLimiter> = Lazy::new(|| ConcurrencyLimiter::new(4));
-
-/// Target thumbnail size in pixels (longest side). 128px is plenty for grid view.
-const THUMB_SIZE: u32 = 128;
-
-pub fn get_thumbnail_cached(
-    path: String,
-    cache_dir: PathBuf,
-) -> Result<String, CommandError> {
-    let source_path = Path::new(&path);
-    if !source_path.exists() {
-        return Err(CommandError::PathError(path));
+#[cfg(target_os = "windows")]
+pub fn get_office_thumbnail_raw(path: String) -> Result<RgbaImage, CommandError> {
+    // 1. Try Windows Shell
+    if let Ok(img) = shell_thumbnail_raw(&path) {
+        return Ok(img);
     }
 
-    // Generate a unique cache name based on path and modification time
-    let metadata = fs::metadata(source_path).map_err(|e| CommandError::IoError(e.to_string()))?;
-    let modified = metadata.modified().unwrap_or(SystemTime::UNIX_EPOCH);
-    let duration = modified.duration_since(SystemTime::UNIX_EPOCH).unwrap_or_default();
-    
-    let hash_input = format!("{}_{}_{}", path, metadata.len(), duration.as_secs());
-    let hash = hex::encode(hash_input);
-    
-    let cache_file = cache_dir.join(format!("{}.jpg", hash));
-    
-    if !cache_dir.exists() {
-        fs::create_dir_all(&cache_dir).map_err(|e| CommandError::IoError(e.to_string()))?;
-    }
-
-    // Return cached version immediately if it exists
-    if cache_file.exists() {
-        return Ok(cache_file.to_string_lossy().to_string());
-    }
-
-    // Acquire permit – blocks if 4 threads are already generating thumbnails
-    THUMB_LIMITER.acquire();
-
-    // Double-check cache after acquiring permit (another thread may have generated it)
-    if cache_file.exists() {
-        THUMB_LIMITER.release();
-        return Ok(cache_file.to_string_lossy().to_string());
-    }
-
-    // Generate thumbnail – wrapped to guarantee release on all paths
-    let result = (|| -> Result<(), CommandError> {
-        let img = image::open(source_path).map_err(|e| CommandError::Other(format!("Failed to open image: {}", e)))?;
-        
-        let (width, height) = img.dimensions();
-        let (n_width, n_height) = if width >= height {
-            (THUMB_SIZE, (height as f64 * (THUMB_SIZE as f64 / width as f64)).max(1.0) as u32)
-        } else {
-            ((width as f64 * (THUMB_SIZE as f64 / height as f64)).max(1.0) as u32, THUMB_SIZE)
-        };
-
-        let thumbnail = img.resize(n_width, n_height, FilterType::Nearest);
-        
-        let out_file = fs::File::create(&cache_file)
-            .map_err(|e| CommandError::IoError(e.to_string()))?;
-        let writer = BufWriter::new(out_file);
-        let encoder = JpegEncoder::new_with_quality(writer, 75);
-        thumbnail.write_with_encoder(encoder)
-            .map_err(|e| CommandError::Other(format!("Failed to save thumbnail: {}", e)))?;
-        Ok(())
-    })();
-
-    THUMB_LIMITER.release();
-    result?;
-
-    Ok(cache_file.to_string_lossy().to_string())
-}
-
-pub fn get_office_thumbnail_cached(
-    path: String,
-    cache_dir: PathBuf,
-) -> Result<String, CommandError> {
-    let source_path = Path::new(&path);
-    if !source_path.exists() {
-        return Err(CommandError::PathError(path.clone()));
-    }
-
-    // Generate cache filename
-    let metadata = fs::metadata(source_path).map_err(|e| CommandError::IoError(e.to_string()))?;
-    let modified = metadata.modified().unwrap_or(SystemTime::UNIX_EPOCH);
-    let duration = modified.duration_since(SystemTime::UNIX_EPOCH).unwrap_or_default();
-    
-    let hash_input = format!("{}_{}_{}_office", path, metadata.len(), duration.as_secs());
-    let hash = hex::encode(hash_input);
-    
-    let cache_file = cache_dir.join(format!("{}.jpg", hash));
-    
-    // Create cache dir if it doesn't exist
-    if !cache_dir.exists() {
-        fs::create_dir_all(&cache_dir).map_err(|e| CommandError::IoError(e.to_string()))?;
-    }
-
-    if cache_file.exists() {
-        return Ok(cache_file.to_string_lossy().to_string());
-    }
-
-    // Try to open as Zip archive
-    let file = fs::File::open(source_path).map_err(|e| CommandError::IoError(e.to_string()))?;
+    // 2. Try extraction from Zip
+    let file = fs::File::open(&path).map_err(|e| CommandError::IoError(e.to_string()))?;
     let mut archive = zip::ZipArchive::new(file).map_err(|e| CommandError::Other(e.to_string()))?;
-
-    // Office formats store it as docProps/thumbnail.jpeg
-    // LibreOffice stores it as Thumbnails/thumbnail.png
     let target_files = vec!["docProps/thumbnail.jpeg", "Thumbnails/thumbnail.png"];
-    
-    let mut extracted_data = Vec::new();
-    let mut found = false;
     
     for target in target_files {
         if let Ok(mut content_file) = archive.by_name(target) {
             use std::io::Read;
-            if content_file.read_to_end(&mut extracted_data).is_ok() {
-                found = true;
-                break;
+            let mut data = Vec::new();
+            if content_file.read_to_end(&mut data).is_ok() {
+                if let Ok(img) = image::load_from_memory(&data) {
+                    return Ok(img.thumbnail(THUMB_SIZE, THUMB_SIZE).to_rgba8());
+                }
             }
         }
     }
-
-    if !found {
-        return Err(CommandError::Other("No thumbnail found in archive".to_string()));
-    }
-
-    // Attempt to parse the extracted data 
-    let img = image::load_from_memory(&extracted_data).map_err(|e| CommandError::Other(format!("Failed to parse embedded thumbnail: {}", e)))?;
-    
-    let (width, height) = img.dimensions();
-    let (n_width, n_height) = if width >= height {
-        (THUMB_SIZE, if width > 0 { (height as f64 * (THUMB_SIZE as f64 / width as f64)).max(1.0) as u32 } else { THUMB_SIZE })
-    } else {
-        (if height > 0 { (width as f64 * (THUMB_SIZE as f64 / height as f64)).max(1.0) as u32 } else { THUMB_SIZE }, THUMB_SIZE)
-    };
-
-    let thumbnail = img.resize(n_width, n_height, FilterType::Nearest);
-    
-    let out_file = fs::File::create(&cache_file)
-        .map_err(|e| CommandError::IoError(e.to_string()))?;
-    let writer = BufWriter::new(out_file);
-    let encoder = JpegEncoder::new_with_quality(writer, 75);
-    thumbnail.write_with_encoder(encoder)
-        .map_err(|e| CommandError::Other(format!("Failed to save thumbnail: {}", e)))?;
-
-    Ok(cache_file.to_string_lossy().to_string())
+    Err(CommandError::Other("No office thumbnail".to_string()))
 }
 
-pub fn get_office_text_preview(
-    path: String,
-) -> Result<String, CommandError> {
-    let source_path = Path::new(&path);
-    if !source_path.exists() {
-        return Err(CommandError::PathError(path.clone()));
-    }
+#[cfg(target_os = "windows")]
+pub fn get_pdf_thumbnail_raw(path: String) -> Result<RgbaImage, CommandError> {
+    use windows::Data::Pdf::{PdfDocument, PdfPageRenderOptions};
+    use windows::Storage::StorageFile;
+    use windows::Storage::Streams::InMemoryRandomAccessStream;
+    use windows::Graphics::Imaging::BitmapDecoder;
 
+    unsafe {
+        use windows::Win32::System::Com::{CoInitializeEx, CoUninitialize, COINIT_MULTITHREADED};
+        let co_ok = CoInitializeEx(None, COINIT_MULTITHREADED).is_ok();
+
+        let res = (|| -> Result<RgbaImage, CommandError> {
+            let abs_path = std::fs::canonicalize(&path).map_err(|e| CommandError::IoError(e.to_string()))?;
+            let mut path_str = abs_path.to_string_lossy().to_string();
+            if path_str.starts_with(r"\\?\") { path_str = path_str.chars().skip(4).collect(); }
+            
+            let hstring_path = windows::core::HSTRING::from(&path_str);
+            let file = StorageFile::GetFileFromPathAsync(&hstring_path)?.get()?;
+            let doc = PdfDocument::LoadFromFileAsync(&file)?.get()?;
+            if doc.PageCount()? == 0 { return Err(CommandError::Other("Empty PDF".to_string())); }
+
+            let page = doc.GetPage(0)?;
+            let stream = InMemoryRandomAccessStream::new()?;
+            let options = PdfPageRenderOptions::new()?;
+            options.SetDestinationWidth(THUMB_SIZE * 2)?;
+
+            page.RenderWithOptionsToStreamAsync(&stream, &options)?.get()?;
+
+            let decoder = BitmapDecoder::CreateAsync(&stream)?.get()?;
+            let pixel_data = decoder.GetPixelDataAsync()?.get()?;
+            let pixels = pixel_data.DetachPixelData()?;
+            let width = decoder.PixelWidth()?;
+            let height = decoder.PixelHeight()?;
+
+            let mut rgba = pixels.to_vec();
+            for chunk in rgba.chunks_exact_mut(4) { chunk.swap(0, 2); }
+
+            RgbaImage::from_raw(width, height, rgba)
+                .ok_or_else(|| CommandError::Other("Invalid pixel data".to_string()))
+        })();
+
+        if co_ok { CoUninitialize(); }
+        res
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn shell_thumbnail_raw(path: &str) -> Result<RgbaImage, CommandError> {
+    use std::ffi::c_void;
+    use windows::Win32::Foundation::SIZE;
+    use windows::Win32::Graphics::Gdi::{
+        BITMAP, BITMAPINFO, BITMAPINFOHEADER, CreateCompatibleDC, DeleteDC, DeleteObject,
+        DIB_RGB_COLORS, GetDIBits, GetObjectW, HGDIOBJ,
+    };
+    use windows::Win32::System::Com::{CoInitializeEx, CoUninitialize, COINIT_APARTMENTTHREADED};
+    use windows::Win32::UI::Shell::{IShellItemImageFactory, SHCreateItemFromParsingName, SIIGBF};
+    use windows::core::PCWSTR;
+
+    unsafe {
+        let co_ok = CoInitializeEx(None, COINIT_APARTMENTTHREADED).is_ok();
+        let res = (|| -> Result<RgbaImage, CommandError> {
+            let wide_path = windows::core::HSTRING::from(path);
+            let factory: IShellItemImageFactory = SHCreateItemFromParsingName(PCWSTR(wide_path.as_ptr()), None)?;
+
+            let size = SIZE { cx: THUMB_SIZE as i32, cy: THUMB_SIZE as i32 };
+            let hbitmap = factory.GetImage(size, SIIGBF(0x8))?; // SIIGBF_THUMBNAILONLY
+
+            let mut bmp: BITMAP = std::mem::zeroed();
+            GetObjectW(HGDIOBJ(hbitmap.0), std::mem::size_of::<BITMAP>() as i32, Some(&mut bmp as *mut _ as *mut c_void));
+
+            let hdc = CreateCompatibleDC(None);
+            let mut bmi: BITMAPINFO = std::mem::zeroed();
+            bmi.bmiHeader.biSize = std::mem::size_of::<BITMAPINFOHEADER>() as u32;
+            bmi.bmiHeader.biWidth = bmp.bmWidth;
+            bmi.bmiHeader.biHeight = -bmp.bmHeight;
+            bmi.bmiHeader.biPlanes = 1;
+            bmi.bmiHeader.biBitCount = 32;
+
+            let mut pixels = vec![0u8; (bmp.bmWidth * bmp.bmHeight * 4) as usize];
+            GetDIBits(hdc, hbitmap, 0, bmp.bmHeight as u32, Some(pixels.as_mut_ptr() as *mut c_void), &mut bmi, DIB_RGB_COLORS);
+            
+            let _ = DeleteDC(hdc);
+            let _ = DeleteObject(HGDIOBJ(hbitmap.0));
+
+            for chunk in pixels.chunks_exact_mut(4) { chunk.swap(0, 2); }
+            RgbaImage::from_raw(bmp.bmWidth as u32, bmp.bmHeight as u32, pixels)
+                .ok_or_else(|| CommandError::Other("Invalid bitmap".to_string()))
+        })();
+        if co_ok { CoUninitialize(); }
+        res
+    }
+}
+
+pub fn get_office_text_preview(path: String) -> Result<String, CommandError> {
+    let source_path = Path::new(&path);
     let file = fs::File::open(source_path).map_err(|e| CommandError::IoError(e.to_string()))?;
     let mut archive = zip::ZipArchive::new(file).map_err(|e| CommandError::Other(e.to_string()))?;
-
+    
     let ext = source_path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
     let targets = match ext.as_str() {
         "docx" | "docm" => vec!["word/document.xml"],
         "xlsx" | "xlsm" => vec!["xl/sharedStrings.xml"],
         "pptx" | "pptm" => vec!["ppt/slides/slide1.xml", "ppt/slides/slide2.xml"],
-        "odt" | "ods" | "odp" | "ott" | "ots" | "otp" => vec!["content.xml"],
-        _ => vec!["content.xml", "word/document.xml"]
+        "odt" | "ods" | "odp" => vec!["content.xml"],
+        _ => vec!["word/document.xml", "xl/sharedStrings.xml", "content.xml"]
     };
 
     let mut preview = String::new();
-    let mut chars_read = 0;
-    let max_chars = 1500;
-
+    let mut data = Vec::new();
+    
     for target in targets {
-        if chars_read >= max_chars { break; }
-        if let Ok(mut content_file) = archive.by_name(target) {
+        if let Ok(mut content) = archive.by_name(target) {
             use std::io::Read;
-            // Only read a chunk to preserve memory
-            let mut buf = vec![0u8; 10240]; 
-            if let Ok(n) = content_file.read(&mut buf) {
-                let content = String::from_utf8_lossy(&buf[..n]);
-                let mut in_tag = false;
-                let mut tag_buffer = String::new();
-                
-                for c in content.chars() {
-                    if chars_read >= max_chars { break; }
-                    
-                    if c == '<' {
-                        in_tag = true;
-                        tag_buffer.clear();
-                    } else if c == '>' {
-                        in_tag = false;
-                        let tl = &tag_buffer;
-                        if (tl.starts_with("w:p") || tl.starts_with("/w:p") ||
-                           tl.starts_with("w:br") || tl.starts_with("text:p") ||
-                           tl.starts_with("/text:p") || tl == "p" || tl == "/p") && !preview.ends_with('\n') {
-                            preview.push('\n');
-                            chars_read += 1;
-                        }
-                    } else if in_tag {
-                        if tag_buffer.len() < 10 {
-                            tag_buffer.push(c);
-                        }
-                    } else {
-                        preview.push(c);
-                        chars_read += 1;
-                    }
-                }
+            let mut buf = vec![0u8; 8192];
+            if let Ok(n) = content.read(&mut buf) {
+                data = buf[..n].to_vec();
+                break;
             }
         }
     }
 
-    if preview.trim().is_empty() {
-        return Err(CommandError::Other("No text found in archive".to_string()));
+    if !data.is_empty() {
+        let text = String::from_utf8_lossy(&data);
+        let mut in_tag = false;
+        let mut tag_content = String::new();
+        for c in text.chars() {
+            if c == '<' { 
+                in_tag = true; 
+                tag_content.clear();
+            } else if c == '>' { 
+                in_tag = false; 
+                // Pour Excel (t) ou Word (p/br), on gère l'espacement
+                if tag_content == "/t" || tag_content == "t" {
+                    if !preview.ends_with(' ') && !preview.ends_with('\n') {
+                        preview.push(' ');
+                    }
+                } else if tag_content.starts_with("w:p") || tag_content == "/w:p" || tag_content == "text:p" {
+                    if !preview.ends_with('\n') {
+                        preview.push('\n');
+                    }
+                }
+            } else if in_tag {
+                if tag_content.len() < 10 { tag_content.push(c); }
+            } else {
+                preview.push(c);
+            }
+            if preview.len() > 1000 { break; }
+        }
     }
-
     Ok(preview.trim().to_string())
 }

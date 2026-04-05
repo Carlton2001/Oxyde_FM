@@ -74,6 +74,12 @@ features = [
     "Win32_Globalization",
     "Win32_NetworkManagement_WNet",
     "Win32_System_Wmi",
+    "Win32_Media",
+    "Win32_Media_MediaFoundation",
+    "Data_Pdf",
+    "Storage",
+    "Storage_Streams",
+    "Graphics_Imaging",
 ]
 
 [dev-dependencies]

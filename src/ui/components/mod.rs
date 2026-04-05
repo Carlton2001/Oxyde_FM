@@ -7,6 +7,7 @@ pub mod tabs;
 pub mod dropdown;
 pub mod input;
 pub mod tooltip;
+pub mod icons;
 
 use gpui::*;
 

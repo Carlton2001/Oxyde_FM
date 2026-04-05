@@ -185,6 +185,7 @@ pub struct TooltipData {
     pub date_str: String,
     pub full_path: Option<String>,
     pub position: Point<Pixels>,
+    pub view: Option<AnyView>,
 }
 
 struct ManualTooltipElement {
@@ -229,8 +230,16 @@ impl Element for ManualTooltipElement {
         window: &mut Window,
         cx: &mut App,
     ) -> Self::PrepaintState {
-        let view = if let Some(path) = self.data.full_path.as_ref() {
-            Tooltip::for_path(self.data.name.clone(), path.clone())(window, cx)
+        let view = if let Some(view) = self.data.view.as_ref() {
+            view.clone()
+        } else if let Some(path) = self.data.full_path.as_ref() {
+            Tooltip::for_file_full(
+                self.data.name.clone(),
+                path.clone(),
+                self.data.type_str.clone(),
+                self.data.size_str.clone(),
+                self.data.date_str.clone(),
+            )(window, cx)
         } else {
             Tooltip::for_file(
                 self.data.name.clone(),

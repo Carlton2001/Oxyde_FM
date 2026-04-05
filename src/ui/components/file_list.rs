@@ -305,8 +305,10 @@ pub fn render_file_list(view: &OxydeApp, pane_id: String, handle: Entity<OxydeAp
                                                                     let file_size = file_size;
                                                                     let file_is_calculated = file_is_calculated;
                                                                     let file_modified = file_modified;
+                                                                    let path_for_tooltip = path_str.clone();
                                                                     move |e, _, cx| {
                                                                         cx.stop_propagation();
+                                                                        let path_inner = path_for_tooltip.clone();
                                                                         let _ = h.update(cx, |this, cx| {
                                                                             let name = file_name.clone();
                                                                             let type_str = if is_dir { "Dossier".to_string() } else { std::path::Path::new(&name).extension().and_then(|e| e.to_str()).map(|s| s.to_uppercase()).unwrap_or("Fichier".to_string()) };
@@ -318,23 +320,49 @@ pub fn render_file_list(view: &OxydeApp, pane_id: String, handle: Entity<OxydeAp
                                                                                 type_str,
                                                                                 size_str,
                                                                                 date_str,
-                                                                                full_path: None,
+                                                                                full_path: Some(path_inner.clone()),
                                                                                 position: e.position,
+                                                                                view: None,
                                                                             };
 
-                                                                            if this.tooltip_request.is_some() {
+                                                                            if let Some(existing) = this.tooltip_request.as_mut() {
+                                                                                if existing.full_path.as_ref() == data.full_path.as_ref() {
+                                                                                    // Même fichier, on garde la vue existante mais on met à jour la position
+                                                                                    data.view = existing.view.clone();
+                                                                                } else {
+                                                                                    // Nouveau fichier, on crée une nouvelle vue
+                                                                                    data.view = Some(crate::ui::components::tooltip::Tooltip::new_for_file_full(
+                                                                                        data.name.clone(),
+                                                                                        path_inner.clone(),
+                                                                                        data.type_str.clone(),
+                                                                                        data.size_str.clone(),
+                                                                                        data.date_str.clone(),
+                                                                                        cx,
+                                                                                    ).into());
+                                                                                }
                                                                                 this.tooltip_request = Some(data);
                                                                                 cx.notify();
                                                                             } else if this.tooltip_timer.is_none() {
                                                                                 let h_inner = h.clone();
+                                                                                let path_timer = path_inner.clone();
                                                                                 this.tooltip_timer = Some(cx.spawn(move |_, cx: &mut AsyncApp| {
                                                                                     let mut cx = cx.clone();
                                                                                     let h_inner = h_inner.clone();
+                                                                                    let path_timer = path_timer.clone();
                                                                                     async move {
                                                                                         cx.background_executor().timer(std::time::Duration::from_millis(500)).await;
                                                                                         let _ = h_inner.update(&mut cx, |this, cx| {
-                                                                                            // Capture CURRENT mouse position from our global tracker
+                                                                                            // On capture la position ACTUELLE de la souris
                                                                                             data.position = this.mouse_pos;
+                                                                                            // On crée la vue au moment où on décide d'afficher le tooltip
+                                                                                            data.view = Some(crate::ui::components::tooltip::Tooltip::new_for_file_full(
+                                                                                                data.name.clone(),
+                                                                                                path_timer.clone(),
+                                                                                                data.type_str.clone(),
+                                                                                                data.size_str.clone(),
+                                                                                                data.date_str.clone(),
+                                                                                                cx,
+                                                                                            ).into());
                                                                                             this.tooltip_request = Some(data);
                                                                                             this.tooltip_timer = None;
                                                                                             cx.notify();
@@ -346,7 +374,15 @@ pub fn render_file_list(view: &OxydeApp, pane_id: String, handle: Entity<OxydeAp
                                                                     }
                                                                 })
 
-                                                                .child(svg().path(if is_dir { "icons/folder.svg" } else { "icons/file.svg" }).size_4().flex_none().mr_2().text_color(if is_dir { theme.accent } else { theme.text_muted }))
+                                                                .child({
+                                                                    let icon_type = crate::ui::components::icons::get_icon_type(&file.name, is_dir, Some(&path_str));
+                                                                    svg()
+                                                                        .path(icon_type.path())
+                                                                        .size_4()
+                                                                        .flex_none()
+                                                                        .mr_2()
+                                                                        .text_color(if is_dir { theme.accent } else { theme.text_muted })
+                                                                })
                                                                 .child(
                                                                     div()
                                                                         .overflow_hidden()

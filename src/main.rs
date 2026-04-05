@@ -6,6 +6,12 @@ use gpui::*;
 use crate::ui::app::OxydeApp;
 
 fn main() {
+    let _rt = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .expect("Failed to create Tokio runtime");
+    let _guard = _rt.enter();
+
     let asset_source = crate::ui::assets::EmbeddedAssetSource::new();
     Application::new()
         .with_assets(asset_source)

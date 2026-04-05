@@ -46,6 +46,13 @@ impl From<&str> for CommandError {
     }
 }
 
+#[cfg(target_os = "windows")]
+impl From<windows::core::Error> for CommandError {
+    fn from(err: windows::core::Error) -> Self {
+        CommandError::SystemError(err.to_string())
+    }
+}
+
 // Helper for convenient error creation
 impl CommandError {
     pub fn new(msg: impl Into<String>) -> Self {

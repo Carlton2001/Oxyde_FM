@@ -109,28 +109,52 @@ pub fn render_sidebar(view: &OxydeApp, handle: Entity<OxydeApp>, _cx: &mut Conte
                                                             let path_cap = path.clone();
                                                             move |e, _, cx| {
                                                                 cx.stop_propagation();
+                                                                let path_inner = path_cap.clone();
                                                                 let _ = h.update(cx, |this, cx| {
                                                                     let mut data = crate::ui::app::TooltipData {
                                                                         name: name.clone(),
                                                                         type_str: "".to_string(),
                                                                         size_str: "".to_string(),
                                                                         date_str: "".to_string(),
-                                                                        full_path: Some(path_cap.clone()),
+                                                                        full_path: Some(path_inner.clone()),
                                                                         position: e.position,
+                                                                        view: None,
                                                                     };
 
-                                                                    if this.tooltip_request.is_some() {
+                                                                    if let Some(existing) = this.tooltip_request.as_mut() {
+                                                                        if existing.full_path.as_ref() == data.full_path.as_ref() {
+                                                                            data.view = existing.view.clone();
+                                                                        } else {
+                                                                            data.view = Some(crate::ui::components::tooltip::Tooltip::new_for_file_full(
+                                                                                data.name.clone(),
+                                                                                path_inner.clone(),
+                                                                                data.type_str.clone(),
+                                                                                data.size_str.clone(),
+                                                                                data.date_str.clone(),
+                                                                                cx,
+                                                                            ).into());
+                                                                        }
                                                                         this.tooltip_request = Some(data);
                                                                         cx.notify();
                                                                     } else if this.tooltip_timer.is_none() {
                                                                         let h_inner = h.clone();
+                                                                        let path_timer = path_inner.clone();
                                                                         this.tooltip_timer = Some(cx.spawn(move |_, cx: &mut AsyncApp| {
                                                                             let mut cx = cx.clone();
                                                                             let h_inner = h_inner.clone();
+                                                                            let path_timer = path_timer.clone();
                                                                             async move {
                                                                                 cx.background_executor().timer(std::time::Duration::from_millis(500)).await;
                                                                                 let _ = h_inner.update(&mut cx, |this, cx| {
                                                                                     data.position = this.mouse_pos;
+                                                                                    data.view = Some(crate::ui::components::tooltip::Tooltip::new_for_file_full(
+                                                                                        data.name.clone(),
+                                                                                        path_timer.clone(),
+                                                                                        data.type_str.clone(),
+                                                                                        data.size_str.clone(),
+                                                                                        data.date_str.clone(),
+                                                                                        cx,
+                                                                                    ).into());
                                                                                     this.tooltip_request = Some(data);
                                                                                     this.tooltip_timer = None;
                                                                                     cx.notify();
@@ -244,28 +268,52 @@ pub fn render_sidebar(view: &OxydeApp, handle: Entity<OxydeApp>, _cx: &mut Conte
                                                             let path_cap = path.clone();
                                                             move |e, _, cx| {
                                                                 cx.stop_propagation();
+                                                                let path_inner = path_cap.clone();
                                                                 let _ = h.update(cx, |this, cx| {
                                                                     let mut data = crate::ui::app::TooltipData {
                                                                         name: label.clone(),
                                                                         type_str: "".to_string(),
                                                                         size_str: "".to_string(),
                                                                         date_str: "".to_string(),
-                                                                        full_path: Some(path_cap.clone()),
+                                                                        full_path: Some(path_inner.clone()),
                                                                         position: e.position,
+                                                                        view: None,
                                                                     };
 
-                                                                    if this.tooltip_request.is_some() {
+                                                                    if let Some(existing) = this.tooltip_request.as_mut() {
+                                                                        if existing.full_path.as_ref() == data.full_path.as_ref() {
+                                                                            data.view = existing.view.clone();
+                                                                        } else {
+                                                                            data.view = Some(crate::ui::components::tooltip::Tooltip::new_for_file_full(
+                                                                                data.name.clone(),
+                                                                                path_inner.clone(),
+                                                                                data.type_str.clone(),
+                                                                                data.size_str.clone(),
+                                                                                data.date_str.clone(),
+                                                                                cx,
+                                                                            ).into());
+                                                                        }
                                                                         this.tooltip_request = Some(data);
                                                                         cx.notify();
                                                                     } else if this.tooltip_timer.is_none() {
                                                                         let h_inner = h.clone();
+                                                                        let path_timer = path_inner.clone();
                                                                         this.tooltip_timer = Some(cx.spawn(move |_, cx: &mut AsyncApp| {
                                                                             let mut cx = cx.clone();
                                                                             let h_inner = h_inner.clone();
+                                                                            let path_timer = path_timer.clone();
                                                                             async move {
                                                                                 cx.background_executor().timer(std::time::Duration::from_millis(500)).await;
                                                                                 let _ = h_inner.update(&mut cx, |this, cx| {
                                                                                     data.position = this.mouse_pos;
+                                                                                    data.view = Some(crate::ui::components::tooltip::Tooltip::new_for_file_full(
+                                                                                        data.name.clone(),
+                                                                                        path_timer.clone(),
+                                                                                        data.type_str.clone(),
+                                                                                        data.size_str.clone(),
+                                                                                        data.date_str.clone(),
+                                                                                        cx,
+                                                                                    ).into());
                                                                                     this.tooltip_request = Some(data);
                                                                                     this.tooltip_timer = None;
                                                                                     cx.notify();
@@ -409,28 +457,52 @@ pub fn render_sidebar(view: &OxydeApp, handle: Entity<OxydeApp>, _cx: &mut Conte
                                                             let path_cap = path.clone();
                                                             move |e, _, cx| {
                                                                 cx.stop_propagation();
+                                                                let path_inner = path_cap.clone();
                                                                 let _ = h.update(cx, |this, cx| {
                                                                     let mut data = crate::ui::app::TooltipData {
                                                                         name: name.clone(),
                                                                         type_str: "".to_string(),
                                                                         size_str: "".to_string(),
                                                                         date_str: "".to_string(),
-                                                                        full_path: Some(path_cap.clone()),
+                                                                        full_path: Some(path_inner.clone()),
                                                                         position: e.position,
+                                                                        view: None,
                                                                     };
 
-                                                                    if this.tooltip_request.is_some() {
+                                                                    if let Some(existing) = this.tooltip_request.as_mut() {
+                                                                        if existing.full_path.as_ref() == data.full_path.as_ref() {
+                                                                            data.view = existing.view.clone();
+                                                                        } else {
+                                                                            data.view = Some(crate::ui::components::tooltip::Tooltip::new_for_file_full(
+                                                                                data.name.clone(),
+                                                                                path_inner.clone(),
+                                                                                data.type_str.clone(),
+                                                                                data.size_str.clone(),
+                                                                                data.date_str.clone(),
+                                                                                cx,
+                                                                            ).into());
+                                                                        }
                                                                         this.tooltip_request = Some(data);
                                                                         cx.notify();
                                                                     } else if this.tooltip_timer.is_none() {
                                                                         let h_inner = h.clone();
+                                                                        let path_timer = path_inner.clone();
                                                                         this.tooltip_timer = Some(cx.spawn(move |_, cx: &mut AsyncApp| {
                                                                             let mut cx = cx.clone();
                                                                             let h_inner = h_inner.clone();
+                                                                            let path_timer = path_timer.clone();
                                                                             async move {
                                                                                 cx.background_executor().timer(std::time::Duration::from_millis(500)).await;
                                                                                 let _ = h_inner.update(&mut cx, |this, cx| {
                                                                                     data.position = this.mouse_pos;
+                                                                                    data.view = Some(crate::ui::components::tooltip::Tooltip::new_for_file_full(
+                                                                                        data.name.clone(),
+                                                                                        path_timer.clone(),
+                                                                                        data.type_str.clone(),
+                                                                                        data.size_str.clone(),
+                                                                                        data.date_str.clone(),
+                                                                                        cx,
+                                                                                    ).into());
                                                                                     this.tooltip_request = Some(data);
                                                                                     this.tooltip_timer = None;
                                                                                     cx.notify();
