@@ -17,6 +17,33 @@ use windows::Win32::UI::WindowsAndMessaging::{CreatePopupMenu, GetMenuItemCount,
 use windows::Win32::System::Com::{CoInitializeEx, CoUninitialize, COINIT_APARTMENTTHREADED, IBindCtx};
 use windows::core::{PWSTR, PSTR, PCWSTR};
 
+use crate::models::FileEntry;
+
+pub async fn list_network_vicinity() -> Result<Vec<FileEntry>, crate::models::CommandError> {
+    let resources = get_network_resources(None).await.map_err(|e| crate::models::CommandError::Other(e))?;
+    
+    Ok(resources.into_iter().map(|r| {
+        FileEntry {
+            name: r.name,
+            path: r.remote_path,
+            is_dir: true, // Servers act as directories
+            is_hidden: false,
+            is_system: false,
+            is_symlink: false,
+            is_junction: false,
+            size: 0,
+            modified: 0,
+            is_readonly: false,
+            is_protected: false,
+            is_calculated: true,
+            folders_count: None,
+            files_count: None,
+            original_path: None,
+            deleted_time: None,
+        }
+    }).collect())
+}
+
 pub async fn get_network_resources(path: Option<String>) -> Result<Vec<NetResource>, String> {
     #[cfg(target_os = "windows")]
     {
@@ -354,4 +381,3 @@ pub async fn disconnect_network_drive(letter: String, force: bool) -> Result<(),
         Err("Network drive disconnect is only available on Windows".to_string())
     }
 }
-

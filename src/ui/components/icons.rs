@@ -25,6 +25,7 @@ pub enum IconType {
     HardDrive,
     Network,
     Globe,
+    Trash,
 }
 
 impl IconType {
@@ -52,6 +53,7 @@ impl IconType {
             Self::HardDrive => "icons/hard-drive.svg",
             Self::Network => "icons/network.svg",
             Self::Globe => "icons/globe.svg",
+            Self::Trash => "icons/trash.svg",
         }
     }
 }
@@ -171,6 +173,14 @@ pub fn get_icon_type(name: &str, is_dir: bool, path: Option<&str>) -> IconType {
     }
 
     if let Some(path) = path {
+        // Virtual paths
+        if path == "__network_vincinity__" {
+            return IconType::Globe;
+        }
+        if path == "trash://" {
+            return IconType::Trash;
+        }
+
         // Drive roots (C:\)
         if path.len() <= 3 && path.chars().next().map(|c| c.is_ascii_alphabetic()).unwrap_or(false) && (path.ends_with(":\\") || path.ends_with(":")) {
              return IconType::HardDrive;

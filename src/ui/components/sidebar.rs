@@ -209,7 +209,10 @@ pub fn render_sidebar(view: &OxydeApp, handle: Entity<OxydeApp>, _cx: &mut Conte
                                                                 .items_center()
                                                                 .justify_center()
                                                                 .flex_shrink_0()
-                                                                .child(svg().path("icons/pin.svg").size_4().text_color(theme.accent))
+                                                                .child({
+                                                                    let icon_type = crate::ui::components::icons::get_icon_type(&item.name, false, Some(&path));
+                                                                    svg().path(icon_type.path()).size_4().text_color(theme.accent)
+                                                                })
                                                         )
                                                         .child(
                                                             div()

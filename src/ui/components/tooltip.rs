@@ -4,6 +4,7 @@ use crate::ui::theme::OxydeTheme;
 use crate::ui::style::TNUM;
 use crate::ui::components::icons::{get_preview_type, PreviewType};
 use std::sync::Arc;
+use std::time::Duration;
 
 /// Un composant de bulle d'aide (Tooltip) dans le style Oxyde.
 pub struct Tooltip {
@@ -191,6 +192,36 @@ impl PreviewTask {
         cx.spawn(move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
             let mut cx = cx.clone();
             async move {
+                if preview_type == PreviewType::Video {
+                    // Bounded channel (size 2) — blocking_send in the WMF thread provides
+                    // natural backpressure: it blocks until the async task has consumed the
+                    // previous frame, so WMF never runs ahead of the display rate.
+                    let (tx, mut rx) = tokio::sync::mpsc::channel::<(Arc<RenderImage>, Duration)>(2);
+
+                    let path_clone = path.clone();
+                    std::thread::spawn(move || {
+                        let _ = ::oxyde_lib::commands::thumbnails::stream_video_frames(path_clone, move |rgba, duration| {
+                            // WMF ARGB32 → bytes are already [B,G,R,A] = BGRA, no swap needed.
+                            let frame = Arc::new(RenderImage::new(vec![image::Frame::new(rgba)]));
+                            tx.blocking_send((frame, duration)).is_ok()
+                        });
+                    });
+
+                    // Cap at 15fps — GPUI re-renders the whole window on notify(),
+                    // so 30fps would double the render load for a tooltip preview.
+                    const MIN_FRAME_MS: u64 = 66;
+                    while let Some((frame, duration)) = rx.recv().await {
+                        let res = this.update(&mut cx, |this, cx| {
+                            this.data = Some(PreviewData::Image(frame));
+                            cx.notify();
+                        });
+                        if res.is_err() { break; }
+                        let wait = duration.max(Duration::from_millis(MIN_FRAME_MS));
+                        cx.background_executor().timer(wait).await;
+                    }
+                    return;
+                }
+
                 let preview = match preview_type {
                     PreviewType::Image | PreviewType::Office | PreviewType::Pdf => {
                         let rgba_img = match preview_type {
@@ -200,11 +231,8 @@ impl PreviewTask {
                             _ => None,
                         };
 
-                        if let Some(mut rgba) = rgba_img {
-                            // GPUI expects BGRA
-                            for pixel in rgba.chunks_exact_mut(4) {
-                                pixel.swap(0, 2);
-                            }
+                        if let Some(rgba) = rgba_img {
+                            // Backend now consistently returns BGRA for all types
                             let frame = image::Frame::new(rgba);
                             Some(PreviewData::Image(Arc::new(RenderImage::new(vec![frame]))))
                         } else if preview_type == PreviewType::Office {
@@ -231,7 +259,7 @@ impl PreviewTask {
                 };
 
                 if let Some(p) = preview {
-                    let _ = this.update(&mut cx, |this, cx: &mut Context<Self>| {
+                    let _ = this.update(&mut cx, |this, cx| {
                         this.data = Some(p);
                         cx.notify();
                     });

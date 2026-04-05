@@ -779,6 +779,21 @@ impl WorkspaceState {
                 self.populate_sidebar_subdir(&drive.path, 1, &mut new_items, &rt);
             }
         }
+
+        new_items.push(SidebarItem::Header("EMPLACEMENTS".to_string()));
+        new_items.push(SidebarItem::Pinned {
+            item: QuickAccessItem {
+                name: "Voisinage réseau".to_string(),
+                path: "__network_vincinity__".to_string(),
+            },
+        });
+        new_items.push(SidebarItem::Pinned {
+            item: QuickAccessItem {
+                name: "Corbeille".to_string(),
+                path: "trash://".to_string(),
+            },
+        });
+
         self.sidebar_items = new_items;
     }
 

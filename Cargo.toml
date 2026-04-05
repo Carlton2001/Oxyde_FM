@@ -19,6 +19,7 @@ glob = "0.3.1"
 walkdir = "2.5.0"
 trash = "3.3.1"
 image = "0.25.1"
+futures = "0.3"
 hex = "0.4.3"
 base64 = "0.22.1"
 fs_extra = "1.3.0"
@@ -76,6 +77,8 @@ features = [
     "Win32_System_Wmi",
     "Win32_Media",
     "Win32_Media_MediaFoundation",
+    "Win32_Graphics_Direct3D11",
+    "Win32_Graphics_Dxgi",
     "Data_Pdf",
     "Storage",
     "Storage_Streams",

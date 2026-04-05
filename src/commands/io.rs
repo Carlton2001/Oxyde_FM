@@ -77,6 +77,45 @@ pub async fn list_dir(
     let show_system = show_system.unwrap_or(false);
     let sort_config = sort_config.unwrap_or_default();
 
+    if path == "trash://" {
+        let entries = crate::commands::ops::list_trash()?.into_iter().map(|t| {
+            FileEntry {
+                name: t.name,
+                path: t.path,
+                is_dir: t.is_dir,
+                is_hidden: false,
+                is_system: false,
+                is_symlink: false,
+                is_junction: false,
+                size: t.size,
+                modified: t.modified,
+                is_readonly: false,
+                is_protected: false,
+                is_calculated: true,
+                folders_count: None,
+                files_count: None,
+                original_path: Some(t.original_path),
+                deleted_time: Some(t.deleted_time as i64),
+            }
+        }).collect();
+        return Ok(DirResponse {
+            entries,
+            summary: FileSummary { count: 0, total_size: 0, files_count: 0, folders_count: 0, parent_path: Some(path) },
+            is_complete: true,
+            is_protected: false,
+        });
+    }
+
+    if path == "__network_vincinity__" {
+        let entries = crate::commands::network::list_network_vicinity().await?;
+        return Ok(DirResponse {
+            entries,
+            summary: FileSummary { count: 0, total_size: 0, files_count: 0, folders_count: 0, parent_path: Some(path) },
+            is_complete: true,
+            is_protected: false,
+        });
+    }
+
     let path_buf = PathBuf::from(&path);
     let mut entries = Vec::new();
     
