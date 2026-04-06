@@ -60,13 +60,28 @@ impl Platform for WindowsPlatform {
 
     fn show_properties_dialog(&self, path: &str) {
         use windows::core::{HSTRING, PCWSTR};
-        use windows::Win32::UI::Shell::{SHObjectProperties, SHOP_FILEPATH};
+        use windows::Win32::UI::Shell::{ShellExecuteExW, SHELLEXECUTEINFOW, SEE_MASK_INVOKEIDLIST};
+        use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
 
-        let owned = path.to_string();
+        // Normalize path: replace / with \ and ensure drive roots have a trailing backslash (e.g. "C:\" instead of "C:")
+        let mut normalized = path.replace('/', "\\");
+        if normalized.len() == 2 && normalized.ends_with(':') {
+            normalized.push('\\');
+        }
+
         std::thread::spawn(move || {
-            let wide = HSTRING::from(&owned);
+            let wide_path = HSTRING::from(&normalized);
+            let verb = HSTRING::from("properties");
+            
+            let mut info = SHELLEXECUTEINFOW::default();
+            info.cbSize = std::mem::size_of::<SHELLEXECUTEINFOW>() as u32;
+            info.fMask = SEE_MASK_INVOKEIDLIST;
+            info.lpVerb = PCWSTR(verb.as_ptr());
+            info.lpFile = PCWSTR(wide_path.as_ptr());
+            info.nShow = SW_SHOWNORMAL.0 as i32;
+
             unsafe {
-                let _ = SHObjectProperties(None, SHOP_FILEPATH, PCWSTR(wide.as_ptr()), PCWSTR::null());
+                let _ = ShellExecuteExW(&mut info);
             }
         });
     }

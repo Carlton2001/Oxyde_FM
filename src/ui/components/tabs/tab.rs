@@ -42,6 +42,7 @@ pub struct Tab {
     icon: Option<String>,
     on_click: Option<Box<dyn Fn(&mut Window, &mut App) + 'static>>,
     on_middle_click: Option<Box<dyn Fn(&mut Window, &mut App) + 'static>>,
+    on_right_click: Option<Box<dyn Fn(&mut Window, &mut App, Point<Pixels>) + 'static>>,
     on_close: Option<Box<dyn Fn(&mut Window, &mut App) + 'static>>,
     drag_refinement: Option<Box<dyn FnOnce(Stateful<Div>) -> Stateful<Div> + 'static>>,
     is_drop_target: bool,
@@ -58,6 +59,7 @@ impl Tab {
             icon: None,
             on_click: None,
             on_middle_click: None,
+            on_right_click: None,
             on_close: None,
             drag_refinement: None,
             is_drop_target: false,
@@ -87,6 +89,11 @@ impl Tab {
 
     pub fn on_middle_click(mut self, f: impl Fn(&mut Window, &mut App) + 'static) -> Self {
         self.on_middle_click = Some(Box::new(f));
+        self
+    }
+
+    pub fn on_right_click(mut self, f: impl Fn(&mut Window, &mut App, Point<Pixels>) + 'static) -> Self {
+        self.on_right_click = Some(Box::new(f));
         self
     }
 
@@ -144,6 +151,10 @@ impl RenderOnce for Tab {
 
         if let Some(on_middle_click) = self.on_middle_click {
             container = container.on_mouse_down(MouseButton::Middle, move |_, window, cx| on_middle_click(window, cx));
+        }
+
+        if let Some(on_right_click) = self.on_right_click {
+            container = container.on_mouse_down(MouseButton::Right, move |e, window, cx| on_right_click(window, cx, e.position));
         }
 
         if let Some(refinement) = self.drag_refinement {

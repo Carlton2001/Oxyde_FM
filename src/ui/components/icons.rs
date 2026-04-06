@@ -23,7 +23,6 @@ pub enum IconType {
     ShieldCheck,
     Box,
     HardDrive,
-    Network,
     Globe,
     Trash,
 }
@@ -51,7 +50,6 @@ impl IconType {
             Self::ShieldCheck => "icons/shield-check.svg",
             Self::Box => "icons/box.svg",
             Self::HardDrive => "icons/hard-drive.svg",
-            Self::Network => "icons/network.svg",
             Self::Globe => "icons/globe.svg",
             Self::Trash => "icons/trash.svg",
         }

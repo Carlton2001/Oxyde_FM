@@ -100,20 +100,6 @@ impl Tooltip {
             }
         })
     }
-
-    /// Crée un constructeur de tooltip affichant un nom et un chemin complet (pour la sidebar).
-    pub fn for_path(name: String, path: String) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
-        let name = SharedString::from(name);
-        let path = SharedString::from(path);
-        move |_, cx| {
-            cx.new(|_| Self {
-                title: name.clone(),
-                meta: Some(path.clone()),
-                file_info: None,
-                preview_view: None,
-            }).into()
-        }
-    }
 }
 
 impl Render for Tooltip {

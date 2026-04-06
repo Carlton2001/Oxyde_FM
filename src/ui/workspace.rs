@@ -629,15 +629,10 @@ impl WorkspaceState {
             new_tab.list_scroll = UniformListScrollHandle::new();        }
 
         if let Some(pane) = self.find_pane_mut(pane_id) {
-            let insert_at = pane.active_tab_index + 1;
-            if insert_at <= pane.tabs.len() {
-                pane.tabs.insert(insert_at, new_tab);
-            } else {
-                pane.tabs.push(new_tab);
-            }
+            pane.tabs.push(new_tab);
 
             if activate {
-                pane.active_tab_index = insert_at;
+                pane.active_tab_index = pane.tabs.len() - 1;
                 self.active_pane_id = pane_id.to_string();
             }
         }
@@ -649,7 +644,7 @@ impl WorkspaceState {
             if pane.tabs.len() > 1 {
                 pane.tabs.remove(tab_idx);
                 if pane.active_tab_index >= pane.tabs.len() {
-                    pane.active_tab_index = pane.tabs.len() - 1;
+                    pane.active_tab_index = pane.tabs.len().saturating_sub(1);
                 }
             } else {
                 should_remove_pane = true;
@@ -658,6 +653,28 @@ impl WorkspaceState {
         
         if should_remove_pane {
             self.remove_pane_by_id(pane_id);
+        }
+    }
+
+    pub fn duplicate_tab(&mut self, pane_id: &str, tab_idx: usize) {
+        let path = if let Some(pane) = self.find_pane(pane_id) {
+            pane.tabs.get(tab_idx).map(|t| t.path.clone())
+        } else {
+            None
+        };
+
+        if let Some(path) = path {
+            self.add_tab(pane_id, path, true);
+        }
+    }
+
+    pub fn close_other_tabs(&mut self, pane_id: &str, tab_idx: usize) {
+        if let Some(pane) = self.find_pane_mut(pane_id) {
+            if tab_idx < pane.tabs.len() {
+                let tab = pane.tabs.remove(tab_idx);
+                pane.tabs = vec![tab];
+                pane.active_tab_index = 0;
+            }
         }
     }
 

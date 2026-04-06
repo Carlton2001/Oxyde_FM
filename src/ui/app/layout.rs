@@ -57,18 +57,24 @@ impl OxydeApp {
              self.breadcrumb_scroll.0.borrow().base_handle.set_offset(Point::new(px(0.0), px(0.0)));
         }
 
-        // Clamp ContextMenu scroll
-        if let Some((_, crate::ui::app::ContextMenuContent::Items(menu, _))) = &self.context_menu {
-             let item_count = menu.len();
-             let content_h = item_count as f32 * 28.0;
-             let viewport_h = content_h.min(480.0);
-             let max_v_offset = (content_h - viewport_h).max(0.0);
-             let current_v_offset = self.context_menu_scroll.0.borrow().base_handle.offset().y.as_f32().abs();
-             if current_v_offset > max_v_offset {
-                  self.context_menu_scroll.0.borrow().base_handle.set_offset(Point::new(px(0.0), px(-max_v_offset)));
-             }
-        } else {
-             self.context_menu_scroll.0.borrow().base_handle.set_offset(Point::new(px(0.0), px(0.0)));
+        // Clamp ContextMenu scrolls
+        for instance in &self.context_menus {
+            let item_count = match &instance.content {
+                crate::ui::app::ContextMenuContent::Items(items, _) => items.len(),
+                crate::ui::app::ContextMenuContent::NativeItems { items, .. } => items.len(),
+                crate::ui::app::ContextMenuContent::NameFilter { .. } => 0,
+            };
+            if item_count > 0 {
+                let content_h = item_count as f32 * 28.0;
+                let viewport_h = content_h.min(480.0);
+                let max_v_offset = (content_h - viewport_h).max(0.0);
+                let current_v_offset = instance.scroll_handle.0.borrow().base_handle.offset().y.as_f32().abs();
+                if current_v_offset > max_v_offset {
+                    instance.scroll_handle.0.borrow().base_handle.set_offset(Point::new(px(0.0), px(-max_v_offset)));
+                }
+            } else {
+                instance.scroll_handle.0.borrow().base_handle.set_offset(Point::new(px(0.0), px(0.0)));
+            }
         }
     }
 
@@ -223,9 +229,21 @@ impl OxydeApp {
             .flex()
             .flex_col()
             .child({
-                let mut tab_bar = TabBar::new(SharedString::from(format!("tab-bar-{}", p_id)));
                 let active_idx = pane.active_tab_index;
                 let tabs_count = pane.tabs.len();
+                let is_drop_target_at_end = self.drop_target_pane.as_ref() == Some(&p_id) && self.drop_target_idx == Some(tabs_count);
+
+                let mut tab_bar = TabBar::new(SharedString::from(format!("tab-bar-{}", p_id)))
+                    .on_new_tab({
+                        let h = h.clone();
+                        let p_id_cap = p_id.clone();
+                        move |_, cx| {
+                            let _ = h.update(cx, |this, cx| {
+                                this.add_tab(&p_id_cap, "C:/".to_string(), true, cx);
+                            });
+                        }
+                    })
+                    .drop_target_indicator(is_drop_target_at_end);
 
                 for (t_ix, tab_data) in pane.tabs.iter().enumerate() {
                     let is_tab_active = t_ix == active_idx;
@@ -258,6 +276,24 @@ impl OxydeApp {
                             let h = h.clone();
                             let p_id_cap = p_id.clone();
                             move |_, cx| { let _ = h.update(cx, |this, cx| this.switch_tab(&p_id_cap, t_ix, cx)); }
+                        })
+                        .on_right_click({
+                            let h = h.clone();
+                            let p_id_cap = p_id.clone();
+                            move |_, cx, pos| {
+                                let _ = h.update(cx, |this, cx| {
+                                    use crate::ui::app::{ContextMenuContent, ContextMenuInstance};
+                                    this.context_menus.clear();
+                                    this.context_menus.push(ContextMenuInstance {
+                                        position: pos,
+                                        content: ContextMenuContent::Items(crate::ui::components::tab_context_menu_items(h.clone(), p_id_cap.clone(), t_ix), None),
+                                        scroll_handle: gpui::UniformListScrollHandle::new(),
+                                        width: px(0.0),
+                                    open_left: false,
+                                    });
+                                    cx.notify();
+                                });
+                            }
                         })
                         .on_middle_click({
                             let h = h.clone();
@@ -447,19 +483,16 @@ impl OxydeApp {
                     );
                 }
 
-                // Gap at the end for dropping tabs
+                // Drop zone at the end of tabs (Transparent behavior-only div)
                 tab_bar = tab_bar.child(
                     div()
-                        .flex_1()
-                        .min_w(px(20.0))
+                        .w(px(8.0)) // Close to tabs
                         .h_full()
-                        .relative()
                         .drag_over::<(String, usize)>({
                             let h = h.clone();
                             let p_id_cap = p_id.clone();
                             move |style, (from_p, from_t), _, app| {
                                 let target = tabs_count;
-                                // It's only a no-op if we are in the same pane AND we are already the last tab
                                 let is_noop = from_p == &p_id_cap && *from_t == target.saturating_sub(1);
                                 
                                 let _ = h.update(app, |v, _| {
@@ -470,7 +503,6 @@ impl OxydeApp {
                                         v.drop_target_idx = None;
                                         v.drop_target_pane = None;
                                     }
-                                    // Clear split highlights when over the gap
                                     v.highlight_split_pane = None;
                                 });
                                 style
@@ -494,18 +526,8 @@ impl OxydeApp {
                                 });
                             }
                         })
-                        .child(
-                            div()
-                                .absolute()
-                                .top_0()
-                                .left_0()
-                                .w(px(2.0))
-                                .h_full()
-                                .bg(rgb(0x0078d4))
-                                .when(self.drop_target_pane == Some(p_id.clone()) && self.drop_target_idx == Some(tabs_count), |s| s.opacity(1.0))
-                                .when(!(self.drop_target_pane == Some(p_id.clone()) && self.drop_target_idx == Some(tabs_count)), |s| s.opacity(0.0))
-                        )
                 );
+
                 div()
                     .h(px(32.0))
                     .w_full()

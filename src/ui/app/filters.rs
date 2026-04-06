@@ -1,5 +1,5 @@
 use gpui::*;
-use crate::ui::app::{OxydeApp, ContextMenuContent, ContextMenuHeader};
+use crate::ui::app::{OxydeApp, ContextMenuContent, ContextMenuHeader, ContextMenuInstance};
 
 impl OxydeApp {
     pub fn update_filter_size(&mut self, pane_id: &str, category: crate::ui::workspace::SizeCategory, active: bool, cx: &mut Context<Self>) {
@@ -21,8 +21,15 @@ impl OxydeApp {
             let tab_files = tab.files.clone();
             let current_filters = tab.filter_types.clone();
             let items = crate::ui::components::file_list::get_type_filter_items(self.handle.as_ref().unwrap().clone(), pane_id.to_string(), tab_files, current_filters, pos);
-            self.context_menu = Some((pos, ContextMenuContent::Items(items, Some(ContextMenuHeader::TypeSelectAll { pane_id: pane_id.to_string() }))));
-            cx.notify();
+            
+            self.context_menus.clear();
+            self.context_menus.push(ContextMenuInstance {
+                position: pos,
+                content: ContextMenuContent::Items(items, Some(ContextMenuHeader::TypeSelectAll { pane_id: pane_id.to_string() })),
+                scroll_handle: UniformListScrollHandle::new(),
+                width: px(0.0),
+                                    open_left: false,
+            });            cx.notify();
         }
     }
 
@@ -32,7 +39,15 @@ impl OxydeApp {
             let tab_files = tab.files.clone();
             let current_filters = tab.filter_sizes.clone();
             let items = crate::ui::components::file_list::get_size_filter_items(self.handle.as_ref().unwrap().clone(), pane_id.to_string(), tab_files, current_filters, pos);
-            self.context_menu = Some((pos, ContextMenuContent::Items(items, Some(ContextMenuHeader::SizeSelectAll { pane_id: pane_id.to_string() }))));
+            
+            self.context_menus.clear();
+            self.context_menus.push(ContextMenuInstance {
+                position: pos,
+                content: ContextMenuContent::Items(items, Some(ContextMenuHeader::SizeSelectAll { pane_id: pane_id.to_string() })),
+                scroll_handle: UniformListScrollHandle::new(),
+                width: px(0.0),
+                                    open_left: false,
+            });
             cx.notify();
         }
     }
@@ -56,7 +71,15 @@ impl OxydeApp {
             let tab_files = tab.files.clone();
             let current_filters = tab.filter_dates.clone();
             let items = crate::ui::components::file_list::get_date_filter_items(self.handle.as_ref().unwrap().clone(), pane_id.to_string(), tab_files, current_filters, pos);
-            self.context_menu = Some((pos, ContextMenuContent::Items(items, Some(ContextMenuHeader::DateSelectAll { pane_id: pane_id.to_string() }))));
+            
+            self.context_menus.clear();
+            self.context_menus.push(ContextMenuInstance {
+                position: pos,
+                content: ContextMenuContent::Items(items, Some(ContextMenuHeader::DateSelectAll { pane_id: pane_id.to_string() })),
+                scroll_handle: UniformListScrollHandle::new(),
+                width: px(0.0),
+                                    open_left: false,
+            });
             cx.notify();
         }
     }
@@ -142,18 +165,25 @@ impl OxydeApp {
             
             crate::ui::components::input::TextInput::new(cx, "Filtrer par nom...", initial_text,
                 move |text, _, cx| { let _ = h_change.update(cx, |this, cx| this.update_filter_name(&pid_change, text.to_string(), cx)); },
-                move |_, cx| { let _ = h_enter.update(cx, |this, _| { this.context_menu = None; }); },
+                move |_, cx| { let _ = h_enter.update(cx, |this, _| { this.context_menus.clear(); }); },
                 move |_, cx| {
                     let _ = h_esc.update(cx, |this, cx| {
                         this.update_filter_name(&pid_esc, "".to_string(), cx);
-                        this.context_menu = None;
+                        this.context_menus.clear();
                     });
                 },
                 window
             )
         });
         
-        self.context_menu = Some((pos, ContextMenuContent::NameFilter { input: input.clone() }));
+        self.context_menus.clear();
+        self.context_menus.push(ContextMenuInstance {
+            position: pos,
+            content: ContextMenuContent::NameFilter { input: input.clone() },
+            scroll_handle: UniformListScrollHandle::new(),
+            width: px(0.0),
+                                    open_left: false,
+        });
         cx.notify();
 
         let focus_handle = input.read(cx).focus_handle.clone();

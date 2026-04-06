@@ -1,5 +1,5 @@
 use gpui::*;
-use crate::ui::app::{OxydeApp, DragTarget, ContextMenuContent, FileDragData, FileDragPreview};
+use crate::ui::app::{OxydeApp, DragTarget, ContextMenuContent, ContextMenuInstance, FileDragData, FileDragPreview};
 use crate::ui::workspace::SidebarItem;
 use crate::ui::components::scrollbar::{render_scrollbar, ScrollbarAxis};
 use crate::ui::theme::{OxydeTheme, ThemeContext, PixelsExt};
@@ -75,9 +75,10 @@ pub fn render_sidebar(view: &OxydeApp, handle: Entity<OxydeApp>, _cx: &mut Conte
                                 "sidebar-list",
                                 sidebar_items.len(),
                                 {
-                                    let items = sidebar_items.clone();
+                                    let items_for_uniform_list = sidebar_items.clone();
                                     let h = handle.clone();
                                     move |range, _, cx| {
+                                        let items = items_for_uniform_list.clone();
                                         range.map(|i| {
                                             let theme = OxydeTheme::global(cx);
                                             let item = &items[i];
@@ -189,11 +190,46 @@ pub fn render_sidebar(view: &OxydeApp, handle: Entity<OxydeApp>, _cx: &mut Conte
                                                         })
                                                         .on_mouse_down(MouseButton::Right, {
                                                             let h_right = h_inner.clone();
+                                                            let items_cap = items.clone();
                                                             move |e, _, cx| {
                                                                 let pos = e.position;
+                                                                let value = items_cap.clone();
+                                                                let h_lvl1 = h_right.clone();
                                                                 let _ = h_right.update(cx, |this, cx| {
-                                                                    this.context_menu = Some((pos, ContextMenuContent::Items(super::oxyde_context_menu_items(h_right.clone()), None)));
-                                                                    this.context_menu_scroll = UniformListScrollHandle::new();
+                                                                    this.context_menus.clear();
+                                                                    let items: Vec<crate::ui::components::dropdown::DropdownItem> = value.into_iter().map(|it| {
+                                                                        use crate::ui::workspace::SidebarItem;
+                                                                        let h = h_lvl1.clone();
+                                                                        match it {
+                                                                            SidebarItem::Directory { node, .. } => {
+                                                                                let path = node.path.clone();
+                                                                                crate::ui::components::dropdown::DropdownItem::new(node.name.clone(), move |_, app| {
+                                                                                    let _ = h.update(app, |this, cx| {
+                                                                                        this.navigate_to("pane-0", path.clone(), cx);
+                                                                                        this.context_menus.clear();
+                                                                                    });
+                                                                                }).icon(crate::ui::components::dropdown::IconName::FolderOpen)
+                                                                            }
+                                                                            SidebarItem::Drive { drive, .. } => {
+                                                                                let path = drive.path.clone();
+                                                                                crate::ui::components::dropdown::DropdownItem::new(drive.label.clone(), move |_, app| {
+                                                                                    let _ = h.update(app, |this, cx| {
+                                                                                        this.navigate_to("pane-0", path.clone(), cx);
+                                                                                        this.context_menus.clear();
+                                                                                    });
+                                                                                }).icon(crate::ui::components::dropdown::IconName::HardDrive)
+                                                                            }
+                                                                            _ => crate::ui::components::dropdown::DropdownItem::new("Inconnu", |_, _| {})
+                                                                        }
+                                                                    }).collect();
+
+                                                                    this.context_menus.push(ContextMenuInstance {
+                                                                        position: pos,
+                                                                        content: ContextMenuContent::Items(items, None),
+                                                                        scroll_handle: UniformListScrollHandle::new(),
+                                                                        width: px(0.0),
+                                    open_left: false,
+                                                                    });
                                                                     this.tooltip_request = None;
                                                                     this.tooltip_timer = None;
                                                                     cx.notify();
@@ -339,11 +375,46 @@ pub fn render_sidebar(view: &OxydeApp, handle: Entity<OxydeApp>, _cx: &mut Conte
                                                         })
                                                         .on_mouse_down(MouseButton::Right, {
                                                             let h_right = h_inner.clone();
+                                                            let items_cap = items.clone();
                                                             move |e, _, cx| {
                                                                 let pos = e.position;
+                                                                let value = items_cap.clone();
+                                                                let h_lvl1 = h_right.clone();
                                                                 let _ = h_right.update(cx, |this, cx| {
-                                                                    this.context_menu = Some((pos, ContextMenuContent::Items(super::oxyde_context_menu_items(h_right.clone()), None)));
-                                                                    this.context_menu_scroll = UniformListScrollHandle::new();
+                                                                    this.context_menus.clear();
+                                                                    let items: Vec<crate::ui::components::dropdown::DropdownItem> = value.into_iter().map(|it| {
+                                                                        use crate::ui::workspace::SidebarItem;
+                                                                        let h = h_lvl1.clone();
+                                                                        match it {
+                                                                            SidebarItem::Directory { node, .. } => {
+                                                                                let path = node.path.clone();
+                                                                                crate::ui::components::dropdown::DropdownItem::new(node.name.clone(), move |_, app| {
+                                                                                    let _ = h.update(app, |this, cx| {
+                                                                                        this.navigate_to("pane-0", path.clone(), cx);
+                                                                                        this.context_menus.clear();
+                                                                                    });
+                                                                                }).icon(crate::ui::components::dropdown::IconName::FolderOpen)
+                                                                            }
+                                                                            SidebarItem::Drive { drive, .. } => {
+                                                                                let path = drive.path.clone();
+                                                                                crate::ui::components::dropdown::DropdownItem::new(drive.label.clone(), move |_, app| {
+                                                                                    let _ = h.update(app, |this, cx| {
+                                                                                        this.navigate_to("pane-0", path.clone(), cx);
+                                                                                        this.context_menus.clear();
+                                                                                    });
+                                                                                }).icon(crate::ui::components::dropdown::IconName::HardDrive)
+                                                                            }
+                                                                            _ => crate::ui::components::dropdown::DropdownItem::new("Inconnu", |_, _| {})
+                                                                        }
+                                                                    }).collect();
+
+                                                                    this.context_menus.push(ContextMenuInstance {
+                                                                        position: pos,
+                                                                        content: ContextMenuContent::Items(items, None),
+                                                                        scroll_handle: UniformListScrollHandle::new(),
+                                                                        width: px(0.0),
+                                    open_left: false,
+                                                                    });
                                                                     this.tooltip_request = None;
                                                                     this.tooltip_timer = None;
                                                                     cx.notify();
@@ -518,11 +589,46 @@ pub fn render_sidebar(view: &OxydeApp, handle: Entity<OxydeApp>, _cx: &mut Conte
                                                         })
                                                         .on_mouse_down(MouseButton::Right, {
                                                             let h_right = h_inner.clone();
+                                                            let items_cap = items.clone();
                                                             move |e, _, cx| {
                                                                 let pos = e.position;
+                                                                let value = items_cap.clone();
+                                                                let h_lvl1 = h_right.clone();
                                                                 let _ = h_right.update(cx, |this, cx| {
-                                                                    this.context_menu = Some((pos, ContextMenuContent::Items(super::oxyde_context_menu_items(h_right.clone()), None)));
-                                                                    this.context_menu_scroll = UniformListScrollHandle::new();
+                                                                    this.context_menus.clear();
+                                                                    let items: Vec<crate::ui::components::dropdown::DropdownItem> = value.into_iter().map(|it| {
+                                                                        use crate::ui::workspace::SidebarItem;
+                                                                        let h = h_lvl1.clone();
+                                                                        match it {
+                                                                            SidebarItem::Directory { node, .. } => {
+                                                                                let path = node.path.clone();
+                                                                                crate::ui::components::dropdown::DropdownItem::new(node.name.clone(), move |_, app| {
+                                                                                    let _ = h.update(app, |this, cx| {
+                                                                                        this.navigate_to("pane-0", path.clone(), cx);
+                                                                                        this.context_menus.clear();
+                                                                                    });
+                                                                                }).icon(crate::ui::components::dropdown::IconName::FolderOpen)
+                                                                            }
+                                                                            SidebarItem::Drive { drive, .. } => {
+                                                                                let path = drive.path.clone();
+                                                                                crate::ui::components::dropdown::DropdownItem::new(drive.label.clone(), move |_, app| {
+                                                                                    let _ = h.update(app, |this, cx| {
+                                                                                        this.navigate_to("pane-0", path.clone(), cx);
+                                                                                        this.context_menus.clear();
+                                                                                    });
+                                                                                }).icon(crate::ui::components::dropdown::IconName::HardDrive)
+                                                                            }
+                                                                            _ => crate::ui::components::dropdown::DropdownItem::new("Inconnu", |_, _| {})
+                                                                        }
+                                                                    }).collect();
+
+                                                                    this.context_menus.push(ContextMenuInstance {
+                                                                        position: pos,
+                                                                        content: ContextMenuContent::Items(items, None),
+                                                                        scroll_handle: UniformListScrollHandle::new(),
+                                                                        width: px(0.0),
+                                    open_left: false,
+                                                                    });
                                                                     this.tooltip_request = None;
                                                                     this.tooltip_timer = None;
                                                                     cx.notify();

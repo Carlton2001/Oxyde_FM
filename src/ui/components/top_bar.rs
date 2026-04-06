@@ -238,12 +238,14 @@ pub fn render_top_bar(view: &OxydeApp, pane_id: String, handle: Entity<OxydeApp>
                                                             label: entry.name.clone(),
                                                             icon: Some(IconName::FolderOpen),
                                                             stay_open: false,
+                                                            has_submenu: false,
                                                             on_click: std::rc::Rc::new(move |_, app| {
                                                                 let _ = h.update(app, |this, cx| {
                                                                     this.navigate_to(&p_id, entry_path.clone(), cx);
                                                                     this.breadcrumb_menu = None;
                                                                 });
                                                             }),
+                                                            on_hover: None,
                                                         }
                                                     }).collect();
 
@@ -275,6 +277,9 @@ pub fn render_top_bar(view: &OxydeApp, pane_id: String, handle: Entity<OxydeApp>
                                                                            });
                                                                         }),
                                                                         is_dragging: matches!(view.drag_target, Some(crate::ui::app::DragTarget::BreadcrumbV { .. })),
+                                                                        on_item_hover: None,
+                                                                        on_width_calculated: None,
+                                                                        on_hover_change: None,
                                                                     })
                                                                 )
                                                         )

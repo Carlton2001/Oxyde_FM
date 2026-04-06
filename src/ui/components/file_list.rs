@@ -1,7 +1,7 @@
 use gpui::*;
 use gpui::prelude::*;
 use oxyde_lib::models::FileEntry;
-use crate::ui::app::{OxydeApp, DragTarget, ContextMenuContent, FileDragData, FileDragPreview};
+use crate::ui::app::{OxydeApp, DragTarget, ContextMenuContent, ContextMenuInstance, FileDragData, FileDragPreview};
 use crate::ui::style::{ROW_HEIGHT, format_size, format_date};
 use crate::ui::components::scrollbar::{render_scrollbar, ScrollbarAxis, ZED_TRACK_WIDTH};
 use crate::ui::theme::{OxydeTheme, ThemeContext, PixelsExt};
@@ -218,8 +218,14 @@ pub fn render_file_list(view: &OxydeApp, pane_id: String, handle: Entity<OxydeAp
                                                               if !this.state.find_pane(&p_id_cap_cap).map(|p| p.active_tab().selected_paths.contains(&p_for_right_cap)).unwrap_or(false) {
                                                                   this.toggle_selection(&p_id_cap_cap, p_for_right_cap.clone(), false, false, cx);
                                                               }
-                                                              this.context_menu = Some((pos, ContextMenuContent::Items(super::oxyde_context_menu_items(h_inner_inner.clone()), None)));
-                                                              this.context_menu_scroll = UniformListScrollHandle::new();
+                                                              this.context_menus.clear();
+                                                              this.context_menus.push(ContextMenuInstance {
+                                                                  position: pos,
+                                                                  content: ContextMenuContent::Items(super::oxyde_context_menu_items(h_inner_inner.clone()), None),
+                                                                  scroll_handle: UniformListScrollHandle::new(),
+                                                                  width: px(0.0),
+                                    open_left: false,
+                                                              });
                                                                this.tooltip_request = None;
                                                                this.tooltip_timer = None;
                                                               cx.notify();
@@ -426,6 +432,28 @@ pub fn render_file_list(view: &OxydeApp, pane_id: String, handle: Entity<OxydeAp
                                     });
                                 }
                             })
+                            .on_mouse_down(MouseButton::Right, {
+                                 let h = handle.clone();
+                                 let p_id_cap = pane_id.clone();
+                                 move |e, _, cx| {
+                                     let pos = e.position;
+                                     let p_id_cap_cap = p_id_cap.clone();
+                                      let _ = h.update(cx, |this, cx| {
+                                          this.state.active_pane_id = p_id_cap_cap.clone();
+                                          this.context_menus.clear();
+                                          this.context_menus.push(ContextMenuInstance {
+                                              position: pos,
+                                              content: ContextMenuContent::Items(super::pane_context_menu_items(h.clone(), p_id_cap_cap), None),
+                                              scroll_handle: UniformListScrollHandle::new(),
+                                              width: px(0.0),
+                                    open_left: false,
+                                          });
+                                          this.tooltip_request = None;
+                                          this.tooltip_timer = None;
+                                          cx.notify();
+                                      });
+                                 }
+                             })
                             .drag_over::<FileDragData>({
                                 let p_id_cap = pane_id.clone();
                                 let h_over = handle.clone();
@@ -742,13 +770,15 @@ pub fn get_type_filter_items(h: Entity<OxydeApp>, pid: String, tab_files: Vec<Fi
             label: "Dossier".to_string(),
             icon: Some(if is_sel { IconName::Check } else { IconName::Square }),
             stay_open: true,
+            has_submenu: false,
             on_click: std::rc::Rc::new(move |_, app| {
                 let pid_cap = pid_dir.clone();
                 let _ = h_dir.update(app, |this, cx| {
                     this.toggle_filter_type(&pid_cap, "Dossier".to_string(), cx);
                     this.open_type_filter_menu(&pid_cap, pos, cx);
                 });
-            })
+            }),
+            on_hover: None,
         });
     }
 
@@ -762,6 +792,7 @@ pub fn get_type_filter_items(h: Entity<OxydeApp>, pid: String, tab_files: Vec<Fi
             label: ext,
             icon: Some(if is_sel { IconName::Check } else { IconName::Square }),
             stay_open: true,
+            has_submenu: false,
             on_click: std::rc::Rc::new(move |_, app| {
                 let pid_cap = pid_ext.clone();
                 let e_inner = e_cap.clone();
@@ -769,7 +800,8 @@ pub fn get_type_filter_items(h: Entity<OxydeApp>, pid: String, tab_files: Vec<Fi
                     this.toggle_filter_type(&pid_cap, e_inner, cx);
                     this.open_type_filter_menu(&pid_cap, pos, cx);
                 });
-            })
+            }),
+            on_hover: None,
         });
     }
     
@@ -813,6 +845,7 @@ pub fn get_date_filter_items(handle: Entity<OxydeApp>, pane_id: String, files: V
             label: cat.label().to_string(),
             icon: Some(if active { IconName::Check } else { IconName::Square }),
             stay_open: true,
+            has_submenu: false,
             on_click: Rc::new(move |_, cx| {
                 let pid_inner = pid.clone();
                 let _ = h.update(cx, |this, cx| {
@@ -820,6 +853,7 @@ pub fn get_date_filter_items(handle: Entity<OxydeApp>, pane_id: String, files: V
                     this.open_date_filter_menu(&pid_inner, pos, cx);
                 });
             }),
+            on_hover: None,
         });
     }
     
@@ -863,6 +897,7 @@ pub fn get_size_filter_items(handle: Entity<OxydeApp>, pane_id: String, files: V
             label: cat.label().to_string(),
             icon: Some(if active { IconName::Check } else { IconName::Square }),
             stay_open: true,
+            has_submenu: false,
             on_click: Rc::new(move |_, cx| {
                 let pid_inner = pid.clone();
                 let _ = h.update(cx, |this, cx| {
@@ -870,6 +905,7 @@ pub fn get_size_filter_items(handle: Entity<OxydeApp>, pane_id: String, files: V
                     this.open_size_filter_menu(&pid_inner, pos, cx);
                 });
             }),
+            on_hover: None,
         });
     }
     

@@ -30,7 +30,7 @@ pub enum DragTarget {
     FileListV { pane_id: String, viewport_h: f32, content_h: f32, track_id: String },
     FileListH { pane_id: String, viewport_w: f32, content_w: f32, track_id: String },
     BreadcrumbV { viewport_h: f32, content_h: f32, track_id: String },
-    ContextMenuV { viewport_h: f32, content_h: f32, track_id: String },
+    ContextMenuV { menu_idx: usize, viewport_h: f32, content_h: f32, track_id: String },
     PaneResize { split_id: String, child_idx: usize, initial_weights: Vec<f32> },
     SelectionRectangle { pane_id: String, start_pos: Point<Pixels>, current_pos: Point<Pixels>, modifiers: Modifiers, initial_selection: std::collections::HashSet<String> },
 }
@@ -45,7 +45,18 @@ pub enum ContextMenuHeader {
 #[derive(Clone)]
 pub enum ContextMenuContent {
     Items(Vec<crate::ui::components::dropdown::DropdownItem>, Option<ContextMenuHeader>),
+    NativeItems { path: String, is_background: bool, items: Vec<oxyde_lib::models::WinMenuItem> },
     NameFilter { input: Entity<crate::ui::components::input::TextInput> },
+}
+
+#[derive(Clone)]
+pub struct ContextMenuInstance {
+    pub position: Point<Pixels>,
+    pub content: ContextMenuContent,
+    pub scroll_handle: UniformListScrollHandle,
+    pub width: Pixels,
+    /// If true, the menu opens to the LEFT of its anchor (use Corner::TopRight).
+    pub open_left: bool,
 }
 
 /// Returns true if `src` and `dst` are on different drives/volumes.
@@ -295,8 +306,9 @@ pub struct OxydeApp {
     pub list_bounds: std::collections::HashMap<String, Bounds<f32>>,
     pub scrollbar_origins: std::collections::HashMap<String, Point<f32>>,
     pub breadcrumb_menu: Option<(String, String, usize, Vec<FileEntry>)>, // (pane_id, path, index, dirs)
-    pub context_menu: Option<(Point<Pixels>, ContextMenuContent)>,
-    pub(crate) context_menu_scroll: UniformListScrollHandle,
+    pub context_menus: Vec<ContextMenuInstance>,
+    pub submenu_timer: Option<Task<()>>,
+    pub submenu_close_timer: Option<Task<()>>,
     pub dragging_tab: Option<(String, usize)>,
     pub tooltip_request: Option<TooltipData>,
     pub tooltip_timer: Option<Task<()>>,
@@ -306,6 +318,7 @@ pub struct OxydeApp {
     pub watcher_changes: std::sync::Arc<std::sync::Mutex<std::collections::VecDeque<String>>>,
     pub _path_watchers: std::collections::HashMap<String, Box<dyn std::any::Any>>,
     pub _watcher_task: Option<Task<()>>,
+    pub _subscriptions: Vec<Subscription>,
     /// Effective drag operation: true = copy, false = move.
     /// Derived from `drag_modifier_copy` (if Some) or `drag_target_default_copy` otherwise.
     pub drag_copy_mode: bool,
@@ -369,8 +382,9 @@ impl OxydeApp {
             list_bounds: std::collections::HashMap::new(),
             scrollbar_origins: std::collections::HashMap::new(),
             breadcrumb_menu: None,
-            context_menu: None,
-            context_menu_scroll: UniformListScrollHandle::new(),
+            context_menus: Vec::new(),
+            submenu_timer: None,
+            submenu_close_timer: None,
             dragging_tab: None,
             tooltip_request: None,
             tooltip_timer: None,
@@ -379,6 +393,7 @@ impl OxydeApp {
             watcher_changes: std::sync::Arc::new(std::sync::Mutex::new(std::collections::VecDeque::new())),
             _path_watchers: std::collections::HashMap::new(),
             _watcher_task: None,
+            _subscriptions: Vec::new(),
             drag_copy_mode: false,
             drag_modifier_copy: None,
             drag_target_default_copy: false,
@@ -519,6 +534,39 @@ impl OxydeApp {
         cx.notify();
     }
 
+    pub fn create_new_folder(&mut self, pane_id: &str, cx: &mut Context<Self>) {
+        use oxyde_lib::models::transaction::{Transaction, TransactionType, TransactionDetails};
+        
+        if let Some(pane) = self.state.layout.find_pane(pane_id) {
+            let current_path = pane.active_tab().path.clone();
+            let base_name = "Nouveau dossier";
+            let mut folder_path = std::path::PathBuf::from(&current_path).join(base_name);
+            let mut counter = 1;
+
+            while folder_path.exists() {
+                counter += 1;
+                folder_path = std::path::PathBuf::from(&current_path).join(format!("{} ({})", base_name, counter));
+            }
+
+            if std::fs::create_dir_all(&folder_path).is_ok() {
+                let path_str = folder_path.to_string_lossy().to_string();
+                self.history.push(Transaction::new(
+                    TransactionType::NewFolder,
+                    TransactionDetails {
+                        paths: vec![path_str.clone()],
+                        target_dir: Some(current_path),
+                        old_path: None,
+                        new_path: None,
+                        created_files: None,
+                    },
+                ));
+                self.state.refresh_sidebar();
+                self.reconcile_watchers();
+            }
+        }
+        cx.notify();
+    }
+
     /// Rebuild the set of directory watchers to cover every open tab across all panes,
     /// plus the expanded directories visible in the sidebar tree.
     /// Watchers are keyed by path so identical paths across multiple tabs share one handle.
@@ -648,6 +696,7 @@ impl Render for OxydeApp {
         use crate::ui::style::TNUM;
 
         let handle = self.handle.clone().expect("handle set");
+        let window_handle = _window.window_handle();
 
         let size = _window.viewport_size();
         let win_w = size.width.as_f32();
@@ -710,185 +759,173 @@ impl Render for OxydeApp {
                         }
                     });
                 }
-            })
-            .track_focus(&self.focus_handle);
+            });
         
         root.text_style().get_or_insert_with(Default::default).font_features = Some(TNUM.clone());
-        
-        let global_handle = handle.clone();
-        root = root.child(
-            canvas(
-                |_bounds, _window, _cx| (),
-                move |_bounds, _prepaint, _window, _cx| {
-                    _window.on_mouse_event({
-                        let handle_move = global_handle.clone();
-                        move |e: &MouseMoveEvent, phase, _, cx| {
-                            if phase != DispatchPhase::Capture && phase != DispatchPhase::Bubble { return; }
-                            let _ = handle_move.update(cx, |this: &mut OxydeApp, cx: &mut Context<OxydeApp>| {
-                                this.mouse_pos = e.position;
-                                if let Some(target) = this.drag_target.clone() {
-                                    let pos = e.position;
-                                    match target {
-                                        DragTarget::SidebarV { viewport_h, content_h, track_id } => {
-                                              if let Some(origin) = this.scrollbar_origins.get(&track_id) {
-                                                  let mouse_pos_in_track = pos.y.as_f32() - origin.y;
-                                                  let thumb_size = (viewport_h * (viewport_h / content_h.max(1.0)).min(1.0)).max(40.0);
-                                                  let travel_distance = (viewport_h - thumb_size).max(1.0);
-                                                  let content_range = content_h - viewport_h;
-                                                  let target_thumb_pos = (mouse_pos_in_track - this.grab_offset).clamp(0.0, travel_distance);
-                                                  let target_px = (target_thumb_pos / travel_distance) * content_range;
-                                                  this.sidebar_scroll.0.borrow().base_handle.set_offset(Point::new(px(0.0), px(-target_px)));
-                                                  cx.notify();
-                                              }
-                                        }
-                                        DragTarget::SidebarH { viewport_w, content_w, track_id } => {
-                                              if let Some(origin) = this.scrollbar_origins.get(&track_id) {
-                                                  let mouse_pos_in_track = pos.x.as_f32() - origin.x;
-                                                  let thumb_size = (viewport_w * (viewport_w / content_w.max(1.0)).min(1.0)).max(40.0);
-                                                  let travel_distance = (viewport_w - thumb_size).max(1.0);
-                                                  let content_range = content_w - viewport_w;
-                                                  let target_thumb_pos = (mouse_pos_in_track - this.grab_offset).clamp(0.0, travel_distance);
-                                                  let target_px = (target_thumb_pos / travel_distance) * content_range;
-                                                  this.sidebar_scroll_h.set_offset(Point::new(px(-target_px), px(0.0)));
-                                                  cx.notify();
-                                              }
-                                        }
-                                        DragTarget::SidebarResize => {
-                                              this.sidebar_width = (pos.x.as_f32() - this.grab_offset).clamp(150.0, 600.0);
-                                              cx.notify();
-                                        }
-                                        DragTarget::FileListV { pane_id, viewport_h, content_h, track_id } => {
-                                              if let Some(origin) = this.scrollbar_origins.get(&track_id) {
-                                                  if let Some(pane) = this.state.layout.find_pane_mut(&pane_id) {
-                                                      let mouse_pos_in_track = pos.y.as_f32() - origin.y;
-                                                      let thumb_size = (viewport_h * (viewport_h / content_h.max(1.0)).min(1.0)).max(40.0);
-                                                      let travel_distance = (viewport_h - thumb_size).max(1.0);
-                                                      let content_range = content_h - viewport_h;
-                                                      let target_thumb_pos = (mouse_pos_in_track - this.grab_offset).clamp(0.0, travel_distance);
-                                                      let target_px = (target_thumb_pos / travel_distance) * content_range;
-                                                      pane.active_tab_mut().list_scroll.0.borrow().base_handle.set_offset(Point::new(px(0.0), px(-target_px)));
-                                                      cx.notify();
-                                                  }
-                                              }
-                                        }
-                                        DragTarget::FileListH { pane_id, viewport_w, content_w, track_id } => {
-                                                 if let Some(origin) = this.scrollbar_origins.get(&track_id) {
-                                                     if let Some(pane) = this.state.layout.find_pane_mut(&pane_id) {
-                                                         let mouse_pos_in_track = pos.x.as_f32() - origin.x;
-                                                         let thumb_size = (viewport_w * (viewport_w / content_w.max(1.0)).min(1.0)).max(40.0);
-                                                         let travel_distance = (viewport_w - thumb_size).max(1.0);
-                                                         let content_range = content_w - viewport_w;
-                                                         let target_thumb_pos = (mouse_pos_in_track - this.grab_offset).clamp(0.0, travel_distance);
-                                                         let target_px = (target_thumb_pos / travel_distance) * content_range;
-                                                         pane.active_tab_mut().list_scroll_h.set_offset(Point::new(px(-target_px), px(0.0)));
-                                                         cx.notify();
-                                                     }
-                                                 }
-                                        }
-                                        DragTarget::BreadcrumbV { viewport_h, content_h, track_id } => {
-                                              if let Some(origin) = this.scrollbar_origins.get(&track_id) {
-                                                  let mouse_pos_in_track = pos.y.as_f32() - origin.y;
-                                                  let thumb_size = (viewport_h * (viewport_h / content_h.max(1.0)).min(1.0)).max(40.0);
-                                                  let travel_distance = (viewport_h - thumb_size).max(1.0);
-                                                  let content_range = content_h - viewport_h;
-                                                  let target_thumb_pos = (mouse_pos_in_track - this.grab_offset).clamp(0.0, travel_distance);
-                                                  let target_px = (target_thumb_pos / travel_distance) * content_range;
-                                                  this.breadcrumb_scroll.0.borrow().base_handle.set_offset(Point::new(px(0.0), px(-target_px)));
-                                                  cx.notify();
-                                              }
-                                        }
-                                         DragTarget::ContextMenuV { viewport_h, content_h, track_id } => {
-                                               if let Some(origin) = this.scrollbar_origins.get(&track_id) {
-                                                   let mouse_pos_in_track = pos.y.as_f32() - origin.y;
-                                                   let thumb_size = (viewport_h * (viewport_h / content_h.max(1.0)).min(1.0)).max(40.0);
-                                                   let travel_distance = (viewport_h - thumb_size).max(1.0);
-                                                   let content_range = content_h - viewport_h;
-                                                   let target_thumb_pos = (mouse_pos_in_track - this.grab_offset).clamp(0.0, travel_distance);
-                                                   let target_px = (target_thumb_pos / travel_distance) * content_range;
-                                                   this.context_menu_scroll.0.borrow().base_handle.set_offset(Point::new(px(0.0), px(-target_px)));
-                                                   cx.notify();
-                                               }
-                                         }
-                                        DragTarget::PaneResize { split_id, child_idx, initial_weights } => {
-                                             if let Some(total_size) = this.split_sizes.get(&split_id).cloned() {
-                                                  if let Some((grid_handle, weights)) = this.state.layout.find_split_mut(&split_id) {
-                                                      let current_pos = match grid_handle {
-                                                          crate::ui::workspace::LayoutAxis::Horizontal => pos.x.as_f32(),
-                                                          crate::ui::workspace::LayoutAxis::Vertical => pos.y.as_f32(),
-                                                      };
-                                                      let delta = current_pos - this.grab_offset;
-                                                      let total_weight: f32 = initial_weights.iter().sum();
-                                                      let weight_per_pixel = total_weight / total_size.max(1.0);
-                                                      let delta_weight = delta * weight_per_pixel;
-                                                      
-                                                      let i = child_idx;
-                                                      let j = i + 1;
-                                                      
-                                                      if i < weights.len() && j < weights.len() {
-                                                          let total_pair_weight = initial_weights[i] + initial_weights[j];
-                                                          let new_wi = (initial_weights[i] + delta_weight).clamp(0.1, total_pair_weight - 0.1);
-                                                          let new_wj = total_pair_weight - new_wi;
-                                                          
-                                                          weights[i] = new_wi;
-                                                          weights[j] = new_wj;
-                                                          cx.notify();
-                                                      }
-                                                  }
-                                             }
-                                        }
-                                        DragTarget::SelectionRectangle { ref pane_id, start_pos, modifiers, ref initial_selection, .. } => {
-                                             let current_pos = pos;
-                                             let initial_selection_cap = initial_selection.clone();
-                                             this.drag_target = Some(DragTarget::SelectionRectangle {
-                                                 pane_id: pane_id.clone(),
-                                                 start_pos,
-                                                 current_pos,
-                                                 modifiers,
-                                                 initial_selection: initial_selection_cap,
-                                             });
-                                             cx.notify();
-                                        }
-                                    }
-                                }
-                            });
-                        }
-                    });
 
-                    _window.on_mouse_event({
-                        let handle_up = global_handle.clone();
-                        move |_: &MouseUpEvent, phase, _, cx| {
-                            if phase != DispatchPhase::Capture && phase != DispatchPhase::Bubble { return; }
-                            let _ = handle_up.update(cx, |this: &mut OxydeApp, cx: &mut Context<OxydeApp>| {
-                                let mut needs_notify = false;
-                                if this.drag_target.is_some() {
-                                    this.drag_target = None;
-                                    needs_notify = true;
+        root = root
+            .on_mouse_move({
+                let h = handle.clone();
+                move |e, _window, cx| {
+                    let _ = h.update(cx, |this, cx| {
+                        this.mouse_pos = e.position;
+                        if let Some(target) = this.drag_target.clone() {
+                            let pos = e.position;
+                            match target {
+                                DragTarget::SidebarV { viewport_h, content_h, track_id } => {
+                                      if let Some(origin) = this.scrollbar_origins.get(&track_id) {
+                                          let mouse_pos_in_track = pos.y.as_f32() - origin.y;
+                                          let thumb_size = (viewport_h * (viewport_h / content_h.max(1.0)).min(1.0)).max(40.0);
+                                          let travel_distance = (viewport_h - thumb_size).max(1.0);
+                                          let content_range = content_h - viewport_h;
+                                          let target_thumb_pos = (mouse_pos_in_track - this.grab_offset).clamp(0.0, travel_distance);
+                                          let target_px = (target_thumb_pos / travel_distance) * content_range;
+                                          this.sidebar_scroll.0.borrow().base_handle.set_offset(Point::new(px(0.0), px(-target_px)));
+                                          cx.notify();
+                                      }
                                 }
-                                if this.dragging_tab.is_some() {
-                                    this.dragging_tab = None;
-                                    needs_notify = true;
+                                DragTarget::SidebarH { viewport_w, content_w, track_id } => {
+                                      if let Some(origin) = this.scrollbar_origins.get(&track_id) {
+                                          let mouse_pos_in_track = pos.x.as_f32() - origin.x;
+                                          let thumb_size = (viewport_w * (viewport_w / content_w.max(1.0)).min(1.0)).max(40.0);
+                                          let travel_distance = (viewport_w - thumb_size).max(1.0);
+                                          let content_range = content_w - viewport_w;
+                                          let target_thumb_pos = (mouse_pos_in_track - this.grab_offset).clamp(0.0, travel_distance);
+                                          let target_px = (target_thumb_pos / travel_distance) * content_range;
+                                          this.sidebar_scroll_h.set_offset(Point::new(px(-target_px), px(0.0)));
+                                          cx.notify();
+                                      }
                                 }
-                                if this.drop_target_idx.is_some() || this.drop_target_pane.is_some() {
-                                    this.drop_target_idx = None;
-                                    this.drop_target_pane = None;
-                                    needs_notify = true;
+                                DragTarget::SidebarResize => {
+                                      this.sidebar_width = (pos.x.as_f32() - this.grab_offset).clamp(150.0, 600.0);
+                                      cx.notify();
                                 }
-                                if this.highlight_split_pane.is_some() {
-                                    this.highlight_split_pane = None;
-                                    needs_notify = true;
+                                DragTarget::FileListV { pane_id, viewport_h, content_h, track_id } => {
+                                      if let Some(origin) = this.scrollbar_origins.get(&track_id) {
+                                          if let Some(pane) = this.state.layout.find_pane_mut(&pane_id) {
+                                              let mouse_pos_in_track = pos.y.as_f32() - origin.y;
+                                              let thumb_size = (viewport_h * (viewport_h / content_h.max(1.0)).min(1.0)).max(40.0);
+                                              let travel_distance = (viewport_h - thumb_size).max(1.0);
+                                              let content_range = content_h - viewport_h;
+                                              let target_thumb_pos = (mouse_pos_in_track - this.grab_offset).clamp(0.0, travel_distance);
+                                              let target_px = (target_thumb_pos / travel_distance) * content_range;
+                                              pane.active_tab_mut().list_scroll.0.borrow().base_handle.set_offset(Point::new(px(0.0), px(-target_px)));
+                                              cx.notify();
+                                          }
+                                      }
                                 }
-                                if needs_notify {
-                                    cx.notify();
+                                DragTarget::FileListH { pane_id, viewport_w, content_w, track_id } => {
+                                         if let Some(origin) = this.scrollbar_origins.get(&track_id) {
+                                             if let Some(pane) = this.state.layout.find_pane_mut(&pane_id) {
+                                                 let mouse_pos_in_track = pos.x.as_f32() - origin.x;
+                                                 let thumb_size = (viewport_w * (viewport_w / content_w.max(1.0)).min(1.0)).max(40.0);
+                                                 let travel_distance = (viewport_w - thumb_size).max(1.0);
+                                                 let content_range = content_w - viewport_w;
+                                                 let target_thumb_pos = (mouse_pos_in_track - this.grab_offset).clamp(0.0, travel_distance);
+                                                 let target_px = (target_thumb_pos / travel_distance) * content_range;
+                                                 pane.active_tab_mut().list_scroll_h.set_offset(Point::new(px(-target_px), px(0.0)));
+                                                 cx.notify();
+                                             }
+                                         }
                                 }
-                            });
+                                DragTarget::BreadcrumbV { viewport_h, content_h, track_id } => {
+                                      if let Some(origin) = this.scrollbar_origins.get(&track_id) {
+                                          let mouse_pos_in_track = pos.y.as_f32() - origin.y;
+                                          let thumb_size = (viewport_h * (viewport_h / content_h.max(1.0)).min(1.0)).max(40.0);
+                                          let travel_distance = (viewport_h - thumb_size).max(1.0);
+                                          let content_range = content_h - viewport_h;
+                                          let target_thumb_pos = (mouse_pos_in_track - this.grab_offset).clamp(0.0, travel_distance);
+                                          let target_px = (target_thumb_pos / travel_distance) * content_range;
+                                          this.breadcrumb_scroll.0.borrow().base_handle.set_offset(Point::new(px(0.0), px(-target_px)));
+                                          cx.notify();
+                                      }
+                                }
+                                 DragTarget::ContextMenuV { menu_idx, viewport_h, content_h, track_id } => {
+                                       if let Some(origin) = this.scrollbar_origins.get(&track_id) {
+                                           if let Some(menu) = this.context_menus.get(menu_idx) {
+                                               let mouse_pos_in_track = pos.y.as_f32() - origin.y;
+                                               let thumb_size = (viewport_h * (viewport_h / content_h.max(1.0)).min(1.0)).max(40.0);
+                                               let travel_distance = (viewport_h - thumb_size).max(1.0);
+                                               let content_range = content_h - viewport_h;
+                                               let target_thumb_pos = (mouse_pos_in_track - this.grab_offset).clamp(0.0, travel_distance);
+                                               let target_px = (target_thumb_pos / travel_distance) * content_range;
+                                               menu.scroll_handle.0.borrow().base_handle.set_offset(Point::new(px(0.0), px(-target_px)));
+                                               cx.notify();
+                                           }
+                                       }
+                                 }
+                                DragTarget::PaneResize { split_id, child_idx, initial_weights } => {
+                                     if let Some(total_size) = this.split_sizes.get(&split_id).cloned() {
+                                          if let Some((grid_handle, weights)) = this.state.layout.find_split_mut(&split_id) {
+                                              let current_pos = match grid_handle {
+                                                  crate::ui::workspace::LayoutAxis::Horizontal => pos.x.as_f32(),
+                                                  crate::ui::workspace::LayoutAxis::Vertical => pos.y.as_f32(),
+                                              };
+                                              let delta = current_pos - this.grab_offset;
+                                              let total_weight: f32 = initial_weights.iter().sum();
+                                              let weight_per_pixel = total_weight / total_size.max(1.0);
+                                              let delta_weight = delta * weight_per_pixel;
+                                              
+                                              let i = child_idx;
+                                              let j = i + 1;
+                                              
+                                              if i < weights.len() && j < weights.len() {
+                                                  let total_pair_weight = initial_weights[i] + initial_weights[j];
+                                                  let new_wi = (initial_weights[i] + delta_weight).clamp(0.1, total_pair_weight - 0.1);
+                                                  let new_wj = total_pair_weight - new_wi;
+                                                  
+                                                  weights[i] = new_wi;
+                                                  weights[j] = new_wj;
+                                                  cx.notify();
+                                              }
+                                          }
+                                     }
+                                }
+                                DragTarget::SelectionRectangle { ref pane_id, start_pos, modifiers, ref initial_selection, .. } => {
+                                     let current_pos = pos;
+                                     let initial_selection_cap = initial_selection.clone();
+                                     this.drag_target = Some(DragTarget::SelectionRectangle {
+                                         pane_id: pane_id.clone(),
+                                         start_pos,
+                                         current_pos,
+                                         modifiers,
+                                         initial_selection: initial_selection_cap,
+                                     });
+                                     cx.notify();
+                                }
+                            }
                         }
                     });
                 }
-            ).size_full().absolute()
-        );
-
-
-        root = root
+            })
+            .on_mouse_up(MouseButton::Left, {
+                let h = handle.clone();
+                move |_, _window, cx| {
+                    let _ = h.update(cx, |this, cx| {
+                        let mut needs_notify = false;
+                        if this.drag_target.is_some() {
+                            this.drag_target = None;
+                            needs_notify = true;
+                        }
+                        if this.dragging_tab.is_some() {
+                            this.dragging_tab = None;
+                            needs_notify = true;
+                        }
+                        if this.drop_target_idx.is_some() || this.drop_target_pane.is_some() {
+                            this.drop_target_idx = None;
+                            this.drop_target_pane = None;
+                            needs_notify = true;
+                        }
+                        if this.highlight_split_pane.is_some() {
+                            this.highlight_split_pane = None;
+                            needs_notify = true;
+                        }
+                        if needs_notify {
+                            cx.notify();
+                        }
+                    });
+                }
+            })
             .on_mouse_down(MouseButton::Navigate(NavigationDirection::Back), {
                 let h = handle.clone();
                 move |_, _, cx| { let _ = h.update(cx, |v, cx| {
@@ -934,222 +971,548 @@ impl Render for OxydeApp {
         root = root.child(div().flex_1().h_full().child(self.render_layout_node(&layout_tree, handle.clone(), cx)));
         
         // CONTEXT MENU OVERLAY
-        root = root.child(
-            div()
-                .when_some(self.context_menu.clone(), |this, (pos, content)| {
-                    use crate::ui::components::dropdown::{GenericDropdown};
+        for (m_idx, instance) in self.context_menus.iter().enumerate() {
+            use crate::ui::components::dropdown::{GenericDropdown};
 
-                    let h = handle.clone();
-                    let pos = pos;
-                    
-                    match content {
-                        ContextMenuContent::Items(items, header_type) => {
-                            let scroll_handle = self.context_menu_scroll.clone();
-                            let is_v_dragging = matches!(self.drag_target, Some(DragTarget::ContextMenuV { .. }));
+            let h = handle.clone();
+            let pos = instance.position;
+            let scroll_handle = instance.scroll_handle.clone();
+            let is_v_dragging = matches!(self.drag_target, Some(DragTarget::ContextMenuV { menu_idx, .. }) if menu_idx == m_idx);
+            let _menu_width = instance.width;
 
-                            let header = header_type.as_ref().map(|ht| {
-                                match ht {
-                                    ContextMenuHeader::TypeSelectAll { pane_id } => {
-                                        let pid_cap = pane_id.clone();
-                                        let h_inner = h.clone();
-                                        
-                                        // Dynamic label and action based on current state
-                                        let (label, should_clear) = if let Some(pane) = self.state.find_pane(&pid_cap) {
-                                            let tab = pane.active_tab();
-                                            let mut all_present = std::collections::HashSet::new();
-                                            for f in &tab.files {
-                                                if f.is_dir { all_present.insert("Dossier".to_string()); }
-                                                else if let Some(ext) = std::path::Path::new(&f.name).extension().and_then(|e| e.to_str()) {
-                                                    all_present.insert(ext.to_uppercase());
+            let content_element = match &instance.content {
+                ContextMenuContent::Items(items, header_type) => {
+                    let header = header_type.as_ref().map(|ht| {
+                        match ht {
+                            ContextMenuHeader::TypeSelectAll { pane_id } => {
+                                let pid_cap = pane_id.clone();
+                                let h_inner = h.clone();
+                                
+                                let (label, should_clear) = if let Some(pane) = self.state.find_pane(&pid_cap) {
+                                    let tab = pane.active_tab();
+                                    let mut all_present = std::collections::HashSet::new();
+                                    for f in &tab.files {
+                                        if f.is_dir { all_present.insert("Dossier".to_string()); }
+                                        else if let Some(ext) = std::path::Path::new(&f.name).extension().and_then(|e| e.to_str()) {
+                                            all_present.insert(ext.to_uppercase());
+                                        }
+                                    }
+                                    let is_full = !all_present.is_empty() && all_present.iter().all(|t| tab.filter_types.contains(t));
+                                    if is_full || tab.filter_types.is_empty() { ("Tout cocher", false) } else { ("Tout décocher", true) }
+                                } else { ("Tout cocher", false) };
+
+                                crate::ui::elements::button::Button::new(SharedString::from(format!("select-all-type-{}", pid_cap)))
+                                    .label(label)
+                                    .variant(crate::ui::elements::button::ButtonVariant::Subtle)
+                                    .on_click(move |_, cx| {
+                                        let pid_inner = pid_cap.clone();
+                                        let _ = h_inner.update(cx, |this, cx| {
+                                            if should_clear {
+                                                this.clear_filter_types(&pid_inner, cx);
+                                            } else {
+                                                if let Some(pane) = this.state.find_pane_mut(&pid_inner) {
+                                                    let tab = pane.active_tab_mut();
+                                                    let all_files = tab.files.clone();
+                                                    for f in &all_files {
+                                                        if f.is_dir { tab.filter_types.insert("Dossier".to_string()); }
+                                                        else if let Some(ext) = std::path::Path::new(&f.name).extension().and_then(|e| e.to_str()) {
+                                                            tab.filter_types.insert(ext.to_uppercase());
+                                                        }
+                                                    }
                                                 }
                                             }
-                                            let is_full = !all_present.is_empty() && all_present.iter().all(|t| tab.filter_types.contains(t));
-                                            if is_full || tab.filter_types.is_empty() { ("Tout cocher", false) } else { ("Tout décocher", true) }
-                                        } else { ("Tout cocher", false) };
+                                            this.context_menus.truncate(m_idx + 1);
+                                            this.open_type_filter_menu(&pid_inner, pos, cx);
+                                        });
+                                    })
+                                    .into_any_element()
+                            }
+                            ContextMenuHeader::SizeSelectAll { pane_id } => {
+                                let pid_cap = pane_id.clone();
+                                let h_inner = h.clone();
+                                
+                                let (label, should_clear) = if let Some(p) = self.state.find_pane(&pid_cap) {
+                                    use crate::ui::workspace::SizeCategory;
+                                    let tab = p.active_tab();
+                                    let categories = [SizeCategory::Minuscule, SizeCategory::Petit, SizeCategory::Moyen, SizeCategory::Grand, SizeCategory::Huge];
+                                    let mut present = std::collections::HashSet::new();
+                                    for f in &tab.files {
+                                        for cat in &categories {
+                                            if cat.matches(f.size) { present.insert(*cat); break; }
+                                        }
+                                    }
+                                    let is_full = !present.is_empty() && present.iter().all(|c| tab.filter_sizes.contains(c));
+                                    if is_full || tab.filter_sizes.is_empty() { ("Tout cocher", false) } else { ("Tout décocher", true) }
+                                } else { ("Tout cocher", false) };
 
-                                        crate::ui::elements::button::Button::new(SharedString::from(format!("select-all-type-{}", pid_cap)))
-                                            .label(label)
-                                            .variant(crate::ui::elements::button::ButtonVariant::Subtle)
-                                            .on_click(move |_, cx| {
-                                                let pid_inner = pid_cap.clone();
-                                                let _ = h_inner.update(cx, |this, cx| {
-                                                    if should_clear {
-                                                        this.clear_filter_types(&pid_inner, cx);
-                                                    } else {
-                                                        if let Some(pane) = this.state.find_pane_mut(&pid_inner) {
-                                                            let tab = pane.active_tab_mut();
-                                                            let all_files = tab.files.clone();
-                                                            for f in &all_files {
-                                                                if f.is_dir { tab.filter_types.insert("Dossier".to_string()); }
-                                                                else if let Some(ext) = std::path::Path::new(&f.name).extension().and_then(|e| e.to_str()) {
-                                                                    tab.filter_types.insert(ext.to_uppercase());
+                                crate::ui::elements::button::Button::new(SharedString::from(format!("select-all-size-{}", pid_cap)))
+                                    .label(label)
+                                    .variant(crate::ui::elements::button::ButtonVariant::Subtle)
+                                    .on_click(move |_, cx| {
+                                        let pid_inner = pid_cap.clone();
+                                        let _ = h_inner.update(cx, |this, cx| {
+                                            if should_clear {
+                                                this.clear_filter_sizes(&pid_inner, cx);
+                                            } else {
+                                                if let Some(p) = this.state.find_pane_mut(&pid_inner) {
+                                                    use crate::ui::workspace::SizeCategory;
+                                                    let tab = p.active_tab_mut();
+                                                    tab.filter_sizes.insert(SizeCategory::Minuscule);
+                                                    tab.filter_sizes.insert(SizeCategory::Petit);
+                                                    tab.filter_sizes.insert(SizeCategory::Moyen);
+                                                    tab.filter_sizes.insert(SizeCategory::Grand);
+                                                    tab.filter_sizes.insert(SizeCategory::Huge);
+                                                }
+                                            }
+                                            this.context_menus.truncate(m_idx + 1);
+                                            this.open_size_filter_menu(&pid_inner, pos, cx);
+                                        });
+                                    })
+                                    .into_any_element()
+                            }
+                            ContextMenuHeader::DateSelectAll { pane_id } => {
+                                let pid_cap = pane_id.clone();
+                                let h_inner = h.clone();
+                                
+                                let (label, should_clear) = if let Some(p) = self.state.find_pane(&pid_cap) {
+                                    use crate::ui::workspace::DateCategory;
+                                    let tab = p.active_tab();
+                                    let categories = [DateCategory::Aujourdhui, DateCategory::Hier, DateCategory::CetteSemaine, DateCategory::LaSemaineDerniere, DateCategory::PlusAncien];
+                                    let mut present = std::collections::HashSet::new();
+                                    for f in &tab.files {
+                                        for cat in &categories {
+                                            if cat.matches(f.modified) { present.insert(*cat); break; }
+                                        }
+                                    }
+                                    let is_full = !present.is_empty() && present.iter().all(|c| tab.filter_dates.contains(c));
+                                    if is_full || tab.filter_dates.is_empty() { ("Tout cocher", false) } else { ("Tout décocher", true) }
+                                } else { ("Tout cocher", false) };
+
+                                crate::ui::elements::button::Button::new(SharedString::from(format!("select-all-date-{}", pid_cap)))
+                                    .label(label)
+                                    .variant(crate::ui::elements::button::ButtonVariant::Subtle)
+                                    .on_click(move |_, cx| {
+                                        let pid_inner = pid_cap.clone();
+                                        let _ = h_inner.update(cx, |this, cx| {
+                                            if should_clear {
+                                                this.clear_filter_dates(&pid_inner, cx);
+                                            } else {
+                                                if let Some(p) = this.state.find_pane_mut(&pid_inner) {
+                                                    use crate::ui::workspace::DateCategory;
+                                                    let tab = p.active_tab_mut();
+                                                    tab.filter_dates.insert(DateCategory::Aujourdhui);
+                                                    tab.filter_dates.insert(DateCategory::Hier);
+                                                    tab.filter_dates.insert(DateCategory::CetteSemaine);
+                                                    tab.filter_dates.insert(DateCategory::LaSemaineDerniere);
+                                                    tab.filter_dates.insert(DateCategory::PlusAncien);
+                                                }
+                                            }
+                                            this.context_menus.truncate(m_idx + 1);
+                                            this.open_date_filter_menu(&pid_inner, pos, cx);
+                                        });
+                                    })
+                                    .into_any_element()
+                            }
+                        }
+                    });
+                    
+                    let dropdown_items = items.iter().map(|it| {
+                        let on_click = it.on_click.clone();
+                        crate::ui::components::dropdown::DropdownItem {
+                            label: it.label.clone(),
+                            icon: it.icon.clone(),
+                            stay_open: it.stay_open,
+                            has_submenu: it.has_submenu,
+                            on_click: std::rc::Rc::new(move |window, app| { (on_click)(window, app); }),
+                            on_hover: it.on_hover.clone(),
+                        }
+                    }).collect();
+
+                    let items_cap = items.clone();
+                    cx.new(|_| GenericDropdown {
+                        h_app: h.clone(),
+                        items: dropdown_items,
+                        scroll_handle,
+                        width: None,
+                        max_height: 480.0,
+                        on_close: {
+                            let h = h.clone();
+                            std::rc::Rc::new(move |_, cx| {
+                                let _ = h.update(cx, |this, _| { this.context_menus.clear(); });
+                            })
+                        },
+                        on_drag: {
+                            std::rc::Rc::new(move |this, tid, vh, ch, _| {
+                                this.drag_target = Some(DragTarget::ContextMenuV { menu_idx: m_idx, viewport_h: vh, content_h: ch, track_id: tid });
+                            })
+                        },
+                        is_dragging: is_v_dragging,
+                        header,
+                        on_item_hover: Some(std::rc::Rc::new({
+                            let h_app = h.clone();
+                            let items_val = items_cap.clone();
+                            let hovered_idx = std::rc::Rc::new(std::cell::Cell::new(None));
+                            let window_handle = window_handle.clone();
+                            move |ix, item_pos, cx| {
+                                if hovered_idx.get() == Some(ix) { return; }
+                                hovered_idx.set(Some(ix));
+
+                                if let Some(it) = items_val.get(ix) {
+                                    let has_submenu = it.on_hover.is_some();
+                                    let h_inner = h_app.clone();
+                                    let items_inner = items_val.clone();
+                                    let ix_inner = ix;
+                                    let pos_inner = item_pos;
+                                    let window_handle_inner = window_handle.clone();
+
+                                    if has_submenu {
+                                        cx.defer(move |cx| {
+                                            let _h_inner_spawn = h_inner.clone();
+                                            let _ = h_inner.update(cx, |this, cx| {
+                                                let parent_left = this.context_menus.get(m_idx)
+                                                    .map(|m| m.position.x)
+                                                    .unwrap_or_default();
+                                                let parent_right = parent_left + this.context_menus.get(m_idx)
+                                                    .map(|m| m.width)
+                                                    .unwrap_or_default();
+                                                this.submenu_close_timer = None;
+                                                this.submenu_timer = Some(cx.spawn(move |_, cx: &mut AsyncApp| {
+                                                    let mut cx_val = cx.clone();
+                                                    async move {
+                                                        cx_val.background_executor().timer(std::time::Duration::from_millis(150)).await;
+                                                        let _ = window_handle_inner.update(&mut cx_val, |_, _window, app| {
+                                                            let viewport_w = _window.viewport_size().width;
+                                                            let open_left = parent_right + px(220.0) > viewport_w;
+                                                            if let Some(it) = items_inner.get(ix_inner) {
+                                                                if let Some(on_h) = it.on_hover.clone() {
+                                                                    let mut sub_pos = pos_inner;
+                                                                    sub_pos.x = if open_left {
+                                                                        parent_left + px(2.0) // TopRight anchor: right edge at parent left
+                                                                    } else {
+                                                                        parent_right - px(2.0) // TopLeft anchor: left edge at parent right
+                                                                    };
+                                                                    sub_pos.y -= px(8.0);
+                                                                    (on_h)(sub_pos, open_left, app);
                                                                 }
                                                             }
-                                                        }
+                                                        });
                                                     }
-                                                    this.open_type_filter_menu(&pid_inner, pos, cx);
-                                                });
-                                            })
-                                            .into_any_element()
-                                    }
-                                    ContextMenuHeader::SizeSelectAll { pane_id } => {
-                                        let pid_cap = pane_id.clone();
-                                        let h_inner = h.clone();
-                                        
-                                        let (label, should_clear) = if let Some(p) = self.state.find_pane(&pid_cap) {
-                                            use crate::ui::workspace::SizeCategory;
-                                            let tab = p.active_tab();
-                                            let categories = [SizeCategory::Minuscule, SizeCategory::Petit, SizeCategory::Moyen, SizeCategory::Grand, SizeCategory::Huge];
-                                            let mut present = std::collections::HashSet::new();
-                                            for f in &tab.files {
-                                                for cat in &categories {
-                                                    if cat.matches(f.size) { present.insert(*cat); break; }
+                                                }));
+                                            });
+                                        });
+                                    } else {
+                                        // Item has no submenu → close any open children immediately
+                                        cx.defer(move |cx| {
+                                            let _ = h_inner.update(cx, |this, cx| {
+                                                this.submenu_timer = None;
+                                                this.submenu_close_timer = None;
+                                                if this.context_menus.len() > m_idx + 1 {
+                                                    this.context_menus.truncate(m_idx + 1);
+                                                    cx.notify();
                                                 }
-                                            }
-                                            let is_full = !present.is_empty() && present.iter().all(|c| tab.filter_sizes.contains(c));
-                                            if is_full || tab.filter_sizes.is_empty() { ("Tout cocher", false) } else { ("Tout décocher", true) }
-                                        } else { ("Tout cocher", false) };
-
-                                        crate::ui::elements::button::Button::new(SharedString::from(format!("select-all-size-{}", pid_cap)))
-                                            .label(label)
-                                            .variant(crate::ui::elements::button::ButtonVariant::Subtle)
-                                            .on_click(move |_, cx| {
-                                                let pid_inner = pid_cap.clone();
-                                                let _ = h_inner.update(cx, |this, cx| {
-                                                    if should_clear {
-                                                        this.clear_filter_sizes(&pid_inner, cx);
-                                                    } else {
-                                                        if let Some(p) = this.state.find_pane_mut(&pid_inner) {
-                                                            use crate::ui::workspace::SizeCategory;
-                                                            let tab = p.active_tab_mut();
-                                                            tab.filter_sizes.insert(SizeCategory::Minuscule);
-                                                            tab.filter_sizes.insert(SizeCategory::Petit);
-                                                            tab.filter_sizes.insert(SizeCategory::Moyen);
-                                                            tab.filter_sizes.insert(SizeCategory::Grand);
-                                                            tab.filter_sizes.insert(SizeCategory::Huge);
-                                                        }
-                                                    }
-                                                    this.open_size_filter_menu(&pid_inner, pos, cx);
-                                                });
-                                            })
-                                            .into_any_element()
+                                            });
+                                        });
                                     }
-                                    ContextMenuHeader::DateSelectAll { pane_id } => {
-                                        let pid_cap = pane_id.clone();
-                                        let h_inner = h.clone();
-                                        
-                                        let (label, should_clear) = if let Some(p) = self.state.find_pane(&pid_cap) {
-                                            use crate::ui::workspace::DateCategory;
-                                            let tab = p.active_tab();
-                                            let categories = [DateCategory::Aujourdhui, DateCategory::Hier, DateCategory::CetteSemaine, DateCategory::LaSemaineDerniere, DateCategory::PlusAncien];
-                                            let mut present = std::collections::HashSet::new();
-                                            for f in &tab.files {
-                                                for cat in &categories {
-                                                    if cat.matches(f.modified) { present.insert(*cat); break; }
-                                                }
+                                } else {
+                                    let h_close = h_app.clone();
+                                    cx.defer(move |cx| {
+                                        let _ = h_close.update(cx, |this, cx| {
+                                            this.submenu_timer = None;
+                                            this.submenu_close_timer = None;
+                                            if this.context_menus.len() > m_idx + 1 {
+                                                this.context_menus.truncate(m_idx + 1);
+                                                cx.notify();
                                             }
-                                            let is_full = !present.is_empty() && present.iter().all(|c| tab.filter_dates.contains(c));
-                                            if is_full || tab.filter_dates.is_empty() { ("Tout cocher", false) } else { ("Tout décocher", true) }
-                                        } else { ("Tout cocher", false) };
-
-                                        crate::ui::elements::button::Button::new(SharedString::from(format!("select-all-date-{}", pid_cap)))
-                                            .label(label)
-                                            .variant(crate::ui::elements::button::ButtonVariant::Subtle)
-                                            .on_click(move |_, cx| {
-                                                let pid_inner = pid_cap.clone();
-                                                let _ = h_inner.update(cx, |this, cx| {
-                                                    if should_clear {
-                                                        this.clear_filter_dates(&pid_inner, cx);
-                                                    } else {
-                                                        if let Some(p) = this.state.find_pane_mut(&pid_inner) {
-                                                            use crate::ui::workspace::DateCategory;
-                                                            let tab = p.active_tab_mut();
-                                                            tab.filter_dates.insert(DateCategory::Aujourdhui);
-                                                            tab.filter_dates.insert(DateCategory::Hier);
-                                                            tab.filter_dates.insert(DateCategory::CetteSemaine);
-                                                            tab.filter_dates.insert(DateCategory::LaSemaineDerniere);
-                                                            tab.filter_dates.insert(DateCategory::PlusAncien);
-                                                        }
-                                                    }
-                                                    this.open_date_filter_menu(&pid_inner, pos, cx);
-                                                });
-                                            })
-                                            .into_any_element()
+                                        });
+                                    });
+                                }
+                            }
+                        })),
+                        on_width_calculated: Some(std::rc::Rc::new({
+                            let h = h.clone();
+                            move |w, cx| {
+                                let _ = h.update(cx, |this, _| {
+                                    if let Some(menu) = this.context_menus.get_mut(m_idx) {
+                                        menu.width = w;
                                     }
+                                });
+                            }
+                        })),
+                        on_hover_change: Some(std::rc::Rc::new({
+                            let h = h.clone();
+                            let window_handle = window_handle.clone();
+                            move |is_hovering: bool, cx: &mut App| {
+                                if is_hovering {
+                                    let _ = h.update(cx, |this, _| { this.submenu_close_timer = None; });
+                                } else {
+                                    let h_close = h.clone();
+                                    let wh = window_handle.clone();
+                                    let _ = h.update(cx, |this, cx| {
+                                        this.submenu_close_timer = Some(cx.spawn(move |_, cx: &mut AsyncApp| {
+                                            let mut cx_val = cx.clone();
+                                            async move {
+                                                cx_val.background_executor().timer(std::time::Duration::from_millis(250)).await;
+                                                let _ = wh.update(&mut cx_val, |_, _, cx| {
+                                                    let h_inner = h_close.clone();
+                                                    cx.defer(move |cx| {
+                                                        let _ = h_inner.update(cx, |this, cx| {
+                                                            if this.context_menus.len() > m_idx + 1 {
+                                                                this.context_menus.truncate(m_idx + 1);
+                                                                cx.notify();
+                                                            }
+                                                        });
+                                                    });
+                                                });
+                                            }
+                                        }));
+                                    });
                                 }
-                            });
-                            let items = items.iter().map(|it| {
-                                let on_click = it.on_click.clone();
-                                crate::ui::components::dropdown::DropdownItem {
-                                    label: it.label.clone(),
-                                    icon: it.icon.clone(),
-                                    stay_open: it.stay_open,
-                                    on_click: std::rc::Rc::new(move |window, app| { (on_click)(window, app); })
+                            }
+                        })),
+                    })
+                },
+                ContextMenuContent::NativeItems { path, is_background, items } => {
+                    let path_cap = path.clone();
+                    let is_bg_cap = *is_background;
+                    let h_app = h.clone();
+                    let items_cap = items.clone();
+
+                    let dropdown_items = items.iter().map(|it| {
+                        let h = h_app.clone();
+                        let p = path_cap.clone();
+                        let id = it.id;
+                        let has_sub = it.has_submenu;
+                        
+                        crate::ui::components::dropdown::DropdownItem {
+                            label: it.label.clone(),
+                            icon: None,
+                            stay_open: has_sub,
+                            has_submenu: has_sub,
+                            on_click: std::rc::Rc::new({
+                                move |_, app| {
+                                    let h_inner = h.clone();
+                                    let p_inner = p.clone();
+                                    let id_inner = id;
+                                    
+                                    let _ = h_inner.update(app, |this, cx| {
+                                        if !has_sub {
+                                            this.context_menus.clear();
+                                            let _ = oxyde_lib::commands::system::execute_native_menu_item(p_inner, id_inner, is_bg_cap);
+                                        }
+                                        cx.notify();
+                                    });
                                 }
-                            }).collect();
-                            
-                            this.child(
-                                deferred(
-                                    anchored()
-                                        .position(pos)
-                                        .child(
-                                            cx.new(|_| GenericDropdown {
-                                                h_app: h.clone(),
-                                                items,
-                                                scroll_handle,
-                                                width: None,
-                                                max_height: 480.0,
-                                                on_close: {
-                                                    let h = h.clone();
-                                                    std::rc::Rc::new(move |_, cx| {
-                                                        let _ = h.update(cx, |this, _| { this.context_menu = None; });
-                                                    })
-                                                },
-                                                on_drag: {
-                                                    std::rc::Rc::new(move |this, tid, vh, ch, _| {
-                                                        this.drag_target = Some(DragTarget::ContextMenuV { viewport_h: vh, content_h: ch, track_id: tid });
-                                                    })
-                                                },
-                                                is_dragging: is_v_dragging,
-                                                header,
-                                            })
-                                        )
-                                )
-                            )
-                        },
-                        ContextMenuContent::NameFilter { input } => {
-                            this.child(
-                                deferred(
-                                    anchored()
-                                        .position(pos)
-                                        .child(
-                                            cx.new(|_| GenericDropdown {
-                                                h_app: h.clone(),
-                                                items: vec![],
-                                                scroll_handle: self.context_menu_scroll.clone(),
-                                                width: None,
-                                                max_height: 480.0,
-                                                on_close: {
-                                                    let h = h.clone();
-                                                    std::rc::Rc::new(move |_, cx| {
-                                                        let _ = h.update(cx, |this, _| { this.context_menu = None; });
-                                                    })
-                                                },
-                                                on_drag: {
-                                                    std::rc::Rc::new(move |this, tid, vh, ch, _| {
-                                                        this.drag_target = Some(DragTarget::ContextMenuV { viewport_h: vh, content_h: ch, track_id: tid });
-                                                    })
-                                                },
-                                                is_dragging: false,
-                                                header: Some(input.clone().into_any_element()),
-                                            })
-                                        )
-                                )
-                            )
+                            }),
+                            on_hover: None,
                         }
+                    }).collect();
+
+                    cx.new(|_| GenericDropdown {
+                        h_app: h.clone(),
+                        items: dropdown_items,
+                        scroll_handle,
+                        width: None,
+                        max_height: 480.0,
+                        on_close: {
+                            let h = h.clone();
+                            std::rc::Rc::new(move |_, cx| {
+                                let _ = h.update(cx, |this, _| { this.context_menus.clear(); });
+                            })
+                        },
+                        on_drag: {
+                            std::rc::Rc::new(move |this, tid, vh, ch, _| {
+                                this.drag_target = Some(DragTarget::ContextMenuV { menu_idx: m_idx, viewport_h: vh, content_h: ch, track_id: tid });
+                            })
+                        },
+                        is_dragging: is_v_dragging,
+                        header: None,
+                        on_item_hover: Some(std::rc::Rc::new({
+                            let h_app = h.clone();
+                            let items_val = items_cap.clone();
+                            let hovered_idx = std::rc::Rc::new(std::cell::Cell::new(None));
+                            let window_handle = window_handle.clone();
+                            move |ix, item_pos, cx| {
+                                if hovered_idx.get() == Some(ix) { return; }
+                                hovered_idx.set(Some(ix));
+
+                                if let Some(it) = items_val.get(ix) {
+                                    let h_inner = h_app.clone();
+                                    let path_inner = path_cap.clone();
+                                    let sub_items = it.children.clone();
+                                    let has_sub = it.has_submenu;
+                                    let window_handle_inner = window_handle.clone();
+                                    
+                                    cx.defer(move |cx| {
+                                        let h_inner_spawn = h_inner.clone();
+                                        let _ = h_inner.update(cx, |this, cx| {
+                                            if has_sub && !sub_items.is_empty() {
+                                                let path_cap = path_inner.clone();
+                                                let is_bg_cap = is_bg_cap;
+                                                let sub_items_cap = sub_items.clone();
+                                                let pos_inner = item_pos;
+                                                let parent_left = this.context_menus.get(m_idx)
+                                                    .map(|m| m.position.x)
+                                                    .unwrap_or_default();
+                                                let parent_right = parent_left + this.context_menus.get(m_idx)
+                                                    .map(|m| m.width)
+                                                    .unwrap_or_default();
+
+                                                this.submenu_close_timer = None;
+                                                this.submenu_timer = Some(cx.spawn(move |_, cx: &mut AsyncApp| {
+                                                    let mut cx_val = cx.clone();
+                                                    async move {
+                                                        cx_val.background_executor().timer(std::time::Duration::from_millis(150)).await;
+                                                        let _ = window_handle_inner.update(&mut cx_val, |_, _window, cx| {
+                                                            let viewport_w = _window.viewport_size().width;
+                                                            let open_left = parent_right + px(220.0) > viewport_w;
+                                                            let app_handle = h_inner_spawn.clone();
+                                                            let path_cap = path_cap.clone();
+                                                            let sub_items_cap = sub_items_cap.clone();
+                                                            let pos_inner = pos_inner;
+
+                                                            cx.defer(move |cx| {
+                                                                let _ = app_handle.update(cx, |this, cx| {
+                                                                    let is_already_open = this.context_menus.get(m_idx + 1)
+                                                                        .map(|m| matches!(&m.content, ContextMenuContent::NativeItems { items, .. } if items.first().map(|it| it.id) == sub_items_cap.first().map(|it| it.id)))
+                                                                        .unwrap_or(false);
+
+                                                                    if !is_already_open {
+                                                                        this.context_menus.truncate(m_idx + 1);
+                                                                        let mut new_pos = pos_inner;
+                                                                        new_pos.x = if open_left {
+                                                                            parent_left + px(2.0) // TopRight: right edge at parent left
+                                                                        } else {
+                                                                            parent_right - px(2.0) // TopLeft: left edge at parent right
+                                                                        };
+                                                                        new_pos.y -= px(8.0);
+
+                                                                        this.context_menus.push(ContextMenuInstance {
+                                                                            position: new_pos,
+                                                                            open_left,
+                                                                            content: ContextMenuContent::NativeItems {
+                                                                                path: path_cap,
+                                                                                is_background: is_bg_cap,
+                                                                                items: sub_items_cap
+                                                                            },
+                                                                            scroll_handle: UniformListScrollHandle::new(),
+                                                                            width: px(0.0),
+                                                                        });
+                                                                        cx.notify();
+                                                                    }
+                                                                });
+                                                            });
+                                                        });
+                                                    }
+                                                }));
+                                            } else {
+                                                this.submenu_timer = None;
+                                                this.submenu_close_timer = None;
+                                                if this.context_menus.len() > m_idx + 1 {
+                                                    this.context_menus.truncate(m_idx + 1);
+                                                    cx.notify();
+                                                }
+                                            }
+                                        });
+                                    });
+                                }
+                            }
+                        })),
+                        on_width_calculated: Some(std::rc::Rc::new({
+                            let h = h.clone();
+                            move |w, cx| {
+                                let _ = h.update(cx, |this, _| {
+                                    if let Some(menu) = this.context_menus.get_mut(m_idx) {
+                                        menu.width = w;
+                                    }
+                                });
+                            }
+                        })),
+                        on_hover_change: Some(std::rc::Rc::new({
+                            let h = h.clone();
+                            let window_handle = window_handle.clone();
+                            move |is_hovering: bool, cx: &mut App| {
+                                if is_hovering {
+                                    let _ = h.update(cx, |this, _| { this.submenu_close_timer = None; });
+                                } else {
+                                    let h_close = h.clone();
+                                    let wh = window_handle.clone();
+                                    let _ = h.update(cx, |this, cx| {
+                                        this.submenu_close_timer = Some(cx.spawn(move |_, cx: &mut AsyncApp| {
+                                            let mut cx_val = cx.clone();
+                                            async move {
+                                                cx_val.background_executor().timer(std::time::Duration::from_millis(250)).await;
+                                                let _ = wh.update(&mut cx_val, |_, _, cx| {
+                                                    let h_inner = h_close.clone();
+                                                    cx.defer(move |cx| {
+                                                        let _ = h_inner.update(cx, |this, cx| {
+                                                            if this.context_menus.len() > m_idx + 1 {
+                                                                this.context_menus.truncate(m_idx + 1);
+                                                                cx.notify();
+                                                            }
+                                                        });
+                                                    });
+                                                });
+                                            }
+                                        }));
+                                    });
+                                }
+                            }
+                        })),
+                    })
+                },
+                ContextMenuContent::NameFilter { input } => {
+                    cx.new(|_| GenericDropdown {
+                        h_app: h.clone(),
+                        items: vec![],
+                        scroll_handle,
+                        width: None,
+                        max_height: 480.0,
+                        on_close: {
+                            let h = h.clone();
+                            std::rc::Rc::new(move |_, cx| {
+                                let _ = h.update(cx, |this, _| { this.context_menus.clear(); });
+                            })
+                        },
+                        on_drag: {
+                            std::rc::Rc::new(move |this, tid, vh, ch, _| {
+                                this.drag_target = Some(DragTarget::ContextMenuV { menu_idx: m_idx, viewport_h: vh, content_h: ch, track_id: tid });
+                            })
+                        },
+                        is_dragging: false,
+                        header: Some(input.clone().into_any_element()),
+                        on_item_hover: None,
+                        on_width_calculated: Some(std::rc::Rc::new({
+                            let h = h.clone();
+                            move |w, cx| {
+                                let _ = h.update(cx, |this, _| {
+                                    if let Some(menu) = this.context_menus.get_mut(m_idx) {
+                                        menu.width = w;
+                                    }
+                                });
+                            }
+                        })),
+                        on_hover_change: None,
+                    })
+                }
+            };
+
+            root = root.child(
+                deferred(
+                    if instance.open_left {
+                        // Snap (no corner-switch) so the submenu extends left from parent_left
+                        anchored()
+                            .position(pos)
+                            .anchor(Corner::TopRight)
+                            .snap_to_window()
+                            .child(content_element)
+                    } else {
+                        anchored()
+                            .position(pos)
+                            .child(content_element)
                     }
-                })
-        );
+                )
+            );
+        }
 
         if let Some(req) = self.tooltip_request.as_ref() {
             root = root.child(ManualTooltipElement { data: req.clone() });
