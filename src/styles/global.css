@@ -167,6 +167,19 @@ svg {
   width: 100%;
 }
 
+.individual-panel-wrapper {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  position: relative;
+}
+
+.panels-container.dual-view .individual-panel-wrapper:not(:last-child) {
+  border-right: 1px solid var(--border-color);
+}
+
 /* Global Animation Utilities */
 @keyframes spin {
   to {

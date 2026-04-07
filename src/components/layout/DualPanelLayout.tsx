@@ -117,9 +117,9 @@ interface DualPanelLayoutProps {
     handleRedo: () => void;
     canPaste: boolean;
     // Tabs
-    onTabSwitch?: (id: string, path?: string) => void;
-    onTabClose?: (id: string) => void;
-    onItemMiddleClick?: (entry: FileEntry) => void;
+    onTabSwitch?: (id: string, path?: string, panelId?: PanelId) => void;
+    onTabClose?: (id: string, panelId?: PanelId) => void;
+    onItemMiddleClick?: (entry: FileEntry, panelId?: PanelId) => void;
     onOpenNewTab?: (path: string) => void;
     isTrashEmpty: boolean;
     favorites: import('../../types').QuickAccessItem[];
@@ -217,14 +217,16 @@ export const DualPanelLayout: React.FC<DualPanelLayoutProps> = ({
     const { driveTrashConfigs } = useApp();
     const activePanel = activePanelId === 'left' ? left : right;
 
-    const isNukeOverride = useMemo(() => {
-        if (!activePanel.path) return false;
-        const targetDriveMatch = activePanel.path.match(/^([a-zA-Z]:)/);
+    const getIsNukeOverride = (p: FullPanelState) => {
+        if (!p.path) return false;
+        const targetDriveMatch = p.path.match(/^([a-zA-Z]:)/);
         if (!targetDriveMatch) return false;
         const targetDrive = targetDriveMatch[1].toLowerCase();
-
         return driveTrashConfigs[targetDrive]?.nukeOnDelete || false;
-    }, [activePanel.path, driveTrashConfigs]);
+    };
+
+    const leftIsNukeOverride = useMemo(() => getIsNukeOverride(left), [left.path, driveTrashConfigs]);
+    const rightIsNukeOverride = useMemo(() => getIsNukeOverride(right), [right.path, driveTrashConfigs]);
 
     // Use Refs to ensure drag handlers always access latest state (files/selection)
     // and to properly handle switching between files vs searchResults
@@ -307,7 +309,7 @@ export const DualPanelLayout: React.FC<DualPanelLayoutProps> = ({
                 handleDragStart(panelId, [entry]);
             }
         };
-    }, [handleDragStart]);
+    }, [handleDragStart, handleSelect]);
 
     const handleLeftDragStart = useMemo(() => makeDragStartHandler('left'), [makeDragStartHandler]);
     const handleRightDragStart = useMemo(() => makeDragStartHandler('right'), [makeDragStartHandler]);
@@ -329,6 +331,142 @@ export const DualPanelLayout: React.FC<DualPanelLayoutProps> = ({
     const leftForwardPath = useMemo(() => getFurthestDescendant(left), [left, getFurthestDescendant]);
     const rightForwardPath = useMemo(() => getFurthestDescendant(right), [right, getFurthestDescendant]);
 
+    const renderPanel = (id: 'left' | 'right') => {
+        const isLeft = id === 'left';
+        const panel = isLeft ? left : right;
+        const handlers = isLeft ? leftHandlers : rightHandlers;
+        const isActive = activePanelId === id;
+        const isNuke = isLeft ? leftIsNukeOverride : rightIsNukeOverride;
+        const forwardPath = isLeft ? leftForwardPath : rightForwardPath;
+        const dragStart = isLeft ? handleLeftDragStart : handleRightDragStart;
+
+        if (id === 'right' && layout === 'standard') return null;
+
+        return (
+            <div key={id} className={cx("individual-panel-wrapper", { active: isActive })}>
+                {onTabSwitch && (
+                    <Tabs
+                        panelId={id}
+                        onSwitch={(tabId, path) => onTabSwitch(tabId, path, id)}
+                        onClose={(tabId) => onTabClose!(tabId, id)}
+                        isDraggingFiles={!!dragState}
+                        dragState={dragState}
+                        onTabDrop={onTabDrop}
+                    />
+                )}
+                <TopBar
+                    activePanel={panel}
+                    activePanelId={id}
+                    canUndo={canUndo}
+                    undoLabel={undoLabel}
+                    canRedo={canRedo}
+                    redoLabel={redoLabel}
+                    onNavigate={handlers.onNavigate}
+                    onRefresh={onRefresh}
+                    onNavigateUp={() => panel.goUp()}
+                    onNavigateBack={() => panel.goBack()}
+                    onNavigateForward={() => panel.goForward()}
+                    onNavigateToIndex={(i) => panel.goToIndex(i)}
+                    onUndo={handleUndo}
+                    onRedo={handleRedo}
+                    onCopy={handleCopy}
+                    onCopyName={handleCopyName}
+                    onCopyPath={handleCopyPath}
+                    onCut={handleCut}
+                    onDelete={handleDelete}
+                    onPaste={handlePaste}
+                    canPaste={canPaste}
+                    t={t}
+                    layout="standard" // Force standard TopBar layout inside per-panel container
+                    showHidden={showHidden}
+                    isDragging={!!dragState}
+                    onDrop={(p, e) => p && handleDrop(e, p, panel.path)}
+                    drives={drives}
+                    isTrashView={panel.path?.startsWith('trash://')}
+                    onRestoreAll={onRestoreAll}
+                    onRestoreSelected={onRestoreSelected}
+                    onEmptyTrash={onEmptyTrash}
+                    isTrashEmpty={isTrashEmpty}
+                    isNukeOverride={isNuke}
+                    onSearchChange={(q) => handleSearch(id, q)}
+                    onSearchSubmit={() => executeSearch(id)}
+                    onSearchClear={() => clearSearch(id)}
+                    onSearchCancel={() => handleCancelSearch(id)}
+                    isShiftPressed={isShiftPressed}
+                    favorites={favorites}
+                    searchQuery={panel.searchQuery}
+                    isSearchActive={panel.isSearching}
+                />
+                <FilePanel
+                    files={panel.files}
+                    viewMode={panel.viewMode}
+                    selected={panel.selected}
+                    isActive={isActive}
+                    currentPath={panel.path}
+                    drives={drives}
+                    showDrives={false}
+                    sortConfig={panel.sortConfig}
+                    colWidths={panel.colWidths}
+                    onNavigate={handlers.onNavigate}
+                    onOpenFile={handlers.onOpenFile}
+                    onSelect={handlers.onSelect}
+                    onSelectMultiple={handlers.onSelectMultiple}
+                    onClearSelection={handlers.onClearSelection}
+                    onContextMenu={handlers.onContextMenu}
+                    onActivate={handlers.onActivate}
+                    onFileDragStart={dragStart}
+                    onFileDrop={handlers.onFileDrop}
+                    isDragging={!!dragState}
+                    onSort={handlers.onSort}
+                    onResize={handlers.onResize}
+                    onResizeMultiple={handlers.onResizeMultiple}
+                    t={t}
+                    searchQuery={panel.searchQuery || ''}
+                    searchResults={panel.searchResults}
+                    isSearching={panel.isSearching}
+                    onClearSearch={handlers.onClearSearch}
+                    onCancelSearch={() => handleCancelSearch(id)}
+                    isDragTarget={!!dragState && dragState.sourcePanel !== id}
+                    dragOverPath={dragOverPath}
+                    showHidden={propShowHidden}
+                    showSystem={propShowSystem}
+                    layout={layout}
+                    cutPaths={cutPaths}
+                    onRename={handleInlineRename}
+                    isTrashView={panel.isTrashView}
+                    isNetworkView={panel.isNetworkView}
+                    useSystemIcons={useSystemIcons}
+                    searchLimitReached={panel.searchLimitReached}
+                    panelId={id}
+                    onViewModeChange={handlers.setViewMode}
+                    loading={panel.loading}
+                    initialScrollOffset={panel.currentEntry?.scrollOffset}
+                    updateCurrentScroll={(o) => panel.updateCurrentScroll!(o)}
+                    showHistogram={histogramPanels.has(id)}
+                    groupByDate={panel.groupByDate}
+                    onGroupByDateChange={handlers.onGroupByDateChange}
+                    isProtected={panel.isProtected}
+                    favorites={favorites}
+                    extensionFilter={panel.extensionFilter}
+                    setExtensionFilter={panel.setExtensionFilter}
+                    sizeFilter={panel.sizeFilter}
+                    setSizeFilter={panel.setSizeFilter}
+                    dateFilter={panel.dateFilter}
+                    setDateFilter={panel.setDateFilter}
+                    nameFilter={panel.nameFilter}
+                    setNameFilter={panel.setNameFilter}
+                    locationFilter={panel.locationFilter}
+                    setLocationFilter={panel.setLocationFilter}
+                    deletedDateFilter={panel.deletedDateFilter}
+                    setDeletedDateFilter={panel.setDeletedDateFilter}
+                    clearAllFilters={panel.clearAllFilters}
+                    forwardPath={forwardPath}
+                    onItemMiddleClick={onItemMiddleClick ? (entry) => onItemMiddleClick(entry, id) : undefined}
+                />
+            </div>
+        );
+    };
+
     return (
         <div className="app">
             <TitleBar
@@ -342,241 +480,54 @@ export const DualPanelLayout: React.FC<DualPanelLayoutProps> = ({
                 onRefresh={onRefresh}
             />
             <div className="main-area">
-                {layout === 'standard' && (
-                    <Sidebar
-                        minimized={sidebarReduced}
-                        onToggle={() => setSidebarReduced(!sidebarReduced)}
-                        drives={drives}
-                        currentPath={activePanel.path}
-                        onNavigate={(path) => navigate(activePanelId, path)}
-                        t={t}
-                        treeRef={treeRef}
-                        onTreeCut={onTreeCut}
-                        onTreeCopy={onTreeCopy}
-                        onTreeCopyName={onTreeCopyName}
-                        onTreeCopyPath={onTreeCopyPath}
-                        onTreeDelete={onTreeDelete}
-                        isShiftPressed={isShiftPressed}
-                        onTreeRename={onTreeRename}
-                        onTreeNewFolder={onTreeNewFolder}
-                        onTreeUnmount={onTreeUnmount}
-                        onTreeDisconnectDrive={onTreeDisconnectDrive}
-                        onTreeProperties={onTreeProperties}
-                        onTreePaste={onTreePaste}
-                        canPaste={true}
-                        canUndo={canUndo}
-                        undoLabel={undoLabel}
-                        canRedo={canRedo}
-                        redoLabel={redoLabel}
-                        onUndo={handleUndo}
-                        onRedo={handleRedo}
-                        onDragStart={handleDragStart}
-                        onDrop={(e, target) => handleDrop(e, target, activePanel.path)}
-                        dragState={dragState}
-                        useSystemIcons={useSystemIcons}
-                        onItemMiddleClick={onItemMiddleClick}
-                        onOpenNewTab={onOpenNewTab}
-                        onDriveContextMenu={onDriveContextMenu}
-                        onAddToFavorites={onAddToFavorites}
-                        onRemoveFromFavorites={onRemoveFromFavorites}
-                        onTreeEmptyTrash={onEmptyTrash}
-                        onTreeRestoreAll={onRestoreAll}
-                        onTrashProperties={onTrashProperties}
-                        onDragOver={setDragOverPath}
-                    />
-                )}
+                <Sidebar
+                    minimized={sidebarReduced}
+                    onToggle={() => setSidebarReduced(!sidebarReduced)}
+                    drives={drives}
+                    currentPath={activePanel.path}
+                    onNavigate={(path) => navigate(activePanelId, path)}
+                    t={t}
+                    treeRef={treeRef}
+                    onTreeCut={onTreeCut}
+                    onTreeCopy={onTreeCopy}
+                    onTreeCopyName={onTreeCopyName}
+                    onTreeCopyPath={onTreeCopyPath}
+                    onTreeDelete={onTreeDelete}
+                    isShiftPressed={isShiftPressed}
+                    onTreeRename={onTreeRename}
+                    onTreeNewFolder={onTreeNewFolder}
+                    onTreeUnmount={onTreeUnmount}
+                    onTreeDisconnectDrive={onTreeDisconnectDrive}
+                    onTreeProperties={onTreeProperties}
+                    onTreePaste={onTreePaste}
+                    canPaste={true}
+                    canUndo={canUndo}
+                    undoLabel={undoLabel}
+                    canRedo={canRedo}
+                    redoLabel={redoLabel}
+                    onUndo={handleUndo}
+                    onRedo={handleRedo}
+                    onDragStart={handleDragStart}
+                    onDrop={(e, target) => handleDrop(e, target, activePanel.path)}
+                    dragState={dragState}
+                    useSystemIcons={useSystemIcons}
+                    onItemMiddleClick={onItemMiddleClick}
+                    onOpenNewTab={onOpenNewTab}
+                    onDriveContextMenu={onDriveContextMenu}
+                    onAddToFavorites={onAddToFavorites}
+                    onRemoveFromFavorites={onRemoveFromFavorites}
+                    onTreeEmptyTrash={onEmptyTrash}
+                    onTreeRestoreAll={onRestoreAll}
+                    onTrashProperties={onTrashProperties}
+                    onDragOver={setDragOverPath}
+                />
 
                 <div className="panel-container">
-                    {layout === 'standard' && onTabSwitch && (
-                        <Tabs
-                            onSwitch={onTabSwitch}
-                            onClose={onTabClose!}
-                            isDraggingFiles={!!dragState}
-                            dragState={dragState}
-                            onTabDrop={onTabDrop}
-                        />
-                    )}
-                    <TopBar
-                        activePanel={activePanel}
-                        activePanelId={activePanelId}
-                        canUndo={canUndo}
-                        undoLabel={undoLabel}
-                        canRedo={canRedo}
-                        redoLabel={redoLabel}
-                        onNavigate={activePanelId === 'left' ? leftHandlers.onNavigate : rightHandlers.onNavigate}
-                        onRefresh={onRefresh}
-                        onNavigateUp={() => activePanel.goUp()}
-                        onNavigateBack={() => activePanel.goBack()}
-                        onNavigateForward={() => activePanel.goForward()}
-                        onNavigateToIndex={(i) => activePanel.goToIndex(i)}
-                        onUndo={handleUndo}
-                        onRedo={handleRedo}
-                        onCopy={handleCopy}
-                        onCopyName={handleCopyName}
-                        onCopyPath={handleCopyPath}
-                        onCut={handleCut}
-                        onDelete={handleDelete}
-                        onPaste={handlePaste}
-                        canPaste={canPaste}
-                        t={t}
-                        layout={layout}
-                        showHidden={showHidden}
-                        isDragging={!!dragState}
-                        onDrop={(p, e) => p && handleDrop(e, p, activePanel.path)}
-                        drives={drives}
-                        isTrashView={activePanel.path?.startsWith('trash://')}
-                        onRestoreAll={onRestoreAll}
-                        onRestoreSelected={onRestoreSelected}
-                        onEmptyTrash={onEmptyTrash}
-                        isTrashEmpty={isTrashEmpty}
-                        isNukeOverride={isNukeOverride}
-                        onSearchChange={(q) => handleSearch(activePanelId, q)}
-                        onSearchSubmit={() => executeSearch(activePanelId)}
-                        onSearchClear={() => clearSearch(activePanelId)}
-                        onSearchCancel={() => handleCancelSearch(activePanelId)}
-                        isShiftPressed={isShiftPressed}
-                        favorites={favorites}
-                        
-                        searchQuery={activePanel.searchQuery}
-                        isSearchActive={activePanel.isSearching}
-                    />
                     <div
                         className={cx("panels-container", { "dual-view": layout === 'dual' })}
                     >
-                        <FilePanel
-                            files={left.files}
-                            viewMode={left.viewMode}
-                            selected={left.selected}
-                            isActive={activePanelId === 'left'}
-                            currentPath={left.path}
-                            drives={drives}
-                            showDrives={layout === 'dual'}
-                            sortConfig={left.sortConfig}
-                            colWidths={left.colWidths}
-                            onNavigate={leftHandlers.onNavigate}
-                            onOpenFile={leftHandlers.onOpenFile}
-                            onSelect={leftHandlers.onSelect}
-                            onSelectMultiple={leftHandlers.onSelectMultiple}
-                            onClearSelection={leftHandlers.onClearSelection}
-                            onContextMenu={leftHandlers.onContextMenu}
-                            onActivate={leftHandlers.onActivate}
-                            onFileDragStart={handleLeftDragStart}
-                            onFileDrop={leftHandlers.onFileDrop}
-                            isDragging={!!dragState}
-                            onSort={leftHandlers.onSort}
-                            onResize={leftHandlers.onResize}
-                            onResizeMultiple={leftHandlers.onResizeMultiple}
-                            t={t}
-                            searchQuery={left.searchQuery || ''}
-                            searchResults={left.searchResults}
-                            isSearching={left.isSearching}
-                            onClearSearch={leftHandlers.onClearSearch}
-                            onCancelSearch={() => handleCancelSearch('left')}
-                            isDragTarget={!!dragState && dragState.sourcePanel !== 'left'}
-                            dragOverPath={dragOverPath}
-                            showHidden={propShowHidden}
-                            showSystem={propShowSystem}
-                            layout={layout}
-                            cutPaths={cutPaths}
-                            onRename={handleInlineRename}
-                            isTrashView={left.isTrashView}
-                            isNetworkView={left.isNetworkView}
-                            useSystemIcons={useSystemIcons}
-                            onItemMiddleClick={onItemMiddleClick}
-                            searchLimitReached={left.searchLimitReached}
-                            panelId="left"
-                            onViewModeChange={leftHandlers.setViewMode}
-                            loading={left.loading}
-                            initialScrollOffset={left.currentEntry?.scrollOffset}
-                            updateCurrentScroll={(o) => left.updateCurrentScroll!(o)}
-                            showHistogram={histogramPanels.has('left')}
-                            groupByDate={left.groupByDate}
-                            onGroupByDateChange={leftHandlers.onGroupByDateChange}
-                            isProtected={left.isProtected}
-                            favorites={favorites}
-                            extensionFilter={left.extensionFilter}
-                            setExtensionFilter={left.setExtensionFilter}
-                            sizeFilter={left.sizeFilter}
-                            setSizeFilter={left.setSizeFilter}
-                            dateFilter={left.dateFilter}
-                            setDateFilter={left.setDateFilter}
-                            nameFilter={left.nameFilter}
-                            setNameFilter={left.setNameFilter}
-                            locationFilter={left.locationFilter}
-                            setLocationFilter={left.setLocationFilter}
-                            deletedDateFilter={left.deletedDateFilter}
-                            setDeletedDateFilter={left.setDeletedDateFilter}
-                            clearAllFilters={left.clearAllFilters}
-                            forwardPath={leftForwardPath}
-                        />
-
-                        {layout === 'dual' && (
-                            <FilePanel
-                                files={right.files}
-                                viewMode={right.viewMode}
-                                selected={right.selected}
-                                isActive={activePanelId === 'right'}
-                                currentPath={right.path}
-                                drives={drives}
-                                showDrives={true}
-                                sortConfig={right.sortConfig}
-                                colWidths={right.colWidths}
-                                onNavigate={rightHandlers.onNavigate}
-                                onOpenFile={rightHandlers.onOpenFile}
-                                onSelect={rightHandlers.onSelect}
-                                onSelectMultiple={rightHandlers.onSelectMultiple}
-                                onClearSelection={rightHandlers.onClearSelection}
-                                onContextMenu={rightHandlers.onContextMenu}
-                                onActivate={rightHandlers.onActivate}
-                                onFileDragStart={handleRightDragStart}
-                                onFileDrop={rightHandlers.onFileDrop}
-                                isDragging={!!dragState}
-                                onSort={rightHandlers.onSort}
-                                onResize={rightHandlers.onResize}
-                                onResizeMultiple={rightHandlers.onResizeMultiple}
-                                t={t}
-                                searchQuery={right.searchQuery || ''}
-                                searchResults={right.searchResults}
-                                isSearching={right.isSearching}
-                                onClearSearch={rightHandlers.onClearSearch}
-                                onCancelSearch={() => handleCancelSearch('right')}
-                                isDragTarget={!!dragState && dragState.sourcePanel !== 'right'}
-                                dragOverPath={dragOverPath}
-                                showHidden={propShowHidden}
-                                showSystem={propShowSystem}
-                                layout={layout}
-                                cutPaths={cutPaths}
-                                onRename={handleInlineRename}
-                                isTrashView={right.isTrashView}
-                                isNetworkView={right.isNetworkView}
-                                useSystemIcons={useSystemIcons}
-                                searchLimitReached={right.searchLimitReached}
-                                panelId="right"
-                                onViewModeChange={rightHandlers.setViewMode}
-                                loading={right.loading}
-                                initialScrollOffset={right.currentEntry?.scrollOffset}
-                                updateCurrentScroll={(o) => right.updateCurrentScroll!(o)}
-                                showHistogram={histogramPanels.has('right')}
-                                groupByDate={right.groupByDate}
-                                onGroupByDateChange={rightHandlers.onGroupByDateChange}
-                                isProtected={right.isProtected}
-                                favorites={favorites}
-                                extensionFilter={right.extensionFilter}
-                                setExtensionFilter={right.setExtensionFilter}
-                                sizeFilter={right.sizeFilter}
-                                setSizeFilter={right.setSizeFilter}
-                                dateFilter={right.dateFilter}
-                                setDateFilter={right.setDateFilter}
-                                nameFilter={right.nameFilter}
-                                setNameFilter={right.setNameFilter}
-                                locationFilter={right.locationFilter}
-                                setLocationFilter={right.setLocationFilter}
-                                deletedDateFilter={right.deletedDateFilter}
-                                setDeletedDateFilter={right.setDeletedDateFilter}
-                                clearAllFilters={right.clearAllFilters}
-                                forwardPath={rightForwardPath}
-                            />
-                        )}
+                        {renderPanel('left')}
+                        {layout === 'dual' && renderPanel('right')}
                     </div>
                 </div>
             </div>

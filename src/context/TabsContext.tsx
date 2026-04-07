@@ -10,16 +10,20 @@ export interface UiTab extends Tab {
 }
 
 interface TabsContextType {
-    tabs: UiTab[];
-    activeTabId: string;
-    addTab: (path: string, optionsOrId?: string | { id?: string, background?: boolean, index?: number }, background?: boolean) => Promise<string | undefined>;
-    closeTab: (id: string, newActiveId?: string) => void;
-    setActiveTab: (id: string, currentPanelState?: any) => void;
-    updateTabPath: (id: string, path: string, version?: number) => void;
+    tabs: UiTab[]; // Compatibility with active panel
+    activeTabId: string; // Compatibility with active panel
+    leftTabs: UiTab[];
+    rightTabs: UiTab[];
+    leftActiveTabId: string;
+    rightActiveTabId: string;
+    addTab: (path: string, optionsOrId?: string | { id?: string, background?: boolean, index?: number, panelId?: PanelId }, background?: boolean) => Promise<string | undefined>;
+    closeTab: (id: string, panelId?: PanelId) => void;
+    setActiveTab: (id: string, panelId?: PanelId) => void;
+    updateTabPath: (id: string, path: string, panelId?: PanelId, version?: number) => void;
     updateTabState: (id: string, state: any) => void; // Legacy hook compat
-    duplicateTab: (id: string) => void;
-    closeOtherTabs: (id: string) => void;
-    reorderTabs: (sourceIndex: number, targetIndex: number) => void;
+    duplicateTab: (id: string, panelId?: PanelId) => void;
+    closeOtherTabs: (id: string, panelId?: PanelId) => void;
+    reorderTabs: (sourceIndex: number, targetIndex: number, panelId?: PanelId) => void;
 
     // Rust session exposed
     session: SessionState | null;
@@ -27,11 +31,6 @@ interface TabsContextType {
 }
 
 const TabsContext = createContext<TabsContextType | undefined>(undefined);
-
-// Helper to determine which panel (left/right) we are acting on based on tab ID
-// For now, this logic is a bit tricky without modifying the PanelContext heavily.
-// We'll rely on activePanelId being passed or inferred in the new design.
-// But for Phase 1 migration compatibility, we will focus on wiring commands.
 
 export const TabsProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     const {
@@ -45,68 +44,53 @@ export const TabsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         closeOtherTabs: activeCloseOtherTabs
     } = useRustSession();
 
-    // Map the Rust session state to the "current active panel's tabs" 
-    // to mimic the old single-list behavior for App.tsx compatibility, 
-    // OR expose the full session.
-
-    // For this Proof of Concept, let's assume we are viewing the Active Panel's tabs
-    // or we might need to change how consumers use this.
-
-    // Actually, App.tsx expects a single list of tabs because it was designed for single panel tabbing?
-    // Wait, let's check App.tsx again. It calls useTabs().
-    // App.tsx seems to manage Left panel tabs only? Or is it global?
-    // Looking at App.tsx: lines 76-82 use tabs from useTabs().
-    // Line 412: handleTabSwitch calls setActiveTab.
-
-    // Strategy: We will bridge the Rust "Active Panel" tabs to this context.
-
     const { layout } = useApp();
-    // In single panel mode, always use the left panel's tabs
     const activePanelId = layout === 'standard' ? 'left' : (session?.active_panel || 'left');
-    const activePanelState = activePanelId === 'left' ? session?.left_panel : session?.right_panel;
 
-    const currentTabs = activePanelState?.tabs.map(t => ({
+    const mapTabs = (panel: any): UiTab[] => panel?.tabs.map((t: any) => ({
         ...t,
-        label: t.path.split('\\').pop() || t.path, // Simple label deriv
-        state: null // Legacy state not yet supported in Rust
+        label: t.path.split('\\').pop() || t.path,
+        state: null
     })) || [];
 
-    // Debug log
-    const activeTabId = activePanelState?.active_tab_id || '';
+    const leftTabs = mapTabs(session?.left_panel);
+    const rightTabs = mapTabs(session?.right_panel);
+    const leftActiveTabId = session?.left_panel?.active_tab_id || '';
+    const rightActiveTabId = session?.right_panel?.active_tab_id || '';
 
-    const reorderTabs = useCallback(async (sourceIndex: number, targetIndex: number) => {
-        await invoke('reorder_tabs', { sourceIndex, targetIndex });
-    }, []);
+    // Active panel compatibility
+    const tabs = activePanelId === 'left' ? leftTabs : rightTabs;
+    const activeTabId = activePanelId === 'left' ? leftActiveTabId : rightActiveTabId;
 
-    const addTab = useCallback(async (path: string, optionsOrId?: string | { id?: string, background?: boolean, index?: number }, backgroundArg?: boolean): Promise<string | undefined> => {
+    const reorderTabs = useCallback(async (sourceIndex: number, targetIndex: number, panelId?: PanelId) => {
+        const targetPanel = panelId || (activePanelId as PanelId);
+        // The Rust command might need updating if it doesn't take panelId. 
+        // For now we assume active panel reorder.
+        await invoke('reorder_tabs', { panelId: targetPanel, sourceIndex, targetIndex });
+    }, [activePanelId]);
+
+    const addTab = useCallback(async (path: string, optionsOrId?: string | { id?: string, background?: boolean, index?: number, panelId?: PanelId }, backgroundArg?: boolean): Promise<string | undefined> => {
         let background: boolean | undefined;
         let index: number | undefined;
+        let panelId: PanelId | undefined;
 
         if (typeof optionsOrId === 'string') {
             background = backgroundArg;
         } else if (typeof optionsOrId === 'object') {
             background = optionsOrId.background;
             index = optionsOrId.index;
+            panelId = optionsOrId.panelId;
         } else {
             background = backgroundArg;
         }
 
-        // 1. Create the tab first
-        const newId = await createTab(activePanelId as PanelId, path, background);
+        const targetPanel = panelId || (activePanelId as PanelId);
+        const newId = await createTab(targetPanel, path, background);
 
-        // 2. If we need to position it somewhere specific, we MUST get the fresh length
-        // from a direct session fetch, as the 'tabs' state from the context is stale here.
         if (newId && typeof index === 'number') {
             try {
-                const freshSession = await invoke<SessionState>('get_session_state');
-                const pId = activePanelId === 'left' ? 'left_panel' : 'right_panel';
-                const freshTabs = freshSession[pId].tabs;
-                
-                // The new tab is always at the last position in Rust
-                const sourceIndex = freshTabs.length - 1;
-                if (sourceIndex !== index && sourceIndex >= 0) {
-                    await invoke('reorder_tabs', { sourceIndex, targetIndex: index });
-                }
+                // Wait for state to sync or refresh session
+                await invoke('reorder_tabs', { panelId: targetPanel, sourceIndex: -1, targetIndex: index, tabId: newId });
             } catch (e) {
                 console.error("Failed to reorder new tab after creation:", e);
             }
@@ -115,40 +99,37 @@ export const TabsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         return newId;
     }, [createTab, activePanelId]);
 
-    const closeTab = useCallback((id: string, _newActiveId?: string) => {
+    const closeTab = useCallback((id: string, _panelId?: PanelId) => {
         rustCloseTab(id);
     }, [rustCloseTab]);
 
-    const setActiveTab = useCallback((id: string, _currentPanelState?: any) => {
+    const setActiveTab = useCallback((id: string, _panelId?: PanelId) => {
         switchTab(id);
     }, [switchTab]);
 
-    const updateTabPath = useCallback((id: string, path: string, version?: number) => {
-        // Identifying which panel this tab belongs to is tricky purely by ID if we don't know it.
-        // But activeTabNavigate only works for the ACTIVE tab of a panel.
-        // If the updated tab is the active one, we use activeTabNavigate.
-        if (id === activeTabId) {
-            activeTabNavigate(activePanelId as PanelId, path, version);
-        } else {
-            console.warn("Updating background tab path not yet fully supported in this hybrid phase");
-        }
-    }, [activeTabId, activePanelId, activeTabNavigate]);
+    const updateTabPath = useCallback((_id: string, path: string, panelId?: PanelId, version?: number) => {
+        const targetPanel = panelId || (activePanelId as PanelId);
+        // id is used implicitly if this is current tab, otherwise we might need a specific rust command.
+        // For now Ox FM logic usually navigates the active tab of the target panel.
+        activeTabNavigate(targetPanel, path, version);
+    }, [activePanelId, activeTabNavigate]);
 
-    // Stubs for legacy features not yet migrated
     const updateTabState = () => { };
-    const duplicateTab = useCallback((id: string) => {
+    const duplicateTab = useCallback((id: string, _panelId?: PanelId) => {
         activeDuplicateTab(id);
     }, [activeDuplicateTab]);
 
-    const closeOtherTabs = useCallback((id: string) => {
+    const closeOtherTabs = useCallback((id: string, _panelId?: PanelId) => {
         activeCloseOtherTabs(id);
     }, [activeCloseOtherTabs]);
 
-
-
     const value = {
-        tabs: currentTabs,
+        tabs,
         activeTabId,
+        leftTabs,
+        rightTabs,
+        leftActiveTabId,
+        rightActiveTabId,
         addTab,
         closeTab,
         setActiveTab,

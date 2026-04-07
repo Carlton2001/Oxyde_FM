@@ -70,7 +70,7 @@ function App() {
 
   const clipboardObj = useClipboard();
   const { clipboard, copy, cut, clearClipboard, copyToSystem, readTextFromSystem, refreshClipboard } = clipboardObj;
-  const { tabs, activeTabId, setActiveTab, updateTabPath, addTab, closeTab } = useTabs();
+  const { tabs, activeTabId, leftTabs, rightTabs, leftActiveTabId, rightActiveTabId, setActiveTab, updateTabPath, addTab, closeTab } = useTabs();
   const dialogs = useDialogs();
   const { left, right, activePanelId, setActivePanelId } = usePanelContext();
   const fileOps = useFileOperations(notify, t as any, dismissNotification);
@@ -208,7 +208,7 @@ function App() {
   // Handlers Integration
   const handlers = useAppHandlers({
     left, right, activePanelId, setActivePanelId, layout, fileOps, treeRef, notify, t, dialogs, clipboard: clipboardObj, refreshDrives,
-    tabs, activeTabId, setActiveTab, closeTab, addTab, setContextMenu, contextMenu, drives, defaultTurboMode,
+    leftActiveTabId, rightActiveTabId, leftTabs, rightTabs, setActiveTab, closeTab, addTab, setContextMenu, contextMenu, drives, defaultTurboMode,
     zipQuality, sevenZipQuality, zstdQuality, favorites, peekStatus, confirmDelete,
     openTrashSettings,
     refreshTrashStatus, driveTrashConfigs
@@ -241,11 +241,15 @@ function App() {
     modifiers, setModifiers, isNativeActive, setIsNativeActive, dragTargetPath
   });
 
-  const handleOpenNewTab = useCallback((path: string) => {
-    const currentIndex = tabs.findIndex(t => t.id === activeTabId);
+  const handleOpenNewTab = useCallback((path: string, panelId?: PanelId) => {
+    const targetPanelId = panelId || activePanelId;
+    const targetTabs = targetPanelId === 'left' ? leftTabs : rightTabs;
+    const targetActiveTabId = targetPanelId === 'left' ? leftActiveTabId : rightActiveTabId;
+
+    const currentIndex = targetTabs.findIndex(t => t.id === targetActiveTabId);
     const targetIndex = currentIndex !== -1 ? currentIndex + 1 : undefined;
-    addTab(path, { index: targetIndex } as any);
-  }, [tabs, activeTabId, addTab]);
+    addTab(path, { index: targetIndex, panelId: targetPanelId } as any);
+  }, [leftTabs, rightTabs, leftActiveTabId, rightActiveTabId, activePanelId, addTab]);
 
   const handleTabDrop = useCallback(async (files: any[], index?: number) => {
     const folders = files.filter(f => f.is_dir);
@@ -257,9 +261,8 @@ function App() {
   }, [addTab, setDragState]);
 
   const handleContextMenuOpenNewTab = useCallback((path: string) => {
-    handleOpenNewTab(path);
-    setContextMenu(null);
-  }, [handleOpenNewTab]);
+    handleOpenNewTab(path, contextMenu?.panelId);
+  }, [handleOpenNewTab, contextMenu?.panelId]);
 
   const handleDragStart = useCallback((sourcePanel: PanelId, files: FileEntry[]) => {
     originalHandleDragStart(sourcePanel, files);
@@ -354,7 +357,7 @@ function App() {
       const normPanel = normalizePath(left.path);
       if (normTab !== normPanel) {
         // Use current panel version for sync to avoid Rust-side increment loops
-        updateTabPath(activeTabId, left.path, left.version);
+        updateTabPath(activeTabId, left.path, 'left', left.version);
       }
     }
   }, [left.path, left.version, activeTabId, layout, tabs, updateTabPath]);
@@ -598,7 +601,7 @@ function App() {
         onRestoreAll={handleRestoreAll} onRestoreSelected={handleRestoreSelected} onEmptyTrash={handleEmptyTrash}
         isTrashEmpty={isTrashEmpty}
         onTabSwitch={handleTabSwitch} onTabClose={handleTabClose} onItemMiddleClick={handleItemMiddleClick}
-        onOpenNewTab={layout === 'standard' ? handleOpenNewTab : undefined}
+        onOpenNewTab={handleOpenNewTab}
         onTabDrop={handleTabDrop}
         onDuplicateSearch={handleDuplicateSearch}
         onCalculateAllSizes={handleCalculateAllSizes}
@@ -663,7 +666,7 @@ function App() {
           isTrashContext={contextMenu.isTrash || (contextMenu.target === 'trash://')}
           isSearchContext={contextMenu.panelId === 'left' ? left.path.startsWith('search://') : right.path.startsWith('search://')}
           onRestore={handleRestoreSelected} onRestoreAll={handleRestoreAll} onEmptyTrash={handleEmptyTrash} onGoToFolder={handleGoToFolder}
-          onOpenNewTab={layout === 'standard' ? handleContextMenuOpenNewTab : undefined}
+          onOpenNewTab={handleContextMenuOpenNewTab}
           isDir={contextMenu.isDir} isBackground={contextMenu.isBackground} isDrive={contextMenu.isDrive} isMediaDevice={contextMenu.isMediaDevice} isNetworkComputer={contextMenu.isNetworkComputer} hasWebPage={contextMenu.hasWebPage} driveType={contextMenu.driveType}
           isReadOnly={false}
           onExtract={(p: string, toSub: boolean) => handleAction(toSub ? 'archive.extract_to_folder' : 'archive.extract_here', { ...actionContext, contextMenuTarget: p })}

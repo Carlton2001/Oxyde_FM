@@ -21,11 +21,13 @@ interface AppHandlersProps {
     dialogs: any;
     clipboard: any;
     refreshDrives: () => void;
-    tabs: any[];
-    activeTabId: string;
-    setActiveTab: (id: string, state?: any) => void;
-    closeTab: (id: string, nextId?: string) => void;
-    addTab: (path: string, id?: string, background?: boolean) => void;
+    leftActiveTabId: string;
+    rightActiveTabId: string;
+    leftTabs: any[];
+    rightTabs: any[];
+    setActiveTab: (id: string, panelId?: PanelId) => void;
+    closeTab: (id: string, panelId?: PanelId) => void;
+    addTab: (path: string, optionsOrId?: string | { id?: string, background?: boolean, index?: number, panelId?: PanelId }, background?: boolean) => Promise<string | undefined>;
     setContextMenu: (menu: any) => void;
     contextMenu: any;
     drives: DriveInfo[];
@@ -53,8 +55,10 @@ export const useAppHandlers = ({
     t,
     dialogs,
     clipboard,
-    tabs,
-    activeTabId,
+    leftActiveTabId,
+    rightActiveTabId,
+    leftTabs,
+    rightTabs,
     setActiveTab,
     closeTab,
     addTab,
@@ -374,39 +378,32 @@ export const useAppHandlers = ({
         }
     }, [left, right, activePanel, contextMenu, notify, t, refreshBothPanels, refreshTreePath, setContextMenu]);
 
-    const handleTabSwitch = useCallback((targetId: string, overridePath?: string) => {
-        if (targetId === activeTabId && !overridePath) return;
-        setActiveTab(targetId);
+    const handleTabSwitch = useCallback((targetId: string, overridePath?: string, panelId?: PanelId) => {
+        const targetPanelId = panelId || activePanelId;
+        const panel = targetPanelId === 'left' ? left : right;
+        setActiveTab(targetId, targetPanelId);
         if (overridePath) {
-            left.navigate(overridePath);
+            panel.navigate(overridePath);
         }
-    }, [activeTabId, left, setActiveTab]);
+    }, [activePanelId, left, right, setActiveTab]);
 
-    const handleTabClose = useCallback((id: string) => {
-        if (id !== activeTabId) {
-            closeTab(id);
-            return;
-        }
-        const nextTabs = tabs.filter(t => t.id !== id);
-        if (nextTabs.length === 0) {
-            closeTab(id);
-        } else {
-            const currentIndex = tabs.findIndex(t => t.id === id);
-            const nextIndex = currentIndex > 0 ? currentIndex - 1 : 0;
-            const nextTab = nextTabs[nextIndex];
-            closeTab(id, nextTab.id);
-        }
-    }, [activeTabId, tabs, closeTab]);
+    const handleTabClose = useCallback((id: string, panelId?: PanelId) => {
+        closeTab(id, panelId);
+    }, [closeTab]);
 
-    const handleItemMiddleClick = useCallback((entry: FileEntry) => {
-        if (entry.is_dir && layout === 'standard') {
-            const currentIndex = tabs.findIndex(t => t.id === activeTabId);
+    const handleItemMiddleClick = useCallback((entry: FileEntry, panelId?: PanelId) => {
+        if (entry.is_dir) {
+            const targetPanelId = panelId || activePanelId;
+            const targetTabs = targetPanelId === 'left' ? leftTabs : rightTabs;
+            const targetActiveTabId = targetPanelId === 'left' ? leftActiveTabId : rightActiveTabId;
+
+            const currentIndex = targetTabs.findIndex(t => t.id === targetActiveTabId);
             const targetIndex = currentIndex !== -1 ? currentIndex + 1 : undefined;
-            
+
             // Pass the target index to insert right of the parent tab
-            addTab(entry.path, { index: targetIndex, background: true } as any, true);
+            addTab(entry.path, { index: targetIndex, background: true, panelId: targetPanelId } as any, true);
         }
-    }, [addTab, layout, tabs, activeTabId]);
+    }, [addTab, activePanelId, leftTabs, rightTabs, leftActiveTabId, rightActiveTabId]);
 
     const handleAddToFavorites = useCallback(async (path: string) => {
         try {

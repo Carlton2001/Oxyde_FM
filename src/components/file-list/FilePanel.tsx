@@ -4,7 +4,6 @@ import { ArrowUp, X, Search, Square } from 'lucide-react';
 import { FilePanelHeader } from './FilePanelHeader';
 import { FilePanelFooter } from './FilePanelFooter';
 import { FileEntry, ViewMode, SortConfig, ColumnWidths, SortField, DriveInfo, LayoutMode } from '../../types';
-import { PathBar } from '../layout/PathBar';
 import { FileHeader } from './FileHeader';
 import { getFileEntryIcon, IMAGE_EXTENSIONS } from '../../utils/fileIcons';
 import { Thumbnail } from '../ui/Thumbnail';
@@ -42,7 +41,7 @@ interface FilePanelProps {
     onContextMenu: (e: React.MouseEvent, entry?: FileEntry) => void;
     onActivate: () => void;
     onFileDragStart: (entry: FileEntry) => void;
-    onFileDrop: (targetPath?: string, e?: React.MouseEvent) => void;
+    onFileDrop?: (targetPath?: string, e?: React.MouseEvent) => void;
     isDragging: boolean;
     onSort: (field: SortField) => void;
     onResize: (field: keyof ColumnWidths, delta: number) => void;
@@ -64,7 +63,7 @@ interface FilePanelProps {
     isTrashView?: boolean;
     isNetworkView?: boolean;
     useSystemIcons?: boolean;
-    onItemMiddleClick?: (entry: FileEntry) => void;
+    onItemMiddleClick?: (entry: FileEntry, panelId: string) => void;
     diffPaths?: Set<string>;
     panelId: string;
     searchLimitReached?: boolean;
@@ -97,17 +96,17 @@ interface FilePanelProps {
 export const FilePanel: React.FC<FilePanelProps> = React.memo(({
     files, viewMode, selected, isActive, currentPath, drives, showDrives, sortConfig,
     colWidths, onNavigate, onOpenFile, onSelect, onSelectMultiple, onClearSelection,
-    onContextMenu, onActivate, onFileDragStart, onFileDrop, isDragging, onSort,
+    onContextMenu, onActivate, onFileDragStart, onFileDrop: _onFileDrop, isDragging, onSort,
     onResize, onResizeMultiple, t, searchQuery, searchResults, isSearching,
     onClearSearch, onCancelSearch, isDragTarget,
     dragOverPath, showHidden = false, showSystem = false, layout, cutPaths = [],
     onRename, showHistogram: propShowHistogram, isTrashView = false, isNetworkView = false,
     useSystemIcons: propUseSystemIcons, onItemMiddleClick, diffPaths, searchLimitReached,
     panelId, onViewModeChange, loading, initialScrollOffset, updateCurrentScroll,
-    groupByDate, onGroupByDateChange, isProtected, favorites,
+    groupByDate, onGroupByDateChange, isProtected, favorites: _favorites,
     extensionFilter, setExtensionFilter, sizeFilter, setSizeFilter, dateFilter, setDateFilter,
     nameFilter, setNameFilter, locationFilter, setLocationFilter,
-    deletedDateFilter, setDeletedDateFilter, clearAllFilters, forwardPath
+    deletedDateFilter, setDeletedDateFilter, clearAllFilters, forwardPath: _forwardPath
 }) => {
     const { useSystemIcons: contextUseSystemIcons, searchLimit, showGridThumbnails, notify, showNetwork, showCheckboxes } = useApp();
     const useSystemIcons = propUseSystemIcons ?? contextUseSystemIcons;
@@ -587,36 +586,17 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
                 ),
             } as React.CSSProperties : undefined}
         >
-            {(layout === 'dual' || showDrives) && (
+            {showDrives && (
                 <div className="panel-navigation">
-                    {layout === 'dual' && (
-                        <div className="panel-path-bar">
-                            <PathBar
-                                className="path-bar"
-                                path={currentPath}
-                                onNavigate={onNavigate}
-                                isDragging={isDragging}
-                                onDrop={(p) => onFileDrop(p || currentPath)}
-                                drives={drives || []}
-                                showHidden={showHidden}
-                                panelId={panelId}
-                                t={t}
-                                favorites={favorites}
-                                forwardPath={forwardPath}
-                            />
-                        </div>
-                    )}
-                    {showDrives && (
-                        <FilePanelHeader
-                            currentPath={currentPath}
-                            drives={drives || []}
-                            showDrives={showDrives || false}
-                            onNavigate={onNavigate}
-                            onContextMenu={onContextMenu}
-                            showNetwork={showNetwork}
-                            t={t}
-                        />
-                    )}
+                    <FilePanelHeader
+                        currentPath={currentPath}
+                        drives={drives || []}
+                        showDrives={showDrives || false}
+                        onNavigate={onNavigate}
+                        onContextMenu={onContextMenu}
+                        showNetwork={showNetwork}
+                        t={t}
+                    />
                 </div>
             )}
 
@@ -733,7 +713,7 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
                         isNetworkView={isNetworkView}
                         ref={scrollHandleRef}
                         onScrollToggle={setShowScrollTop}
-                        onItemMiddleClick={onItemMiddleClick}
+                        onItemMiddleClick={onItemMiddleClick ? (entry) => onItemMiddleClick(entry, panelId) : undefined}
                         diffPaths={diffPaths}
                         colWidths={colWidths}
                         isSearching={isSearching}

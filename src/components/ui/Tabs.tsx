@@ -9,6 +9,7 @@ import './Tabs.css';
 import { FileEntry } from '../../types';
 
 interface TabsProps {
+    panelId: 'left' | 'right';
     onSwitch: (tabId: string, path?: string) => void;
     onClose: (tabId: string) => void;
     isDraggingFiles?: boolean;
@@ -17,9 +18,11 @@ interface TabsProps {
 }
 
 export const Tabs: React.FC<TabsProps> = ({
-    onSwitch, onClose, isDraggingFiles, dragState, onTabDrop
+    panelId, onSwitch, onClose, isDraggingFiles, dragState, onTabDrop
 }) => {
-    const { tabs, activeTabId, addTab, duplicateTab, closeOtherTabs, reorderTabs } = useTabs();
+    const { leftTabs, rightTabs, leftActiveTabId, rightActiveTabId, addTab, duplicateTab, closeOtherTabs, reorderTabs } = useTabs();
+    const tabs = panelId === 'left' ? leftTabs : rightTabs;
+    const activeTabId = panelId === 'left' ? leftActiveTabId : rightActiveTabId;
     const { t } = useApp();
     const wrapperRef = useRef<HTMLDivElement>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
@@ -131,7 +134,7 @@ export const Tabs: React.FC<TabsProps> = ({
                 const targetIndex = tabs.findIndex(t => t.id === dropTargetId);
 
                 if (sourceIndex !== -1 && targetIndex !== -1) {
-                    reorderTabs(sourceIndex, targetIndex);
+                    reorderTabs(sourceIndex, targetIndex, panelId);
                 }
             }
             setDraggingId(null);
@@ -367,7 +370,7 @@ export const Tabs: React.FC<TabsProps> = ({
                     // Middle click on empty space creates new tab
                     if (e.button === 1 && e.target === e.currentTarget) {
                         e.preventDefault();
-                        const id = await addTab('C:\\', { background: false });
+                        const id = await addTab('C:\\', { background: false, panelId });
                         if (id) onSwitch(id, 'C:\\');
                     }
                 }}
@@ -449,7 +452,7 @@ export const Tabs: React.FC<TabsProps> = ({
                     </div>
                 ))}
                 <div className="new-tab-btn" onClick={async () => {
-                    const id = await addTab('C:\\', { background: false });
+                    const id = await addTab('C:\\', { background: false, panelId });
                     if (id) onSwitch(id, 'C:\\');
                 }} data-tooltip={t('new_tab') || "New Tab"}>
                     <Plus size={16} />
@@ -483,7 +486,7 @@ export const Tabs: React.FC<TabsProps> = ({
                     }}
                     onClick={(e) => e.stopPropagation()}
                 >
-                    <div className="menu-item" onClick={() => { duplicateTab(menu.tabId); setMenu(null); }}>
+                    <div className="menu-item" onClick={() => { duplicateTab(menu.tabId, panelId); setMenu(null); }}>
                         <Copy size={14} /> {t('duplicate_tab' as any) || "Duplicate Tab"}
                     </div>
                     {tabs.length > 1 && (
@@ -492,7 +495,7 @@ export const Tabs: React.FC<TabsProps> = ({
                                 if (menu.tabId !== activeTabId) {
                                     onSwitch(menu.tabId);
                                 }
-                                closeOtherTabs(menu.tabId);
+                                closeOtherTabs(menu.tabId, panelId);
                                 setMenu(null);
                             }}>
                                 <Split size={14} /> {t('close_other_tabs' as any) || "Close Other Tabs"}
