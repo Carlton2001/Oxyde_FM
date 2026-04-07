@@ -6,15 +6,14 @@ import { useSelection } from './useSelection';
 import { usePanelSearch } from './usePanelSearch';
 
 import { useApp } from '../context/AppContext';
-import { ViewMode, SortConfig, ColumnWidths, MultiModeColumnWidths, ColumnMode, SizeCategoryKey } from '../types';
+import { ColumnWidths, ViewMode, SizeCategoryKey, PanelId, SortConfig, MultiModeColumnWidths, ColumnMode } from '../types';
 import { getColumnMode } from '../config/columnDefinitions';
 
-export const usePanel = (initialPath: string, panelId?: string, activeTabId?: string) => {
+export const usePanel = (initialPath: string, panelId: PanelId, activeTabId?: string) => {
     const { showHidden, showSystem, searchLimit } = useApp();
 
     const normalizedPanelId = useMemo(() => {
-        if (!panelId) return 'left' as 'left' | 'right';
-        return (panelId.startsWith('panel-') ? panelId.replace('panel-', '') : panelId) as 'left' | 'right';
+        return (panelId.startsWith('panel-') ? panelId.replace('panel-', '') : panelId) as PanelId;
     }, [panelId]);
 
     // Navigation

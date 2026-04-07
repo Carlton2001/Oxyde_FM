@@ -3,7 +3,7 @@ import { ChevronRight, Folder, Trash, HardDrive, Usb, Disc, Copy, Network, Globe
 import { invoke } from '@tauri-apps/api/core';
 import cx from 'classnames';
 import './PathBar.css';
-import { DriveInfo, FileEntry, DirResponse, QuickAccessItem } from '../../types';
+import { DriveInfo, FileEntry, DirResponse, QuickAccessItem, PanelId } from '../../types';
 import { TFunc } from '../../i18n';
 import { useApp } from '../../context/AppContext';
 import { AsyncFileIcon } from '../ui/AsyncFileIcon';
@@ -17,7 +17,7 @@ interface PathBarProps {
     onDrop?: (path: string, e: React.MouseEvent) => void;
     drives?: DriveInfo[];
     showHidden?: boolean;
-    panelId: string;
+    panelId: PanelId;
     t?: TFunc;
     favorites?: QuickAccessItem[];
     forwardPath?: string | null;

@@ -50,8 +50,10 @@ export const PanelProvider: React.FC<PanelProviderProps> = ({
 
     const [resolvedPaths] = useState<{ left: string; right: string } | null>(() => {
         if (!session) return null;
-        const leftTab = session.left_panel.tabs.find((t: any) => t.id === session.left_panel.active_tab_id);
-        const rightTab = session.right_panel.tabs.find((t: any) => t.id === session.right_panel.active_tab_id);
+        const leftPanel = session.panels['left'];
+        const rightPanel = session.panels['right'];
+        const leftTab = leftPanel?.tabs.find((t: any) => t.id === leftPanel.active_tab_id);
+        const rightTab = rightPanel?.tabs.find((t: any) => t.id === rightPanel.active_tab_id);
         const defaultPath = "C:\\";
         return {
             left: initialLeftPath || (leftTab ? normalizePath(leftTab.path) : defaultPath),
@@ -63,8 +65,10 @@ export const PanelProvider: React.FC<PanelProviderProps> = ({
 
     useEffect(() => {
         if (initialPaths || !session) return;
-        const leftTab = session.left_panel.tabs.find((t: any) => t.id === session.left_panel.active_tab_id);
-        const rightTab = session.right_panel.tabs.find((t: any) => t.id === session.right_panel.active_tab_id);
+        const leftPanel = session.panels['left'];
+        const rightPanel = session.panels['right'];
+        const leftTab = leftPanel?.tabs.find((t: any) => t.id === leftPanel.active_tab_id);
+        const rightTab = rightPanel?.tabs.find((t: any) => t.id === rightPanel.active_tab_id);
         const defaultPath = "C:\\";
         setInitialPaths({
             left: initialLeftPath || (leftTab ? normalizePath(leftTab.path) : defaultPath),
@@ -99,8 +103,8 @@ const PanelProviderReady: React.FC<{
     initialLeftPath: string;
     initialRightPath: string;
 }> = ({ children, session, isLoading, initialLeftPath, initialRightPath }) => {
-    const leftActiveTabId = session?.left_panel.active_tab_id;
-    const rightActiveTabId = session?.right_panel.active_tab_id;
+    const leftActiveTabId = session?.panels?.['left']?.active_tab_id;
+    const rightActiveTabId = session?.panels?.['right']?.active_tab_id;
 
     const left = usePanel(initialLeftPath, 'left', leftActiveTabId);
     const right = usePanel(initialRightPath, 'right', rightActiveTabId);
@@ -148,7 +152,8 @@ const PanelProviderReady: React.FC<{
         }
         prevLeftTabIdRef.current = leftActiveTabId;
 
-        const leftTabArr = session.left_panel.tabs.find((t: any) => t.id === session.left_panel.active_tab_id);
+        const leftPanelSession = session.panels?.['left'];
+        const leftTabArr = leftPanelSession?.tabs?.find((t: any) => t.id === leftPanelSession.active_tab_id);
         if (leftTabArr) {
             const normRust = normalizePath(leftTabArr.path);
 
@@ -188,7 +193,8 @@ const PanelProviderReady: React.FC<{
         }
         prevRightTabIdRef.current = rightActiveTabId;
 
-        const rightTabArr = session.right_panel.tabs.find((t: any) => t.id === session.right_panel.active_tab_id);
+        const rightPanelSession = session.panels?.['right'];
+        const rightTabArr = rightPanelSession?.tabs?.find((t: any) => t.id === rightPanelSession.active_tab_id);
         if (rightTabArr) {
             const normRust = normalizePath(rightTabArr.path);
 

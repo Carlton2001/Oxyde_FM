@@ -15,9 +15,8 @@ export interface PanelState {
 }
 
 export interface SessionState {
-    left_panel: PanelState;
-    right_panel: PanelState;
-    active_panel: string;
+    panels: Record<string, PanelState>;
+    active_panel_id: string;
 }
 
 export const useRustSession = () => {

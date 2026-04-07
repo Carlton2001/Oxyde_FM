@@ -4,15 +4,16 @@ import { homeDir } from '@tauri-apps/api/path';
 import { PathBar } from './PathBar';
 import { SearchBox } from '../ui/SearchBox';
 import { AsyncFileIcon } from '../ui/AsyncFileIcon';
+import { DriveInfo, PanelId } from '../../types';
 import { TFunc } from '../../i18n';
+import { useApp } from '../../context/AppContext';
 import { getParent } from '../../utils/path';
 import './TopBar.css';
-import { PanelState, LayoutMode, DriveInfo } from '../../types';
-import { useApp } from '../../context/AppContext';
 
 interface TopBarProps {
-    activePanel: PanelState;
-    activePanelId: 'left' | 'right';
+    t: TFunc;
+    activePanelId: PanelId;
+    activePanel: any; // PanelState doesn't perfectly match FullPanelState used in DualPanelLayout, any is fine for this context or use intersection
     canUndo: boolean;
     undoLabel?: string;
     canRedo: boolean;
@@ -32,10 +33,9 @@ interface TopBarProps {
     onDelete: () => void;
     onPaste: () => void;
     canPaste: boolean;
-    t: TFunc;
 
     // Layout & settings
-    layout: LayoutMode;
+    layout: string;
     showHidden: boolean;
 
     // Drag Drop (needed for PathBar in single mode)
@@ -412,7 +412,7 @@ export const TopBar: React.FC<TopBarProps> = ({
                             const items = activePanel.history.slice(0, activePanel.historyIndex).reverse();
                             return (
                                 <div ref={backMenuRef} className="hamburger-menu" style={{ position: 'fixed', top: backMenuPos.top, left: backMenuPos.anchorCenterX, visibility: 'hidden', minWidth: 0, width: 'fit-content', marginTop: 0, maxHeight: '400px', overflowY: 'auto' }}>
-                                    {items.map((entry, i) => {
+                                    {items.map((entry: any, i: number) => {
                                         const targetIndex = activePanel.historyIndex - 1 - i;
                                         return (
                                             <div key={targetIndex} className="hamburger-item" onClick={() => { onNavigateToIndex(targetIndex); setBackMenuPos(null); }} data-tooltip={entry.path}>
@@ -430,7 +430,7 @@ export const TopBar: React.FC<TopBarProps> = ({
                             const items = activePanel.history.slice(activePanel.historyIndex + 1);
                             return (
                                 <div ref={fwdMenuRef} className="hamburger-menu" style={{ position: 'fixed', top: fwdMenuPos.top, left: fwdMenuPos.anchorCenterX, visibility: 'hidden', minWidth: 0, width: 'fit-content', marginTop: 0, maxHeight: '400px', overflowY: 'auto' }}>
-                                    {items.map((entry, i) => {
+                                    {items.map((entry: any, i: number) => {
                                         const targetIndex = activePanel.historyIndex + 1 + i;
                                         return (
                                             <div key={targetIndex} className="hamburger-item" onClick={() => { onNavigateToIndex(targetIndex); setFwdMenuPos(null); }} data-tooltip={entry.path}>

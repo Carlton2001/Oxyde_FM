@@ -382,14 +382,17 @@ export const useAppHandlers = ({
         const targetPanelId = panelId || activePanelId;
         const panel = targetPanelId === 'left' ? left : right;
         setActiveTab(targetId, targetPanelId);
+        setActivePanelId(targetPanelId);
         if (overridePath) {
             panel.navigate(overridePath);
         }
-    }, [activePanelId, left, right, setActiveTab]);
+    }, [activePanelId, left, right, setActiveTab, setActivePanelId]);
 
     const handleTabClose = useCallback((id: string, panelId?: PanelId) => {
-        closeTab(id, panelId);
-    }, [closeTab]);
+        const targetPanelId = panelId || activePanelId;
+        closeTab(id, targetPanelId);
+        setActivePanelId(targetPanelId);
+    }, [closeTab, activePanelId, setActivePanelId]);
 
     const handleItemMiddleClick = useCallback((entry: FileEntry, panelId?: PanelId) => {
         if (entry.is_dir) {

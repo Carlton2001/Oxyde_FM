@@ -49,30 +49,30 @@ interface DualPanelLayoutProps {
     canRedo: boolean;
     redoLabel?: string;
     // Panel props
-    activePanelId: 'left' | 'right';
-    setActivePanelId: (id: 'left' | 'right') => void;
+    activePanelId: PanelId;
+    setActivePanelId: (id: PanelId) => void;
     layout: 'standard' | 'dual';
     // Search props
     searchQuery: { left: string; right: string };
     // Callbacks
-    navigate: (id: 'left' | 'right', path: string) => void;
-    handleSearch: (id: 'left' | 'right', query: string) => void;
-    executeSearch: (id: 'left' | 'right') => void;
-    openAdvancedSearch: (id: 'left' | 'right') => void;
-    clearSearch: (id: 'left' | 'right') => void;
-    handleCancelSearch: (id: 'left' | 'right') => void;
+    navigate: (id: PanelId, path: string) => void;
+    handleSearch: (id: PanelId, query: string) => void;
+    executeSearch: (id: PanelId) => void;
+    openAdvancedSearch: (id: PanelId) => void;
+    clearSearch: (id: PanelId) => void;
+    handleCancelSearch: (id: PanelId) => void;
     // Handlers
-    handleDragStart: (id: 'left' | 'right', files: FileEntry[]) => void;
+    handleDragStart: (id: PanelId, files: FileEntry[]) => void;
     handleDrop: (e: React.DragEvent | React.MouseEvent | undefined, targetPath: string | null, currentPath: string) => void;
-    dragState: { sourcePanel: 'left' | 'right'; files: FileEntry[] } | null;
-    handleSelect: (id: 'left' | 'right', path: string, selected: boolean, range: boolean) => void;
-    handleSelectMultiple: (id: 'left' | 'right', paths: string[], isAdditive: boolean) => void;
-    handleClearSelection: (id: 'left' | 'right') => void;
-    handleContextMenu: (e: React.MouseEvent, id: 'left' | 'right', entry?: FileEntry) => void;
-    handleOpenFile: (path: string, id: 'left' | 'right') => void;
-    handleSort: (id: 'left' | 'right', field: SortField) => void;
-    handleResize: (id: 'left' | 'right', field: keyof ColumnWidths, delta: number) => void;
-    handleResizeMultiple: (id: 'left' | 'right', updates: Partial<ColumnWidths>) => void;
+    dragState: { sourcePanel: PanelId; files: FileEntry[] } | null;
+    handleSelect: (id: PanelId, path: string, selected: boolean, range: boolean) => void;
+    handleSelectMultiple: (id: PanelId, paths: string[], isAdditive: boolean) => void;
+    handleClearSelection: (id: PanelId) => void;
+    handleContextMenu: (e: React.MouseEvent, id: PanelId, entry?: FileEntry) => void;
+    handleOpenFile: (path: string, id: PanelId) => void;
+    handleSort: (id: PanelId, field: SortField) => void;
+    handleResize: (id: PanelId, field: keyof ColumnWidths, delta: number) => void;
+    handleResizeMultiple: (id: PanelId, updates: Partial<ColumnWidths>) => void;
     handleInlineRename: (oldPath: string, newPath: string) => void;
     // State
     propPaths: any;
@@ -483,9 +483,10 @@ export const DualPanelLayout: React.FC<DualPanelLayoutProps> = ({
                 <Sidebar
                     minimized={sidebarReduced}
                     onToggle={() => setSidebarReduced(!sidebarReduced)}
+                    activePanelId={activePanelId}
                     drives={drives}
                     currentPath={activePanel.path}
-                    onNavigate={(path) => navigate(activePanelId, path)}
+                    onNavigate={navigate}
                     t={t}
                     treeRef={treeRef}
                     onTreeCut={onTreeCut}

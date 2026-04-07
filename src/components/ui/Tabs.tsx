@@ -4,23 +4,28 @@ import cx from 'classnames';
 import { X, Plus, Folder, Copy, Split, XCircle, ChevronLeft, ChevronRight, HardDrive, Trash, Network, Globe } from 'lucide-react';
 import { useTabs } from '../../context/TabsContext';
 import { useApp } from '../../context/AppContext';
+import { PanelId, FileEntry } from '../../types';
 import './Tabs.css';
 
-import { FileEntry } from '../../types';
-
 interface TabsProps {
-    panelId: 'left' | 'right';
+    panelId: PanelId;
     onSwitch: (tabId: string, path?: string) => void;
     onClose: (tabId: string) => void;
     isDraggingFiles?: boolean;
-    dragState?: { sourcePanel: 'left' | 'right'; files: FileEntry[] } | null;
+    dragState?: { sourcePanel: string; files: FileEntry[] } | null;
     onTabDrop?: (files: FileEntry[], index?: number) => void;
 }
 
 export const Tabs: React.FC<TabsProps> = ({
-    panelId, onSwitch, onClose, isDraggingFiles, dragState, onTabDrop
+    panelId, onSwitch, onClose, isDraggingFiles, dragState
 }) => {
-    const { leftTabs, rightTabs, leftActiveTabId, rightActiveTabId, addTab, duplicateTab, closeOtherTabs, reorderTabs } = useTabs();
+    const { 
+        leftTabs, rightTabs, leftActiveTabId, rightActiveTabId, 
+        addTab, duplicateTab, closeOtherTabs, 
+        draggedTab, setDraggedTab,
+        dragPos, targetPanelId, markerOffset,
+        registerPanel
+    } = useTabs();
     const tabs = panelId === 'left' ? leftTabs : rightTabs;
     const activeTabId = panelId === 'left' ? leftActiveTabId : rightActiveTabId;
     const { t } = useApp();
@@ -66,84 +71,37 @@ export const Tabs: React.FC<TabsProps> = ({
         }
     }, [isDraggingFolders]);
 
-    // Mouse Drag & Reorder State
-    const [draggingId, setDraggingId] = React.useState<string | null>(null);
-    const [dragPos, setDragPos] = React.useState({ x: 0, y: 0 });
-    const [dropTargetId, setDropTargetId] = React.useState<string | null>(null);
-    const [isOutOfBounds, setIsOutOfBounds] = React.useState(false);
+    // Register panel with context for global hit-testing
+    useLayoutEffect(() => {
+        registerPanel(panelId, wrapperRef as React.RefObject<HTMLDivElement>);
+    }, [panelId, registerPanel]);
 
     // Track initial click to enforce drag threshold
     const [mouseDownInfo, setMouseDownInfo] = React.useState<{ id: string, x: number, y: number } | null>(null);
 
-    // Handle global mouse events for dragging
+    // Handle global mouse events for dragging (Initiation only)
     React.useEffect(() => {
         const handleGlobalMouseMove = (e: MouseEvent) => {
-            if (draggingId) {
-                setDragPos({ x: e.clientX, y: e.clientY });
+            if (draggedTab) return; // Managed by context
 
-                if (wrapperRef.current) {
-                    const rect = wrapperRef.current.getBoundingClientRect();
-                    const threshold = 40;
-                    const isOut =
-                        e.clientY < rect.top - threshold ||
-                        e.clientY > rect.bottom + threshold ||
-                        e.clientX < rect.left - threshold ||
-                        e.clientX > rect.right + threshold;
-
-                    if (isOut !== isOutOfBounds) {
-                        setIsOutOfBounds(isOut);
-                        if (isOut) setDropTargetId(null);
-                    }
-                }
-            } else if (mouseDownInfo) {
-                const dx = e.clientX - mouseDownInfo.x;
-                const dy = e.clientY - mouseDownInfo.y;
-                const dist = Math.sqrt(dx * dx + dy * dy);
+            if (mouseDownInfo) {
+                const dist = Math.sqrt(Math.pow(e.clientX - mouseDownInfo.x, 2) + Math.pow(e.clientY - mouseDownInfo.y, 2));
 
                 if (dist > 10) {
-                    setDraggingId(mouseDownInfo.id);
-                    setDragPos({ x: e.clientX, y: e.clientY });
-                    setDropTargetId(mouseDownInfo.id);
+                    const tab = tabs.find(t => t.id === mouseDownInfo.id);
+                    if (tab) {
+                        setDraggedTab({ id: tab.id, panelId, path: tab.path, label: tab.label });
+                    }
                     setMouseDownInfo(null);
                 }
             }
         };
 
-        const handleGlobalMouseUp = (e: MouseEvent) => {
-            // Handle File Drop (Simulated DnD)
-            if (isDraggingFolders && dragState && onTabDrop) {
-                // Determine if we are dropping on the tabs bar
-                if (wrapperRef.current) {
-                    const rect = wrapperRef.current.getBoundingClientRect();
-                    const isOverTabs = e.clientX >= rect.left && e.clientX <= rect.right &&
-                                     e.clientY >= rect.top && e.clientY <= rect.bottom;
-                    
-                    if (isOverTabs) {
-                        const folders = dragState.files.filter(f => f.is_dir);
-                        if (folders.length > 0) {
-                            onTabDrop(folders, fileDropIndex !== null ? fileDropIndex : undefined);
-                        }
-                    }
-                }
-                setFileDropIndex(null);
-            }
-
-            // Normal tab reorder drop
-            if (draggingId && dropTargetId && draggingId !== dropTargetId && !isOutOfBounds) {
-                const sourceIndex = tabs.findIndex(t => t.id === draggingId);
-                const targetIndex = tabs.findIndex(t => t.id === dropTargetId);
-
-                if (sourceIndex !== -1 && targetIndex !== -1) {
-                    reorderTabs(sourceIndex, targetIndex, panelId);
-                }
-            }
-            setDraggingId(null);
-            setDropTargetId(null);
-            setIsOutOfBounds(false);
+        const handleGlobalMouseUp = () => {
             setMouseDownInfo(null);
         };
 
-        if (draggingId || mouseDownInfo || isDraggingFolders) {
+        if (mouseDownInfo) {
             window.addEventListener('mousemove', handleGlobalMouseMove);
             window.addEventListener('mouseup', handleGlobalMouseUp);
         }
@@ -151,7 +109,7 @@ export const Tabs: React.FC<TabsProps> = ({
             window.removeEventListener('mousemove', handleGlobalMouseMove);
             window.removeEventListener('mouseup', handleGlobalMouseUp);
         };
-    }, [draggingId, dropTargetId, tabs, reorderTabs, isOutOfBounds, mouseDownInfo, isDraggingFolders, dragState, onTabDrop, fileDropIndex]);
+    }, [draggedTab, setDraggedTab, tabs, mouseDownInfo, panelId]);
 
     const onTabMouseDown = (e: React.MouseEvent, id: string) => {
         if (e.button === 0) {
@@ -163,9 +121,7 @@ export const Tabs: React.FC<TabsProps> = ({
     };
 
     const onTabMouseEnter = (targetId: string) => {
-        if (draggingId) {
-            setDropTargetId(targetId);
-        } else if (isDraggingFiles) {
+        if (isDraggingFiles) {
             setFileHoverTabId(targetId);
         }
     };
@@ -351,6 +307,10 @@ export const Tabs: React.FC<TabsProps> = ({
                 if (isDraggingFolders) setFileDropIndex(null);
             }}
         >
+            {targetPanelId === panelId && markerOffset !== null && (
+                <div className="insertion-marker" style={{ left: markerOffset }} />
+            )}
+
             {showLeftScroll && (
                 <button className="scroll-btn left" onClick={() => handleScroll('left')}>
                     <ChevronLeft size={16} />
@@ -381,7 +341,7 @@ export const Tabs: React.FC<TabsProps> = ({
                         key={tab.id}
                         className={cx("tab", {
                             active: tab.id === activeTabId,
-                            dragging: draggingId === tab.id
+                            dragging: draggedTab?.id === tab.id
                         })}
                         onMouseDown={(e) => onTabMouseDown(e, tab.id)}
                         onMouseEnter={() => onTabMouseEnter(tab.id)}
@@ -404,7 +364,7 @@ export const Tabs: React.FC<TabsProps> = ({
                             }
                         }}
                         onContextMenu={(e) => onContextMenu(e, tab.id)}
-                        data-tooltip={draggingId ? undefined : (() => {
+                        data-tooltip={draggedTab ? undefined : (() => {
                             if (tab.path === '__network_vincinity__') return t('network_vincinity');
                             if (!tab.path.startsWith('search://')) return tab.path;
                             const searchPart = tab.path.replace('search://', '');
@@ -420,13 +380,6 @@ export const Tabs: React.FC<TabsProps> = ({
                         })()}
                         data-tooltip-pos="bottom"
                     >
-                        {dropTargetId === tab.id && draggingId !== tab.id && (
-                            <div className="insertion-marker" style={{
-                                left: tabs.findIndex(t => t.id === dropTargetId) > tabs.findIndex(t => t.id === draggingId!) ? '100%' : '0'
-                            }} />
-                        )}
-
-                        {/* Only show if folders are dragging */}
                         {isDraggingFolders && fileDropIndex === index && (
                             <div className="insertion-marker" style={{ left: 0 }} />
                         )}
@@ -459,12 +412,12 @@ export const Tabs: React.FC<TabsProps> = ({
                 </div>
             </div>
 
-            {draggingId && !isOutOfBounds && (
+            {draggedTab && draggedTab.panelId === panelId && (
                 <div className="tab-ghost" style={{ left: dragPos.x, top: dragPos.y }}>
                     <div className="tab-icon">
-                        {getTabIcon(tabs.find(t => t.id === draggingId)?.path || '')}
+                        {getTabIcon(draggedTab.path)}
                     </div>
-                    <span>{getTabLabel(tabs.find(t => t.id === draggingId) || { label: '', path: '' })}</span>
+                    <span>{getTabLabel({ label: draggedTab.label, path: draggedTab.path })}</span>
                 </div>
             )}
 

@@ -42,7 +42,7 @@ export type LayoutMode = 'standard' | 'dual';
 export type Language = 'en' | 'fr';
 export type DateFormat = 'US' | 'European' | 'ISO';
 export type CompressionQuality = 'fast' | 'normal' | 'best';
-export type PanelId = 'left' | 'right';
+export type PanelId = string;
 
 export interface HistoryEntry {
     path: string;

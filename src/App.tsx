@@ -4,7 +4,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { check } from '@tauri-apps/plugin-updater';
 import { File as FileIcon } from 'lucide-react';
 import cx from 'classnames';
-import { FileEntry } from './types';
+import { FileEntry, PanelId } from './types';
 
 import './styles/global.css';
 import './styles/components/Utilities.css';
@@ -53,7 +53,7 @@ import { NotificationArea } from './components/ui/NotificationArea';
 import { ProgressOverlay } from './components/ui/ProgressOverlay';
 import { Tooltip } from './components/ui/Tooltip';
 import { DirectoryTreeHandle } from './components/ui/DirectoryTree';
-import { PanelId, DriveInfo } from './types';
+import { DriveInfo } from './types';
 
 function App() {
   const {
@@ -522,7 +522,7 @@ function App() {
   } : progress;
 
 
-  const handleCancelSearch = (id: 'left' | 'right') => {
+  const handleCancelSearch = (id: string) => {
     (id === 'left' ? left : right).cancelSearch();
   };
 

@@ -961,7 +961,6 @@ pub async fn unmount_disk_image(
                 }
 
                 if tabs_to_keep.is_empty() {
-                    // Panel becomes empty, must add fallback
                     let new_id = uuid::Uuid::new_v4().to_string();
                     tabs_to_keep.push(crate::models::Tab {
                         id: new_id.clone(),
@@ -970,7 +969,6 @@ pub async fn unmount_disk_image(
                     });
                     panel.active_tab_id = new_id;
                 } else if active_id_invalidated {
-                    // Active tab closed, switch to another one
                     if let Some(last) = tabs_to_keep.last() {
                         panel.active_tab_id = last.id.clone();
                     }
@@ -978,12 +976,10 @@ pub async fn unmount_disk_image(
                 panel.tabs = tabs_to_keep;
             };
 
-            clean_panel(&mut session.left_panel);
-            clean_panel(&mut session.right_panel);
-
-            // CRITICAL: Release file watchers on the drive before unmounting/ejecting
-            session.left_panel.update_watcher(&app);
-            session.right_panel.update_watcher(&app);
+            for panel in session.panels.values_mut() {
+                clean_panel(panel);
+                panel.update_watcher(&app);
+            }
 
             let _ = app.emit("session_changed", session.clone());
         } // session lock released here

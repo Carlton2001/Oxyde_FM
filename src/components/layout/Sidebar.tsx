@@ -3,7 +3,7 @@ import cx from 'classnames';
 import { PanelLeft, PanelLeftClose, Trash, ArrowUpToLine, ChevronsUp, Globe } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { FileEntry, DriveInfo, QuickAccessItem } from '../../types';
+import { FileEntry, DriveInfo, QuickAccessItem, PanelId } from '../../types';
 import { TFunc } from '../../i18n';
 import { DirectoryTree, DirectoryTreeHandle } from '../ui/DirectoryTree';
 import { FavoritesMenu } from '../ui/FavoritesMenu';
@@ -14,9 +14,10 @@ import './Sidebar.css';
 interface SidebarProps {
     minimized: boolean;
     onToggle: () => void;
+    activePanelId: PanelId;
     drives: DriveInfo[];
     currentPath: string;
-    onNavigate: (path: string) => void;
+    onNavigate: (id: PanelId, path: string) => void;
     t: TFunc;
     treeRef?: React.RefObject<DirectoryTreeHandle | null>;
     // DirectoryTree action callbacks
@@ -41,9 +42,9 @@ interface SidebarProps {
     onRedo?: () => void;
     // DnD props
     // DnD props
-    onDragStart?: (sourcePanel: 'left' | 'right', files: FileEntry[]) => void;
+    onDragStart?: (sourcePanel: string, files: FileEntry[]) => void;
     onDrop?: (e: React.DragEvent, targetPath: string) => void;
-    dragState?: { sourcePanel: 'left' | 'right'; files: FileEntry[] } | null;
+    dragState?: { sourcePanel: string; files: FileEntry[] } | null;
     useSystemIcons?: boolean;
     onItemMiddleClick?: (entry: FileEntry) => void;
     onOpenNewTab?: (path: string) => void;
@@ -59,6 +60,7 @@ interface SidebarProps {
 export const Sidebar: React.FC<SidebarProps> = ({
     minimized,
     onToggle,
+    activePanelId,
     drives,
     currentPath,
     onNavigate,
@@ -241,7 +243,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {minimized && (
                 <div className="minimized-actions">
                     <FavoritesMenu
-                        onNavigate={onNavigate}
+                        onNavigate={(path) => onNavigate(activePanelId, path)}
                         onOpenNewTab={onOpenNewTab}
                         currentPath={currentPath}
                         buttonClassName="drive-icon-btn favorites-btn"
@@ -254,7 +256,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             <div key={drive.path} className="minimized-drive-wrapper">
                                 <button
                                     className={cx("drive-icon-btn", { active: isActive })}
-                                    onClick={() => onNavigate(drive.path)}
+                                    onClick={() => onNavigate(activePanelId, drive.path)}
                                     onContextMenu={(e) => onDriveContextMenu?.(e, drive.path)}
                                     onMouseDown={(e) => {
                                         if (e.button === 1) {
@@ -277,7 +279,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     {showNetwork && (
                         <button
                             className={cx("drive-icon-btn", { active: currentPath === '__network_vincinity__' })}
-                            onClick={() => onNavigate('__network_vincinity__')}
+                            onClick={() => onNavigate(activePanelId, '__network_vincinity__')}
                             onContextMenu={(e) => onDriveContextMenu?.(e, '__network_vincinity__')}
                             onMouseDown={(e) => {
                                 if (e.button === 1) {
@@ -293,7 +295,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     )}
                     <button
                         className={cx("drive-icon-btn", { active: currentPath === 'trash://' })}
-                        onClick={() => onNavigate('trash://')}
+                        onClick={() => onNavigate(activePanelId, 'trash://')}
                         onContextMenu={(e) => onDriveContextMenu?.(e, 'trash://')}
                         onMouseDown={(e) => {
                             if (e.button === 1) {
@@ -314,7 +316,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     ref={treeRef}
                     drives={drives}
                     currentPath={currentPath}
-                    onNavigate={onNavigate}
+                    onNavigate={(path) => onNavigate(activePanelId, path)}
                     minimized={minimized}
                     t={t}
                     onCut={onTreeCut}

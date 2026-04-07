@@ -176,6 +176,7 @@ pub fn run() {
             commands::session::duplicate_tab,
             commands::session::close_other_tabs,
             commands::session::reorder_tabs,
+            commands::session::move_tab_between_panels,
             commands::session::set_active_panel,
             commands::session::update_sort_config,
             commands::session::swap_panels,

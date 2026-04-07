@@ -1,4 +1,5 @@
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, Deserializer};
+use indexmap::IndexMap;
 
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -150,50 +151,123 @@ impl PanelState {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct SessionState {
-    pub left_panel: PanelState,
-    pub right_panel: PanelState,
-    pub active_panel: String, // "left" or "right"
+    pub panels: IndexMap<String, PanelState>,
+    pub active_panel_id: String, // Dynamic ID
+}
+
+// Custom deserialization for migration "sans tout casser"
+impl<'de> Deserialize<'de> for SessionState {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct LegacySession {
+            #[serde(default)]
+            left_panel: Option<PanelState>,
+            #[serde(default)]
+            right_panel: Option<PanelState>,
+            #[serde(default)]
+            active_panel: Option<String>,
+            #[serde(default)]
+            panels: Option<IndexMap<String, PanelState>>,
+            #[serde(default)]
+            active_panel_id: Option<String>,
+        }
+
+        let legacy = LegacySession::deserialize(deserializer)?;
+        let mut panels = legacy.panels.unwrap_or_default();
+        let mut active_panel_id = legacy.active_panel_id.unwrap_or_else(|| "left".to_string());
+
+        // Migrate left_panel if exists and not in map
+        if let Some(left) = legacy.left_panel {
+            if !panels.contains_key("left") {
+                panels.insert("left".to_string(), left);
+            }
+        }
+        // Migrate right_panel if exists and not in map
+        if let Some(right) = legacy.right_panel {
+            if !panels.contains_key("right") {
+                panels.insert("right".to_string(), right);
+            }
+        }
+
+        // Handle active_panel field migration
+        if let Some(old_active) = legacy.active_panel {
+             active_panel_id = old_active;
+        }
+
+        // Ensure at least "left" exists for Dual UI compatibility if everything was empty
+        if panels.is_empty() {
+            return Ok(SessionState::default());
+        }
+
+        Ok(SessionState {
+            panels,
+            active_panel_id,
+        })
+    }
 }
 
 impl SessionState {
-    /// Get a mutable reference to the panel identified by `id` ("left" or "right").
+    /// Get a mutable reference to the panel identified by `id`.
     pub fn get_panel_mut(&mut self, id: &str) -> &mut PanelState {
-        if id == "left" { &mut self.left_panel } else { &mut self.right_panel }
+        self.panels.entry(id.to_string()).or_insert_with(|| {
+             // Create a new panel if it doesn't exist (e.g. dynamic creation)
+             PanelState {
+                tabs: vec![Tab {
+                    id: uuid::Uuid::new_v4().to_string(),
+                    path: PathBuf::from("C:\\"),
+                    version: 0,
+                }],
+                active_tab_id: "".to_string(), // Will be set by caller or during initialization
+                watcher: None,
+                watched_path: None,
+                search_context: None,
+                sort_config: SortConfig::default(),
+                cached_results: None,
+            }
+        })
     }
 }
 
 impl Default for SessionState {
     fn default() -> Self {
+        let mut panels = IndexMap::new();
+        
+        panels.insert("left".to_string(), PanelState {
+            tabs: vec![Tab {
+                id: "default-left".to_string(),
+                path: PathBuf::from("C:\\"),
+                version: 0,
+            }],
+            active_tab_id: "default-left".to_string(),
+            watcher: None,
+            watched_path: None,
+            search_context: None,
+            sort_config: SortConfig::default(),
+            cached_results: None,
+        });
+
+        panels.insert("right".to_string(), PanelState {
+            tabs: vec![Tab {
+                id: "default-right".to_string(),
+                path: PathBuf::from("C:\\"),
+                version: 0,
+            }],
+            active_tab_id: "default-right".to_string(),
+            watcher: None,
+            watched_path: None,
+            search_context: None,
+            sort_config: SortConfig::default(),
+            cached_results: None,
+        });
+
         SessionState {
-            left_panel: PanelState {
-                tabs: vec![Tab {
-                    id: "default-left".to_string(),
-                    path: PathBuf::from("C:\\"),
-                    version: 0,
-                }],
-                active_tab_id: "default-left".to_string(),
-                watcher: None,
-                watched_path: None,
-                search_context: None,
-                sort_config: SortConfig::default(),
-                cached_results: None,
-            },
-            right_panel: PanelState {
-                tabs: vec![Tab {
-                    id: "default-right".to_string(),
-                    path: PathBuf::from("C:\\"),
-                    version: 0,
-                }],
-                active_tab_id: "default-right".to_string(),
-                watcher: None,
-                watched_path: None,
-                search_context: None,
-                sort_config: SortConfig::default(),
-                cached_results: None,
-            },
-            active_panel: "left".to_string(),
+            panels,
+            active_panel_id: "left".to_string(),
         }
     }
 }
@@ -230,9 +304,10 @@ impl SessionManager {
             let content = fs::read_to_string(session_path).map_err(|e| CommandError::IoError(e.to_string()))?;
             match serde_json::from_str::<SessionState>(&content) {
                 Ok(mut loaded_session) => {
-                    // Update watchers for the loaded paths
-                    loaded_session.left_panel.update_watcher(app_handle);
-                    loaded_session.right_panel.update_watcher(app_handle);
+                    // Update watchers for all panels
+                    for panel in loaded_session.panels.values_mut() {
+                        panel.update_watcher(app_handle);
+                    }
 
                     let mut session = self.0.lock().map_err(|_| CommandError::SystemError("Failed to lock session state".to_string()))?;
                     *session = loaded_session;

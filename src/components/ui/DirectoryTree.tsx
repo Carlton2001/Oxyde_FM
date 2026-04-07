@@ -66,9 +66,9 @@ interface DirectoryTreeProps {
     onUnmount?: (path: string) => void;
     onDisconnectDrive?: (path: string) => void;
     useSystemIcons?: boolean;
-    onDragStart?: (sourcePanel: 'left' | 'right', files: FileEntry[]) => void;
+    onDragStart?: (sourcePanel: string, files: FileEntry[]) => void;
     onDrop?: (e: React.DragEvent, targetPath: string) => void;
-    dragState?: { sourcePanel: 'left' | 'right'; files: FileEntry[] } | null;
+    dragState?: { sourcePanel: string; files: FileEntry[] } | null;
     onItemMiddleClick?: (entry: FileEntry) => void;
     onOpenNewTab?: (path: string) => void;
     skipExpandAndScroll?: boolean;

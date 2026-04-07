@@ -478,7 +478,7 @@ pub async fn start_search(
     // 1. Setup Session Context
     let root_path = {
         let mut session = state.0.lock().map_err(|e| e.to_string())?;
-        let panel = if panel_id == "left" { &mut session.left_panel } else { &mut session.right_panel };
+        let panel = session.get_panel_mut(&panel_id);
         
         let mut path_to_search = if let Some(root) = search_root {
             std::path::PathBuf::from(root)
@@ -742,7 +742,7 @@ pub async fn start_search(
         // Save results to session
         if let Some(state_manager) = app_handle.try_state::<SessionManager>() {
             if let Ok(mut session) = state_manager.0.lock() {
-                let panel = if panel_id_clone == "left" { &mut session.left_panel } else { &mut session.right_panel };
+                let panel = session.get_panel_mut(&panel_id_clone);
                  
                 // Sort using shared function (no duplication)
                 let config = panel.sort_config.clone();
@@ -782,7 +782,7 @@ pub async fn cancel_search(
     tab_id: Option<String>
 ) -> Result<(), String> {
     let mut session = state.0.lock().map_err(|e| e.to_string())?;
-    let panel = if panel_id == "left" { &mut session.left_panel } else { &mut session.right_panel };
+    let panel = session.get_panel_mut(&panel_id);
 
     if let Some(ctx) = &mut panel.search_context {
         if let Some(ref tid) = tab_id {

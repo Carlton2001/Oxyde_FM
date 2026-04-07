@@ -1,5 +1,4 @@
 use crate::models::{CommandError, SessionManager, SessionState, Tab};
-use crate::models::session::PanelState;
 use tauri::{AppHandle, Emitter, State};
 use std::path::PathBuf;
 use std::sync::MutexGuard;
@@ -40,7 +39,7 @@ pub fn create_tab(
     if !background.unwrap_or(false) {
         panel.active_tab_id = new_id.clone();
         // Auto-switch focus to this panel
-        session.active_panel = panel_id.clone();
+        session.active_panel_id = panel_id.clone();
     }
 
     session.get_panel_mut(&panel_id).update_watcher(&app);
@@ -60,8 +59,7 @@ pub fn close_tab(
 ) -> Result<(), CommandError> {
     let mut session = lock_session(&state)?;
     
-    // Helper to remove tab from a panel
-    let remove_from_panel = |panel: &mut PanelState| -> bool {
+    for panel in session.panels.values_mut() {
         if let Some(pos) = panel.tabs.iter().position(|t| t.id == tab_id) {
             panel.tabs.remove(pos);
             // If we closed the active tab, switch to the nearest one (or create default)
@@ -80,19 +78,9 @@ pub fn close_tab(
                     panel.active_tab_id = default_id;
                 }
             }
-            true
-        } else {
-            false
         }
-    };
-
-    if !remove_from_panel(&mut session.left_panel) {
-        remove_from_panel(&mut session.right_panel);
+        panel.update_watcher(&app);
     }
-    
-    // Update watchers for both panels just in case (active tab might have changed)
-    session.left_panel.update_watcher(&app);
-    session.right_panel.update_watcher(&app);
 
     app.emit("session_changed", session.clone()).map_err(|e| CommandError::SystemError(e.to_string()))?;
     drop(session);
@@ -108,20 +96,20 @@ pub fn switch_tab(
 ) -> Result<(), CommandError> {
     let mut session = lock_session(&state)?;
 
-    // Find which panel contains this tab
-    if session.left_panel.tabs.iter().any(|t| t.id == tab_id) {
-        session.left_panel.active_tab_id = tab_id;
-        session.active_panel = "left".to_string();
-    } else if session.right_panel.tabs.iter().any(|t| t.id == tab_id) {
-        session.right_panel.active_tab_id = tab_id;
-        session.active_panel = "right".to_string();
+    let mut found_panel_id = None;
+    for (id, panel) in &mut session.panels {
+        if panel.tabs.iter().any(|t| t.id == tab_id) {
+            panel.active_tab_id = tab_id.clone();
+            found_panel_id = Some(id.clone());
+        }
+        panel.update_watcher(&app);
+    }
+
+    if let Some(id) = found_panel_id {
+        session.active_panel_id = id;
     } else {
         return Err(CommandError::Other("Tab not found".to_string()));
     }
-    
-    // Update watchers
-    session.left_panel.update_watcher(&app);
-    session.right_panel.update_watcher(&app);
 
     app.emit("session_changed", session.clone()).map_err(|e| CommandError::SystemError(e.to_string()))?;
     drop(session);
@@ -177,11 +165,11 @@ pub fn set_active_panel(
 ) -> Result<(), CommandError> {
     let mut session = lock_session(&state)?;
     
-    if panel_id != "left" && panel_id != "right" {
+    if !session.panels.contains_key(&panel_id) {
          return Err(CommandError::Other("Invalid panel ID".to_string()));
     }
 
-    session.active_panel = panel_id;
+    session.active_panel_id = panel_id;
     app.emit("session_changed", session.clone()).map_err(|e| CommandError::SystemError(e.to_string()))?;
     drop(session);
     state.save(&app)?;
@@ -196,8 +184,7 @@ pub fn duplicate_tab(
 ) -> Result<(), CommandError> {
     let mut session = lock_session(&state)?;
 
-    // Helper to duplicate in a panel
-    let duplicate_in_panel = |panel: &mut PanelState| -> bool {
+    for panel in session.panels.values_mut() {
         if let Some(pos) = panel.tabs.iter().position(|t| t.id == tab_id) {
             let tab = &panel.tabs[pos];
             let new_tab = Tab {
@@ -205,22 +192,11 @@ pub fn duplicate_tab(
                 path: tab.path.clone(),
                 version: tab.version,
             };
-            // Insert after current
             panel.tabs.insert(pos + 1, new_tab.clone());
-            // Switch to it (optional, but standard behavior)
             panel.active_tab_id = new_tab.id;
-            true
-        } else {
-            false
         }
-    };
-
-    if !duplicate_in_panel(&mut session.left_panel) {
-        duplicate_in_panel(&mut session.right_panel);
+        panel.update_watcher(&app);
     }
-    
-    session.left_panel.update_watcher(&app);
-    session.right_panel.update_watcher(&app);
 
     app.emit("session_changed", session.clone()).map_err(|e| CommandError::SystemError(e.to_string()))?;
     drop(session);
@@ -236,24 +212,13 @@ pub fn close_other_tabs(
 ) -> Result<(), CommandError> {
     let mut session = lock_session(&state)?;
 
-    let handle_panel = |panel: &mut PanelState| -> bool {
-        // Check if tab exists in this panel
+    for panel in session.panels.values_mut() {
         if let Some(target_tab) = panel.tabs.iter().find(|t| t.id == tab_id).cloned() {
-            // Replace all tabs with just this one
             panel.tabs = vec![target_tab];
             panel.active_tab_id = tab_id.clone();
-            true
-        } else {
-            false
         }
-    };
-
-    if !handle_panel(&mut session.left_panel) {
-        handle_panel(&mut session.right_panel);
+        panel.update_watcher(&app);
     }
-
-    session.left_panel.update_watcher(&app);
-    session.right_panel.update_watcher(&app);
 
     app.emit("session_changed", session.clone()).map_err(|e| CommandError::SystemError(e.to_string()))?;
     drop(session);
@@ -265,22 +230,98 @@ pub fn close_other_tabs(
 pub fn reorder_tabs(
     app: AppHandle,
     state: State<'_, SessionManager>,
+    panel_id: String,
     source_index: usize,
     target_index: usize,
 ) -> Result<(), CommandError> {
     let mut session = lock_session(&state)?;
 
-    // B3 fix: bounds-check both indices before modifying
-    let active = session.active_panel.clone();
-    let panel = session.get_panel_mut(&active);
+    let panel = session.get_panel_mut(&panel_id);
 
-    if source_index < panel.tabs.len() && target_index < panel.tabs.len() {
+    if source_index < panel.tabs.len() && target_index <= panel.tabs.len() {
         let tab = panel.tabs.remove(source_index);
-        panel.tabs.insert(target_index, tab);
+        let final_index = if target_index > source_index {
+            target_index - 1
+        } else {
+            target_index
+        };
+        panel.tabs.insert(final_index, tab);
     } else {
         return Err(CommandError::Other("Index out of bounds".to_string()));
     }
 
+    app.emit("session_changed", session.clone()).map_err(|e| CommandError::SystemError(e.to_string()))?;
+    drop(session);
+    state.save(&app)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn move_tab_between_panels(
+    app: AppHandle,
+    state: State<'_, SessionManager>,
+    tab_id: String,
+    target_panel_id: String,
+    target_index: usize,
+) -> Result<(), CommandError> {
+    let mut session = lock_session(&state)?;
+    
+    let mut moved_tab = None;
+    let mut source_panel_id = None;
+    for (id, panel) in &session.panels {
+        if panel.tabs.iter().any(|t| t.id == tab_id) {
+            source_panel_id = Some(id.clone());
+            break;
+        }
+    }
+
+    let source_panel_id = source_panel_id.ok_or_else(|| CommandError::Other("Source panel not found".to_string()))?;
+    
+    if source_panel_id == target_panel_id {
+        // This should normally be handled by reorder_tabs on the frontend, 
+        // but if it hits here, we just return.
+        return Ok(());
+    }
+    
+    {
+        let source_panel = session.get_panel_mut(&source_panel_id);
+        if let Some(pos) = source_panel.tabs.iter().position(|t| t.id == tab_id) {
+            moved_tab = Some(source_panel.tabs.remove(pos));
+            
+            // If we closed the active tab in source, switch to another one
+            if source_panel.active_tab_id == tab_id {
+                let new_pos = pos.min(source_panel.tabs.len().saturating_sub(1));
+                if let Some(next_tab) = source_panel.tabs.get(new_pos) {
+                    source_panel.active_tab_id = next_tab.id.clone();
+                } else {
+                    // Create a default tab if all closed
+                    let default_id = uuid::Uuid::new_v4().to_string();
+                    source_panel.tabs.push(Tab {
+                        id: default_id.clone(),
+                        path: std::path::PathBuf::from("C:\\"),
+                        version: 0,
+                    });
+                    source_panel.active_tab_id = default_id;
+                }
+            }
+        }
+    }
+    
+    if let Some(tab) = moved_tab {
+        let target_panel = session.get_panel_mut(&target_panel_id);
+        let idx = target_index.min(target_panel.tabs.len());
+        target_panel.tabs.insert(idx, tab.clone());
+        target_panel.active_tab_id = tab.id;
+        
+        // Auto-focus the target panel
+        session.active_panel_id = target_panel_id;
+    }
+
+    // Refresh watchers
+    for panel in session.panels.values_mut() {
+        panel.update_watcher(&app);
+    }
+    
     app.emit("session_changed", session.clone()).map_err(|e| CommandError::SystemError(e.to_string()))?;
     drop(session);
     state.save(&app)?;
@@ -311,15 +352,27 @@ pub fn swap_panels(
     let mut session_guard = lock_session(&state)?;
     let session = &mut *session_guard;
     
+    // Only allow swapping if we have "left" and "right" panels (legacy support)
+    // In a multi-pane world, "swap" might need different arguments, but for now we keep the dual logic.
+    let (l_exists, r_exists) = {
+        (session.panels.contains_key("left"), session.panels.contains_key("right"))
+    };
+
+    if !l_exists || !r_exists {
+        return Err(CommandError::Other("Swap requires both 'left' and 'right' panels".to_string()));
+    }
+
+    let mut left_panel = session.panels.shift_remove("left").unwrap();
+    let mut right_panel = session.panels.shift_remove("right").unwrap();
+
     // 1. Identify active tabs on both sides
-    let l_active_id = session.left_panel.active_tab_id.clone();
-    let r_active_id = session.right_panel.active_tab_id.clone();
+    let l_active_id = left_panel.active_tab_id.clone();
+    let r_active_id = right_panel.active_tab_id.clone();
 
     // 2. Perform the content exchange between active tabs
-    // We use a temporary scope to satisfy the borrow checker when accessing both panels' tabs
     {
-        let l_tab = session.left_panel.tabs.iter_mut().find(|t| t.id == l_active_id);
-        let r_tab = session.right_panel.tabs.iter_mut().find(|t| t.id == r_active_id);
+        let l_tab = left_panel.tabs.iter_mut().find(|t| t.id == l_active_id);
+        let r_tab = right_panel.tabs.iter_mut().find(|t| t.id == r_active_id);
 
         if let (Some(lt), Some(rt)) = (l_tab, r_tab) {
             std::mem::swap(&mut lt.path, &mut rt.path);
@@ -328,21 +381,21 @@ pub fn swap_panels(
     }
 
     // 3. Swap panel-level states (search, sort, cache)
-    std::mem::swap(&mut session.left_panel.search_context, &mut session.right_panel.search_context);
-    std::mem::swap(&mut session.left_panel.sort_config, &mut session.right_panel.sort_config);
-    std::mem::swap(&mut session.left_panel.cached_results, &mut session.right_panel.cached_results);
+    std::mem::swap(&mut left_panel.search_context, &mut right_panel.search_context);
+    std::mem::swap(&mut left_panel.sort_config, &mut right_panel.sort_config);
+    std::mem::swap(&mut left_panel.cached_results, &mut right_panel.cached_results);
 
-    // 4. Update tab_ids in search contexts to match their new physical owner
-    if let Some(ctx) = &mut session.left_panel.search_context {
-        ctx.tab_id = l_active_id;
-    }
-    if let Some(ctx) = &mut session.right_panel.search_context {
-        ctx.tab_id = r_active_id;
-    }
+    // 4. Update tab_ids in search contexts
+    if let Some(ctx) = &mut left_panel.search_context { ctx.tab_id = l_active_id; }
+    if let Some(ctx) = &mut right_panel.search_context { ctx.tab_id = r_active_id; }
 
-    // 5. Update watchers for both panels (they now monitor the new paths)
-    session.left_panel.update_watcher(&app);
-    session.right_panel.update_watcher(&app);
+    // 5. Update watchers
+    left_panel.update_watcher(&app);
+    right_panel.update_watcher(&app);
+
+    // Put them back
+    session.panels.insert("left".to_string(), left_panel);
+    session.panels.insert("right".to_string(), right_panel);
     
     app.emit("session_changed", session.clone()).map_err(|e| CommandError::SystemError(e.to_string()))?;
     drop(session_guard);
