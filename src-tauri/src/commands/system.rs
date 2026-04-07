@@ -976,7 +976,7 @@ pub async fn unmount_disk_image(
                 panel.tabs = tabs_to_keep;
             };
 
-            for panel in session.panels.values_mut() {
+            for panel in session.root.all_panels_mut() {
                 clean_panel(panel);
                 panel.update_watcher(&app);
             }

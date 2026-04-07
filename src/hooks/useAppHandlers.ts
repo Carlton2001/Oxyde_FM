@@ -7,13 +7,12 @@ import { formatCommandError } from '../utils/error';
 import { getParent } from '../utils/path';
 import { DirectoryTreeHandle } from '../components/ui/DirectoryTree';
 import { invoke } from '@tauri-apps/api/core';
+import { useTabs } from '../context/TabsContext';
 
 interface AppHandlersProps {
-    left: any;
-    right: any;
+    panels: Record<string, any>;
     activePanelId: PanelId;
     setActivePanelId: (id: PanelId) => void;
-    layout: string;
     fileOps: any;
     treeRef: React.RefObject<DirectoryTreeHandle | null>;
     notify: (message: string, type: 'error' | 'info' | 'success' | 'warning' | 'loading', duration?: number) => string | undefined;
@@ -21,10 +20,6 @@ interface AppHandlersProps {
     dialogs: any;
     clipboard: any;
     refreshDrives: () => void;
-    leftActiveTabId: string;
-    rightActiveTabId: string;
-    leftTabs: any[];
-    rightTabs: any[];
     setActiveTab: (id: string, panelId?: PanelId) => void;
     closeTab: (id: string, panelId?: PanelId) => void;
     addTab: (path: string, optionsOrId?: string | { id?: string, background?: boolean, index?: number, panelId?: PanelId }, background?: boolean) => Promise<string | undefined>;
@@ -44,21 +39,15 @@ interface AppHandlersProps {
 }
 
 export const useAppHandlers = ({
-    left,
-    right,
+    panels,
     activePanelId,
     setActivePanelId,
-    layout,
     fileOps,
     treeRef,
     notify,
     t,
     dialogs,
     clipboard,
-    leftActiveTabId,
-    rightActiveTabId,
-    leftTabs,
-    rightTabs,
     setActiveTab,
     closeTab,
     addTab,
@@ -77,7 +66,8 @@ export const useAppHandlers = ({
     refreshTrashStatus,
     driveTrashConfigs
 }: AppHandlersProps) => {
-    const activePanel = activePanelId === 'left' ? left : right;
+    const { panels: tabPanels } = useTabs();
+    const activePanel = panels[activePanelId];
 
     const refreshTreePath = useCallback((path: string) => {
         if (treeRef.current) {
@@ -86,17 +76,15 @@ export const useAppHandlers = ({
     }, [treeRef]);
 
     const refreshBothPanels = useCallback(() => {
-        left.refresh();
-        if (layout === 'dual') {
-            right.refresh();
-        }
-        if (treeRef.current) {
-            if (left.path) treeRef.current.refreshPath(left.path);
-            if (layout === 'dual' && right.path && right.path !== left.path) {
-                treeRef.current.refreshPath(right.path);
+        const seenPaths = new Set<string>();
+        for (const panel of Object.values(panels)) {
+            panel?.refresh?.();
+            if (treeRef.current && panel?.path && !seenPaths.has(panel.path)) {
+                seenPaths.add(panel.path);
+                treeRef.current.refreshPath(panel.path);
             }
         }
-    }, [left, right, layout, treeRef]);
+    }, [panels, treeRef]);
 
     const initiateFileOp = useCallback(async (action: 'copy' | 'move', paths: string[], targetDir: string, turbo?: boolean) => {
         const success = await fileOps.initiateFileOp(action, paths, targetDir, turbo ?? defaultTurboMode);
@@ -113,8 +101,8 @@ export const useAppHandlers = ({
 
     const actionContextBase = useMemo(() => ({
         activePanelId,
-        activePanel: activePanelId === 'left' ? left : right,
-        otherPanel: activePanelId === 'left' ? right : left,
+        activePanel: panels[activePanelId],
+        otherPanel: Object.values(panels).find((_, i) => Object.keys(panels)[i] !== activePanelId),
         fileOps,
         clipboard: {
             clipboard: clipboard.clipboard,
@@ -138,7 +126,7 @@ export const useAppHandlers = ({
         setContextMenu,
         peekStatus,
         driveTrashConfigs
-    }), [activePanelId, left, right, fileOps, clipboard, notify, t, dialogs, zipQuality, sevenZipQuality, zstdQuality, defaultTurboMode, refreshBothPanels, refreshTreePath, setContextMenu, peekStatus, driveTrashConfigs]);
+    }), [activePanelId, panels, fileOps, clipboard, notify, t, dialogs, zipQuality, sevenZipQuality, zstdQuality, defaultTurboMode, refreshBothPanels, refreshTreePath, setContextMenu, peekStatus, driveTrashConfigs]);
 
     const handleAction = useCallback(async (actionId: string, contextOverride?: Partial<ActionContext>) => {
         try {
@@ -152,19 +140,17 @@ export const useAppHandlers = ({
     const handleRedo = useCallback(() => handleAction('file.redo'), [handleAction]);
 
     const handleNavigate = useCallback((id: PanelId, path: string) => {
-        const panel = id === 'left' ? left : right;
-        panel.navigate(path);
+        panels[id]?.navigate(path);
         setActivePanelId(id);
-    }, [left, right, setActivePanelId]);
+    }, [panels, setActivePanelId]);
 
     const handleSearch = useCallback((id: PanelId, query: string) => {
-        const panel = id === 'left' ? left : right;
-        panel.setSearchQuery(query);
-    }, [left, right]);
+        panels[id]?.setSearchQuery(query);
+    }, [panels]);
 
     const executeSearch = useCallback((id: PanelId) => {
-        const panel = id === 'left' ? left : right;
-        const query = panel.searchQuery;
+        const panel = panels[id];
+        const query = panel?.searchQuery;
 
         if (!query.trim()) {
             panel.setSearchResults(null);
@@ -177,10 +163,10 @@ export const useAppHandlers = ({
         panel.setIsSearching(true);
         panel.setSearchResults(null);
         panel.navigate(`search://${encodeURIComponent(query)}?root=${encodeURIComponent(root)}`);
-    }, [left, right]);
+    }, [panels]);
 
     const clearSearch = useCallback((id: PanelId) => {
-        const panel = id === 'left' ? left : right;
+        const panel = panels[id];
         let root = (panel as any).currentSearchRoot || 'C:\\';
 
         const isSearch = panel.path.startsWith('search://') || panel.path.startsWith('search:\\\\');
@@ -205,10 +191,10 @@ export const useAppHandlers = ({
         if (isSearch) {
             panel.navigate(root);
         }
-    }, [left, right]);
+    }, [panels]);
 
     const openAdvancedSearch = useCallback(async (id: PanelId) => {
-        const panel = id === 'left' ? left : right;
+        const panel = panels[id];
         const initialRoot = panel.currentSearchRoot || 'C:\\';
 
         // Parse current URI to restore previous state
@@ -261,17 +247,17 @@ export const useAppHandlers = ({
             panel.setSearchResults(null);
             panel.navigate(`search://${query}?${params.toString()}`);
         }
-    }, [left, right, dialogs]);
+    }, [panels, dialogs]);
 
     const openDuplicateSearchHandler = useCallback((id: PanelId) => {
-        const panel = id === 'left' ? left : right;
-        const initialRoot = panel.path.startsWith('search://') ? (panel as any).currentSearchRoot || 'C:\\' : panel.path;
+        const panel = panels[id];
+        const initialRoot = panel?.path.startsWith('search://') ? (panel as any).currentSearchRoot || 'C:\\' : panel?.path;
         dialogs.openDuplicateSearch({ initialRoot });
-    }, [left, right, dialogs]);
+    }, [panels, dialogs]);
 
     const handleOpenFile = useCallback(async (path: string, panelId?: PanelId) => {
         const targetId = panelId || activePanelId;
-        const panel = targetId === 'left' ? left : right;
+        const panel = panels[targetId];
 
         const ext = path.split('.').pop()?.toLowerCase() || '';
         const isArchive = ['zip', '7z', 'tar', 'tgz', 'txz', 'zst', 'rar', 'tbz2', 'tzst', 'gz', 'bz2', 'xz', 'iso', 'img', 'vhd', 'vhdx'].includes(ext);
@@ -286,41 +272,38 @@ export const useAppHandlers = ({
         } catch (e) {
             notify(`${t('error')}: ${formatCommandError(e)}`, 'error');
         }
-    }, [left, right, activePanelId, notify, t]);
+    }, [panels, activePanelId, notify, t]);
 
 
     const handleSort = useCallback((id: PanelId, field: SortField) => {
-        const panel = id === 'left' ? left : right;
-        const direction = panel.sortConfig.field === field && panel.sortConfig.direction === 'asc' ? 'desc' : 'asc';
-        panel.setSortConfig({ field, direction });
-    }, [left, right]);
+        const panel = panels[id];
+        const direction = panel?.sortConfig.field === field && panel.sortConfig.direction === 'asc' ? 'desc' : 'asc';
+        panel?.setSortConfig({ field, direction });
+    }, [panels]);
 
     const handleSortDirection = useCallback((id: PanelId, direction: 'asc' | 'desc') => {
-        const panel = id === 'left' ? left : right;
-        panel.setSortConfig((prev: any) => ({ ...prev, direction }));
-    }, [left, right]);
+        panels[id]?.setSortConfig((prev: any) => ({ ...prev, direction }));
+    }, [panels]);
 
     const handleResize = useCallback((id: PanelId, field: string, newWidth: number) => {
-        const panel = id === 'left' ? left : right;
-        panel.setColWidths((prev: ColumnWidths) => ({
+        panels[id]?.setColWidths((prev: ColumnWidths) => ({
             ...prev,
             [field]: Math.max(30, newWidth)
         }));
-    }, [left, right]);
+    }, [panels]);
 
     const handleResizeMultiple = useCallback((id: PanelId, updates: Partial<ColumnWidths>) => {
-        const panel = id === 'left' ? left : right;
-        panel.setColWidths((prev: ColumnWidths) => ({ ...prev, ...updates }));
-    }, [left, right]);
+        panels[id]?.setColWidths((prev: ColumnWidths) => ({ ...prev, ...updates }));
+    }, [panels]);
 
     const handleGoToFolder = useCallback(async (path: string) => {
         const parent = getParent(path);
         if (parent) {
-            const panel = contextMenu ? (contextMenu.panelId === 'left' ? left : right) : activePanel;
+            const panel = contextMenu ? panels[contextMenu.panelId] : activePanel;
             panel.navigate(parent);
             setContextMenu(null);
         }
-    }, [left, right, activePanel, contextMenu, setContextMenu]);
+    }, [panels, activePanel, contextMenu, setContextMenu]);
 
     const handleRestoreAll = useCallback(async () => {
         const panel = activePanel;
@@ -356,7 +339,7 @@ export const useAppHandlers = ({
     }, [openTrashSettings, setContextMenu]);
 
     const handleRestoreSelected = useCallback(async () => {
-        const panel = contextMenu ? (contextMenu.panelId === 'left' ? left : right) : activePanel;
+        const panel = contextMenu ? panels[contextMenu.panelId] : activePanel;
         const selected = Array.from(panel.selected);
         if (selected.length === 0) return;
         try {
@@ -376,37 +359,49 @@ export const useAppHandlers = ({
         } catch (e) {
             notify(`${t('error')}: ${formatCommandError(e)}`, 'error');
         }
-    }, [left, right, activePanel, contextMenu, notify, t, refreshBothPanels, refreshTreePath, setContextMenu]);
+    }, [panels, activePanel, contextMenu, notify, t, refreshBothPanels, refreshTreePath, setContextMenu]);
 
     const handleTabSwitch = useCallback((targetId: string, overridePath?: string, panelId?: PanelId) => {
         const targetPanelId = panelId || activePanelId;
-        const panel = targetPanelId === 'left' ? left : right;
+        const panel = panels[targetPanelId];
         setActiveTab(targetId, targetPanelId);
         setActivePanelId(targetPanelId);
-        if (overridePath) {
+        if (overridePath && panel) {
             panel.navigate(overridePath);
         }
-    }, [activePanelId, left, right, setActiveTab, setActivePanelId]);
+    }, [activePanelId, panels, setActiveTab, setActivePanelId]);
 
     const handleTabClose = useCallback((id: string, panelId?: PanelId) => {
         const targetPanelId = panelId || activePanelId;
+        const panelTabs = tabPanels[targetPanelId]?.tabs || [];
+        const panelCount = Object.keys(tabPanels).length;
+
+        if (panelTabs.length <= 1) {
+            // Last tab in this panel — close the panel if not the last one
+            if (panelCount > 1) {
+                invoke('remove_panel', { panelId: targetPanelId }).catch(console.error);
+            }
+            // If it's the last panel, do nothing (can't close the last tab of the last pane)
+            return;
+        }
+
         closeTab(id, targetPanelId);
         setActivePanelId(targetPanelId);
-    }, [closeTab, activePanelId, setActivePanelId]);
+    }, [closeTab, activePanelId, setActivePanelId, tabPanels]);
 
     const handleItemMiddleClick = useCallback((entry: FileEntry, panelId?: PanelId) => {
         if (entry.is_dir) {
             const targetPanelId = panelId || activePanelId;
-            const targetTabs = targetPanelId === 'left' ? leftTabs : rightTabs;
-            const targetActiveTabId = targetPanelId === 'left' ? leftActiveTabId : rightActiveTabId;
+            const tabPanelData = tabPanels[targetPanelId];
+            const targetTabs = tabPanelData?.tabs || [];
+            const targetActiveTabId = tabPanelData?.activeTabId || '';
 
-            const currentIndex = targetTabs.findIndex(t => t.id === targetActiveTabId);
+            const currentIndex = targetTabs.findIndex((t: any) => t.id === targetActiveTabId);
             const targetIndex = currentIndex !== -1 ? currentIndex + 1 : undefined;
 
-            // Pass the target index to insert right of the parent tab
             addTab(entry.path, { index: targetIndex, background: true, panelId: targetPanelId } as any, true);
         }
-    }, [addTab, activePanelId, leftTabs, rightTabs, leftActiveTabId, rightActiveTabId]);
+    }, [addTab, activePanelId, tabPanels]);
 
     const handleAddToFavorites = useCallback(async (path: string) => {
         try {
@@ -462,7 +457,7 @@ export const useAppHandlers = ({
         }
 
         setActivePanelId(id);
-        const panel = id === 'left' ? left : right;
+        const panel = panels[id];
 
         // Determine if this was likely a keyboard-triggered event (null e, 0,0 or no detail)
         const isProbablyKeyboard = !e || e.button === -1 || (e.clientX <= 2 && e.clientY <= 2);
@@ -587,7 +582,7 @@ export const useAppHandlers = ({
                 isNetworkComputer: (path.startsWith('\\\\') && path.split('\\').filter(Boolean).length === 1) || path.toLowerCase() === 'network'
             });
         }
-    }, [left, right, setActivePanelId, setContextMenu, drives, favorites]);
+    }, [panels, setActivePanelId, setContextMenu, drives, favorites]);
 
     return {
         refreshBothPanels,

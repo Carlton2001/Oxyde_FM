@@ -9,7 +9,6 @@ import { useRustConfig } from '../hooks/useRustConfig';
 export interface AppContextValue {
     // Settings
     theme: Theme;
-    layout: LayoutMode;
     language: Language;
     showHidden: boolean;
     showSystem: boolean;
@@ -35,7 +34,6 @@ export interface AppContextValue {
 
     // Setters
     setTheme: (theme: Theme) => void;
-    setLayout: (layout: LayoutMode) => void;
     setLanguage: (language: Language) => void;
     setShowHidden: (show: boolean) => void;
     setShowSystem: (show: boolean) => void;
@@ -95,7 +93,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
     // Defaults (used while loading or if config missing)
     const defaults = {
         theme: 'oxyde-dark' as Theme,
-        layout: 'standard' as LayoutMode,
+        layout: 'multipane' as LayoutMode,
         language: 'en' as Language,
         showHidden: false,
         showSystem: false,
@@ -116,7 +114,6 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
 
     // Derived state (or defaults)
     const theme = (config?.theme as Theme) || (localStorage.getItem('fm_theme') as Theme) || defaults.theme;
-    const layout = (config?.layout as LayoutMode) || (localStorage.getItem('fm_layout') as LayoutMode) || defaults.layout;
     const language = (config?.language as Language) || (localStorage.getItem('fm_language') as Language) || defaults.language;
     const showHidden = config?.show_hidden ?? (localStorage.getItem('fm_showHidden') === 'true' || (localStorage.getItem('fm_showHidden') === null && defaults.showHidden));
     const showSystem = config?.show_system ?? (localStorage.getItem('fm_showSystem') === 'true' || (localStorage.getItem('fm_showSystem') === null && defaults.showSystem));
@@ -186,10 +183,6 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
     const setTheme = useCallback((v: Theme) => {
         localStorage.setItem('fm_theme', v);
         setConfigValue('theme', v);
-    }, [setConfigValue]);
-    const setLayout = useCallback((v: LayoutMode) => {
-        localStorage.setItem('fm_layout', v);
-        setConfigValue('layout', v);
     }, [setConfigValue]);
     const setLanguage = useCallback((v: Language) => {
         localStorage.setItem('fm_language', v);
@@ -318,13 +311,11 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
 
     const value: AppContextValue = {
         theme,
-        layout,
         language,
         showHidden,
         showSystem,
         fontSize,
         setTheme,
-        setLayout,
         setLanguage,
         setShowHidden,
         setShowSystem,

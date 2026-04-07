@@ -1,13 +1,8 @@
 import React, { createContext, useContext, useState, useMemo, useEffect, useRef, useCallback, ReactNode } from 'react';
-import { invoke } from '@tauri-apps/api/core';
 import { usePanel } from '../hooks/usePanel';
-import { PanelId } from '../types';
-import { useRustSession } from '../hooks/useRustSession';
+import { PanelId, HistoryEntry } from '../types';
+import { useTabs } from './TabsContext';
 import { normalizePath } from '../utils/path';
-import { HistoryEntry } from '../types';
-
-// Infers the return type of usePanel automatically
-type PanelState = ReturnType<typeof usePanel>;
 
 interface TabNavSnapshot {
     history: HistoryEntry[];
@@ -16,16 +11,196 @@ interface TabNavSnapshot {
 }
 
 interface PanelContextType {
-    left: PanelState;
-    right: PanelState;
+    panels: Record<PanelId, any>;
     activePanelId: PanelId;
-    activePanel: PanelState;
     setActivePanelId: (id: PanelId) => void;
-    otherPanel: PanelState;
-    isLoading: boolean;
+    activePanel: any;
+    isReady: boolean;
 }
 
-const PanelContext = createContext<PanelContextType | null>(null);
+const PanelContext = createContext<PanelContextType | undefined>(undefined);
+
+const PanelStateHoister: React.FC<{
+    id: PanelId,
+    initialPath: string,
+    activeTabId: string,
+    onRegister: (id: PanelId, state: any) => void,
+    onUnregister: (id: PanelId) => void
+}> = React.memo(({ id, initialPath, activeTabId, onRegister, onUnregister }) => {
+    const state = usePanel(initialPath, id, activeTabId);
+
+    useEffect(() => {
+        onRegister(id, state);
+        return () => onUnregister(id);
+    }, [id, state, onRegister, onUnregister]);
+
+    return null;
+});
+
+export const PanelProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+    const { session } = useTabs();
+    const [panelStates, setPanels] = useState<Record<PanelId, any>>({});
+    const [panelConfigs, setConfigs] = useState<Record<PanelId, { initialPath: string, activeTabId: string }>>({});
+    const [activePanelId, setActivePanelId] = useState<PanelId>('left' as PanelId);
+
+    const onRegister = useCallback((id: PanelId, state: any) => {
+        setPanels(prev => ({ ...prev, [id]: state }));
+    }, []);
+
+    const onUnregister = useCallback((id: PanelId) => {
+        setPanels(prev => {
+            const next = { ...prev };
+            delete next[id];
+            return next;
+        });
+    }, []);
+
+    useEffect(() => {
+        if (session?.active_panel_id && session.active_panel_id !== activePanelId) {
+            setActivePanelId(session.active_panel_id as PanelId);
+        }
+    }, [session?.active_panel_id, activePanelId]);
+
+    // Track tab histories for navigation restoration
+    const tabHistoriesRef = useRef<Record<PanelId, Map<string, TabNavSnapshot>>>({});
+    const prevTabIdsRef = useRef<Record<PanelId, string>>({});
+
+    const getPanes = useCallback((node: import('../hooks/useRustSession').LayoutNode): Record<string, import('../hooks/useRustSession').PanelState> => {
+        if (node.type === 'Pane') return { [node.data.id]: node.data.state };
+        return node.data.children.reduce((acc, child) => ({ ...acc, ...getPanes(child) }), {});
+    }, []);
+
+    useEffect(() => {
+        if (!session) return;
+        const allPanels = getPanes(session.root);
+
+        for (const [id, panel] of Object.entries(panelStates)) {
+            const panelSession = allPanels[id];
+            if (!panel || !panelSession) continue;
+
+            const activeTabId = panelSession.active_tab_id;
+            if (!tabHistoriesRef.current[id as PanelId]) tabHistoriesRef.current[id as PanelId] = new Map();
+            
+            const tabSwitched = activeTabId !== prevTabIdsRef.current[id as PanelId];
+
+            if (tabSwitched && prevTabIdsRef.current[id as PanelId]) {
+                tabHistoriesRef.current[id as PanelId]!.set(prevTabIdsRef.current[id as PanelId], {
+                    history: panel.history,
+                    historyIndex: panel.historyIndex,
+                    version: panel.version
+                });
+            }
+            prevTabIdsRef.current[id as PanelId] = activeTabId;
+
+            const activeTab = panelSession.tabs.find((t: any) => t.id === activeTabId);
+            if (activeTab) {
+                const normRust = normalizePath(activeTab.path);
+                if (tabSwitched) {
+                    const saved = tabHistoriesRef.current[id as PanelId]!.get(activeTabId);
+                    if (saved) {
+                        panel.setNavigationState({
+                            path: normRust,
+                            history: saved.history,
+                            historyIndex: saved.historyIndex,
+                            version: saved.version
+                        });
+                    } else {
+                        panel.setNavigationState({
+                            path: normRust,
+                            history: [{ path: normRust, timestamp: Date.now() }],
+                            historyIndex: 0,
+                            version: activeTab.version || 0
+                        });
+                    }
+                }
+            }
+        }
+    }, [session, panelStates, getPanes]);
+
+    useEffect(() => {
+        if (session) {
+            const allPanels = getPanes(session.root);
+            const sessionIds = Object.keys(allPanels);
+
+            // 1. Cleanup removed panels
+            setPanels(prev => {
+                const next = { ...prev };
+                let changed = false;
+                for (const id of Object.keys(next)) {
+                    if (!sessionIds.includes(id)) {
+                        delete next[id as PanelId];
+                        changed = true;
+                    }
+                }
+                return changed ? next : prev;
+            });
+
+            // 2. Sync configurations (Add new, update existing, REMOVE orphaned)
+            setConfigs(prev => {
+                const next: Record<PanelId, { initialPath: string, activeTabId: string }> = {};
+                let changed = false;
+
+                // Only keep panels that are in the session
+                for (const [id, p] of Object.entries(allPanels)) {
+                    const panelId = id as PanelId;
+                    const existing = prev[panelId];
+                    const activeTabPath = p.tabs.find((t: any) => t.id === p.active_tab_id)?.path || 'C:\\';
+
+                    if (!existing || existing.activeTabId !== p.active_tab_id) {
+                        next[panelId] = {
+                            initialPath: activeTabPath,
+                            activeTabId: p.active_tab_id
+                        };
+                        changed = true;
+                    } else {
+                        next[panelId] = existing;
+                    }
+                }
+
+                // Check if we removed any panels
+                if (Object.keys(prev).length !== Object.keys(next).length) {
+                    changed = true;
+                }
+
+                return changed ? next : prev;
+            });
+        }
+    }, [session, getPanes]);
+
+    const activePanel = useMemo(() => {
+        if (Object.keys(panelStates).length === 0) return null;
+        return panelStates[activePanelId] || Object.values(panelStates)[0];
+    }, [panelStates, activePanelId]);
+
+    const isReady = useMemo(() => {
+        const configIds = Object.keys(panelConfigs);
+        return configIds.length > 0 && configIds.every(id => panelStates[id as PanelId]);
+    }, [panelConfigs, panelStates]);
+
+    const value = {
+        panels: panelStates,
+        activePanelId,
+        setActivePanelId,
+        activePanel,
+        isReady
+    };
+
+    return (
+        <PanelContext.Provider value={value}>
+            {Object.entries(panelConfigs).map(([id, config]) => (
+                <PanelStateHoister
+                    key={id}
+                    id={id as PanelId}
+                    initialPath={config.initialPath}
+                    activeTabId={config.activeTabId}
+                    onRegister={onRegister}
+                    onUnregister={onUnregister}
+                />
+            ))}
+            {children}
+        </PanelContext.Provider>
+    );
+};
 
 export const usePanelContext = () => {
     const context = useContext(PanelContext);
@@ -33,210 +208,4 @@ export const usePanelContext = () => {
         throw new Error('usePanelContext must be used within a PanelProvider');
     }
     return context;
-};
-
-interface PanelProviderProps {
-    children: ReactNode;
-    initialLeftPath?: string;
-    initialRightPath?: string;
-}
-
-export const PanelProvider: React.FC<PanelProviderProps> = ({
-    children,
-    initialLeftPath,
-    initialRightPath
-}) => {
-    const { session, isLoading } = useRustSession();
-
-    const [resolvedPaths] = useState<{ left: string; right: string } | null>(() => {
-        if (!session) return null;
-        const leftPanel = session.panels['left'];
-        const rightPanel = session.panels['right'];
-        const leftTab = leftPanel?.tabs.find((t: any) => t.id === leftPanel.active_tab_id);
-        const rightTab = rightPanel?.tabs.find((t: any) => t.id === rightPanel.active_tab_id);
-        const defaultPath = "C:\\";
-        return {
-            left: initialLeftPath || (leftTab ? normalizePath(leftTab.path) : defaultPath),
-            right: initialRightPath || (rightTab ? normalizePath(rightTab.path) : defaultPath),
-        };
-    });
-
-    const [initialPaths, setInitialPaths] = useState(resolvedPaths);
-
-    useEffect(() => {
-        if (initialPaths || !session) return;
-        const leftPanel = session.panels['left'];
-        const rightPanel = session.panels['right'];
-        const leftTab = leftPanel?.tabs.find((t: any) => t.id === leftPanel.active_tab_id);
-        const rightTab = rightPanel?.tabs.find((t: any) => t.id === rightPanel.active_tab_id);
-        const defaultPath = "C:\\";
-        setInitialPaths({
-            left: initialLeftPath || (leftTab ? normalizePath(leftTab.path) : defaultPath),
-            right: initialRightPath || (rightTab ? normalizePath(rightTab.path) : defaultPath),
-        });
-    }, [session, initialPaths, initialLeftPath, initialRightPath]);
-
-    if (isLoading || !initialPaths) {
-        return null;
-    }
-
-    return (
-        <PanelProviderReady
-            session={session}
-            isLoading={isLoading}
-            initialLeftPath={initialPaths.left}
-            initialRightPath={initialPaths.right}
-        >
-            {children}
-        </PanelProviderReady>
-    );
-};
-
-/**
- * Inner component that creates panels. Separated so that usePanel hooks
- * are only called once initial paths are definitively known.
- */
-const PanelProviderReady: React.FC<{
-    children: ReactNode;
-    session: any;
-    isLoading: boolean;
-    initialLeftPath: string;
-    initialRightPath: string;
-}> = ({ children, session, isLoading, initialLeftPath, initialRightPath }) => {
-    const leftActiveTabId = session?.panels?.['left']?.active_tab_id;
-    const rightActiveTabId = session?.panels?.['right']?.active_tab_id;
-
-    const left = usePanel(initialLeftPath, 'left', leftActiveTabId);
-    const right = usePanel(initialRightPath, 'right', rightActiveTabId);
-
-    const [activePanelId, setActivePanelIdState] = useState<PanelId>('left');
-
-    // --- Per-tab isolated navigation history ---
-    // Each tab has its own history stack. On tab switch, we save the outgoing tab's
-    // stack and restore the incoming tab's stack via setNavigationState (no navigate() call,
-    // which would wrongly push a new entry into the shared history).
-    const leftTabHistoriesRef = useRef<Map<string, TabNavSnapshot>>(new Map());
-    const rightTabHistoriesRef = useRef<Map<string, TabNavSnapshot>>(new Map());
-
-    // Track previous active tab IDs to detect switches
-    const prevLeftTabIdRef = useRef<string>(leftActiveTabId);
-    const prevRightTabIdRef = useRef<string>(rightActiveTabId);
-
-    const setActivePanelId = useCallback((id: PanelId) => {
-        setActivePanelIdState(id);
-        invoke('set_active_panel', { panelId: id }).catch(console.error);
-    }, []);
-
-    // Sync React panel state with Rust session
-    useEffect(() => {
-        if (!session) return;
-
-        // Sync active panel
-        if (session.active_panel === 'left' || session.active_panel === 'right') {
-            if (activePanelId !== session.active_panel) {
-                setActivePanelIdState(session.active_panel as PanelId);
-            }
-        }
-
-        const leftTabSwitched = leftActiveTabId !== prevLeftTabIdRef.current;
-        const rightTabSwitched = rightActiveTabId !== prevRightTabIdRef.current;
-
-        // ─── LEFT PANEL ──────────────────────────────────────────────────
-        if (leftTabSwitched && prevLeftTabIdRef.current) {
-            // Save outgoing tab's full nav state
-            leftTabHistoriesRef.current.set(prevLeftTabIdRef.current, {
-                history: left.history,
-                historyIndex: left.historyIndex,
-                version: left.version
-            });
-        }
-        prevLeftTabIdRef.current = leftActiveTabId;
-
-        const leftPanelSession = session.panels?.['left'];
-        const leftTabArr = leftPanelSession?.tabs?.find((t: any) => t.id === leftPanelSession.active_tab_id);
-        if (leftTabArr) {
-            const normRust = normalizePath(leftTabArr.path);
-
-            if (leftTabSwitched) {
-                // Tab switch → restore saved history or start fresh
-                const saved = leftTabHistoriesRef.current.get(leftActiveTabId);
-                if (saved) {
-                    left.setNavigationState({
-                        path: normRust,
-                        history: saved.history,
-                        historyIndex: saved.historyIndex,
-                        version: saved.version
-                    });
-                } else {
-                    left.setNavigationState({
-                        path: normRust,
-                        history: [{ path: normRust, selected: [] }],
-                        historyIndex: 0,
-                        version: leftTabArr.version
-                    });
-                }
-            } else if (leftTabArr.version > left.version) {
-                left.navigate(normRust, [], leftTabArr.version);
-            } else if (leftTabArr.version === left.version && normalizePath(left.path) !== normRust) {
-                left.navigate(normRust, [], left.version);
-            }
-        }
-
-        // ─── RIGHT PANEL ─────────────────────────────────────────────────
-        if (rightTabSwitched && prevRightTabIdRef.current) {
-            // Save outgoing tab's full nav state
-            rightTabHistoriesRef.current.set(prevRightTabIdRef.current, {
-                history: right.history,
-                historyIndex: right.historyIndex,
-                version: right.version
-            });
-        }
-        prevRightTabIdRef.current = rightActiveTabId;
-
-        const rightPanelSession = session.panels?.['right'];
-        const rightTabArr = rightPanelSession?.tabs?.find((t: any) => t.id === rightPanelSession.active_tab_id);
-        if (rightTabArr) {
-            const normRust = normalizePath(rightTabArr.path);
-
-            if (rightTabSwitched) {
-                // Tab switch → restore saved history or start fresh
-                const saved = rightTabHistoriesRef.current.get(rightActiveTabId);
-                if (saved) {
-                    right.setNavigationState({
-                        path: normRust,
-                        history: saved.history,
-                        historyIndex: saved.historyIndex,
-                        version: saved.version
-                    });
-                } else {
-                    right.setNavigationState({
-                        path: normRust,
-                        history: [{ path: normRust, selected: [] }],
-                        historyIndex: 0,
-                        version: rightTabArr.version
-                    });
-                }
-            } else if (rightTabArr.version > right.version) {
-                right.navigate(normRust, [], rightTabArr.version);
-            } else if (rightTabArr.version === right.version && normalizePath(right.path) !== normRust) {
-                right.navigate(normRust, [], right.version);
-            }
-        }
-    }, [session, left.version, left.path, right.version, right.path, activePanelId, leftActiveTabId, rightActiveTabId]);
-
-    const value = useMemo(() => ({
-        left,
-        right,
-        activePanelId,
-        activePanel: activePanelId === 'left' ? left : right,
-        otherPanel: activePanelId === 'left' ? right : left,
-        setActivePanelId,
-        isLoading
-    }), [left, right, activePanelId, isLoading, setActivePanelId]);
-
-    return (
-        <PanelContext.Provider value={value}>
-            {children}
-        </PanelContext.Provider>
-    );
 };

@@ -3,7 +3,7 @@ import cx from 'classnames';
 import { ArrowUp, X, Search, Square } from 'lucide-react';
 import { FilePanelHeader } from './FilePanelHeader';
 import { FilePanelFooter } from './FilePanelFooter';
-import { FileEntry, ViewMode, SortConfig, ColumnWidths, SortField, DriveInfo, LayoutMode } from '../../types';
+import { FileEntry, ViewMode, SortConfig, ColumnWidths, SortField, DriveInfo } from '../../types';
 import { FileHeader } from './FileHeader';
 import { getFileEntryIcon, IMAGE_EXTENSIONS } from '../../utils/fileIcons';
 import { Thumbnail } from '../ui/Thumbnail';
@@ -56,7 +56,6 @@ interface FilePanelProps {
     dragOverPath?: string | null;
     showHidden?: boolean;
     showSystem?: boolean;
-    layout: LayoutMode;
     cutPaths?: string[];
     onRename?: (oldPath: string, newName: string) => void;
     showHistogram?: boolean;
@@ -99,7 +98,7 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
     onContextMenu, onActivate, onFileDragStart, onFileDrop: _onFileDrop, isDragging, onSort,
     onResize, onResizeMultiple, t, searchQuery, searchResults, isSearching,
     onClearSearch, onCancelSearch, isDragTarget,
-    dragOverPath, showHidden = false, showSystem = false, layout, cutPaths = [],
+    dragOverPath, showHidden = false, showSystem = false, cutPaths = [],
     onRename, showHistogram: propShowHistogram, isTrashView = false, isNetworkView = false,
     useSystemIcons: propUseSystemIcons, onItemMiddleClick, diffPaths, searchLimitReached,
     panelId, onViewModeChange, loading, initialScrollOffset, updateCurrentScroll,
@@ -567,7 +566,7 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
     return (
         <div
             ref={panelRef}
-            className={cx("panel", layout, { active: isActive, 'drag-over': isDragTarget })}
+            className={cx("panel", "multipane", { active: isActive, 'drag-over': isDragTarget })}
             data-panel-id={panelId}
             onClick={() => onActivate()}
             onMouseMove={(e) => {

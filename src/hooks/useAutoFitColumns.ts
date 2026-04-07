@@ -183,28 +183,28 @@ export const useAutoFitColumns = ({
             }
 
             if (searchResults || isTrashView) {
-                const availableForDual = panelWidth - fixedSum - 32;
+                const availableWidth = panelWidth - fixedSum - 32;
                 const totalDesired = maxName + maxLocation;
 
                 // Priority Logic: Name is the primary identifier.
                 // We try to give Location its desired width, but we prioritize Name if space is tight.
-                if (availableForDual >= totalDesired) {
+                if (availableWidth >= totalDesired) {
                     // Plenty of space: give Location what it needs, Name takes the rest
                     updates.location = maxLocation;
-                    updates.name = availableForDual - maxLocation;
+                    updates.name = availableWidth - maxLocation;
                 } else {
                     // Restricted space: 
                     // 1. Give Name a comfortable minimum or its proportional share
                     // 2. Ensure Location doesn't disappear but gets the smaller share
-                    const minName = Math.max(150, availableForDual * 0.6);
-                    updates.name = Math.max(minName, availableForDual - maxLocation);
+                    const minName = Math.max(150, availableWidth * 0.6);
+                    updates.name = Math.max(minName, availableWidth - maxLocation);
 
                     // If even the above name width is too much, Name takes priority
-                    if (updates.name > availableForDual - 50) {
-                        updates.name = Math.max(100, availableForDual - 80);
+                    if (updates.name > availableWidth - 50) {
+                        updates.name = Math.max(100, availableWidth - 80);
                     }
 
-                    updates.location = availableForDual - (updates.name as number);
+                    updates.location = availableWidth - (updates.name as number);
                 }
             } else {
                 // Shared Intelligent Fill Logic

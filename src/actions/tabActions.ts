@@ -6,12 +6,7 @@ export const NEW_TAB_ACTION: ActionDefinition = {
     label: 'new_tab',
     icon: Plus,
     shortcut: 'Ctrl+T',
-    isVisible: (ctx) => {
-        // Only visible/relevant in standard (single panel) mode as dual panel has fixed tabs per panel
-        // Actually, even in dual panel we might want to add tabs to the active panel.
-        // But the user specifically asked for "single panel mode".
-        return ctx.layout === 'standard';
-    },
+    isVisible: () => true,
     handler: async (ctx) => {
         if (typeof ctx.addTab === 'function') {
             // Replicate the 'New Tab' button behavior: open C:\

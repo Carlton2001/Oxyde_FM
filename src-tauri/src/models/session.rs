@@ -151,10 +151,146 @@ impl PanelState {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub enum LayoutAxis {
+    Horizontal,
+    Vertical,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", content = "data")]
+pub enum LayoutNode {
+    Pane {
+        id: String,
+        state: PanelState,
+    },
+    Split {
+        id: String,
+        axis: LayoutAxis,
+        children: Vec<LayoutNode>,
+        #[serde(default)]
+        weights: Vec<f32>,
+    },
+}
+
+impl LayoutNode {
+    pub fn find_pane(&self, target_id: &str) -> Option<&PanelState> {
+        match self {
+            LayoutNode::Pane { id, state } => {
+                if id == target_id {
+                    Some(state)
+                } else {
+                    None
+                }
+            }
+            LayoutNode::Split { children, .. } => {
+                for child in children {
+                    if let Some(state) = child.find_pane(target_id) {
+                        return Some(state);
+                    }
+                }
+                None
+            }
+        }
+    }
+
+    pub fn find_pane_mut(&mut self, target_id: &str) -> Option<&mut PanelState> {
+        match self {
+            LayoutNode::Pane { id, state } => {
+                if id == target_id {
+                    Some(state)
+                } else {
+                    None
+                }
+            }
+            LayoutNode::Split { children, .. } => {
+                for child in children {
+                    if let Some(state) = child.find_pane_mut(target_id) {
+                        return Some(state);
+                    }
+                }
+                None
+            }
+        }
+    }
+
+    pub fn remove_pane(&mut self, target_id: &str) -> (bool, Option<LayoutNode>) {
+        match self {
+            LayoutNode::Pane { id, .. } => {
+                if id == target_id {
+                    (true, None)
+                } else {
+                    (false, None)
+                }
+            }
+            LayoutNode::Split { children, weights, .. } => {
+                let mut found_target = false;
+                let mut update_at = None;
+
+                for (i, child) in children.iter_mut().enumerate() {
+                    let (found, replacement) = child.remove_pane(target_id);
+                    if found || replacement.is_some() {
+                        found_target = true;
+                        update_at = Some((i, replacement));
+                        break;
+                    }
+                }
+
+                if let Some((idx, replacement)) = update_at {
+                    if let Some(r) = replacement {
+                        children[idx] = r;
+                    } else {
+                        children.remove(idx);
+                        if !weights.is_empty() && idx < weights.len() {
+                            weights.remove(idx);
+                        }
+                    }
+
+                    // Collapse: if only 1 child remains, this Split is no longer needed
+                    if children.len() == 1 {
+                        return (false, Some(children.remove(0)));
+                    }
+                    (false, None)
+                } else {
+                    (false, None)
+                }
+            }
+        }
+    }
+
+    pub fn all_pane_ids(&self) -> Vec<String> {
+        match self {
+            LayoutNode::Pane { id, .. } => vec![id.clone()],
+            LayoutNode::Split { children, .. } => {
+                children.iter().flat_map(|c| c.all_pane_ids()).collect()
+            }
+        }
+    }
+
+    pub fn all_panels(&self) -> Vec<&PanelState> {
+        match self {
+            LayoutNode::Pane { state, .. } => vec![state],
+            LayoutNode::Split { children, .. } => {
+                children.iter().flat_map(|c| c.all_panels()).collect()
+            }
+        }
+    }
+
+    pub fn all_panels_mut(&mut self) -> Vec<&mut PanelState> {
+        match self {
+            LayoutNode::Pane { state, .. } => vec![state],
+            LayoutNode::Split { children, .. } => {
+                children.iter_mut().flat_map(|c| c.all_panels_mut()).collect()
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct SessionState {
-    pub panels: IndexMap<String, PanelState>,
-    pub active_panel_id: String, // Dynamic ID
+    pub root: LayoutNode,
+    pub active_panel_id: String,
 }
 
 // Custom deserialization for migration "sans tout casser"
@@ -166,78 +302,69 @@ impl<'de> Deserialize<'de> for SessionState {
         #[derive(Deserialize)]
         struct LegacySession {
             #[serde(default)]
-            left_panel: Option<PanelState>,
-            #[serde(default)]
-            right_panel: Option<PanelState>,
-            #[serde(default)]
-            active_panel: Option<String>,
-            #[serde(default)]
             panels: Option<IndexMap<String, PanelState>>,
             #[serde(default)]
             active_panel_id: Option<String>,
+            #[serde(default)]
+            root: Option<LayoutNode>,
         }
 
         let legacy = LegacySession::deserialize(deserializer)?;
-        let mut panels = legacy.panels.unwrap_or_default();
-        let mut active_panel_id = legacy.active_panel_id.unwrap_or_else(|| "left".to_string());
-
-        // Migrate left_panel if exists and not in map
-        if let Some(left) = legacy.left_panel {
-            if !panels.contains_key("left") {
-                panels.insert("left".to_string(), left);
-            }
-        }
-        // Migrate right_panel if exists and not in map
-        if let Some(right) = legacy.right_panel {
-            if !panels.contains_key("right") {
-                panels.insert("right".to_string(), right);
-            }
+        
+        if let Some(root) = legacy.root {
+            return Ok(SessionState {
+                root,
+                active_panel_id: legacy.active_panel_id.unwrap_or_else(|| "left".to_string()),
+            });
         }
 
-        // Handle active_panel field migration
-        if let Some(old_active) = legacy.active_panel {
-             active_panel_id = old_active;
-        }
+        let panels = legacy.panels.unwrap_or_default();
+        let active_panel_id = legacy.active_panel_id.unwrap_or_else(|| "left".to_string());
 
-        // Ensure at least "left" exists for Dual UI compatibility if everything was empty
         if panels.is_empty() {
             return Ok(SessionState::default());
         }
 
+        // Migrate flat map to a horizontal split
+        let children: Vec<LayoutNode> = panels.into_iter()
+            .map(|(id, state)| LayoutNode::Pane { id, state })
+            .collect();
+
+        let root = if children.len() == 1 {
+            children.into_iter().next().unwrap()
+        } else {
+            let count = children.len();
+            LayoutNode::Split {
+                id: "root-split".to_string(),
+                axis: LayoutAxis::Horizontal,
+                children,
+                weights: vec![1.0; count],
+            }
+        };
+
         Ok(SessionState {
-            panels,
+            root,
             active_panel_id,
         })
     }
 }
 
 impl SessionState {
-    /// Get a mutable reference to the panel identified by `id`.
+    pub fn get_panel(&self, id: &str) -> &PanelState {
+        self.root.find_pane(id).expect("Panel not found in session")
+    }
+
     pub fn get_panel_mut(&mut self, id: &str) -> &mut PanelState {
-        self.panels.entry(id.to_string()).or_insert_with(|| {
-             // Create a new panel if it doesn't exist (e.g. dynamic creation)
-             PanelState {
-                tabs: vec![Tab {
-                    id: uuid::Uuid::new_v4().to_string(),
-                    path: PathBuf::from("C:\\"),
-                    version: 0,
-                }],
-                active_tab_id: "".to_string(), // Will be set by caller or during initialization
-                watcher: None,
-                watched_path: None,
-                search_context: None,
-                sort_config: SortConfig::default(),
-                cached_results: None,
-            }
-        })
+        self.root.find_pane_mut(id).expect("Panel not found in session")
     }
 }
 
 impl Default for SessionState {
     fn default() -> Self {
-        let mut panels = IndexMap::new();
-        
-        panels.insert("left".to_string(), PanelState {
+        let left_id = "left".to_string();
+        let right_id = "right".to_string();
+
+        let left_panel = PanelState {
             tabs: vec![Tab {
                 id: "default-left".to_string(),
                 path: PathBuf::from("C:\\"),
@@ -249,9 +376,9 @@ impl Default for SessionState {
             search_context: None,
             sort_config: SortConfig::default(),
             cached_results: None,
-        });
+        };
 
-        panels.insert("right".to_string(), PanelState {
+        let right_panel = PanelState {
             tabs: vec![Tab {
                 id: "default-right".to_string(),
                 path: PathBuf::from("C:\\"),
@@ -263,11 +390,21 @@ impl Default for SessionState {
             search_context: None,
             sort_config: SortConfig::default(),
             cached_results: None,
-        });
+        };
+
+        let root = LayoutNode::Split {
+            id: "root-split".to_string(),
+            axis: LayoutAxis::Horizontal,
+            children: vec![
+                LayoutNode::Pane { id: left_id.clone(), state: left_panel },
+                LayoutNode::Pane { id: right_id, state: right_panel },
+            ],
+            weights: vec![1.0, 1.0],
+        };
 
         SessionState {
-            panels,
-            active_panel_id: "left".to_string(),
+            root,
+            active_panel_id: left_id,
         }
     }
 }
@@ -304,8 +441,8 @@ impl SessionManager {
             let content = fs::read_to_string(session_path).map_err(|e| CommandError::IoError(e.to_string()))?;
             match serde_json::from_str::<SessionState>(&content) {
                 Ok(mut loaded_session) => {
-                    // Update watchers for all panels
-                    for panel in loaded_session.panels.values_mut() {
+                    // Update watchers for all panels in the tree
+                    for panel in loaded_session.root.all_panels_mut() {
                         panel.update_watcher(app_handle);
                     }
 

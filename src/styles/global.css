@@ -176,9 +176,56 @@ svg {
   position: relative;
 }
 
-.panels-container.dual-view .individual-panel-wrapper:not(:last-child) {
-  border-right: 1px solid var(--border-color);
+
+.panels-container.multipane-view {
+  display: grid;
+  gap: 0;
+  width: 100%;
+  height: 100%;
 }
+
+.panels-container.multipane-view .individual-panel-wrapper {
+  border: 1px solid var(--border-color);
+  overflow: hidden;
+  position: relative;
+}
+
+.multipane-drop-zones {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 1000;
+  display: grid;
+  grid-template-areas: 
+    ". top ."
+    "left . right"
+    ". bottom .";
+  grid-template-columns: 25% 50% 25%;
+  grid-template-rows: 25% 50% 25%;
+}
+
+.drop-zone {
+  pointer-events: auto;
+  opacity: 0;
+  transition: opacity 0.2s, background-color 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.drop-zone.active {
+  opacity: 1;
+  background-color: rgba(var(--accent-color-rgb), 0.1);
+  border: 2px dashed var(--accent-color);
+}
+
+.drop-zone-top { grid-area: top; }
+.drop-zone-bottom { grid-area: bottom; }
+.drop-zone-left { grid-area: left; }
+.drop-zone-right { grid-area: right; }
 
 /* Global Animation Utilities */
 @keyframes spin {

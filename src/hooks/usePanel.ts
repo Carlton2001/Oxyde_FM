@@ -12,20 +12,16 @@ import { getColumnMode } from '../config/columnDefinitions';
 export const usePanel = (initialPath: string, panelId: PanelId, activeTabId?: string) => {
     const { showHidden, showSystem, searchLimit } = useApp();
 
-    const normalizedPanelId = useMemo(() => {
-        return (panelId.startsWith('panel-') ? panelId.replace('panel-', '') : panelId) as PanelId;
-    }, [panelId]);
-
     // Navigation
     const { path, history, historyIndex, currentEntry, navigate, goToIndex, goBack, goForward, goUp, updateCurrentSelection, updateCurrentScroll, setNavigationState, version } = useNavigation(initialPath);
 
     useEffect(() => {
         if (panelId) {
-            invoke('active_tab_navigate', { panelId: normalizedPanelId, path, version }).catch(err => {
+            invoke('active_tab_navigate', { panelId, path, version }).catch(err => {
                 console.error("Failed to sync navigation:", err);
             });
         }
-    }, [path, normalizedPanelId, version]);
+    }, [path, panelId, version]);
 
     // Persistence identifiers
     const groupByDateKey = panelId ? `groupByDate_${panelId}` : null;
@@ -86,11 +82,11 @@ export const usePanel = (initialPath: string, panelId: PanelId, activeTabId?: st
     // Sync sortConfig with backend session
     useEffect(() => {
         if (panelId) {
-            invoke('update_sort_config', { panelId: normalizedPanelId, sortConfig }).catch(err => {
+            invoke('update_sort_config', { panelId, sortConfig }).catch(err => {
                 console.error("Failed to sync sort config:", err);
             });
         }
-    }, [sortConfig, normalizedPanelId]);
+    }, [sortConfig, panelId]);
 
     // Multi-mode Column Widths management
     const [allColWidths, setAllColWidths] = useState<MultiModeColumnWidths>(() => {
@@ -146,7 +142,7 @@ export const usePanel = (initialPath: string, panelId: PanelId, activeTabId?: st
     }, [mode]);
 
     // File System
-    const { files, sortedFiles, summary, isComplete, loading, error, isProtected, refresh, setFiles, setSummary, setIsComplete, updateFileSize, setFileCalculating } = useFiles(normalizedPanelId, path, sortConfig, showHidden, showSystem, version);
+    const { files, sortedFiles, summary, isComplete, loading, error, isProtected, refresh, setFiles, setSummary, setIsComplete, updateFileSize, setFileCalculating } = useFiles(panelId, path, sortConfig, showHidden, showSystem, version);
 
     // Effective Files (Normal vs Search)
     const displayFiles = useMemo(() => {

@@ -55,20 +55,6 @@ export const useGlobalShortcuts = (context: ActionContext, tabs: any[], activeTa
                 return;
             }
 
-            // 1b. Panel Switching logic (Tab only, without Ctrl)
-            if (isTab && !e.ctrlKey && !e.altKey && !e.shiftKey) {
-                // Only if in Dual Panel mode
-                const currentContext = contextRef.current;
-                if (currentContext.layout === 'dual') {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    const nextPanelId = currentContext.activePanelId === 'left' ? 'right' : 'left';
-                    if (currentContext.setActivePanelId) {
-                        currentContext.setActivePanelId(nextPanelId);
-                    }
-                    return;
-                }
-            }
 
             // 2. Construct shortcut string
             const parts = [];

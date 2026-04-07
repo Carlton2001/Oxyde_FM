@@ -91,7 +91,7 @@ pub async fn list_dir(
             None
         } else {
             let session = state.0.lock().unwrap();
-            let panel = session.panels.get(&panel_id).ok_or_else(|| CommandError::Other("Panel not found".to_string()))?;
+            let panel = session.get_panel(&panel_id);
             
             if let Some(cached) = &panel.cached_results {
                 if cached.path.to_string_lossy() == path {
@@ -197,7 +197,7 @@ pub async fn list_dir(
     // Update cache (one clone here is unavoidable: cache needs its own copy)
     {
         let mut session = state.0.lock().unwrap();
-        let panel = session.panels.get_mut(&panel_id).ok_or_else(|| CommandError::Other("Panel not found".to_string()))?;
+        let panel = session.get_panel_mut(&panel_id);
         
         // CRITICAL: Clear search context when entering a normal directory to free RAM
         if let Some(mut ctx) = panel.search_context.take() {

@@ -19,15 +19,18 @@ interface TabsProps {
 export const Tabs: React.FC<TabsProps> = ({
     panelId, onSwitch, onClose, isDraggingFiles, dragState
 }) => {
-    const { 
-        leftTabs, rightTabs, leftActiveTabId, rightActiveTabId, 
-        addTab, duplicateTab, closeOtherTabs, 
+    const {
+        panels: allPanels,
+        addTab, duplicateTab, closeOtherTabs,
         draggedTab, setDraggedTab,
         dragPos, targetPanelId, markerOffset,
         registerPanel
     } = useTabs();
-    const tabs = panelId === 'left' ? leftTabs : rightTabs;
-    const activeTabId = panelId === 'left' ? leftActiveTabId : rightActiveTabId;
+    const tabs = allPanels[panelId]?.tabs || [];
+    const activeTabId = allPanels[panelId]?.activeTabId || '';
+    const panelCount = Object.keys(allPanels).length;
+    // A tab can be closed unless it's the last tab of the last pane
+    const canCloseTab = tabs.length > 1 || panelCount > 1;
     const { t } = useApp();
     const wrapperRef = useRef<HTMLDivElement>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
@@ -392,10 +395,10 @@ export const Tabs: React.FC<TabsProps> = ({
                         </div>
                         <span className="tab-label">{getTabLabel(tab)}</span>
                         <div
-                            className={cx("tab-close", { disabled: tabs.length <= 1 })}
+                            className={cx("tab-close", { disabled: !canCloseTab })}
                             onClick={(e) => {
                                 e.stopPropagation();
-                                if (tabs.length > 1) {
+                                if (canCloseTab) {
                                     onClose(tab.id);
                                 }
                             }}
@@ -443,17 +446,19 @@ export const Tabs: React.FC<TabsProps> = ({
                         <Copy size={14} /> {t('duplicate_tab' as any) || "Duplicate Tab"}
                     </div>
                     {tabs.length > 1 && (
+                        <div className="menu-item" onClick={() => {
+                            if (menu.tabId !== activeTabId) {
+                                onSwitch(menu.tabId);
+                            }
+                            closeOtherTabs(menu.tabId, panelId);
+                            setMenu(null);
+                        }}>
+                            <Split size={14} /> {t('close_other_tabs' as any) || "Close Other Tabs"}
+                        </div>
+                    )}
+                    {canCloseTab && (
                         <>
-                            <div className="menu-item" onClick={() => {
-                                if (menu.tabId !== activeTabId) {
-                                    onSwitch(menu.tabId);
-                                }
-                                closeOtherTabs(menu.tabId, panelId);
-                                setMenu(null);
-                            }}>
-                                <Split size={14} /> {t('close_other_tabs' as any) || "Close Other Tabs"}
-                            </div>
-                            <div className="menu-separator" />
+                            {tabs.length > 1 && <div className="menu-separator" />}
                             <div className="menu-item" onClick={() => { onClose(menu.tabId); setMenu(null); }}>
                                 <XCircle size={14} /> {t('close_tab' as any) || "Close Tab"}
                             </div>

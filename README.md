@@ -25,8 +25,8 @@ Oxyde is a modern, high-performance file manager designed for efficiency and spe
 
 ## Key Features
 
-*   **Flexible Layouts**: Switch between a classic single-panel view with a full **directory tree** or a powerful **dual-panel** interface for side-by-side management.
-*   **Tabbed Browsing**: Manage multiple locations simultaneously with a robust tab system, supporting duplication and easy navigation.
+*   **Dynamic Multipane System**: Move beyond single or dual panels with a dynamic layout allowing 1 to 3+ panels simultaneously. Drag and drop tabs between panels or create new ones on the fly for complex file management.
+*   **Tabbed Browsing**: Manage multiple locations simultaneously within each panel. Tab duplication, middle-click to open in new tab, and drag-and-drop support.
 *   **Native Performance**: Leverages a Rust-driven backend for near-instant responsiveness even in directories with tens of thousands of files.
 *   **Turbo Mode**: Hardware-aware I/O optimization for accelerated file transfers that respect system stability.
 *   **Duplicate Search**: Integrated tool to **identify** duplicate files by content, name, or size across multiple locations.

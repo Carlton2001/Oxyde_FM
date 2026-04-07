@@ -14,8 +14,14 @@ export interface PanelState {
     active_tab_id: string;
 }
 
+export type LayoutAxis = 'horizontal' | 'vertical';
+
+export type LayoutNode = 
+    | { type: 'Pane', data: { id: string, state: PanelState } }
+    | { type: 'Split', data: { id: string, axis: LayoutAxis, children: LayoutNode[], weights: number[] } };
+
 export interface SessionState {
-    panels: Record<string, PanelState>;
+    root: LayoutNode;
     active_panel_id: string;
 }
 

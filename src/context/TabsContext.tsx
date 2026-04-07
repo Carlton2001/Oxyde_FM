@@ -9,15 +9,9 @@ export interface UiTab extends Tab {
 }
 
 interface TabsContextType {
-    tabs: UiTab[]; // Compatibility with active panel
-    activeTabId: string; // Compatibility with active panel
-    panels: Record<string, { tabs: Tab[], activeTabId: string }>;
+    panels: Record<string, { tabs: UiTab[], activeTabId: string }>;
     activePanelId: string;
     setActivePanelId: (id: string) => void;
-    leftTabs: UiTab[];
-    rightTabs: UiTab[];
-    leftActiveTabId: string;
-    rightActiveTabId: string;
     addTab: (path: string, optionsOrId?: string | { id?: string, background?: boolean, index?: number, panelId?: PanelId }, background?: boolean) => Promise<string | undefined>;
     closeTab: (id: string, panelId?: PanelId) => void;
     setActiveTab: (id: string, panelId?: PanelId) => void;
@@ -36,6 +30,8 @@ interface TabsContextType {
     markerOffset: number | null;
     registerPanel: (panelId: PanelId, ref: React.RefObject<HTMLDivElement>) => void;
     moveTab: (tabId: string, sourcePanel: PanelId, targetPanelId: PanelId, targetIndex: number) => Promise<void>;
+    splitPanel: (tabId: string, sourcePanelId: PanelId, targetPanelId: PanelId, side: 'top' | 'bottom' | 'left' | 'right') => Promise<void>;
+    setActiveDropZone: (zone: { panelId: PanelId; side: 'top' | 'bottom' | 'left' | 'right' } | null) => void;
 
     // Rust session exposed
     session: SessionState | null;
@@ -68,17 +64,25 @@ export const TabsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
 
     const panels = React.useMemo(() => {
-        const result: Record<string, { tabs: Tab[], activeTabId: string }> = {};
-        if (session?.panels) {
-            for (const [id, p] of Object.entries(session.panels)) {
+        const result: Record<string, { tabs: UiTab[], activeTabId: string }> = {};
+        
+        const traverse = (node: import('../hooks/useRustSession').LayoutNode) => {
+            if (node.type === 'Pane') {
+                const { id, state } = node.data;
                 result[id] = {
-                    tabs: mapTabs(p),
-                    activeTabId: p.active_tab_id || ''
+                    tabs: mapTabs(state),
+                    activeTabId: state.active_tab_id || ''
                 };
+            } else {
+                node.data.children.forEach(traverse);
             }
+        };
+
+        if (session) {
+            traverse(session.root);
         }
         return result;
-    }, [session?.panels]);
+    }, [session]);
 
     // Sync activePanelId with session once loaded
     React.useEffect(() => {
@@ -86,12 +90,6 @@ export const TabsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             setActivePanelId(session.active_panel_id);
         }
     }, [session?.active_panel_id]);
-
-    // Conveniences for Dual UI
-    const leftTabs = (panels["left"]?.tabs || []) as UiTab[];
-    const rightTabs = (panels["right"]?.tabs || []) as UiTab[];
-    const leftActiveTabId = panels["left"]?.activeTabId || '';
-    const rightActiveTabId = panels["right"]?.activeTabId || '';
 
     const [draggedTab, setDraggedTab] = React.useState<{ id: string, panelId: PanelId, path: string, label: string } | null>(null);
     const [dragPos, setDragPos] = React.useState({ x: 0, y: 0 });
@@ -105,9 +103,11 @@ export const TabsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         panelsRefs.current.set(panelId, ref);
     }, []);
 
-    // Active panel compatibility
-    const tabs = (activePanelId === 'left' ? leftTabs : rightTabs);
-    const activeTabId = (activePanelId === 'left' ? leftActiveTabId : rightActiveTabId);
+    // Ref for tracking which drop zone is currently hovered (set by MultipaneDropZones)
+    const activeDropZoneRef = React.useRef<{ panelId: PanelId; side: 'top' | 'bottom' | 'left' | 'right' } | null>(null);
+    const setActiveDropZone = useCallback((zone: { panelId: PanelId; side: 'top' | 'bottom' | 'left' | 'right' } | null) => {
+        activeDropZoneRef.current = zone;
+    }, []);
 
     const reorderTabs = useCallback(async (sourceIndex: number, targetIndex: number, panelId?: PanelId) => {
         const targetPanel = panelId || (activePanelId as PanelId);
@@ -136,6 +136,14 @@ export const TabsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             console.error("[moveTab] Failed:", e);
         }
     }, [panels]);
+
+    const splitPanel = useCallback(async (tabId: string, sourcePanelId: string, targetPanelId: string, side: 'top' | 'bottom' | 'left' | 'right') => {
+        try {
+            await invoke('split_panel', { tabId, sourcePanelId, targetPanelId, side });
+        } catch (e) {
+            console.error("[splitPanel] Failed:", e);
+        }
+    }, []);
 
     const dragTargetRef = React.useRef<{ panelId: PanelId | null, index: number | null, offset: number | null }>({ panelId: null, index: null, offset: null });
 
@@ -194,15 +202,27 @@ export const TabsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             }
         };
 
-        const handleMouseUp = () => {
+        const handleMouseUp = (_e: MouseEvent) => {
+            if (!draggedTab) return;
+
+            // Capture all state before clearing
+            const capturedTab = draggedTab;
+            const capturedDropZone = activeDropZoneRef.current;
             const { panelId: tPanel, index: tIndex } = dragTargetRef.current;
-            if (draggedTab && tPanel !== null && tIndex !== null) {
-                moveTab(draggedTab.id, draggedTab.panelId, tPanel, tIndex);
-            }
+
             setDraggedTab(null);
             setTargetPanelId(null);
             setInternalDropIndex(null);
             setMarkerOffset(null);
+            activeDropZoneRef.current = null;
+
+            if (capturedDropZone) {
+                // Dropped on a split zone — create a new panel
+                splitPanel(capturedTab.id, capturedTab.panelId, capturedDropZone.panelId, capturedDropZone.side);
+            } else if (tPanel !== null && tIndex !== null) {
+                // Dropped on a tab bar — move the tab
+                moveTab(capturedTab.id, capturedTab.panelId, tPanel, tIndex);
+            }
         };
 
         window.addEventListener('mousemove', handleMouseMove);
@@ -233,8 +253,14 @@ export const TabsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
         if (newId && typeof index === 'number') {
             try {
-                // Wait for state to sync or refresh session
-                await invoke('reorder_tabs', { panelId: targetPanel, sourceIndex: -1, targetIndex: index, tabId: newId });
+                // The tab was appended, so its source index is tabs.length - 1
+                // Wait for state to sync or use the count from session
+                const currentTabs = panels[targetPanel]?.tabs || [];
+                await invoke('reorder_tabs', { 
+                    panelId: targetPanel, 
+                    sourceIndex: currentTabs.length, // createTab already added it
+                    targetIndex: index 
+                });
             } catch (e) {
                 console.error("Failed to reorder new tab after creation:", e);
             }
@@ -268,13 +294,7 @@ export const TabsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }, [activeCloseOtherTabs]);
 
     const value = {
-        tabs,
-        activeTabId,
         panels,
-        leftTabs,
-        rightTabs,
-        leftActiveTabId,
-        rightActiveTabId,
         activePanelId,
         setActivePanelId,
         addTab,
@@ -293,6 +313,8 @@ export const TabsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         markerOffset,
         registerPanel,
         moveTab,
+        splitPanel,
+        setActiveDropZone,
         session,
         isLoading
     };

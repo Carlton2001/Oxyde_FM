@@ -3,9 +3,6 @@ import { Language } from './types';
 export const translations = {
     en: {
         // --- Settings & UI ---
-        layout: 'Layout',
-        single: 'Single Panel',
-        dual: 'Dual Panel',
         appearance: 'Appearance',
         theme: 'Theme',
         language: 'Language',
@@ -506,9 +503,6 @@ export const translations = {
     },
     fr: {
         // --- Settings & UI ---
-        layout: 'Disposition',
-        single: 'Panneau Unique',
-        dual: 'Double Panneau',
         appearance: 'Apparence',
         theme: 'Thème',
         language: 'Langue',

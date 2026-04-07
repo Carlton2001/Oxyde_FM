@@ -44,9 +44,9 @@ import { useFavorites } from './hooks/useFavorites';
 
 import { ActionContext } from './types/actions';
 import { actionService } from './services/ActionService';
-import { normalizePath } from './utils/path';
 
-import { DualPanelLayout } from './components/layout/DualPanelLayout';
+
+import { MultipaneLayout } from './components/layout/MultipaneLayout';
 import { ContextMenu } from './components/ui/ContextMenu';
 import { GlobalDialogContainer } from './components/managers/GlobalDialogContainer';
 import { NotificationArea } from './components/ui/NotificationArea';
@@ -57,7 +57,6 @@ import { DriveInfo } from './types';
 
 function App() {
   const {
-    layout, setLayout,
     showHidden, showSystem, t,
     notifications, notify, dismissNotification, drives, mountedImages,
     useSystemIcons, refreshDrives,
@@ -70,9 +69,9 @@ function App() {
 
   const clipboardObj = useClipboard();
   const { clipboard, copy, cut, clearClipboard, copyToSystem, readTextFromSystem, refreshClipboard } = clipboardObj;
-  const { tabs, activeTabId, leftTabs, rightTabs, leftActiveTabId, rightActiveTabId, setActiveTab, updateTabPath, addTab, closeTab } = useTabs();
+  const { setActiveTab, addTab, closeTab } = useTabs();
   const dialogs = useDialogs();
-  const { left, right, activePanelId, setActivePanelId } = usePanelContext();
+  const { panels, activePanelId, setActivePanelId, activePanel, isReady } = usePanelContext();
   const fileOps = useFileOperations(notify, t as any, dismissNotification);
   const { favorites } = useFavorites();
 
@@ -207,8 +206,8 @@ function App() {
 
   // Handlers Integration
   const handlers = useAppHandlers({
-    left, right, activePanelId, setActivePanelId, layout, fileOps, treeRef, notify, t, dialogs, clipboard: clipboardObj, refreshDrives,
-    leftActiveTabId, rightActiveTabId, leftTabs, rightTabs, setActiveTab, closeTab, addTab, setContextMenu, contextMenu, drives, defaultTurboMode,
+    panels, activePanelId, setActivePanelId, fileOps, treeRef, notify, t, dialogs, clipboard: clipboardObj, refreshDrives,
+    setActiveTab, closeTab, addTab, setContextMenu, contextMenu, drives, defaultTurboMode,
     zipQuality, sevenZipQuality, zstdQuality, favorites, peekStatus, confirmDelete,
     openTrashSettings,
     refreshTrashStatus, driveTrashConfigs
@@ -236,20 +235,19 @@ function App() {
   const { dragState, dragTargetPath, dragOverPath, handleDragStart: originalHandleDragStart, handleDrop, setDragState, setDragOverPath, setDragTargetPath } = useDragDrop(onDropFile);
 
   useNativeDragDrop({
-    leftPanel: left, rightPanel: right, activePanelId, dragState, dragGhostRef,
+    activePanel: activePanel as any, activePanelId, dragState, dragGhostRef,
     handleFileDrop: handleDrop, setDragState, setDragOverPath, setDragTargetPath,
     modifiers, setModifiers, isNativeActive, setIsNativeActive, dragTargetPath
   });
 
+  const { panels: tabPanels } = useTabs();
   const handleOpenNewTab = useCallback((path: string, panelId?: PanelId) => {
     const targetPanelId = panelId || activePanelId;
-    const targetTabs = targetPanelId === 'left' ? leftTabs : rightTabs;
-    const targetActiveTabId = targetPanelId === 'left' ? leftActiveTabId : rightActiveTabId;
-
-    const currentIndex = targetTabs.findIndex(t => t.id === targetActiveTabId);
+    const tabData = tabPanels[targetPanelId];
+    const currentIndex = tabData?.tabs.findIndex(t => t.id === tabData.activeTabId) ?? -1;
     const targetIndex = currentIndex !== -1 ? currentIndex + 1 : undefined;
     addTab(path, { index: targetIndex, panelId: targetPanelId } as any);
-  }, [leftTabs, rightTabs, leftActiveTabId, rightActiveTabId, activePanelId, addTab]);
+  }, [tabPanels, activePanelId, addTab]);
 
   const handleTabDrop = useCallback(async (files: any[], index?: number) => {
     const folders = files.filter(f => f.is_dir);
@@ -268,60 +266,47 @@ function App() {
     originalHandleDragStart(sourcePanel, files);
   }, [originalHandleDragStart]);
 
+  const activePanelTabData = tabPanels[activePanelId];
   const actionContext: ActionContext = useMemo(() => ({
-    activePanelId, 
-    activePanel: activePanelId === 'left' ? left : right, 
-    otherPanel: activePanelId === 'left' ? right : left,
-    fileOps, 
-    clipboard: { 
-      clipboard, 
-      copy, 
-      cut, 
-      clearClipboard, 
-      copyToSystem, 
-      refreshClipboard 
-    },
-    notify, 
-    t: t as any, 
-    dialogs, 
-    settings: { 
-      zipQuality, 
-      sevenZipQuality, 
-      zstdQuality, 
-      defaultTurboMode, 
-      confirmDelete
-    }, 
+    activePanelId,
+    activePanel: panels[activePanelId],
+    otherPanel: Object.entries(panels).find(([id]) => id !== activePanelId)?.[1],
+    fileOps,
+    clipboard: { clipboard, copy, cut, clearClipboard, copyToSystem, refreshClipboard },
+    notify,
+    t: t as any,
+    dialogs,
+    settings: { zipQuality, sevenZipQuality, zstdQuality, defaultTurboMode, confirmDelete },
     setProgress,
-    contextMenuTarget: contextMenu?.target, 
-    isDir: contextMenu?.isDir, 
-    isDrive: contextMenu?.isDrive, 
-    refreshDrives, 
+    contextMenuTarget: contextMenu?.target,
+    isDir: contextMenu?.isDir,
+    isDrive: contextMenu?.isDrive,
+    refreshDrives,
     mountedImages,
-    tabs, 
-    activeTabId, 
-    setActiveTab, 
-    closeTab, 
-    addTab, 
-    refreshBothPanels, 
-    layout,
-    modifiers, 
-    peekStatus, 
-    driveTrashConfigs, 
-    setContextMenu, 
+    tabs: activePanelTabData?.tabs || [],
+    activeTabId: activePanelTabData?.activeTabId || '',
+    setActiveTab,
+    closeTab,
+    addTab,
+    refreshBothPanels,
+    modifiers,
+    peekStatus,
+    driveTrashConfigs,
+    setContextMenu,
     onContextMenu: handleContextMenu as any,
     setActivePanelId,
     fontSize,
     setFontSize
   }), [
-    activePanelId, left, right, fileOps, clipboard, copy, cut, clearClipboard, copyToSystem, refreshClipboard,
+    activePanelId, panels, fileOps, clipboard, copy, cut, clearClipboard, copyToSystem, refreshClipboard,
     notify, t, dialogs, zipQuality, sevenZipQuality, zstdQuality, defaultTurboMode, setProgress,
     contextMenu?.target, contextMenu?.isDir, contextMenu?.isDrive, refreshDrives, mountedImages,
-    tabs, activeTabId, setActiveTab, closeTab, addTab, refreshBothPanels, layout,
+    activePanelTabData, setActiveTab, closeTab, addTab, refreshBothPanels,
     modifiers, peekStatus, driveTrashConfigs, setContextMenu, handleContextMenu,
     fontSize, setFontSize, setActivePanelId
   ]);
 
-  useGlobalShortcuts(actionContext, tabs, activeTabId, handleTabSwitch);
+  useGlobalShortcuts(actionContext, activePanelTabData?.tabs || [], activePanelTabData?.activeTabId || '', handleTabSwitch);
 
   // Sync conflicts
   const lastConflictSessionRef = useRef<string | null>(null);
@@ -346,21 +331,6 @@ function App() {
     }
   }, [fileOps.conflicts, fileOps.pendingOp, fileOps.resolveConflicts, fileOps.cancelOp, dialogs]);
 
-  // Tab Sync
-  const prevActiveTabIdRef = useRef(activeTabId);
-  useEffect(() => {
-    if (layout === 'dual') return;
-    if (prevActiveTabIdRef.current !== activeTabId) { prevActiveTabIdRef.current = activeTabId; return; }
-    const activeTab = tabs.find(t => t.id === activeTabId);
-    if (activeTab) {
-      const normTab = normalizePath(activeTab.path);
-      const normPanel = normalizePath(left.path);
-      if (normTab !== normPanel) {
-        // Use current panel version for sync to avoid Rust-side increment loops
-        updateTabPath(activeTabId, left.path, 'left', left.version);
-      }
-    }
-  }, [left.path, left.version, activeTabId, layout, tabs, updateTabPath]);
 
 
 
@@ -477,12 +447,12 @@ function App() {
   }, [t, notify, setUpdateAvailable]);
 
   // Global Mouse Navigation
-  const stateRef = useRef({ leftPanel: left, rightPanel: right, activePanelId, fileOps });
-  stateRef.current = { leftPanel: left, rightPanel: right, activePanelId, fileOps };
+  const stateRef = useRef({ activePanel, activePanelId, fileOps });
+  stateRef.current = { activePanel, activePanelId, fileOps };
   useEffect(() => {
     const handleUp = (e: MouseEvent) => {
       if (e.button === 3 || e.button === 4) {
-        const pan = stateRef.current.activePanelId === 'left' ? stateRef.current.leftPanel : stateRef.current.rightPanel;
+        const pan = stateRef.current.activePanel;
         if (e.button === 3 && pan.historyIndex > 0) pan.goBack();
         if (e.button === 4 && pan.historyIndex < pan.history.length - 1) pan.goForward();
         e.preventDefault();
@@ -523,7 +493,7 @@ function App() {
 
 
   const handleCancelSearch = (id: string) => {
-    (id === 'left' ? left : right).cancelSearch();
+    panels[id]?.cancelSearch();
   };
 
   const effectiveAction = useMemo(() => {
@@ -546,8 +516,8 @@ function App() {
       return next;
     });
 
-    const panel = targetId === 'left' ? left : right;
-    panel.files.forEach(async (f) => {
+    const panel = activePanel;
+    panel.files.forEach(async (f: import('./types').FileEntry) => {
       if (f.is_dir && !f.is_calculated && !f.is_calculating) {
         try {
           panel.setFileCalculating(f.path, true);
@@ -559,80 +529,80 @@ function App() {
         }
       }
     });
-  }, [activePanelId, left, right]);
+  }, [activePanelId, activePanel]);
+
+  const layoutProps = {
+    t, sidebarReduced, setSidebarReduced,
+    drives, activePanelId, setActivePanelId,
+    showHidden,
+    useSystemIcons,
+    navigate: handleNavigate, onRefresh: refreshBothPanels, handleSearch,
+    executeSearch,
+    openAdvancedSearch,
+    clearSearch,
+    handleCancelSearch,
+    handleDragStart, handleDrop, dragState,
+    handleSelect: (id: PanelId, path: string, m: boolean, r: boolean) => { setContextMenu(null); panels[id]?.handleSelect(path, m, r); setActivePanelId(id); },
+    handleSelectMultiple: (id: PanelId, paths: string[], a: boolean) => { panels[id]?.selectMultiple(paths, a); setActivePanelId(id); },
+    handleClearSelection: (id: PanelId) => panels[id]?.clearSelection(),
+    handleContextMenu, handleOpenFile, handleSort, handleResize,
+    handleResizeMultiple, handleInlineRename: (old: string, n: string) => handleAction('file.rename', { ...actionContext, contextMenuTarget: old, renameValue: n }),
+    propShowHidden: showHidden, propShowSystem: showSystem,
+    cutPaths: clipboard?.action === 'cut' ? clipboard.paths : [], treeRef,
+    onTreeCut: (paths: string[]) => handleAction('file.cut', { contextMenuTarget: paths[0] }),
+    onTreeCopy: (paths: string[]) => handleAction('file.copy', { contextMenuTarget: paths[0] }),
+    onTreeCopyName: (name: string) => copyToSystem(name),
+    onTreeCopyPath: (path: string) => copyToSystem(path),
+    onTreeDelete: (paths: string[]) => handleAction('file.delete', { contextMenuTarget: paths[0] }),
+    isShiftPressed: modifiers.shift,
+    onTreeRename: (path: string) => handleAction('file.rename', { contextMenuTarget: path }),
+    onTreeNewFolder: (parent: string) => handleAction('file.new_folder', { contextMenuTarget: parent }),
+    onTreeUnmount: (path: string) => handleAction('drive.unmount_image', { contextMenuTarget: path, isDrive: true }),
+    onTreeDisconnectDrive: handleDisconnectDrive,
+    onTreeProperties: (path: string) => dialogs.openPropertiesDialog([path]),
+    onTrashProperties: handleTrashProperties,
+    onTreePaste: (path: string) => handleAction('file.paste', { ...actionContext, contextMenuTarget: path }),
+    setShowAbout: () => dialogs.openAboutDialog(),
+    onRestoreAll: handleRestoreAll, onRestoreSelected: handleRestoreSelected, onEmptyTrash: handleEmptyTrash,
+    isTrashEmpty: isTrashEmpty,
+    onTabSwitch: handleTabSwitch, onTabClose: handleTabClose, onItemMiddleClick: handleItemMiddleClick,
+    onOpenNewTab: handleOpenNewTab,
+    onTabDrop: handleTabDrop,
+    onDuplicateSearch: handleDuplicateSearch,
+    onCalculateAllSizes: handleCalculateAllSizes,
+    histogramPanels: histogramPanels,
+    onAddToFavorites: handleAddToFavorites,
+    onRemoveFromFavorites: handleRemoveFromFavorites,
+    onDriveContextMenu: (e: React.MouseEvent, p: string) => {
+      const drive = drives.find(d => d.path === p);
+      const isTrash = p === 'trash://';
+      const isNetworkVicinity = p === '__network_vincinity__';
+
+      handleContextMenu(e, activePanelId, {
+        path: p,
+        is_dir: true,
+        isDrive: !!drive,
+        driveType: drive?.drive_type,
+        isNetworkComputer: isNetworkVicinity || (p.startsWith('\\\\') && p.split('\\').filter(Boolean).length === 1),
+        isTrash: isTrash,
+        isNetworkVicinity: isNetworkVicinity
+      } as any);
+    },
+    canPaste: !!clipboard && clipboard.paths.length > 0, canUndo: fileOps.canUndo, canRedo: fileOps.canRedo,
+    handleCopy: () => handleAction('file.copy', actionContext), handleCopyName: () => handleAction('file.copy_name', actionContext), handleCopyPath: () => handleAction('file.copy_path', actionContext), handleCut: () => handleAction('file.cut', actionContext),
+    handlePaste: () => handleAction('file.paste', actionContext), handleDelete: () => handleAction('file.delete', actionContext),
+    handleUndo: handleUndo, handleRedo: handleRedo,
+    undoLabel: actionService.get('file.undo')?.getLabel?.(actionContext),
+    redoLabel: actionService.get('file.redo')?.getLabel?.(actionContext),
+    dragOverPath: dragOverPath,
+    setDragOverPath: setDragOverPath,
+    favorites: favorites
+  };
 
   return (
     <div className="app-container">
       <GlobalDialogContainer />
-      <DualPanelLayout
-        t={t} sidebarReduced={sidebarReduced} setSidebarReduced={setSidebarReduced}
-        drives={drives} left={left} right={right} activePanelId={activePanelId} setActivePanelId={setActivePanelId}
-        layout={layout} onLayoutChange={setLayout}
-        showHidden={showHidden}
-        useSystemIcons={useSystemIcons}
-        searchQuery={{ left: left.searchQuery, right: right.searchQuery }}
-        navigate={handleNavigate} onRefresh={refreshBothPanels} handleSearch={handleSearch}
-        executeSearch={executeSearch}
-        openAdvancedSearch={openAdvancedSearch}
-        clearSearch={clearSearch}
-        handleCancelSearch={handleCancelSearch}
-        handleDragStart={handleDragStart} handleDrop={handleDrop} dragState={dragState}
-        handleSelect={(id: PanelId, path: string, m: boolean, r: boolean) => { setContextMenu(null); (id === 'left' ? left : right).handleSelect(path, m, r); setActivePanelId(id); }}
-        handleSelectMultiple={(id: PanelId, paths: string[], a: boolean) => { (id === 'left' ? left : right).selectMultiple(paths, a); setActivePanelId(id); }}
-        handleClearSelection={(id: PanelId) => (id === 'left' ? left : right).clearSelection()}
-        handleContextMenu={handleContextMenu} handleOpenFile={handleOpenFile} handleSort={handleSort} handleResize={handleResize}
-        handleResizeMultiple={handleResizeMultiple} handleInlineRename={(old: string, n: string) => handleAction('file.rename', { ...actionContext, contextMenuTarget: old, renameValue: n })}
-        propPaths={dialogs.propertiesPaths} propShowHidden={showHidden} propShowSystem={showSystem}
-        cutPaths={clipboard?.action === 'cut' ? clipboard.paths : []} treeRef={treeRef}
-        onTreeCut={(paths: string[]) => handleAction('file.cut', { contextMenuTarget: paths[0] })}
-        onTreeCopy={(paths: string[]) => handleAction('file.copy', { contextMenuTarget: paths[0] })}
-        onTreeCopyName={(name: string) => copyToSystem(name)}
-        onTreeCopyPath={(path: string) => copyToSystem(path)}
-        onTreeDelete={(paths: string[]) => handleAction('file.delete', { contextMenuTarget: paths[0] })}
-        isShiftPressed={modifiers.shift}
-        onTreeRename={(path: string) => handleAction('file.rename', { contextMenuTarget: path })}
-        onTreeNewFolder={(parent: string) => handleAction('file.new_folder', { contextMenuTarget: parent })}
-        onTreeUnmount={(path: string) => handleAction('drive.unmount_image', { contextMenuTarget: path, isDrive: true })}
-        onTreeDisconnectDrive={handleDisconnectDrive}
-        onTreeProperties={(path: string) => dialogs.openPropertiesDialog([path])}
-        onTrashProperties={handleTrashProperties}
-        onTreePaste={(path: string) => handleAction('file.paste', { ...actionContext, contextMenuTarget: path })}
-        setShowAbout={() => dialogs.openAboutDialog()}
-        onRestoreAll={handleRestoreAll} onRestoreSelected={handleRestoreSelected} onEmptyTrash={handleEmptyTrash}
-        isTrashEmpty={isTrashEmpty}
-        onTabSwitch={handleTabSwitch} onTabClose={handleTabClose} onItemMiddleClick={handleItemMiddleClick}
-        onOpenNewTab={handleOpenNewTab}
-        onTabDrop={handleTabDrop}
-        onDuplicateSearch={handleDuplicateSearch}
-        onCalculateAllSizes={handleCalculateAllSizes}
-        histogramPanels={histogramPanels}
-        onAddToFavorites={handleAddToFavorites}
-        onRemoveFromFavorites={handleRemoveFromFavorites}
-        onDriveContextMenu={(e: React.MouseEvent, p: string) => {
-          const drive = drives.find(d => d.path === p);
-          const isTrash = p === 'trash://';
-          const isNetworkVicinity = p === '__network_vincinity__';
-
-          handleContextMenu(e, activePanelId, {
-            path: p,
-            is_dir: true,
-            isDrive: !!drive,
-            driveType: drive?.drive_type,
-            isNetworkComputer: isNetworkVicinity || (p.startsWith('\\\\') && p.split('\\').filter(Boolean).length === 1),
-            isTrash: isTrash,
-            isNetworkVicinity: isNetworkVicinity
-          } as any);
-        }}
-        canPaste={!!clipboard && clipboard.paths.length > 0} canUndo={fileOps.canUndo} canRedo={fileOps.canRedo}
-        handleCopy={() => handleAction('file.copy', actionContext)} handleCopyName={() => handleAction('file.copy_name', actionContext)} handleCopyPath={() => handleAction('file.copy_path', actionContext)} handleCut={() => handleAction('file.cut', actionContext)}
-        handlePaste={() => handleAction('file.paste', actionContext)} handleDelete={() => handleAction('file.delete', actionContext)}
-        handleUndo={handleUndo} handleRedo={handleRedo}
-        undoLabel={actionService.get('file.undo')?.getLabel?.(actionContext)}
-        redoLabel={actionService.get('file.redo')?.getLabel?.(actionContext)}
-        dragOverPath={dragOverPath}
-        setDragOverPath={setDragOverPath}
-        favorites={favorites}
-      />
+      <MultipaneLayout {...layoutProps} panels={panels as any} />
       <ProgressOverlay
         progress={effectiveProgress as any}
         t={t as any}
@@ -648,7 +618,7 @@ function App() {
           canPaste={!!clipboard && clipboard.paths.length > 0} canUndo={fileOps.canUndo} canRedo={fileOps.canRedo}
           undoLabel={actionService.get('file.undo')?.getLabel?.(actionContext)}
           redoLabel={actionService.get('file.redo')?.getLabel?.(actionContext)}
-          sortConfig={(contextMenu.panelId === 'left' ? left : right).viewMode === 'grid' ? (contextMenu.panelId === 'left' ? left : right).sortConfig : undefined}
+          sortConfig={panels[contextMenu.panelId]?.viewMode === 'grid' ? panels[contextMenu.panelId]?.sortConfig : undefined}
           onSort={(f) => handleSort(activePanelId, f)}
           onSortDirection={(d) => handleSortDirection(activePanelId, d)}
           onClose={() => setContextMenu(null)} onRefresh={refreshBothPanels} onUndo={handleUndo} onRedo={handleRedo}
@@ -664,7 +634,7 @@ function App() {
           onCut={contextMenu.isInputContext ? handleInputCut : () => handleAction('file.cut', actionContext)}
           onPaste={contextMenu.isInputContext ? handleInputPaste : () => handleAction('file.paste', actionContext)}
           isTrashContext={contextMenu.isTrash || (contextMenu.target === 'trash://')}
-          isSearchContext={contextMenu.panelId === 'left' ? left.path.startsWith('search://') : right.path.startsWith('search://')}
+          isSearchContext={panels[contextMenu.panelId]?.path?.startsWith('search://')}
           onRestore={handleRestoreSelected} onRestoreAll={handleRestoreAll} onEmptyTrash={handleEmptyTrash} onGoToFolder={handleGoToFolder}
           onOpenNewTab={handleContextMenuOpenNewTab}
           isDir={contextMenu.isDir} isBackground={contextMenu.isBackground} isDrive={contextMenu.isDrive} isMediaDevice={contextMenu.isMediaDevice} isNetworkComputer={contextMenu.isNetworkComputer} hasWebPage={contextMenu.hasWebPage} driveType={contextMenu.driveType}

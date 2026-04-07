@@ -4,8 +4,7 @@ import { isArchivePath, isSupportedArchiveForAdding } from '../utils/archive';
 import { startDrag } from '@crabnebula/tauri-plugin-drag';
 
 interface UseNativeDragDropProps {
-    leftPanel: PanelState;
-    rightPanel: PanelState;
+    activePanel: PanelState;
     activePanelId: PanelId;
     dragState: { sourcePanel: PanelId; files: FileEntry[] } | null;
     dragGhostRef: RefObject<HTMLDivElement | null>;
@@ -21,8 +20,7 @@ interface UseNativeDragDropProps {
 }
 
 export const useNativeDragDrop = ({
-    leftPanel,
-    rightPanel,
+    activePanel,
     activePanelId,
     dragState,
     dragGhostRef,
@@ -42,8 +40,8 @@ export const useNativeDragDrop = ({
         modifiersRef.current = modifiers;
     }, [modifiers]);
 
-    const stateRef = useRef({ leftPanel, rightPanel, activePanelId });
-    stateRef.current = { leftPanel, rightPanel, activePanelId };
+    const stateRef = useRef({ activePanel, activePanelId });
+    stateRef.current = { activePanel, activePanelId };
 
     const handlerRef = useRef<{ handleFileDrop: (e: any, targetPath: string, currentPath: string) => void }>({ handleFileDrop });
     handlerRef.current = { handleFileDrop };
@@ -99,16 +97,10 @@ export const useNativeDragDrop = ({
             return { targetPath: null, overPath: null };
         }
 
-        // 5. Fallback to the Panel itself
+        // 5. Fallback to the active panel path
         const panel = target.closest('.panel');
         if (panel) {
-            const panelContainer = document.querySelector('.panel-container');
-            if (panelContainer) {
-                const panels = panelContainer.querySelectorAll('.panel');
-                const targetId: PanelId = panels[0] === panel ? 'left' : 'right';
-                const panelPath = stateRef.current[targetId === 'left' ? 'leftPanel' : 'rightPanel'].path;
-                return { targetPath: panelPath, overPath: null };
-            }
+            return { targetPath: stateRef.current.activePanel?.path || null, overPath: null };
         }
         return { targetPath: null, overPath: null };
     };
@@ -150,7 +142,7 @@ export const useNativeDragDrop = ({
 
                         if ((payload.paths && payload.paths.length > 0) || dragStateRef.current) {
                             const target = document.elementFromPoint(lx, ly) as HTMLElement;
-                            let targetPath = stateRef.current.activePanelId === 'left' ? stateRef.current.leftPanel.path : stateRef.current.rightPanel.path;
+                            let targetPath: string = stateRef.current.activePanel?.path || '';
                             if (target) {
                                 const { targetPath: infoPath } = getTargetPathsFromElement(target);
                                 if (infoPath) targetPath = infoPath;
@@ -201,8 +193,7 @@ export const useNativeDragDrop = ({
 
             const targetPath = dragTargetPathRef.current;
             if (targetPath && targetPath !== '__TABS__') {
-                const { leftPanel, rightPanel, activePanelId } = stateRef.current;
-                const sourcePanelPath = activePanelId === 'left' ? leftPanel.path : rightPanel.path;
+                const sourcePanelPath = stateRef.current.activePanel?.path || '';
                 handlerRef.current.handleFileDrop(e as any, targetPath, sourcePanelPath);
             }
 

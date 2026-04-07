@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Minus, Square, X, Copy, Columns, Sidebar as SidebarIcon, Wrench, Search, ChartBarBig, RefreshCw } from 'lucide-react';
+import { Minus, Square, X, Copy, Wrench, Search, ChartBarBig, RefreshCw, Plus } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { invoke } from '@tauri-apps/api/core';
 import cx from 'classnames';
 import { SettingsMenu } from './SettingsMenu';
 import { TFunc } from '../../i18n';
@@ -9,8 +10,6 @@ import './TitleBar.css';
 
 interface TitleBarProps {
     t: TFunc;
-    layout: 'standard' | 'dual';
-    onLayoutChange: (mode: 'standard' | 'dual') => void;
     onAdvancedSearch: () => void;
     onDuplicateSearch: () => void;
     onShowAbout: () => void;
@@ -20,8 +19,6 @@ interface TitleBarProps {
 
 export const TitleBar: React.FC<TitleBarProps> = ({
     t,
-    layout,
-    onLayoutChange,
     onAdvancedSearch,
     onDuplicateSearch,
     onShowAbout,
@@ -33,6 +30,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [settingsPage, setSettingsPage] = useState<'main' | 'themes' | 'languages' | 'dates' | 'compression'>('main');
     const [hamburgerOpen, setHamburgerOpen] = useState(false);
+    const lastActionRef = React.useRef<number>(0);
 
     useEffect(() => {
         const updateMaximized = async () => {
@@ -110,11 +108,17 @@ export const TitleBar: React.FC<TitleBarProps> = ({
                 <div className="app-tools-group">
                     <button
                         className="btn-icon"
-                        onClick={() => onLayoutChange(layout === 'standard' ? 'dual' : 'standard')}
-                        data-tooltip={layout === 'standard' ? t('dual') : t('single')}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            const now = Date.now();
+                            if (now - lastActionRef.current < 500) return;
+                            lastActionRef.current = now;
+                            invoke('add_panel', { path: 'C:\\' }).catch(console.error);
+                        }}
+                        data-tooltip={t('new_pane' as any) || 'New Pane'}
                         data-tooltip-pos="bottom"
                     >
-                        {layout === 'standard' ? <Columns size={16} /> : <SidebarIcon size={16} />}
+                        <Plus size={16} />
                     </button>
 
                     <div className="hamburger-container">
@@ -171,3 +175,4 @@ export const TitleBar: React.FC<TitleBarProps> = ({
         </div>
     );
 };
+

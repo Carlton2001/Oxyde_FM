@@ -1,10 +1,9 @@
 import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
-import { ArrowLeft, ArrowRight, ArrowUp, Home, RefreshCw, Undo2, Redo2, Copy, Scissors, Trash2, ClipboardPaste, RotateCcw, Folder, HardDrive, Globe, Network, Usb, Disc } from 'lucide-react';
+import { ArrowLeft, ArrowRight, ArrowUp, Home, RefreshCw, Undo2, Redo2, Copy, Scissors, Trash2, ClipboardPaste, RotateCcw, Folder, HardDrive, Globe, Network, Usb, Disc, X } from 'lucide-react';
 import { homeDir } from '@tauri-apps/api/path';
-import { PathBar } from './PathBar';
 import { SearchBox } from '../ui/SearchBox';
 import { AsyncFileIcon } from '../ui/AsyncFileIcon';
-import { DriveInfo, PanelId } from '../../types';
+import { DriveInfo } from '../../types';
 import { TFunc } from '../../i18n';
 import { useApp } from '../../context/AppContext';
 import { getParent } from '../../utils/path';
@@ -12,8 +11,7 @@ import './TopBar.css';
 
 interface TopBarProps {
     t: TFunc;
-    activePanelId: PanelId;
-    activePanel: any; // PanelState doesn't perfectly match FullPanelState used in DualPanelLayout, any is fine for this context or use intersection
+    activePanel: any;
     canUndo: boolean;
     undoLabel?: string;
     canRedo: boolean;
@@ -34,13 +32,6 @@ interface TopBarProps {
     onPaste: () => void;
     canPaste: boolean;
 
-    // Layout & settings
-    layout: string;
-    showHidden: boolean;
-
-    // Drag Drop (needed for PathBar in single mode)
-    isDragging: boolean;
-    onDrop: (path: string | null, e?: React.MouseEvent) => void;
     isShiftPressed?: boolean;
     drives: DriveInfo[];
 
@@ -52,8 +43,6 @@ interface TopBarProps {
 
     isTrashEmpty?: boolean;
     isNukeOverride?: boolean;
-    favorites?: import('../../types').QuickAccessItem[];
-    
     // Quick Search integration
     searchQuery?: string;
     isSearchActive?: boolean;
@@ -61,11 +50,11 @@ interface TopBarProps {
     onSearchSubmit?: () => void;
     onSearchClear?: () => void;
     onSearchCancel?: () => void;
+    onClosePanel?: () => void;
 }
 
 export const TopBar: React.FC<TopBarProps> = ({
     activePanel,
-    activePanelId,
     canUndo,
     undoLabel,
     canRedo,
@@ -86,10 +75,6 @@ export const TopBar: React.FC<TopBarProps> = ({
     onPaste,
     canPaste,
     t,
-    layout,
-    showHidden,
-    isDragging,
-    onDrop,
     drives,
     isTrashView = false,
     onEmptyTrash,
@@ -98,13 +83,13 @@ export const TopBar: React.FC<TopBarProps> = ({
     isTrashEmpty = false,
     isNukeOverride = false,
     isShiftPressed,
-    favorites,
     searchQuery,
     isSearchActive = false,
     onSearchChange,
     onSearchSubmit,
     onSearchClear,
-    onSearchCancel
+    onSearchCancel,
+    onClosePanel
 }) => {
     const { useSystemIcons } = useApp();
     const [copyMenuOpen, setCopyMenuOpen] = useState(false);
@@ -127,20 +112,6 @@ export const TopBar: React.FC<TopBarProps> = ({
             if (path) setHomePath(path);
         }).catch(err => console.error("Failed to get home dir", err));
     }, []);
-
-    const forwardPath = React.useMemo(() => {
-        if (!activePanel.history || activePanel.historyIndex === undefined || activePanel.historyIndex >= activePanel.history.length - 1) return null;
-        let furthest = null;
-        for (let i = activePanel.historyIndex + 1; i < activePanel.history.length; i++) {
-            const hPath = activePanel.history[i].path;
-            if (hPath.toLowerCase().startsWith(activePanel.path.toLowerCase() + '\\') || hPath.toLowerCase() === activePanel.path.toLowerCase()) {
-                furthest = hPath;
-            } else {
-                break;
-            }
-        }
-        return furthest;
-    }, [activePanel.history, activePanel.historyIndex, activePanel.path]);
 
     useEffect(() => {
         if (!copyMenuOpen) return;
@@ -257,6 +228,12 @@ export const TopBar: React.FC<TopBarProps> = ({
                 <button className="btn-icon" onClick={() => onNavigate(homePath)} disabled={activePanel.path === homePath} data-tooltip={t('home' as any) || 'Home'} data-tooltip-pos="bottom"><Home className="icon-lg" /></button>
                 <button className="btn-icon" onClick={onRefresh} data-tooltip={t('refresh')} data-tooltip-pos="bottom"><RefreshCw className="icon-lg" /></button>
 
+                {onClosePanel && (
+                    <button className="btn-icon danger" onClick={onClosePanel} data-tooltip={t('close' as any)} data-tooltip-pos="bottom">
+                        <X className="icon-lg" />
+                    </button>
+                )}
+
                 {canUndo && (
                     <button
                         className="btn-icon"
@@ -279,25 +256,7 @@ export const TopBar: React.FC<TopBarProps> = ({
                 )}
             </div>
 
-            {layout === 'standard' ? (
-                <div className="path-bar-container">
-                    <PathBar
-                        className="path-bar"
-                        path={activePanel.path}
-                        onNavigate={onNavigate}
-                        isDragging={isDragging}
-                        onDrop={onDrop}
-                        drives={drives}
-                        showHidden={showHidden}
-                        panelId={activePanelId}
-                        t={t}
-                        favorites={favorites}
-                        forwardPath={forwardPath}
-                    />
-                </div>
-            ) : (
-                <div className="flex-spacer" />
-            )}
+            <div className="flex-spacer" />
 
             <div className="toolbar-actions">
                 {activePanel.selected.size > 0 && (
