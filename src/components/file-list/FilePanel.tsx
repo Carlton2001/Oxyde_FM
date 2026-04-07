@@ -51,11 +51,8 @@ interface FilePanelProps {
     searchQuery: string;
     searchResults: FileEntry[] | null;
     isSearching: boolean;
-    onSearch: () => void;
-    onQueryChange: (query: string) => void;
     onClearSearch: () => void;
     onCancelSearch?: () => void;
-    showSearch?: boolean;
     isDragTarget?: boolean;
     dragOverPath?: string | null;
     showHidden?: boolean;
@@ -102,7 +99,7 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
     colWidths, onNavigate, onOpenFile, onSelect, onSelectMultiple, onClearSelection,
     onContextMenu, onActivate, onFileDragStart, onFileDrop, isDragging, onSort,
     onResize, onResizeMultiple, t, searchQuery, searchResults, isSearching,
-    onSearch, onQueryChange, onClearSearch, onCancelSearch, showSearch = true, isDragTarget,
+    onClearSearch, onCancelSearch, isDragTarget,
     dragOverPath, showHidden = false, showSystem = false, layout, cutPaths = [],
     onRename, showHistogram: propShowHistogram, isTrashView = false, isNetworkView = false,
     useSystemIcons: propUseSystemIcons, onItemMiddleClick, diffPaths, searchLimitReached,
@@ -590,7 +587,7 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
                 ),
             } as React.CSSProperties : undefined}
         >
-            {(layout === 'dual' || showDrives || showSearch) && (
+            {(layout === 'dual' || showDrives) && (
                 <div className="panel-navigation">
                     {layout === 'dual' && (
                         <div className="panel-path-bar">
@@ -609,19 +606,13 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
                             />
                         </div>
                     )}
-                    {(showDrives || showSearch) && (
+                    {showDrives && (
                         <FilePanelHeader
                             currentPath={currentPath}
                             drives={drives || []}
                             showDrives={showDrives || false}
                             onNavigate={onNavigate}
                             onContextMenu={onContextMenu}
-                            showSearch={showSearch}
-                            searchQuery={searchQuery}
-                            isSearching={isSearching}
-                            onQueryChange={onQueryChange}
-                            onSearch={onSearch}
-                            onClearSearch={onClearSearch}
                             showNetwork={showNetwork}
                             t={t}
                         />

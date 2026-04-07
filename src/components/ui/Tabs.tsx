@@ -4,7 +4,6 @@ import cx from 'classnames';
 import { X, Plus, Folder, Copy, Split, XCircle, ChevronLeft, ChevronRight, HardDrive, Trash, Network, Globe } from 'lucide-react';
 import { useTabs } from '../../context/TabsContext';
 import { useApp } from '../../context/AppContext';
-import { SearchBox } from './SearchBox';
 import './Tabs.css';
 
 import { FileEntry } from '../../types';
@@ -15,18 +14,10 @@ interface TabsProps {
     isDraggingFiles?: boolean;
     dragState?: { sourcePanel: 'left' | 'right'; files: FileEntry[] } | null;
     onTabDrop?: (files: FileEntry[], index?: number) => void;
-    searchQuery: string;
-    onSearchChange: (query: string) => void;
-    onSearchSubmit: () => void;
-    onSearchClear: () => void;
-    isSearching: boolean;
-    onCancelSearch?: () => void;
 }
 
 export const Tabs: React.FC<TabsProps> = ({
-    onSwitch, onClose, isDraggingFiles, dragState, onTabDrop,
-    searchQuery, onSearchChange, onSearchSubmit, onSearchClear, isSearching,
-    onCancelSearch
+    onSwitch, onClose, isDraggingFiles, dragState, onTabDrop
 }) => {
     const { tabs, activeTabId, addTab, duplicateTab, closeOtherTabs, reorderTabs } = useTabs();
     const { t } = useApp();
@@ -480,22 +471,6 @@ export const Tabs: React.FC<TabsProps> = ({
                     <ChevronRight size={16} />
                 </button>
             )}
-
-            <div className="tab-search-container">
-                <SearchBox
-                    autoExpand={true}
-                    query={searchQuery}
-                    placeholder={t('search') + "..."}
-                    isSearching={isSearching}
-                    onChange={onSearchChange}
-                    onSubmit={onSearchSubmit}
-                    onClear={onSearchClear}
-                    clearTitle={t('clear') || 'Clear'}
-                    searchTitle={t('search')}
-                    stopTitle={t('stop') || 'Stop'}
-                    onCancel={onCancelSearch}
-                />
-            </div>
 
             {menu && (
                 <div

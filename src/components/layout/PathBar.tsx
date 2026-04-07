@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from 'react';
 import { ChevronRight, Folder, Trash, HardDrive, Usb, Disc, Copy, Network, Globe, Pin } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
-import { getCurrentWindow } from '@tauri-apps/api/window';
 import cx from 'classnames';
 import './PathBar.css';
 import { DriveInfo, FileEntry, DirResponse, QuickAccessItem } from '../../types';
@@ -463,40 +462,9 @@ export const PathBar: React.FC<PathBarProps> = ({ path, onNavigate, className, i
         return () => el.removeEventListener('wheel', handleWheel);
     }, [updateOverflow]);
 
-    // Manual Drag handling
-    const isDragRef = useRef(false);
-    const downPosRef = useRef<{ x: number, y: number } | null>(null);
-
-    const handleMouseDown = (e: React.MouseEvent) => {
-        if (e.button === 0 && !isEditing) {
-            isDragRef.current = false;
-            downPosRef.current = { x: e.clientX, y: e.clientY };
-        }
-    };
-
-    const handleMouseMove = async (e: React.MouseEvent) => {
-        if (downPosRef.current && !isDragRef.current && !isDragging) {
-            const dx = Math.abs(e.clientX - downPosRef.current.x);
-            const dy = Math.abs(e.clientY - downPosRef.current.y);
-            if (dx > 5 || dy > 5) {
-                isDragRef.current = true;
-                downPosRef.current = null;
-                getCurrentWindow().startDragging();
-            }
-        }
-    };
-
-    const handleMouseUp = () => {
-        downPosRef.current = null;
-        isDragRef.current = false;
-    };
-
     return (
         <div
             className={cx("path-breadcrumbs", className, { editing: isEditing })}
-            onMouseDown={handleMouseDown}
-            onMouseMove={handleMouseMove}
-            onMouseUp={handleMouseUp}
         >
 
             {isEditing ? (
@@ -589,7 +557,7 @@ export const PathBar: React.FC<PathBarProps> = ({ path, onNavigate, className, i
                             e.stopPropagation();
                             setMenuOpen(null);
                             setContextMenuOpen(null);
-                            if (!isDragRef.current && !isEditing && !isDragging) {
+                            if (!isEditing && !isDragging) {
                                 setIsEditing(true);
                             }
                         }}

@@ -1,14 +1,12 @@
 import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
-import { ArrowLeft, ArrowRight, ArrowUp, Home, RefreshCw, Undo2, Redo2, Copy, Scissors, Trash2, ClipboardPaste, Minus, Square, X, ChartBarBig, RotateCcw, ArrowLeftRight, StretchVertical, GitCompare, Sidebar, Columns, Wrench, Search, Folder, HardDrive, Globe, Network, Usb, Disc } from 'lucide-react';
-import { getCurrentWindow } from '@tauri-apps/api/window';
+import { ArrowLeft, ArrowRight, ArrowUp, Home, RefreshCw, Undo2, Redo2, Copy, Scissors, Trash2, ClipboardPaste, RotateCcw, Folder, HardDrive, Globe, Network, Usb, Disc } from 'lucide-react';
 import { homeDir } from '@tauri-apps/api/path';
 import { PathBar } from './PathBar';
+import { SearchBox } from '../ui/SearchBox';
 import { AsyncFileIcon } from '../ui/AsyncFileIcon';
-import { SettingsMenu } from './SettingsMenu';
 import { TFunc } from '../../i18n';
 import { getParent } from '../../utils/path';
 import './TopBar.css';
-import cx from 'classnames';
 import { PanelState, LayoutMode, DriveInfo } from '../../types';
 import { useApp } from '../../context/AppContext';
 
@@ -38,32 +36,31 @@ interface TopBarProps {
 
     // Layout & settings
     layout: LayoutMode;
-    onLayoutChange: (mode: LayoutMode) => void;
     showHidden: boolean;
-    onShowAbout: () => void;
 
     // Drag Drop (needed for PathBar in single mode)
     isDragging: boolean;
     onDrop: (path: string | null, e?: React.MouseEvent) => void;
     isShiftPressed?: boolean;
     drives: DriveInfo[];
-    onCalculateAllSizes: () => void;
-    onAdvancedSearch: () => void;
-    onDuplicateSearch: () => void;
+
     // Trash actions
     isTrashView?: boolean;
     onEmptyTrash?: () => void;
     onRestoreAll?: () => void;
     onRestoreSelected?: () => void;
-    // Dual Panel Management
-    onSwapPanels?: () => void;
-    onSyncPanels?: () => void;
-    isSyncDisabled?: boolean;
-    onComparePanels?: () => void;
-    isComparing?: boolean;
+
     isTrashEmpty?: boolean;
     isNukeOverride?: boolean;
     favorites?: import('../../types').QuickAccessItem[];
+    
+    // Quick Search integration
+    searchQuery?: string;
+    isSearchActive?: boolean;
+    onSearchChange?: (q: string) => void;
+    onSearchSubmit?: () => void;
+    onSearchClear?: () => void;
+    onSearchCancel?: () => void;
 }
 
 export const TopBar: React.FC<TopBarProps> = ({
@@ -90,30 +87,26 @@ export const TopBar: React.FC<TopBarProps> = ({
     canPaste,
     t,
     layout,
-    onLayoutChange,
     showHidden,
-    onShowAbout,
     isDragging,
     onDrop,
     drives,
-    onCalculateAllSizes,
-    onAdvancedSearch,
-    onDuplicateSearch,
     isTrashView = false,
     onEmptyTrash,
     onRestoreAll,
     onRestoreSelected,
-    onSwapPanels,
-    onSyncPanels,
-    isSyncDisabled = false,
-    onComparePanels,
-    isComparing = false,
     isTrashEmpty = false,
     isNukeOverride = false,
     isShiftPressed,
-    favorites
+    favorites,
+    searchQuery,
+    isSearchActive = false,
+    onSearchChange,
+    onSearchSubmit,
+    onSearchClear,
+    onSearchCancel
 }) => {
-    const { firstLaunch, setFirstLaunch, useSystemIcons } = useApp();
+    const { useSystemIcons } = useApp();
     const [copyMenuOpen, setCopyMenuOpen] = useState(false);
     const copyBtnRef = useRef<HTMLButtonElement>(null);
     const copyMenuRef = useRef<HTMLDivElement>(null);
@@ -127,14 +120,9 @@ export const TopBar: React.FC<TopBarProps> = ({
     const backMenuRef = useRef<HTMLDivElement>(null);
     const fwdMenuRef = useRef<HTMLDivElement>(null);
 
-    const [settingsOpen, setSettingsOpen] = useState(false);
-    const [settingsPage, setSettingsPage] = useState<'main' | 'themes' | 'languages' | 'dates' | 'compression'>('main');
-
-    const [hamburgerOpen, setHamburgerOpen] = useState(false);
     const [homePath, setHomePath] = useState<string>('C:\\Users');
-    const [isMaximized, setIsMaximized] = useState(false);
 
-    React.useEffect(() => {
+    useEffect(() => {
         homeDir().then(path => {
             if (path) setHomePath(path);
         }).catch(err => console.error("Failed to get home dir", err));
@@ -153,26 +141,6 @@ export const TopBar: React.FC<TopBarProps> = ({
         }
         return furthest;
     }, [activePanel.history, activePanel.historyIndex, activePanel.path]);
-
-    const closeSettings = () => {
-        setSettingsOpen(false);
-        setSettingsPage('main');
-    };
-
-    const toggleSettings = () => {
-        if (!settingsOpen && firstLaunch) {
-            setFirstLaunch(false);
-        }
-        setSettingsOpen(!settingsOpen);
-        setSettingsPage('main');
-        if (hamburgerOpen) setHamburgerOpen(false);
-    };
-
-    const closeHamburger = () => setHamburgerOpen(false);
-    const toggleHamburger = () => {
-        setHamburgerOpen(!hamburgerOpen);
-        if (settingsOpen) setSettingsOpen(false);
-    };
 
     useEffect(() => {
         if (!copyMenuOpen) return;
@@ -252,59 +220,8 @@ export const TopBar: React.FC<TopBarProps> = ({
         }
     }, [copyMenuOpen, copyMenuPos]);
 
-    // Close settings/hamburger when clicking outside
-    React.useEffect(() => {
-        if (!settingsOpen && !hamburgerOpen) return;
-
-        const handleClickOutside = (e: MouseEvent) => {
-            const target = e.target as HTMLElement;
-            if (settingsOpen && !target.closest('.settings-container')) {
-                closeSettings();
-            }
-            if (hamburgerOpen && !target.closest('.hamburger-container')) {
-                closeHamburger();
-            }
-        };
-
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, [settingsOpen, hamburgerOpen]);
-
-    React.useEffect(() => {
-        const updateMaximized = async () => {
-            try {
-                const max = await getCurrentWindow().isMaximized();
-                setIsMaximized(max);
-            } catch (err) {
-                // Ignore transient errors
-            }
-        };
-        window.addEventListener('resize', updateMaximized);
-        updateMaximized();
-        return () => window.removeEventListener('resize', updateMaximized);
-    }, []);
-
-
     return (
-        <div className="header" data-tauri-drag-region>
-            <div className="settings-container branding" onClick={(e) => e.stopPropagation()}>
-                <button
-                    className={cx("btn-icon", { "glow-pulse": firstLaunch && !settingsOpen })}
-                    onClick={toggleSettings}
-                    data-tooltip={t('settings' as any)}
-                    data-tooltip-pos="bottom"
-                >
-                    <img src="/logo.svg" className="icon-lg app-logo-icon" alt="Oxyde" />
-                </button>
-                <SettingsMenu
-                    isOpen={settingsOpen}
-                    onClose={closeSettings}
-                    page={settingsPage}
-                    onPageChange={setSettingsPage}
-                    onShowAbout={onShowAbout}
-                />
-            </div>
-
+        <div className="header">
             <div className="nav-group">
                 <button
                     ref={backBtnRef}
@@ -363,7 +280,7 @@ export const TopBar: React.FC<TopBarProps> = ({
             </div>
 
             {layout === 'standard' ? (
-                <div className="path-bar-container" data-tauri-drag-region>
+                <div className="path-bar-container">
                     <PathBar
                         className="path-bar"
                         path={activePanel.path}
@@ -379,36 +296,7 @@ export const TopBar: React.FC<TopBarProps> = ({
                     />
                 </div>
             ) : (
-                <>
-                    <div className="flex-spacer" />
-                    <div className="dual-panel-tools" data-tauri-drag-region>
-                        <button
-                            className="btn-icon"
-                            onClick={onSwapPanels}
-                            data-tooltip={t('swap_panels' as any)}
-                            data-tooltip-pos="bottom"
-                        >
-                            <ArrowLeftRight className="icon-lg" />
-                        </button>
-                        <button
-                            className="btn-icon"
-                            onClick={onSyncPanels}
-                            disabled={isSyncDisabled}
-                            data-tooltip={t('sync_panels' as any)}
-                            data-tooltip-pos="bottom"
-                        >
-                            <StretchVertical className="icon-lg" />
-                        </button>
-                        <button
-                            className={cx("btn-icon", { active: isComparing })}
-                            onClick={onComparePanels}
-                            data-tooltip={t('compare_panels' as any)}
-                            data-tooltip-pos="bottom"
-                        >
-                            <GitCompare className="icon-lg" />
-                        </button>
-                    </div>
-                </>
+                <div className="flex-spacer" />
             )}
 
             <div className="toolbar-actions">
@@ -448,45 +336,6 @@ export const TopBar: React.FC<TopBarProps> = ({
                 )}
             </div>
 
-            <div className="app-tools-container">
-                <button
-                    className="btn-icon"
-                    onClick={() => onLayoutChange(layout === 'standard' ? 'dual' : 'standard')}
-                    data-tooltip={layout === 'standard' ? t('dual') : t('single')}
-                    data-tooltip-pos="bottom"
-                >
-                    {layout === 'standard' ? <Columns className="icon-lg" /> : <Sidebar className="icon-lg" />}
-                </button>
-
-                <div className="hamburger-container">
-                    <button className={cx("btn-icon", { active: hamburgerOpen })} onClick={toggleHamburger} data-tooltip={t('tools' as any) || 'Tools'} data-tooltip-pos="bottom">
-                        <Wrench className="icon-lg" />
-                    </button>
-                    {hamburgerOpen && (
-                        <div className="hamburger-menu" onClick={(e) => e.stopPropagation()}>
-                            <div className="hamburger-item" onClick={() => { onCalculateAllSizes(); closeHamburger(); }}>
-                                <div className="hamburger-item-content">
-                                    <ChartBarBig size={14} />
-                                    {t('calculate_size' as any) || 'Histogram'}
-                                </div>
-                            </div>
-                            <div className="hamburger-item" onClick={() => { onAdvancedSearch(); closeHamburger(); }}>
-                                <div className="hamburger-item-content">
-                                    <Search size={14} />
-                                    {t('advanced_search' as any) || 'Advanced Search'}
-                                </div>
-                            </div>
-                            <div className="hamburger-item" onClick={() => { onDuplicateSearch(); closeHamburger(); }}>
-                                <div className="hamburger-item-content">
-                                    <Copy size={14} />
-                                    {t('duplicates' as any) || 'Duplicate Search'}
-                                </div>
-                            </div>
-                        </div>
-                    )}
-                </div>
-            </div>
-
             {isTrashView && (
                 <div className="toolbar-actions trash-actions">
                     <button
@@ -520,6 +369,20 @@ export const TopBar: React.FC<TopBarProps> = ({
                     </button>
                 </div>
             )}
+
+            <div className="header-search-container">
+                <SearchBox
+                    query={searchQuery || ''}
+                    placeholder={t('search') + "..."}
+                    isSearching={isSearchActive}
+                    onChange={onSearchChange || (() => {})}
+                    onSubmit={onSearchSubmit || (() => {})}
+                    onClear={onSearchClear || (() => {})}
+                    onCancel={onSearchCancel}
+                    autoExpand={true}
+                    className="header-search-box"
+                />
+            </div>
 
             {(backMenuPos || fwdMenuPos) && (() => {
                 const getHistIcon = (path: string, driveList: typeof drives) => {
@@ -605,17 +468,6 @@ export const TopBar: React.FC<TopBarProps> = ({
                     </div>
                 </div>
             )}
-
-            <div className="window-controls">
-                <div className="btn-icon" onClick={() => getCurrentWindow().minimize()} data-tooltip={t('minimize' as any)} data-tooltip-pos="bottom"><Minus className="icon-sm" /></div>
-                <div className="btn-icon" id="titlebar-maximize" onClick={async () => {
-                    await getCurrentWindow().toggleMaximize();
-                    setIsMaximized(await getCurrentWindow().isMaximized());
-                }} data-tooltip={isMaximized ? t('restore' as any) || 'Restore' : t('maximize' as any)} data-tooltip-pos="bottom">
-                    {isMaximized ? <Copy className="icon-xs" style={{ transform: 'rotate(180deg) scaleY(-1)' }} /> : <Square className="icon-xs" />}
-                </div>
-                <div className="btn-icon danger" onClick={() => getCurrentWindow().close()} data-tooltip={t('close' as any)} data-tooltip-pos="bottom"><X className="icon-sm" /></div>
-            </div>
         </div>
     );
 };

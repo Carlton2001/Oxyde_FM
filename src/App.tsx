@@ -40,7 +40,6 @@ import { useKeybindings } from './context/KeybindingContext';
 import { useDragDrop } from './hooks/useDragDrop';
 import { useNativeDragDrop } from './hooks/useNativeDragDrop';
 import { useFileDrop } from './hooks/useFileDrop';
-import { usePanelComparison } from './hooks/usePanelComparison';
 import { useFavorites } from './hooks/useFavorites';
 
 import { ActionContext } from './types/actions';
@@ -201,6 +200,7 @@ function App() {
     }
   }, [peekStatus, registerKeybinding]);
 
+  const [histogramPanels, setHistogramPanels] = useState<Set<PanelId>>(new Set());
   const [progress, setProgress] = useState<{ visible: boolean; message: string; cancellable?: boolean; cancelling?: boolean; task?: string; current?: number; total?: number; filename?: string; } | null>(null);
 
   const openTrashSettings = useCallback(() => dialogs.openTrashSettingsDialog(), [dialogs]);
@@ -218,7 +218,7 @@ function App() {
     refreshBothPanels, initiateFileOp, handleUndo, handleRedo, handleNavigate, handleSearch, executeSearch, clearSearch,
     handleOpenFile, handleAction, handleSort, handleSortDirection, handleResize, handleResizeMultiple,
     handleRestoreAll, handleEmptyTrash, handleRestoreSelected, handleTabSwitch, handleTabClose,
-    handleItemMiddleClick, handleContextMenu, handleSwapPanels, handleSyncPanels, openAdvancedSearch,
+    handleItemMiddleClick, handleContextMenu, openAdvancedSearch,
     openDuplicateSearchHandler,
     handleGoToFolder, handleAddToFavorites, handleRemoveFromFavorites,
     handleDisconnectDrive, handleTrashProperties
@@ -229,10 +229,6 @@ function App() {
   }, [openDuplicateSearchHandler, activePanelId]);
 
 
-  // Comparison Hook
-  const { histogramPanels, diffPaths, isComparing, handleComparePanels, handleCalculateAllSizes } = usePanelComparison({
-    left, right, activePanelId, notify, t: t as any
-  });
 
   // Drag & Drop
   const [isNativeActive, setIsNativeActive] = useState(false);
@@ -270,17 +266,53 @@ function App() {
   }, [originalHandleDragStart]);
 
   const actionContext: ActionContext = useMemo(() => ({
-    activePanelId, activePanel: activePanelId === 'left' ? left : right, otherPanel: activePanelId === 'left' ? right : left,
-    fileOps, clipboard: { clipboard, copy, cut, clearClipboard, copyToSystem, refreshClipboard },
-    notify, t: t as any, dialogs, settings: { zipQuality, sevenZipQuality, zstdQuality, defaultTurboMode, confirmDelete, fontSize, setFontSize }, setProgress,
-    contextMenuTarget: contextMenu?.target, isDir: contextMenu?.isDir, isDrive: contextMenu?.isDrive, refreshDrives, mountedImages,
-    tabs, activeTabId, setActiveTab, closeTab, addTab, refreshBothPanels, layout,
-    modifiers, peekStatus, driveTrashConfigs, setContextMenu, onContextMenu: handleContextMenu,
-    setActivePanelId
+    activePanelId, 
+    activePanel: activePanelId === 'left' ? left : right, 
+    otherPanel: activePanelId === 'left' ? right : left,
+    fileOps, 
+    clipboard: { 
+      clipboard, 
+      copy, 
+      cut, 
+      clearClipboard, 
+      copyToSystem, 
+      refreshClipboard 
+    },
+    notify, 
+    t: t as any, 
+    dialogs, 
+    settings: { 
+      zipQuality, 
+      sevenZipQuality, 
+      zstdQuality, 
+      defaultTurboMode, 
+      confirmDelete
+    }, 
+    setProgress,
+    contextMenuTarget: contextMenu?.target, 
+    isDir: contextMenu?.isDir, 
+    isDrive: contextMenu?.isDrive, 
+    refreshDrives, 
+    mountedImages,
+    tabs, 
+    activeTabId, 
+    setActiveTab, 
+    closeTab, 
+    addTab, 
+    refreshBothPanels, 
+    layout,
+    modifiers, 
+    peekStatus, 
+    driveTrashConfigs, 
+    setContextMenu, 
+    onContextMenu: handleContextMenu as any,
+    setActivePanelId,
+    fontSize,
+    setFontSize
   }), [
     activePanelId, left, right, fileOps, clipboard, copy, cut, clearClipboard, copyToSystem, refreshClipboard,
     notify, t, dialogs, zipQuality, sevenZipQuality, zstdQuality, defaultTurboMode, setProgress,
-    contextMenu?.target, contextMenu?.isDir, contextMenu?.isDrive, refreshDrives,
+    contextMenu?.target, contextMenu?.isDir, contextMenu?.isDrive, refreshDrives, mountedImages,
     tabs, activeTabId, setActiveTab, closeTab, addTab, refreshBothPanels, layout,
     modifiers, peekStatus, driveTrashConfigs, setContextMenu, handleContextMenu,
     fontSize, setFontSize, setActivePanelId
@@ -503,6 +535,28 @@ function App() {
   }, [dragState, dragTargetPath, modifiers.ctrl, modifiers.shift, isNativeActive]);
 
 
+  const handleCalculateAllSizes = useCallback(() => {
+    const targetId = activePanelId;
+    setHistogramPanels(prev => {
+      const next = new Set(prev);
+      next.add(targetId);
+      return next;
+    });
+
+    const panel = targetId === 'left' ? left : right;
+    panel.files.forEach(async (f) => {
+      if (f.is_dir && !f.is_calculated && !f.is_calculating) {
+        try {
+          panel.setFileCalculating(f.path, true);
+          const res = await invoke<any>('calculate_folder_size', { path: f.path });
+          panel.updateFileSize(f.path, res.size);
+        } catch (err) {
+          console.error("Failed to calculate size for", f.path, err);
+          panel.setFileCalculating(f.path, false);
+        }
+      }
+    });
+  }, [activePanelId, left, right]);
 
   return (
     <div className="app-container">
@@ -525,7 +579,7 @@ function App() {
         handleClearSelection={(id: PanelId) => (id === 'left' ? left : right).clearSelection()}
         handleContextMenu={handleContextMenu} handleOpenFile={handleOpenFile} handleSort={handleSort} handleResize={handleResize}
         handleResizeMultiple={handleResizeMultiple} handleInlineRename={(old: string, n: string) => handleAction('file.rename', { ...actionContext, contextMenuTarget: old, renameValue: n })}
-        propPaths={dialogs.propertiesPaths} histogramPanels={histogramPanels} propShowHidden={showHidden} propShowSystem={showSystem}
+        propPaths={dialogs.propertiesPaths} propShowHidden={showHidden} propShowSystem={showSystem}
         cutPaths={clipboard?.action === 'cut' ? clipboard.paths : []} treeRef={treeRef}
         onTreeCut={(paths: string[]) => handleAction('file.cut', { contextMenuTarget: paths[0] })}
         onTreeCopy={(paths: string[]) => handleAction('file.copy', { contextMenuTarget: paths[0] })}
@@ -540,14 +594,15 @@ function App() {
         onTreeProperties={(path: string) => dialogs.openPropertiesDialog([path])}
         onTrashProperties={handleTrashProperties}
         onTreePaste={(path: string) => handleAction('file.paste', { ...actionContext, contextMenuTarget: path })}
-        setShowAbout={() => dialogs.openAboutDialog()} onCalculateAllSizes={handleCalculateAllSizes}
+        setShowAbout={() => dialogs.openAboutDialog()}
         onRestoreAll={handleRestoreAll} onRestoreSelected={handleRestoreSelected} onEmptyTrash={handleEmptyTrash}
         isTrashEmpty={isTrashEmpty}
         onTabSwitch={handleTabSwitch} onTabClose={handleTabClose} onItemMiddleClick={handleItemMiddleClick}
         onOpenNewTab={layout === 'standard' ? handleOpenNewTab : undefined}
         onTabDrop={handleTabDrop}
-        onSwapPanels={handleSwapPanels} onSyncPanels={handleSyncPanels} isSyncDisabled={left.path === right.path}
-        onComparePanels={handleComparePanels} isComparing={isComparing} diffPaths={diffPaths}
+        onDuplicateSearch={handleDuplicateSearch}
+        onCalculateAllSizes={handleCalculateAllSizes}
+        histogramPanels={histogramPanels}
         onAddToFavorites={handleAddToFavorites}
         onRemoveFromFavorites={handleRemoveFromFavorites}
         onDriveContextMenu={(e: React.MouseEvent, p: string) => {
@@ -571,7 +626,6 @@ function App() {
         handleUndo={handleUndo} handleRedo={handleRedo}
         undoLabel={actionService.get('file.undo')?.getLabel?.(actionContext)}
         redoLabel={actionService.get('file.redo')?.getLabel?.(actionContext)}
-        onDuplicateSearch={handleDuplicateSearch}
         dragOverPath={dragOverPath}
         setDragOverPath={setDragOverPath}
         favorites={favorites}

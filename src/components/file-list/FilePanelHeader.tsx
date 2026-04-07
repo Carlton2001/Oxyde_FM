@@ -1,7 +1,6 @@
 import React from 'react';
 import cx from 'classnames';
 import { HardDrive, Usb, Disc, Trash, Globe } from 'lucide-react';
-import { SearchBox } from '../ui/SearchBox';
 import { DriveInfo } from '../../types';
 import { TFunc } from '../../i18n';
 import { FavoritesMenu } from '../ui/FavoritesMenu';
@@ -13,12 +12,6 @@ interface FilePanelHeaderProps {
     showDrives: boolean;
     onNavigate: (path: string) => void;
     onContextMenu: (e: React.MouseEvent, entry?: any) => void;
-    showSearch: boolean;
-    searchQuery: string;
-    isSearching: boolean;
-    onQueryChange: (q: string) => void;
-    onSearch: () => void;
-    onClearSearch: () => void;
     showNetwork?: boolean;
     t: TFunc;
 }
@@ -29,18 +22,11 @@ export const FilePanelHeader: React.FC<FilePanelHeaderProps> = React.memo(({
     showDrives,
     onNavigate,
     onContextMenu,
-    showSearch,
-    searchQuery,
-    isSearching,
-    onQueryChange,
-    onSearch,
-    onClearSearch,
     showNetwork = true,
     t
 }) => {
     const headerRef = React.useRef<HTMLDivElement>(null);
     const [isCompact, setIsCompact] = React.useState(false);
-    const [isNarrow, setIsNarrow] = React.useState(false);
 
     React.useEffect(() => {
         if (!headerRef.current) return;
@@ -51,7 +37,6 @@ export const FilePanelHeader: React.FC<FilePanelHeaderProps> = React.memo(({
                 // roughly (120px per drive w/ name) vs (40px per drive letter)
                 const neededForNames = drives.length * 120 + 250;
                 setIsCompact(width < neededForNames);
-                setIsNarrow(width < 380); // Trigger narrow search bar earlier
             }
         });
         observer.observe(headerRef.current);
@@ -140,22 +125,6 @@ export const FilePanelHeader: React.FC<FilePanelHeaderProps> = React.memo(({
                     >
                         <Trash size="0.875rem" />
                     </div>
-                </div>
-            )}
-
-            {showSearch && (
-                <div className={cx("search-module", { narrow: isNarrow })}>
-                    <SearchBox
-                        autoExpand={true}
-                        query={searchQuery}
-                        placeholder={isNarrow ? "" : (t('search') + "...")}
-                        isSearching={isSearching}
-                        onChange={onQueryChange}
-                        onSubmit={onSearch}
-                        onClear={onClearSearch}
-                        clearTitle={t('clear') || 'Clear'}
-                        searchTitle={t('search')}
-                    />
                 </div>
             )}
         </div>

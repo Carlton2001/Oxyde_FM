@@ -2,8 +2,9 @@ import { useRef, useMemo, useCallback } from 'react';
 import { Sidebar } from '../layout/Sidebar';
 import { FilePanel } from '../file-list/FilePanel';
 import { TopBar } from '../layout/TopBar';
+import { TitleBar } from '../layout/TitleBar';
 import cx from 'classnames';
-import { PanelState, DriveInfo, FileEntry, SortField, ColumnWidths, ViewMode, SizeCategoryKey } from '../../types';
+import { PanelState, DriveInfo, FileEntry, SortField, ColumnWidths, ViewMode, SizeCategoryKey, PanelId } from '../../types';
 import { Tabs } from '../ui/Tabs';
 import { TFunc } from '../../i18n';
 import { useApp } from '../../context/AppContext';
@@ -63,7 +64,6 @@ interface DualPanelLayoutProps {
     // Handlers
     handleDragStart: (id: 'left' | 'right', files: FileEntry[]) => void;
     handleDrop: (e: React.DragEvent | React.MouseEvent | undefined, targetPath: string | null, currentPath: string) => void;
-    onTabDrop?: (files: FileEntry[], index?: number) => void;
     dragState: { sourcePanel: 'left' | 'right'; files: FileEntry[] } | null;
     handleSelect: (id: 'left' | 'right', path: string, selected: boolean, range: boolean) => void;
     handleSelectMultiple: (id: 'left' | 'right', paths: string[], isAdditive: boolean) => void;
@@ -76,7 +76,6 @@ interface DualPanelLayoutProps {
     handleInlineRename: (oldPath: string, newPath: string) => void;
     // State
     propPaths: any;
-    histogramPanels: Set<'left' | 'right'>;
     propShowHidden: boolean;
     propShowSystem: boolean;
     cutPaths: string[];
@@ -95,12 +94,14 @@ interface DualPanelLayoutProps {
     onTreeDisconnectDrive: (path: string) => void;
     onTreeProperties: (path: string) => void;
     onTreePaste: (path: string) => void;
+    onCalculateAllSizes: () => void;
+    histogramPanels: Set<PanelId>;
+    onTabDrop: (files: any[], index?: number) => void;
     // TopBar (only what TopBar still needs)
     setShowAbout: (show: boolean) => void;
     onLayoutChange: (mode: 'standard' | 'dual') => void;
     showHidden: boolean;
     // Actions
-    onCalculateAllSizes: () => void;
     onRefresh: () => void;
     onRestoreAll?: () => void;
     onRestoreSelected?: () => void;
@@ -120,23 +121,15 @@ interface DualPanelLayoutProps {
     onTabClose?: (id: string) => void;
     onItemMiddleClick?: (entry: FileEntry) => void;
     onOpenNewTab?: (path: string) => void;
-    // Dual Panel Management
-    onSwapPanels?: () => void;
-    onSyncPanels?: () => void;
-    isSyncDisabled?: boolean;
-    onComparePanels?: () => void;
-    isComparing?: boolean;
-    diffPaths?: Set<string>;
-    onDriveContextMenu?: (e: React.MouseEvent, path: string) => void;
-    onAddToFavorites?: (path: string) => void;
-    onRemoveFromFavorites?: (path: string) => void;
-    onDuplicateSearch?: () => void;
-    dragOverPath?: string | null;
-    setDragOverPath?: (path: string | null) => void;
-    dragOverPathApp?: string | null;
-    onTrashProperties?: () => void;
     isTrashEmpty: boolean;
     favorites: import('../../types').QuickAccessItem[];
+    onDuplicateSearch?: () => void;
+    onTrashProperties: () => void;
+    dragOverPath: string | null;
+    setDragOverPath: (p: string | null) => void;
+    onAddToFavorites: (path: string) => void;
+    onRemoveFromFavorites: (path: string) => void;
+    onDriveContextMenu: (e: React.MouseEvent, p: string) => void;
 }
 
 export const DualPanelLayout: React.FC<DualPanelLayoutProps> = ({
@@ -171,7 +164,6 @@ export const DualPanelLayout: React.FC<DualPanelLayoutProps> = ({
     handleResize,
     handleResizeMultiple,
     handleInlineRename,
-    histogramPanels,
     propShowHidden,
     propShowSystem,
     cutPaths,
@@ -189,10 +181,10 @@ export const DualPanelLayout: React.FC<DualPanelLayoutProps> = ({
     onTreeDisconnectDrive,
     onTreeProperties,
     onTreePaste,
-    setShowAbout,
-    onLayoutChange,
-    showHidden,
     onCalculateAllSizes,
+    histogramPanels,
+    setShowAbout,
+    showHidden,
     onRefresh,
     onRestoreAll,
     onRestoreSelected,
@@ -210,20 +202,15 @@ export const DualPanelLayout: React.FC<DualPanelLayoutProps> = ({
     onTabClose,
     onItemMiddleClick,
     onOpenNewTab,
-    onSwapPanels,
-    onSyncPanels,
-    isSyncDisabled,
-    onComparePanels,
-    isComparing,
-    diffPaths,
-    onTabDrop,
-    onDriveContextMenu,
-    onAddToFavorites,
-    onRemoveFromFavorites,
+    onLayoutChange,
     onDuplicateSearch,
-    setDragOverPath,
     onTrashProperties,
     dragOverPath,
+    setDragOverPath,
+    onTabDrop,
+    onAddToFavorites,
+    onRemoveFromFavorites,
+    onDriveContextMenu,
     isTrashEmpty,
     favorites
 }) => {
@@ -344,54 +331,16 @@ export const DualPanelLayout: React.FC<DualPanelLayoutProps> = ({
 
     return (
         <div className="app">
-            <TopBar
-                activePanel={activePanel}
-                activePanelId={activePanelId}
-                canUndo={canUndo}
-                undoLabel={undoLabel}
-                canRedo={canRedo}
-                redoLabel={redoLabel}
-                onNavigate={activePanelId === 'left' ? leftHandlers.onNavigate : rightHandlers.onNavigate}
-                onRefresh={onRefresh}
-                onNavigateUp={() => activePanel.goUp()}
-                onNavigateBack={() => activePanel.goBack()}
-                onNavigateForward={() => activePanel.goForward()}
-                onNavigateToIndex={(i) => activePanel.goToIndex(i)}
-                onUndo={handleUndo}
-                onRedo={handleRedo}
-                onCopy={handleCopy}
-                onCopyName={handleCopyName}
-                onCopyPath={handleCopyPath}
-                onCut={handleCut}
-                onDelete={handleDelete}
-                onPaste={handlePaste}
-                canPaste={canPaste}
+            <TitleBar
                 t={t}
                 layout={layout}
                 onLayoutChange={onLayoutChange}
-                showHidden={showHidden}
-                onShowAbout={() => setShowAbout(true)}
-                isDragging={!!dragState}
-                isShiftPressed={isShiftPressed}
-                onDrop={(p, e) => p && handleDrop(e, p, activePanel.path)}
-                drives={drives}
-                isTrashView={activePanel.path?.startsWith('trash://')}
-                onCalculateAllSizes={onCalculateAllSizes}
-                onRestoreAll={onRestoreAll}
-                onRestoreSelected={onRestoreSelected}
-                onEmptyTrash={onEmptyTrash}
-                isTrashEmpty={isTrashEmpty}
-                isNukeOverride={isNukeOverride}
-                onSwapPanels={onSwapPanels}
-                onSyncPanels={onSyncPanels}
-                isSyncDisabled={isSyncDisabled}
-                onComparePanels={onComparePanels}
-                isComparing={isComparing}
                 onAdvancedSearch={() => openAdvancedSearch(activePanelId)}
                 onDuplicateSearch={onDuplicateSearch || (() => { })}
-                favorites={favorites}
+                onShowAbout={() => setShowAbout(true)}
+                onCalculateAllSizes={onCalculateAllSizes}
+                onRefresh={onRefresh}
             />
-
             <div className="main-area">
                 {layout === 'standard' && (
                     <Sidebar
@@ -445,14 +394,52 @@ export const DualPanelLayout: React.FC<DualPanelLayoutProps> = ({
                             isDraggingFiles={!!dragState}
                             dragState={dragState}
                             onTabDrop={onTabDrop}
-                            searchQuery={activePanel.searchQuery}
-                            onSearchChange={(q) => handleSearch(activePanelId, q)}
-                            onSearchSubmit={() => executeSearch(activePanelId)}
-                            onSearchClear={() => clearSearch(activePanelId)}
-                            onCancelSearch={() => handleCancelSearch(activePanelId)}
-                            isSearching={activePanel.isSearching}
                         />
                     )}
+                    <TopBar
+                        activePanel={activePanel}
+                        activePanelId={activePanelId}
+                        canUndo={canUndo}
+                        undoLabel={undoLabel}
+                        canRedo={canRedo}
+                        redoLabel={redoLabel}
+                        onNavigate={activePanelId === 'left' ? leftHandlers.onNavigate : rightHandlers.onNavigate}
+                        onRefresh={onRefresh}
+                        onNavigateUp={() => activePanel.goUp()}
+                        onNavigateBack={() => activePanel.goBack()}
+                        onNavigateForward={() => activePanel.goForward()}
+                        onNavigateToIndex={(i) => activePanel.goToIndex(i)}
+                        onUndo={handleUndo}
+                        onRedo={handleRedo}
+                        onCopy={handleCopy}
+                        onCopyName={handleCopyName}
+                        onCopyPath={handleCopyPath}
+                        onCut={handleCut}
+                        onDelete={handleDelete}
+                        onPaste={handlePaste}
+                        canPaste={canPaste}
+                        t={t}
+                        layout={layout}
+                        showHidden={showHidden}
+                        isDragging={!!dragState}
+                        onDrop={(p, e) => p && handleDrop(e, p, activePanel.path)}
+                        drives={drives}
+                        isTrashView={activePanel.path?.startsWith('trash://')}
+                        onRestoreAll={onRestoreAll}
+                        onRestoreSelected={onRestoreSelected}
+                        onEmptyTrash={onEmptyTrash}
+                        isTrashEmpty={isTrashEmpty}
+                        isNukeOverride={isNukeOverride}
+                        onSearchChange={(q) => handleSearch(activePanelId, q)}
+                        onSearchSubmit={() => executeSearch(activePanelId)}
+                        onSearchClear={() => clearSearch(activePanelId)}
+                        onSearchCancel={() => handleCancelSearch(activePanelId)}
+                        isShiftPressed={isShiftPressed}
+                        favorites={favorites}
+                        
+                        searchQuery={activePanel.searchQuery}
+                        isSearchActive={activePanel.isSearching}
+                    />
                     <div
                         className={cx("panels-container", { "dual-view": layout === 'dual' })}
                     >
@@ -483,11 +470,8 @@ export const DualPanelLayout: React.FC<DualPanelLayoutProps> = ({
                             searchQuery={left.searchQuery || ''}
                             searchResults={left.searchResults}
                             isSearching={left.isSearching}
-                            onSearch={leftHandlers.onSearch}
-                            onQueryChange={leftHandlers.onQueryChange}
                             onClearSearch={leftHandlers.onClearSearch}
                             onCancelSearch={() => handleCancelSearch('left')}
-                            showSearch={layout === 'dual'}
                             isDragTarget={!!dragState && dragState.sourcePanel !== 'left'}
                             dragOverPath={dragOverPath}
                             showHidden={propShowHidden}
@@ -495,18 +479,17 @@ export const DualPanelLayout: React.FC<DualPanelLayoutProps> = ({
                             layout={layout}
                             cutPaths={cutPaths}
                             onRename={handleInlineRename}
-                            showHistogram={histogramPanels.has('left')}
                             isTrashView={left.isTrashView}
                             isNetworkView={left.isNetworkView}
                             useSystemIcons={useSystemIcons}
                             onItemMiddleClick={onItemMiddleClick}
-                            diffPaths={diffPaths}
                             searchLimitReached={left.searchLimitReached}
                             panelId="left"
                             onViewModeChange={leftHandlers.setViewMode}
                             loading={left.loading}
                             initialScrollOffset={left.currentEntry?.scrollOffset}
-                            updateCurrentScroll={left.updateCurrentScroll}
+                            updateCurrentScroll={(o) => left.updateCurrentScroll!(o)}
+                            showHistogram={histogramPanels.has('left')}
                             groupByDate={left.groupByDate}
                             onGroupByDateChange={leftHandlers.onGroupByDateChange}
                             isProtected={left.isProtected}
@@ -555,11 +538,8 @@ export const DualPanelLayout: React.FC<DualPanelLayoutProps> = ({
                                 searchQuery={right.searchQuery || ''}
                                 searchResults={right.searchResults}
                                 isSearching={right.isSearching}
-                                onSearch={rightHandlers.onSearch}
-                                onQueryChange={rightHandlers.onQueryChange}
                                 onClearSearch={rightHandlers.onClearSearch}
                                 onCancelSearch={() => handleCancelSearch('right')}
-                                showSearch={true}
                                 isDragTarget={!!dragState && dragState.sourcePanel !== 'right'}
                                 dragOverPath={dragOverPath}
                                 showHidden={propShowHidden}
@@ -567,23 +547,23 @@ export const DualPanelLayout: React.FC<DualPanelLayoutProps> = ({
                                 layout={layout}
                                 cutPaths={cutPaths}
                                 onRename={handleInlineRename}
-                                showHistogram={histogramPanels.has('right')}
                                 isTrashView={right.isTrashView}
                                 isNetworkView={right.isNetworkView}
                                 useSystemIcons={useSystemIcons}
-                                diffPaths={diffPaths}
                                 searchLimitReached={right.searchLimitReached}
                                 panelId="right"
                                 onViewModeChange={rightHandlers.setViewMode}
                                 loading={right.loading}
                                 initialScrollOffset={right.currentEntry?.scrollOffset}
-                                updateCurrentScroll={right.updateCurrentScroll}
+                                updateCurrentScroll={(o) => right.updateCurrentScroll!(o)}
+                                showHistogram={histogramPanels.has('right')}
                                 groupByDate={right.groupByDate}
                                 onGroupByDateChange={rightHandlers.onGroupByDateChange}
                                 isProtected={right.isProtected}
                                 favorites={favorites}
                                 extensionFilter={right.extensionFilter}
-                                setExtensionFilter={right.setExtensionFilter}                                sizeFilter={right.sizeFilter}
+                                setExtensionFilter={right.setExtensionFilter}
+                                sizeFilter={right.sizeFilter}
                                 setSizeFilter={right.setSizeFilter}
                                 dateFilter={right.dateFilter}
                                 setDateFilter={right.setDateFilter}

@@ -12,18 +12,6 @@
     gap: 0.25rem;
 }
 
-.tab-search-container {
-    margin-left: auto;
-    display: flex;
-    align-items: center;
-    margin-right: 0.5rem;
-    min-width: 0;
-}
-
-.tab-search-container .search-box {
-    height: 1.875rem;
-}
-
 .tabs-container {
     display: flex;
     align-items: flex-end;

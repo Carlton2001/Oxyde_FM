@@ -284,21 +284,6 @@ export const useAppHandlers = ({
         }
     }, [left, right, activePanelId, notify, t]);
 
-    const handleSwapPanels = useCallback(() => {
-        const leftState = left.getPanelState();
-        const rightState = right.getPanelState();
-        left.setPanelState(rightState);
-        right.setPanelState(leftState);
-        invoke('swap_panels').catch(e => {
-            console.error("Backend panel swap failed:", e);
-        });
-    }, [left, right]);
-
-    const handleSyncPanels = useCallback(() => {
-        const activePath = activePanelId === 'left' ? left.path : right.path;
-        left.navigate(activePath);
-        right.navigate(activePath);
-    }, [left, right, activePanelId]);
 
     const handleSort = useCallback((id: PanelId, field: SortField) => {
         const panel = id === 'left' ? left : right;
@@ -617,8 +602,6 @@ export const useAppHandlers = ({
         clearSearch,
         handleOpenFile,
         handleAction,
-        handleSwapPanels,
-        handleSyncPanels,
         handleSort,
         handleSortDirection,
         handleResize,
