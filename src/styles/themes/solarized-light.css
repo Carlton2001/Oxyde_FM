@@ -1,49 +1,53 @@
 [data-theme="solarized-light"] {
-    /* Colors */
-    --bg-color: #eee8d5;
-    /* Base2 */
-    --text-color: #657b83;
-    /* Base00 */
-    --text-muted: #93a1a1;
-    /* Base1 */
-    --sidebar-bg: #eee8d5;
-    /* Base2 */
-    --header-bg: #eee8d5;
-    --hover-color: #ddd6c3;
-    --accent-color: #d33682;
-    --accent-color-rgb: 211, 54, 130;
-    --selected-text: #fdf6e3;
-    --border-color: #d6d6d6;
-    --surface-primary: #fdf6e3;
-    --surface-secondary: #eee8d5;
-    --dimmed-opacity: 0.7;
+    /* Solarized Light — Premium Clarity */
+    
+    /* Core Palette */
+    --bg-color: #fdf6e3;         /* Base3 */
+    --bg-color-rgb: 253, 246, 227;
+    --text-color: #657b83;       /* Base00 */
+    --text-muted: #93a1a1;       /* Base1 */
+    --sidebar-bg: #eee8d5;      /* Base2 for structure */
+    --header-bg: #fdf6e3;       /* Base3 (Canonical) */
 
-    /* Components */
-    --menu-bg: #fdf6e3;
-    --menu-border: #93a1a1;
-    --menu-shadow: 0 0.15rem 0.5rem rgba(0, 0, 0, 0.1);
+    --hover-color: #eee8d5;     /* Use Base2 for hover on Base3 */
+    --accent-color: #d33682;     /* Magenta — Traditional for Sol Light */
+    --accent-color-rgb: 211, 54, 130;
+    --selected-text: #ffffff;
+
+    --border-color: #dcd6c0;     /* Refined Base2 border */
+    --border-color-rgb: 220, 214, 192;
+
+    /* Component Groups */
+    --surface-primary: var(--header-bg);    /* GRP 1 : Onglets actifs, NavBar, Menus */
+    --surface-secondary: var(--sidebar-bg); /* GRP 2 : TabBar, StatusBar, Sidebar */
+    --dimmed-opacity: 0.65;
+
+    --menu-bg: var(--header-bg);            /* GRP 1 : Menus */
+    --menu-border: #dcd6c0;
+    --shadow-soft: 0 4px 15px rgba(0, 0, 0, 0.05);
+    --shadow-medium: 0 8px 30px rgba(0, 0, 0, 0.08);
+    --menu-shadow: var(--shadow-medium);
 
     /* Scrollbar */
-    --scrollbar-bg: #fdf6e3;
-    --scrollbar-thumb: #93a1a1;
-    --scrollbar-thumb-hover: #586e75;
+    --scrollbar-bg: transparent;
+    --scrollbar-thumb: #d3ccb1;
+    --scrollbar-thumb-hover: #c4bd9f;
 
-    /* File Icons */
-    --icon-default: #657b83;
-    --icon-folder: #268bd2;
-    /* Blue */
-    --icon-image: #859900;
-    /* Green */
-    --icon-audio: #6c71c4;
-    /* Violet */
-    --icon-video: #dc322f;
-    /* Red */
-    --icon-exec: #b58900;
-    /* Yellow */
-    --icon-archive: #cb4b16;
-    /* Orange */
-    --icon-pdf: #dc322f;
-    --icon-code: #2aa198;
-    /* Cyan */
-    --icon-disk: #93a1a1;
+    /* Multi-pane */
+    --pane-active-border: var(--accent-color);
+    --pane-inactive-opacity: 0.98;
+
+    /* File Icons — Solarized Accent Palette */
+    --icon-default: #657b83;    /* Base00 */
+    --icon-folder: #268bd2;     /* Blue */
+    --icon-image: #859900;      /* Green */
+    --icon-audio: #6c71c4;      /* Violet */
+    --icon-video: #dc322f;      /* Red */
+    --icon-exec: #b58900;       /* Yellow */
+    --icon-archive: #cb4b16;    /* Orange */
+    --icon-pdf: #dc322f;        /* Red */
+    --icon-code: #2aa198;       /* Cyan */
+    --icon-disk: #93a1a1;       /* Base1 */
+
+    --histogram-opacity: 0.2;
 }

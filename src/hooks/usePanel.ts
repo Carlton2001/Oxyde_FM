@@ -11,9 +11,19 @@ import { getColumnMode } from '../config/columnDefinitions';
 
 export const usePanel = (initialPath: string, panelId: PanelId, activeTabId?: string, initialConfig?: PanelInitialConfig) => {
     const { showHidden, showSystem, searchLimit } = useApp();
+    const isFirstRender = useRef(true);
 
     // Navigation
     const { path, history, historyIndex, currentEntry, navigate, goToIndex, goBack, goForward, goUp, updateCurrentSelection, updateCurrentScroll, setNavigationState, version } = useNavigation(initialPath);
+
+    // Sync with initialConfig if it changes (e.g. tab moved or switched)
+    useEffect(() => {
+        if (initialConfig) {
+            if (initialConfig.viewMode) setViewModeState(initialConfig.viewMode);
+            if (initialConfig.sortConfig) setSortConfig(initialConfig.sortConfig);
+            if (initialConfig.groupByDate !== undefined) setGroupByDateState(initialConfig.groupByDate);
+        }
+    }, [initialConfig]);
 
     useEffect(() => {
         if (panelId) {

@@ -201,14 +201,23 @@ export const TabsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             }
 
             if (bestPanel !== dragTargetRef.current.panelId || bestIndexResult !== dragTargetRef.current.index || bestOffset !== dragTargetRef.current.offset) {
+                // Logic to hide marker if drop is redundant (same position)
+                let finalOffset = bestOffset;
+                if (draggedTab && bestPanel === draggedTab.panelId) {
+                    const sourceIndex = panels[draggedTab.panelId].tabs.findIndex(t => t.id === draggedTab.id);
+                    if (bestIndexResult === sourceIndex || bestIndexResult === sourceIndex + 1) {
+                        finalOffset = null;
+                    }
+                }
+
                 dragTargetRef.current = { panelId: bestPanel, index: bestIndexResult, offset: bestOffset };
                 setTargetPanelId(bestPanel);
                 setInternalDropIndex(bestIndexResult);
-                setMarkerOffset(bestOffset);
+                setMarkerOffset(finalOffset);
             }
         };
 
-        const handleMouseUp = (_e: MouseEvent) => {
+        const handleMouseUp = async (_e: MouseEvent) => {
             if (!draggedTab) return;
 
             // Capture all state before clearing
@@ -216,19 +225,19 @@ export const TabsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             const capturedDropZone = activeDropZoneRef.current;
             const { panelId: tPanel, index: tIndex } = dragTargetRef.current;
 
+            if (capturedDropZone) {
+                // Dropped on a split zone — create a new panel
+                await splitPanel(capturedTab.id, capturedTab.panelId, capturedDropZone.panelId, capturedDropZone.side, capturedTab.initialConfig);
+            } else if (tPanel !== null && tIndex !== null) {
+                // Dropped on a tab bar — move the tab
+                await moveTab(capturedTab.id, capturedTab.panelId, tPanel, tIndex);
+            }
+
             setDraggedTab(null);
             setTargetPanelId(null);
             setInternalDropIndex(null);
             setMarkerOffset(null);
             activeDropZoneRef.current = null;
-
-            if (capturedDropZone) {
-                // Dropped on a split zone — create a new panel
-                splitPanel(capturedTab.id, capturedTab.panelId, capturedDropZone.panelId, capturedDropZone.side, capturedTab.initialConfig);
-            } else if (tPanel !== null && tIndex !== null) {
-                // Dropped on a tab bar — move the tab
-                moveTab(capturedTab.id, capturedTab.panelId, tPanel, tIndex);
-            }
         };
 
         window.addEventListener('mousemove', handleMouseMove);

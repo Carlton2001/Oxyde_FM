@@ -321,10 +321,6 @@ export const Tabs: React.FC<TabsProps> = ({
                 if (isDraggingFolders) setFileDropIndex(null);
             }}
         >
-            {targetPanelId === panelId && markerOffset !== null && (
-                <div className="insertion-marker" style={{ left: markerOffset }} />
-            )}
-
             {showLeftScroll && (
                 <button className="scroll-btn left" onClick={() => handleScroll('left')}>
                     <ChevronLeft size={16} />
@@ -394,12 +390,6 @@ export const Tabs: React.FC<TabsProps> = ({
                         })()}
                         data-tooltip-pos="bottom"
                     >
-                        {isDraggingFolders && fileDropIndex === index && (
-                            <div className="insertion-marker" style={{ left: 0 }} />
-                        )}
-                        {isDraggingFolders && index === tabs.length - 1 && fileDropIndex === tabs.length && (
-                            <div className="insertion-marker" style={{ left: '100%' }} />
-                        )}
 
                         <div className="tab-icon">
                             {getTabIcon(tab.path)}
@@ -432,6 +422,31 @@ export const Tabs: React.FC<TabsProps> = ({
                 <button className="scroll-btn right" onClick={() => handleScroll('right')}>
                     <ChevronRight size={16} />
                 </button>
+            )}
+
+            {/* Insertion Markers (High Z-Index overlays) */}
+            {targetPanelId === panelId && markerOffset !== null && (
+                <div className="insertion-marker" style={{ left: markerOffset }} />
+            )}
+
+            {isDraggingFolders && fileDropIndex !== null && (
+                <div 
+                    className="insertion-marker" 
+                    style={{ 
+                        left: (() => {
+                            const container = scrollRef.current;
+                            if (!container) return 0;
+                            const tabElems = container.querySelectorAll('.tab');
+                            if (fileDropIndex < tabElems.length) {
+                                return (tabElems[fileDropIndex] as HTMLElement).offsetLeft - container.scrollLeft;
+                            } else if (tabElems.length > 0) {
+                                const last = tabElems[tabElems.length - 1] as HTMLElement;
+                                return last.offsetLeft + last.offsetWidth - container.scrollLeft;
+                            }
+                            return 0;
+                        })()
+                    }} 
+                />
             )}
 
             {menu && (

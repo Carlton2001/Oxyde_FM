@@ -4,18 +4,19 @@
     --text-color: #383a42;
     --text-muted: #a0a1a7;
     --sidebar-bg: #f3f3f3;
-    --header-bg: #fafafa;
+    --header-bg: #ffffff;
     --hover-color: #e5e5e6;
     --accent-color: #4078f2;
     --accent-color-rgb: 64, 120, 242;
     --selected-text: #ffffff;
     --border-color: #e8e8e8;
     --border-color-rgb: 232, 232, 232;
-    --surface-primary: #ffffff;
-    --surface-secondary: #f3f3f3;
+
+    --surface-primary: var(--header-bg);    /* GRP 1 : Onglets actifs, NavBar, Menus */
+    --surface-secondary: var(--sidebar-bg); /* GRP 2 : TabBar, StatusBar, Sidebar */
     --dimmed-opacity: 0.7;
 
-    --menu-bg: #ffffff;
+    --menu-bg: var(--header-bg);
     --menu-border: #e8e8e8;
     --menu-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 

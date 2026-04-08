@@ -1,16 +1,14 @@
 .tabs-wrapper {
     display: flex;
     align-items: center;
-    background-color: var(--surface-secondary);
+    background: linear-gradient(to top, var(--border-color) 1px, transparent 1px), var(--surface-secondary);
+    /* The separator line as background + base theme color */
     height: 2rem;
     -webkit-app-region: no-drag;
     position: relative;
     padding: 0;
     gap: 0;
-    margin-bottom: -1px;
-    /* Overlap the NavBar's border-top */
     z-index: 11;
-    /* Above NavBar's 10 */
     transition: background-color var(--transition-normal);
 }
 
@@ -42,12 +40,12 @@
     background-color: transparent;
     color: var(--text-secondary);
     border: none;
-    margin: 0 2px;
+    margin: 0;
     transition: color 0.2s;
 }
 
 .scroll-btn:hover {
-    background-color: var(--hover-color);
+    background: linear-gradient(to top, transparent 1px, var(--hover-color) 1px);
     color: var(--text-primary);
 }
 
@@ -60,8 +58,6 @@
     background-color: transparent;
     border-left: 1px solid transparent;
     border-right: 1px solid transparent;
-    border-bottom: 1px solid var(--border-color);
-    /* Matches the line below */
     padding: 0 0.75rem;
     cursor: default;
     font-size: 0.8125rem;
@@ -84,7 +80,7 @@
 }
 
 .tab:hover {
-    background-color: var(--hover-color);
+    background: linear-gradient(to top, transparent 1px, var(--hover-color) 1px);
     color: var(--text-primary);
 }
 
@@ -94,8 +90,12 @@
     z-index: 20;
     border-left: 1px solid var(--border-color);
     border-right: 1px solid var(--border-color);
-    border-bottom: 1px solid var(--surface-primary);
-    /* Masks the line below */
+    border-bottom: none;
+    /* Integrated with background logic */
+}
+
+.tab.active:first-child {
+    border-left-color: transparent;
 }
 
 .tab-icon {
@@ -177,11 +177,13 @@
     color: var(--text-secondary);
     transition: color 0.2s;
     margin-bottom: 0;
-    align-self: center;
+    align-self: flex-end;
+    height: 100%;
+    border-bottom: none;
 }
 
 .new-tab-btn:hover {
-    background-color: var(--hover-color);
+    background: linear-gradient(to top, transparent 1px, var(--hover-color) 1px);
     color: var(--text-primary);
 }
 
@@ -246,8 +248,10 @@
     width: 2px;
     height: 100%;
     background-color: var(--accent-color);
+    z-index: 200; /* Much higher than tabs (20) */
     pointer-events: none;
-    z-index: 20;
+    box-shadow: 0 0 4px var(--accent-color);
+    /* Electric glow for sharpness */
     transition: left 0.1s ease-out;
 }
 

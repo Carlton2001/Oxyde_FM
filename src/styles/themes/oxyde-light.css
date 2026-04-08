@@ -4,8 +4,8 @@
     --bg-color-rgb: 253, 251, 247;
     --text-color: #242433;
     --text-muted: #6e6b85;
-    --sidebar-bg: #f7f4f0;
-    --header-bg: #ffffff;
+    --sidebar-bg: #f1ede6;
+    --header-bg: #fafafa; /* Base pour le groupe "Actif" */
     
     --hover-color: #f1ede6;
     --accent-color: #3d5af1;
@@ -15,12 +15,12 @@
     --border-color: #e6e1d6;
     --border-color-rgb: 230, 225, 214;
 
-    --surface-primary: #ffffff;
-    --surface-secondary: #f9f7f2;
+    --surface-primary: var(--header-bg);    /* GRP 1 : Onglets actifs */
+    --surface-secondary: var(--sidebar-bg); /* GRP 2 : TabBar & StatusBar */
     --dimmed-opacity: 0.65;
 
     /* Components */
-    --menu-bg: #ffffff;
+    --menu-bg: var(--header-bg);            /* GRP 1 : Menus */
     --menu-border: #e6e1d6;
     --shadow-soft: 0 4px 20px rgba(0, 0, 0, 0.04);
     --shadow-medium: 0 8px 30px rgba(0, 0, 0, 0.08);

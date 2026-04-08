@@ -31,6 +31,7 @@ interface PanelContextType {
     activePanel: any;
     isReady: boolean;
     getTabConfig: (panelId: PanelId, tabId: string) => PanelInitialConfig | undefined;
+    transferTabState: (tabId: string, fromPanel: PanelId, toPanel: PanelId) => void;
 }
 
 const PanelContext = createContext<PanelContextType | undefined>(undefined);
@@ -54,7 +55,7 @@ const PanelStateHoister: React.FC<{
 });
 
 export const PanelProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-    const { session, splitPanel: originalSplitPanel } = useTabs();
+    const { session, draggedTab } = useTabs();
     const { consumeSplitConfig } = useSplitConfig();
     const [panelStates, setPanels] = useState<Record<PanelId, any>>({});
     const [panelConfigs, setConfigs] = useState<Record<PanelId, PanelConfig>>({});
@@ -90,33 +91,37 @@ export const PanelProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     const tabHistoriesRef = useRef<Record<PanelId, Map<string, TabNavSnapshot>>>({});
     const tabConfigsRef = useRef<Record<PanelId, Map<string, TabViewConfig>>>({});
     const prevTabIdsRef = useRef<Record<PanelId, string>>({});
+    const tabMappingRef = useRef<Map<string, PanelId>>(new Map()); // Tracks [TabId -> PanelId] for move detection
+    const protectedTabsRef = useRef<Set<string>>(new Set()); // Tabs that just moved and shouldn't be overwritten
 
     const getPanes = useCallback((node: import('../hooks/useRustSession').LayoutNode): Record<string, import('../hooks/useRustSession').PanelState> => {
         if (node.type === 'Pane') return { [node.data.id]: node.data.state };
         return node.data.children.reduce((acc, child) => ({ ...acc, ...getPanes(child) }), {});
     }, []);
 
-    // Intercept splitPanel to capture source state
-    const splitPanel = useCallback(async (tabId: string, sourcePanelId: string, targetPanelId: string, side: 'top' | 'bottom' | 'left' | 'right') => {
-        const sourcePanel = panelStates[sourcePanelId];
-        if (sourcePanel) {
-            const config: PanelInitialConfig = {
-                viewMode: sourcePanel.viewMode,
-                sortConfig: sourcePanel.sortConfig,
-                groupByDate: sourcePanel.groupByDate
-            };
-            // We need a way to pass this config to the next usePanel.
-            // Since splitting will trigger a session change and re-render PanelProvider,
-            // we can store the pending config in a ref or state.
-            pendingConfigsRef.current.set(sourcePanelId, config); // Use sourcePanelId as a hint? No, new panels have random IDs.
-            // Actually, any NEW panel that appears after a split should probably take the source config.
-            lastSplitSourceConfigRef.current = config;
-        }
-        return originalSplitPanel(tabId, sourcePanelId, targetPanelId, side);
-    }, [panelStates, originalSplitPanel]);
-
     const pendingConfigsRef = useRef<Map<string, PanelInitialConfig>>(new Map());
     const lastSplitSourceConfigRef = useRef<PanelInitialConfig | null>(null);
+
+    // Auto-migration of tab data when detected in a new panel
+    const autoMigrateTab = useCallback((tabId: string, oldPanelId: PanelId, newPanelId: PanelId) => {
+        if (oldPanelId === newPanelId) return;
+        
+        // 1. Migrate Config
+        const oldConfigs = tabConfigsRef.current[oldPanelId];
+        if (oldConfigs && oldConfigs.has(tabId)) {
+            if (!tabConfigsRef.current[newPanelId]) tabConfigsRef.current[newPanelId] = new Map();
+            tabConfigsRef.current[newPanelId].set(tabId, oldConfigs.get(tabId)!);
+            oldConfigs.delete(tabId);
+        }
+
+        // 2. Migrate History
+        const oldHistories = tabHistoriesRef.current[oldPanelId];
+        if (oldHistories && oldHistories.has(tabId)) {
+            if (!tabHistoriesRef.current[newPanelId]) tabHistoriesRef.current[newPanelId] = new Map();
+            tabHistoriesRef.current[newPanelId].set(tabId, oldHistories.get(tabId)!);
+            oldHistories.delete(tabId);
+        }
+    }, []);
 
     useEffect(() => {
         if (session) {
@@ -138,8 +143,35 @@ export const PanelProvider: React.FC<{ children: ReactNode }> = ({ children }) =
             setConfigs(prev => {
                 const next: Record<PanelId, PanelConfig> = {};
                 let changed = false;
+
                 for (const [id, p] of Object.entries(allPanels)) {
                     const panelId = id as PanelId;
+
+                    // NEW: Detect moves for migration
+                    p.tabs.forEach((t: any) => {
+                        const previousPanelId = tabMappingRef.current.get(t.id);
+                        
+                        // Priority 1: If it's the tab currently being dragged, use its live captured config!
+                        if (draggedTab && t.id === draggedTab.id) {
+                            if (draggedTab.initialConfig) {
+                                if (!tabConfigsRef.current[panelId]) tabConfigsRef.current[panelId] = new Map();
+                                tabConfigsRef.current[panelId].set(t.id, {
+                                    viewMode: draggedTab.initialConfig.viewMode,
+                                    sortConfig: draggedTab.initialConfig.sortConfig,
+                                    groupByDate: draggedTab.initialConfig.groupByDate || false
+                                });
+                                protectedTabsRef.current.add(t.id);
+                            }
+                        } 
+                        // Priority 2: Standard migration if it's a move of a background tab
+                        else if (previousPanelId && previousPanelId !== panelId) {
+                            autoMigrateTab(t.id, previousPanelId, panelId);
+                            protectedTabsRef.current.add(t.id);
+                        }
+                        
+                        tabMappingRef.current.set(t.id, panelId);
+                    });
+
                     const existing = prev[panelId];
                     const activeTabPath = p.tabs.find((t: any) => t.id === p.active_tab_id)?.path || 'C:\\';
                     
@@ -154,19 +186,33 @@ export const PanelProvider: React.FC<{ children: ReactNode }> = ({ children }) =
                         };
                         changed = true;
                     } else if (existing.activeTabId !== p.active_tab_id) {
-                        next[panelId] = { ...existing, initialPath: activeTabPath, activeTabId: p.active_tab_id };
+                        // Tab switched or moved in — lookup its saved config to force it on the panel
+                        const initialConfig = tabConfigsRef.current[panelId]?.get(p.active_tab_id);
+                        next[panelId] = { 
+                            ...existing, 
+                            initialPath: activeTabPath, 
+                            activeTabId: p.active_tab_id,
+                            initialConfig: initialConfig || existing.initialConfig
+                        };
                         changed = true;
                     } else {
                         next[panelId] = existing;
                     }
                 }
+
+                // Cleanup mapping for removed tabs
+                const allCurrentTabIds = new Set(Object.values(allPanels).flatMap(p => p.tabs.map((t: any) => t.id)));
+                for (const tabId of tabMappingRef.current.keys()) {
+                    if (!allCurrentTabIds.has(tabId)) tabMappingRef.current.delete(tabId);
+                }
+
                 if (Object.keys(prev).length !== Object.keys(next).length) {
                     changed = true;
                 }
                 return changed ? next : prev;
             });
         }
-    }, [session, getPanes]);
+    }, [session, getPanes, autoMigrateTab, draggedTab]);
 
     useEffect(() => {
         if (!session) return;
@@ -184,17 +230,22 @@ export const PanelProvider: React.FC<{ children: ReactNode }> = ({ children }) =
             if (!tabConfigsRef.current[id as PanelId]) tabConfigsRef.current[id as PanelId] = new Map();
 
             if (tabSwitched && prevTabIdsRef.current[id as PanelId]) {
-                tabHistoriesRef.current[id as PanelId]!.set(prevTabIdsRef.current[id as PanelId], {
+                const outgoingTabId = prevTabIdsRef.current[id as PanelId];
+                
+                tabHistoriesRef.current[id as PanelId]!.set(outgoingTabId, {
                     history: panel.history,
                     historyIndex: panel.historyIndex,
                     version: panel.version
                 });
-                // Save the outgoing tab's view config
-                tabConfigsRef.current[id as PanelId]!.set(prevTabIdsRef.current[id as PanelId], {
-                    viewMode: panel.viewMode,
-                    sortConfig: panel.sortConfig,
-                    groupByDate: panel.groupByDate
-                });
+
+                // ONLY save config if the outgoing tab wasn't just moved here (to avoid polluting it with target panel's defaults)
+                if (!protectedTabsRef.current.has(outgoingTabId)) {
+                    tabConfigsRef.current[id as PanelId]!.set(outgoingTabId, {
+                        viewMode: panel.viewMode,
+                        sortConfig: panel.sortConfig,
+                        groupByDate: panel.groupByDate
+                    });
+                }
             }
             prevTabIdsRef.current[id as PanelId] = activeTabId;
 
@@ -218,13 +269,16 @@ export const PanelProvider: React.FC<{ children: ReactNode }> = ({ children }) =
                             version: activeTab.version || 0
                         });
                     }
-                    // Restore the incoming tab's view config (if previously visited)
+                    // Restore the incoming tab's view config (if previously visited or just migrated)
                     const savedConfig = tabConfigsRef.current[id as PanelId]!.get(activeTabId);
                     if (savedConfig) {
                         panel.setViewMode(savedConfig.viewMode);
                         panel.setSortConfig(savedConfig.sortConfig);
                         panel.setGroupByDate(savedConfig.groupByDate);
                     }
+                    
+                    // Once restored, the tab is no longer "new" to this panel
+                    protectedTabsRef.current.delete(activeTabId);
                 }
             }
         }
@@ -244,6 +298,37 @@ export const PanelProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         return tabConfigsRef.current[panelId]?.get(tabId);
     }, [panelStates]);
 
+    const transferTabState = useCallback((tabId: string, fromPanel: PanelId, toPanel: PanelId) => {
+        // 1. Capture current live state if it's the active tab being moved
+        const liveConfig = getTabConfig(fromPanel, tabId);
+        const panelState = panelStates[fromPanel];
+        
+        // 2. Transfer Config
+        if (!tabConfigsRef.current[toPanel]) tabConfigsRef.current[toPanel] = new Map();
+        if (liveConfig) {
+            tabConfigsRef.current[toPanel].set(tabId, {
+                viewMode: liveConfig.viewMode,
+                sortConfig: liveConfig.sortConfig,
+                groupByDate: liveConfig.groupByDate || false
+            });
+        }
+
+        // 3. Transfer History
+        if (!tabHistoriesRef.current[toPanel]) tabHistoriesRef.current[toPanel] = new Map();
+        // Check if exists in ref
+        const savedHistory = tabHistoriesRef.current[fromPanel]?.get(tabId);
+        if (savedHistory) {
+            tabHistoriesRef.current[toPanel].set(tabId, savedHistory);
+        } else if (panelState && prevTabIdsRef.current[fromPanel] === tabId) {
+            // Or capture live history
+            tabHistoriesRef.current[toPanel].set(tabId, {
+                history: panelState.history,
+                historyIndex: panelState.historyIndex,
+                version: panelState.version
+            });
+        }
+    }, [panelStates, getTabConfig]);
+
     const activePanel = useMemo(() => {
         if (Object.keys(panelStates).length === 0) return null;
         return panelStates[activePanelId] || Object.values(panelStates)[0];
@@ -260,7 +345,6 @@ export const PanelProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         setActivePanelId: syncActivePanel,
         activePanel,
         isReady,
-        splitPanel, // Overridden splitPanel
         getTabConfig
     };
 

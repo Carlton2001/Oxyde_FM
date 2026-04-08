@@ -6,8 +6,7 @@
     min-height: 2.25rem;
     max-height: 2.25rem;
     background-color: var(--header-pane-bg, var(--header-bg));
-    border-top: 1px solid var(--border-color);
-    /* The line you wanted back */
+    /* Removed border-top to avoid double lines or covering issues */
     border-bottom: 1px solid var(--border-color);
     z-index: 10;
     position: relative;

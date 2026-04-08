@@ -1,11 +1,13 @@
 [data-theme="oxyde-dark"] {
     /* Oxyde Dark — Midnight Sapphire & Amber Gold */
-    --bg-color: #0e0c15;
-    --bg-color-rgb: 14, 12, 21;
+    --bg-color: #12101b;
+    --bg-color-rgb: 18, 16, 27;
     --text-color: #e2e0ed;
     --text-muted: #8b86a3;
-    --sidebar-bg: #09080e;
-    --header-bg: #12101b;
+    --sidebar-bg: #08070d;
+    /* Groupe Structure / Fond / Inactif */
+    --header-bg: #151320;
+    /* Groupe Actif / Focus */
 
     --hover-color: #1c1a2b;
     --accent-color: #d4a54a;
@@ -15,12 +17,15 @@
     --border-color: #232031;
     --border-color-rgb: 35, 32, 49;
 
-    --surface-primary: #151320;
-    --surface-secondary: #0f0d18;
+    --surface-primary: var(--header-bg);
+    /* GRP 1 : Onglets actifs */
+    --surface-secondary: var(--sidebar-bg);
+    /* GRP 2 : TabBar, StatusBar & Inactifs */
     --dimmed-opacity: 0.65;
 
     /* Components */
-    --menu-bg: #151320;
+    --menu-bg: var(--header-bg);
+    /* GRP 1 : Menus */
     --menu-border: #2d2a3c;
     --shadow-soft: 0 4px 20px rgba(0, 0, 0, 0.25);
     --shadow-medium: 0 12px 40px rgba(0, 0, 0, 0.45);

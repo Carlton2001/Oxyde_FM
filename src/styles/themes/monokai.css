@@ -6,19 +6,18 @@
     /* Foreground */
     --text-muted: #88846f;
     --sidebar-bg: #1e1f1c;
-    /* Slightly darker */
-    --header-bg: #272822;
+    --header-bg: #3e3d32;
     --hover-color: #4a493e;
     --accent-color: #fd971f;
     --accent-color-rgb: 253, 151, 31;
     --selected-text: #f8f8f2;
     --border-color: #171814;
-    --surface-primary: #3e3d32;
-    --surface-secondary: #1e1f1c;
+
+    --surface-primary: var(--header-bg);    /* GRP 1 : Onglets actifs, NavBar, Menus */
+    --surface-secondary: var(--sidebar-bg); /* GRP 2 : TabBar, StatusBar, Sidebar */
     --dimmed-opacity: 0.7;
 
-    /* Components */
-    --menu-bg: #272822;
+    --menu-bg: var(--header-bg);
     --menu-border: #171814;
     --menu-shadow: 0 0.25rem 0.625rem rgba(0, 0, 0, 0.5);
 

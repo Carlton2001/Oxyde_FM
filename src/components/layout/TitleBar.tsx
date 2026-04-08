@@ -59,8 +59,8 @@ export const TitleBar: React.FC<TitleBarProps> = ({
                 setHamburgerOpen(false);
             }
         };
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
+        document.addEventListener('mousedown', handleClickOutside, true);
+        return () => document.removeEventListener('mousedown', handleClickOutside, true);
     }, [settingsOpen, hamburgerOpen]);
 
     const toggleSettings = () => {
@@ -82,12 +82,13 @@ export const TitleBar: React.FC<TitleBarProps> = ({
             <div className="title-bar-left">
                 <div className="settings-container branding" onClick={(e) => e.stopPropagation()}>
                     <button
-                        className={cx("btn-icon logo-btn", { "glow-pulse": firstLaunch && !settingsOpen })}
+                        className={cx("btn-icon logo-btn branding-btn", { "glow-pulse": firstLaunch && !settingsOpen, "active": settingsOpen })}
                         onClick={toggleSettings}
                         data-tooltip={t('settings' as any)}
                         data-tooltip-pos="bottom"
                     >
                         <img src="/logo.svg" className="app-logo-icon" alt="Oxyde" />
+                        <span className="app-title">Oxyde</span>
                     </button>
                     <SettingsMenu
                         isOpen={settingsOpen}
@@ -97,7 +98,6 @@ export const TitleBar: React.FC<TitleBarProps> = ({
                         onShowAbout={onShowAbout}
                     />
                 </div>
-                <span className="app-title">Oxyde</span>
             </div>
 
             <div className="title-bar-center" data-tauri-drag-region>
