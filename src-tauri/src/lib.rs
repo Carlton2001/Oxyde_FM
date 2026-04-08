@@ -3,8 +3,6 @@ pub mod models;
 pub mod utils;
 pub mod systems;
 
-use commands::archive::ArchiveState;
-use std::sync::atomic::AtomicBool;
 use std::sync::Mutex;
 use tauri::{AppHandle, Manager, Emitter};
 use crate::models::SnapRect;
@@ -96,7 +94,6 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
 
-        .manage(ArchiveState(AtomicBool::new(false)))
         .manage(systems::file_ops::FileOperationManager::new())
         .manage(models::SessionManager::default())
         .manage(models::ConfigManager::new())
@@ -166,7 +163,7 @@ pub fn run() {
             commands::archive::extract_archive,
             commands::archive::compress_to_archive,
             commands::archive::add_to_archive,
-            commands::archive::cancel_archive_operation,
+            commands::archive::get_supported_archive_formats,
             // Session Commands
             commands::session::get_session_state,
             commands::session::create_tab,

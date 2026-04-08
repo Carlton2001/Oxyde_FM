@@ -61,8 +61,9 @@ function App() {
     showHidden, showSystem, t,
     notifications, notify, dismissNotification, drives, mountedImages,
     useSystemIcons, refreshDrives,
-    zipQuality, sevenZipQuality, zstdQuality, defaultTurboMode,
+    defaultTurboMode,
     setUpdateAvailable, peekStatus, confirmDelete,
+    supportedFormats,
     isTrashEmpty, refreshTrashStatus, driveTrashConfigs,
     fontSize, setFontSize
   } = useApp();
@@ -201,7 +202,6 @@ function App() {
   }, [peekStatus, registerKeybinding]);
 
   const [histogramPanels, setHistogramPanels] = useState<Set<PanelId>>(new Set());
-  const [progress, setProgress] = useState<{ visible: boolean; message: string; cancellable?: boolean; cancelling?: boolean; task?: string; current?: number; total?: number; filename?: string; } | null>(null);
 
   const openTrashSettings = useCallback(() => dialogs.openTrashSettingsDialog(), [dialogs]);
 
@@ -209,9 +209,9 @@ function App() {
   const handlers = useAppHandlers({
     panels, activePanelId, setActivePanelId, fileOps, treeRef, notify, t, dialogs, clipboard: clipboardObj, refreshDrives,
     setActiveTab, closeTab, addTab, setContextMenu, contextMenu, drives, defaultTurboMode,
-    zipQuality, sevenZipQuality, zstdQuality, favorites, peekStatus, confirmDelete,
+    favorites, peekStatus, confirmDelete,
     openTrashSettings,
-    refreshTrashStatus, driveTrashConfigs
+    refreshTrashStatus, supportedFormats, driveTrashConfigs
   });
 
   const {
@@ -232,7 +232,7 @@ function App() {
 
   // Drag & Drop
   const [isNativeActive, setIsNativeActive] = useState(false);
-  const { onDropFile } = useFileDrop({ t: t as any, notify, refreshBothPanels, refreshTreePath: (p) => treeRef.current?.refreshPath(p), setProgress, initiateFileOp, defaultTurboMode });
+  const { onDropFile } = useFileDrop({ t: t as any, notify, refreshBothPanels, refreshTreePath: (p) => treeRef.current?.refreshPath(p), initiateFileOp, defaultTurboMode });
   const { dragState, dragTargetPath, dragOverPath, handleDragStart: originalHandleDragStart, handleDrop, setDragState, setDragOverPath, setDragTargetPath } = useDragDrop(onDropFile);
 
   useNativeDragDrop({
@@ -277,8 +277,8 @@ function App() {
     notify,
     t: t as any,
     dialogs,
-    settings: { zipQuality, sevenZipQuality, zstdQuality, defaultTurboMode, confirmDelete },
-    setProgress,
+    settings: { defaultTurboMode, confirmDelete },
+    supportedFormats,
     contextMenuTarget: contextMenu?.target,
     isDir: contextMenu?.isDir,
     isDrive: contextMenu?.isDrive,
@@ -301,7 +301,7 @@ function App() {
     setFontSize
   }), [
     activePanelId, panels, fileOps, clipboard, copy, cut, clearClipboard, copyToSystem, refreshClipboard,
-    notify, t, dialogs, zipQuality, sevenZipQuality, zstdQuality, defaultTurboMode, setProgress,
+    notify, t, dialogs, defaultTurboMode,
     contextMenu?.target, contextMenu?.isDir, contextMenu?.isDrive, refreshDrives, mountedImages,
     activePanelTabData, setActiveTab, closeTab, addTab, refreshBothPanels,
     modifiers, peekStatus, driveTrashConfigs, setContextMenu, handleContextMenu,
@@ -337,41 +337,22 @@ function App() {
 
 
   // Ref for callbacks used in stable IPC listeners
-  const callbacksRef = useRef({ refreshBothPanels, t, setProgress, refreshTrashStatus });
+  const callbacksRef = useRef({ refreshBothPanels, t, refreshTrashStatus });
   useEffect(() => {
-    callbacksRef.current = { refreshBothPanels, t, setProgress, refreshTrashStatus };
-  }, [refreshBothPanels, t, setProgress, refreshTrashStatus]);
+    callbacksRef.current = { refreshBothPanels, t, refreshTrashStatus };
+  }, [refreshBothPanels, t, refreshTrashStatus]);
 
-  // IPC listeners - must be stable to not lose events during re-renders
+  // IPC listener for file operation completion - refresh UI when ops finish
   useEffect(() => {
-    // 1. Legacy Progress listener
-    const unlistenProgress = listen<any>('progress', (e) => {
-      const { task, current, total, status, filename } = e.payload;
-      if (status === 'completed') { setTimeout(() => callbacksRef.current.setProgress(null), 500); return; }
-      let message = callbacksRef.current.t('processing');
-      let cancellable = (task === 'copy' || task === 'move');
-      if (task === 'copy') message = callbacksRef.current.t('op_copy' as any);
-      if (task === 'move') message = callbacksRef.current.t('op_move' as any);
-      if (task === 'calculate_size') message = callbacksRef.current.t('calculating');
-      callbacksRef.current.setProgress(prev => ({ visible: true, message, task, cancellable: prev?.cancellable ?? cancellable, current, total, filename, cancelling: prev?.cancelling ?? false }));
-    });
-
-    // 2. New File Operation Event listener (Real-time tracking and refresh)
     const unlistenOp = listen<any>('file_op_event', (e) => {
-      const op = e.payload; // FileOperation struct
-
+      const op = e.payload;
       if (op.status === 'Completed' || (typeof op.status === 'object' && op.status.Error)) {
-        // Operation finished - Refresh UI
         callbacksRef.current.refreshBothPanels();
         callbacksRef.current.refreshTrashStatus();
-        return;
       }
     });
 
-    return () => {
-      unlistenProgress.then(fn => fn());
-      unlistenOp.then(fn => fn());
-    };
+    return () => { unlistenOp.then(fn => fn()); };
   }, []);
 
   const handleInputPaste = async () => {
@@ -475,8 +456,12 @@ function App() {
 
   const effectiveProgress = liveOperation ? {
     visible: showProgress,
-    message: liveOperation.op_type === 'Copy' ? t('op_copy' as any) : liveOperation.op_type === 'Move' ? t('op_move' as any) :
-      liveOperation.op_type === 'Delete' || liveOperation.op_type === 'Trash' ? t('op_delete' as any) : liveOperation.status,
+    message: liveOperation.op_type === 'Copy' ? t('op_copy' as any) :
+      liveOperation.op_type === 'Move' ? t('op_move' as any) :
+      liveOperation.op_type === 'Delete' || liveOperation.op_type === 'Trash' ? t('op_delete' as any) :
+      liveOperation.op_type === 'Archive' ? t('op_archive' as any) :
+      liveOperation.op_type === 'Extract' ? t('op_extract' as any) :
+      liveOperation.status,
     cancellable: true,
     cancelling: liveOperation.status === 'Cancelled',
     current: liveOperation.processed_bytes,
@@ -491,7 +476,7 @@ function App() {
     processedFiles: liveOperation.processed_files,
     totalFiles: liveOperation.total_files,
     turbo: liveOperation.turbo
-  } : progress;
+  } : null;
 
 
   const handleCancelSearch = (id: string) => {

@@ -107,6 +107,8 @@ export const fr = {
     conflict_reso: 'Résolution de conflits',
     op_delete: 'Supprimer',
     op_restore: 'Restaurer',
+    op_archive: 'Archiver',
+    op_extract: 'Extraire',
     item_created: 'Élément créé',
     op_cancelled: 'Opération annulée',
     processing: 'Traitement en cours...',

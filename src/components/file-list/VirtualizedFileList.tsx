@@ -155,7 +155,6 @@ const DetailsRowContent = React.memo(({ entry, style, sharedProps }: { entry: Fi
     const { isSelected, isRenaming, handlers, itemClassName, tooltipText } = useFileItemState({
         ...sharedProps,
         entry,
-        showCheckboxes,
         isFocused: sharedProps.currentIndex === sharedProps.index // Using index passed from List
     });
 
@@ -236,7 +235,6 @@ const GridCellContent = React.memo(({ entry, style, sharedProps }: { entry: File
     const { isSelected, isRenaming, handlers, itemClassName, tooltipText } = useFileItemState({
         ...sharedProps,
         entry,
-        showCheckboxes,
         isFocused: sharedProps.currentIndex === sharedProps.index // Using index passed from Grid
     });
 
@@ -326,63 +324,63 @@ const FiltersRow = React.memo(({ activeFilters, t, style }: { activeFilters: Act
                         <span>{t('active_filters' as any) || 'Active filters'}</span>
                     </div>
                     <div className="active-filters-pills">
-                        {activeFilters.extensions?.size > 0 && (
+                        {activeFilters.extensions && activeFilters.extensions.size > 0 && (
                             <div className="filter-pill-group">
                                 {activeFilters.extensions.size === 1
                                     ? Array.from(activeFilters.extensions).map(ext => (
-                                        <span key={ext} className="filter-pill" onClick={() => activeFilters.onRemoveExtension(ext)}>
+                                        <span key={ext} className="filter-pill" onClick={() => (activeFilters as any).onRemoveExtension(ext)}>
                                             {t('type')}: {ext === '__DIR__' ? (t('folder' as any) || 'Folder') : (ext === '' ? `(${t('none_fem' as any) || 'None'})` : ext.toUpperCase())} <X size={10} style={{ marginLeft: '4px' }} />
                                         </span>
                                     ))
                                     : (
-                                        <span className="filter-pill" onClick={() => activeFilters.onClearExtensions()}>
-                                            {t('type')}: {activeFilters.extensions.size} <X size={10} style={{ marginLeft: '4px' }} />
+                                        <span className="filter-pill" onClick={() => (activeFilters as any).onClearExtensions()}>
+                                            {(t('type') || 'Type')}: {activeFilters.extensions.size} <X size={10} style={{ marginLeft: '4px' }} />
                                         </span>
                                     )
                                 }
                             </div>
                         )}
-                        {activeFilters.sizes?.size > 0 && (
+                        {activeFilters.sizes && activeFilters.sizes.size > 0 && (
                             <div className="filter-pill-group">
                                 {activeFilters.sizes.size === 1
                                     ? Array.from(activeFilters.sizes).map(size => {
                                         const info = (SIZE_CATEGORIES as any)[size];
                                         const label = info ? t(info.key as any) : size;
                                         return (
-                                            <span key={size} className="filter-pill" onClick={() => activeFilters.onRemoveSize(size)}>
+                                            <span key={size} className="filter-pill" onClick={() => (activeFilters as any).onRemoveSize(size)}>
                                                 {t('size')}: {label} <X size={10} style={{ marginLeft: '4px' }} />
                                             </span>
                                         );
                                     })
                                     : (
-                                        <span className="filter-pill" onClick={() => activeFilters.onClearSizes()}>
-                                            {t('size')}: {activeFilters.sizes.size} <X size={10} style={{ marginLeft: '4px' }} />
+                                        <span className="filter-pill" onClick={() => (activeFilters as any).onClearSizes()}>
+                                            {(t('size') || 'Size')}: {activeFilters.sizes.size} <X size={10} style={{ marginLeft: '4px' }} />
                                         </span>
                                     )
                                 }
                             </div>
                         )}
-                        {activeFilters.deletedDates?.size > 0 && (
+                        {activeFilters.deletedDates && activeFilters.deletedDates.size > 0 && (
                             <div className="filter-pill-group">
                                 {activeFilters.deletedDates.size === 1
                                     ? Array.from(activeFilters.deletedDates).map(date => {
                                         const key = (DATE_CATEGORIES as any)[date];
                                         const label = key ? t(key as any) : date;
                                         return (
-                                            <span key={date} className="filter-pill" onClick={() => activeFilters.onRemoveDeletedDate(date)}>
+                                            <span key={date} className="filter-pill" onClick={() => (activeFilters as any).onRemoveDeletedDate(date)}>
                                                 {t('deleted_date')}: {label} <X size={10} style={{ marginLeft: '4px' }} />
                                             </span>
                                         );
                                     })
                                     : (
-                                        <span className="filter-pill" onClick={() => activeFilters.onClearDeletedDates()}>
+                                        <span className="filter-pill" onClick={() => (activeFilters as any).onClearDeletedDates()}>
                                             {t('deleted_date')}: {activeFilters.deletedDates.size} <X size={10} style={{ marginLeft: '4px' }} />
                                         </span>
                                     )
                                 }
                             </div>
                         )}
-                        {activeFilters.date?.size > 0 && (
+                        {activeFilters.date && activeFilters.date.size > 0 && (
                             <div className="filter-pill-group">
                                 {activeFilters.date.size === 1
                                     ? Array.from(activeFilters.date).map(date => {
@@ -433,7 +431,6 @@ const GroupedFileRow = React.memo(({ entry, style, sharedProps }: { entry: FileE
     const { isSelected, isRenaming, handlers, itemClassName, tooltipText } = useFileItemState({
         ...sharedProps,
         entry,
-        showCheckboxes,
         isFocused: sharedProps.currentIndex === (sharedProps as any).index
     });
 
@@ -582,7 +579,6 @@ const GroupedGridItem = React.memo<{ entry: FileEntry; sharedProps: SharedItemPr
     const { isSelected, isRenaming, handlers, itemClassName, tooltipText } = useFileItemState({
         ...sharedProps,
         entry,
-        showCheckboxes,
         isFocused: sharedProps.currentIndex === (sharedProps as any).index
     });
 

@@ -95,6 +95,12 @@ export const useFileOperations = (
                         case 'Delete':
                             msg = `${count} ${itemStr} ${_t(count > 1 ? 'permanently_deleted_plural' : 'permanently_deleted')}`;
                             break;
+                        case 'Archive':
+                            msg = _t('item_created' as any) || 'Archive created';
+                            break;
+                        case 'Extract':
+                            msg = _t('item_restored' as any) || 'Extracted';
+                            break;
                     }
 
                     if (msg) _notify(msg, 'success');

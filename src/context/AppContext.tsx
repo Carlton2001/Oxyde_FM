@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useCallback, ReactNode } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { Theme, LayoutMode, Language, DateFormat, CompressionQuality, DriveInfo, NotificationType, AppNotification } from '../types';
+import { Theme, LayoutMode, Language, DateFormat, DriveInfo, NotificationType, AppNotification } from '../types';
 import { getT, TFunc } from '../i18n';
 import { useNotifications } from '../hooks/useNotifications';
 import { useDrives } from '../hooks/useFileSystem';
@@ -15,9 +15,7 @@ export interface AppContextValue {
     useSystemIcons: boolean;
     dateFormat: DateFormat;
     showPreviews: boolean;
-    zipQuality: CompressionQuality;
-    sevenZipQuality: CompressionQuality;
-    zstdQuality: CompressionQuality;
+    supportedFormats: string[];
     defaultTurboMode: boolean;
     showGridThumbnails: boolean;
     showCheckboxes: boolean;
@@ -41,9 +39,6 @@ export interface AppContextValue {
     setUseSystemIcons: (use: boolean) => void;
     setDateFormat: (format: DateFormat) => void;
     setShowPreviews: (show: boolean) => void;
-    setZipQuality: (quality: CompressionQuality) => void;
-    setSevenZipQuality: (quality: CompressionQuality) => void;
-    setZstdQuality: (quality: CompressionQuality) => void;
     setDefaultTurboMode: (enabled: boolean) => void;
     setShowGridThumbnails: (show: boolean) => void;
     setShowCheckboxes: (show: boolean) => void;
@@ -109,9 +104,6 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
         useSystemIcons: false,
         dateFormat: 'European' as DateFormat,
         showPreviews: true,
-        zipQuality: 'fast' as CompressionQuality,
-        sevenZipQuality: 'fast' as CompressionQuality,
-        zstdQuality: 'fast' as CompressionQuality,
         fontSize: 16,
         searchLimit: 3000,
         defaultTurboMode: true,
@@ -130,9 +122,6 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
     const useSystemIcons = config?.use_system_icons ?? (localStorage.getItem('fm_useSystemIcons') === 'true' || (localStorage.getItem('fm_useSystemIcons') === null && defaults.useSystemIcons));
     const dateFormat = (config?.date_format as DateFormat) || (localStorage.getItem('fm_dateFormat') as DateFormat) || defaults.dateFormat;
     const showPreviews = config?.show_previews ?? (localStorage.getItem('fm_showPreviews') === 'true' || (localStorage.getItem('fm_showPreviews') === null && defaults.showPreviews));
-    const zipQuality = (config?.zip_quality as CompressionQuality) || (localStorage.getItem('fm_zipQuality') as CompressionQuality) || defaults.zipQuality;
-    const sevenZipQuality = (config?.seven_zip_quality as CompressionQuality) || (localStorage.getItem('fm_sevenZipQuality') as CompressionQuality) || defaults.sevenZipQuality;
-    const zstdQuality = (config?.zstd_quality as CompressionQuality) || (localStorage.getItem('fm_zstdQuality') as CompressionQuality) || defaults.zstdQuality;
     const cachedFontSize = localStorage.getItem('fm_fontSize');
     const fontSize = config?.font_size ?? (cachedFontSize ? parseInt(cachedFontSize, 10) : defaults.fontSize);
     const searchLimit = config?.search_limit ?? (localStorage.getItem('fm_searchLimit') ? parseInt(localStorage.getItem('fm_searchLimit')!, 10) : defaults.searchLimit);
@@ -146,6 +135,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
     const [updateAvailable, setUpdateAvailable] = React.useState(false);
     const [isTrashEmpty, setIsTrashEmpty] = React.useState(true);
     const [peekStatus, setPeekStatus] = React.useState<AppContextValue['peekStatus']>(null);
+    const [supportedFormats, setSupportedFormats] = React.useState<string[]>(['zip', 'tar', 'zst']);
     const [driveTrashConfigs, setDriveTrashConfigs] = React.useState<Record<string, { nukeOnDelete: boolean }>>({});
 
     useEffect(() => {
@@ -155,6 +145,10 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
                 console.error("Failed to get Peek status", e);
                 setPeekStatus({ installed: false, enabled: false, space_enabled: false, activation_shortcut: null });
             });
+
+        invoke<string[]>('get_supported_archive_formats')
+            .then(setSupportedFormats)
+            .catch(e => console.error("Failed to get supported formats", e));
     }, []);
 
     const refreshDriveTrashConfigs = useCallback(async () => {
@@ -219,18 +213,6 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
         localStorage.setItem('fm_showPreviews', v.toString());
         setConfigValue('show_previews', v);
     }, [setConfigValue]);
-    const setZipQuality = useCallback((v: CompressionQuality) => {
-        localStorage.setItem('fm_zipQuality', v);
-        setConfigValue('zip_quality', v);
-    }, [setConfigValue]);
-    const setSevenZipQuality = useCallback((v: CompressionQuality) => {
-        localStorage.setItem('fm_sevenZipQuality', v);
-        setConfigValue('seven_zip_quality', v);
-    }, [setConfigValue]);
-    const setZstdQuality = useCallback((v: CompressionQuality) => {
-        localStorage.setItem('fm_zstdQuality', v);
-        setConfigValue('zstd_quality', v);
-    }, [setConfigValue]);
     const setDefaultTurboMode = useCallback((v: boolean) => {
         localStorage.setItem('fm_defaultTurboMode', v.toString());
         setConfigValue('default_turbo_mode', v);
@@ -283,9 +265,8 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
             await invoke('reset_config_to_default');
             const keysToRemove = [
                 'fm_theme', 'fm_layout', 'fm_language', 'fm_showHidden', 'fm_showSystem',
-                'fm_useSystemIcons', 'fm_dateFormat', 'fm_showPreviews', 'fm_zipQuality',
-                'fm_sevenZipQuality', 'fm_zstdQuality', 'fm_fontSize', 'fm_searchLimit',
-                'fm_defaultTurboMode', 'fm_showGridThumbnails', 'fm_showCheckboxes'
+                'fm_useSystemIcons', 'fm_dateFormat', 'fm_showPreviews', 'fm_fontSize',
+                'fm_searchLimit', 'fm_defaultTurboMode', 'fm_showGridThumbnails', 'fm_showCheckboxes'
             ];
             keysToRemove.forEach(k => localStorage.removeItem(k));
 
@@ -348,12 +329,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
         setDateFormat,
         showPreviews,
         setShowPreviews,
-        zipQuality,
-        setZipQuality,
-        sevenZipQuality,
-        setSevenZipQuality,
-        zstdQuality,
-        setZstdQuality,
+        supportedFormats,
         searchLimit,
         setSearchLimit,
         defaultTurboMode,

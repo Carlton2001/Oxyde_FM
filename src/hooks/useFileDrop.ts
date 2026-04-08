@@ -4,15 +4,12 @@ import { getParent } from '../utils/path';
 import { isArchivePath, isSupportedArchiveForAdding } from '../utils/archive';
 import { formatCommandError } from '../utils/error';
 import { TFunc } from '../i18n';
-import { ProgressState } from '../components/ui/ProgressOverlay';
 
 interface UseFileDropProps {
     t: TFunc;
-    notify: (message: string, type: NotificationType, duration?: number) => void;
-
+    notify: (message: string, type: NotificationType, duration?: number) => string | undefined;
     refreshBothPanels: () => void;
     refreshTreePath: (path: string) => void;
-    setProgress: (progress: ProgressState | null) => void;
     initiateFileOp: (action: 'copy' | 'move', paths: string[], targetDir: string, turbo?: boolean) => Promise<boolean>;
     defaultTurboMode?: boolean;
 }
@@ -20,10 +17,8 @@ interface UseFileDropProps {
 export const useFileDrop = ({
     t,
     notify,
-
     refreshBothPanels,
     refreshTreePath,
-    setProgress,
     initiateFileOp,
     defaultTurboMode
 }: UseFileDropProps) => {
@@ -35,23 +30,20 @@ export const useFileDrop = ({
         const isFromTrash = files.some(f => f.original_path || f.path?.startsWith('trash://'));
 
         if (isFromTrash) {
-            // Only allow "Moving/Restoring" from trash
-            setProgress({ visible: true, message: t('restoring') + '...' });
+            const nid = notify(t('restoring') + '...', 'loading', 0);
             try {
                 await invoke('move_from_trash', { paths: filePaths, targetDir: targetPath });
                 const itemCount = files.length;
                 const isPlural = itemCount > 1;
                 const itemText = isPlural ? t('items') : t('item');
                 notify(`${itemCount} ${itemText} ${t('restored')} `, 'success');
-
-
                 refreshBothPanels();
                 refreshTreePath(targetPath);
             } catch (e) {
                 console.error("Failed to restore from trash via DnD", e);
                 notify(`${t('error')}: ${formatCommandError(e)} `, 'error');
             } finally {
-                setProgress(null);
+                if (nid) notify('', 'info'); // dismiss loading — or use dismissNotification if available
             }
             return;
         }
@@ -61,11 +53,9 @@ export const useFileDrop = ({
 
         // Check if target is an ARCHIVE (supported for adding)
         if (isArchivePath(targetPath) && isSupportedArchiveForAdding(targetPath)) {
-            setProgress({ visible: true, message: t('adding_to_archive') + '...' });
             try {
                 await invoke('add_to_archive', { paths: filePaths, archivePath: targetPath });
-                notify(t('added_to_archive_success'), 'success');
-                refreshBothPanels();
+                // Progress and completion are handled via file_op_event
             } catch (e: any) {
                 console.error("Failed to add to archive via DnD", e);
                 const errorMsg = formatCommandError(e);
@@ -74,8 +64,6 @@ export const useFileDrop = ({
                 } else {
                     notify(`${t('error')}: ${errorMsg} `, 'error');
                 }
-            } finally {
-                setProgress(null);
             }
             return;
         }

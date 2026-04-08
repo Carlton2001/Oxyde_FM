@@ -2,41 +2,65 @@ import { useCallback, useMemo } from 'react';
 import { PanelId, FileEntry, ColumnWidths, SortField, DriveInfo } from '../types';
 import { ActionContext } from '../types/actions';
 import { AppContextValue } from '../context/AppContext';
+import { DialogContextType } from '../context/DialogContext';
 import { actionService } from '../services/ActionService';
 import { formatCommandError } from '../utils/error';
 import { getParent } from '../utils/path';
 import { DirectoryTreeHandle } from '../components/ui/DirectoryTree';
 import { invoke } from '@tauri-apps/api/core';
 import { useTabs } from '../context/TabsContext';
+import { TFunc } from '../i18n';
+import { useFileOperations } from './useFileOperations';
+import { useClipboard } from './useClipboard';
+
+type FileOps = ReturnType<typeof useFileOperations>;
+type ClipboardHook = ReturnType<typeof useClipboard>;
+
+interface ContextMenuState {
+    x: number;
+    y: number;
+    target?: string;
+    panelId: PanelId;
+    isDir?: boolean;
+    isBackground?: boolean;
+    isDrive?: boolean;
+    isMediaDevice?: boolean;
+    isNetworkComputer?: boolean;
+    hasWebPage?: boolean;
+    driveType?: DriveInfo['drive_type'];
+    isFavorite?: boolean;
+    isTrash?: boolean;
+    isInputContext?: boolean;
+    isTextSelected?: boolean;
+}
 
 interface AppHandlersProps {
     panels: Record<string, any>;
     activePanelId: PanelId;
     setActivePanelId: (id: PanelId) => void;
-    fileOps: any;
+    fileOps: FileOps;
     treeRef: React.RefObject<DirectoryTreeHandle | null>;
     notify: (message: string, type: 'error' | 'info' | 'success' | 'warning' | 'loading', duration?: number) => string | undefined;
-    t: any;
-    dialogs: any;
-    clipboard: any;
+    t: TFunc;
+    dialogs: DialogContextType;
+    clipboard: ClipboardHook;
     refreshDrives: () => void;
     setActiveTab: (id: string, panelId?: PanelId) => void;
     closeTab: (id: string, panelId?: PanelId) => void;
     addTab: (path: string, optionsOrId?: string | { id?: string, background?: boolean, index?: number, panelId?: PanelId }, background?: boolean) => Promise<string | undefined>;
-    setContextMenu: (menu: any) => void;
-    contextMenu: any;
+    setContextMenu: (menu: ContextMenuState | null) => void;
+    contextMenu: ContextMenuState | null;
     drives: DriveInfo[];
     defaultTurboMode: boolean;
-    zipQuality: any;
-    sevenZipQuality: any;
-    zstdQuality: any;
-    favorites: any[];
-    peekStatus?: AppContextValue['peekStatus'];
-    openTrashSettings: () => void;
     confirmDelete: boolean;
     refreshTrashStatus: () => Promise<void>;
+    supportedFormats: string[];
     driveTrashConfigs: Record<string, { nukeOnDelete: boolean }>;
+    favorites: { path: string }[];
+    peekStatus?: AppContextValue['peekStatus'];
+    openTrashSettings: () => void;
 }
+
 
 export const useAppHandlers = ({
     panels,
@@ -56,15 +80,13 @@ export const useAppHandlers = ({
     drives,
     refreshDrives,
     defaultTurboMode,
-    zipQuality,
-    sevenZipQuality,
-    zstdQuality,
-    favorites,
-    peekStatus,
     openTrashSettings,
     confirmDelete,
     refreshTrashStatus,
-    driveTrashConfigs
+    supportedFormats,
+    driveTrashConfigs,
+    favorites,
+    peekStatus
 }: AppHandlersProps) => {
     const { panels: tabPanels } = useTabs();
     const activePanel = panels[activePanelId];
@@ -116,17 +138,15 @@ export const useAppHandlers = ({
         t,
         dialogs,
         settings: {
-            zipQuality,
-            sevenZipQuality,
-            zstdQuality,
             defaultTurboMode,
             confirmDelete
         },
+        supportedFormats,
         refreshTreePath,
         setContextMenu,
         peekStatus,
         driveTrashConfigs
-    }), [activePanelId, panels, fileOps, clipboard, notify, t, dialogs, zipQuality, sevenZipQuality, zstdQuality, defaultTurboMode, refreshBothPanels, refreshTreePath, setContextMenu, peekStatus, driveTrashConfigs]);
+    }), [activePanelId, panels, fileOps, clipboard, notify, t, dialogs, defaultTurboMode, refreshBothPanels, refreshTreePath, setContextMenu, peekStatus, driveTrashConfigs, supportedFormats]);
 
     const handleAction = useCallback(async (actionId: string, contextOverride?: Partial<ActionContext>) => {
         try {
@@ -331,7 +351,7 @@ export const useAppHandlers = ({
             refreshBothPanels();
             refreshTrashStatus();
         }
-    }, [dialogs, notify, t, refreshBothPanels]);
+    }, [dialogs, fileOps, t, refreshBothPanels, refreshTrashStatus]);
 
     const handleTrashProperties = useCallback(() => {
         openTrashSettings();

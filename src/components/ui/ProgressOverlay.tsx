@@ -167,7 +167,7 @@ export const ProgressOverlay: React.FC<ProgressOverlayProps> = ({ progress, t, o
                     </span>
 
                     <div className="progress-controls-row" onMouseDown={(e) => e.stopPropagation()}>
-                        {!isCompleted && (
+                        {!isCompleted && progress.canPause && (
                             <button
                                 onClick={() => onToggleTurbo?.(!progress.turbo)}
                                 className={`progress-btn-control turbo-toggle-btn ${progress.turbo ? 'turbo-active' : ''}`}

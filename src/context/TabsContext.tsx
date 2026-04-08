@@ -17,7 +17,6 @@ interface TabsContextType {
     closeTab: (id: string, panelId?: PanelId) => void;
     setActiveTab: (id: string, panelId?: PanelId) => void;
     updateTabPath: (id: string, path: string, panelId?: PanelId, version?: number) => void;
-    updateTabState: (id: string, state: any) => void; // Legacy hook compat
     duplicateTab: (id: string, panelId?: PanelId) => void;
     closeOtherTabs: (id: string, panelId?: PanelId) => void;
     reorderTabs: (sourceIndex: number, targetIndex: number, panelId?: PanelId) => void;
@@ -298,7 +297,6 @@ export const TabsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         activeTabNavigate(targetPanel, path, version);
     }, [activePanelId, activeTabNavigate]);
 
-    const updateTabState = () => { };
     const duplicateTab = useCallback((id: string, _panelId?: PanelId) => {
         activeDuplicateTab(id);
     }, [activeDuplicateTab]);
@@ -315,7 +313,6 @@ export const TabsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         closeTab,
         setActiveTab,
         updateTabPath,
-        updateTabState,
         duplicateTab,
         closeOtherTabs,
         reorderTabs,

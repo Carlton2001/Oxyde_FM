@@ -107,6 +107,8 @@ export const es = {
     conflict_reso: 'Resolución de conflictos',
     op_delete: 'Eliminar',
     op_restore: 'Restaurar',
+    op_archive: 'Archivar',
+    op_extract: 'Extraer',
     item_created: 'Elemento creado',
     op_cancelled: 'Operación cancelada',
     processing: 'Procesando...',

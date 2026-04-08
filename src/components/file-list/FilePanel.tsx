@@ -347,7 +347,7 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
             if (f.is_system && !showSystem) return false;
             if (f.is_hidden && !showHidden) return false;
 
-            if (extensionFilter?.size > 0) {
+            if (extensionFilter && extensionFilter.size > 0) {
                 if (f.is_dir) {
                     if (!extensionFilter.has('__DIR__')) return false;
                 } else {
@@ -356,7 +356,7 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
                 }
             }
 
-            if (sizeFilter?.size > 0 && !f.is_dir) {
+            if (sizeFilter && sizeFilter.size > 0 && !f.is_dir) {
                 const cat = getSizeCategoryForFile(f.size);
                 if (!sizeFilter.has(cat)) return false;
             }
@@ -365,7 +365,7 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
                 if (!f.name.toLowerCase().includes(nameFilter.toLowerCase())) return false;
             }
 
-            if (dateFilter?.size > 0) {
+            if (dateFilter && dateFilter.size > 0) {
                 const cat = getDateCategoryForFile(f.modified || 0);
                 if (!dateFilter.has(cat as any)) return false;
             }
@@ -377,7 +377,7 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
                 if (!dirPath.toLowerCase().includes(locationFilter.toLowerCase())) return false;
             }
 
-            if (deletedDateFilter?.size > 0 && isTrashView) {
+            if (deletedDateFilter && deletedDateFilter.size > 0 && isTrashView) {
                 const cat = getDateCategoryForFile(f.deleted_time || 0);
                 if (!deletedDateFilter.has(cat as any)) return false;
             }
@@ -666,12 +666,12 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
                             onClearSearch={onClearSearch}
                             onSelectAll={handleHeaderClick}
                             onHeaderContextMenu={handleHeaderContextMenu}
-                            isTypeFiltered={extensionFilter?.size > 0}
-                            isSizeFiltered={sizeFilter?.size > 0}
+                            isTypeFiltered={!!extensionFilter && extensionFilter.size > 0}
+                            isSizeFiltered={!!sizeFilter && sizeFilter.size > 0}
                             isNameFiltered={nameFilter !== null}
                             isLocationFiltered={locationFilter !== null}
-                            isDeletedDateFiltered={deletedDateFilter?.size > 0}
-                            isDateFiltered={dateFilter?.size > 0}
+                            isDeletedDateFiltered={!!deletedDateFilter && deletedDateFilter.size > 0}
+                            isDateFiltered={!!dateFilter && dateFilter.size > 0}
                             t={t}
                             panelRef={panelRef}
                             selected={selected}

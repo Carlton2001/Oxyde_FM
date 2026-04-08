@@ -107,6 +107,8 @@ export const de = {
     conflict_reso: 'Konfliktlösung',
     op_delete: 'Löschen',
     op_restore: 'Wiederherstellen',
+    op_archive: 'Archivieren',
+    op_extract: 'Entpacken',
     item_created: 'Element erstellt',
     op_cancelled: 'Vorgang abgebrochen',
     processing: 'Verarbeitung...',

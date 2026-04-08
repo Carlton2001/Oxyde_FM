@@ -34,7 +34,9 @@ pub enum FileOpType {
     Copy,
     Move,
     Delete,
-    Trash, // Move to recycle bin
+    Trash,   // Move to recycle bin
+    Archive, // Compress to archive
+    Extract, // Extract from archive
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -167,6 +169,9 @@ impl FileOperationManager {
                 FileOpType::Move => Self::perform_copy(&app_clone, &op_clone, sources, destination, true, resolutions),
                 FileOpType::Delete => Self::perform_delete(&app_clone, &op_clone, sources),
                 FileOpType::Trash => Self::perform_trash(&app_clone, &op_clone, sources),
+                FileOpType::Archive | FileOpType::Extract => {
+                    unreachable!("Archive/Extract ops are executed directly, not through FileOperationManager::execute_operation")
+                }
             };
 
             // Always restore normal priority before thread exits
@@ -199,7 +204,7 @@ impl FileOperationManager {
                     FileOpType::Copy => Some(TransactionType::Copy),
                     FileOpType::Move => Some(TransactionType::Move),
                     FileOpType::Trash => Some(TransactionType::Delete),
-                    FileOpType::Delete => None,
+                    FileOpType::Delete | FileOpType::Archive | FileOpType::Extract => None,
                 };
 
                 if let Some(t_type) = tx_type {
@@ -954,6 +959,31 @@ impl FileOperationManager {
         ops.get(id).map(|op| op.lock().unwrap().clone())
     }
     
+    /// Register an operation that manages its own execution (e.g. archive ops).
+    /// Returns the Arc so the caller can mutate it and emit events directly.
+    pub fn register_op(&self, op: FileOperation) -> Arc<Mutex<FileOperation>> {
+        let arc = Arc::new(Mutex::new(op));
+        let mut ops = self.operations.lock().unwrap();
+
+        if ops.len() > 50 {
+            let to_remove: Vec<String> = ops.iter()
+                .filter(|(_, a)| {
+                    let locked = a.lock().unwrap();
+                    matches!(locked.status, OpStatus::Completed | OpStatus::Cancelled | OpStatus::Error(_))
+                })
+                .map(|(id, _)| id.clone())
+                .take(20)
+                .collect();
+            for id in to_remove {
+                ops.remove(&id);
+            }
+        }
+
+        let id = arc.lock().unwrap().id.clone();
+        ops.insert(id, arc.clone());
+        arc
+    }
+
     pub fn cancel_operation(&self, id: &str) -> bool {
         let ops = self.operations.lock().unwrap();
         if let Some(op) = ops.get(id) {

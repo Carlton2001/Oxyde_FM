@@ -37,7 +37,7 @@ export interface ClipboardOperations {
     refreshClipboard: () => Promise<void>;
 }
 
-import { NotificationType, CompressionQuality } from './index';
+import { NotificationType } from './index';
 import { DialogContextType } from '../context/DialogContext';
 
 export interface ActionContext {
@@ -47,6 +47,7 @@ export interface ActionContext {
     clipboard: ClipboardOperations;
     notify: (message: string, type?: NotificationType, duration?: number) => void;
     t: (key: string, params?: Record<string, string | number>) => string;
+    supportedFormats: string[];
 
     // UI State Setters (Temporary hooks until full refactor)
     // Dialog Context
@@ -54,15 +55,9 @@ export interface ActionContext {
 
     // App Settings (for Archives etc)
     settings: {
-        zipQuality: CompressionQuality;
-        sevenZipQuality: CompressionQuality;
-        zstdQuality: CompressionQuality;
         defaultTurboMode: boolean;
         confirmDelete: boolean;
     };
-
-    // UI Feedback
-    setProgress?: (state: { visible: boolean; message: string; cancellable?: boolean } | null) => void;
 
     otherPanel?: PanelState;
     refreshBothPanels?: () => void;

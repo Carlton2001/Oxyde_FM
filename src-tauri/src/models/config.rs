@@ -34,12 +34,6 @@ pub struct AppConfig {
     #[serde(default)]
     pub show_previews: bool,
     #[serde(default)]
-    pub zip_quality: String,
-    #[serde(default)]
-    pub seven_zip_quality: String,
-    #[serde(default)]
-    pub zstd_quality: String,
-    #[serde(default)]
     pub font_size: u32,
     #[serde(default)]
     pub search_limit: u32,
@@ -126,9 +120,6 @@ impl Default for AppConfig {
             use_system_icons: false,
             date_format,
             show_previews: true,
-            zip_quality: "fast".to_string(),
-            seven_zip_quality: "fast".to_string(),
-            zstd_quality: "fast".to_string(),
             font_size: 16,
             search_limit: 3000,
             default_turbo_mode: true,

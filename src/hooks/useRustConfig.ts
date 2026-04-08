@@ -10,9 +10,6 @@ export interface AppConfig {
     use_system_icons: boolean;
     date_format: string;
     show_previews: boolean;
-    zip_quality: string;
-    seven_zip_quality: string;
-    zstd_quality: string;
     font_size: number;
     search_limit: number;
     default_turbo_mode: boolean;

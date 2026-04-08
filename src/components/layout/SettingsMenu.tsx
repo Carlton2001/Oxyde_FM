@@ -4,13 +4,13 @@ import { ChevronRight, Sun, Moon, Eye, Globe, Info, Check, Plus, Minus, Grid2x2,
 import { Toggle } from '../ui/Toggle';
 import { useApp } from '../../context/AppContext';
 import { useDialogs } from '../../context/DialogContext';
-import { Theme, Language, DateFormat, CompressionQuality } from '../../types';
+import { Theme, Language, DateFormat } from '../../types';
 
 interface SettingsMenuProps {
     isOpen: boolean;
     onClose: () => void;
-    page: 'main' | 'themes' | 'languages' | 'dates' | 'compression';
-    onPageChange: (page: 'main' | 'themes' | 'languages' | 'dates' | 'compression') => void;
+    page: 'main' | 'themes' | 'languages' | 'dates';
+    onPageChange: (page: 'main' | 'themes' | 'languages' | 'dates') => void;
     onShowAbout: () => void;
 }
 
@@ -30,9 +30,6 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({
         useSystemIcons, setUseSystemIcons,
         dateFormat, setDateFormat,
         showPreviews, setShowPreviews,
-        zipQuality, setZipQuality,
-        sevenZipQuality, setSevenZipQuality,
-        zstdQuality, setZstdQuality,
         searchLimit, setSearchLimit,
         defaultTurboMode, setDefaultTurboMode,
         showGridThumbnails, setShowGridThumbnails,
@@ -127,47 +124,6 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({
         </div>
     );
 
-    const renderCompressionSubmenu = () => (
-        <div className="settings-submenu" onClick={(e) => e.stopPropagation()}>
-            <div className="settings-label">{t('compression_quality')}</div>
-            <div className="settings-sub-label">ZIP</div>
-            <div className="settings-quality-group">
-                {(['fast', 'normal', 'best'] as CompressionQuality[]).map(q => (
-                    <button
-                        key={q}
-                        className={cx("quality-btn", { active: zipQuality === q })}
-                        onClick={() => setZipQuality(q)}
-                    >
-                        {t(`quality_${q}`)}
-                    </button>
-                ))}
-            </div>
-            <div className="settings-sub-label">7-Zip</div>
-            <div className="settings-quality-group">
-                {(['fast', 'normal', 'best'] as CompressionQuality[]).map(q => (
-                    <button
-                        key={q}
-                        className={cx("quality-btn", { active: sevenZipQuality === q })}
-                        onClick={() => setSevenZipQuality(q)}
-                    >
-                        {t(`quality_${q}`)}
-                    </button>
-                ))}
-            </div>
-            <div className="settings-sub-label">Zstd</div>
-            <div className="settings-quality-group">
-                {(['fast', 'normal', 'best'] as CompressionQuality[]).map(q => (
-                    <button
-                        key={q}
-                        className={cx("quality-btn", { active: zstdQuality === q })}
-                        onClick={() => setZstdQuality(q)}
-                    >
-                        {t(`quality_${q}`)}
-                    </button>
-                ))}
-            </div>
-        </div>
-    );
 
     return (
         <div className="settings-menu" onClick={(e) => e.stopPropagation()}>
@@ -335,17 +291,6 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({
                                     <Plus size={12} />
                                 </button>
                             </div>
-                        </div>
-                        <div
-                            className={cx("settings-item", { active: page === 'compression' })}
-                            onClick={(e) => { e.stopPropagation(); onPageChange(page === 'compression' ? 'main' : 'compression'); }}
-                        >
-                            <div className="settings-item-icon-left">
-                                <Zap size={16} className="icon-md" />
-                            </div>
-                            <span className="settings-item-text">{t('compression')}</span>
-                            <ChevronRight size={14} className="settings-item-icon-right icon-sm" />
-                            {page === 'compression' && renderCompressionSubmenu()}
                         </div>
 
                         <div className="settings-divider" />

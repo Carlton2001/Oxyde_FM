@@ -31,7 +31,6 @@ interface PanelContextType {
     activePanel: any;
     isReady: boolean;
     getTabConfig: (panelId: PanelId, tabId: string) => PanelInitialConfig | undefined;
-    transferTabState: (tabId: string, fromPanel: PanelId, toPanel: PanelId) => void;
 }
 
 const PanelContext = createContext<PanelContextType | undefined>(undefined);
@@ -99,7 +98,6 @@ export const PanelProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         return node.data.children.reduce((acc, child) => ({ ...acc, ...getPanes(child) }), {});
     }, []);
 
-    const pendingConfigsRef = useRef<Map<string, PanelInitialConfig>>(new Map());
     const lastSplitSourceConfigRef = useRef<PanelInitialConfig | null>(null);
 
     // Auto-migration of tab data when detected in a new panel
@@ -156,8 +154,8 @@ export const PanelProvider: React.FC<{ children: ReactNode }> = ({ children }) =
                             if (draggedTab.initialConfig) {
                                 if (!tabConfigsRef.current[panelId]) tabConfigsRef.current[panelId] = new Map();
                                 tabConfigsRef.current[panelId].set(t.id, {
-                                    viewMode: draggedTab.initialConfig.viewMode,
-                                    sortConfig: draggedTab.initialConfig.sortConfig,
+                                    viewMode: draggedTab.initialConfig.viewMode || 'details',
+                                    sortConfig: draggedTab.initialConfig.sortConfig || { field: 'name', direction: 'asc' },
                                     groupByDate: draggedTab.initialConfig.groupByDate || false
                                 });
                                 protectedTabsRef.current.add(t.id);
@@ -298,36 +296,6 @@ export const PanelProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         return tabConfigsRef.current[panelId]?.get(tabId);
     }, [panelStates]);
 
-    const transferTabState = useCallback((tabId: string, fromPanel: PanelId, toPanel: PanelId) => {
-        // 1. Capture current live state if it's the active tab being moved
-        const liveConfig = getTabConfig(fromPanel, tabId);
-        const panelState = panelStates[fromPanel];
-        
-        // 2. Transfer Config
-        if (!tabConfigsRef.current[toPanel]) tabConfigsRef.current[toPanel] = new Map();
-        if (liveConfig) {
-            tabConfigsRef.current[toPanel].set(tabId, {
-                viewMode: liveConfig.viewMode,
-                sortConfig: liveConfig.sortConfig,
-                groupByDate: liveConfig.groupByDate || false
-            });
-        }
-
-        // 3. Transfer History
-        if (!tabHistoriesRef.current[toPanel]) tabHistoriesRef.current[toPanel] = new Map();
-        // Check if exists in ref
-        const savedHistory = tabHistoriesRef.current[fromPanel]?.get(tabId);
-        if (savedHistory) {
-            tabHistoriesRef.current[toPanel].set(tabId, savedHistory);
-        } else if (panelState && prevTabIdsRef.current[fromPanel] === tabId) {
-            // Or capture live history
-            tabHistoriesRef.current[toPanel].set(tabId, {
-                history: panelState.history,
-                historyIndex: panelState.historyIndex,
-                version: panelState.version
-            });
-        }
-    }, [panelStates, getTabConfig]);
 
     const activePanel = useMemo(() => {
         if (Object.keys(panelStates).length === 0) return null;

@@ -1,7 +1,5 @@
 import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { ArrowLeft, ArrowRight, ArrowUp, Undo2, Redo2, Copy, Scissors, Trash2, ClipboardPaste, RotateCcw, Folder, HardDrive, Globe, Network, Usb, Disc } from 'lucide-react';
-import { homeDir } from '@tauri-apps/api/path';
-import { SearchBox } from '../ui/SearchBox';
 import { AsyncFileIcon } from '../ui/AsyncFileIcon';
 import { PathBar } from './PathBar';
 import { DriveInfo, PanelId } from '../../types';
@@ -67,7 +65,6 @@ export const NavBar: React.FC<NavBarProps> = ({
     onNavigateBack,
     onNavigateForward,
     onNavigateToIndex,
-    onRefresh,
     onUndo,
     onRedo,
     onCopy,
@@ -91,8 +88,7 @@ export const NavBar: React.FC<NavBarProps> = ({
     onSearchChange,
     onSearchSubmit,
     onSearchClear,
-    onSearchCancel,
-    onClosePanel
+    onSearchCancel
 }) => {
     const { useSystemIcons } = useApp();
     const [copyMenuOpen, setCopyMenuOpen] = useState(false);
@@ -108,13 +104,6 @@ export const NavBar: React.FC<NavBarProps> = ({
     const backMenuRef = useRef<HTMLDivElement>(null);
     const fwdMenuRef = useRef<HTMLDivElement>(null);
 
-    const [homePath, setHomePath] = useState<string>('C:\\Users');
-
-    useEffect(() => {
-        homeDir().then(path => {
-            if (path) setHomePath(path);
-        }).catch(err => console.error("Failed to get home dir", err));
-    }, []);
 
     useEffect(() => {
         if (!copyMenuOpen) return;

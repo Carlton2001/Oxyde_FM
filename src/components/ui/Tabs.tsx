@@ -61,7 +61,7 @@ export const Tabs: React.FC<TabsProps> = ({
         panels: allPanels,
         addTab, duplicateTab, closeOtherTabs,
         draggedTab, setDraggedTab,
-        dragPos, targetPanelId, markerOffset,
+        targetPanelId, markerOffset,
         registerPanel
     } = useTabs();
     const { getTabConfig } = usePanelContext();
@@ -345,7 +345,7 @@ export const Tabs: React.FC<TabsProps> = ({
                     }
                 }}
             >
-                {tabs.map((tab, index) => (
+                {tabs.map((tab, _index) => (
                     <div
                         id={`tab-${tab.id}`}
                         key={tab.id}

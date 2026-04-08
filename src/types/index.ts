@@ -41,7 +41,6 @@ export type Theme = 'github-light' | 'github-dark' | 'ayu-light' | 'ayu-dark' | 
 export type LayoutMode = 'multipane';
 export type Language = 'en' | 'fr' | 'es' | 'de' | 'it';
 export type DateFormat = 'US' | 'European' | 'ISO';
-export type CompressionQuality = 'fast' | 'normal' | 'best';
 export type PanelId = string;
 
 export interface HistoryEntry {
@@ -307,7 +306,7 @@ export type OpStatus =
     | { Error: string };
 // Note: WaitingForConflictResolution was removed — conflicts are always resolved before the op starts
 
-export type FileOpType = 'Copy' | 'Move' | 'Delete' | 'Trash';
+export type FileOpType = 'Copy' | 'Move' | 'Delete' | 'Trash' | 'Archive' | 'Extract';
 
 export interface FileOperation {
     id: string;

@@ -163,7 +163,7 @@ export const PathBar: React.FC<PathBarProps> = ({
         await fetchSubDirectories(folderPath);
     }, [menuOpen, fetchSubDirectories]);
     
-    const handleEditClick = useCallback((e: React.MouseEvent) => {
+    const handleEditClick = useCallback(() => {
         // Only trigger if clicking exactly the container or non-interactive areas
         // (Children like segments and searchbox stop propagation)
         setMenuOpen(null);
@@ -591,7 +591,7 @@ export const PathBar: React.FC<PathBarProps> = ({
                         <SearchBox
                             query={searchQuery || ''}
                             placeholder={(t ? t('search') : 'Search') + "..."}
-                            isSearching={isSearchActive}
+                            isSearching={!!isSearchActive}
                             onChange={onSearchChange || (() => { })}
                             onSubmit={onSearchSubmit || (() => { })}
                             onClear={onSearchClear || (() => { })}

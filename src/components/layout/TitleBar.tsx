@@ -28,7 +28,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
     const { firstLaunch, setFirstLaunch } = useApp();
     const [isMaximized, setIsMaximized] = useState(false);
     const [settingsOpen, setSettingsOpen] = useState(false);
-    const [settingsPage, setSettingsPage] = useState<'main' | 'themes' | 'languages' | 'dates' | 'compression'>('main');
+    const [settingsPage, setSettingsPage] = useState<'main' | 'themes' | 'languages' | 'dates'>('main');
     const [hamburgerOpen, setHamburgerOpen] = useState(false);
     const lastActionRef = React.useRef<number>(0);
 

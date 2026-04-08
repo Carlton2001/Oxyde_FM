@@ -9,9 +9,8 @@ import { useApp } from '../context/AppContext';
 import { ColumnWidths, ViewMode, SizeCategoryKey, PanelId, SortConfig, MultiModeColumnWidths, ColumnMode, PanelInitialConfig } from '../types';
 import { getColumnMode } from '../config/columnDefinitions';
 
-export const usePanel = (initialPath: string, panelId: PanelId, activeTabId?: string, initialConfig?: PanelInitialConfig) => {
+export const usePanel = (initialPath: string, panelId: PanelId, _activeTabId?: string, initialConfig?: PanelInitialConfig) => {
     const { showHidden, showSystem, searchLimit } = useApp();
-    const isFirstRender = useRef(true);
 
     // Navigation
     const { path, history, historyIndex, currentEntry, navigate, goToIndex, goBack, goForward, goUp, updateCurrentSelection, updateCurrentScroll, setNavigationState, version } = useNavigation(initialPath);
@@ -130,7 +129,7 @@ export const usePanel = (initialPath: string, panelId: PanelId, activeTabId?: st
         searchQuery, searchResults, isSearching, searchLimitReached,
         currentSearchRoot, setSearchQuery, setSearchResults,
         setIsSearching, setSearchLimitReached, cancelSearch
-    } = usePanelSearch({ path, panelId, activeTabId, searchLimit, initialPath });
+    } = usePanelSearch({ path, panelId, activeTabId: _activeTabId, searchLimit, initialPath });
 
     // Derive current mode (moved down to have access to searchResults)
     const isTrashView = !!path && /^(trash)(:\/\/|:\\{1,2})/i.test(path);
@@ -156,7 +155,7 @@ export const usePanel = (initialPath: string, panelId: PanelId, activeTabId?: st
     }, [mode]);
 
     // File System
-    const { files, sortedFiles, summary, isComplete, loading, error, isProtected, refresh, setFiles, setSummary, setIsComplete, updateFileSize, setFileCalculating } = useFiles(panelId, path, sortConfig, showHidden, showSystem, version);
+    const { sortedFiles, summary, isComplete, loading, error, isProtected, refresh, updateFileSize, setFileCalculating } = useFiles(panelId, path, sortConfig, showHidden, showSystem, version);
 
     // Effective Files (Normal vs Search)
     const displayFiles = useMemo(() => {
@@ -189,69 +188,6 @@ export const usePanel = (initialPath: string, panelId: PanelId, activeTabId?: st
         updateCurrentSelection(Array.from(selected));
     }, [selected, updateCurrentSelection]);
 
-    // State Export/Import for Tabs
-    const getPanelState = useCallback(() => ({
-        path,
-        history,
-        historyIndex,
-        viewMode,
-        sortConfig,
-        searchQuery,
-        searchResults,
-        isSearching,
-        searchLimitReached,
-        files,
-        summary,
-        isComplete,
-        version,
-        selected: Array.from(selected),
-        allColWidths,
-        groupByDate,
-        filters: {
-            extensionFilter: extensionFilter ? Array.from(extensionFilter) : null,
-            sizeFilter: sizeFilter ? Array.from(sizeFilter) : null,
-            dateFilter: dateFilter ? Array.from(dateFilter) : null,
-            nameFilter,
-            locationFilter,
-            deletedDateFilter: deletedDateFilter ? Array.from(deletedDateFilter) : null
-        }
-    }), [path, history, historyIndex, viewMode, sortConfig, searchQuery, searchResults, isSearching, searchLimitReached, files, summary, isComplete, version, selected, allColWidths, groupByDate, extensionFilter, sizeFilter, dateFilter, nameFilter, locationFilter, deletedDateFilter]);
-
-    const setPanelState = useCallback((state: any) => {
-        if (!state) return;
-        setNavigationState({
-            path: state.path,
-            history: state.history,
-            historyIndex: state.historyIndex,
-            version: state.version || 0
-        });
-        setViewMode(state.viewMode);
-        setSortConfig(state.sortConfig);
-        if (state.searchQuery !== undefined) setSearchQuery(state.searchQuery);
-        if (state.selected) setSelected(new Set(state.selected));
-        if (state.allColWidths) setAllColWidths(state.allColWidths);
-        if (state.groupByDate !== undefined) setGroupByDate(state.groupByDate);
-        
-        // Restore files and search results
-        if (state.files) setFiles(state.files);
-        if (state.summary) setSummary(state.summary);
-        if (state.isComplete !== undefined) setIsComplete(state.isComplete);
-        if (state.searchResults !== undefined) setSearchResults(state.searchResults);
-        if (state.isSearching !== undefined) setIsSearching(state.isSearching);
-        if (state.searchLimitReached !== undefined) setSearchLimitReached(state.searchLimitReached);
-
-        // Restore filters
-        if (state.filters) {
-            setExtensionFilter(state.filters.extensionFilter ? new Set(state.filters.extensionFilter) : null);
-            setSizeFilter(state.filters.sizeFilter ? new Set(state.filters.sizeFilter) : null);
-            setDateFilter(state.filters.dateFilter ? new Set(state.filters.dateFilter) : null);
-            setNameFilter(state.filters.nameFilter || null);
-            setLocationFilter(state.filters.locationFilter || null);
-            setDeletedDateFilter(state.filters.deletedDateFilter ? new Set(state.filters.deletedDateFilter) : null);
-        } else {
-            clearAllFilters();
-        }
-    }, [setNavigationState, setViewMode, setSortConfig, setSearchQuery, setSelected, setGroupByDate, clearAllFilters, setFiles, setSummary, setIsComplete, setSearchResults, setIsSearching, setSearchLimitReached]);
 
     // Navigation helpers
     const handleNavigate = useCallback((newPath: string, selection?: string[], forceVersion?: number) => {
@@ -332,8 +268,6 @@ export const usePanel = (initialPath: string, panelId: PanelId, activeTabId?: st
         updateCurrentScroll,
 
         // Tab Support
-        getPanelState,
-        setPanelState,
         setNavigationState,
     }), [
         path, displayFiles, loading, error, isProtected, selected, viewMode, sortConfig,
@@ -346,7 +280,7 @@ export const usePanel = (initialPath: string, panelId: PanelId, activeTabId?: st
         setExtensionFilter, setSizeFilter, setDateFilter, setNameFilter, setLocationFilter, setDeletedDateFilter, clearAllFilters,
         setSearchQuery, setSearchResults, setIsSearching, setSearchLimitReached,
         handleSelect, selectMultiple, clearSelection, setSelected, updateFileSize, setFileCalculating, updateCurrentScroll,
-        getPanelState, setPanelState, setNavigationState
+        setNavigationState
     ]);
 };
 
