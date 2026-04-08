@@ -97,7 +97,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
                         onShowAbout={onShowAbout}
                     />
                 </div>
-                <span className="app-title">Oxyde File Manager</span>
+                <span className="app-title">Oxyde</span>
             </div>
 
             <div className="title-bar-center" data-tauri-drag-region>
@@ -106,6 +106,15 @@ export const TitleBar: React.FC<TitleBarProps> = ({
 
             <div className="title-bar-right">
                 <div className="app-tools-group">
+                    <button
+                        className="btn-icon"
+                        onClick={onRefresh}
+                        data-tooltip={t('refresh')}
+                        data-tooltip-pos="bottom"
+                    >
+                        <RefreshCw size={16} />
+                    </button>
+
                     <button
                         className="btn-icon"
                         onClick={(e) => {
@@ -127,12 +136,6 @@ export const TitleBar: React.FC<TitleBarProps> = ({
                         </button>
                         {hamburgerOpen && (
                             <div className="hamburger-menu" onClick={(e) => e.stopPropagation()}>
-                                <div className="hamburger-item" onClick={() => { onRefresh(); setHamburgerOpen(false); }}>
-                                    <div className="hamburger-item-content">
-                                        <RefreshCw size={14} />
-                                        {t('refresh' as any) || 'Refresh'}
-                                    </div>
-                                </div>
                                 <div className="hamburger-item" onClick={() => { onCalculateAllSizes(); setHamburgerOpen(false); }}>
                                     <div className="hamburger-item-content">
                                         <ChartBarBig size={14} />
@@ -157,7 +160,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
                     </div>
                 </div>
 
-                <div className="window-controls">
+                <div className={cx("window-controls", { maximized: isMaximized })}>
                     <div className="btn-icon control-btn" onClick={() => getCurrentWindow().minimize()} data-tooltip={t('minimize' as any)} data-tooltip-pos="bottom">
                         <Minus size={14} />
                     </div>

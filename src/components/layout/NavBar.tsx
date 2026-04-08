@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
-import { ArrowLeft, ArrowRight, ArrowUp, Home, RefreshCw, Undo2, Redo2, Copy, Scissors, Trash2, ClipboardPaste, RotateCcw, Folder, HardDrive, Globe, Network, Usb, Disc, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, ArrowUp, Undo2, Redo2, Copy, Scissors, Trash2, ClipboardPaste, RotateCcw, Folder, HardDrive, Globe, Network, Usb, Disc } from 'lucide-react';
 import { homeDir } from '@tauri-apps/api/path';
 import { SearchBox } from '../ui/SearchBox';
 import { AsyncFileIcon } from '../ui/AsyncFileIcon';
@@ -211,7 +211,7 @@ export const NavBar: React.FC<NavBarProps> = ({
                         const rect = backBtnRef.current.getBoundingClientRect();
                         setBackMenuPos({ top: rect.bottom + 4, anchorCenterX: rect.left + rect.width / 2 });
                     }}
-                ><ArrowLeft className="icon-lg" /></button>
+                ><ArrowLeft className="icon-md" /></button>
                 <button
                     ref={fwdBtnRef}
                     className="btn-icon"
@@ -226,16 +226,9 @@ export const NavBar: React.FC<NavBarProps> = ({
                         const rect = fwdBtnRef.current.getBoundingClientRect();
                         setFwdMenuPos({ top: rect.bottom + 4, anchorCenterX: rect.left + rect.width / 2 });
                     }}
-                ><ArrowRight className="icon-lg" /></button>
-                <button className="btn-icon" onClick={onNavigateUp} disabled={!getParent(activePanel.path)} data-tooltip={t('up' as any)} data-tooltip-pos="bottom"><ArrowUp className="icon-lg" /></button>
-                <button className="btn-icon" onClick={() => onNavigate(homePath)} disabled={activePanel.path === homePath} data-tooltip={t('home' as any) || 'Home'} data-tooltip-pos="bottom"><Home className="icon-lg" /></button>
-                <button className="btn-icon" onClick={onRefresh} data-tooltip={t('refresh')} data-tooltip-pos="bottom"><RefreshCw className="icon-lg" /></button>
+                ><ArrowRight className="icon-md" /></button>
+                <button className="btn-icon" onClick={onNavigateUp} disabled={!getParent(activePanel.path)} data-tooltip={t('up' as any)} data-tooltip-pos="bottom"><ArrowUp className="icon-md" /></button>
 
-                {onClosePanel && (
-                    <button className="btn-icon danger" onClick={onClosePanel} data-tooltip={t('close' as any)} data-tooltip-pos="bottom">
-                        <X className="icon-lg" />
-                    </button>
-                )}
 
                 {canUndo && (
                     <button
@@ -244,7 +237,7 @@ export const NavBar: React.FC<NavBarProps> = ({
                         data-tooltip={undoLabel || t('undo_action')}
                         data-tooltip-pos="bottom"
                     >
-                        <Undo2 className="icon-lg" />
+                        <Undo2 className="icon-md" />
                     </button>
                 )}
                 {canRedo && (
@@ -254,26 +247,14 @@ export const NavBar: React.FC<NavBarProps> = ({
                         data-tooltip={redoLabel || t('redo_action')}
                         data-tooltip-pos="bottom"
                     >
-                        <Redo2 className="icon-lg" />
+                        <Redo2 className="icon-md" />
                     </button>
                 )}
             </div>
 
-            {activePanel?.path && (
-                <PathBar
-                    panelId={panelId}
-                    path={activePanel.path}
-                    onNavigate={onNavigate}
-                    t={t}
-                    drives={drives}
-                />
-            )}
-
-            <div className="flex-spacer" />
-
             <div className="toolbar-actions">
                 {activePanel.selected.size > 0 && (
-                    <button className="btn-icon" data-tooltip={t("cut")} data-tooltip-pos="bottom" onClick={onCut}><Scissors className="icon-lg" /></button>
+                    <button className="btn-icon" data-tooltip={t("cut")} data-tooltip-pos="bottom" onClick={onCut}><Scissors className="icon-md" /></button>
                 )}
                 {activePanel.selected.size > 0 && !isTrashView && (
                     <button
@@ -290,11 +271,11 @@ export const NavBar: React.FC<NavBarProps> = ({
                             setCopyMenuOpen(o => !o);
                         }}
                     >
-                        <Copy className="icon-lg" />
+                        <Copy className="icon-md" />
                     </button>
                 )}
                 {canPaste && !isTrashView && (
-                    <button className="btn-icon" data-tooltip={t("paste")} data-tooltip-pos="bottom" onClick={onPaste}><ClipboardPaste className="icon-lg" /></button>
+                    <button className="btn-icon" data-tooltip={t("paste")} data-tooltip-pos="bottom" onClick={onPaste}><ClipboardPaste className="icon-md" /></button>
                 )}
                 {activePanel.selected.size > 0 && (
                     <button
@@ -303,7 +284,7 @@ export const NavBar: React.FC<NavBarProps> = ({
                         data-tooltip-pos="bottom"
                         onClick={onDelete}
                     >
-                        <Trash2 className="icon-lg" />
+                        <Trash2 className="icon-md" />
                     </button>
                 )}
             </div>
@@ -317,7 +298,7 @@ export const NavBar: React.FC<NavBarProps> = ({
                         data-tooltip={t('restore_selected' as any)}
                         data-tooltip-pos="bottom"
                     >
-                        <RotateCcw className="icon-lg" />
+                        <RotateCcw className="icon-md" />
                     </button>
                     <button
                         className="btn-icon"
@@ -326,7 +307,7 @@ export const NavBar: React.FC<NavBarProps> = ({
                         data-tooltip={t('restore_all' as any)}
                         data-tooltip-pos="bottom"
                     >
-                        <RotateCcw className="icon-lg" />
+                        <RotateCcw className="icon-md" />
                         <span style={{ fontSize: '0.625rem', marginLeft: '2px' }}>{t('all' as any)}</span>
                     </button>
                     <button
@@ -336,25 +317,31 @@ export const NavBar: React.FC<NavBarProps> = ({
                         data-tooltip={t('empty_recycle_bin' as any)}
                         data-tooltip-pos="bottom"
                     >
-                        <Trash2 className="icon-lg" />
+                        <Trash2 className="icon-md" />
                         <span style={{ fontSize: '0.625rem', marginLeft: '2px' }}>{t('all' as any)}</span>
                     </button>
                 </div>
             )}
 
-            <div className="header-search-container">
-                <SearchBox
-                    query={searchQuery || ''}
-                    placeholder={t('search') + "..."}
-                    isSearching={isSearchActive}
-                    onChange={onSearchChange || (() => {})}
-                    onSubmit={onSearchSubmit || (() => {})}
-                    onClear={onSearchClear || (() => {})}
-                    onCancel={onSearchCancel}
-                    autoExpand={true}
-                    className="header-search-box"
-                />
+
+            <div className="path-bar-container">
+                {activePanel?.path && (
+                    <PathBar
+                        panelId={panelId}
+                        path={activePanel.path}
+                        onNavigate={onNavigate}
+                        t={t}
+                        drives={drives}
+                        searchQuery={searchQuery}
+                        isSearchActive={isSearchActive}
+                        onSearchChange={onSearchChange}
+                        onSearchSubmit={onSearchSubmit}
+                        onSearchClear={onSearchClear}
+                        onSearchCancel={onSearchCancel}
+                    />
+                )}
             </div>
+
 
             {(backMenuPos || fwdMenuPos) && (() => {
                 const getHistIcon = (path: string, driveList: typeof drives) => {

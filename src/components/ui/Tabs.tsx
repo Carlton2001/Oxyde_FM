@@ -17,6 +17,43 @@ interface TabsProps {
     onTabDrop?: (files: FileEntry[], index?: number) => void;
 }
 
+export const getTabIcon = (path: string) => {
+    if (path === 'trash://') return <Trash size={14} />;
+    if (path === '__network_vincinity__') return <Globe size={14} />;
+    if (path.startsWith('\\\\')) {
+        const parts = path.split('\\').filter(Boolean);
+        if (parts.length <= 2) {
+            return <Network size={14} />;
+        }
+    }
+    if (/^[a-zA-Z]:\\$/.test(path)) return <HardDrive size={14} />;
+    // Default folder icon
+    return <Folder size={14} />;
+};
+
+export const getTabLabel = (tab: { label: string, path: string }, t: any) => {
+    if (tab.path === 'trash://') return t('recycle_bin');
+    if (tab.path === '__network_vincinity__') return t('network_vincinity');
+
+    if (tab.path.startsWith('search://')) {
+        const searchPart = tab.path.replace('search://', '');
+        const querySepIndex = searchPart.indexOf('?');
+        const query = decodeURIComponent(querySepIndex !== -1 ? searchPart.substring(0, querySepIndex) : searchPart);
+
+        const params = new URLSearchParams(querySepIndex !== -1 ? searchPart.substring(querySepIndex + 1) : '');
+        const root = params.get('root');
+        const folderName = root ? (root.split('\\').filter(Boolean).pop() || root) : '';
+
+        const inLabel = t('in' as any) === 'in' ? 'dans' : t('in' as any); // Simple detection or fallback
+
+        return root
+            ? `${t('search')} "${query}" ${inLabel} ${folderName}`
+            : `${t('search')}: ${query}`;
+    }
+
+    return tab.label;
+};
+
 export const Tabs: React.FC<TabsProps> = ({
     panelId, onSwitch, onClose, isDraggingFiles, dragState
 }) => {
@@ -274,42 +311,6 @@ export const Tabs: React.FC<TabsProps> = ({
         };
     }, []);
 
-    const getTabIcon = (path: string) => {
-        if (path === 'trash://') return <Trash size={14} />;
-        if (path === '__network_vincinity__') return <Globe size={14} />;
-        if (path.startsWith('\\\\')) {
-            const parts = path.split('\\').filter(Boolean);
-            if (parts.length <= 2) {
-                return <Network size={14} />;
-            }
-        }
-        if (/^[a-zA-Z]:\\$/.test(path)) return <HardDrive size={14} />;
-        // Default folder icon
-        return <Folder size={14} />;
-    };
-
-    const getTabLabel = (tab: { label: string, path: string }) => {
-        if (tab.path === 'trash://') return t('recycle_bin');
-        if (tab.path === '__network_vincinity__') return t('network_vincinity');
-
-        if (tab.path.startsWith('search://')) {
-            const searchPart = tab.path.replace('search://', '');
-            const querySepIndex = searchPart.indexOf('?');
-            const query = decodeURIComponent(querySepIndex !== -1 ? searchPart.substring(0, querySepIndex) : searchPart);
-
-            const params = new URLSearchParams(querySepIndex !== -1 ? searchPart.substring(querySepIndex + 1) : '');
-            const root = params.get('root');
-            const folderName = root ? (root.split('\\').filter(Boolean).pop() || root) : '';
-
-            const inLabel = t('in' as any) === 'in' ? 'dans' : t('in' as any); // Simple detection or fallback
-
-            return root
-                ? `${t('search')} "${query}" ${inLabel} ${folderName}`
-                : `${t('search')}: ${query}`;
-        }
-
-        return tab.label;
-    };
 
     return (
         <div
@@ -403,7 +404,7 @@ export const Tabs: React.FC<TabsProps> = ({
                         <div className="tab-icon">
                             {getTabIcon(tab.path)}
                         </div>
-                        <span className="tab-label">{getTabLabel(tab)}</span>
+                        <span className="tab-label">{getTabLabel(tab, t)}</span>
                         <div
                             className={cx("tab-close", { disabled: !canCloseTab })}
                             onClick={(e) => {
@@ -425,14 +426,6 @@ export const Tabs: React.FC<TabsProps> = ({
                 </div>
             </div>
 
-            {draggedTab && draggedTab.panelId === panelId && (
-                <div className="tab-ghost" style={{ left: dragPos.x, top: dragPos.y }}>
-                    <div className="tab-icon">
-                        {getTabIcon(draggedTab.path)}
-                    </div>
-                    <span>{getTabLabel({ label: draggedTab.label, path: draggedTab.path })}</span>
-                </div>
-            )}
 
 
             {showRightScroll && (

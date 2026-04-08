@@ -1,46 +1,51 @@
 [data-theme="oxyde-light"] {
-    /* Opus Light — Warm ivory & sapphire, editorial elegance */
-    --bg-color: #faf8f5;
-    --bg-color-rgb: 250, 248, 245;
-    --text-color: #1e1e2e;
-    --text-muted: #6b6880;
-    --sidebar-bg: #f3f0ea;
-    --header-bg: #fffdfb;
-    /* True Ivory */
-
-    --hover-color: #edeae4;
+    /* Oxyde Light — Premium Ivory & Sapphire */
+    --bg-color: #fdfbf7;
+    --bg-color-rgb: 253, 251, 247;
+    --text-color: #242433;
+    --text-muted: #6e6b85;
+    --sidebar-bg: #f7f4f0;
+    --header-bg: #ffffff;
+    
+    --hover-color: #f1ede6;
     --accent-color: #3d5af1;
     --accent-color-rgb: 61, 90, 241;
     --selected-text: #ffffff;
 
-    --border-color: #ddd8cf;
-    --border-color-rgb: 221, 216, 207;
+    --border-color: #e6e1d6;
+    --border-color-rgb: 230, 225, 214;
 
-    --surface-primary: #fffdfb;
-    --surface-secondary: #f5f2ec;
-    --dimmed-opacity: 0.7;
+    --surface-primary: #ffffff;
+    --surface-secondary: #f9f7f2;
+    --dimmed-opacity: 0.65;
 
     /* Components */
-    --menu-bg: #fffdfb;
-    --menu-border: #e2ddd4;
-    --menu-shadow: 0 0.5rem 1.5rem rgba(30, 30, 46, 0.10);
+    --menu-bg: #ffffff;
+    --menu-border: #e6e1d6;
+    --shadow-soft: 0 4px 20px rgba(0, 0, 0, 0.04);
+    --shadow-medium: 0 8px 30px rgba(0, 0, 0, 0.08);
+    --menu-shadow: var(--shadow-medium);
 
     /* Scrollbar */
     --scrollbar-bg: transparent;
-    --scrollbar-thumb: #d4cfc5;
-    --scrollbar-thumb-hover: #bfb9ad;
+    --scrollbar-thumb: #dcd7cc;
+    --scrollbar-thumb-hover: #cbc6ba;
 
-    /* File Icons — Rich jewel tones on warm canvas */
-    --icon-default: #6b6880;
+    /* Multi-pane */
+    --pane-active-border: var(--accent-color);
+    --pane-inactive-opacity: 0.95;
+
+    /* File Icons — Enhanced vibrancy */
+    --icon-default: #7c7994;
     --icon-folder: #3d5af1;
-    --icon-image: #2d8c5a;
+    --icon-image: #10b981;
     --icon-audio: #8b5cf6;
-    --icon-video: #d14d72;
-    --icon-exec: #c87518;
-    --icon-archive: #8d6748;
-    --icon-pdf: #d93636;
-    --icon-code: #0891b2;
-    --icon-disk: #7c7f8a;
+    --icon-video: #f43f5e;
+    --icon-exec: #f59e0b;
+    --icon-archive: #92400e;
+    --icon-pdf: #ef4444;
+    --icon-code: #06b6d4;
+    --icon-disk: #64748b;
 
-    --histogram-opacity: 0.18;
+    --histogram-opacity: 0.15;
 }

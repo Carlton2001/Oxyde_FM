@@ -31,7 +31,7 @@
 .panel-header {
     display: flex;
     align-items: center;
-    height: 2.5rem;
+    height: 1.875rem;
     padding: 0;
     background-color: transparent;
     /* Changed to transparent as parent now manages the block */
@@ -661,7 +661,7 @@
     display: grid;
     grid-template-columns: var(--grid-template);
     align-items: center;
-    height: 2rem;
+    height: 1.625rem;
     padding: 0 0.5rem;
     border-bottom: 1px solid var(--border-color);
     font-size: 0.75rem;
@@ -683,7 +683,7 @@
     position: absolute;
     left: 0;
     top: 0;
-    height: 2rem;
+    height: 1.625rem;
     width: 0.5rem;
     /* STRICT 0.5rem WIDTH */
     z-index: 20;
@@ -1222,7 +1222,7 @@
 .group-header.details {
     display: grid;
     grid-template-columns: var(--grid-template);
-    height: 2rem;
+    height: 1.625rem;
     padding: 0;
     border-bottom: 1px solid var(--border-color);
     background: var(--pane-bg, var(--bg-color));
@@ -1243,7 +1243,7 @@
 }
 
 .group-header.grid {
-    height: 2rem;
+    height: 1.625rem;
     padding: 0 0.75rem;
     border-bottom: 1px solid var(--border-color);
     background: var(--pane-bg, var(--bg-color));
@@ -1322,20 +1322,10 @@
     pointer-events: none;
 }
 
-.file-item.grid.selected {
-    color: var(--selected-text);
-    opacity: 1;
-}
-
 /* Details View Folder Chevron */
 .folder-has-subdirs {
     opacity: 0.5;
     margin-left: 0.5rem;
     flex-shrink: 0;
     color: var(--text-muted);
-}
-
-.file-item.selected {
-    opacity: 0.6;
-    color: inherit;
 }

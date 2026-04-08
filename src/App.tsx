@@ -52,6 +52,7 @@ import { GlobalDialogContainer } from './components/managers/GlobalDialogContain
 import { NotificationArea } from './components/ui/NotificationArea';
 import { ProgressOverlay } from './components/ui/ProgressOverlay';
 import { Tooltip } from './components/ui/Tooltip';
+import { getTabIcon, getTabLabel } from './components/ui/Tabs';
 import { DirectoryTreeHandle } from './components/ui/DirectoryTree';
 import { DriveInfo } from './types';
 
@@ -69,7 +70,7 @@ function App() {
 
   const clipboardObj = useClipboard();
   const { clipboard, copy, cut, clearClipboard, copyToSystem, readTextFromSystem, refreshClipboard } = clipboardObj;
-  const { setActiveTab, addTab, closeTab } = useTabs();
+  const { setActiveTab, addTab, closeTab, draggedTab, dragPos } = useTabs();
   const dialogs = useDialogs();
   const { panels, activePanelId, setActivePanelId, activePanel } = usePanelContext();
   const fileOps = useFileOperations(notify, t as any, dismissNotification);
@@ -691,6 +692,15 @@ function App() {
       </div>
       <NotificationArea notifications={notifications} onDismiss={dismissNotification} />
       <Tooltip isShiftPressed={modifiers.shift} />
+
+      {draggedTab && (
+        <div className="tab-ghost" style={{ left: dragPos.x, top: dragPos.y }}>
+          <div className="tab-icon">
+            {getTabIcon(draggedTab.path)}
+          </div>
+          <span>{getTabLabel({ label: draggedTab.label, path: draggedTab.path }, t)}</span>
+        </div>
+      )}
     </div>
   );
 }

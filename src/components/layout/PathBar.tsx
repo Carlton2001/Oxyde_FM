@@ -8,6 +8,7 @@ import { TFunc } from '../../i18n';
 import { useApp } from '../../context/AppContext';
 import { AsyncFileIcon } from '../ui/AsyncFileIcon';
 import { isVirtualPath } from '../../utils/path';
+import { SearchBox } from '../ui/SearchBox';
 
 interface PathBarProps {
     path: string;
@@ -21,9 +22,20 @@ interface PathBarProps {
     t?: TFunc;
     favorites?: QuickAccessItem[];
     forwardPath?: string | null;
+
+    // Search integration
+    searchQuery?: string;
+    isSearchActive?: boolean;
+    onSearchChange?: (q: string) => void;
+    onSearchSubmit?: () => void;
+    onSearchClear?: () => void;
+    onSearchCancel?: () => void;
 }
 
-export const PathBar: React.FC<PathBarProps> = ({ path, onNavigate, className, isDragging, onDrop, drives, showHidden = false, panelId, t, favorites, forwardPath }) => {
+export const PathBar: React.FC<PathBarProps> = ({ 
+    path, onNavigate, className, isDragging, onDrop, drives, showHidden = false, panelId, t, favorites, forwardPath,
+    searchQuery, isSearchActive, onSearchChange, onSearchSubmit, onSearchClear, onSearchCancel
+}) => {
     const { useSystemIcons } = useApp();
     
     const isFavorite = useMemo(() => {
@@ -567,6 +579,19 @@ export const PathBar: React.FC<PathBarProps> = ({ path, onNavigate, className, i
                             <Pin size="0.875rem" fill="var(--accent-color)" stroke="var(--accent-color)" style={{ transform: 'rotate(45deg)' }} />
                         </div>
                     )}
+                    <div className="path-bar-search-container">
+                        <SearchBox
+                            query={searchQuery || ''}
+                            placeholder={(t ? t('search') : 'Search') + "..."}
+                            isSearching={isSearchActive}
+                            onChange={onSearchChange || (() => { })}
+                            onSubmit={onSearchSubmit || (() => { })}
+                            onClear={onSearchClear || (() => { })}
+                            onCancel={onSearchCancel}
+                            autoExpand={true}
+                            className="path-bar-search-box"
+                        />
+                    </div>
                 </>
             )}
 

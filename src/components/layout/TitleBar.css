@@ -4,13 +4,15 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0 4px;
+    padding-left: 5px;
+    /* Brighter indent for logo */
+    padding-right: 0;
+    /* Flush right */
     border-bottom: 1px solid var(--border-color);
     user-select: none;
     flex-shrink: 0;
     z-index: var(--z-header);
     position: relative;
-    /* Glassmorphism subtle effect if supported */
     backdrop-filter: blur(8px);
 }
 
@@ -37,12 +39,12 @@
 
 .app-title {
     margin-left: 0.5rem;
-    font-size: 11px;
+    font-size: 14px;
     font-weight: 600;
     color: var(--text-color);
-    opacity: 0.7;
+    opacity: 0.9;
     white-space: nowrap;
-    letter-spacing: 0.2px;
+    letter-spacing: 0.1px;
 }
 
 .app-tools-group {
@@ -64,6 +66,7 @@
     align-items: center;
     justify-content: center;
     transition: background-color 0.1s ease;
+    cursor: default;
 }
 
 .control-btn:hover {

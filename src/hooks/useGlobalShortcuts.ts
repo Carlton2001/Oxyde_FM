@@ -105,10 +105,8 @@ export const useGlobalShortcuts = (context: ActionContext, tabs: any[], activeTa
             if (combo === 'Ctrl+F' || (e.ctrlKey && (e.key === 'f' || e.key === 'F'))) {
                 e.preventDefault();
                 e.stopPropagation();
-                // Find the active search input:
-                // 1. In the active panel (Dual Panel Mode)
-                // 2. In the tabs bar (Standard Mode)
-                const selector = '.panel.active .search-box input, .panel.standard .search-box input, .tabs-wrapper .search-box input';
+                // Find the search input in the active panel wrapper
+                const selector = '.individual-panel-wrapper.active .path-bar-search-box input';
                 const searchInput = document.querySelector(selector) as HTMLInputElement;
                 if (searchInput) {
                     searchInput.focus();

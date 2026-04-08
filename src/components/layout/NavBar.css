@@ -2,10 +2,11 @@
     display: flex;
     align-items: center;
     padding: 0 0.4rem;
-    height: 2.75rem;
-    min-height: 2.75rem;
-    max-height: 2.75rem;
+    height: 2.25rem;
+    min-height: 2.25rem;
+    max-height: 2.25rem;
     background-color: var(--header-pane-bg, var(--header-bg));
+    border-top: 1px solid var(--border-color); /* The line you wanted back */
     border-bottom: 1px solid var(--border-color);
     z-index: 10;
     position: relative;
@@ -54,6 +55,7 @@
     gap: 0.25rem;
     flex-shrink: 0;
     pointer-events: none;
+    margin-right: 0.5rem;
 }
 
 .nav-group .btn-icon,
@@ -61,15 +63,17 @@
     pointer-events: auto;
 }
 
-.nav-btn {
+.nav-btn,
+.header .btn-icon {
     display: flex;
     align-items: center;
     justify-content: center;
     border-radius: 0.375rem;
-    padding: 0.375rem;
+    padding: 0.25rem; /* More compact */
     line-height: normal;
     background: transparent;
     border: none;
+    color: var(--text-color);
 }
 
 .nav-btn:hover:not(:disabled),
@@ -97,19 +101,17 @@
 .path-bar-container {
     flex: 1;
     display: flex;
-    justify-content: center;
-    margin: 0 0.75rem;
+    justify-content: flex-start;
+    /* Space from the icons */
     min-width: 0;
 }
 
-/* Toolbar Actions */
 .toolbar-actions {
     display: flex;
     gap: 0.25rem;
-    padding: 0;
+    padding-right: 0.5rem;
     flex-shrink: 0;
     overflow: hidden;
-    max-width: 30rem;
     transition: max-width 200ms ease;
 }
 
@@ -117,14 +119,6 @@
     max-width: 0;
 }
 
-.toolbar-actions:not(:empty):after {
-    content: '';
-    width: 1px;
-    height: 1.25rem;
-    background-color: var(--border-color);
-    margin: 0 0.4rem;
-    align-self: center;
-}
 
 .toolbar-actions>* {
     animation: toolbar-btn-in 150ms ease-out both;
@@ -142,33 +136,6 @@
     }
 }
 
-.header-search-container {
-    margin-left: 0.5rem;
-    margin-right: 0.25rem;
-    display: flex;
-    align-items: center;
-}
-
-.header-search-box {
-    width: 250px;
-    background-color: var(--surface-tertiary);
-    border: 1px solid var(--border-color);
-    border-radius: 6px;
-    height: 1.875rem;
-    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.header-search-box.focused {
-    width: 320px;
-    background-color: var(--surface-primary);
-    border-color: var(--accent-color);
-    box-shadow: 0 0 0 2px rgba(var(--accent-color-rgb, 100, 100, 255), 0.15);
-}
-
-.header-search-box input {
-    font-size: 0.8125rem;
-    color: var(--text-color);
-}
 
 
 
@@ -184,14 +151,14 @@
     top: 100%;
     right: 0;
     margin-top: 0.5rem;
-    padding: 4px;
+    padding: 0.25rem;
     min-width: 15rem;
     background: var(--menu-bg);
     border: 1px solid var(--menu-border);
-    border-radius: 8px;
+    border-radius: var(--radius-lg);
     box-shadow: var(--menu-shadow);
     z-index: var(--z-menu);
-    animation: menuFadeIn 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+    animation: menuFadeIn var(--transition-fast);
 }
 
 
@@ -250,31 +217,27 @@
     min-width: 18rem;
     background: var(--menu-bg);
     border: 1px solid var(--menu-border);
-    border-radius: 0.5rem;
+    border-radius: var(--radius-lg);
     box-shadow: var(--menu-shadow);
     flex-shrink: 0;
     position: relative;
     z-index: 1;
     color: var(--text-color);
-    /* Correct color inheritance */
 }
 
 .settings-submenu {
     position: absolute;
     left: 100%;
-    /* Float to the right of parent */
     top: -0.5rem;
-    /* Re-align with top of item, offset by menu padding */
     margin-left: 0.25rem;
     padding: 0.5rem;
     min-width: 15rem;
     background: var(--menu-bg);
     border: 1px solid var(--menu-border);
-    border-radius: 0.5rem;
+    border-radius: var(--radius-lg);
     box-shadow: var(--menu-shadow), 0 10px 25px rgba(0, 0, 0, 0.15);
-    animation: submenuFadeIn 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+    animation: submenuFadeIn var(--transition-fast);
     z-index: 100;
-
     color: var(--text-color);
 }
 
