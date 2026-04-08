@@ -297,6 +297,11 @@ pub fn split_panel(
 
     let tab = moved_tab.ok_or_else(|| CommandError::Other(format!("Tab {} not found", tab_id)))?;
     
+    // Find the source panel's sort_config before we moved the tab
+    let source_sort_config = session.root.find_pane(&source_panel_id)
+        .map(|p| p.sort_config.clone())
+        .unwrap_or_default();
+
     // 2. Create new pane
     let new_panel_id = format!("panel-{}", Uuid::new_v4().to_string().get(..8).unwrap_or("extra"));
     let new_pane = LayoutNode::Pane {
@@ -307,7 +312,7 @@ pub fn split_panel(
             watcher: None,
             watched_path: None,
             search_context: None,
-            sort_config: SortConfig::default(),
+            sort_config: source_sort_config,
             cached_results: None,
         },
     };
@@ -550,15 +555,7 @@ pub fn move_tab_between_panels(
             moved_tab = Some(p.tabs.remove(pos));
             
             if p.tabs.is_empty() {
-                // If it's the last tab, we'll keep it as C:\ or remove pane later?
-                // For simplicity, we just ensure a tab exists.
-                let default_id = uuid::Uuid::new_v4().to_string();
-                p.tabs.push(Tab {
-                    id: default_id.clone(),
-                    path: std::path::PathBuf::from("C:\\"),
-                    version: 0,
-                });
-                p.active_tab_id = default_id;
+                // Last tab moved out — pane will be removed after the move
             } else if p.active_tab_id == tab_id {
                 let new_pos = pos.min(p.tabs.len().saturating_sub(1));
                 p.active_tab_id = p.tabs[new_pos].id.clone();
@@ -577,7 +574,21 @@ pub fn move_tab_between_panels(
         target.tabs.insert(idx, tab.clone());
         target.active_tab_id = tab.id;
         target.update_watcher(&app);
-        session.active_panel_id = target_panel_id;
+        session.active_panel_id = target_panel_id.clone();
+    }
+
+    // Remove the source pane if it is now empty and it's not the only pane
+    let source_pane_empty = session.get_panel_mut(&source_id).tabs.is_empty();
+    if source_pane_empty && session.root.all_pane_ids().len() > 1 {
+        let (_, replacement) = session.root.remove_pane(&source_id);
+        if let Some(r) = replacement {
+            session.root = r;
+        }
+        if session.active_panel_id == source_id {
+            if let Some(first) = session.root.all_pane_ids().first() {
+                session.active_panel_id = first.clone();
+            }
+        }
     }
 
     app.emit("session_changed", session.clone()).map_err(|e| CommandError::SystemError(e.to_string()))?;

@@ -408,7 +408,7 @@
     overflow-x: auto;
     padding: 0 0.5rem 0.5rem 0.5rem;
     scrollbar-gutter: stable;
-    background: transparent;
+    background-color: var(--file-list-bg, var(--bg-color));
     position: relative;
 }
 

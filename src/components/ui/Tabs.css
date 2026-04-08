@@ -22,7 +22,6 @@
     scrollbar-width: none;
     -webkit-overflow-scrolling: touch;
     scroll-behavior: smooth;
-    padding: 0 0.25rem;
 }
 
 /* Hide scrollbar */
@@ -99,7 +98,7 @@
     background-color: var(--surface-primary, #ffffff);
     color: var(--text-color, #1a1a1a);
     border: 1px solid var(--border-color);
-    border-bottom: 1px solid var(--accent-color);
+    border-bottom: 1px solid var(--surface-primary);
     /* The accent line at bottom */
     box-shadow: none;
     /* Removed shadow per request */

@@ -4,6 +4,7 @@ import cx from 'classnames';
 import { X, Plus, Folder, Copy, Split, XCircle, ChevronLeft, ChevronRight, HardDrive, Trash, Network, Globe } from 'lucide-react';
 import { useTabs } from '../../context/TabsContext';
 import { useApp } from '../../context/AppContext';
+import { usePanelContext } from '../../context/PanelContext';
 import { PanelId, FileEntry } from '../../types';
 import './Tabs.css';
 
@@ -26,6 +27,7 @@ export const Tabs: React.FC<TabsProps> = ({
         dragPos, targetPanelId, markerOffset,
         registerPanel
     } = useTabs();
+    const { getTabConfig } = usePanelContext();
     const tabs = allPanels[panelId]?.tabs || [];
     const activeTabId = allPanels[panelId]?.activeTabId || '';
     const panelCount = Object.keys(allPanels).length;
@@ -93,7 +95,15 @@ export const Tabs: React.FC<TabsProps> = ({
                 if (dist > 10) {
                     const tab = tabs.find(t => t.id === mouseDownInfo.id);
                     if (tab) {
-                        setDraggedTab({ id: tab.id, panelId, path: tab.path, label: tab.label });
+                        const initialConfig = getTabConfig(panelId, tab.id);
+
+                        setDraggedTab({
+                            id: tab.id,
+                            panelId,
+                            path: tab.path,
+                            label: tab.label,
+                            initialConfig
+                        });
                     }
                     setMouseDownInfo(null);
                 }

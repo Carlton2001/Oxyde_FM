@@ -6,21 +6,24 @@ import { TabsProvider } from "./context/TabsContext";
 import { DialogProvider } from "./context/DialogContext";
 import { KeybindingProvider } from "./context/KeybindingContext";
 import { PanelProvider } from "./context/PanelContext";
+import { SplitConfigProvider } from "./context/SplitConfigContext";
 import { initializeActions } from "./actions";
 
 initializeActions();
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <AppProvider>
-    <TabsProvider>
-      <DialogProvider>
-        <KeybindingProvider>
-          <PanelProvider>
-            <App />
-          </PanelProvider>
-        </KeybindingProvider>
-      </DialogProvider>
-    </TabsProvider>
+    <SplitConfigProvider>
+      <TabsProvider>
+        <DialogProvider>
+          <KeybindingProvider>
+            <PanelProvider>
+              <App />
+            </PanelProvider>
+          </KeybindingProvider>
+        </DialogProvider>
+      </TabsProvider>
+    </SplitConfigProvider>
   </AppProvider>,
 );
 

@@ -118,41 +118,6 @@ interface MultipaneLayoutProps {
     onDriveContextMenu: (e: React.MouseEvent, p: string) => void;
 }
 
-interface MultipaneDropZonesProps {
-    panelId: PanelId;
-    draggedTab: { id: string, panelId: PanelId } | null;
-}
-
-const MultipaneDropZones: React.FC<MultipaneDropZonesProps> = ({ panelId, draggedTab }) => {
-    const [activeZone, setActiveZone] = React.useState<'top' | 'bottom' | 'left' | 'right' | null>(null);
-    const { setActiveDropZone } = useTabs();
-
-    if (!draggedTab) return null;
-
-    const handleMouseEnter = (side: 'top' | 'bottom' | 'left' | 'right') => {
-        setActiveZone(side);
-        setActiveDropZone({ panelId, side });
-    };
-
-    const handleMouseLeave = () => {
-        setActiveZone(null);
-        setActiveDropZone(null);
-    };
-
-    return (
-        <div className="multipane-drop-zones" data-panel-id={panelId}>
-            {(['top', 'bottom', 'left', 'right'] as const).map(side => (
-                <div
-                    key={side}
-                    className={cx("drop-zone", `drop-zone-${side}`, { active: activeZone === side })}
-                    onMouseEnter={() => handleMouseEnter(side)}
-                    onMouseLeave={handleMouseLeave}
-                />
-            ))}
-        </div>
-    );
-};
-
 export const MultipaneLayout: React.FC<MultipaneLayoutProps> = ({
     t, sidebarReduced, setSidebarReduced, drives, panels,
     activePanelId, setActivePanelId, navigate,
@@ -233,10 +198,6 @@ export const MultipaneLayout: React.FC<MultipaneLayoutProps> = ({
                     if (!isActive) setActivePanelId(id);
                 }}
             >
-                <MultipaneDropZones
-                    panelId={id}
-                    draggedTab={draggedTab}
-                />
                 {onTabSwitch && (
                     <Tabs
                         panelId={id}
@@ -358,6 +319,7 @@ export const MultipaneLayout: React.FC<MultipaneLayoutProps> = ({
                     setDeletedDateFilter={panel.setDeletedDateFilter}
                     clearAllFilters={panel.clearAllFilters}
                     onItemMiddleClick={onItemMiddleClick ? (entry) => onItemMiddleClick(entry, id) : undefined}
+                    draggedTab={draggedTab}
                 />
             </div>
         );
@@ -485,29 +447,58 @@ const TreeResizeHandle: React.FC<{ axis: 'horizontal' | 'vertical', onResize: (d
 
     const onMouseDown = (e: React.MouseEvent) => {
         e.preventDefault();
+
+        const handle = handleRef.current;
+        if (!handle?.parentElement) return;
+
+        const prevChild = handle.previousElementSibling as HTMLElement | null;
+        const nextChild = handle.nextElementSibling as HTMLElement | null;
+        if (!prevChild || !nextChild) return;
+
+        const parentRect = handle.parentElement.getBoundingClientRect();
+        const totalSize = axis === 'horizontal' ? parentRect.width : parentRect.height;
+
+        const prevInitialSize = axis === 'horizontal'
+            ? prevChild.getBoundingClientRect().width
+            : prevChild.getBoundingClientRect().height;
+        const nextInitialSize = axis === 'horizontal'
+            ? nextChild.getBoundingClientRect().width
+            : nextChild.getBoundingClientRect().height;
+
+        const minSize = totalSize * 0.1;
+        let accumulatedDelta = 0;
+
         setIsDragging(true);
+        document.body.style.cursor = axis === 'horizontal' ? 'col-resize' : 'row-resize';
+        document.body.style.userSelect = 'none';
+
+        const handleMouseMove = (ev: MouseEvent) => {
+            accumulatedDelta += axis === 'horizontal' ? ev.movementX : ev.movementY;
+
+            const prevNewSize = Math.max(minSize, prevInitialSize + accumulatedDelta);
+            const excess = prevNewSize - prevInitialSize;
+            const nextNewSize = Math.max(minSize, nextInitialSize - excess);
+
+            // Direct DOM manipulation — no React state, no re-render
+            prevChild.style.flex = `0 0 ${prevNewSize}px`;
+            nextChild.style.flex = `0 0 ${nextNewSize}px`;
+        };
+
+        const handleMouseUp = () => {
+            setIsDragging(false);
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+
+            // Single backend call — React will reconcile styles from the new session
+            onResize(accumulatedDelta, totalSize);
+
+            window.removeEventListener('mousemove', handleMouseMove);
+            window.removeEventListener('mouseup', handleMouseUp);
+        };
+
+        window.addEventListener('mousemove', handleMouseMove);
+        window.addEventListener('mouseup', handleMouseUp);
     };
-
-    React.useEffect(() => {
-        if (!isDragging) return;
-
-        const onMouseMove = (e: MouseEvent) => {
-            if (!handleRef.current?.parentElement) return;
-            const parentRect = handleRef.current.parentElement.getBoundingClientRect();
-            const delta = axis === 'horizontal' ? e.movementX : e.movementY;
-            const totalSize = axis === 'horizontal' ? parentRect.width : parentRect.height;
-            onResize(delta, totalSize);
-        };
-
-        const onMouseUp = () => setIsDragging(false);
-
-        window.addEventListener('mousemove', onMouseMove);
-        window.addEventListener('mouseup', onMouseUp);
-        return () => {
-            window.removeEventListener('mousemove', onMouseMove);
-            window.removeEventListener('mouseup', onMouseUp);
-        };
-    }, [isDragging, axis, onResize]);
 
     return (
         <div

@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useCallback, ReactNode } from 'react';
 import { useRustSession, SessionState, Tab } from '../hooks/useRustSession';
 import { invoke } from '@tauri-apps/api/core';
-import { PanelId } from '../types';
+import { PanelId, PanelInitialConfig } from '../types';
+import { useSplitConfig } from './SplitConfigContext';
 
 export interface UiTab extends Tab {
     label: string;
@@ -22,15 +23,15 @@ interface TabsContextType {
     reorderTabs: (sourceIndex: number, targetIndex: number, panelId?: PanelId) => void;
 
     // Unified drag state
-    draggedTab: { id: string, panelId: PanelId, path: string, label: string } | null;
-    setDraggedTab: (tab: { id: string, panelId: PanelId, path: string, label: string } | null) => void;
+    draggedTab: { id: string, panelId: PanelId, path: string, label: string, initialConfig?: PanelInitialConfig } | null;
+    setDraggedTab: (tab: { id: string, panelId: PanelId, path: string, label: string, initialConfig?: PanelInitialConfig } | null) => void;
     dragPos: { x: number, y: number };
     internalDropIndex: number | null;
     targetPanelId: PanelId | null;
     markerOffset: number | null;
     registerPanel: (panelId: PanelId, ref: React.RefObject<HTMLDivElement>) => void;
     moveTab: (tabId: string, sourcePanel: PanelId, targetPanelId: PanelId, targetIndex: number) => Promise<void>;
-    splitPanel: (tabId: string, sourcePanelId: PanelId, targetPanelId: PanelId, side: 'top' | 'bottom' | 'left' | 'right') => Promise<void>;
+    splitPanel: (tabId: string, sourcePanelId: PanelId, targetPanelId: PanelId, side: 'top' | 'bottom' | 'left' | 'right', config?: PanelInitialConfig) => Promise<void>;
     setActiveDropZone: (zone: { panelId: PanelId; side: 'top' | 'bottom' | 'left' | 'right' } | null) => void;
 
     // Rust session exposed
@@ -91,7 +92,7 @@ export const TabsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
     }, [session?.active_panel_id]);
 
-    const [draggedTab, setDraggedTab] = React.useState<{ id: string, panelId: PanelId, path: string, label: string } | null>(null);
+    const [draggedTab, setDraggedTab] = React.useState<{ id: string, panelId: PanelId, path: string, label: string, initialConfig?: PanelInitialConfig } | null>(null);
     const [dragPos, setDragPos] = React.useState({ x: 0, y: 0 });
     const [internalDropIndex, setInternalDropIndex] = React.useState<number | null>(null);
     const [targetPanelId, setTargetPanelId] = React.useState<PanelId | null>(null);
@@ -137,13 +138,18 @@ export const TabsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
     }, [panels]);
 
-    const splitPanel = useCallback(async (tabId: string, sourcePanelId: string, targetPanelId: string, side: 'top' | 'bottom' | 'left' | 'right') => {
+    const { captureSplitConfig } = useSplitConfig();
+
+    const splitPanel = useCallback(async (tabId: string, sourcePanelId: string, targetPanelId: string, side: 'top' | 'bottom' | 'left' | 'right', config?: PanelInitialConfig) => {
         try {
+            if (config) {
+                captureSplitConfig(config);
+            }
             await invoke('split_panel', { tabId, sourcePanelId, targetPanelId, side });
         } catch (e) {
             console.error("[splitPanel] Failed:", e);
         }
-    }, []);
+    }, [captureSplitConfig]);
 
     const dragTargetRef = React.useRef<{ panelId: PanelId | null, index: number | null, offset: number | null }>({ panelId: null, index: null, offset: null });
 
@@ -218,7 +224,7 @@ export const TabsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
             if (capturedDropZone) {
                 // Dropped on a split zone — create a new panel
-                splitPanel(capturedTab.id, capturedTab.panelId, capturedDropZone.panelId, capturedDropZone.side);
+                splitPanel(capturedTab.id, capturedTab.panelId, capturedDropZone.panelId, capturedDropZone.side, capturedTab.initialConfig);
             } else if (tPanel !== null && tIndex !== null) {
                 // Dropped on a tab bar — move the tab
                 moveTab(capturedTab.id, capturedTab.panelId, tPanel, tIndex);

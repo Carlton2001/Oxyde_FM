@@ -3,7 +3,8 @@ import cx from 'classnames';
 import { ArrowUp, X, Search, Square } from 'lucide-react';
 import { FilePanelHeader } from './FilePanelHeader';
 import { FilePanelFooter } from './FilePanelFooter';
-import { FileEntry, ViewMode, SortConfig, ColumnWidths, SortField, DriveInfo } from '../../types';
+import { MultipaneDropZones } from '../layout/MultipaneDropZones';
+import { FileEntry, ViewMode, SortConfig, ColumnWidths, SortField, DriveInfo, PanelId } from '../../types';
 import { FileHeader } from './FileHeader';
 import { getFileEntryIcon, IMAGE_EXTENSIONS } from '../../utils/fileIcons';
 import { Thumbnail } from '../ui/Thumbnail';
@@ -90,6 +91,7 @@ interface FilePanelProps {
     setDeletedDateFilter: (val: Set<string> | null | ((prev: Set<string> | null) => Set<string> | null)) => void;
     clearAllFilters: () => void;
     forwardPath?: string | null;
+    draggedTab?: { id: string, panelId: PanelId } | null;
 }
 
 export const FilePanel: React.FC<FilePanelProps> = React.memo(({
@@ -105,7 +107,8 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
     groupByDate, onGroupByDateChange, isProtected, favorites: _favorites,
     extensionFilter, setExtensionFilter, sizeFilter, setSizeFilter, dateFilter, setDateFilter,
     nameFilter, setNameFilter, locationFilter, setLocationFilter,
-    deletedDateFilter, setDeletedDateFilter, clearAllFilters, forwardPath: _forwardPath
+    deletedDateFilter, setDeletedDateFilter, clearAllFilters, forwardPath: _forwardPath,
+    draggedTab
 }) => {
     const { useSystemIcons: contextUseSystemIcons, searchLimit, showGridThumbnails, notify, showNetwork, showCheckboxes } = useApp();
     const useSystemIcons = propUseSystemIcons ?? contextUseSystemIcons;
@@ -671,8 +674,13 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
                     </div>
                 )} {/* Filters bar is now integrated into VirtualizedFileList */}
 
-                <div
-                    className={cx("file-list", viewMode, { "search-mode": !!searchResults, "trash-mode": isTrashView, "virtualized": true })}
+                <div className="file-list-area" style={{ flex: 1, position: 'relative', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+                    <MultipaneDropZones
+                        panelId={panelId}
+                        draggedTab={draggedTab || null}
+                    />
+                    <div
+                        className={cx("file-list", viewMode, { "search-mode": !!searchResults, "trash-mode": isTrashView, "virtualized": true })}
                     onClick={(e) => {
                         if (isDragging || isMarqueeRef.current) return;
                         const isFileItem = (e.target as HTMLElement).closest('.file-item');
@@ -727,8 +735,9 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
                     />
                 </div>
             </div>
+        </div>
 
-            {showScrollTop && mouseNearScrollbar && (
+        {showScrollTop && mouseNearScrollbar && (
                 <button
                     className="scroll-to-top-btn"
                     onClick={(e) => {

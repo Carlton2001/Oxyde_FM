@@ -98,6 +98,12 @@ export interface SortConfig {
     direction: SortDirection;
 }
 
+export interface PanelInitialConfig {
+    viewMode?: ViewMode;
+    sortConfig?: SortConfig;
+    groupByDate?: boolean;
+}
+
 export interface ColumnWidths {
     name: number;
     location: number;

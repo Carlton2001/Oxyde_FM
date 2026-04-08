@@ -6,10 +6,10 @@ import { useSelection } from './useSelection';
 import { usePanelSearch } from './usePanelSearch';
 
 import { useApp } from '../context/AppContext';
-import { ColumnWidths, ViewMode, SizeCategoryKey, PanelId, SortConfig, MultiModeColumnWidths, ColumnMode } from '../types';
+import { ColumnWidths, ViewMode, SizeCategoryKey, PanelId, SortConfig, MultiModeColumnWidths, ColumnMode, PanelInitialConfig } from '../types';
 import { getColumnMode } from '../config/columnDefinitions';
 
-export const usePanel = (initialPath: string, panelId: PanelId, activeTabId?: string) => {
+export const usePanel = (initialPath: string, panelId: PanelId, activeTabId?: string, initialConfig?: PanelInitialConfig) => {
     const { showHidden, showSystem, searchLimit } = useApp();
 
     // Navigation
@@ -28,6 +28,7 @@ export const usePanel = (initialPath: string, panelId: PanelId, activeTabId?: st
 
     // View State with localStorage persistence
     const [viewMode, setViewModeState] = useState<ViewMode>(() => {
+        if (initialConfig?.viewMode) return initialConfig.viewMode;
         if (panelId) {
             const saved = localStorage.getItem(`viewMode_${panelId}`);
             if (saved && ['grid', 'details'].includes(saved)) {
@@ -38,6 +39,7 @@ export const usePanel = (initialPath: string, panelId: PanelId, activeTabId?: st
     });
 
     const [groupByDate, setGroupByDateState] = useState<boolean>(() => {
+        if (initialConfig?.groupByDate !== undefined) return initialConfig.groupByDate;
         if (groupByDateKey) {
             const saved = localStorage.getItem(groupByDateKey);
             return saved === 'true';
@@ -77,7 +79,9 @@ export const usePanel = (initialPath: string, panelId: PanelId, activeTabId?: st
         setDeletedDateFilter(null);
     }, []);
 
-    const [sortConfig, setSortConfig] = useState<SortConfig>({ field: 'name', direction: 'asc' });
+    const [sortConfig, setSortConfig] = useState<SortConfig>(() => {
+        return initialConfig?.sortConfig || { field: 'name', direction: 'asc' };
+    });
 
     // Sync sortConfig with backend session
     useEffect(() => {
