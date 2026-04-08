@@ -240,6 +240,11 @@ export function buildGridTemplate(
     colWidths: Record<string, number>
 ): string {
     return visibleColumns
-        .map(col => `${colWidths[col.key] || col.defaultWidth}px`)
+        .map(col => {
+            const width = colWidths[col.key];
+            // Enforce minWidth safety even if state is corrupted or panel too small
+            const safeWidth = Math.max(width !== undefined ? width : col.defaultWidth, col.minWidth);
+            return `${safeWidth}px`;
+        })
         .join(' ');
 }

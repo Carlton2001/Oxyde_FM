@@ -12,7 +12,7 @@ import { formatSize, formatDate, getFileTypeString } from '../utils/format';
 import { getParent } from '../utils/path';
 import { useApp } from '../context/AppContext';
 import { TFunc } from '../i18n';
-import { calculateIdealFlexWidth } from '../config/columnDefinitions';
+import { COLUMNS } from '../config/columnDefinitions';
 
 interface AutoFitOptions {
     panelRef: React.RefObject<HTMLDivElement | null>;
@@ -166,49 +166,56 @@ export const useAutoFitColumns = ({
             maxLocation = Math.max(maxLocation, Math.ceil(maxLocationText + COL_PADDING));
 
             // ---------------------------------------------------------
-            // 5. Batch Apply (Proportional Fit)
+            // 5. Batch Apply (Robust Allocation)
             // ---------------------------------------------------------
             const panelWidth = panelRef.current.clientWidth;
 
-            const fixedSum = maxType + maxSize + maxDate + (isTrashView ? Math.max(maxDeletedDate, Math.ceil(maxDeletedDateText + COL_PADDING)) : 0);
-
-            const updates: Partial<ColumnWidths> = {
-                type: maxType,
-                size: maxSize,
-                date: maxDate
+            // Clamping measured values to their respective minWidths from COLUMNS registry
+            const getSafeWidth = (key: string, measured: number) => {
+                const def = COLUMNS.find(c => c.key === key);
+                return Math.max(measured, def?.minWidth || 20);
             };
 
-            if (isTrashView) {
-                updates.deletedDate = Math.max(maxDeletedDate, Math.ceil(maxDeletedDateText + DATE_PADDING));
-            }
+            const safeType = getSafeWidth('type', maxType);
+            const safeSize = getSafeWidth('size', maxSize);
+            const safeDate = getSafeWidth('date', maxDate);
+            const safeDeletedDate = isTrashView ? getSafeWidth('deletedDate', Math.max(maxDeletedDate, Math.ceil(maxDeletedDateText + DATE_PADDING))) : 0;
+
+            const updates: Partial<ColumnWidths> = {
+                type: safeType,
+                size: safeSize,
+                date: safeDate
+            };
+            if (isTrashView) updates.deletedDate = safeDeletedDate;
+
+            const fixedSum = safeType + safeSize + safeDate + safeDeletedDate;
 
             if (searchResults || isTrashView) {
-                const availableWidth = panelWidth - fixedSum - 32;
-                const totalDesired = maxName + maxLocation;
+                const safeLocationMeasured = getSafeWidth('location', maxLocation);
+                const safeNameMeasured = getSafeWidth('name', Math.ceil(maxNameText + NAME_STRUCT));
 
-                // Priority Logic: Name is the primary identifier.
-                // We try to give Location its desired width, but we prioritize Name if space is tight.
-                if (availableWidth >= totalDesired) {
-                    // Plenty of space: give Location what it needs, Name takes the rest
-                    updates.location = maxLocation;
-                    updates.name = availableWidth - maxLocation;
+                // Available space for the two "variable" columns (Name & Location)
+                const availableForPair = Math.max(0, panelWidth - fixedSum - 40); // 40px safety/gutter
+                const minLocation = 80;
+                const minName = 150;
+
+                if (availableForPair >= (safeLocationMeasured + safeNameMeasured)) {
+                    // Plenty of space: give both their ideal measured widths
+                    updates.location = safeLocationMeasured;
+                    updates.name = availableForPair - safeLocationMeasured;
                 } else {
-                    // Restricted space: 
-                    // 1. Give Name a comfortable minimum or its proportional share
-                    // 2. Ensure Location doesn't disappear but gets the smaller share
-                    const minName = Math.max(150, availableWidth * 0.6);
-                    updates.name = Math.max(minName, availableWidth - maxLocation);
-
-                    // If even the above name width is too much, Name takes priority
-                    if (updates.name > availableWidth - 50) {
-                        updates.name = Math.max(100, availableWidth - 80);
-                    }
-
-                    updates.location = availableWidth - (updates.name as number);
+                    // Tight space: prioritize Name but keep Location visible
+                    // We ensure they never drop below their absolute UI minimums
+                    const targetNameWidth = Math.max(minName, availableForPair * 0.6);
+                    updates.name = Math.max(targetNameWidth, safeNameMeasured); 
+                    updates.location = Math.max(minLocation, safeLocationMeasured);
+                    
+                    // Note: If panelWidth is very small, the sum will exceed it, 
+                    // and buildGridTemplate/CSS will handle horizontal scroll.
                 }
             } else {
-                // Shared Intelligent Fill Logic
-                updates.name = calculateIdealFlexWidth(panelWidth, fixedSum);
+                // Normal mode: Standard flex calculation for Name
+                updates.name = Math.max(150, panelWidth - fixedSum - 32); 
             }
 
             if (onResizeMultiple) {
