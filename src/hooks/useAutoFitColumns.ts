@@ -200,18 +200,16 @@ export const useAutoFitColumns = ({
                 const minName = 150;
 
                 if (availableForPair >= (safeLocationMeasured + safeNameMeasured)) {
-                    // Plenty of space: give both their ideal measured widths
+                    // Plenty of space: give Location what it needs, Name takes the rest (extra flex)
                     updates.location = safeLocationMeasured;
                     updates.name = availableForPair - safeLocationMeasured;
                 } else {
-                    // Tight space: prioritize Name but keep Location visible
-                    // We ensure they never drop below their absolute UI minimums
-                    const targetNameWidth = Math.max(minName, availableForPair * 0.6);
-                    updates.name = Math.max(targetNameWidth, safeNameMeasured); 
-                    updates.location = Math.max(minLocation, safeLocationMeasured);
+                    // Tight space: Prioritize Name as the primary identifier
+                    // Give Name its full measured width to ensure it's not truncated if possible
+                    updates.name = safeNameMeasured;
                     
-                    // Note: If panelWidth is very small, the sum will exceed it, 
-                    // and buildGridTemplate/CSS will handle horizontal scroll.
+                    // Location gets the remaining share, but never falls below its absolute minimum
+                    updates.location = Math.max(minLocation, availableForPair - safeNameMeasured);
                 }
             } else {
                 // Normal mode: Standard flex calculation for Name

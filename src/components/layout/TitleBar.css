@@ -55,7 +55,8 @@
     transition: all 0.2s ease;
 }
 
-.logo-btn:hover, .logo-btn.active {
+.logo-btn:hover,
+.logo-btn.active {
     background-color: var(--hover-color) !important;
 }
 
@@ -65,7 +66,8 @@
     color: var(--text-color);
     white-space: nowrap;
     letter-spacing: 0.3px;
-    margin-top: -1px; /* Visual center adjustment */
+    margin-top: -1px;
+    /* Visual center adjustment */
 }
 
 .app-tools-group {
@@ -80,7 +82,7 @@
 }
 
 .control-btn {
-    width: 32px !important;
+    width: 40px !important;
     height: 32px !important;
     border-radius: 0 !important;
     display: flex;
