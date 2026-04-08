@@ -408,14 +408,17 @@ export const useFiles = (panelId: PanelId, path: string, sortConfig: SortConfig,
         refresh(false);
     }, [refresh, requestId]);
 
-    // Trash polling for real-time updates (virtual paths can't be watched natively)
+    // Event-driven refresh for trash:// (replaces polling that caused layout disruption)
     useEffect(() => {
-        if (path === 'trash://') {
-            const interval = setInterval(() => {
-                refresh(true); // Silent refresh
-            }, 3000);
-            return () => clearInterval(interval);
-        }
+        if (path !== 'trash://') return;
+
+        const unlisten = listen('trash-changed', () => {
+            refresh(true); // Silent refresh
+        });
+
+        return () => {
+            unlisten.then(u => u());
+        };
     }, [path, refresh]);
 
     const sortedFiles = useMemo(() => {

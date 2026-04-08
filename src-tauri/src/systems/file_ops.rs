@@ -933,6 +933,7 @@ impl FileOperationManager {
             let _ = app.emit("file_op_event", op_data);
         }
 
+        let _ = app.emit("trash-changed", ());
         Ok(())
     }
 

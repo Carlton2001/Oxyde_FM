@@ -176,7 +176,7 @@ pub fn list_trash() -> Result<Vec<TrashEntry>, CommandError> {
 
 /// Empty the Recycle Bin (permanently delete all items)
 #[tauri::command]
-pub async fn empty_trash() -> Result<(), CommandError> {
+pub async fn empty_trash(app: AppHandle) -> Result<(), CommandError> {
     info!("Emptying recycle bin...");
     
     #[cfg(target_os = "windows")]
@@ -197,12 +197,12 @@ pub async fn empty_trash() -> Result<(), CommandError> {
             .map_err(|e| CommandError::TrashError(e.to_string()))?;
     }
 
+    let _ = app.emit("trash-changed", ());
     Ok(())
 }
 
-/// Permanently delete specific items from the Recycle Bin
 #[tauri::command]
-pub async fn purge_recycle_bin(paths: Vec<String>) -> Result<(), CommandError> {
+pub async fn purge_recycle_bin(app: AppHandle, paths: Vec<String>) -> Result<(), CommandError> {
     let trash_items = trash::os_limited::list().map_err(|e| CommandError::TrashError(e.to_string()))?;
 
     let normalize = |p: &std::path::Path| -> String {
@@ -266,6 +266,7 @@ pub async fn purge_recycle_bin(paths: Vec<String>) -> Result<(), CommandError> {
         }
     }
 
+    let _ = app.emit("trash-changed", ());
     Ok(())
 }
 
@@ -1187,6 +1188,7 @@ pub async fn move_from_trash(app: AppHandle, paths: Vec<String>, target_dir: Str
         history.push(Transaction::new(TransactionType::Restore, tx_details));
     }
 
+    let _ = app.emit("trash-changed", ());
     Ok(())
 }
 
@@ -1194,6 +1196,7 @@ pub async fn move_from_trash(app: AppHandle, paths: Vec<String>, target_dir: Str
 pub fn get_history(history: State<'_, HistoryManager>) -> Result<crate::models::history::HistoryState, CommandError> {
     Ok(history.get_state())
 }
+
 
 fn fast_trash(paths: Vec<PathBuf>) -> Result<(), CommandError> {
     if paths.is_empty() { return Ok(()); }
