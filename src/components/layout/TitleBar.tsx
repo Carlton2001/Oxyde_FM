@@ -78,16 +78,27 @@ export const TitleBar: React.FC<TitleBarProps> = ({
     };
 
     return (
-        <div className="title-bar" data-tauri-drag-region>
+        <div
+            className="title-bar"
+            data-tauri-drag-region
+            onMouseDown={(e) => {
+                if (e.button === 1) { // Middle click
+                    e.preventDefault();
+                    getCurrentWindow().minimize().catch(console.error);
+                }
+            }}
+        >
             <div className="title-bar-left">
                 <div className="settings-container branding" onClick={(e) => e.stopPropagation()}>
                     <button
-                        className={cx("btn-icon logo-btn branding-btn", { "glow-pulse": firstLaunch && !settingsOpen, "active": settingsOpen })}
+                        className={cx("btn-icon logo-btn branding-btn", { "active": settingsOpen })}
                         onClick={toggleSettings}
                         data-tooltip={t('settings' as any)}
                         data-tooltip-pos="bottom"
                     >
-                        <img src="/logo.svg" className="app-logo-icon" alt="Oxyde" />
+                        <div className={cx("logo-icon-wrapper", { "glow-pulse": firstLaunch && !settingsOpen })}>
+                            <img src="/logo.svg" className="app-logo-icon" alt="Oxyde" />
+                        </div>
                         <span className="app-title">Oxyde</span>
                     </button>
                     <SettingsMenu

@@ -112,7 +112,6 @@ export const TabsProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     const reorderTabs = useCallback(async (sourceIndex: number, targetIndex: number, panelId?: PanelId) => {
         const targetPanel = panelId || (activePanelId as PanelId);
-        console.log(`[reorderTabs] panel: ${targetPanel}, ${sourceIndex} -> ${targetIndex}`);
         try {
             await invoke('reorder_tabs', { panelId: targetPanel, sourceIndex, targetIndex });
         } catch (e) {

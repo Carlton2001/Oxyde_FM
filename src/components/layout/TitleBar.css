@@ -4,7 +4,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding-left: 5px;
+    padding-left: 0;
     /* Brighter indent for logo */
     padding-right: 0;
     /* Flush right */
@@ -20,10 +20,16 @@
 .title-bar-right {
     display: flex;
     align-items: center;
+    height: 100%;
 }
 
 .title-bar-left {
     min-width: 0;
+    height: 100%;
+}
+
+.title-bar .settings-container {
+    height: 100%;
 }
 
 .app-logo-icon {
@@ -31,11 +37,18 @@
     height: 20px;
 }
 
+.logo-icon-wrapper {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+}
+
 .logo-btn {
     width: auto !important;
-    height: 28px !important;
-    padding: 0 0.5rem !important;
-    border-radius: var(--radius-md) !important;
+    height: 100% !important;
+    padding: 0 0.75rem !important;
+    border-radius: 0 !important;
     display: flex;
     align-items: center;
     gap: 0.5rem;
@@ -95,7 +108,7 @@
 .title-bar .settings-menu {
     top: 100%;
     margin-top: 0;
-    left: 4px;
+    left: 0;
 }
 
 .title-bar .hamburger-menu {
