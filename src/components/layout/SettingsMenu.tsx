@@ -85,6 +85,9 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({
             {[
                 { id: 'en', label: 'english' },
                 { id: 'fr', label: 'french' },
+                { id: 'es', label: 'spanish' },
+                { id: 'de', label: 'german' },
+                { id: 'it', label: 'italian' },
             ].map(item => (
                 <div
                     key={item.id}

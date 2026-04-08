@@ -92,11 +92,18 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
     const { notifications, notify, dismissNotification } = useNotifications();
     const { drives, mountedImages, refreshDrives } = useDrives();
 
+    // System language detection
+    const getSystemLanguage = (): Language => {
+        const sysLang = navigator.language.split('-')[0];
+        const supported: Language[] = ['en', 'fr', 'es', 'de', 'it'];
+        return supported.includes(sysLang as Language) ? (sysLang as Language) : 'en';
+    };
+
     // Defaults (used while loading or if config missing)
     const defaults = {
         theme: 'oxyde-dark' as Theme,
         layout: 'multipane' as LayoutMode,
-        language: 'en' as Language,
+        language: getSystemLanguage(),
         showHidden: false,
         showSystem: false,
         useSystemIcons: false,
