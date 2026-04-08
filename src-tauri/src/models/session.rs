@@ -225,13 +225,11 @@ impl LayoutNode {
                 }
             }
             LayoutNode::Split { children, weights, .. } => {
-                let mut found_target = false;
                 let mut update_at = None;
 
                 for (i, child) in children.iter_mut().enumerate() {
                     let (found, replacement) = child.remove_pane(target_id);
                     if found || replacement.is_some() {
-                        found_target = true;
                         update_at = Some((i, replacement));
                         break;
                     }

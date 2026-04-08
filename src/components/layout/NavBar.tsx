@@ -3,13 +3,15 @@ import { ArrowLeft, ArrowRight, ArrowUp, Home, RefreshCw, Undo2, Redo2, Copy, Sc
 import { homeDir } from '@tauri-apps/api/path';
 import { SearchBox } from '../ui/SearchBox';
 import { AsyncFileIcon } from '../ui/AsyncFileIcon';
-import { DriveInfo } from '../../types';
+import { PathBar } from './PathBar';
+import { DriveInfo, PanelId } from '../../types';
 import { TFunc } from '../../i18n';
 import { useApp } from '../../context/AppContext';
 import { getParent } from '../../utils/path';
-import './TopBar.css';
+import './NavBar.css';
 
-interface TopBarProps {
+interface NavBarProps {
+    panelId: PanelId;
     t: TFunc;
     activePanel: any;
     canUndo: boolean;
@@ -53,7 +55,8 @@ interface TopBarProps {
     onClosePanel?: () => void;
 }
 
-export const TopBar: React.FC<TopBarProps> = ({
+export const NavBar: React.FC<NavBarProps> = ({
+    panelId,
     activePanel,
     canUndo,
     undoLabel,
@@ -255,6 +258,16 @@ export const TopBar: React.FC<TopBarProps> = ({
                     </button>
                 )}
             </div>
+
+            {activePanel?.path && (
+                <PathBar
+                    panelId={panelId}
+                    path={activePanel.path}
+                    onNavigate={onNavigate}
+                    t={t}
+                    drives={drives}
+                />
+            )}
 
             <div className="flex-spacer" />
 

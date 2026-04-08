@@ -6,7 +6,7 @@
     border-right: 1px solid var(--border-color);
     position: relative;
     overflow: hidden;
-    background-color: var(--bg-color);
+    background-color: var(--pane-bg, var(--bg-color));
 }
 
 .panel:last-child {
@@ -666,7 +666,7 @@
     border-bottom: 1px solid var(--border-color);
     font-size: 0.75rem;
     font-weight: 600;
-    background-color: var(--bg-color);
+    background-color: var(--pane-bg, var(--bg-color));
     flex-shrink: 0;
     color: var(--text-color);
     width: max-content;
@@ -1225,7 +1225,7 @@
     height: 2rem;
     padding: 0;
     border-bottom: 1px solid var(--border-color);
-    background: color-mix(in srgb, var(--surface-secondary), transparent 30%);
+    background: var(--pane-bg, var(--bg-color));
     width: max-content;
     min-width: max-content;
 }
@@ -1246,7 +1246,7 @@
     height: 2rem;
     padding: 0 0.75rem;
     border-bottom: 1px solid var(--border-color);
-    background: color-mix(in srgb, var(--surface-secondary), transparent 30%);
+    background: var(--pane-bg, var(--bg-color));
 }
 
 .group-header:hover {

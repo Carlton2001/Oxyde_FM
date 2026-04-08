@@ -111,6 +111,7 @@ export function useFileItemState(props: UseFileItemStateProps): FileItemState {
             onFileDragStart(entry);
         },
         onMouseDown: (e: React.MouseEvent) => {
+            onItemClick(entry, e); // Signal activation
             if (e.button === 1 && onItemMiddleClick) {
                 e.preventDefault();
                 e.stopPropagation();

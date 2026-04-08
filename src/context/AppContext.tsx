@@ -23,6 +23,7 @@ export interface AppContextValue {
     showCheckboxes: boolean;
     showNetwork: boolean;
     confirmDelete: boolean;
+    syncSidebarWithPath: boolean;
     updateAvailable: boolean;
     firstLaunch: boolean;
     peekStatus: {
@@ -48,6 +49,7 @@ export interface AppContextValue {
     setShowCheckboxes: (show: boolean) => void;
     setShowNetwork: (show: boolean) => void;
     setConfirmDelete: (show: boolean) => void;
+    setSyncSidebarWithPath: (sync: boolean) => void;
     setUpdateAvailable: (available: boolean) => void;
     setFirstLaunch: (val: boolean) => void;
 
@@ -109,7 +111,8 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
         showGridThumbnails: false,
         showCheckboxes: false,
         showNetwork: true,
-        confirmDelete: true
+        confirmDelete: true,
+        syncSidebarWithPath: true
     };
 
     // Derived state (or defaults)
@@ -131,6 +134,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
     const showCheckboxes = config?.show_checkboxes ?? (localStorage.getItem('fm_showCheckboxes') === 'true' || (localStorage.getItem('fm_showCheckboxes') === null && defaults.showCheckboxes));
     const showNetwork = config?.show_network ?? (localStorage.getItem('fm_showNetwork') === 'true' || (localStorage.getItem('fm_showNetwork') === null && defaults.showNetwork));
     const confirmDelete = config?.confirm_delete ?? (localStorage.getItem('fm_confirmDelete') === 'true' || (localStorage.getItem('fm_confirmDelete') === null && defaults.confirmDelete));
+    const syncSidebarWithPath = config?.sync_sidebar_with_path ?? (localStorage.getItem('fm_syncSidebarWithPath') === 'true' || (localStorage.getItem('fm_syncSidebarWithPath') === null && defaults.syncSidebarWithPath));
     const firstLaunch = config?.first_launch ?? (localStorage.getItem('fm_first_launch') !== 'false');
     const [updateAvailable, setUpdateAvailable] = React.useState(false);
     const [isTrashEmpty, setIsTrashEmpty] = React.useState(true);
@@ -242,6 +246,11 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
         setConfigValue('confirm_delete', v);
     }, [setConfigValue]);
 
+    const setSyncSidebarWithPath = useCallback((v: boolean) => {
+        localStorage.setItem('fm_syncSidebarWithPath', v.toString());
+        setConfigValue('sync_sidebar_with_path', v);
+    }, [setConfigValue]);
+
 
     const setFontSize = useCallback((size: number) => {
         const newSize = Math.max(10, Math.min(24, size));
@@ -350,6 +359,8 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
         setShowNetwork,
         confirmDelete,
         setConfirmDelete,
+        syncSidebarWithPath,
+        setSyncSidebarWithPath,
         updateAvailable,
         setUpdateAvailable,
         firstLaunch,

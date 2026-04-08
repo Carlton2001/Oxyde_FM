@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useMemo, useEffect, useRef, useCallback, ReactNode } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 import { usePanel } from '../hooks/usePanel';
 import { PanelId, HistoryEntry } from '../types';
 import { useTabs } from './TabsContext';
@@ -42,6 +43,7 @@ export const PanelProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     const [panelStates, setPanels] = useState<Record<PanelId, any>>({});
     const [panelConfigs, setConfigs] = useState<Record<PanelId, { initialPath: string, activeTabId: string }>>({});
     const [activePanelId, setActivePanelId] = useState<PanelId>('left' as PanelId);
+    const lastManualActiveId = useRef<PanelId | null>(null);
 
     const onRegister = useCallback((id: PanelId, state: any) => {
         setPanels(prev => ({ ...prev, [id]: state }));
@@ -55,13 +57,20 @@ export const PanelProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         });
     }, []);
 
+    const syncActivePanel = useCallback((id: PanelId) => {
+        lastManualActiveId.current = id;
+        setActivePanelId(id);
+        invoke('set_active_panel', { panelId: id }).catch(console.error);
+    }, []);
+
     useEffect(() => {
         if (session?.active_panel_id && session.active_panel_id !== activePanelId) {
-            setActivePanelId(session.active_panel_id as PanelId);
+            if (lastManualActiveId.current === null || session.active_panel_id === lastManualActiveId.current) {
+                setActivePanelId(session.active_panel_id as PanelId);
+            }
         }
     }, [session?.active_panel_id, activePanelId]);
 
-    // Track tab histories for navigation restoration
     const tabHistoriesRef = useRef<Record<PanelId, Map<string, TabNavSnapshot>>>({});
     const prevTabIdsRef = useRef<Record<PanelId, string>>({});
 
@@ -122,7 +131,6 @@ export const PanelProvider: React.FC<{ children: ReactNode }> = ({ children }) =
             const allPanels = getPanes(session.root);
             const sessionIds = Object.keys(allPanels);
 
-            // 1. Cleanup removed panels
             setPanels(prev => {
                 const next = { ...prev };
                 let changed = false;
@@ -135,33 +143,21 @@ export const PanelProvider: React.FC<{ children: ReactNode }> = ({ children }) =
                 return changed ? next : prev;
             });
 
-            // 2. Sync configurations (Add new, update existing, REMOVE orphaned)
             setConfigs(prev => {
                 const next: Record<PanelId, { initialPath: string, activeTabId: string }> = {};
                 let changed = false;
-
-                // Only keep panels that are in the session
                 for (const [id, p] of Object.entries(allPanels)) {
                     const panelId = id as PanelId;
                     const existing = prev[panelId];
                     const activeTabPath = p.tabs.find((t: any) => t.id === p.active_tab_id)?.path || 'C:\\';
-
                     if (!existing || existing.activeTabId !== p.active_tab_id) {
-                        next[panelId] = {
-                            initialPath: activeTabPath,
-                            activeTabId: p.active_tab_id
-                        };
+                        next[panelId] = { initialPath: activeTabPath, activeTabId: p.active_tab_id };
                         changed = true;
                     } else {
                         next[panelId] = existing;
                     }
                 }
-
-                // Check if we removed any panels
-                if (Object.keys(prev).length !== Object.keys(next).length) {
-                    changed = true;
-                }
-
+                if (Object.keys(prev).length !== Object.keys(next).length) changed = true;
                 return changed ? next : prev;
             });
         }
@@ -180,7 +176,7 @@ export const PanelProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     const value = {
         panels: panelStates,
         activePanelId,
-        setActivePanelId,
+        setActivePanelId: syncActivePanel,
         activePanel,
         isReady
     };

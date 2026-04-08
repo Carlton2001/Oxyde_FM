@@ -71,7 +71,7 @@ function App() {
   const { clipboard, copy, cut, clearClipboard, copyToSystem, readTextFromSystem, refreshClipboard } = clipboardObj;
   const { setActiveTab, addTab, closeTab } = useTabs();
   const dialogs = useDialogs();
-  const { panels, activePanelId, setActivePanelId, activePanel, isReady } = usePanelContext();
+  const { panels, activePanelId, setActivePanelId, activePanel } = usePanelContext();
   const fileOps = useFileOperations(notify, t as any, dismissNotification);
   const { favorites } = useFavorites();
 
@@ -289,6 +289,7 @@ function App() {
     closeTab,
     addTab,
     refreshBothPanels,
+    panels,
     modifiers,
     peekStatus,
     driveTrashConfigs,

@@ -21,6 +21,7 @@ export interface AppConfig {
     show_network: boolean;
     group_by_date: boolean;
     confirm_delete: boolean;
+    sync_sidebar_with_path: boolean;
     first_launch: boolean;
 }
 

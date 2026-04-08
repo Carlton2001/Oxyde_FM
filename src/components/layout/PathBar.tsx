@@ -426,7 +426,7 @@ export const PathBar: React.FC<PathBarProps> = ({ path, onNavigate, className, i
 
         window.addEventListener('resize', scrollToActiveItem);
         
-        // Also observe the element size itself, because TopBar actions appearing 
+        // Also observe the element size itself, because NavBar actions appearing
         // will change the pathbar width without a window resize event.
         let observer: ResizeObserver | null = null;
         if (scrollRef.current) {

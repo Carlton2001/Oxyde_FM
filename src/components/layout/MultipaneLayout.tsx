@@ -1,14 +1,15 @@
 import React, { useCallback } from 'react';
-import { Sidebar } from '../layout/Sidebar';
+import { Sidebar } from './Sidebar';
 import { FilePanel } from '../file-list/FilePanel';
-import { TopBar } from '../layout/TopBar';
-import { TitleBar } from '../layout/TitleBar';
+import { NavBar } from './NavBar';
+import { TitleBar } from './TitleBar';
 import cx from 'classnames';
 import { PanelState, DriveInfo, FileEntry, SortField, ColumnWidths, ViewMode, SizeCategoryKey, PanelId } from '../../types';
 import { Tabs } from '../ui/Tabs';
 import { TFunc } from '../../i18n';
 import { useApp } from '../../context/AppContext';
 import { useTabs } from '../../context/TabsContext';
+import { LayoutNode } from '../../hooks/useRustSession';
 import { invoke } from '@tauri-apps/api/core';
 
 interface FullPanelState extends PanelState {
@@ -170,8 +171,38 @@ export const MultipaneLayout: React.FC<MultipaneLayoutProps> = ({
     isTrashEmpty, favorites
 }) => {
     const { driveTrashConfigs } = useApp();
-    const { draggedTab } = useTabs();
+    const { draggedTab, session } = useTabs();
     const activePanel = panels[activePanelId] || Object.values(panels)[0];
+
+    const handleResizeSplit = useCallback((splitId: string, _axis: 'horizontal' | 'vertical', index: number, delta: number, totalSize: number) => {
+        if (!session) return;
+
+        const findAndResize = (node: LayoutNode): boolean => {
+            if (node.type === 'Split') {
+                if (node.data.id === splitId) {
+                    const newWeights = [...node.data.weights];
+                    const weightDelta = (delta / totalSize) * newWeights.reduce((a, b) => a + b, 0);
+                    
+                    // Adjust weights of neighbor children
+                    if (newWeights[index] !== undefined && newWeights[index + 1] !== undefined) {
+                        const minWeight = 0.1;
+                        const oldA = newWeights[index];
+                        const oldB = newWeights[index + 1];
+                        
+                        newWeights[index] = Math.max(minWeight, oldA + weightDelta);
+                        newWeights[index + 1] = Math.max(minWeight, oldB - (newWeights[index] - oldA));
+                        
+                        invoke('update_layout_weights', { splitId, weights: newWeights }).catch(console.error);
+                        return true;
+                    }
+                }
+                return node.data.children.some(findAndResize);
+            }
+            return false;
+        };
+
+        findAndResize(session.root);
+    }, [session]);
 
     if (!activePanel) return null;
 
@@ -195,7 +226,13 @@ export const MultipaneLayout: React.FC<MultipaneLayoutProps> = ({
         const isNuke = getIsNukeOverride(panel);
 
         return (
-            <div key={id} className={cx("individual-panel-wrapper", { active: isActive })}>
+            <div 
+                key={id} 
+                className={cx("individual-panel-wrapper", { active: isActive })}
+                onMouseDownCapture={() => {
+                    if (!isActive) setActivePanelId(id);
+                }}
+            >
                 <MultipaneDropZones
                     panelId={id}
                     draggedTab={draggedTab}
@@ -210,7 +247,8 @@ export const MultipaneLayout: React.FC<MultipaneLayoutProps> = ({
                         onTabDrop={onTabDrop}
                     />
                 )}
-                <TopBar
+                <NavBar
+                    panelId={id}
                     activePanel={panel}
                     canUndo={canUndo}
                     undoLabel={undoLabel}
@@ -325,39 +363,7 @@ export const MultipaneLayout: React.FC<MultipaneLayoutProps> = ({
         );
     };
 
-    const { session } = useTabs();
-
-    const handleResizeSplit = useCallback((splitId: string, _axis: 'horizontal' | 'vertical', index: number, delta: number, totalSize: number) => {
-        if (!session) return;
-
-        const findAndResize = (node: import('../../hooks/useRustSession').LayoutNode): boolean => {
-            if (node.type === 'Split') {
-                if (node.data.id === splitId) {
-                    const newWeights = [...node.data.weights];
-                    const weightDelta = (delta / totalSize) * newWeights.reduce((a, b) => a + b, 0);
-                    
-                    // Adjust weights of neighbor children
-                    if (newWeights[index] !== undefined && newWeights[index + 1] !== undefined) {
-                        const minWeight = 0.1;
-                        const oldA = newWeights[index];
-                        const oldB = newWeights[index + 1];
-                        
-                        newWeights[index] = Math.max(minWeight, oldA + weightDelta);
-                        newWeights[index + 1] = Math.max(minWeight, oldB - (newWeights[index] - oldA));
-                        
-                        invoke('update_layout_weights', { splitId, weights: newWeights }).catch(console.error);
-                        return true;
-                    }
-                }
-                return node.data.children.some(findAndResize);
-            }
-            return false;
-        };
-
-        findAndResize(session.root);
-    }, [session]);
-
-    const renderNode = (node: import('../../hooks/useRustSession').LayoutNode): React.ReactNode => {
+    const renderNode = (node: LayoutNode): React.ReactNode => {
         if (node.type === 'Pane') {
             return renderPanel(node.data.id as PanelId);
         }

@@ -99,7 +99,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     onTrashProperties,
     onDragOver
 }) => {
-    const { showNetwork } = useApp();
+    const { showNetwork, syncSidebarWithPath } = useApp();
     const sidebarRef = React.useRef<HTMLDivElement>(null);
     const [width, setWidth] = React.useState(() => {
         const saved = localStorage.getItem('sidebarWidth');
@@ -147,6 +147,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
             unlistenPromise.then(unlisten => unlisten());
         };
     }, [minimized]);
+
+    useEffect(() => {
+        if (syncSidebarWithPath && !minimized && currentPath && treeRef?.current) {
+            treeRef.current.revealPath(currentPath);
+        }
+    }, [currentPath, syncSidebarWithPath, minimized, treeRef]);
 
 
     const COLLAPSE_THRESHOLD = 80; // px — dragging past this collapses the sidebar
@@ -351,6 +357,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     onRestoreAll={onTreeRestoreAll}
                     onTrashProperties={onTrashProperties}
                     onDragOver={onDragOver}
+                    syncSidebarWithPath={syncSidebarWithPath}
                 />
             )}
 

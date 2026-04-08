@@ -40,18 +40,36 @@ export const useGlobalShortcuts = (context: ActionContext, tabs: any[], activeTa
             const isTab = (e.key === 'Tab');
             const isPageDown = (e.code === 'PageDown' || e.key === 'PageDown');
             const isPageUp = (e.code === 'PageUp' || e.key === 'PageUp');
-            const isNext = (e.ctrlKey && isTab && !e.shiftKey) || (e.ctrlKey && isPageDown);
-            const isPrev = (e.ctrlKey && isTab && e.shiftKey) || (e.ctrlKey && isPageUp);
+            const isNextTab = (e.ctrlKey && isTab && !e.shiftKey) || (e.ctrlKey && isPageDown);
+            const isPrevTab = (e.ctrlKey && isTab && e.shiftKey) || (e.ctrlKey && isPageUp);
 
-            if (isNext || isPrev) {
+            if (isNextTab || isPrevTab) {
                 e.preventDefault();
                 e.stopPropagation();
                 const currentTabs = tabsRef.current;
                 const currentActiveId = activeTabIdRef.current;
                 const currentIndex = currentTabs.findIndex(t => t.id === currentActiveId);
                 if (currentIndex === -1) return;
-                let nextIndex = isNext ? (currentIndex + 1) % currentTabs.length : (currentIndex - 1 + currentTabs.length) % currentTabs.length;
+                let nextIndex = isNextTab ? (currentIndex + 1) % currentTabs.length : (currentIndex - 1 + currentTabs.length) % currentTabs.length;
                 handleTabSwitch(currentTabs[nextIndex].id);
+                return;
+            }
+
+            // Tab key alone switches between panels
+            if (isTab && !e.ctrlKey && !e.altKey && !e.metaKey) {
+                e.preventDefault();
+                e.stopPropagation();
+                const ctx = contextRef.current;
+                if (ctx.panels && ctx.activePanelId && ctx.setActivePanelId) {
+                    const panelIds = Object.keys(ctx.panels);
+                    if (panelIds.length > 1) {
+                        const currentIndex = panelIds.indexOf(ctx.activePanelId);
+                        const nextIndex = e.shiftKey ? 
+                            (currentIndex - 1 + panelIds.length) % panelIds.length : 
+                            (currentIndex + 1) % panelIds.length;
+                        ctx.setActivePanelId(panelIds[nextIndex]);
+                    }
+                }
                 return;
             }
 

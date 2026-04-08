@@ -79,12 +79,14 @@ interface DirectoryTreeProps {
     onRestoreAll?: () => void;
     onTrashProperties?: () => void;
     onDragOver?: (path: string | null) => void;
+    syncSidebarWithPath?: boolean;
 }
 
 export interface DirectoryTreeHandle {
     refreshPath: (path: string) => Promise<void>;
     collapseAll: () => void;
     scrollToTop: () => void;
+    revealPath: (path: string) => Promise<void>;
 }
 
 export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTreeProps>(({
@@ -125,7 +127,8 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
     onEmptyTrash,
     onRestoreAll,
     onTrashProperties,
-    onDragOver
+    onDragOver,
+    syncSidebarWithPath = true
 }, ref) => {
     const { useSystemIcons: contextUseSystemIcons, showHidden, showSystem, showNetwork } = useApp();
     const useSystemIcons = propUseSystemIcons ?? contextUseSystemIcons;
@@ -229,18 +232,6 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
             await loadPathContent(normPath);
         }
     }, [expandedPaths, loadPathContent]);
-
-    React.useImperativeHandle(ref, () => ({
-        refreshPath,
-        collapseAll: () => {
-            setExpandedPaths(new Set());
-        },
-        scrollToTop: () => {
-            if (listRef.current) {
-                listRef.current.scrollToRow({ index: 0, behavior: 'smooth' });
-            }
-        }
-    }), [refreshPath]);
 
     const fsChangeDebounceRef = useRef<Record<string, any>>({});
 
@@ -365,7 +356,7 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
 
     // Auto-expand and sync to current path
     useEffect(() => {
-        if (!currentPath || currentPath === 'trash://' || skipExpandAndScroll || skipSyncInternal) return;
+        if (!syncSidebarWithPath || !currentPath || currentPath === 'trash://' || skipExpandAndScroll || skipSyncInternal) return;
 
         const parts = currentPath.split(/[/\\]/).filter(Boolean);
         const pathsToExpand: string[] = [];
@@ -407,6 +398,57 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
         loadPathsSequentially();
     }, [currentPath, loadPathContent]);
 
+    const revealPath = useCallback(async (path: string) => {
+        if (!path || path === 'trash://' || path === '__network_vincinity__') return;
+
+        const parts = path.split(/[/\\]/).filter(Boolean);
+        const pathsToExpand: string[] = [];
+        let accumulated = '';
+
+        for (let i = 0; i < parts.length - 1; i++) {
+            const part = parts[i];
+            if (i === 0) {
+                accumulated = `${part}\\`;
+            } else {
+                accumulated = `${accumulated}${part}`;
+            }
+            pathsToExpand.push(accumulated);
+            if (i > 0) {
+                accumulated = `${accumulated}\\`;
+            }
+        }
+
+        setExpandedPaths(prev => {
+            const next = new Set(prev);
+            pathsToExpand.forEach(p => {
+                const pLower = p.toLowerCase();
+                next.add(pLower);
+            });
+            return next;
+        });
+
+        // Sequential load to ensure tree consistency
+        for (const p of pathsToExpand) {
+            const lowerP = p.toLowerCase();
+            if (!loadedPathsRef.current.has(lowerP)) {
+                await loadPathContent(p);
+            }
+        }
+
+        // Scroll to the revealed node after a small delay to let state settle
+        setTimeout(() => {
+            const lowerPath = normalizePath(path).toLowerCase();
+            const index = visibleNodes.findIndex(vn => {
+                const vnNorm = normalizePath(vn.node.path);
+                return vnNorm.toLowerCase() === lowerPath && !vn.node.isFavorite;
+            });
+            if (index !== -1 && listRef.current) {
+                listRef.current.scrollToRow({ index, align: 'smart' });
+                lastScrolledPathRef.current = lowerPath;
+            }
+        }, 100);
+    }, [loadPathContent, visibleNodes]);
+
     const lastScrolledPathRef = useRef<string | null>(null);
 
     // Scroll to active node
@@ -427,6 +469,19 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
             lastScrolledPathRef.current = lowerPath;
         }
     }, [currentPath, visibleNodes, minimized]);
+
+    React.useImperativeHandle(ref, () => ({
+        refreshPath,
+        collapseAll: () => {
+            setExpandedPaths(new Set());
+        },
+        scrollToTop: () => {
+            if (listRef.current) {
+                listRef.current.scrollToRow({ index: 0, behavior: 'smooth' });
+            }
+        },
+        revealPath
+    }), [refreshPath, revealPath]);
 
     const toggleExpand = useCallback(async (e: React.MouseEvent, node: TreeNode) => {
         e.stopPropagation();
@@ -895,4 +950,3 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
         </div>
     );
 });
-

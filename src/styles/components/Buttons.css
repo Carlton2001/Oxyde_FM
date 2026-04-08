@@ -86,7 +86,7 @@
     background: var(--hover-color);
 }
 
-/* Icon-only Button (For close buttons, topbar actions, etc.) */
+/* Icon-only Button (For close buttons, navbar actions, etc.) */
 .btn-icon {
     padding: 0.25rem;
     border-radius: 0.25rem;

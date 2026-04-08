@@ -1,6 +1,6 @@
 import React from 'react';
 import cx from 'classnames';
-import { ChevronRight, Sun, Moon, Eye, Globe, Info, Check, Plus, Minus, Grid2x2, Calendar, Zap, Trash2, RefreshCw, CheckSquare } from 'lucide-react';
+import { ChevronRight, Sun, Moon, Eye, Globe, Info, Check, Plus, Minus, Grid2x2, Calendar, Zap, Trash2, RefreshCw, CheckSquare, FolderTree } from 'lucide-react';
 import { Toggle } from '../ui/Toggle';
 import { useApp } from '../../context/AppContext';
 import { useDialogs } from '../../context/DialogContext';
@@ -38,6 +38,7 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({
         showGridThumbnails, setShowGridThumbnails,
         showCheckboxes, setShowCheckboxes,
         showNetwork, setShowNetwork,
+        syncSidebarWithPath, setSyncSidebarWithPath,
         t, notify, resetToDefaults
     } = useApp();
     const { confirm } = useDialogs();
@@ -230,6 +231,13 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({
                             </div>
                             <span className="settings-item-text">{t('show_checkboxes')}</span>
                             <Toggle checked={showCheckboxes} onChange={setShowCheckboxes} />
+                        </div>
+                        <div className="settings-item" onClick={() => setSyncSidebarWithPath(!syncSidebarWithPath)}>
+                            <div className="settings-item-icon-left">
+                                <FolderTree size={16} className="icon-md" />
+                            </div>
+                            <span className="settings-item-text">{t('sync_sidebar_with_path')}</span>
+                            <Toggle checked={syncSidebarWithPath} onChange={setSyncSidebarWithPath} />
                         </div>
                         <div className="settings-divider" />
                         <div className="settings-label">{t('files')}</div>

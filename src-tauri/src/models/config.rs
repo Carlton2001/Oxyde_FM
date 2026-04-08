@@ -58,6 +58,8 @@ pub struct AppConfig {
     #[serde(default = "default_true")]
     pub confirm_delete: bool,
     #[serde(default = "default_true")]
+    pub sync_sidebar_with_path: bool,
+    #[serde(default = "default_true")]
     pub first_launch: bool,
 }
 
@@ -136,6 +138,7 @@ impl Default for AppConfig {
             group_by_date: false,
             trash_drive_settings: Vec::new(),
             confirm_delete: true,
+            sync_sidebar_with_path: true,
             first_launch: true,
         }
     }

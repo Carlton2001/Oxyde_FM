@@ -5,7 +5,7 @@
     height: 2.75rem;
     min-height: 2.75rem;
     max-height: 2.75rem;
-    background-color: var(--header-bg);
+    background-color: var(--header-pane-bg, var(--header-bg));
     border-bottom: 1px solid var(--border-color);
     z-index: 10;
     position: relative;
@@ -523,7 +523,7 @@
     color: var(--selected-text);
 }
 
-/* End of TopBar styles */
+/* End of NavBar styles */
 
 .drive-chip {
     display: flex;
