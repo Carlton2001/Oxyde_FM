@@ -7,7 +7,7 @@
     --sidebar-bg: #f1ede6;
     --header-bg: #fafafa; /* Base pour le groupe "Actif" */
     
-    --hover-color: #f1ede6;
+    --hover-color: #e6e2d9; /* Distinct from sidebar-bg (#f1ede6) */
     --accent-color: #3d5af1;
     --accent-color-rgb: 61, 90, 241;
     --selected-text: #ffffff;

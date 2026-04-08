@@ -9,7 +9,7 @@
     --sidebar-bg: #eee8d5;      /* Base2 for structure */
     --header-bg: #fdf6e3;       /* Base3 (Canonical) */
 
-    --hover-color: #eee8d5;     /* Use Base2 for hover on Base3 */
+    --hover-color: #e2dbbf;     /* Slightly darker than Base2 (#eee8d5) for contrast on sidebar */
     --accent-color: #d33682;     /* Magenta — Traditional for Sol Light */
     --accent-color-rgb: 211, 54, 130;
     --selected-text: #ffffff;

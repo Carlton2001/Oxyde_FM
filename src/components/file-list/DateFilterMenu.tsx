@@ -140,8 +140,11 @@ export const DateFilterMenu: React.FC<DateFilterMenuProps> = ({
                     })}
                 </div>
                 <div className="filter-menu-footer">
-                    <button className="btn ghost" onClick={handleSelectAll}>{t('all' as any) || 'All'}</button>
-                    <button className="btn ghost" onClick={handleClearAll}>{t('none' as any) || 'None'}</button>
+                    {selectedDates === null ? (
+                        <button className="btn ghost" onClick={handleClearAll}>{t('none' as any) || 'None'}</button>
+                    ) : (
+                        <button className="btn ghost" onClick={handleSelectAll}>{t('all' as any) || 'All'}</button>
+                    )}
                 </div>
             </div>
         </div>

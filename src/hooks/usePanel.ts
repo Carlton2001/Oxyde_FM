@@ -73,20 +73,20 @@ export const usePanel = (initialPath: string, panelId: PanelId, activeTabId?: st
     }, [groupByDateKey]);
 
     // Filters
-    const [extensionFilter, setExtensionFilter] = useState<Set<string> | null>(null);
-    const [sizeFilter, setSizeFilter] = useState<Set<SizeCategoryKey> | null>(null);
-    const [dateFilter, setDateFilter] = useState<Set<string> | null>(null);
+    const [extensionFilter, setExtensionFilter] = useState<Set<string> | null>(new Set());
+    const [sizeFilter, setSizeFilter] = useState<Set<SizeCategoryKey> | null>(new Set());
+    const [dateFilter, setDateFilter] = useState<Set<string> | null>(new Set());
     const [nameFilter, setNameFilter] = useState<string | null>(null);
     const [locationFilter, setLocationFilter] = useState<string | null>(null);
-    const [deletedDateFilter, setDeletedDateFilter] = useState<Set<string> | null>(null);
+    const [deletedDateFilter, setDeletedDateFilter] = useState<Set<string> | null>(new Set());
 
     const clearAllFilters = useCallback(() => {
-        setExtensionFilter(null);
-        setSizeFilter(null);
-        setDateFilter(null);
+        setExtensionFilter(new Set());
+        setSizeFilter(new Set());
+        setDateFilter(new Set());
         setNameFilter(null);
         setLocationFilter(null);
-        setDeletedDateFilter(null);
+        setDeletedDateFilter(new Set());
     }, []);
 
     const [sortConfig, setSortConfig] = useState<SortConfig>(() => {

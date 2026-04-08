@@ -127,10 +127,10 @@ export const NavBar: React.FC<NavBarProps> = ({
                 setCopyMenuOpen(false);
             }
         };
-        document.addEventListener('mousedown', handleClose);
+        document.addEventListener('mousedown', handleClose, true);
         document.addEventListener('contextmenu', handleClose, true);
         return () => {
-            document.removeEventListener('mousedown', handleClose);
+            document.removeEventListener('mousedown', handleClose, true);
             document.removeEventListener('contextmenu', handleClose, true);
         };
     }, [copyMenuOpen]);
@@ -172,10 +172,10 @@ export const NavBar: React.FC<NavBarProps> = ({
             setBackMenuPos(null);
             setFwdMenuPos(null);
         };
-        document.addEventListener('mousedown', handleClose);
+        document.addEventListener('mousedown', handleClose, true);
         document.addEventListener('contextmenu', handleClose, true);
         return () => {
-            document.removeEventListener('mousedown', handleClose);
+            document.removeEventListener('mousedown', handleClose, true);
             document.removeEventListener('contextmenu', handleClose, true);
         };
     }, [backMenuPos, fwdMenuPos]);

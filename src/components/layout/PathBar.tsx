@@ -93,9 +93,13 @@ export const PathBar: React.FC<PathBarProps> = ({
             }
         };
         if (menuOpen || contextMenuOpen) {
-            document.addEventListener('mousedown', handleClickOutside);
+            document.addEventListener('mousedown', handleClickOutside, true);
+            document.addEventListener('contextmenu', handleClickOutside, true);
         }
-        return () => document.removeEventListener('mousedown', handleClickOutside);
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside, true);
+            document.removeEventListener('contextmenu', handleClickOutside, true);
+        };
     }, [menuOpen, contextMenuOpen]);
 
     useLayoutEffect(() => {
@@ -158,6 +162,16 @@ export const PathBar: React.FC<PathBarProps> = ({
 
         await fetchSubDirectories(folderPath);
     }, [menuOpen, fetchSubDirectories]);
+    
+    const handleEditClick = useCallback((e: React.MouseEvent) => {
+        // Only trigger if clicking exactly the container or non-interactive areas
+        // (Children like segments and searchbox stop propagation)
+        setMenuOpen(null);
+        setContextMenuOpen(null);
+        if (!isEditing && !isDragging) {
+            setIsEditing(true);
+        }
+    }, [isEditing, isDragging, setMenuOpen, setContextMenuOpen]);
 
     const [isNavigating, setIsNavigating] = useState(false);
 
@@ -478,6 +492,7 @@ export const PathBar: React.FC<PathBarProps> = ({
     return (
         <div
             className={cx("path-breadcrumbs", className, { editing: isEditing })}
+            onClick={handleEditClick}
         >
 
             {isEditing ? (
@@ -566,21 +581,13 @@ export const PathBar: React.FC<PathBarProps> = ({
                     </div>
                     <div
                         className="breadcrumb-spacer"
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            setMenuOpen(null);
-                            setContextMenuOpen(null);
-                            if (!isEditing && !isDragging) {
-                                setIsEditing(true);
-                            }
-                        }}
                     />
                     {isFavorite && (
-                        <div className="path-favorite-icon">
+                        <div className="path-favorite-icon" onClick={(e) => e.stopPropagation()}>
                             <Pin size="0.875rem" fill="var(--accent-color)" stroke="var(--accent-color)" style={{ transform: 'rotate(45deg)' }} />
                         </div>
                     )}
-                    <div className="path-bar-search-container">
+                    <div className="path-bar-search-container" onClick={(e) => e.stopPropagation()}>
                         <SearchBox
                             query={searchQuery || ''}
                             placeholder={(t ? t('search') : 'Search') + "..."}

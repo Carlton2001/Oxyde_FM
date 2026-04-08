@@ -90,7 +90,10 @@ export const ExtensionFilterMenu: React.FC<ExtensionFilterMenuProps> = ({
                 <div className="filter-menu-list scrollable">
                     {availableExtensions.map(ext => {
                         const isChecked = selectedExtensions === null || selectedExtensions.has(ext);
-                        const displayExt = ext === '' ? `(${t('none_fem' as any) || 'None'})` : ext.toUpperCase();
+                        let displayExt = ext.toUpperCase();
+                        if (ext === '') displayExt = `(${t('none_fem' as any) || 'None'})`;
+                        if (ext === '__DIR__') displayExt = t('folder' as any) || 'Folder';
+                        
                         return (
                             <FilterMenuCheckbox
                                 key={ext}
@@ -102,8 +105,11 @@ export const ExtensionFilterMenu: React.FC<ExtensionFilterMenuProps> = ({
                     })}
                 </div>
                 <div className="filter-menu-footer">
-                    <button className="btn ghost" onClick={handleSelectAll}>{t('all' as any) || 'All'}</button>
-                    <button className="btn ghost" onClick={handleClearAll}>{t('none' as any) || 'None'}</button>
+                    {selectedExtensions === null ? (
+                        <button className="btn ghost" onClick={handleClearAll}>{t('none' as any) || 'None'}</button>
+                    ) : (
+                        <button className="btn ghost" onClick={handleSelectAll}>{t('all' as any) || 'All'}</button>
+                    )}
                 </div>
             </div>
         </div>

@@ -111,8 +111,11 @@ export const SizeFilterMenu: React.FC<SizeFilterMenuProps> = ({
                     })}
                 </div>
                 <div className="filter-menu-footer">
-                    <button className="btn ghost" onClick={handleSelectAll}>{t('all' as any) || 'All'}</button>
-                    <button className="btn ghost" onClick={handleClearAll}>{t('none' as any) || 'None'}</button>
+                    {selectedSizes === null ? (
+                        <button className="btn ghost" onClick={handleClearAll}>{t('none' as any) || 'None'}</button>
+                    ) : (
+                        <button className="btn ghost" onClick={handleSelectAll}>{t('all' as any) || 'All'}</button>
+                    )}
                 </div>
             </div>
         </div>

@@ -28,8 +28,8 @@ interface UseFileItemStateProps {
     onItemContextMenu: (entry: FileEntry, e: React.MouseEvent) => void;
     onFileDragStart: (entry: FileEntry) => void;
     onItemMiddleClick?: (entry: FileEntry) => void;
-    showCheckboxes: boolean;
     isFocused?: boolean;
+    onActivate: () => void;
 }
 
 export interface FileItemState {
@@ -57,7 +57,7 @@ export function useFileItemState(props: UseFileItemStateProps): FileItemState {
         isDragging, dragOverPath, cutPathsSet, diffPaths,
         isTrashView, dateFormat, t,
         onItemClick, onItemDoubleClick, onItemContextMenu,
-        onFileDragStart, onItemMiddleClick, isFocused
+        onFileDragStart, onItemMiddleClick, isFocused, onActivate
     } = props;
 
     const isSelected = selected.has(entry.path) || pendingSelection.has(entry.path);
@@ -111,7 +111,7 @@ export function useFileItemState(props: UseFileItemStateProps): FileItemState {
             onFileDragStart(entry);
         },
         onMouseDown: (e: React.MouseEvent) => {
-            onItemClick(entry, e); // Signal activation
+            onActivate();
             if (e.button === 1 && onItemMiddleClick) {
                 e.preventDefault();
                 e.stopPropagation();
@@ -123,7 +123,7 @@ export function useFileItemState(props: UseFileItemStateProps): FileItemState {
             const syntheticEvent = { ...e, ctrlKey: true, shiftKey: false, button: 0, detail: 1, stopPropagation: () => { } } as any;
             onItemClick(entry, syntheticEvent);
         }
-    }), [entry, isRenaming, onItemClick, onItemDoubleClick, onItemContextMenu, onFileDragStart, onItemMiddleClick]);
+    }), [entry, isRenaming, onItemClick, onItemDoubleClick, onItemContextMenu, onFileDragStart, onItemMiddleClick, onActivate]);
 
     return { isSelected, isRenaming, isDropTarget, isCut, isDiff, isProtected, tooltipText, itemClassName, handlers };
 }

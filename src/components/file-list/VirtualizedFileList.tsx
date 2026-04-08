@@ -65,6 +65,7 @@ interface VirtualizedFileListProps {
     activeFilters?: ActiveFilters;
     currentPath?: string;
     onNavigate?: (path: string) => void;
+    onActivate: () => void;
 }
 
 export interface VirtualizedFileListHandle {
@@ -104,6 +105,7 @@ interface SharedItemProps {
     activeFilters?: ActiveFilters;
     showCheckboxes: boolean;
     currentIndex: number;
+    onActivate: () => void;
     index?: number;
 }
 
@@ -324,35 +326,25 @@ const FiltersRow = React.memo(({ activeFilters, t, style }: { activeFilters: Act
                         <span>{t('active_filters' as any) || 'Active filters'}</span>
                     </div>
                     <div className="active-filters-pills">
-                        {activeFilters.extensions !== null && (
+                        {activeFilters.extensions?.size > 0 && (
                             <div className="filter-pill-group">
-                                {activeFilters.extensions.size === 0
-                                    ? (
-                                        <span className="filter-pill" onClick={activeFilters.onClearExtensions}>
-                                            {t('type')}: {t('none' as any) || 'Aucun'} <X size={10} style={{ marginLeft: '4px' }} />
-                                        </span>
-                                    ) : activeFilters.extensions.size === 1
+                                {activeFilters.extensions.size === 1
                                     ? Array.from(activeFilters.extensions).map(ext => (
                                         <span key={ext} className="filter-pill" onClick={() => activeFilters.onRemoveExtension(ext)}>
-                                            {t('type')}: {ext === '' ? `(${t('none_fem' as any)})` : ext.toUpperCase()} <X size={10} style={{ marginLeft: '4px' }} />
+                                            {t('type')}: {ext === '__DIR__' ? (t('folder' as any) || 'Folder') : (ext === '' ? `(${t('none_fem' as any) || 'None'})` : ext.toUpperCase())} <X size={10} style={{ marginLeft: '4px' }} />
                                         </span>
                                     ))
                                     : (
-                                        <span className="filter-pill" onClick={() => Array.from(activeFilters.extensions!).forEach(ext => activeFilters.onRemoveExtension(ext))}>
+                                        <span className="filter-pill" onClick={() => activeFilters.onClearExtensions()}>
                                             {t('type')}: {activeFilters.extensions.size} <X size={10} style={{ marginLeft: '4px' }} />
                                         </span>
                                     )
                                 }
                             </div>
                         )}
-                        {activeFilters.sizes !== null && (
+                        {activeFilters.sizes?.size > 0 && (
                             <div className="filter-pill-group">
-                                {activeFilters.sizes.size === 0
-                                    ? (
-                                        <span className="filter-pill" onClick={activeFilters.onClearSizes}>
-                                            {t('size')}: {t('none' as any) || 'Aucun'} <X size={10} style={{ marginLeft: '4px' }} />
-                                        </span>
-                                    ) : activeFilters.sizes.size === 1
+                                {activeFilters.sizes.size === 1
                                     ? Array.from(activeFilters.sizes).map(size => {
                                         const info = (SIZE_CATEGORIES as any)[size];
                                         const label = info ? t(info.key as any) : size;
@@ -363,21 +355,16 @@ const FiltersRow = React.memo(({ activeFilters, t, style }: { activeFilters: Act
                                         );
                                     })
                                     : (
-                                        <span className="filter-pill" onClick={() => Array.from(activeFilters.sizes!).forEach(size => activeFilters.onRemoveSize(size))}>
+                                        <span className="filter-pill" onClick={() => activeFilters.onClearSizes()}>
                                             {t('size')}: {activeFilters.sizes.size} <X size={10} style={{ marginLeft: '4px' }} />
                                         </span>
                                     )
                                 }
                             </div>
                         )}
-                        {activeFilters.deletedDates !== null && (
+                        {activeFilters.deletedDates?.size > 0 && (
                             <div className="filter-pill-group">
-                                {activeFilters.deletedDates.size === 0
-                                    ? (
-                                        <span className="filter-pill" onClick={activeFilters.onClearDeletedDates}>
-                                            {t('deleted_date')}: {t('none' as any) || 'Aucun'} <X size={10} style={{ marginLeft: '4px' }} />
-                                        </span>
-                                    ) : activeFilters.deletedDates.size === 1
+                                {activeFilters.deletedDates.size === 1
                                     ? Array.from(activeFilters.deletedDates).map(date => {
                                         const key = (DATE_CATEGORIES as any)[date];
                                         const label = key ? t(key as any) : date;
@@ -388,21 +375,16 @@ const FiltersRow = React.memo(({ activeFilters, t, style }: { activeFilters: Act
                                         );
                                     })
                                     : (
-                                        <span className="filter-pill" onClick={() => Array.from(activeFilters.deletedDates!).forEach(date => activeFilters.onRemoveDeletedDate(date))}>
+                                        <span className="filter-pill" onClick={() => activeFilters.onClearDeletedDates()}>
                                             {t('deleted_date')}: {activeFilters.deletedDates.size} <X size={10} style={{ marginLeft: '4px' }} />
                                         </span>
                                     )
                                 }
                             </div>
                         )}
-                        {activeFilters.date !== null && (
+                        {activeFilters.date?.size > 0 && (
                             <div className="filter-pill-group">
-                                {activeFilters.date.size === 0
-                                    ? (
-                                        <span className="filter-pill" onClick={activeFilters.onClearDate}>
-                                            {t('date')}: {t('none' as any) || 'Aucun'} <X size={10} style={{ marginLeft: '4px' }} />
-                                        </span>
-                                    ) : activeFilters.date.size === 1
+                                {activeFilters.date.size === 1
                                     ? Array.from(activeFilters.date).map(date => {
                                         const key = (DATE_CATEGORIES as any)[date];
                                         const label = key ? t(key as any) : date;
@@ -413,7 +395,7 @@ const FiltersRow = React.memo(({ activeFilters, t, style }: { activeFilters: Act
                                         );
                                     })
                                     : (
-                                        <span className="filter-pill" onClick={() => Array.from(activeFilters.date!).forEach(date => activeFilters.onRemoveDate(date))}>
+                                        <span className="filter-pill" onClick={() => activeFilters.onClearDate()}>
                                             {t('date')}: {activeFilters.date.size} <X size={10} style={{ marginLeft: '4px' }} />
                                         </span>
                                     )
@@ -671,7 +653,7 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
         initialScrollOffset = 0, updateCurrentScroll,
         isProtected = false,
         activeFilters,
-        currentPath, onNavigate
+        currentPath, onNavigate, onActivate
     } = props;
 
     const { dateFormat, showCheckboxes } = useApp();
@@ -846,10 +828,10 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
 
     const hasActiveFilters = useMemo(() => {
         if (!activeFilters) return false;
-        return activeFilters.extensions !== null ||
-               activeFilters.sizes !== null ||
-               activeFilters.date !== null ||
-               activeFilters.deletedDates !== null ||
+        return (activeFilters.extensions && activeFilters.extensions.size > 0) ||
+               (activeFilters.sizes && activeFilters.sizes.size > 0) ||
+               (activeFilters.date && activeFilters.date.size > 0) ||
+               (activeFilters.deletedDates && activeFilters.deletedDates.size > 0) ||
                !!activeFilters.name ||
                !!activeFilters.location;
     }, [activeFilters]);
@@ -930,7 +912,7 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
         onRenameTextChange, onRenameCommit, onRenameCancel, getIcon,
         totalItemsSize, showHistogram, isTrashView, onItemMiddleClick,
         dateFormat, diffPaths, viewMode, rootFontSize, isNetworkView, activeFilters,
-        showCheckboxes, currentIndex
+        showCheckboxes, currentIndex, onActivate
     };
 
     const groupedSharedProps: GroupedSharedProps = {
