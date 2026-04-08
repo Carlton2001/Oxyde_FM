@@ -27,7 +27,7 @@
 
 .search-box.auto-expand.focused,
 .search-box.auto-expand.has-text {
-    width: 12rem;
+    width: 8rem; /* Restored to 8rem as per user preference */
     background: var(--surface-primary);
     border-color: var(--menu-border);
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);

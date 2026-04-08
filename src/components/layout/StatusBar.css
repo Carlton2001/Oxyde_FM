@@ -21,7 +21,7 @@
 }
 
 .status-info .separator {
-    opacity: 0.3;
+    color: var(--text-muted);
     margin: 0 0.5rem;
 }
 
@@ -44,7 +44,6 @@
     height: 1.25rem;
     background-color: var(--border-color);
     margin: 0 0.5rem;
-    opacity: 0.8;
 }
 
 .view-btn {
@@ -53,13 +52,12 @@
     justify-content: center;
     background: none;
     border: none;
-    color: var(--text-color);
+    color: var(--text-muted);
     transition: all 0.1s;
     width: 1.5rem;
     height: 1.5rem;
     border-radius: 0.25rem;
     padding: 0;
-    opacity: 0.6;
 }
 
 .view-btn:hover {

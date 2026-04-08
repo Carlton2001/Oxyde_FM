@@ -349,11 +349,19 @@ impl<'de> Deserialize<'de> for SessionState {
 
 impl SessionState {
     pub fn get_panel(&self, id: &str) -> &PanelState {
-        self.root.find_pane(id).expect("Panel not found in session")
+        self.root.find_pane(id).unwrap_or_else(|| panic!("Panel '{}' not found in session", id))
     }
 
     pub fn get_panel_mut(&mut self, id: &str) -> &mut PanelState {
-        self.root.find_pane_mut(id).expect("Panel not found in session")
+        self.root.find_pane_mut(id).unwrap_or_else(|| panic!("Panel '{}' not found in session", id))
+    }
+
+    pub fn try_get_panel(&self, id: &str) -> Result<&PanelState, CommandError> {
+        self.root.find_pane(id).ok_or_else(|| CommandError::Other(format!("Panel '{}' not found", id)))
+    }
+
+    pub fn try_get_panel_mut(&mut self, id: &str) -> Result<&mut PanelState, CommandError> {
+        self.root.find_pane_mut(id).ok_or_else(|| CommandError::Other(format!("Panel '{}' not found", id)))
     }
 }
 

@@ -143,7 +143,6 @@
     font-size: 0.85rem;
     font-weight: 500;
     color: var(--text-color);
-    opacity: 0.9;
 }
 
 .toggle-switch.disabled {
@@ -266,7 +265,7 @@
 }
 
 .dialog-badge.partial {
-    opacity: 0.7;
+    color: var(--text-muted);
     font-style: italic;
 }
 
@@ -488,7 +487,7 @@
     top: 50%;
     transform: translateY(-50%);
     transition: transform 0.2s ease;
-    opacity: 0.6;
+    color: var(--text-muted);
 }
 
 .unit-selected-value .arrow.open {

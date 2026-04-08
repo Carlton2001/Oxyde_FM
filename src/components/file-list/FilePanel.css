@@ -450,9 +450,18 @@
 }
 
 .panel.active .file-item.selected {
-    background-color: color-mix(in srgb, var(--accent-color), transparent 85%);
+    background-color: color-mix(in srgb, var(--accent-color), transparent 82%);
     box-shadow: inset 3px 0 0 0 var(--accent-color);
     color: var(--text-color);
+    /* Force full opacity for content when selected to ensure readability */
+}
+
+.file-item.selected .file-name,
+.file-item.selected .file-icon,
+.file-item.selected .file-icon-small,
+.file-item.selected .system-icon-img,
+.file-item.selected .file-info {
+    opacity: 1 !important;
 }
 
 .panel.active .file-item.keyboard-focused:not(.selected) {
@@ -849,21 +858,21 @@
 }
 
 /* Semi-transparency for hidden/system/cut files - target content only, not the selection box */
-.file-item.hidden .file-icon,
-.file-item.hidden .file-icon-small,
-.file-item.hidden .system-icon-img,
-.file-item.hidden .file-name,
-.file-item.hidden .file-info,
-.file-item.system-file .file-icon,
-.file-item.system-file .file-icon-small,
-.file-item.system-file .system-icon-img,
-.file-item.system-file .file-name,
-.file-item.system-file .file-info,
-.file-item.cut .file-icon,
-.file-item.cut .file-icon-small,
-.file-item.cut .system-icon-img,
-.file-item.cut .file-name,
-.file-item.cut .file-info {
+.file-item.hidden:not(.selected) .file-icon,
+.file-item.hidden:not(.selected) .file-icon-small,
+.file-item.hidden:not(.selected) .system-icon-img,
+.file-item.hidden:not(.selected) .file-name,
+.file-item.hidden:not(.selected) .file-info,
+.file-item.system-file:not(.selected) .file-icon,
+.file-item.system-file:not(.selected) .file-icon-small,
+.file-item.system-file:not(.selected) .system-icon-img,
+.file-item.system-file:not(.selected) .file-name,
+.file-item.system-file:not(.selected) .file-info,
+.file-item.cut:not(.selected) .file-icon,
+.file-item.cut:not(.selected) .file-icon-small,
+.file-item.cut:not(.selected) .system-icon-img,
+.file-item.cut:not(.selected) .file-name,
+.file-item.cut:not(.selected) .file-info {
     opacity: var(--dimmed-opacity);
 }
 

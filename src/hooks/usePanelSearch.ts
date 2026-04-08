@@ -49,7 +49,7 @@ export const usePanelSearch = ({
 
     searchQueryRef.current = searchQuery;
 
-    const pid = useMemo(() => panelId?.replace('panel-', '') || 'left', [panelId]);
+    const pid = useMemo(() => panelId || 'left', [panelId]);
 
     // Track last physical path for search root (per tab)
     const prevPathRef = useRef<string>(initialPath);

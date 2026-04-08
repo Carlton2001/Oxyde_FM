@@ -42,7 +42,6 @@
     font-size: 14px;
     font-weight: 600;
     color: var(--text-color);
-    opacity: 0.9;
     white-space: nowrap;
     letter-spacing: 0.1px;
 }

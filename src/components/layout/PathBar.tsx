@@ -466,7 +466,8 @@ export const PathBar: React.FC<PathBarProps> = ({
         const handleWheel = (e: WheelEvent) => {
             if (e.deltaY !== 0) {
                 e.preventDefault();
-                el.scrollLeft += e.deltaY;
+                // Sensible horizontal scrolling
+                el.scrollLeft += e.deltaY * 1.5; 
                 updateOverflow();
             }
         };

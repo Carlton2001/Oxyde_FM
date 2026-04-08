@@ -33,7 +33,7 @@ pub fn create_tab(
         version: 0,
     };
 
-    let panel = session.get_panel_mut(&panel_id);
+    let panel = session.try_get_panel_mut(&panel_id)?;
     panel.tabs.push(new_tab);
     
     let is_background = background.unwrap_or(false);
@@ -165,7 +165,7 @@ pub fn switch_tab(
     }
 
     if let Some(panel_id) = find_pane_id_with_tab(&session.root, &tab_id) {
-        let panel = session.get_panel_mut(&panel_id);
+        let panel = session.try_get_panel_mut(&panel_id)?;
         panel.active_tab_id = tab_id;
         panel.update_watcher(&app);
         session.active_panel_id = panel_id;
@@ -193,7 +193,7 @@ pub fn active_tab_navigate(
     let mut session = lock_session(&state)?;
     
     {
-        let panel = session.get_panel_mut(&panel_id);
+        let panel = session.try_get_panel_mut(&panel_id)?;
         if let Some(tab) = panel.tabs.iter_mut().find(|t| t.id == panel.active_tab_id) {
             if let Some(v) = version {
                 if v > tab.version {
@@ -467,7 +467,7 @@ pub fn update_sort_config(
 ) -> Result<(), CommandError> {
     let mut session = lock_session(&state)?;
     
-    let panel = session.get_panel_mut(&panel_id);
+    let panel = session.try_get_panel_mut(&panel_id)?;
     panel.sort_config = sort_config;
     panel.update_watcher(&app);
     
@@ -549,7 +549,7 @@ pub fn move_tab_between_panels(
 
     // Find source
     for pane_id in session.root.all_pane_ids() {
-        let p = session.get_panel_mut(&pane_id);
+        let p = session.try_get_panel_mut(&pane_id)?;
         if let Some(pos) = p.tabs.iter().position(|t| t.id == tab_id) {
             source_panel_id = Some(pane_id.clone());
             moved_tab = Some(p.tabs.remove(pos));
@@ -569,7 +569,7 @@ pub fn move_tab_between_panels(
     if source_id == target_panel_id { return Ok(()); }
 
     if let Some(tab) = moved_tab {
-        let target = session.get_panel_mut(&target_panel_id);
+        let target = session.try_get_panel_mut(&target_panel_id)?;
         let idx = target_index.min(target.tabs.len());
         target.tabs.insert(idx, tab.clone());
         target.active_tab_id = tab.id;
@@ -578,7 +578,7 @@ pub fn move_tab_between_panels(
     }
 
     // Remove the source pane if it is now empty and it's not the only pane
-    let source_pane_empty = session.get_panel_mut(&source_id).tabs.is_empty();
+    let source_pane_empty = session.try_get_panel_mut(&source_id)?.tabs.is_empty();
     if source_pane_empty && session.root.all_pane_ids().len() > 1 {
         let (_, replacement) = session.root.remove_pane(&source_id);
         if let Some(r) = replacement {
@@ -656,7 +656,7 @@ pub fn reorder_tabs(
     target_index: usize,
 ) -> Result<(), CommandError> {
     let mut session = lock_session(&state)?;
-    let panel = session.get_panel_mut(&panel_id);
+    let panel = session.try_get_panel_mut(&panel_id)?;
 
     if source_index < panel.tabs.len() && target_index <= panel.tabs.len() {
         let tab = panel.tabs.remove(source_index);

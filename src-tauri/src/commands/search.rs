@@ -478,7 +478,7 @@ pub async fn start_search(
     // 1. Setup Session Context
     let root_path = {
         let mut session = state.0.lock().map_err(|e| e.to_string())?;
-        let panel = session.get_panel_mut(&panel_id);
+        let panel = session.try_get_panel_mut(&panel_id).map_err(|e| e.to_string())?;
         
         let mut path_to_search = if let Some(root) = search_root {
             std::path::PathBuf::from(root)

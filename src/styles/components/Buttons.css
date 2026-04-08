@@ -21,15 +21,15 @@
 
 .btn:focus {
     outline: none;
-    box-shadow: 0 0 0 2px var(--btn-focus-shadow, rgba(var(--accent-color-rgb), 0.3));
+    box-shadow: 0 0 0 2px var(--btn-focus-shadow, var(--accent-color));
 }
 
 .btn.danger:focus {
-    --btn-focus-shadow: color-mix(in srgb, var(--error-color), transparent 60%);
+    --btn-focus-shadow: var(--error-color);
 }
 
 .btn.primary:focus {
-    --btn-focus-shadow: rgba(var(--accent-color-rgb), 0.3);
+    --btn-focus-shadow: var(--accent-color);
 }
 
 .btn:hover:not(:disabled) {
@@ -97,7 +97,7 @@
     align-items: center;
     justify-content: center;
     transition: all 0.1s ease-in-out;
-    opacity: 0.7;
+    color: var(--text-muted); /* Solid color instead of opacity */
     outline: none;
     -webkit-app-region: no-drag;
     cursor: default;
@@ -109,7 +109,7 @@
 }
 
 .btn-icon:active:not(:disabled) {
-    opacity: 0.8;
+    color: var(--text-color);
 }
 
 .btn-icon:disabled {

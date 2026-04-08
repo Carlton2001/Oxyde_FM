@@ -5,9 +5,9 @@
     width: 100%;
     max-width: 100%;
     min-width: 0;
-    background-color: var(--surface-secondary);
+    /* background-color: var(--surface-secondary);
     border: 1px solid var(--border-color);
-    border-radius: var(--radius-md);
+    border-radius: var(--radius-md); */
     padding: 0 0 0 0.5rem;
     margin: 0;
     color: var(--text-color);
@@ -60,10 +60,10 @@
     white-space: nowrap;
     scrollbar-width: none;
     -ms-overflow-style: none;
+    flex: 1 1 auto; /* Allow to grow and shrink, priority handled by items */
     min-width: 0;
-    padding-right: 0.75rem;
+    padding-right: 1.5rem; /* Larger gap for better separation */
     scroll-behavior: smooth;
-    /* Gap between last item and spacer */
 }
 
 .breadcrumb-list::-webkit-scrollbar {
@@ -71,25 +71,25 @@
 }
 
 .breadcrumb-list.overflow-left {
-    mask-image: linear-gradient(to right, transparent, black 1rem);
-    -webkit-mask-image: linear-gradient(to right, transparent, black 1rem);
+    mask-image: linear-gradient(to right, transparent, black 1.5rem);
+    -webkit-mask-image: linear-gradient(to right, transparent, black 1.5rem);
 }
 
 .breadcrumb-list.overflow-right {
-    mask-image: linear-gradient(to left, transparent, black 1rem);
-    -webkit-mask-image: linear-gradient(to left, transparent, black 1rem);
+    mask-image: linear-gradient(to left, transparent, black 1.5rem);
+    -webkit-mask-image: linear-gradient(to left, transparent, black 1.5rem);
 }
 
 .breadcrumb-list.overflow-both {
-    mask-image: linear-gradient(to right, transparent, black 1rem, black calc(100% - 1rem), transparent);
-    -webkit-mask-image: linear-gradient(to right, transparent, black 1rem, black calc(100% - 1rem), transparent);
+    mask-image: linear-gradient(to right, transparent, black 1.5rem, black calc(100% - 1.5rem), transparent);
+    -webkit-mask-image: linear-gradient(to right, transparent, black 1.5rem, black calc(100% - 1.5rem), transparent);
 }
 
 .breadcrumb-spacer {
-    flex: 1 0 1rem;
-    /* Grow to fill, but never shrink below 1rem */
+    flex: 0 1 2rem; /* Shorter spacer, flexes down if needed */
     height: 100%;
     cursor: text;
+    min-width: 1rem;
 }
 
 .path-favorite-icon {
@@ -221,8 +221,14 @@
     border: none !important;
     box-shadow: none !important;
     height: 100% !important;
-    width: 100% !important;
+    width: 2rem !important; /* Default collapsed width */
     border-radius: 0 !important;
+    transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.path-bar-search-box.search-box.focused,
+.path-bar-search-box.search-box.has-text {
+    width: 8rem !important; /* Restored to 8rem */
 }
 
 .path-bar-search-box.search-box input {
