@@ -3293,7 +3293,6 @@ dependencies = [
  "flate2",
  "fs_extra",
  "glob",
- "hex",
  "image",
  "indexmap 2.13.1",
  "iso9660_core",
