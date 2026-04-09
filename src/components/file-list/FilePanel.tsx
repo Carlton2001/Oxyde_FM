@@ -292,53 +292,61 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
     }, [viewMode]);
 
     const availableExtensions = React.useMemo(() => {
-        const exts = new Set<string>();
-        let hasDirs = false;
+        const counts = new Map<string, number>();
+        let dirCount = 0;
         files.forEach(f => {
-            if (f.is_system) { if (!showSystem) return; }
-            else if (f.is_hidden) { if (!showHidden) return; }
-            if (!f.is_dir) {
-                const ext = f.name.includes('.') ? f.name.split('.').pop()?.toLowerCase() || '' : '';
-                exts.add(ext);
+            if (f.is_system && !showSystem) return;
+            if (f.is_hidden && !showHidden) return;
+            if (f.is_dir) {
+                dirCount++;
             } else {
-                hasDirs = true;
+                const ext = f.name.includes('.') ? f.name.split('.').pop()?.toLowerCase() || '' : '';
+                counts.set(ext, (counts.get(ext) || 0) + 1);
             }
         });
-        const sorted = Array.from(exts).sort();
-        if (hasDirs) return ['__DIR__', ...sorted];
+        const sorted = Array.from(counts.entries())
+            .sort((a, b) => a[0].localeCompare(b[0]))
+            .map(([id, count]) => ({ id, count }));
+        
+        if (dirCount > 0) return [{ id: '__DIR__', count: dirCount }, ...sorted];
         return sorted;
     }, [files, showHidden, showSystem]);
 
     const availableSizeCategories = React.useMemo(() => {
-        const cats = new Set<SizeCategoryKey>();
+        const counts = new Map<SizeCategoryKey, number>();
         files.forEach(f => {
-            if (f.is_system) { if (!showSystem) return; }
-            else if (f.is_hidden) { if (!showHidden) return; }
+            if (f.is_system && !showSystem) return;
+            if (f.is_hidden && !showHidden) return;
             if (!f.is_dir) {
-                cats.add(getSizeCategoryForFile(f.size));
+                const cat = getSizeCategoryForFile(f.size);
+                counts.set(cat, (counts.get(cat) || 0) + 1);
             }
         });
-        return cats;
+        return counts;
     }, [files, showHidden, showSystem]);
 
     const availableDateCategories = React.useMemo(() => {
-        const cats = new Set<DateCategoryKey>();
+        const counts = new Map<DateCategoryKey, number>();
         files.forEach(f => {
-            if (f.is_system) { if (!showSystem) return; }
-            else if (f.is_hidden) { if (!showHidden) return; }
-            cats.add(getDateCategoryForFile(f.modified || 0));
+            if (f.is_system && !showSystem) return;
+            if (f.is_hidden && !showHidden) return;
+            const cat = getDateCategoryForFile(f.modified || 0);
+            counts.set(cat, (counts.get(cat) || 0) + 1);
         });
-        return cats;
+        return counts;
     }, [files, showHidden, showSystem]);
 
     const availableDeletedDateCategories = React.useMemo(() => {
-        const cats = new Set<DateCategoryKey>();
+        const counts = new Map<DateCategoryKey, number>();
         files.forEach(f => {
-            if (f.is_system) { if (!showSystem) return; }
-            else if (f.is_hidden) { if (!showHidden) return; }
-            if (f.deleted_time) cats.add(getDateCategoryForFile(f.deleted_time));
+            if (f.is_system && !showSystem) return;
+            if (f.is_hidden && !showHidden) return;
+            if (f.deleted_time) {
+                const cat = getDateCategoryForFile(f.deleted_time);
+                counts.set(cat, (counts.get(cat) || 0) + 1);
+            }
         });
-        return cats;
+        return counts;
     }, [files, showHidden, showSystem]);
 
     const visibleFiles = React.useMemo(() => {

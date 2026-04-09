@@ -13,9 +13,9 @@ use crate::models::CommandError;
 use std::sync::atomic::AtomicBool;
 
 #[derive(Clone, Serialize)]
-struct FsChangeEvent {
-    kind: String,
-    paths: Vec<String>,
+pub struct FsChangeEvent {
+    pub kind: String,
+    pub paths: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -138,7 +138,7 @@ impl PanelState {
             Config::default(),
         ) {
             Ok(mut watcher) => {
-                if let Err(e) = watcher.watch(&active_path, RecursiveMode::NonRecursive) {
+                if let Err(e) = watcher.watch(&active_path, RecursiveMode::Recursive) {
                     // Don't log as ERROR for things we might not have access to (system folders)
                     log::warn!("Could not watch {:?} (Protected or Virtual): {}", active_path, e);
                 } else {
@@ -464,5 +464,15 @@ impl SessionManager {
             }
         }
         Ok(())
+    }
+}
+
+pub struct SidebarWatcherState {
+    pub watcher: Mutex<Option<RecommendedWatcher>>,
+}
+
+impl Default for SidebarWatcherState {
+    fn default() -> Self {
+        Self { watcher: Mutex::new(None) }
     }
 }

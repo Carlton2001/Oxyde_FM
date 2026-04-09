@@ -1,6 +1,56 @@
-use crate::models::{CommandError, SidebarNode};
+use crate::models::{CommandError, SidebarNode, FsChangeEvent, SidebarWatcherState};
 use crate::utils::path_security::validate_path;
 use std::fs;
+use tauri::{AppHandle, Emitter, State};
+use notify::{Config, Event, RecommendedWatcher, RecursiveMode, Watcher};
+use log::error;
+
+#[tauri::command]
+pub async fn update_sidebar_watchers(
+    app: AppHandle,
+    state: State<'_, SidebarWatcherState>,
+    paths: Vec<String>,
+) -> Result<(), CommandError> {
+    let mut watcher_lock = state.watcher.lock().map_err(|_| CommandError::SystemError("Failed to lock sidebar watcher".to_string()))?;
+    
+    // Stop all previous watches by dropping the old watcher
+    *watcher_lock = None;
+    
+    if paths.is_empty() {
+        return Ok(());
+    }
+
+    let app_clone = app.clone();
+    let mut new_watcher = RecommendedWatcher::new(
+        move |res: Result<Event, notify::Error>| match res {
+            Ok(event) => {
+                let kind = format!("{:?}", event.kind);
+                if kind.contains("Access") { return; }
+                
+                let paths: Vec<String> = event.paths.iter()
+                    .map(|p| p.to_string_lossy().replace("\\\\?\\", "").to_string())
+                    .collect();
+                
+                if !paths.is_empty() {
+                    let _ = app_clone.emit("fs-change", FsChangeEvent { kind, paths });
+                }
+            }
+            Err(e) => error!("Sidebar watcher error: {}", e),
+        },
+        Config::default(),
+    ).map_err(|e| CommandError::SystemError(format!("Failed to create sidebar watcher: {}", e)))?;
+
+    for path in paths {
+        if let Ok(pb) = validate_path(&path) {
+            if pb.is_dir() {
+                let _ = new_watcher.watch(&pb, RecursiveMode::NonRecursive);
+            }
+        }
+    }
+
+    *watcher_lock = Some(new_watcher);
+    Ok(())
+}
 
 #[tauri::command]
 pub async fn get_sidebar_nodes(path: String) -> Result<Vec<SidebarNode>, CommandError> {

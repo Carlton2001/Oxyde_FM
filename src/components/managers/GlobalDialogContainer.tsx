@@ -127,9 +127,9 @@ const InlineAboutDialog: React.FC<{ onClose: () => void, t: any, theme: string, 
                         <div className="credits-label">{t('main_tools' as any)}</div>
                         <div className="credits-grid">
                             {[
-                                { name: 'React', logo: theme.includes('light') ? reactLight : reactDark, url: 'https://react.dev' },
                                 { name: 'Rust', logo: rustLogo, isRust: true, url: 'https://www.rust-lang.org' },
                                 { name: 'Tauri', logo: theme.includes('light') ? tauriLight : tauriDark, url: 'https://tauri.app' },
+                                { name: 'React', logo: theme.includes('light') ? reactLight : reactDark, url: 'https://react.dev' },
                                 { name: 'Lucide', logo: theme.includes('light') ? lucideLight : lucideDark, url: 'https://lucide.dev' },
                             ].map((tool: any) => (
                                 <div key={tool.name} className="credit-card" onClick={() => openUrl(tool.url)}>

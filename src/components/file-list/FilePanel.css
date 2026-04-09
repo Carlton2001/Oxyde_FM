@@ -963,7 +963,7 @@
     font-size: 0.8125rem;
     outline: none;
     box-sizing: border-box;
-    border-radius: 0.25rem;
+    border-radius: 0;
     margin: 0;
     line-height: 1.35rem;
     /* Stabilized line-height for vertical centering inside the input */

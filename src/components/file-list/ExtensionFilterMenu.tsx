@@ -6,7 +6,7 @@ import './FilterMenu.css';
 interface ExtensionFilterMenuProps {
     x: number;
     y: number;
-    availableExtensions: string[];
+    availableExtensions: Array<{ id: string, count: number }>;
     selectedExtensions: Set<string> | null;
     onChange: (exts: Set<string> | null) => void;
     onClose: () => void;
@@ -53,7 +53,7 @@ export const ExtensionFilterMenu: React.FC<ExtensionFilterMenuProps> = ({
     const handleToggle = (ext: string) => {
         if (selectedExtensions === null) {
             // First time filtering, uncheck the clicked one, keep all others
-            const newSet = new Set(availableExtensions);
+            const newSet = new Set(availableExtensions.map(i => i.id));
             newSet.delete(ext);
             // If deleting makes it empty, just restore null? Actually, if unchecking the only checked one, we empty it?
             onChange(newSet.size === 0 ? new Set() : newSet);
@@ -88,18 +88,20 @@ export const ExtensionFilterMenu: React.FC<ExtensionFilterMenuProps> = ({
                 </div>
 
                 <div className="filter-menu-list scrollable">
-                    {availableExtensions.map(ext => {
-                        const isChecked = selectedExtensions === null || selectedExtensions.has(ext);
-                        let displayExt = ext.toUpperCase();
-                        if (ext === '') displayExt = `(${t('none_fem' as any) || 'None'})`;
-                        if (ext === '__DIR__') displayExt = t('folder' as any) || 'Folder';
+                    {availableExtensions.map(item => {
+                        const { id, count } = item;
+                        const isChecked = selectedExtensions === null || selectedExtensions.has(id);
+                        let displayExt = id.toUpperCase();
+                        if (id === '') displayExt = `(${t('none_fem' as any) || 'None'})`;
+                        if (id === '__DIR__') displayExt = t('folder' as any) || 'Folder';
                         
                         return (
                             <FilterMenuCheckbox
-                                key={ext}
+                                key={id}
                                 checked={isChecked}
                                 label={displayExt}
-                                onClick={() => handleToggle(ext)}
+                                count={count}
+                                onClick={() => handleToggle(id)}
                             />
                         );
                     })}

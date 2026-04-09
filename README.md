@@ -25,7 +25,7 @@ Oxyde is a modern, high-performance file manager designed for efficiency and spe
 
 ## Key Features
 
-*   **Dynamic Multipane System**: Move beyond single or dual panels with a dynamic layout allowing 1 to 3+ panels simultaneously. Drag and drop tabs between panels or create new ones on the fly for complex file management.
+*   **Dynamic Multipane System**: Move beyond traditional split-views with a fully flexible layout. Open multiple resizable panels side-by-side, with full support for horizontal reordering and seamless drag-and-drop of tabs and files between locations.
 *   **Tabbed Browsing**: Manage multiple locations simultaneously within each panel. Tab duplication, middle-click to open in new tab, and drag-and-drop support.
 *   **Native Performance**: Leverages a Rust-driven backend for near-instant responsiveness even in directories with tens of thousands of files.
 *   **Turbo Mode**: Hardware-aware I/O optimization for accelerated file transfers that respect system stability.
@@ -38,12 +38,12 @@ Oxyde is a modern, high-performance file manager designed for efficiency and spe
 *   **PowerToys Peek Integration**: Full support for PowerToys Peek, allowing for super-fast file previews with smart activation and real-time status checks.
 *   **Network Drive Management**: Dedicated tools to easily Connect (Map) and Disconnect network drives directly from the interface.
 
-*  **Language**: For now, english and french.
+*   **Language**: Supports English, French, Spanish, German, and Italian.
 
 ## Technology Stack
 
 *   **Backend**: [Rust](https://www.rust-lang.org/) & [Tauri v2](https://tauri.app/)
-*   **Frontend**: [React](https://reactjs.org/) with [TypeScript](https://www.typescriptlang.org/)
+*   **Frontend**: [React v19](https://reactjs.org/) with [TypeScript v5](https://www.typescriptlang.org/)
 *   **Icons**: [Lucide React](https://lucide.dev/)
 
 ## Getting Started

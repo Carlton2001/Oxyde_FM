@@ -436,19 +436,19 @@ export function getMenuItems(ctx: MenuContext): MenuItem[] {
                     id: 'extract_here',
                     type: 'action',
                     label: t('extract_here' as any),
-                    icon: Archive,
+                    icon: FileArchive,
                     action: () => actions.onExtract?.(target, false)
                 });
                 items.push({
                     id: 'extract_to_folder',
                     type: 'action',
                     label: t('extract_to_folder' as any),
-                    icon: Archive,
+                    icon: FileArchive,
                     action: () => actions.onExtract?.(target, true)
                 });
             } else if (!isDrive) {
                 const submenu: MenuItem[] = [
-                    { id: 'zip', type: 'action', label: 'Archive .zip', icon: Box, action: () => actions.onCompress?.('zip') },
+                    { id: 'zip', type: 'action', label: 'Archive .zip', icon: FileArchive, action: () => actions.onCompress?.('zip') },
                     { id: '7z', type: 'action', label: 'Archive .7z', icon: FileArchive, action: () => actions.onCompress?.('7z') },
                     { id: 'tar', type: 'action', label: 'Archive .tar', icon: FileArchive, action: () => actions.onCompress?.('tar') },
                     { id: 'zst', type: 'action', label: 'Archive .zstd', icon: FileArchive, action: () => actions.onCompress?.('zst') }
@@ -457,7 +457,7 @@ export function getMenuItems(ctx: MenuContext): MenuItem[] {
                     id: 'compress',
                     type: 'submenu',
                     label: t('compress' as any),
-                    icon: Box,
+                    icon: FileArchive,
                     children: submenu
                 });
             }

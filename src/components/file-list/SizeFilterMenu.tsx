@@ -18,7 +18,7 @@ interface SizeFilterMenuProps {
     x: number;
     y: number;
     selectedSizes: Set<SizeCategoryKey> | null;
-    availableSizeCategories: Set<SizeCategoryKey>;
+    availableSizeCategories: Map<SizeCategoryKey, number>;
     onChange: (sizes: Set<SizeCategoryKey> | null) => void;
     onClose: () => void;
     t: TFunc;
@@ -100,11 +100,13 @@ export const SizeFilterMenu: React.FC<SizeFilterMenuProps> = ({
                         const info = SIZE_CATEGORIES[cat];
                         const isChecked = selectedSizes === null || selectedSizes.has(cat);
                         const label = t(info.key as any) || cat;
+                        const count = availableSizeCategories.get(cat);
                         return (
                             <FilterMenuCheckbox
                                 key={cat}
                                 checked={isChecked}
                                 label={label}
+                                count={count}
                                 onClick={() => handleToggle(cat)}
                             />
                         );

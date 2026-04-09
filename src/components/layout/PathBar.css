@@ -35,6 +35,7 @@
     background-color: var(--surface-primary);
     border-color: var(--accent-color);
     box-shadow: 0 0 0 1px var(--accent-color);
+    margin-right: 0.5rem;
 }
 
 .path-input {
@@ -160,7 +161,7 @@
     max-width: 320px;
     max-height: 400px;
     overflow-y: auto;
-    z-index: 3000;
+    z-index: var(--z-menu);
     padding: 0.25rem;
     animation: menuFadeIn var(--transition-fast) ease-out;
 }

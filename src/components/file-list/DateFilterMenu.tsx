@@ -47,7 +47,7 @@ interface DateFilterMenuProps {
     x: number;
     y: number;
     selectedDates: Set<DateCategoryKey> | null;
-    availableDateCategories: Set<DateCategoryKey>;
+    availableDateCategories: Map<DateCategoryKey, number>;
     onChange: (dates: Set<DateCategoryKey> | null) => void;
     onClose: () => void;
     t: TFunc;
@@ -129,11 +129,13 @@ export const DateFilterMenu: React.FC<DateFilterMenuProps> = ({
                         const key = DATE_CATEGORIES[cat];
                         const isChecked = selectedDates === null || selectedDates.has(cat);
                         const label = t(key as any) || cat;
+                        const count = availableDateCategories.get(cat);
                         return (
                             <FilterMenuCheckbox
                                 key={cat}
                                 checked={isChecked}
                                 label={label}
+                                count={count}
                                 onClick={() => handleToggle(cat)}
                             />
                         );

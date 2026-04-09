@@ -98,6 +98,7 @@ pub fn run() {
         .manage(models::SessionManager::default())
         .manage(models::ConfigManager::new())
         .manage(models::HistoryManager::default())
+        .manage(models::session::SidebarWatcherState::default())
         .manage(commands::duplicates::DuplicateSearchState::new())
         .invoke_handler(tauri::generate_handler![
             commands::io::list_dir,
@@ -189,6 +190,7 @@ pub fn run() {
             commands::config::reset_config_to_default,
             commands::sidebar::get_sidebar_nodes,
             commands::sidebar::get_subtree_nodes,
+            commands::sidebar::update_sidebar_watchers,
             commands::duplicates::find_duplicates,
             commands::duplicates::cancel_find_duplicates,
             commands::system::get_peek_status,

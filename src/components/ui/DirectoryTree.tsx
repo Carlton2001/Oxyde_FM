@@ -236,37 +236,61 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
     const fsChangeDebounceRef = useRef<Record<string, any>>({});
 
     // Listen for file system changes
+    // Listen for file system changes
     useEffect(() => {
         const unlisten = listen<{ kind: string; paths: string[] }>('fs-change', (event) => {
             const { paths } = event.payload;
 
             paths.forEach(p => {
                 const normP = normalizePath(p);
-                const parentPath = getParent(normP);
-                if (!parentPath) return;
+                const normPLower = normP.toLowerCase();
 
-                const normParent = normalizePath(parentPath);
-                const normParentLower = normParent.toLowerCase();
-
-                if (loadedPathsRef.current.has(normParentLower)) {
-                    // Debounce refresh for this parent
-                    if (fsChangeDebounceRef.current[normParentLower]) {
-                        clearTimeout(fsChangeDebounceRef.current[normParentLower]);
+                const debounceRefresh = (path: string) => {
+                    const lower = path.toLowerCase();
+                    if (fsChangeDebounceRef.current[lower]) {
+                        clearTimeout(fsChangeDebounceRef.current[lower]);
                     }
-                    fsChangeDebounceRef.current[normParentLower] = setTimeout(() => {
-                        loadPathContent(normParent);
-                        delete fsChangeDebounceRef.current[normParentLower];
+                    fsChangeDebounceRef.current[lower] = setTimeout(() => {
+                        loadPathContent(path);
+                        delete fsChangeDebounceRef.current[lower];
                     }, 200);
+                };
+
+                // 1. Refresh node itself if loaded
+                if (loadedPathsRef.current.has(normPLower)) {
+                    debounceRefresh(normP);
+                }
+
+                // 2. Refresh parent node
+                const parentPath = getParent(normP);
+                if (parentPath) {
+                    const normParent = normalizePath(parentPath);
+                    const normParentLower = normParent.toLowerCase();
+
+                    // Check if parent is loaded OR if it's a root drive (always "loaded" conceptually)
+                    const isRoot = normParent.length <= 3 && normParent.includes(":");
+                    if (loadedPathsRef.current.has(normParentLower) || isRoot) {
+                        debounceRefresh(normParent);
+                    }
                 }
             });
         });
 
         return () => {
             unlisten.then(f => f());
-            // Clear all pending timeouts on unmount
             Object.values(fsChangeDebounceRef.current).forEach(clearTimeout);
         };
     }, [loadPathContent]);
+
+    // Sync expanded paths with backend watcher
+    useEffect(() => {
+        const paths = Array.from(expandedPaths).filter(p => !p.startsWith('trash://') && !p.startsWith('search://') && p !== '__network_vincinity__');
+        if (paths.length > 0 || expandedPaths.size === 0) {
+            invoke('update_sidebar_watchers', { paths }).catch(err => {
+                console.error("Failed to update sidebar watchers:", err);
+            });
+        }
+    }, [expandedPaths]);
 
     // Root nodes
     const rootNodes = useMemo<TreeNode[]>(() => {
@@ -390,8 +414,17 @@ export const DirectoryTree = React.forwardRef<DirectoryTreeHandle, DirectoryTree
         const loadPathsSequentially = async () => {
             for (const path of pathsToExpand) {
                 const lowerPath = path.toLowerCase();
-                if (loadedPathsRef.current.has(lowerPath)) continue;
+                // Always refresh if it's the immediate parent of our current target, 
+                // otherwise only load if not already loaded
+                const isImmediateParent = lowerPath === normalizePath(getParent(currentPath) || "").toLowerCase();
+                if (loadedPathsRef.current.has(lowerPath) && !isImmediateParent) continue;
                 await loadPathContent(path);
+            }
+            
+            // Also ensure the current path node itself is loaded if expanded
+            const currentLower = currentPath.toLowerCase();
+            if (expandedPaths.has(currentLower)) {
+                await loadPathContent(currentPath);
             }
         };
 

@@ -1,6 +1,6 @@
 import React from 'react';
 import cx from 'classnames';
-import { ChevronRight, Sun, Moon, Eye, Globe, Info, Check, Plus, Minus, Grid2x2, Calendar, Zap, Trash2, RefreshCw, CheckSquare, FolderTree } from 'lucide-react';
+import { ChevronRight, Sun, Moon, Eye, Globe, Info, Check, Plus, Minus, Grid2x2, Calendar, Zap, Trash2, RefreshCw, CheckSquare, FolderTree, Languages } from 'lucide-react';
 import { Toggle } from '../ui/Toggle';
 import { useApp } from '../../context/AppContext';
 import { useDialogs } from '../../context/DialogContext';
@@ -92,7 +92,7 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({
                     onClick={() => setLanguage(item.id as Language)}
                 >
                     <div className="settings-item-icon-left">
-                        <Globe size={16} className="icon-md" />
+                        <Languages size={16} className="icon-md" />
                     </div>
                     <span className="settings-item-text">{t(item.label as any)}</span>
                     {language === item.id && <Check size={14} className="settings-item-icon-right icon-sm" />}
@@ -237,7 +237,7 @@ export const SettingsMenu: React.FC<SettingsMenuProps> = ({
                             onClick={(e) => { e.stopPropagation(); onPageChange(page === 'languages' ? 'main' : 'languages'); }}
                         >
                             <div className="settings-item-icon-left">
-                                <Globe size={16} className="icon-md" />
+                                <Languages size={16} className="icon-md" />
                             </div>
                             <span className="settings-item-text">{t('language')}</span>
                             <ChevronRight size={14} className="settings-item-icon-right icon-sm" />

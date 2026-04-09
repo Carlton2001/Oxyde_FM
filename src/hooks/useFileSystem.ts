@@ -270,9 +270,6 @@ export const useFiles = (panelId: PanelId, path: string, sortConfig: SortConfig,
         } else if (sortChanged) {
             prevParamsRef.current = { path, sortConfig, showHidden, showSystem };
             return;
-        } else if (files.length > 0 && silent && !error) {
-            // Only skip background refreshes if we already have data
-            return;
         }
 
         if (!silent) setLoading(true);
