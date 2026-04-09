@@ -641,10 +641,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c673075a2e0e5f4a1dde27ce9dee1ea4558c7ffe648f576438a20ca1d2acc4b0"
 dependencies = [
  "iana-time-zone",
- "js-sys",
  "num-traits",
  "serde",
- "wasm-bindgen",
  "windows-link 0.2.1",
 ]
 
@@ -3290,7 +3288,6 @@ dependencies = [
  "base64 0.22.1",
  "blake3",
  "bzip2 0.6.1",
- "chrono",
  "dashmap",
  "env_logger",
  "flate2",
@@ -3301,7 +3298,6 @@ dependencies = [
  "indexmap 2.13.1",
  "iso9660_core",
  "jwalk",
- "lazy_static",
  "log",
  "notify",
  "once_cell",

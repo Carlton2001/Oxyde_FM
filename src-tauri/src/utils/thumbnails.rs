@@ -55,7 +55,7 @@ pub fn get_thumbnail_cached(
     let duration = modified.duration_since(SystemTime::UNIX_EPOCH).unwrap_or_default();
     
     let hash_input = format!("{}_{}_{}", path, metadata.len(), duration.as_secs());
-    let hash = hex::encode(hash_input);
+    let hash = blake3::hash(hash_input.as_bytes()).to_hex().to_string();
     
     let cache_file = cache_dir.join(format!("{}.jpg", hash));
     
@@ -88,7 +88,8 @@ pub fn get_thumbnail_cached(
             ((width as f64 * (THUMB_SIZE as f64 / height as f64)).max(1.0) as u32, THUMB_SIZE)
         };
 
-        let thumbnail = img.resize(n_width, n_height, FilterType::Nearest);
+        // Triangle filter is a good balance between speed and quality for thumbnails
+        let thumbnail = img.resize(n_width, n_height, FilterType::Triangle);
         
         let out_file = fs::File::create(&cache_file)
             .map_err(|e| CommandError::IoError(e.to_string()))?;
@@ -120,7 +121,7 @@ pub fn get_office_thumbnail_cached(
     let duration = modified.duration_since(SystemTime::UNIX_EPOCH).unwrap_or_default();
     
     let hash_input = format!("{}_{}_{}_office", path, metadata.len(), duration.as_secs());
-    let hash = hex::encode(hash_input);
+    let hash = blake3::hash(hash_input.as_bytes()).to_hex().to_string();
     
     let cache_file = cache_dir.join(format!("{}.jpg", hash));
     
