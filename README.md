@@ -1,7 +1,7 @@
 # Oxyde
 
 <p align="center">
-  <img src="screenshots/hero.png" alt="Oxyde Hero" width="100%" />
+  <img src="screenshots/hero120.png" alt="Oxyde Hero" width="100%" />
 </p>
 
 Oxyde is a modern, high-performance file manager designed for efficiency and speed. Built on a powerful **Rust** core using **Tauri**, with a sleek **React** and **TypeScript** interface.
@@ -12,12 +12,12 @@ Oxyde is a modern, high-performance file manager designed for efficiency and spe
 
 <table border="0" cellpadding="0" cellspacing="0">
   <tr>
-    <td style="border: none;"><img src="screenshots/main_view.png" /></td>
-    <td style="border: none;"><img src="screenshots/dual_panel.png" /></td>
+    <td style="border: none;"><img src="screenshots/main_view120.png" /></td>
+    <td style="border: none;"><img src="screenshots/multi_panel120.png" /></td>
   </tr>
   <tr>
-    <td style="border: none;"><img src="screenshots/advanced_search.png" /></td>
-    <td style="border: none;"><img src="screenshots/themes_showcase.png" /></td>
+    <td style="border: none;"><img src="screenshots/advanced_search120.png" /></td>
+    <td style="border: none;"><img src="screenshots/themes_showcase120.png" /></td>
   </tr>
 </table>
 
