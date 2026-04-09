@@ -3,7 +3,7 @@ import {
     Copy, Scissors, Trash2, ClipboardPaste,
     ChevronDown, ChevronUp, Undo2, Redo2,
     FolderPlus, Edit2, Settings, ExternalLink, RotateCcw,
-    Archive, Box, FileArchive, Pin, ListOrdered, Check, MoreHorizontal, Globe, RefreshCw, Network, ServerOff
+    FileArchive, Pin, ListOrdered, Check, MoreHorizontal, Globe, RefreshCw, Network, ServerOff
 } from 'lucide-react';
 import { TFunc } from '../../../i18n';
 import { DriveInfo, SortConfig, SortField, SortDirection } from '../../../types';

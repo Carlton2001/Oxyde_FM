@@ -43,7 +43,7 @@ Oxyde is a modern, high-performance file manager designed for efficiency and spe
 ## Technology Stack
 
 *   **Backend**: [Rust](https://www.rust-lang.org/) & [Tauri v2](https://tauri.app/)
-*   **Frontend**: [React v19](https://reactjs.org/) with [TypeScript v5](https://www.typescriptlang.org/)
+*   **Frontend**: [React v19](https://reactjs.org/) with [TypeScript v6](https://www.typescriptlang.org/)
 *   **Icons**: [Lucide React](https://lucide.dev/)
 
 ## Getting Started
