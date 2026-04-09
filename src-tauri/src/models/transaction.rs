@@ -33,7 +33,7 @@ impl Transaction {
     pub fn new(op_type: TransactionType, details: TransactionDetails) -> Self {
         Self {
             id: uuid::Uuid::new_v4().to_string(),
-            timestamp: chrono::Utc::now().timestamp_millis(),
+            timestamp: time::OffsetDateTime::now_utc().unix_timestamp_nanos() as i64 / 1_000_000,
             op_type,
             details,
         }

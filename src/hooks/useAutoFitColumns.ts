@@ -197,7 +197,6 @@ export const useAutoFitColumns = ({
                 // Available space for the two "variable" columns (Name & Location)
                 const availableForPair = Math.max(0, panelWidth - fixedSum - 40); // 40px safety/gutter
                 const minLocation = 80;
-                const minName = 150;
 
                 if (availableForPair >= (safeLocationMeasured + safeNameMeasured)) {
                     // Plenty of space: give Location what it needs, Name takes the rest (extra flex)

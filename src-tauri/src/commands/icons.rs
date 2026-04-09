@@ -17,13 +17,11 @@ use crate::models::CommandError;
 use tauri::{AppHandle, Manager};
 use std::collections::HashMap;
 use std::sync::Mutex;
-use lazy_static::lazy_static;
+use once_cell::sync::Lazy;
 use std::path::PathBuf;
 use std::fs;
 
-lazy_static! {
-    static ref ICON_CACHE: Mutex<HashMap<String, Vec<u8>>> = Mutex::new(HashMap::new());
-}
+static ICON_CACHE: Lazy<Mutex<HashMap<String, Vec<u8>>>> = Lazy::new(|| Mutex::new(HashMap::new()));
 
 #[tauri::command]
 pub fn purge_icon_cache() {
