@@ -32,7 +32,7 @@ jobs:
         run: |
           $Config = Get-Content src-tauri/tauri.conf.json | ConvertFrom-Json
           $Version = $Config.version
-          echo "APP_VERSION=$Version" >> $GITHUB_ENV
+          Add-Content -Path $env:GITHUB_ENV -Value "APP_VERSION=$Version"
           echo "Version found: $Version"
 
       - name: install frontend dependencies
@@ -58,6 +58,10 @@ jobs:
         shell: pwsh
         run: |
           $Version = "${{ env.APP_VERSION }}"
+          if (-not $Version) {
+              $Config = Get-Content src-tauri/tauri.conf.json | ConvertFrom-Json
+              $Version = $Config.version
+          }
           $OutputFolder = "Oxyde_FM_v$($Version)_Portable"
           New-Item -ItemType Directory -Path $OutputFolder
           
@@ -83,11 +87,23 @@ jobs:
           # Create ZIP
           Compress-Archive -Path "$OutputFolder" -DestinationPath "Oxyde_FM_v$($Version)_Portable.zip"
 
-      - name: Upload Portable ZIP to Same Release
+      - name: Prepare Updater JSON for GitHub
+        shell: pwsh
+        run: |
+          # Copy updater.json to latest.json to match tauri.conf.json endpoint
+          if (Test-Path "src-tauri/target/release/updater.json") {
+            Copy-Item "src-tauri/target/release/updater.json" -Destination "latest.json"
+          } elseif (Test-Path "src-tauri/updater.json") {
+             Copy-Item "src-tauri/updater.json" -Destination "latest.json"
+          }
+
+      - name: Upload Additional Assets
         uses: softprops/action-gh-release@v1
         if: startsWith(github.ref, 'refs/tags/')
         with:
-          files: Oxyde_FM_v*_Portable.zip
+          files: |
+            Oxyde_FM_v*_Portable.zip
+            latest.json
           tag_name: v${{ env.APP_VERSION }}
           draft: true
         env:
