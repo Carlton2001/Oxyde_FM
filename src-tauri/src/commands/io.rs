@@ -11,7 +11,6 @@ use log::info;
 use serde::Serialize;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
-use dashmap::DashSet;
 use crate::utils::hardware::is_ssd;
 use jwalk::WalkDir;
 
@@ -766,21 +765,30 @@ pub async fn calculate_folder_size(path: String) -> Result<FolderSizeResult, Com
         let size = Arc::new(AtomicU64::new(0));
         let folders_count = Arc::new(AtomicUsize::new(0));
         let files_count = Arc::new(AtomicUsize::new(0));
-        let seen_ids = Arc::new(DashSet::new());
         
         let num_threads = if is_ssd(&pb) { 16 } else { 2 };
 
         let s_acc = size.clone();
         let fo_acc = folders_count.clone();
         let fi_acc = files_count.clone();
-        let id_map = seen_ids.clone();
 
         WalkDir::new(&pb)
             .parallelism(jwalk::Parallelism::RayonNewPool(num_threads))
-            .process_read_dir(move |depth, _path, _state, children| {
+            .process_read_dir(move |depth, path, _state, children| {
                 if depth == Some(0) {
-                    // This callback is for the contents of the root.
+                    // Contents of root
                 }
+
+                // Blacklist check: skip problematic system folders that are extremely slow or virtual
+                let path_str = path.to_string_lossy();
+                let is_blacklisted = path_str.contains("System Volume Information") || 
+                                    path_str.contains("Microsoft\\Windows\\Containers");
+
+                if is_blacklisted {
+                    children.clear();
+                    return;
+                }
+
                 for entry in children.iter().flatten() {
                     let ft = entry.file_type();
                     if ft.is_symlink() { continue; }
@@ -788,21 +796,7 @@ pub async fn calculate_folder_size(path: String) -> Result<FolderSizeResult, Com
                     if ft.is_file() {
                         fi_acc.fetch_add(1, Ordering::Relaxed);
                         if let Ok(m) = entry.metadata() {
-                            let mut already_seen = false;
-                            
-                            // Fingerprint based on Size + Creation Time + Modification Time
-                            // This is a very reliable heuristic for hardlinks without using unstable APIs
-                            let created = m.created().map(|t| t.duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_nanos()).unwrap_or(0);
-                            let modified = m.modified().map(|t| t.duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_nanos()).unwrap_or(0);
-                            let fingerprint = (m.len(), created, modified);
-
-                            if !id_map.insert(fingerprint) {
-                                already_seen = true;
-                            }
-
-                            if !already_seen {
-                                s_acc.fetch_add(m.len(), Ordering::Relaxed);
-                            }
+                            s_acc.fetch_add(m.len(), Ordering::Relaxed);
                         }
                     } else if ft.is_dir() {
                         fo_acc.fetch_add(1, Ordering::Relaxed);
