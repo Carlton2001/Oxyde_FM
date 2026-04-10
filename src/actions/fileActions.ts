@@ -2,7 +2,7 @@ import { ActionDefinition, ActionContext } from '../types/actions';
 import { invoke } from '@tauri-apps/api/core';
 import {
     Copy, Scissors, ClipboardPaste, Trash2, Edit2,
-    FolderPlus, Info, Undo, Redo, ExternalLink, Menu
+    FolderPlus, Info, Undo, Redo, ExternalLink, Menu, CheckSquare
 } from 'lucide-react';
 import { formatCommandError } from '../utils/error';
 import { getParent } from '../utils/path';
@@ -553,6 +553,21 @@ export const CONTEXT_MENU_ACTION: ActionDefinition = {
             }
         } else {
             onContextMenu(null, activePanelId);
+        }
+    }
+};
+
+export const SELECT_ALL_ACTION: ActionDefinition = {
+    id: 'file.select_all',
+    label: 'select_all',
+    icon: CheckSquare,
+    shortcut: 'Ctrl+A',
+    isEnabled: (ctx: ActionContext) => ctx.activePanel && ctx.activePanel.files && ctx.activePanel.files.length > 0,
+    handler: async (ctx: ActionContext) => {
+        const { activePanel } = ctx;
+        if (activePanel && activePanel.files && activePanel.selectMultiple) {
+            const allPaths = activePanel.files.map((f: any) => f.path);
+            activePanel.selectMultiple(allPaths, false);
         }
     }
 };
