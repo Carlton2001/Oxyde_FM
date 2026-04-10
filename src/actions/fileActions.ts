@@ -369,6 +369,7 @@ export const NEW_FOLDER_ACTION: ActionDefinition = {
     id: 'file.new_folder',
     label: 'new_folder',
     icon: FolderPlus,
+    shortcut: 'Ctrl+Shift+N',
     handler: (ctx: ActionContext) => {
         const targetPath = ctx['contextMenuTarget'] as string | undefined;
         const parentPath = targetPath || ctx.activePanel.path;
@@ -419,6 +420,7 @@ export const PROPERTIES_ACTION: ActionDefinition = {
 export const COPY_PATH_ACTION: ActionDefinition = {
     id: 'file.copy_path',
     label: 'copy_path',
+    shortcut: 'Ctrl+Shift+C',
     handler: async (ctx: ActionContext) => {
         const selection = Array.from(ctx.activePanel.selected);
         if (selection.length > 0) {
