@@ -9,6 +9,8 @@ use std::time::SystemTime;
 use tauri::{AppHandle, Emitter};
 use log::info;
 use serde::Serialize;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use crate::utils::hardware::is_ssd;
 use jwalk::WalkDir;
 
@@ -760,31 +762,43 @@ pub async fn calculate_folder_size(path: String) -> Result<FolderSizeResult, Com
             return Err(CommandError::PathError("Path is not a directory".to_string()));
         }
 
-        let mut size = 0;
-        let mut folders_count = 0;
-        let mut files_count = 0;
+        let size = Arc::new(AtomicU64::new(0));
+        let folders_count = Arc::new(AtomicUsize::new(0));
+        let files_count = Arc::new(AtomicUsize::new(0));
         
         let num_threads = if is_ssd(&pb) { 16 } else { 2 };
 
-        for entry in WalkDir::new(&pb)
-            .parallelism(jwalk::Parallelism::RayonNewPool(num_threads))
-            .into_iter()
-            .filter_map(|e| e.ok()) 
-        {
-            if entry.depth == 0 { continue; }
+        let s_acc = size.clone();
+        let fo_acc = folders_count.clone();
+        let fi_acc = files_count.clone();
 
-            if entry.file_type().is_file() {
-                files_count += 1;
-                size += entry.metadata().map(|m| m.len()).unwrap_or(0);
-            } else if entry.file_type().is_dir() {
-                folders_count += 1;
-            }
-        }
+        WalkDir::new(&pb)
+            .parallelism(jwalk::Parallelism::RayonNewPool(num_threads))
+            .process_read_dir(move |depth, _path, _state, children| {
+                if depth == Some(0) {
+                    // This callback is for the contents of the root.
+                }
+                for entry in children.iter().flatten() {
+                    let ft = entry.file_type();
+                    if ft.is_symlink() { continue; }
+
+                    if ft.is_file() {
+                        fi_acc.fetch_add(1, Ordering::Relaxed);
+                        if let Ok(m) = entry.metadata() {
+                            s_acc.fetch_add(m.len(), Ordering::Relaxed);
+                        }
+                    } else if ft.is_dir() {
+                        fo_acc.fetch_add(1, Ordering::Relaxed);
+                    }
+                }
+            })
+            .into_iter()
+            .for_each(|_| {}); // Drive the parallel walker to completion
 
         Ok(FolderSizeResult {
-            size,
-            folders_count,
-            files_count,
+            size: size.load(Ordering::Relaxed),
+            folders_count: folders_count.load(Ordering::Relaxed) as u64,
+            files_count: files_count.load(Ordering::Relaxed) as u64,
         })
     }).await.map_err(|e| CommandError::SystemError(format!("Task join error: {}", e)))?
 }
