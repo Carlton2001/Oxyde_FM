@@ -40,39 +40,6 @@ Oxyde is a modern, high-performance file manager designed for efficiency and spe
 
 *   **Language**: Supports English, French, Spanish, German, and Italian.
 
----
-
-## Keyboard Shortcuts
-
-Oxyde is designed for a keyboard-first workflow. Here are the most common shortcuts:
-
-### Navigation & Focus
-*   **Tab**: Switch focus between active panels.
-*   **Backspace**: Go back in history; if no history exists, move up to the parent directory.
-*   **Alt + Arrow Up**: Navigate to the parent directory.
-*   **Enter**: Open the selected folder or file.
-*   **Space**: Quick preview of the selected file (requires PowerToys Peek).
-*   **Ctrl + F**: Instantly focus the search box.
-*   **Ctrl + N**: Open a new research panel.
-
-### File Operations
-*   **Ctrl + C / X / V**: Standard Copy, Cut, and Paste.
-*   **Delete**: Move selected items to the Trash.
-*   **Shift + Delete**: Permanently delete items (bypassing the Trash).
-*   **F2**: Rename the selected item.
-*   **Ctrl + A**: Select all items in the active panel.
-*   **Alt + Enter**: Show properties for the current selection.
-*   **Ctrl + Z / Y**: Undo and Redo file operations.
-
-### Tab Management
-*   **Ctrl + Tab** or **Ctrl + PageDown**: Switch to the next tab.
-*   **Ctrl + Shift + Tab** or **Ctrl + PageUp**: Switch to the previous tab.
-*   **Middle Click**: Open a folder in a new tab.
-
-### View & Controls
-*   **F5** or **Ctrl + R**: Refresh the current view.
-*   **Ctrl + Plus / Minus**: Increase or decrease the UI font size.
-*   **Ctrl + 0**: Reset the UI font size to default.
 
 ---
 
@@ -105,6 +72,40 @@ npm run tauri dev
 ```bash
 npm run tauri build
 ```
+
+---
+
+## Keyboard Shortcuts
+
+Oxyde is designed with some keyboard workflow. Here are the most common shortcuts:
+
+### Navigation & Focus
+*   **Tab**: Switch focus between active panels.
+*   **Backspace**: Go back in history; if no history exists, move up to the parent directory.
+*   **Alt + Arrow Up**: Navigate to the parent directory.
+*   **Enter**: Open the selected folder or file.
+*   **Space**: Quick preview of the selected file (requires PowerToys Peek).
+*   **Ctrl + F**: Instantly focus the search box.
+*   **Ctrl + N**: Open a new panel.
+
+### File Operations
+*   **Ctrl + C / X / V**: Standard Copy, Cut, and Paste.
+*   **Delete**: Move selected items to the Trash.
+*   **Shift + Delete**: Permanently delete items (bypassing the Trash).
+*   **F2**: Rename the selected item.
+*   **Ctrl + A**: Select all items in the active panel.
+*   **Alt + Enter**: Show properties for the current selection.
+*   **Ctrl + Z / Y**: Undo and Redo file operations.
+
+### Tab Management
+*   **Ctrl + Tab** or **Ctrl + PageDown**: Switch to the next tab.
+*   **Ctrl + Shift + Tab** or **Ctrl + PageUp**: Switch to the previous tab.
+*   **Middle Click**: Open a folder in a new tab.
+
+### View & Controls
+*   **F5** or **Ctrl + R**: Refresh the current view.
+*   **Ctrl + Plus / Minus**: Increase or decrease the UI font size.
+*   **Ctrl + 0**: Reset the UI font size to default.
 
 ---
 
