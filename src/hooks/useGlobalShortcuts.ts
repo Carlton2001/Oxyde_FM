@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useKeybindings } from '../context/KeybindingContext';
+import { invoke } from '@tauri-apps/api/core';
 import { actionService } from '../services/ActionService';
 import { ActionContext } from '../types/actions';
 
@@ -24,16 +25,19 @@ export const useGlobalShortcuts = (context: ActionContext, tabs: any[], activeTa
 
             // 0. Block standard browser shortcuts (Save, Print, Find Next, Refresh, etc.)
             // to prevent WebView2/Edge overrides in production.
-            if (e.ctrlKey && ['s', 'S', 'p', 'P', 'g', 'G', 'l', 'L', 'r', 'R', 'n', 'N', 'w', 'W'].includes(e.key)) {
+            let blockedBrowserDefault = false;
+            if (e.ctrlKey && ['s', 'S', 'p', 'P', 'g', 'G', 'l', 'L', 'r', 'R', 'n', 'N', 't', 'T', 'w', 'W', 'j', 'J'].includes(e.key)) {
                 e.preventDefault();
                 e.stopPropagation();
+                blockedBrowserDefault = true;
             }
-            if (e.key === 'F5') {
+            if (e.key === 'F5' || e.key === 'F3' || e.key === 'F7') {
                 e.preventDefault();
                 e.stopPropagation();
+                blockedBrowserDefault = true;
             }
 
-            if (e.defaultPrevented || (isInput && !isCtrlF)) {
+            if ((e.defaultPrevented && !blockedBrowserDefault) || (isInput && !isCtrlF)) {
                 return;
             }
 
@@ -99,6 +103,7 @@ export const useGlobalShortcuts = (context: ActionContext, tabs: any[], activeTa
             if (combo === 'Ctrl+N') {
                 e.preventDefault();
                 e.stopPropagation();
+                invoke('add_panel', { path: 'C:\\' }).catch(console.error);
                 return;
             }
 
@@ -115,7 +120,7 @@ export const useGlobalShortcuts = (context: ActionContext, tabs: any[], activeTa
                 return;
             }
 
-            if (combo === 'F5') {
+            if (combo === 'F5' || combo === 'Ctrl+R') {
                 e.preventDefault();
                 e.stopPropagation();
                 if (contextRef.current.refreshBothPanels) {
@@ -124,14 +129,18 @@ export const useGlobalShortcuts = (context: ActionContext, tabs: any[], activeTa
                 return;
             }
 
-            if (combo === 'Ctrl+=' || combo === 'Ctrl++' || combo === 'Ctrl+-') {
+            if (combo === 'Ctrl+=' || combo === 'Ctrl++' || combo === 'Ctrl+-' || combo === 'Ctrl+0') {
                 e.preventDefault();
                 e.stopPropagation();
-                const currentSize = (contextRef.current as any).fontSize || 16;
-                const delta = (combo === 'Ctrl+=' || combo === 'Ctrl++') ? 1 : -1;
                 const setFontSize = (contextRef.current as any).setFontSize;
                 if (setFontSize) {
-                    setFontSize(currentSize + delta);
+                    if (combo === 'Ctrl+0') {
+                        setFontSize(16);
+                    } else {
+                        const currentSize = (contextRef.current as any).fontSize || 16;
+                        const delta = (combo === 'Ctrl+=' || combo === 'Ctrl++') ? 1 : -1;
+                        setFontSize(currentSize + delta);
+                    }
                 }
                 return;
             }
