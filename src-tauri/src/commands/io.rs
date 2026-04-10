@@ -9,6 +9,8 @@ use std::time::SystemTime;
 use tauri::{AppHandle, Emitter};
 use log::info;
 use serde::Serialize;
+use crate::utils::hardware::is_ssd;
+use jwalk::WalkDir;
 
 #[cfg(target_os = "windows")]
 use windows::Win32::UI::Shell::PropertiesSystem::{SHGetPropertyStoreFromParsingName, IPropertyStore, GPS_DEFAULT};
@@ -761,9 +763,16 @@ pub async fn calculate_folder_size(path: String) -> Result<FolderSizeResult, Com
         let mut size = 0;
         let mut folders_count = 0;
         let mut files_count = 0;
-        use walkdir::WalkDir;
-        // skip(1) to avoid counting the root folder itself
-        for entry in WalkDir::new(&pb).into_iter().skip(1).filter_map(|e| e.ok()) {
+        
+        let num_threads = if is_ssd(&pb) { 16 } else { 2 };
+
+        for entry in WalkDir::new(&pb)
+            .parallelism(jwalk::Parallelism::RayonNewPool(num_threads))
+            .into_iter()
+            .filter_map(|e| e.ok()) 
+        {
+            if entry.depth == 0 { continue; }
+
             if entry.file_type().is_file() {
                 files_count += 1;
                 size += entry.metadata().map(|m| m.len()).unwrap_or(0);
