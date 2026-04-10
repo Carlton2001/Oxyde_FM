@@ -130,6 +130,9 @@ export const usePanel = (initialPath: string, panelId: PanelId, _activeTabId?: s
         currentSearchRoot, setSearchQuery, setSearchResults,
         setIsSearching, setSearchLimitReached, cancelSearch
     } = usePanelSearch({ path, panelId, activeTabId: _activeTabId, searchLimit, initialPath });
+    
+    // Histogram State (calculated folder sizes display)
+    const [showHistogram, setShowHistogram] = useState(false);
 
     // Derive current mode (moved down to have access to searchResults)
     const isTrashView = !!path && /^(trash)(:\/\/|:\\{1,2})/i.test(path);
@@ -173,6 +176,7 @@ export const usePanel = (initialPath: string, panelId: PanelId, _activeTabId?: s
     useEffect(() => {
         if (path !== lastPathRef.current) {
             lastPathRef.current = path;
+            setShowHistogram(false); // Reset histogram on any navigation
             const newSelected = new Set(currentEntry?.selected || []);
             setSelected(newSet => {
                 if (newSet.size === newSelected.size && Array.from(newSet).every(p => newSelected.has(p))) {
@@ -231,6 +235,7 @@ export const usePanel = (initialPath: string, panelId: PanelId, _activeTabId?: s
         nameFilter,
         locationFilter,
         deletedDateFilter,
+        showHistogram,
 
         // Actions
         navigate: handleNavigate,
@@ -265,6 +270,7 @@ export const usePanel = (initialPath: string, panelId: PanelId, _activeTabId?: s
         setSelected,
         updateFileSize,
         setFileCalculating,
+        setShowHistogram,
         updateCurrentScroll,
 
         // Tab Support

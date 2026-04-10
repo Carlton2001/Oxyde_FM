@@ -36,6 +36,8 @@ interface FullPanelState extends PanelState {
     deletedDateFilter: Set<string> | null;
     setDeletedDateFilter: (val: Set<string> | null | ((prev: Set<string> | null) => Set<string> | null)) => void;
     clearAllFilters: () => void;
+    showHistogram: boolean;
+    setShowHistogram: (val: boolean) => void;
 }
 
 interface MultipaneLayoutProps {
@@ -82,7 +84,6 @@ interface MultipaneLayoutProps {
     onTreeProperties: (path: string) => void;
     onTreePaste: (path: string) => void;
     onCalculateAllSizes: () => void;
-    histogramPanels: Set<PanelId>;
     onTabDrop: (files: any[], index?: number) => void;
     setShowAbout: (show: boolean) => void;
     showHidden: boolean;
@@ -127,7 +128,7 @@ export const MultipaneLayout: React.FC<MultipaneLayoutProps> = ({
     propShowHidden, propShowSystem, cutPaths, useSystemIcons, treeRef,
     onTreeCut, onTreeCopy, onTreeCopyName, onTreeCopyPath, onTreeDelete, isShiftPressed,
     onTreeRename, onTreeNewFolder, onTreeUnmount, onTreeDisconnectDrive, onTreeProperties, onTreePaste,
-    onCalculateAllSizes, histogramPanels, setShowAbout, onRefresh,
+    onCalculateAllSizes, setShowAbout, onRefresh,
     onRestoreAll, onRestoreSelected, onEmptyTrash,
     handleCopy, handleCopyName, handleCopyPath, handleCut, handlePaste, handleDelete, handleUndo, handleRedo,
     canPaste, canUndo, undoLabel, canRedo, redoLabel,
@@ -300,7 +301,7 @@ export const MultipaneLayout: React.FC<MultipaneLayoutProps> = ({
                     loading={panel.loading}
                     initialScrollOffset={panel.currentEntry?.scrollOffset}
                     updateCurrentScroll={(o) => panel.updateCurrentScroll!(o)}
-                    showHistogram={histogramPanels.has(id)}
+                    showHistogram={panel.showHistogram}
                     groupByDate={panel.groupByDate}
                     onGroupByDateChange={(v) => panel.setGroupByDate(v)}
                     isProtected={panel.isProtected}

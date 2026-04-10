@@ -201,7 +201,6 @@ function App() {
     }
   }, [peekStatus, registerKeybinding]);
 
-  const [histogramPanels, setHistogramPanels] = useState<Set<PanelId>>(new Set());
 
   const openTrashSettings = useCallback(() => dialogs.openTrashSettingsDialog(), [dialogs]);
 
@@ -496,14 +495,8 @@ function App() {
 
 
   const handleCalculateAllSizes = useCallback(() => {
-    const targetId = activePanelId;
-    setHistogramPanels(prev => {
-      const next = new Set(prev);
-      next.add(targetId);
-      return next;
-    });
-
     const panel = activePanel;
+    panel.setShowHistogram(true);
     panel.files.forEach(async (f: import('./types').FileEntry) => {
       if (f.is_dir && !f.is_calculated && !f.is_calculating) {
         try {
@@ -557,7 +550,6 @@ function App() {
     onTabDrop: handleTabDrop,
     onDuplicateSearch: handleDuplicateSearch,
     onCalculateAllSizes: handleCalculateAllSizes,
-    histogramPanels: histogramPanels,
     onAddToFavorites: handleAddToFavorites,
     onRemoveFromFavorites: handleRemoveFromFavorites,
     onDriveContextMenu: (e: React.MouseEvent, p: string) => {
