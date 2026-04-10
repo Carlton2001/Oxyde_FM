@@ -24,6 +24,13 @@
     color: var(--accent-color);
 }
 
+.tooltip-shortcut {
+    margin-left: 0.75rem;
+    color: var(--text-muted);
+    opacity: 0.6;
+    font-size: 0.7rem;
+}
+
 /* Uniquement pour les tooltips simples (une seule ligne) */
 .tooltip-portal:not(.multiline) {
     font-weight: 500;

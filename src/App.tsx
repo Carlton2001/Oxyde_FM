@@ -608,7 +608,14 @@ function App() {
           onCopyPath={() => handleAction('file.copy_path', actionContext)} t={t}
           isInputContext={contextMenu.isInputContext}
           isTextSelected={contextMenu.isTextSelected}
-          onSelectAll={handleInputSelectAll}
+          onSelectAll={contextMenu.isInputContext ? handleInputSelectAll : () => {
+            const pan = panels[activePanelId];
+              if (pan) {
+                const filesToSelect = (pan.searchResults || pan.files).map(f => f.path);
+                pan.selectMultiple(filesToSelect, false);
+              }
+              setContextMenu(null);
+          }}
           onCopy={contextMenu.isInputContext ? handleInputCopy : () => handleAction('file.copy', actionContext)}
           onCut={contextMenu.isInputContext ? handleInputCut : () => handleAction('file.cut', actionContext)}
           onPaste={contextMenu.isInputContext ? handleInputPaste : () => handleAction('file.paste', actionContext)}

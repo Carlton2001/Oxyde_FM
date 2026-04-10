@@ -1,5 +1,5 @@
 import { ActionDefinition } from '../types/actions';
-import { Plus } from 'lucide-react';
+import { Plus, X } from 'lucide-react';
 
 export const NEW_TAB_ACTION: ActionDefinition = {
     id: 'tab.new',
@@ -19,6 +19,19 @@ export const NEW_TAB_ACTION: ActionDefinition = {
                     ctx.activePanel.navigate('C:\\');
                 }
             }
+        }
+    }
+};
+
+export const CLOSE_TAB_ACTION: ActionDefinition = {
+    id: 'tab.close',
+    label: 'close_tab',
+    icon: X,
+    shortcut: 'Ctrl+W',
+    isVisible: () => true,
+    handler: async (ctx) => {
+        if (typeof ctx.closeTab === 'function' && ctx.activeTabId) {
+            ctx.closeTab(ctx.activeTabId, ctx.activePanelId);
         }
     }
 };

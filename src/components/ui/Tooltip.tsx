@@ -468,7 +468,18 @@ export const Tooltip: React.FC<TooltipProps> = ({ isShiftPressed }) => {
                 {i < tooltip.content.split("\n").length - 1 && <br />}
               </React.Fragment>
             ))
-          : tooltip.content}
+          : (() => {
+              const parts = tooltip.content.split('  ');
+              if (parts.length > 1) {
+                return (
+                  <>
+                    {parts[0]}
+                    <span className="tooltip-shortcut">{parts.slice(1).join('  ')}</span>
+                  </>
+                );
+              }
+              return tooltip.content;
+            })()}
       </div>
 
       {tooltip.diskStats && (

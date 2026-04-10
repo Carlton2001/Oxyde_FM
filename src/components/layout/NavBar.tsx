@@ -191,7 +191,7 @@ export const NavBar: React.FC<NavBarProps> = ({
                     className="btn-icon"
                     onClick={onNavigateBack}
                     disabled={activePanel.historyIndex <= 0}
-                    data-tooltip={t('back')}
+                    data-tooltip={`${t('back')}  Alt+←`}
                     data-tooltip-pos="bottom"
                     onContextMenu={(e) => {
                         e.preventDefault();
@@ -206,7 +206,7 @@ export const NavBar: React.FC<NavBarProps> = ({
                     className="btn-icon"
                     onClick={onNavigateForward}
                     disabled={activePanel.historyIndex >= activePanel.history.length - 1}
-                    data-tooltip={t('forward' as any)}
+                    data-tooltip={`${t('forward' as any)}  Alt+→`}
                     data-tooltip-pos="bottom"
                     onContextMenu={(e) => {
                         e.preventDefault();
@@ -216,14 +216,14 @@ export const NavBar: React.FC<NavBarProps> = ({
                         setFwdMenuPos({ top: rect.bottom + 4, anchorCenterX: rect.left + rect.width / 2 });
                     }}
                 ><ArrowRight className="icon-md" /></button>
-                <button className="btn-icon" onClick={onNavigateUp} disabled={!getParent(activePanel.path)} data-tooltip={t('up' as any)} data-tooltip-pos="bottom"><ArrowUp className="icon-md" /></button>
+                <button className="btn-icon" onClick={onNavigateUp} disabled={!getParent(activePanel.path)} data-tooltip={`${t('up' as any)}  Alt+↑`} data-tooltip-pos="bottom"><ArrowUp className="icon-md" /></button>
 
 
                 {canUndo && (
                     <button
                         className="btn-icon"
                         onClick={onUndo}
-                        data-tooltip={undoLabel || t('undo_action')}
+                        data-tooltip={`${undoLabel || t('undo_action')}  Ctrl+Z`}
                         data-tooltip-pos="bottom"
                     >
                         <Undo2 className="icon-md" />
@@ -233,7 +233,7 @@ export const NavBar: React.FC<NavBarProps> = ({
                     <button
                         className="btn-icon"
                         onClick={onRedo}
-                        data-tooltip={redoLabel || t('redo_action')}
+                        data-tooltip={`${redoLabel || t('redo_action')}  Ctrl+Y`}
                         data-tooltip-pos="bottom"
                     >
                         <Redo2 className="icon-md" />
@@ -243,13 +243,13 @@ export const NavBar: React.FC<NavBarProps> = ({
 
             <div className="toolbar-actions">
                 {activePanel.selected.size > 0 && (
-                    <button className="btn-icon" data-tooltip={t("cut")} data-tooltip-pos="bottom" onClick={onCut}><Scissors className="icon-md" /></button>
+                    <button className="btn-icon" data-tooltip={`${t("cut")}  Ctrl+X`} data-tooltip-pos="bottom" onClick={onCut}><Scissors className="icon-md" /></button>
                 )}
                 {activePanel.selected.size > 0 && !isTrashView && (
                     <button
                         ref={copyBtnRef}
                         className="btn-icon"
-                        data-tooltip={t("copy")}
+                        data-tooltip={`${t("copy")}  Ctrl+C`}
                         data-tooltip-pos="bottom"
                         onClick={onCopy}
                         onContextMenu={(e) => {
@@ -264,12 +264,12 @@ export const NavBar: React.FC<NavBarProps> = ({
                     </button>
                 )}
                 {canPaste && !isTrashView && (
-                    <button className="btn-icon" data-tooltip={t("paste")} data-tooltip-pos="bottom" onClick={onPaste}><ClipboardPaste className="icon-md" /></button>
+                    <button className="btn-icon" data-tooltip={`${t("paste")}  Ctrl+V`} data-tooltip-pos="bottom" onClick={onPaste}><ClipboardPaste className="icon-md" /></button>
                 )}
                 {activePanel.selected.size > 0 && (
                     <button
                         className="btn-icon danger"
-                        data-tooltip={(isTrashView || isShiftPressed || isNukeOverride) ? t("perm_delete" as any) : t("delete")}
+                        data-tooltip={(isTrashView || isShiftPressed || isNukeOverride) ? `${t("perm_delete" as any)}  Shift+Del` : `${t("delete")}  Del`}
                         data-tooltip-pos="bottom"
                         onClick={onDelete}
                     >

@@ -411,7 +411,7 @@ export const Tabs: React.FC<TabsProps> = ({
                 <div className="new-tab-btn" onClick={async () => {
                     const id = await addTab('C:\\', { background: false, panelId });
                     if (id) onSwitch(id, 'C:\\');
-                }} data-tooltip={t('new_tab') || "New Tab"}>
+                }} data-tooltip={`${t('new_tab') || "New Tab"}  Ctrl+T`}>
                     <Plus size={16} />
                 </div>
             </div>
@@ -479,6 +479,7 @@ export const Tabs: React.FC<TabsProps> = ({
                             {tabs.length > 1 && <div className="menu-separator" />}
                             <div className="menu-item" onClick={() => { onClose(menu.tabId); setMenu(null); }}>
                                 <XCircle size={14} /> {t('close_tab' as any) || "Close Tab"}
+                                <span className="menu-item-shortcut">Ctrl+W</span>
                             </div>
                         </>
                     )}

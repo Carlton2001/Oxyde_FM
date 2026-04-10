@@ -120,7 +120,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
                     <button
                         className="btn-icon"
                         onClick={onRefresh}
-                        data-tooltip={t('refresh')}
+                        data-tooltip={`${t('refresh' as any)}  F5`}
                         data-tooltip-pos="bottom"
                     >
                         <RefreshCw size={16} />
@@ -135,7 +135,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
                             lastActionRef.current = now;
                             invoke('add_panel', { path: 'C:\\' }).catch(console.error);
                         }}
-                        data-tooltip={t('new_pane' as any) || 'New Pane'}
+                        data-tooltip={`${t('new_pane' as any) || 'New Pane'}  Ctrl+N`}
                         data-tooltip-pos="bottom"
                     >
                         <Plus size={16} />

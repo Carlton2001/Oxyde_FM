@@ -3,7 +3,7 @@ import {
     Copy, Scissors, Trash2, ClipboardPaste,
     ChevronDown, ChevronUp, Undo2, Redo2,
     FolderPlus, Edit2, Settings, ExternalLink, RotateCcw,
-    FileArchive, Pin, ListOrdered, Check, MoreHorizontal, Globe, RefreshCw, Network, ServerOff
+    FileArchive, Pin, ListOrdered, Check, MoreHorizontal, Globe, RefreshCw, Network, ServerOff, MousePointerSquareDashed
 } from 'lucide-react';
 import { TFunc } from '../../../i18n';
 import { DriveInfo, SortConfig, SortField, SortDirection } from '../../../types';
@@ -187,7 +187,7 @@ export function getMenuItems(ctx: MenuContext): MenuItem[] {
             id: 'select_all',
             type: 'action',
             label: t('select_all' as any) || 'Select All',
-            icon: BlankIcon,
+            icon: MousePointerSquareDashed,
             action: () => actions.onSelectAll?.(),
             shortcut: 'Ctrl+A'
         });
@@ -424,6 +424,14 @@ export function getMenuItems(ctx: MenuContext): MenuItem[] {
                 icon: FolderPlus,
                 action: () => actions.onNewFolder(),
                 shortcut: 'Ctrl+Shift+N'
+            });
+            items.push({
+                id: 'select_all',
+                type: 'action',
+                label: t('select_all' as any) || 'Select All',
+                icon: MousePointerSquareDashed,
+                action: () => actions.onSelectAll?.(),
+                shortcut: 'Ctrl+A'
             });
         }
 

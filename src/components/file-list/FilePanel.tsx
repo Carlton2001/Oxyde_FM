@@ -654,7 +654,7 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
                 <div
                     className={cx("header-selection-gutter", { "with-checkbox": showCheckboxes })}
                     onClick={handleHeaderClick}
-                    data-tooltip={t(finalFiles.length > 0 && finalFiles.every(f => selected.has(f.path)) ? ('deselect_all' as any) : 'select_all')}
+                    data-tooltip={`${t(finalFiles.length > 0 && finalFiles.every(f => selected.has(f.path)) ? ('deselect_all' as any) : 'select_all')}  Ctrl+A`}
                     data-tooltip-pos="right"
                 />
 

@@ -24,7 +24,7 @@ export const useGlobalShortcuts = (context: ActionContext, tabs: any[], activeTa
 
             // 0. Block standard browser shortcuts (Save, Print, Find Next, Refresh, etc.)
             // to prevent WebView2/Edge overrides in production.
-            if (e.ctrlKey && ['s', 'S', 'p', 'P', 'g', 'G', 'l', 'L', 'r', 'R'].includes(e.key)) {
+            if (e.ctrlKey && ['s', 'S', 'p', 'P', 'g', 'G', 'l', 'L', 'r', 'R', 'n', 'N', 'w', 'W'].includes(e.key)) {
                 e.preventDefault();
                 e.stopPropagation();
             }
@@ -127,11 +127,9 @@ export const useGlobalShortcuts = (context: ActionContext, tabs: any[], activeTa
             if (combo === 'Ctrl+=' || combo === 'Ctrl++' || combo === 'Ctrl+-') {
                 e.preventDefault();
                 e.stopPropagation();
-                // We need to look up the current font size from context
-                // but since it's inside contextRef, we can access it
-                const currentSize = (contextRef.current as any).settings?.fontSize || 16;
+                const currentSize = (contextRef.current as any).fontSize || 16;
                 const delta = (combo === 'Ctrl+=' || combo === 'Ctrl++') ? 1 : -1;
-                const setFontSize = (contextRef.current as any).settings?.setFontSize;
+                const setFontSize = (contextRef.current as any).setFontSize;
                 if (setFontSize) {
                     setFontSize(currentSize + delta);
                 }
