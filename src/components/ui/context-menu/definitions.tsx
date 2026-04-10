@@ -484,8 +484,8 @@ export function getMenuItems(ctx: MenuContext): MenuItem[] {
                 shortcut: 'Ctrl+X'
             });
             const copySubmenu: MenuItem[] = [
-                { id: 'copy_name', type: 'action', label: t('copy_name' as any), icon: Copy, action: () => actions.onCopyName() },
-                { id: 'copy_path', type: 'action', label: t('copy_path' as any), icon: Copy, action: () => actions.onCopyPath() }
+                { id: 'copy_name', type: 'action', label: t('copy_name' as any), icon: Copy, action: () => actions.onCopyName(), shortcut: 'Ctrl+Alt+C' },
+                { id: 'copy_path', type: 'action', label: t('copy_path' as any), icon: Copy, action: () => actions.onCopyPath(), shortcut: 'Ctrl+Shift+C' }
             ];
             items.push({
                 id: 'copy',
