@@ -52,7 +52,7 @@ export const de = {
     confirm_delete: 'Löschen bestätigen',
     scroll_to_top: 'Nach oben',
     minimize: 'Minimieren',
-    maximize: 'Maximieren/Wiederherstellen',
+    maximize: 'Maximieren',
     close: 'Schließen',
     reduce: 'Verkleinern',
     expand: 'Vergrößern',

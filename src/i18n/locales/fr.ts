@@ -52,7 +52,7 @@ export const fr = {
     confirm_delete: 'Confirmer la suppression des fichiers',
     scroll_to_top: 'Retour en haut',
     minimize: 'Réduire',
-    maximize: 'Agrandir/Restaurer',
+    maximize: 'Agrandir',
     close: 'Fermer',
     reduce: 'Réduire',
     expand: 'Agrandir',

@@ -52,7 +52,7 @@ export const it = {
     confirm_delete: 'Conferma eliminazione file',
     scroll_to_top: 'Torna su',
     minimize: 'Minimizza',
-    maximize: 'Massimizza/Ripristina',
+    maximize: 'Massimizza',
     close: 'Chiudi',
     reduce: 'Riduci',
     expand: 'Espandi',
