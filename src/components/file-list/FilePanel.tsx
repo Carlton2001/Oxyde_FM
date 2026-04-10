@@ -90,7 +90,6 @@ interface FilePanelProps {
     deletedDateFilter: Set<string> | null;
     setDeletedDateFilter: (val: Set<string> | null | ((prev: Set<string> | null) => Set<string> | null)) => void;
     clearAllFilters: () => void;
-    forwardPath?: string | null;
     draggedTab?: { id: string, panelId: PanelId } | null;
 }
 
@@ -107,7 +106,7 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
     groupByDate, onGroupByDateChange, isProtected, favorites: _favorites,
     extensionFilter, setExtensionFilter, sizeFilter, setSizeFilter, dateFilter, setDateFilter,
     nameFilter, setNameFilter, locationFilter, setLocationFilter,
-    deletedDateFilter, setDeletedDateFilter, clearAllFilters, forwardPath: _forwardPath,
+    deletedDateFilter, setDeletedDateFilter, clearAllFilters,
     draggedTab
 }) => {
     const { useSystemIcons: contextUseSystemIcons, searchLimit, showGridThumbnails, notify, showNetwork, showCheckboxes } = useApp();
@@ -578,6 +577,12 @@ export const FilePanel: React.FC<FilePanelProps> = React.memo(({
             setFilterMenuAnchor({ x: e.clientX, y: e.clientY });
         }
     }, [availableExtensions.length]);
+
+    useEffect(() => {
+        if (isActive && scrollHandleRef.current) {
+            scrollHandleRef.current.focus();
+        }
+    }, [isActive]);
 
     return (
         <div

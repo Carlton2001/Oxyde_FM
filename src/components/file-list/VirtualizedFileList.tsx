@@ -12,7 +12,7 @@ import { RenameInput } from './RenameInput';
 import { getFileTypeString } from '../../utils/format';
 import { getColumnMode, getVisibleColumns } from '../../config/columnDefinitions';
 import { getDateCategoryForFile, DATE_CATEGORIES, DateCategoryKey } from './DateFilterMenu';
-import { getParent } from '../../utils/path';
+
 
 // --- Error Boundary for the virtualized list ---
 class ErrorBoundary extends React.Component<{ children: React.ReactNode; fallback: React.ReactNode }, { hasError: boolean }> {
@@ -70,6 +70,7 @@ interface VirtualizedFileListProps {
 
 export interface VirtualizedFileListHandle {
     scrollToTop: () => void;
+    focus: () => void;
 }
 
 // Shared props passed to row/cell components via rowProps/cellProps
@@ -681,23 +682,27 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
 
         switch (e.key) {
             case 'ArrowDown':
-                e.preventDefault();
-                if (currentIndex === -1) selectIndex(0);
-                else if (currentIndex + colCount < files.length) selectIndex(currentIndex + colCount);
+                if (!e.altKey && !e.ctrlKey) {
+                    e.preventDefault();
+                    if (currentIndex === -1) selectIndex(0);
+                    else if (currentIndex + colCount < files.length) selectIndex(currentIndex + colCount);
+                }
                 break;
             case 'ArrowUp':
-                e.preventDefault();
-                if (currentIndex === -1) selectIndex(files.length - 1);
-                else if (currentIndex - colCount >= 0) selectIndex(currentIndex - colCount);
+                if (!e.altKey && !e.ctrlKey) {
+                    e.preventDefault();
+                    if (currentIndex === -1) selectIndex(files.length - 1);
+                    else if (currentIndex - colCount >= 0) selectIndex(currentIndex - colCount);
+                }
                 break;
             case 'ArrowRight':
-                if (viewMode === 'grid') {
+                if (viewMode === 'grid' && !e.altKey && !e.ctrlKey) {
                     e.preventDefault();
                     if (currentIndex < files.length - 1) selectIndex(currentIndex + 1);
                 }
                 break;
             case 'ArrowLeft':
-                if (viewMode === 'grid') {
+                if (viewMode === 'grid' && !e.altKey && !e.ctrlKey) {
                     e.preventDefault();
                     if (currentIndex > 0) selectIndex(currentIndex - 1);
                 }
@@ -711,13 +716,7 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
                     }
                 }
                 break;
-            case 'Backspace':
-                e.preventDefault();
-                if (currentPath && onNavigate) {
-                    const parentPath = getParent(currentPath);
-                    if (parentPath) onNavigate(parentPath);
-                }
-                break;
+
             case 'ContextMenu':
             case 'Apps':
                 e.preventDefault();
@@ -786,6 +785,11 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
             const gridEl = gridRef.current?.element;
             if (gridEl) gridEl.scrollTop = 0;
             if (scrollContainerRef.current) scrollContainerRef.current.scrollTop = 0;
+        },
+        focus: () => {
+            if (scrollContainerRef.current) {
+                scrollContainerRef.current.focus();
+            }
         }
     }));
 
@@ -921,6 +925,7 @@ export const VirtualizedFileList = React.forwardRef<VirtualizedFileListHandle, V
 
     return (
         <div
+            ref={scrollContainerRef}
             onKeyDown={handleKeyDown}
             tabIndex={0}
             style={{ width: '100%', height: '100%', overflowX: 'auto', overflowY: 'hidden', outline: 'none' }}

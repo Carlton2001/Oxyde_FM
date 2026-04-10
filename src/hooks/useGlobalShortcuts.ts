@@ -3,6 +3,7 @@ import { useKeybindings } from '../context/KeybindingContext';
 import { invoke } from '@tauri-apps/api/core';
 import { actionService } from '../services/ActionService';
 import { ActionContext } from '../types/actions';
+import { getParent } from '../utils/path';
 
 export const useGlobalShortcuts = (context: ActionContext, tabs: any[], activeTabId: string, handleTabSwitch: (id: string) => void) => {
     const { getActionId } = useKeybindings();
@@ -31,7 +32,7 @@ export const useGlobalShortcuts = (context: ActionContext, tabs: any[], activeTa
                 e.stopPropagation();
                 blockedBrowserDefault = true;
             }
-            if (e.key === 'F5' || e.key === 'F3' || e.key === 'F7') {
+            if ((e.key === 'F5' || e.key === 'F3' || e.key === 'F7' || (e.key === 'Backspace' && !isInput)) && !e.ctrlKey && !e.altKey && !e.shiftKey) {
                 e.preventDefault();
                 e.stopPropagation();
                 blockedBrowserDefault = true;
@@ -125,6 +126,23 @@ export const useGlobalShortcuts = (context: ActionContext, tabs: any[], activeTa
                 e.stopPropagation();
                 if (contextRef.current.refreshBothPanels) {
                     contextRef.current.refreshBothPanels();
+                }
+                return;
+            }
+
+            if (combo === 'Backspace' || combo === 'Alt+ArrowUp') {
+                e.preventDefault();
+                e.stopPropagation();
+                const pan = (contextRef.current as any).activePanel;
+                if (pan) {
+                    if (combo === 'Backspace' && pan.historyIndex > 0) {
+                        pan.goBack();
+                    } else {
+                        const parent = getParent(pan.path);
+                        if (parent && parent !== pan.path) {
+                            pan.navigate(parent);
+                        }
+                    }
                 }
                 return;
             }
