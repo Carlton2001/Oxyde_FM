@@ -27,6 +27,14 @@ jobs:
       - name: install Rust stable
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Extract Version
+        shell: pwsh
+        run: |
+          $Config = Get-Content src-tauri/tauri.conf.json | ConvertFrom-Json
+          $Version = $Config.version
+          echo "APP_VERSION=$Version" >> $GITHUB_ENV
+          echo "Version found: $Version"
+
       - name: install frontend dependencies
         run: npm ci
 
@@ -39,9 +47,9 @@ jobs:
           TAURI_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          tagName: v__VERSION__ # tauri-action will replace this with the version from tauri.conf.json
-          releaseName: "Oxyde FM v__VERSION__"
-          releaseBody: "Consultez le README pour la liste des changements."
+          tagName: v${{ env.APP_VERSION }}
+          releaseName: "Oxyde FM v${{ env.APP_VERSION }}"
+          releaseBody: "Consultez le CHANGELOG pour la liste des changements."
           releaseDraft: true
           prerelease: false
           includeUpdaterJson: true
@@ -49,24 +57,38 @@ jobs:
       - name: Create Portable Version
         shell: pwsh
         run: |
-          $Config = Get-Content src-tauri/tauri.conf.json | ConvertFrom-Json
-          $Version = $Config.version
+          $Version = "${{ env.APP_VERSION }}"
           $OutputFolder = "Oxyde_FM_v$($Version)_Portable"
           New-Item -ItemType Directory -Path $OutputFolder
-          New-Item -ItemType Directory -Path "$OutputFolder/data"
+          
+          # Create full data structure for portable mode
+          $DataFolder = "$OutputFolder/data"
+          New-Item -ItemType Directory -Path "$DataFolder/config"
+          New-Item -ItemType Directory -Path "$DataFolder/cache"
+          New-Item -ItemType Directory -Path "$DataFolder/webview"
+          
+          # Add .gitkeep to ensure empty folders are zipped
+          New-Item -Path "$DataFolder/config/.gitkeep" -ItemType File -Force
+          New-Item -Path "$DataFolder/cache/.gitkeep" -ItemType File -Force
+          New-Item -Path "$DataFolder/webview/.gitkeep" -ItemType File -Force
+          New-Item -Path "$DataFolder/portable.txt" -ItemType File -Value "Oxyde Portable Mode Active" -Force
           
           # Copy binary and metadata
           # In Tauri v2, the binary in target/release follows the Cargo.toml name (oxyde-fm.exe)
           Copy-Item "src-tauri/target/release/oxyde-fm.exe" -Destination "$OutputFolder/Oxyde_FM.exe"
           Copy-Item "README.md" -Destination "$OutputFolder/"
+          Copy-Item "CHANGELOG.md" -Destination "$OutputFolder/" -ErrorAction SilentlyContinue
+          Copy-Item ".idea/changelog.md" -Destination "$OutputFolder/" -ErrorAction SilentlyContinue
           
           # Create ZIP
-          Compress-Archive -Path "$OutputFolder/*" -DestinationPath "Oxyde_FM_v$($Version)_Portable.zip"
+          Compress-Archive -Path "$OutputFolder" -DestinationPath "Oxyde_FM_v$($Version)_Portable.zip"
 
-      - name: Upload Portable ZIP to Release
+      - name: Upload Portable ZIP to Same Release
         uses: softprops/action-gh-release@v1
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: Oxyde_FM_v*_Portable.zip
+          tag_name: v${{ env.APP_VERSION }}
+          draft: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
