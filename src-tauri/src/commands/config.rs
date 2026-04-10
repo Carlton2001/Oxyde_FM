@@ -35,6 +35,7 @@ pub fn set_config_value(
         "confirm_delete" => config.confirm_delete = value.parse().unwrap_or(true),
         "sync_sidebar_with_path" => config.sync_sidebar_with_path = value.parse().unwrap_or(true),
         "first_launch" => config.first_launch = value.parse().unwrap_or(true),
+        "last_notified_update" => config.last_notified_update = value,
         _ => return Err(CommandError::Other(format!("Unknown config key: {}", key))),
     }
 

@@ -7,6 +7,7 @@ pub mod path_security;
 pub mod archive;
 pub mod thumbnails;
 pub mod hardware;
+pub mod paths;
 
 use unicode_normalization::UnicodeNormalization;
 

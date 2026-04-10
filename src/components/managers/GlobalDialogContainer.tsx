@@ -46,16 +46,31 @@ const InlineAboutDialog: React.FC<{ onClose: () => void, t: any, theme: string, 
                 setUpdateAvailable(true);
                 setUpdateStatus('available');
 
-                const confirmed = await confirm(
-                    t('update_confirm_msg'),
-                    t('update_confirm_title'),
-                    false, // isDanger
-                    t('install'), // confirmLabel
-                );
+                const isPortable = await invoke<boolean>('is_portable');
 
-                if (confirmed) {
-                    await update.downloadAndInstall();
-                    await relaunch();
+                if (isPortable) {
+                    const confirmed = await confirm(
+                        t('update_portable_msg'),
+                        t('update_confirm_title'),
+                        false,
+                        t('download_zip'),
+                    );
+
+                    if (confirmed) {
+                        openUrl('https://github.com/Carlton2001/Oxyde_FM/releases');
+                    }
+                } else {
+                    const confirmed = await confirm(
+                        t('update_confirm_msg'),
+                        t('update_confirm_title'),
+                        false,
+                        t('install'),
+                    );
+
+                    if (confirmed) {
+                        await update.downloadAndInstall();
+                        await relaunch();
+                    }
                 }
             } else {
                 setUpdateAvailable(false);

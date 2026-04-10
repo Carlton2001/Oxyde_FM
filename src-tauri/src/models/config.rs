@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::sync::Mutex;
-use tauri::{AppHandle, Manager};
+use tauri::AppHandle;
 #[cfg(target_os = "windows")]
 use windows::Win32::System::Registry::{RegOpenKeyExW, RegQueryValueExW, HKEY_CURRENT_USER, KEY_READ};
 #[cfg(target_os = "windows")]
@@ -55,6 +55,8 @@ pub struct AppConfig {
     pub sync_sidebar_with_path: bool,
     #[serde(default = "default_true")]
     pub first_launch: bool,
+    #[serde(default)]
+    pub last_notified_update: String,
 }
 
 fn default_true() -> bool { true }
@@ -131,6 +133,7 @@ impl Default for AppConfig {
             confirm_delete: true,
             sync_sidebar_with_path: true,
             first_launch: true,
+            last_notified_update: String::new(),
         }
     }
 }
@@ -154,7 +157,7 @@ impl ConfigManager {
     }
 
     pub fn save_config(&self, app_handle: &AppHandle, config: &AppConfig) -> Result<(), CommandError> {
-        let config_dir = app_handle.path().app_config_dir().map_err(|e| CommandError::IoError(e.to_string()))?;
+        let config_dir = crate::utils::paths::get_config_dir(app_handle);
         
         if !config_dir.exists() {
             fs::create_dir_all(&config_dir).map_err(|e| CommandError::IoError(e.to_string()))?;
@@ -168,7 +171,7 @@ impl ConfigManager {
     }
 
     pub fn load(&self, app_handle: &AppHandle) -> Result<(), CommandError> {
-        let config_dir = app_handle.path().app_config_dir().map_err(|e| CommandError::IoError(e.to_string()))?;
+        let config_dir = crate::utils::paths::get_config_dir(app_handle);
         let config_path = config_dir.join("config.json");
 
         if config_path.exists() {

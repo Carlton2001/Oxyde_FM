@@ -20,6 +20,7 @@ export interface AppConfig {
     confirm_delete: boolean;
     sync_sidebar_with_path: boolean;
     first_launch: boolean;
+    last_notified_update: string;
 }
 
 export const useRustConfig = () => {

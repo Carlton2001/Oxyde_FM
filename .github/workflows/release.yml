@@ -45,3 +45,27 @@ jobs:
           releaseDraft: true
           prerelease: false
           includeUpdaterJson: true
+
+      - name: Create Portable Version
+        shell: pwsh
+        run: |
+          $Config = Get-Content src-tauri/tauri.conf.json | ConvertFrom-Json
+          $Version = $Config.version
+          $OutputFolder = "Oxyde_FM_v$($Version)_Portable"
+          New-Item -ItemType Directory -Path $OutputFolder
+          New-Item -ItemType Directory -Path "$OutputFolder/data"
+          
+          # Copy binary and metadata
+          Copy-Item "src-tauri/target/release/Oxyde_FM.exe" -Destination "$OutputFolder/"
+          Copy-Item "README.md" -Destination "$OutputFolder/"
+          
+          # Create ZIP
+          Compress-Archive -Path "$OutputFolder/*" -DestinationPath "Oxyde_FM_v$($Version)_Portable.zip"
+
+      - name: Upload Portable ZIP to Release
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: Oxyde_FM_v*_Portable.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

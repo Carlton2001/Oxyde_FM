@@ -14,7 +14,7 @@ use windows::Win32::Graphics::Gdi::{
     GetObjectW, BITMAP
 };
 use crate::models::CommandError;
-use tauri::{AppHandle, Manager};
+use tauri::AppHandle;
 use std::collections::HashMap;
 use std::sync::Mutex;
 use once_cell::sync::Lazy;
@@ -32,7 +32,7 @@ pub fn purge_icon_cache() {
 
 #[tauri::command]
 pub fn get_file_icon(app: AppHandle, path: String, size: String) -> Result<Vec<u8>, CommandError> {
-    let cache_dir = app.path().app_cache_dir().ok().map(|p| p.join("icons"));
+    let cache_dir = Some(crate::utils::paths::get_cache_dir(&app).join("icons"));
     
     // Virtual path logic (copying the folder "C:\Windows" spirit)
     let (real_path, use_attributes) = if let Some(ext) = path.strip_prefix("oxyde_ext_") {

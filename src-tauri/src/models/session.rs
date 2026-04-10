@@ -6,7 +6,7 @@ use std::sync::Mutex;
 
 use notify::{Config, Event, RecommendedWatcher, RecursiveMode, Watcher};
 use std::sync::Arc;
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter};
 use std::fs;
 use crate::models::file_entry::FileEntry;
 use crate::models::CommandError;
@@ -369,7 +369,6 @@ impl SessionState {
 impl Default for SessionState {
     fn default() -> Self {
         let left_id = "left".to_string();
-        let right_id = "right".to_string();
 
         let left_panel = PanelState {
             tabs: vec![Tab {
@@ -385,29 +384,7 @@ impl Default for SessionState {
             cached_results: None,
         };
 
-        let right_panel = PanelState {
-            tabs: vec![Tab {
-                id: "default-right".to_string(),
-                path: PathBuf::from("C:\\"),
-                version: 0,
-            }],
-            active_tab_id: "default-right".to_string(),
-            watcher: None,
-            watched_path: None,
-            search_context: None,
-            sort_config: SortConfig::default(),
-            cached_results: None,
-        };
-
-        let root = LayoutNode::Split {
-            id: "root-split".to_string(),
-            axis: LayoutAxis::Horizontal,
-            children: vec![
-                LayoutNode::Pane { id: left_id.clone(), state: left_panel },
-                LayoutNode::Pane { id: right_id, state: right_panel },
-            ],
-            weights: vec![1.0, 1.0],
-        };
+        let root = LayoutNode::Pane { id: left_id.clone(), state: left_panel };
 
         SessionState {
             root,
@@ -427,7 +404,7 @@ impl Default for SessionManager {
 impl SessionManager {
     pub fn save(&self, app_handle: &AppHandle) -> Result<(), CommandError> {
         let session = self.0.lock().map_err(|_| CommandError::SystemError("Failed to lock session state".to_string()))?;
-        let config_dir = app_handle.path().app_local_data_dir().map_err(|e: tauri::Error| CommandError::IoError(e.to_string()))?;
+        let config_dir = crate::utils::paths::get_local_data_dir(app_handle);
         
         if !config_dir.exists() {
             fs::create_dir_all(&config_dir).map_err(|e| CommandError::IoError(e.to_string()))?;
@@ -441,7 +418,7 @@ impl SessionManager {
     }
 
     pub fn load(&self, app_handle: &AppHandle) -> Result<(), CommandError> {
-        let config_dir = app_handle.path().app_local_data_dir().map_err(|e: tauri::Error| CommandError::IoError(e.to_string()))?;
+        let config_dir = crate::utils::paths::get_local_data_dir(app_handle);
         let session_path = config_dir.join("session.json");
 
         if session_path.exists() {

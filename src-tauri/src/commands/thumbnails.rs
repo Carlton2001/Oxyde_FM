@@ -1,4 +1,4 @@
-use tauri::{AppHandle, Manager};
+use tauri::AppHandle;
 use crate::models::{Result, CommandError};
 use crate::utils::thumbnails::get_thumbnail_cached;
 
@@ -8,9 +8,7 @@ pub async fn get_image_thumbnail(
     path: String,
 ) -> Result<String> {
     // Get the app's cache directory
-    let cache_dir = app.path().app_cache_dir()
-        .map_err(|e| CommandError::IoError(e.to_string()))?
-        .join("thumbnails");
+    let cache_dir = crate::utils::paths::get_cache_dir(&app).join("thumbnails");
 
     // Offload CPU intensive resizing to a dedicated thread pool to keep the async bridge responsive
     tokio::task::spawn_blocking(move || {
@@ -24,9 +22,7 @@ pub async fn get_office_thumbnail(
     path: String,
 ) -> Result<String> {
     // Get the app's cache directory
-    let cache_dir = app.path().app_cache_dir()
-        .map_err(|e| CommandError::IoError(e.to_string()))?
-        .join("thumbnails");
+    let cache_dir = crate::utils::paths::get_cache_dir(&app).join("thumbnails");
 
     tokio::task::spawn_blocking(move || {
         crate::utils::thumbnails::get_office_thumbnail_cached(path, cache_dir)

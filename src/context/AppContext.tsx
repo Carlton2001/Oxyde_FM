@@ -30,6 +30,8 @@ export interface AppContextValue {
         space_enabled: boolean;
         activation_shortcut: string | null;
     } | null;
+    lastNotifiedUpdate: string;
+    setConfigValue: (key: any, value: any) => Promise<void>;
 
     // Setters
     setTheme: (theme: Theme) => void;
@@ -132,6 +134,7 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
     const confirmDelete = config?.confirm_delete ?? (localStorage.getItem('fm_confirmDelete') === 'true' || (localStorage.getItem('fm_confirmDelete') === null && defaults.confirmDelete));
     const syncSidebarWithPath = config?.sync_sidebar_with_path ?? (localStorage.getItem('fm_syncSidebarWithPath') === 'true' || (localStorage.getItem('fm_syncSidebarWithPath') === null && defaults.syncSidebarWithPath));
     const firstLaunch = config?.first_launch ?? (localStorage.getItem('fm_first_launch') !== 'false');
+    const lastNotifiedUpdate = config?.last_notified_update ?? '';
     const [updateAvailable, setUpdateAvailable] = React.useState(false);
     const [isTrashEmpty, setIsTrashEmpty] = React.useState(true);
     const [peekStatus, setPeekStatus] = React.useState<AppContextValue['peekStatus']>(null);
@@ -348,6 +351,8 @@ export const AppProvider: React.FC<AppProviderProps> = ({ children }) => {
         setUpdateAvailable,
         firstLaunch,
         setFirstLaunch,
+        lastNotifiedUpdate,
+        setConfigValue, // Adding setConfigValue to the context!
         peekStatus,
         isTrashEmpty,
         refreshTrashStatus,

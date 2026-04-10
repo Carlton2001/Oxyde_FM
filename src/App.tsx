@@ -66,7 +66,8 @@ function App() {
     setUpdateAvailable, peekStatus, confirmDelete,
     supportedFormats,
     isTrashEmpty, refreshTrashStatus, driveTrashConfigs,
-    fontSize, setFontSize
+    fontSize, setFontSize,
+    lastNotifiedUpdate, setConfigValue // Accessing new context values
   } = useApp();
   const { registerKeybinding } = useKeybindings();
 
@@ -424,8 +425,15 @@ function App() {
       try {
         const update = await check();
         if (update?.available) {
+          const isPortable = await invoke<boolean>('is_portable');
           setUpdateAvailable(true);
-          notify(t('update_available_notif' as any), 'info', 0);
+          
+          // Only notify automatically if NOT in portable mode AND version is new
+          if (!isPortable && update.version !== lastNotifiedUpdate) {
+            notify(t('update_available_notif' as any), 'info', 0);
+            // Record that we've notified for this specific version
+            setConfigValue('last_notified_update', update.version);
+          }
         }
       } catch (e) {
         console.error("Lazy update check failed", e);

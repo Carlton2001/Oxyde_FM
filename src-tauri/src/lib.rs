@@ -153,6 +153,7 @@ pub fn run() {
             commands::system::clear_app_cache,
             commands::system::restart_app,
             commands::system::app_ready,
+            commands::system::is_portable,
             commands::io::set_shortcut_info,
 
             commands::icons::get_file_icon,

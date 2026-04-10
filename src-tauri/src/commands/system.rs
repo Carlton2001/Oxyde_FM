@@ -7,6 +7,11 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use std::path::PathBuf;
 
 #[tauri::command]
+pub fn is_portable() -> bool {
+    crate::utils::paths::is_portable()
+}
+
+#[tauri::command]
 pub fn app_ready(app: AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
