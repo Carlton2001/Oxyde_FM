@@ -435,6 +435,7 @@ export const COPY_PATH_ACTION: ActionDefinition = {
 export const COPY_NAME_ACTION: ActionDefinition = {
     id: 'file.copy_name',
     label: 'copy_name',
+    shortcut: 'Ctrl+Alt+C',
     handler: async (ctx: ActionContext) => {
         const selection = Array.from(ctx.activePanel.selected);
         if (selection.length > 0) {

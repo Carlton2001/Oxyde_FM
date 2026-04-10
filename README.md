@@ -91,6 +91,7 @@ Oxyde is designed with some keyboard workflow. Here are the most common shortcut
 ### File Operations
 *   **Ctrl + C / X / V**: Standard Copy, Cut, and Paste.
 *   **Ctrl + Shift + C**: Copy the full path of selected items.
+*   **Ctrl + Alt + C**: Copy only the names of selected items.
 *   **Ctrl + Shift + N**: Create a new folder.
 *   **Delete**: Move selected items to the Trash.
 *   **Shift + Delete**: Permanently delete items (bypassing the Trash).
