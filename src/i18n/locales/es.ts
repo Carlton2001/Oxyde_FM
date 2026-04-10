@@ -480,6 +480,8 @@ export const es = {
     checking_updates: 'Buscando actualizaciones...',
     install: 'Instalar y reiniciar',
     up_to_date: 'Oxyde está actualizado.',
+    update_portable_msg: 'Oxyde está en modo portátil. Las actualizaciones automáticas no están disponibles para evitar sobrescribir sus datos. Descargue la última versión (ZIP) de GitHub y extraiga su contenido en esta carpeta para actualizar.',
+    download_zip: 'Descargar ZIP',
     github_repo: 'Repositorio GitHub',
     credits: 'Créditos',
     licensed_under: 'Bajo licencia',

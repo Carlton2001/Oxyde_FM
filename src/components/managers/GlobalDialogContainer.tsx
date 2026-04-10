@@ -1,4 +1,5 @@
 import React, { useRef } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 import '../../styles/components/AboutDialog.css';
 import { useDialogs } from '../../context/DialogContext';
 import { useApp } from '../../context/AppContext';
