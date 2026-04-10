@@ -56,7 +56,8 @@ jobs:
           New-Item -ItemType Directory -Path "$OutputFolder/data"
           
           # Copy binary and metadata
-          Copy-Item "src-tauri/target/release/Oxyde_FM.exe" -Destination "$OutputFolder/"
+          # In Tauri v2, the binary in target/release follows the Cargo.toml name (oxyde-fm.exe)
+          Copy-Item "src-tauri/target/release/oxyde-fm.exe" -Destination "$OutputFolder/Oxyde_FM.exe"
           Copy-Item "README.md" -Destination "$OutputFolder/"
           
           # Create ZIP
