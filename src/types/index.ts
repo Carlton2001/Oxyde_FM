@@ -134,6 +134,8 @@ export interface FileProperties {
     path: string;
     parent: string;
     is_dir: boolean;
+    is_symlink?: boolean;
+    is_junction?: boolean;
     size: number;
     is_calculated: boolean;
     created: number;

@@ -31,7 +31,7 @@ export const CLOSE_TAB_ACTION: ActionDefinition = {
     isVisible: () => true,
     handler: async (ctx) => {
         if (typeof ctx.closeTab === 'function' && ctx.activeTabId) {
-            ctx.closeTab(ctx.activeTabId, ctx.activePanelId);
+            ctx.closeTab(ctx.activeTabId);
         }
     }
 };

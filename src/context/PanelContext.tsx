@@ -252,27 +252,35 @@ export const PanelProvider: React.FC<{ children: ReactNode }> = ({ children }) =
                 const normRust = normalizePath(activeTab.path);
                 if (tabSwitched) {
                     const saved = tabHistoriesRef.current[id as PanelId]!.get(activeTabId);
+                    const currentVersion = activeTab.version || 0;
+
                     if (saved) {
-                        panel.setNavigationState({
-                            path: normRust,
-                            history: saved.history,
-                            historyIndex: saved.historyIndex,
-                            version: saved.version
-                        });
+                        // Only update if actually different to break loops
+                        if (panel.path !== normRust || panel.version !== saved.version) {
+                            panel.setNavigationState({
+                                path: normRust,
+                                history: saved.history,
+                                historyIndex: saved.historyIndex,
+                                version: saved.version
+                            });
+                        }
                     } else {
-                        panel.setNavigationState({
-                            path: normRust,
-                            history: [{ path: normRust, timestamp: Date.now() }],
-                            historyIndex: 0,
-                            version: activeTab.version || 0
-                        });
+                        // Only update if actually different
+                        if (panel.path !== normRust || panel.version !== currentVersion) {
+                            panel.setNavigationState({
+                                path: normRust,
+                                history: [{ path: normRust, timestamp: Date.now() }],
+                                historyIndex: 0,
+                                version: currentVersion
+                            });
+                        }
                     }
                     // Restore the incoming tab's view config (if previously visited or just migrated)
                     const savedConfig = tabConfigsRef.current[id as PanelId]!.get(activeTabId);
                     if (savedConfig) {
-                        panel.setViewMode(savedConfig.viewMode);
-                        panel.setSortConfig(savedConfig.sortConfig);
-                        panel.setGroupByDate(savedConfig.groupByDate);
+                        if (panel.viewMode !== savedConfig.viewMode) panel.setViewMode(savedConfig.viewMode);
+                        if (JSON.stringify(panel.sortConfig) !== JSON.stringify(savedConfig.sortConfig)) panel.setSortConfig(savedConfig.sortConfig);
+                        if (panel.groupByDate !== savedConfig.groupByDate) panel.setGroupByDate(savedConfig.groupByDate);
                     }
                     
                     // Once restored, the tab is no longer "new" to this panel

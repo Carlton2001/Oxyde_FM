@@ -55,6 +55,7 @@ import { Tooltip } from './components/ui/Tooltip';
 import { getTabIcon, getTabLabel } from './components/ui/Tabs';
 import { DirectoryTreeHandle } from './components/ui/DirectoryTree';
 import { DriveInfo } from './types';
+import { preWarmIcons } from './components/ui/AsyncFileIcon';
 
 function App() {
   const {
@@ -142,8 +143,14 @@ function App() {
   useEffect(() => {
     // Signal that the app is ready and should be shown
     const timer = setTimeout(() => {
-      invoke('app_ready').catch(console.error);
-    }, 50); // Minimal delay to ensure styles and fonts are well applied
+      invoke('app_ready')
+        .then(() => {
+          // Pre-warm generic icons only after backend is fully ready and window is shown
+          // This avoids Vite HMR cancelling the early invoke callbacks at startup
+          preWarmIcons();
+        })
+        .catch(console.error);
+    }, 100); // Minimal delay to ensure styles and fonts are well applied
     return () => clearTimeout(timer);
   }, []);
 
@@ -611,8 +618,10 @@ function App() {
           onSelectAll={contextMenu.isInputContext ? handleInputSelectAll : () => {
             const pan = panels[activePanelId];
               if (pan) {
-                const filesToSelect = (pan.searchResults || pan.files).map(f => f.path);
-                pan.selectMultiple(filesToSelect, false);
+                const filesToSelect = (pan.searchResults || pan.files).map((f: any) => f.path);
+                if (pan.selectMultiple) {
+                  pan.selectMultiple(filesToSelect, false);
+                }
               }
               setContextMenu(null);
           }}

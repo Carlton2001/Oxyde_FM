@@ -166,6 +166,8 @@ export const es = {
     select_all: 'Seleccionar todo',
     deselect_all: 'Deseleccionar todo',
     file_type: 'Archivo {ext}',
+    symlink: 'Enlace simbólico',
+    junction: 'Unión (Junction)',
     group_by_date: 'Agrupar por fecha',
 
     // --- Header / Columns ---

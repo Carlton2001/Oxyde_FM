@@ -91,8 +91,8 @@ export const PropertiesDialog: React.FC<PropertiesDialogProps> = ({ paths, initi
         }
     };
 
-    const getIcon = (name: string, isDir: boolean, path?: string) => {
-        return getFileIcon(name, isDir, { size: 48, strokeWidth: 1 }, useSystemIcons, path);
+    const getIcon = (name: string, isDir: boolean, path?: string, isSymlink?: boolean, isJunction?: boolean) => {
+        return getFileIcon(name, isDir, { size: 48, strokeWidth: 1 }, useSystemIcons, path, false, false, isSymlink, isJunction);
     };
 
     const handleOk = async () => {
@@ -173,7 +173,7 @@ export const PropertiesDialog: React.FC<PropertiesDialogProps> = ({ paths, initi
                                     <div className="dialog-grid">
                                         <div className="dialog-main-info" style={{ gridColumn: '1 / -1' }}>
                                             <div className="dialog-icon-large">
-                                                {isSingle ? getIcon(properties!.name, properties!.is_dir, properties!.path) : <Folder size={48} strokeWidth={1} />}
+                                                {isSingle ? getIcon(properties!.name, properties!.is_dir, properties!.path, properties!.is_symlink, properties!.is_junction) : <Folder size={48} strokeWidth={1} />}
                                             </div>
                                             <div className="dialog-name-input">
                                                 {isSingle ? (() => {
@@ -211,33 +211,33 @@ export const PropertiesDialog: React.FC<PropertiesDialogProps> = ({ paths, initi
                                                                     default: return t('disk_drive' as any);
                                                                 }
                                                             })()
-                                                            : getFileTypeString(properties as any, t))}
+                                                            : (getFileTypeString(properties as any, t) || '—'))}
                                                 </div>
 
                                                 {properties!.is_media_device ? (
                                                     <>
                                                         <div className="dialog-label">{t('manufacturer' as any)}</div>
-                                                        <div className="dialog-value">{properties!.manufacturer || '-'}</div>
+                                                        <div className="dialog-value">{properties!.manufacturer || '—'}</div>
 
                                                         <div className="dialog-label">{t('model' as any)}</div>
-                                                        <div className="dialog-value">{properties!.model_name || '-'}</div>
+                                                        <div className="dialog-value">{properties!.model_name || '—'}</div>
 
                                                         <div className="dialog-label">{t('model_number' as any)}</div>
-                                                        <div className="dialog-value">{properties!.model_number || '-'}</div>
+                                                        <div className="dialog-value">{properties!.model_number || '—'}</div>
 
                                                         <div className="dialog-divider-row" />
 
                                                         <div className="dialog-label">{t('serial_number' as any)}</div>
-                                                        <div className="dialog-value">{properties!.serial_number || '-'}</div>
+                                                        <div className="dialog-value">{properties!.serial_number || '—'}</div>
 
                                                         <div className="dialog-label">{t('mac_address' as any)}</div>
-                                                        <div className="dialog-value">{properties!.mac_address || '-'}</div>
+                                                        <div className="dialog-value">{properties!.mac_address || '—'}</div>
 
                                                         <div className="dialog-label">{t('unique_id' as any)}</div>
-                                                        <div className="dialog-value" style={{ wordBreak: 'break-all', fontSize: '0.65rem' }}>{properties!.unique_id || '-'}</div>
+                                                        <div className="dialog-value" style={{ wordBreak: 'break-all', fontSize: '0.65rem' }}>{properties!.unique_id || '—'}</div>
 
                                                         <div className="dialog-label">{t('ip_address' as any)}</div>
-                                                        <div className="dialog-value">{properties!.ip_address || '-'}</div>
+                                                        <div className="dialog-value">{properties!.ip_address || '—'}</div>
 
                                                         {properties!.debug_props && properties!.debug_props.length > 0 && (
                                                             <>
@@ -281,7 +281,7 @@ export const PropertiesDialog: React.FC<PropertiesDialogProps> = ({ paths, initi
                                                 )}
                                                 {properties!.deleted_time && (
                                                     <div className="dialog-value">
-                                                        {formatDate(properties!.deleted_time, dateFormat, '-')}
+                                                        {formatDate(properties!.deleted_time, dateFormat, '—')}
                                                     </div>
                                                 )}
 
@@ -345,9 +345,12 @@ export const PropertiesDialog: React.FC<PropertiesDialogProps> = ({ paths, initi
                                                                     calcLoading ? (
                                                                         <span className="calc-status">{t('calculating' as any)}</span>
                                                                     ) : (
-                                                                         <button className="dialog-btn xsmall" onClick={handleCalculate}>
-                                                                            <ChartBarBig size={12} className="dialog-btn-icon" /> {t('calculate_size' as any)}
-                                                                        </button>
+                                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                                            <span className="dimmed-placeholder">—</span>
+                                                                            <button className="dialog-btn xsmall" onClick={handleCalculate} title={t('calculate_size' as any)}>
+                                                                                <ChartBarBig size={12} />
+                                                                            </button>
+                                                                        </div>
                                                                     )
                                                                 )
                                                             ) : (
@@ -376,13 +379,13 @@ export const PropertiesDialog: React.FC<PropertiesDialogProps> = ({ paths, initi
                                                         <div className="dialog-divider-row" style={{ gridColumn: '1 / -1', margin: '0.5rem 0' }} />
 
                                                         <div className="dialog-label">{t('created')}</div>
-                                                        <div className="dialog-value">{formatDate(properties!.created, dateFormat, '-')}</div>
+                                                        <div className="dialog-value">{formatDate(properties!.created, dateFormat, '—')}</div>
 
                                                         <div className="dialog-label">{t('modified')}</div>
-                                                        <div className="dialog-value">{formatDate(properties!.modified, dateFormat, '-')}</div>
+                                                        <div className="dialog-value">{formatDate(properties!.modified, dateFormat, '—')}</div>
 
                                                         <div className="dialog-label">{t('accessed')}</div>
-                                                        <div className="dialog-value">{formatDate(properties!.accessed, dateFormat, '-')}</div>
+                                                        <div className="dialog-value">{formatDate(properties!.accessed, dateFormat, '—')}</div>
                                                     </>
                                                 )}
                                             </>

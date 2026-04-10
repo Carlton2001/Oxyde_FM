@@ -160,6 +160,7 @@ pub enum LayoutAxis {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", content = "data")]
+#[allow(clippy::large_enum_variant)]
 pub enum LayoutNode {
     Pane {
         id: String,

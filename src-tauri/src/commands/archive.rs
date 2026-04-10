@@ -55,12 +55,10 @@ fn count_sources(sources: &[PathBuf]) -> (u64, usize) {
     let mut total_bytes: u64 = 0;
     let mut total_files: usize = 0;
     for p in sources {
-        for entry in walkdir::WalkDir::new(p) {
-            if let Ok(e) = entry {
-                if e.file_type().is_file() {
-                    total_bytes += e.metadata().map(|m| m.len()).unwrap_or(0);
-                    total_files += 1;
-                }
+        for e in walkdir::WalkDir::new(p).into_iter().flatten() {
+            if e.file_type().is_file() {
+                total_bytes += e.metadata().map(|m| m.len()).unwrap_or(0);
+                total_files += 1;
             }
         }
     }

@@ -68,8 +68,10 @@ export function useFileItemState(props: UseFileItemStateProps): FileItemState {
     const isProtected = !!entry.is_protected;
 
     const tooltipText = useMemo(() => {
-        const sizeText = entry.is_dir ? (entry.size > 0 ? formatSize(entry.size, 1, t) : t('folder')) : formatSize(entry.size, 1, t);
-        let text = `${entry.name}\n${t('type')}: ${getFileTypeString(entry, t)}\n${t('size')}: ${sizeText}\n${t('date')}: ${formatDate(entry.modified, dateFormat)}`;
+        const sizeText = entry.is_dir
+            ? (entry.is_calculated ? (entry.size > 0 ? formatSize(entry.size, 1, t) : t('empty_dir' as any) || 'Dossier vide') : '—')
+            : formatSize(entry.size, 1, t);
+        let text = `${entry.name}\n${t('type')}: ${getFileTypeString(entry, t) || '—'}\n${t('size')}: ${sizeText}\n${t('date')}: ${formatDate(entry.modified, dateFormat)}`;
         if (isProtected) {
             text += `\n[${t('protected_access') || 'Restricted Access'}]`;
         }

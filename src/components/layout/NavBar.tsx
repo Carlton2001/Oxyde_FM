@@ -104,7 +104,6 @@ export const NavBar: React.FC<NavBarProps> = ({
     const backMenuRef = useRef<HTMLDivElement>(null);
     const fwdMenuRef = useRef<HTMLDivElement>(null);
 
-
     useEffect(() => {
         if (!copyMenuOpen) return;
         const handleClose = (e: MouseEvent) => {
@@ -276,41 +275,41 @@ export const NavBar: React.FC<NavBarProps> = ({
                         <Trash2 className="icon-md" />
                     </button>
                 )}
-            </div>
 
-            {isTrashView && (
-                <div className="toolbar-actions trash-actions">
-                    <button
-                        className="btn-icon"
-                        onClick={onRestoreSelected}
-                        disabled={activePanel.selected.size === 0}
-                        data-tooltip={t('restore_selected' as any)}
-                        data-tooltip-pos="bottom"
-                    >
-                        <RotateCcw className="icon-md" />
-                    </button>
-                    <button
-                        className="btn-icon"
-                        onClick={onRestoreAll}
-                        disabled={isTrashEmpty}
-                        data-tooltip={t('restore_all' as any)}
-                        data-tooltip-pos="bottom"
-                    >
-                        <RotateCcw className="icon-md" />
-                        <span style={{ fontSize: '0.625rem', marginLeft: '2px' }}>{t('all' as any)}</span>
-                    </button>
-                    <button
-                        className="btn-icon danger"
-                        onClick={onEmptyTrash}
-                        disabled={isTrashEmpty}
-                        data-tooltip={t('empty_recycle_bin' as any)}
-                        data-tooltip-pos="bottom"
-                    >
-                        <Trash2 className="icon-md" />
-                        <span style={{ fontSize: '0.625rem', marginLeft: '2px' }}>{t('all' as any)}</span>
-                    </button>
-                </div>
-            )}
+                {isTrashView && (
+                    <div className="toolbar-actions trash-actions">
+                        <button
+                            className="btn-icon"
+                            onClick={onRestoreSelected}
+                            disabled={activePanel.selected.size === 0}
+                            data-tooltip={t('restore_selected' as any)}
+                            data-tooltip-pos="bottom"
+                        >
+                            <RotateCcw className="icon-md" />
+                        </button>
+                        <button
+                            className="btn-icon"
+                            onClick={onRestoreAll}
+                            disabled={isTrashEmpty}
+                            data-tooltip={t('restore_all' as any)}
+                            data-tooltip-pos="bottom"
+                        >
+                            <RotateCcw className="icon-md" />
+                            <span style={{ fontSize: '0.625rem', marginLeft: '2px' }}>{t('all' as any)}</span>
+                        </button>
+                        <button
+                            className="btn-icon danger"
+                            onClick={onEmptyTrash}
+                            disabled={isTrashEmpty}
+                            data-tooltip={t('empty_recycle_bin' as any)}
+                            data-tooltip-pos="bottom"
+                        >
+                            <Trash2 className="icon-md" />
+                            <span style={{ fontSize: '0.625rem', marginLeft: '2px' }}>{t('all' as any)}</span>
+                        </button>
+                    </div>
+                )}
+            </div>
 
 
             <div className="path-bar-container">

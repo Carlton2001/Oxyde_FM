@@ -564,10 +564,10 @@ export const SELECT_ALL_ACTION: ActionDefinition = {
     shortcut: 'Ctrl+A',
     isEnabled: (ctx: ActionContext) => ctx.activePanel && ctx.activePanel.files && ctx.activePanel.files.length > 0,
     handler: async (ctx: ActionContext) => {
-        const { activePanel } = ctx;
-        if (activePanel && activePanel.files && activePanel.selectMultiple) {
-            const allPaths = activePanel.files.map((f: any) => f.path);
-            activePanel.selectMultiple(allPaths, false);
+        const pan = ctx.activePanel as any;
+        if (pan && pan.files && pan.selectMultiple) {
+            const allPaths = pan.files.map((f: any) => f.path);
+            pan.selectMultiple(allPaths, false);
         }
     }
 };

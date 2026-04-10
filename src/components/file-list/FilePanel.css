@@ -369,6 +369,10 @@
     color: var(--icon-disk);
 }
 
+.file-icon.symlink {
+    color: var(--icon-code);
+}
+
 .system-icon-img {
     object-fit: contain;
     image-rendering: -webkit-optimize-contrast;

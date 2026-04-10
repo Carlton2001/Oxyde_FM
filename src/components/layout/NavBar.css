@@ -113,19 +113,15 @@
 
 .toolbar-actions {
     display: flex;
+    align-items: center;
     gap: 0.25rem;
     flex-shrink: 0;
-    overflow: hidden;
-    transition: max-width 200ms ease;
 }
 
-.toolbar-actions:empty {
-    max-width: 0;
-}
-
-
-.toolbar-actions>* {
-    animation: toolbar-btn-in 150ms ease-out both;
+.trash-actions-group {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
 }
 
 @keyframes toolbar-btn-in {

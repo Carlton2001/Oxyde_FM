@@ -10,6 +10,7 @@ import { FileEntry, SortField, DateFormat, ColumnMode } from '../types';
 import { formatSize, formatDate, getFileTypeString } from '../utils/format';
 import { getParent } from '../utils/path';
 import { TFunc } from '../i18n';
+import cx from 'classnames';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -112,9 +113,10 @@ export const COLUMNS: ColumnDef[] = [
         cellClass: 'file-info col-type',
         visibleIn: ['normal', 'search', 'trash', 'network'],
         renderCell: (entry, ctx) => {
-            return React.createElement('span', { className: 'text-truncate' }, getFileTypeString(entry, ctx.t));
+            const type = getFileTypeString(entry, ctx.t);
+            return React.createElement('span', { className: cx('text-truncate', { 'dimmed-placeholder': !type }) }, type || '—');
         },
-        measureContent: (entry, ctx) => getFileTypeString(entry, ctx.t),
+        measureContent: (entry, ctx) => getFileTypeString(entry, ctx.t) || '—',
     },
     {
         key: 'size',
@@ -127,19 +129,27 @@ export const COLUMNS: ColumnDef[] = [
         visibleIn: ['normal', 'search', 'trash'],
         renderCell: (entry, ctx) => {
             let text = '';
+            let isPlaceholder = false;
             if (entry.is_dir) {
                 if (entry.is_calculated) {
                     text = entry.size === 0 ? ctx.t('empty_dir') : formatSize(entry.size, 1, ctx.t);
                 } else if (entry.is_calculating) {
                     text = ctx.t('calculating');
+                } else {
+                    text = '—';
+                    isPlaceholder = true;
                 }
             } else {
                 text = formatSize(entry.size, 1, ctx.t);
             }
-            return React.createElement('span', { className: 'text-truncate' }, text);
+            return React.createElement('span', { className: cx('text-truncate', { 'dimmed-placeholder': isPlaceholder }) }, text);
         },
         measureContent: (entry, ctx) => {
-            if (entry.is_dir) return '';
+            if (entry.is_dir) {
+                if (entry.is_calculated) return entry.size === 0 ? ctx.t('empty_dir') : formatSize(entry.size, 1, ctx.t);
+                if (entry.is_calculating) return ctx.t('calculating');
+                return '—';
+            }
             return formatSize(entry.size, 1, ctx.t);
         },
     },

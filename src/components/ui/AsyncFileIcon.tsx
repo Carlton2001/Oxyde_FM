@@ -209,72 +209,53 @@ export const purgeIconCache = () => {
     invoke('purge_icon_cache').catch(() => { });
 };
 
-// --- PRE-WARMING ---
-// Fetch the generic and common special folder icons immediately so they are ready before any folder is rendered.
-const preWarmIcons = async () => {
+// Safety flag to ensure pre-warming only happens once per app lifecycle
+// let preWarmingStarted = false;
+
+/**
+ * Fetch the generic and common special folder icons immediately
+ * so they are ready before any folder is rendered.
+ */
+export const preWarmIcons = async () => {
+    return; // Disabled to prevent Vite HMR clashes
+    /* 
+    if (preWarmingStarted) return;
+    preWarmingStarted = true;
+
     try {
         const rootFontSize = getActualRootFontSize();
-
-        // Define common sizes to pre-load
         const sizes = [16, 48]; // 32px and 96px logic
 
-        // 1. Pre-warm Generic Folder (High Priority)
+
+        // 1. Pre-warm Essentials (Generic Folder & File)
         for (const size of sizes) {
             const targetPx = (size / 16) * rootFontSize;
             const sizeStr = targetPx <= 24 ? 'small' : 'large';
-            const cacheKey = `dir:generic:${targetPx <= 24 ? '32' : '96'}`;
 
-            if (!blobUrlCache.has(cacheKey)) {
-                invoke<number[]>('get_file_icon', { path: "C:\\Windows", size: sizeStr }).then(bytes => {
+            // Generic Folder
+            const dirKey = `dir:generic:${targetPx <= 24 ? '32' : '96'}`;
+            if (!blobUrlCache.has(dirKey)) {
+                invoke<number[]>('get_file_icon', { path: "oxyde_dir_generic", size: sizeStr }).then(bytes => {
                     if (bytes && bytes.length > 0) {
                         const blob = new Blob([new Uint8Array(bytes)], { type: 'image/png' });
-                        blobUrlCache.set(cacheKey, URL.createObjectURL(blob));
+                        blobUrlCache.set(dirKey, URL.createObjectURL(blob));
                     }
                 }).catch(() => { });
             }
-        }
 
-        // 2. Pre-warm Generic File (High Priority)
-        for (const size of sizes) {
-            const targetPx = (size / 16) * rootFontSize;
-            const sizeStr = targetPx <= 24 ? 'small' : 'large';
-            const cacheKey = `ext:generic:${targetPx <= 24 ? '32' : '96'}`;
-
-            if (!blobUrlCache.has(cacheKey)) {
+            // Generic File
+            const fileKey = `ext:generic:${targetPx <= 24 ? '32' : '96'}`;
+            if (!blobUrlCache.has(fileKey)) {
                 invoke<number[]>('get_file_icon', { path: "oxyde_ext_unknown", size: sizeStr }).then(bytes => {
                     if (bytes && bytes.length > 0) {
                         const blob = new Blob([new Uint8Array(bytes)], { type: 'image/png' });
-                        blobUrlCache.set(cacheKey, URL.createObjectURL(blob));
+                        blobUrlCache.set(fileKey, URL.createObjectURL(blob));
                     }
                 }).catch(() => { });
-            }
-        }
-
-        // 3. Pre-warm Common Extensions (Background)
-        const commonExts = ['zip', 'pdf', 'txt', 'png', 'jpg', 'mp3', 'wav', 'mp4'];
-        for (const ext of commonExts) {
-            for (const size of sizes) {
-                const targetPx = (size / 16) * rootFontSize;
-                const sizeStr = targetPx <= 24 ? 'small' : 'large';
-                const cacheKey = `ext:${ext}:${targetPx <= 24 ? '32' : '96'}`;
-
-                if (!blobUrlCache.has(cacheKey)) {
-                    invoke<number[]>('get_file_icon', { path: `oxyde_ext_${ext}`, size: sizeStr }).then(bytes => {
-                        if (bytes && bytes.length > 0) {
-                            const blob = new Blob([new Uint8Array(bytes)], { type: 'image/png' });
-                            blobUrlCache.set(cacheKey, URL.createObjectURL(blob));
-                        }
-                    }).catch(() => { });
-                }
             }
         }
     } catch (e) {
         console.warn('Pre-warming icons failed:', e);
     }
+    */
 };
-
-// Initialize pre-warming
-if (typeof window !== 'undefined') {
-    preWarmIcons();
-}
-

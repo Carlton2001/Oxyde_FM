@@ -85,6 +85,10 @@ export const getFileTypeString = (entry: FileEntry, t: any): string => {
         return t('network');
     }
 
+    if (entry.is_symlink || entry.is_junction) {
+        return 'Symlink';
+    }
+
     if (entry.is_dir) {
         return t('folder');
     }

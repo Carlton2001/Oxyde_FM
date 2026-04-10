@@ -156,10 +156,10 @@ pub async fn list_dir(
 
         let mut entries = Vec::with_capacity(2048);
         for entry in read_dir.flatten() {
-            if let Ok(metadata) = entry.metadata() {
+            let entry_path = entry.path();
+            if let Ok(metadata) = fs::symlink_metadata(&entry_path) {
                 let name = entry.file_name().to_string_lossy().to_string();
-                let path = entry.path();
-                let mut file_entry = get_file_entry_from_metadata(&metadata, &name, &path);
+                let mut file_entry = get_file_entry_from_metadata(&metadata, &name, &entry_path);
                 
                 // If it's a directory, check if it's protected (Access Denied)
                 if file_entry.is_dir {
@@ -384,6 +384,8 @@ pub fn get_file_properties(path: String) -> Result<FileProperties, CommandError>
             path: path.clone(),
             parent: "Voisinage Réseau".to_string(),
             is_dir: false,
+            is_symlink: false,
+            is_junction: false,
             size: 0,
             is_calculated: true,
             created: 0,
@@ -487,13 +489,18 @@ pub fn get_file_properties(path: String) -> Result<FileProperties, CommandError>
 
 
     let path_buf = validate_path(&path)?;
-    let metadata = fs::metadata(&path_buf)?;
+    let metadata = fs::symlink_metadata(&path_buf)?;
 
     let name = path_buf
         .file_name()
         .unwrap_or_default()
         .to_string_lossy()
         .to_string();
+
+    let (_, _, is_reparse_point) = crate::utils::get_file_attributes(&metadata, &name);
+    let is_symlink = metadata.file_type().is_symlink();
+    let is_dir = metadata.is_dir();
+    let is_junction = is_reparse_point && is_dir && !is_symlink;
     let parent = path_buf
         .parent()
         .map(|p: &std::path::Path| p.to_string_lossy().to_string())
@@ -562,6 +569,8 @@ pub fn get_file_properties(path: String) -> Result<FileProperties, CommandError>
         path,
         parent,
         is_dir,
+        is_symlink,
+        is_junction,
         size,
         is_calculated: false,
         created,

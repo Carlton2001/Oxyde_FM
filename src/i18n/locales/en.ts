@@ -166,6 +166,8 @@ export const en = {
     select_all: 'Select All',
     deselect_all: 'Deselect All',
     file_type: '{ext} File',
+    symlink: 'Symbolic Link',
+    junction: 'Junction Point',
     group_by_date: 'Group by date',
 
     // --- Header / Columns ---

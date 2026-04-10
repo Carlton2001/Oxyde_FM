@@ -87,3 +87,7 @@
 .mr-auto {
     margin-right: auto;
 }
+
+.dimmed-placeholder {
+    color: var(--text-muted);
+}

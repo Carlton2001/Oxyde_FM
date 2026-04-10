@@ -191,30 +191,40 @@ pub fn active_tab_navigate(
     version: Option<u64>,
 ) -> Result<(), CommandError> {
     let mut session = lock_session(&state)?;
-    
-    {
+    let changed = {
         let panel = session.try_get_panel_mut(&panel_id)?;
         if let Some(tab) = panel.tabs.iter_mut().find(|t| t.id == panel.active_tab_id) {
             if let Some(v) = version {
                 if v > tab.version {
                     tab.path = PathBuf::from(&path);
                     tab.version = v;
+                    panel.update_watcher(&app);
+                    true
                 } else if v < tab.version {
-                    return Ok(());
+                    false
                 } else if tab.path.to_string_lossy() != path {
                     tab.path = PathBuf::from(&path);
+                    panel.update_watcher(&app);
+                    true
+                } else {
+                    false
                 }
             } else {
                 tab.path = PathBuf::from(path);
                 tab.version += 1;
+                panel.update_watcher(&app);
+                true
             }
+        } else {
+            false
         }
-        panel.update_watcher(&app);
-    }
+    };
 
-    app.emit("session_changed", session.clone()).map_err(|e| CommandError::SystemError(e.to_string()))?;
-    drop(session);
-    state.save(&app)?;
+    if changed {
+        app.emit("session_changed", session.clone()).map_err(|e| CommandError::SystemError(e.to_string()))?;
+        drop(session);
+        state.save(&app)?;
+    }
     Ok(())
 }
 
@@ -466,14 +476,22 @@ pub fn update_sort_config(
     sort_config: crate::models::session::SortConfig,
 ) -> Result<(), CommandError> {
     let mut session = lock_session(&state)?;
+    let changed = {
+        let panel = session.try_get_panel_mut(&panel_id)?;
+        if panel.sort_config != sort_config {
+            panel.sort_config = sort_config;
+            panel.update_watcher(&app);
+            true
+        } else {
+            false
+        }
+    };
     
-    let panel = session.try_get_panel_mut(&panel_id)?;
-    panel.sort_config = sort_config;
-    panel.update_watcher(&app);
-    
-    app.emit("session_changed", session.clone()).map_err(|e| CommandError::SystemError(e.to_string()))?;
-    drop(session);
-    state.save(&app)?;
+    if changed {
+        app.emit("session_changed", session.clone()).map_err(|e| CommandError::SystemError(e.to_string()))?;
+        drop(session);
+        state.save(&app)?;
+    }
     Ok(())
 }
 

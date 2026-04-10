@@ -1,7 +1,7 @@
 import React from 'react';
 import {
     Folder, File, FileText, FileImage, FileVideo, Music,
-    Package, Archive, Disc, FileCode, Link, ExternalLink,
+    Package, Archive, Disc, FileCode, Link, ExternalLink, Link2,
     FileSpreadsheet, FileStack, Database, Terminal, Key,
     ShieldCheck, Box, HardDrive, Network, Globe
 } from 'lucide-react';
@@ -84,7 +84,9 @@ export const getFileIcon = (
     useSystemIcons: boolean = false,
     path?: string,
     isMediaDevice?: boolean,
-    hasWebPage?: boolean
+    hasWebPage?: boolean,
+    isSymlink?: boolean,
+    isJunction?: boolean
 ): React.ReactNode => {
     const { size: pixelSize, strokeWidth = 1.5 } = options;
     const size = pixelSize ? `${pixelSize / 16}rem` : undefined;
@@ -125,6 +127,11 @@ export const getFileIcon = (
                 className="system-icon-img"
             />
         );
+    }
+
+    // New: Symlink/Junction specific icon (only for Lucide mode)
+    if (isSymlink || isJunction) {
+        return <Link2 className="file-icon symlink" {...iconProps} />;
     }
 
     // 2. Standard Directory Icons
@@ -210,7 +217,15 @@ export const getFileIcon = (
  * Returns an appropriate icon component for a FileEntry
  */
 export const getFileEntryIcon = (
-    entry: { name: string; is_dir: boolean; path?: string; is_media_device?: boolean; has_web_page?: boolean },
+    entry: { 
+        name: string; 
+        is_dir: boolean; 
+        path?: string; 
+        is_media_device?: boolean; 
+        has_web_page?: boolean;
+        is_symlink?: boolean;
+        is_junction?: boolean;
+    },
     options?: IconOptions,
     useSystemIcons: boolean = false
 ): React.ReactNode => {
@@ -221,7 +236,9 @@ export const getFileEntryIcon = (
         useSystemIcons,
         entry.path,
         entry.is_media_device,
-        entry.has_web_page
+        entry.has_web_page,
+        entry.is_symlink,
+        entry.is_junction
     );
 };
 

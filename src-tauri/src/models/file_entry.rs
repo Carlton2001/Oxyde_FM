@@ -40,6 +40,8 @@ pub struct FileProperties {
     pub path: String,
     pub parent: String,
     pub is_dir: bool,
+    pub is_symlink: bool,
+    pub is_junction: bool,
     pub size: u64,
     pub is_calculated: bool,
     pub created: u64,
