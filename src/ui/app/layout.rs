@@ -215,7 +215,6 @@ impl OxydeApp {
     pub(crate) fn render_pane(&self, pane: &crate::ui::workspace::PaneState, handle: Entity<Self>, cx: &mut Context<Self>) -> AnyElement {
         use crate::ui::components::tabs::{TabBar, Tab, TabPosition, TabDragPreview};
         use crate::ui::components::top_bar::render_top_bar;
-        use crate::ui::components::action_bar::render_action_bar;
         use crate::ui::components::file_list::render_file_list;
 
         let h = handle.clone();
@@ -250,10 +249,26 @@ impl OxydeApp {
                     let h = h.clone();
                     let p_id_cap = p_id.clone();
                     
-                    let label = if tab_data.path == "C:/" || tab_data.path == "C:\\" {
-                        "C:".to_string()
+                    let is_root = tab_data.path.len() <= 3 && tab_data.path.chars().nth(1) == Some(':');
+                    let label = if is_root {
+                        let mut drive_name = None;
+                        for item in &self.state.sidebar_items {
+                            if let crate::ui::workspace::SidebarItem::Drive { drive, .. } = item {
+                                let norm_drive = drive.path.trim_end_matches(['/', '\\']);
+                                let norm_tab = tab_data.path.trim_end_matches(['/', '\\']);
+                                if norm_drive.eq_ignore_ascii_case(norm_tab) {
+                                    drive_name = Some(if drive.label.is_empty() {
+                                        format!("Disque local ({})", norm_drive)
+                                    } else {
+                                        format!("{} ({})", drive.label, norm_drive)
+                                    });
+                                    break;
+                                }
+                            }
+                        }
+                        drive_name.unwrap_or_else(|| tab_data.path.trim_end_matches(['/', '\\']).to_string())
                     } else {
-                        tab_data.path.split(|c| c == '/' || c == '\\').filter(|p| !p.is_empty()).last().unwrap_or("C:").to_string()
+                        tab_data.path.split(|c| c == '/' || c == '\\').filter(|p| !p.is_empty()).last().unwrap_or("Unknown").to_string()
                     };
 
                     let position = if t_ix == 0 {
@@ -582,7 +597,6 @@ impl OxydeApp {
             .child({
                 div().id(SharedString::from(format!("pane-content-{}", p_id.clone()))).size_full().flex().flex_col().relative()
                     .child(render_top_bar(self, p_id.clone(), handle.clone(), cx))
-                    .child(render_action_bar(self, handle.clone(), cx))
                     .child(render_file_list(self, p_id.clone(), handle.clone(), cx))
                     // Visual highlights for splits
                     .when(self.highlight_split_pane == Some(p_id.clone()), |s| {

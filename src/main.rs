@@ -6,6 +6,10 @@ use gpui::*;
 use crate::ui::app::OxydeApp;
 
 fn main() {
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("off"))
+        .filter_module("oxyde", log::LevelFilter::Info)
+        .filter_module("oxyde_lib", log::LevelFilter::Info)
+        .init();
     let _rt = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
@@ -28,10 +32,11 @@ fn main() {
         });
         cx.open_window(
             WindowOptions {
-                titlebar: Some(TitlebarOptions {
-                    title: Some("Oxyde".into()),
-                    ..Default::default()
-                }),
+                window_bounds: Some(WindowBounds::Windowed(Bounds {
+                    origin: point(px(100.0), px(100.0)),
+                    size: size(px(1200.0), px(800.0)),
+                })),
+                titlebar: Some(TitlebarOptions { appears_transparent: true, title: None, ..Default::default() }),
                 ..Default::default()
             },
             move |window, cx| {

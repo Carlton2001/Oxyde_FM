@@ -1,5 +1,6 @@
 use gpui::*;
 use crate::ui::app::{OxydeApp, DragTarget, ContextMenuContent, ContextMenuInstance, FileDragData, FileDragPreview};
+use crate::ui::components::tooltip::Tooltip;
 use crate::ui::workspace::SidebarItem;
 use crate::ui::components::scrollbar::{render_scrollbar, ScrollbarAxis};
 use crate::ui::theme::{OxydeTheme, ThemeContext, PixelsExt};
@@ -47,18 +48,6 @@ pub fn render_sidebar(view: &OxydeApp, handle: Entity<OxydeApp>, _cx: &mut Conte
         .child(
             div()
                 .size_full()
-                .on_mouse_move({
-                    let h = handle.clone();
-                    move |_, _, cx| {
-                        let _ = h.update(cx, |this, cx| {
-                            if this.tooltip_request.is_some() || this.tooltip_timer.is_some() {
-                                this.tooltip_request = None;
-                                this.tooltip_timer = None;
-                                cx.notify();
-                            }
-                        });
-                    }
-                })
                 .child(
                     div()
                         .h(px(16.0))
@@ -98,74 +87,14 @@ pub fn render_sidebar(view: &OxydeApp, handle: Entity<OxydeApp>, _cx: &mut Conte
                                                     let path = item.path.clone();
                                                     let h_inner = h.clone();
                                                     div()
+                                                        .id(SharedString::from(format!("sidebar-pinned-{}", path)))
                                                         .h(px(SIDEBAR_ROW_H))
                                                         .px_3()
                                                         .rounded_md()
                                                         .flex()
                                                         .items_center()
                                                         .hover(|s| s.bg(theme.hover))
-                                                        .on_mouse_move({
-                                                            let h = h_inner.clone();
-                                                            let name = item.name.clone();
-                                                            let path_cap = path.clone();
-                                                            move |e, _, cx| {
-                                                                cx.stop_propagation();
-                                                                let path_inner = path_cap.clone();
-                                                                let _ = h.update(cx, |this, cx| {
-                                                                    let mut data = crate::ui::app::TooltipData {
-                                                                        name: name.clone(),
-                                                                        type_str: "".to_string(),
-                                                                        size_str: "".to_string(),
-                                                                        date_str: "".to_string(),
-                                                                        full_path: Some(path_inner.clone()),
-                                                                        position: e.position,
-                                                                        view: None,
-                                                                    };
-
-                                                                    if let Some(existing) = this.tooltip_request.as_mut() {
-                                                                        if existing.full_path.as_ref() == data.full_path.as_ref() {
-                                                                            data.view = existing.view.clone();
-                                                                        } else {
-                                                                            data.view = Some(crate::ui::components::tooltip::Tooltip::new_for_file_full(
-                                                                                data.name.clone(),
-                                                                                path_inner.clone(),
-                                                                                data.type_str.clone(),
-                                                                                data.size_str.clone(),
-                                                                                data.date_str.clone(),
-                                                                                cx,
-                                                                            ).into());
-                                                                        }
-                                                                        this.tooltip_request = Some(data);
-                                                                        cx.notify();
-                                                                    } else if this.tooltip_timer.is_none() {
-                                                                        let h_inner = h.clone();
-                                                                        let path_timer = path_inner.clone();
-                                                                        this.tooltip_timer = Some(cx.spawn(move |_, cx: &mut AsyncApp| {
-                                                                            let mut cx = cx.clone();
-                                                                            let h_inner = h_inner.clone();
-                                                                            let path_timer = path_timer.clone();
-                                                                            async move {
-                                                                                cx.background_executor().timer(std::time::Duration::from_millis(500)).await;
-                                                                                let _ = h_inner.update(&mut cx, |this, cx| {
-                                                                                    data.position = this.mouse_pos;
-                                                                                    data.view = Some(crate::ui::components::tooltip::Tooltip::new_for_file_full(
-                                                                                        data.name.clone(),
-                                                                                        path_timer.clone(),
-                                                                                        data.type_str.clone(),
-                                                                                        data.size_str.clone(),
-                                                                                        data.date_str.clone(),
-                                                                                        cx,
-                                                                                    ).into());
-                                                                                    this.tooltip_request = Some(data);
-                                                                                    this.tooltip_timer = None;
-                                                                                    cx.notify();
-                                                                                });
-                                                                            }
-                                                                        }));
-                                                                    }
-                                                                });
-                                                            }
-                                                        })
+                                                        .tooltip(Tooltip::with_meta(item.name.clone(), path.clone()))
                                                         .on_mouse_down(MouseButton::Left, {
                                                             let p = path.clone();
                                                             let h_inner_inner = h_inner.clone();
@@ -230,8 +159,6 @@ pub fn render_sidebar(view: &OxydeApp, handle: Entity<OxydeApp>, _cx: &mut Conte
                                                                         width: px(0.0),
                                     open_left: false,
                                                                     });
-                                                                    this.tooltip_request = None;
-                                                                    this.tooltip_timer = None;
                                                                     cx.notify();
                                                                 });
                                                             }
@@ -246,7 +173,7 @@ pub fn render_sidebar(view: &OxydeApp, handle: Entity<OxydeApp>, _cx: &mut Conte
                                                                 .justify_center()
                                                                 .flex_shrink_0()
                                                                 .child({
-                                                                    let icon_type = crate::ui::components::icons::get_icon_type(&item.name, false, Some(&path));
+                                                                    let icon_type = crate::ui::components::icons::get_icon_type(&item.name, false, Some(&path), false, false);
                                                                     svg().path(icon_type.path()).size_4().text_color(theme.accent)
                                                                 })
                                                         )
@@ -295,74 +222,17 @@ pub fn render_sidebar(view: &OxydeApp, handle: Entity<OxydeApp>, _cx: &mut Conte
                                                     let path = drive.path.clone();
                                                     let h_inner = h.clone();
                                                     div()
+                                                        .id(SharedString::from(format!("sidebar-drive-{}", path)))
                                                         .h(px(SIDEBAR_ROW_H))
                                                         .px_3()
                                                         .rounded_md()
                                                         .flex()
                                                         .items_center()
                                                         .hover(|s| s.bg(theme.hover))
-                                                        .on_mouse_move({
-                                                            let h = h_inner.clone();
-                                                            let label = drive.label.clone();
-                                                            let path_cap = path.clone();
-                                                            move |e, _, cx| {
-                                                                cx.stop_propagation();
-                                                                let path_inner = path_cap.clone();
-                                                                let _ = h.update(cx, |this, cx| {
-                                                                    let mut data = crate::ui::app::TooltipData {
-                                                                        name: label.clone(),
-                                                                        type_str: "".to_string(),
-                                                                        size_str: "".to_string(),
-                                                                        date_str: "".to_string(),
-                                                                        full_path: Some(path_inner.clone()),
-                                                                        position: e.position,
-                                                                        view: None,
-                                                                    };
-
-                                                                    if let Some(existing) = this.tooltip_request.as_mut() {
-                                                                        if existing.full_path.as_ref() == data.full_path.as_ref() {
-                                                                            data.view = existing.view.clone();
-                                                                        } else {
-                                                                            data.view = Some(crate::ui::components::tooltip::Tooltip::new_for_file_full(
-                                                                                data.name.clone(),
-                                                                                path_inner.clone(),
-                                                                                data.type_str.clone(),
-                                                                                data.size_str.clone(),
-                                                                                data.date_str.clone(),
-                                                                                cx,
-                                                                            ).into());
-                                                                        }
-                                                                        this.tooltip_request = Some(data);
-                                                                        cx.notify();
-                                                                    } else if this.tooltip_timer.is_none() {
-                                                                        let h_inner = h.clone();
-                                                                        let path_timer = path_inner.clone();
-                                                                        this.tooltip_timer = Some(cx.spawn(move |_, cx: &mut AsyncApp| {
-                                                                            let mut cx = cx.clone();
-                                                                            let h_inner = h_inner.clone();
-                                                                            let path_timer = path_timer.clone();
-                                                                            async move {
-                                                                                cx.background_executor().timer(std::time::Duration::from_millis(500)).await;
-                                                                                let _ = h_inner.update(&mut cx, |this, cx| {
-                                                                                    data.position = this.mouse_pos;
-                                                                                    data.view = Some(crate::ui::components::tooltip::Tooltip::new_for_file_full(
-                                                                                        data.name.clone(),
-                                                                                        path_timer.clone(),
-                                                                                        data.type_str.clone(),
-                                                                                        data.size_str.clone(),
-                                                                                        data.date_str.clone(),
-                                                                                        cx,
-                                                                                    ).into());
-                                                                                    this.tooltip_request = Some(data);
-                                                                                    this.tooltip_timer = None;
-                                                                                    cx.notify();
-                                                                                });
-                                                                            }
-                                                                        }));
-                                                                    }
-                                                                });
-                                                            }
-                                                        })
+                                                        .tooltip(Tooltip::with_meta(
+                                                            format!("{} ({})", drive.label, drive.path),
+                                                            path.clone()
+                                                        ))
                                                         .on_mouse_down(MouseButton::Middle, {
                                                             let p = path.clone();
                                                             let h_inner_inner = h_inner.clone();
@@ -415,8 +285,6 @@ pub fn render_sidebar(view: &OxydeApp, handle: Entity<OxydeApp>, _cx: &mut Conte
                                                                         width: px(0.0),
                                     open_left: false,
                                                                     });
-                                                                    this.tooltip_request = None;
-                                                                    this.tooltip_timer = None;
                                                                     cx.notify();
                                                                 });
                                                             }
@@ -525,68 +393,7 @@ pub fn render_sidebar(view: &OxydeApp, handle: Entity<OxydeApp>, _cx: &mut Conte
                                                         .items_center()
                                                         .text_color(theme.text)
                                                         .hover(|s| s.bg(theme.hover))
-                                                        .on_mouse_move({
-                                                            let h = h_inner.clone();
-                                                            let name = node.name.clone();
-                                                            let path_cap = path.clone();
-                                                            move |e, _, cx| {
-                                                                cx.stop_propagation();
-                                                                let path_inner = path_cap.clone();
-                                                                let _ = h.update(cx, |this, cx| {
-                                                                    let mut data = crate::ui::app::TooltipData {
-                                                                        name: name.clone(),
-                                                                        type_str: "".to_string(),
-                                                                        size_str: "".to_string(),
-                                                                        date_str: "".to_string(),
-                                                                        full_path: Some(path_inner.clone()),
-                                                                        position: e.position,
-                                                                        view: None,
-                                                                    };
-
-                                                                    if let Some(existing) = this.tooltip_request.as_mut() {
-                                                                        if existing.full_path.as_ref() == data.full_path.as_ref() {
-                                                                            data.view = existing.view.clone();
-                                                                        } else {
-                                                                            data.view = Some(crate::ui::components::tooltip::Tooltip::new_for_file_full(
-                                                                                data.name.clone(),
-                                                                                path_inner.clone(),
-                                                                                data.type_str.clone(),
-                                                                                data.size_str.clone(),
-                                                                                data.date_str.clone(),
-                                                                                cx,
-                                                                            ).into());
-                                                                        }
-                                                                        this.tooltip_request = Some(data);
-                                                                        cx.notify();
-                                                                    } else if this.tooltip_timer.is_none() {
-                                                                        let h_inner = h.clone();
-                                                                        let path_timer = path_inner.clone();
-                                                                        this.tooltip_timer = Some(cx.spawn(move |_, cx: &mut AsyncApp| {
-                                                                            let mut cx = cx.clone();
-                                                                            let h_inner = h_inner.clone();
-                                                                            let path_timer = path_timer.clone();
-                                                                            async move {
-                                                                                cx.background_executor().timer(std::time::Duration::from_millis(500)).await;
-                                                                                let _ = h_inner.update(&mut cx, |this, cx| {
-                                                                                    data.position = this.mouse_pos;
-                                                                                    data.view = Some(crate::ui::components::tooltip::Tooltip::new_for_file_full(
-                                                                                        data.name.clone(),
-                                                                                        path_timer.clone(),
-                                                                                        data.type_str.clone(),
-                                                                                        data.size_str.clone(),
-                                                                                        data.date_str.clone(),
-                                                                                        cx,
-                                                                                    ).into());
-                                                                                    this.tooltip_request = Some(data);
-                                                                                    this.tooltip_timer = None;
-                                                                                    cx.notify();
-                                                                                });
-                                                                            }
-                                                                        }));
-                                                                    }
-                                                                });
-                                                            }
-                                                        })
+                                                        .tooltip(Tooltip::with_meta(node.name.clone(), path.clone()))
                                                         .on_mouse_down(MouseButton::Right, {
                                                             let h_right = h_inner.clone();
                                                             let items_cap = items.clone();
@@ -629,8 +436,6 @@ pub fn render_sidebar(view: &OxydeApp, handle: Entity<OxydeApp>, _cx: &mut Conte
                                                                         width: px(0.0),
                                     open_left: false,
                                                                     });
-                                                                    this.tooltip_request = None;
-                                                                    this.tooltip_timer = None;
                                                                     cx.notify();
                                                                 });
                                                             }

@@ -18,7 +18,8 @@ pub use filters::*;
 #[allow(unused_imports)]
 pub use layout::*;
 
-use crate::ui::components::tooltip::Tooltip;
+use crate::ui::components::input::TextInput;
+
 
 actions!(oxyde, [Ouvrir, Copier, Couper, Coller, Renommer, Supprimer, ToutSelectionner, Annuler, Refaire]);
 
@@ -188,97 +189,6 @@ impl Render for FileDragPreview {
     }
 }
 
-#[derive(Clone)]
-pub struct TooltipData {
-    pub name: String,
-    pub type_str: String,
-    pub size_str: String,
-    pub date_str: String,
-    pub full_path: Option<String>,
-    pub position: Point<Pixels>,
-    pub view: Option<AnyView>,
-}
-
-struct ManualTooltipElement {
-    data: TooltipData,
-}
-
-impl IntoElement for ManualTooltipElement {
-    type Element = Self;
-    fn into_element(self) -> Self::Element {
-        self
-    }
-}
-
-impl Element for ManualTooltipElement {
-    type RequestLayoutState = ();
-    type PrepaintState = ();
-
-    fn id(&self) -> Option<ElementId> {
-        None
-    }
-
-    fn source_location(&self) -> Option<&'static std::panic::Location<'static>> {
-        None
-    }
-
-    fn request_layout(
-        &mut self,
-        _id: Option<&GlobalElementId>,
-        _inspector_id: Option<&InspectorElementId>,
-        window: &mut Window,
-        cx: &mut App,
-    ) -> (LayoutId, Self::RequestLayoutState) {
-        (window.request_layout(Style::default(), None, cx), ())
-    }
-
-    fn prepaint(
-        &mut self,
-        _id: Option<&GlobalElementId>,
-        _inspector_id: Option<&InspectorElementId>,
-        _bounds: Bounds<Pixels>,
-        _request_layout: &mut Self::RequestLayoutState,
-        window: &mut Window,
-        cx: &mut App,
-    ) -> Self::PrepaintState {
-        let view = if let Some(view) = self.data.view.as_ref() {
-            view.clone()
-        } else if let Some(path) = self.data.full_path.as_ref() {
-            Tooltip::for_file_full(
-                self.data.name.clone(),
-                path.clone(),
-                self.data.type_str.clone(),
-                self.data.size_str.clone(),
-                self.data.date_str.clone(),
-            )(window, cx)
-        } else {
-            Tooltip::for_file(
-                self.data.name.clone(),
-                self.data.type_str.clone(),
-                self.data.size_str.clone(),
-                self.data.date_str.clone(),
-            )(window, cx)
-        };
-        window.set_tooltip(AnyTooltip {
-            view,
-            mouse_position: window.mouse_position(),
-            check_visible_and_update: std::rc::Rc::new(|_, _, _| true),
-        });
-    }
-
-    fn paint(
-        &mut self,
-        _id: Option<&GlobalElementId>,
-        _inspector_id: Option<&InspectorElementId>,
-        _bounds: Bounds<Pixels>,
-        _request_layout: &mut Self::RequestLayoutState,
-        _prepaint: &mut Self::PrepaintState,
-        _window: &mut Window,
-        _cx: &mut App,
-    ) {
-    }
-}
-
 pub struct OxydeApp {
     pub state: WorkspaceState,
     pub handle: Option<Entity<Self>>,
@@ -310,8 +220,6 @@ pub struct OxydeApp {
     pub submenu_timer: Option<Task<()>>,
     pub submenu_close_timer: Option<Task<()>>,
     pub dragging_tab: Option<(String, usize)>,
-    pub tooltip_request: Option<TooltipData>,
-    pub tooltip_timer: Option<Task<()>>,
     pub mouse_pos: Point<Pixels>,
     #[allow(dead_code)]
     pub file_ops: std::sync::Arc<oxyde_lib::systems::file_ops::FileOperationManager>,
@@ -328,12 +236,19 @@ pub struct OxydeApp {
     /// Drive-based default for the currently hovered drop target:
     /// true if source and target are on different drives → default to copy.
     pub drag_target_default_copy: bool,
+
+    pub editing_path: Option<String>,
+    pub editing_text: String,
+    pub editing_view: Option<Entity<TextInput>>,
 }
 
 impl OxydeApp {
     pub fn bind_keys(cx: &mut App) {
         cx.bind_keys([
             KeyBinding::new("ctrl-a", ToutSelectionner, None),
+            KeyBinding::new("ctrl-c", Copier, None),
+            KeyBinding::new("ctrl-x", Couper, None),
+            KeyBinding::new("ctrl-v", Coller, None),
             KeyBinding::new("ctrl-z", Annuler, None),
             KeyBinding::new("ctrl-y", Refaire, None),
             KeyBinding::new("ctrl-shift-z", Refaire, None),
@@ -386,8 +301,6 @@ impl OxydeApp {
             submenu_timer: None,
             submenu_close_timer: None,
             dragging_tab: None,
-            tooltip_request: None,
-            tooltip_timer: None,
             mouse_pos: Point::default(),
             file_ops: std::sync::Arc::new(oxyde_lib::systems::file_ops::FileOperationManager::new()),
             watcher_changes: std::sync::Arc::new(std::sync::Mutex::new(std::collections::VecDeque::new())),
@@ -397,6 +310,202 @@ impl OxydeApp {
             drag_copy_mode: false,
             drag_modifier_copy: None,
             drag_target_default_copy: false,
+            editing_path: None,
+            editing_text: String::new(),
+            editing_view: None,
+        }
+    }
+
+    pub fn on_action_tout_selectionner(&mut self, _: &ToutSelectionner, _: &mut Window, cx: &mut Context<Self>) {
+        self.execute_tout_selectionner(cx);
+    }
+
+    pub fn execute_tout_selectionner(&mut self, cx: &mut Context<Self>) {
+        let pane_id = self.state.active_pane_id.clone();
+        self.select_all(&pane_id, cx);
+    }
+
+    pub fn on_action_annuler(&mut self, _: &Annuler, _: &mut Window, cx: &mut Context<Self>) {
+        self.execute_undo(cx);
+    }
+
+    pub fn on_action_refaire(&mut self, _: &Refaire, _: &mut Window, cx: &mut Context<Self>) {
+        self.execute_redo(cx);
+    }
+
+    pub fn on_action_copier(&mut self, _: &Copier, _: &mut Window, cx: &mut Context<Self>) {
+        self.execute_copier(cx);
+    }
+
+    pub fn on_action_renommer(&mut self, _: &Renommer, window: &mut Window, cx: &mut Context<Self>) {
+        self.execute_renommer(window, cx);
+    }
+
+    pub fn execute_renommer(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let pane_id = self.state.active_pane_id.clone();
+        if let Some(pane) = self.state.layout.find_pane(&pane_id) {
+            let selected: Vec<String> = pane.active_tab().selected_paths.iter().cloned().collect();
+            if let Some(path) = selected.first() {
+                self.editing_path = Some(path.clone());
+                let initial_name = std::path::Path::new(path)
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("")
+                    .to_string();
+                self.editing_text = initial_name.clone();
+
+                let stem_len = std::path::Path::new(&initial_name)
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .map(|s| s.len())
+                    .unwrap_or(initial_name.len());
+                let initial_selection = Some(0..stem_len);
+
+                let path_cap = path.clone();
+                let handle = self.handle.clone().unwrap();
+                
+                let view = cx.new(|cx| {
+                    TextInput::new(
+                        cx,
+                        "Nom du fichier",
+                        initial_name,
+                        {
+                            let handle = handle.clone();
+                            move |txt, _window, cx| {
+                                let _ = handle.update(cx, |this, _| {
+                                    this.editing_text = txt.to_string();
+                                });
+                            }
+                        },
+                        {
+                            let handle = handle.clone();
+                            let p = path_cap.clone();
+                            move |_window, cx| {
+                                let _ = handle.update(cx, |this, cx| {
+                                    let new_name = this.editing_text.clone();
+                                    this.execute_file_rename(p.clone(), new_name, cx);
+                                    this.editing_view = None;
+                                });
+                            }
+                        },
+                        {
+                            let handle = handle.clone();
+                            move |_window, cx| {
+                                let _ = handle.update(cx, |this, _| {
+                                    this.editing_path = None;
+                                    this.editing_view = None;
+                                });
+                            }
+                        },
+                        true,
+                        initial_selection,
+                        window
+                    )
+                });
+
+                let focus_handle = view.read(cx).focus_handle.clone();
+                window.focus(&focus_handle);
+                self.editing_view = Some(view);
+                cx.notify();
+            }
+        }
+    }
+
+    pub fn execute_file_rename(&mut self, old_path: String, new_name: String, cx: &mut Context<Self>) {
+        let parent = std::path::Path::new(&old_path).parent().unwrap_or(std::path::Path::new(""));
+        let new_path = parent.join(new_name).to_string_lossy().to_string();
+        
+        let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
+        if let Ok(_) = rt.block_on(oxyde_lib::commands::io::rename_item(old_path, new_path)) {
+            self.editing_path = None;
+            self.reconcile_watchers();
+            cx.notify();
+        }
+    }
+
+    pub fn execute_copier(&mut self, _cx: &mut Context<Self>) {
+        let pane_id = self.state.active_pane_id.clone();
+        if let Some(pane) = self.state.layout.find_pane(&pane_id) {
+            let paths: Vec<String> = pane.active_tab().selected_paths.iter().cloned().collect();
+            log::info!("Action 'Copier': paths={:?}", paths);
+            if !paths.is_empty() {
+                if let Err(e) = oxyde_lib::commands::clipboard::set_clipboard_files(paths, false) {
+                    log::error!("Action 'Copier' failed: {:?}", e);
+                }
+            }
+        }
+    }
+
+    pub fn on_action_couper(&mut self, _: &Couper, _: &mut Window, cx: &mut Context<Self>) {
+        self.execute_couper(cx);
+    }
+
+    pub fn execute_couper(&mut self, _cx: &mut Context<Self>) {
+        let pane_id = self.state.active_pane_id.clone();
+        if let Some(pane) = self.state.layout.find_pane(&pane_id) {
+            let paths: Vec<String> = pane.active_tab().selected_paths.iter().cloned().collect();
+            log::info!("Action 'Couper': paths={:?}", paths);
+            if !paths.is_empty() {
+                if let Err(e) = oxyde_lib::commands::clipboard::set_clipboard_files(paths, true) {
+                    log::error!("Action 'Couper' failed: {:?}", e);
+                }
+            }
+        }
+    }
+
+    pub fn on_action_coller(&mut self, _: &Coller, _: &mut Window, cx: &mut Context<Self>) {
+        self.execute_coller(cx);
+    }
+
+    pub fn execute_coller(&mut self, cx: &mut Context<Self>) {
+        let pane_id = self.state.active_pane_id.clone();
+        if let Some(pane) = self.state.layout.find_pane(&pane_id) {
+            let target_dir = pane.active_tab().path.clone();
+            if let Ok((paths, is_cut)) = oxyde_lib::commands::clipboard::get_clipboard_files() {
+                if !paths.is_empty() {
+                    if is_cut {
+                        self.execute_file_move(paths, target_dir, cx);
+                    } else {
+                        self.execute_file_copy(paths, target_dir, cx);
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn on_action_ouvrir(&mut self, _: &Ouvrir, _: &mut Window, cx: &mut Context<Self>) {
+        self.execute_ouvrir(cx);
+    }
+
+    pub fn execute_ouvrir(&mut self, cx: &mut Context<Self>) {
+        let pane_id = self.state.active_pane_id.clone();
+        if let Some(pane) = self.state.layout.find_pane(&pane_id) {
+            let paths: Vec<String> = pane.active_tab().selected_paths.iter().cloned().collect();
+            for path in paths {
+                if std::path::Path::new(&path).is_dir() {
+                    self.navigate_to(&pane_id, path, cx);
+                } else {
+                    let _ = oxyde_lib::platform::platform().open_item(&path);
+                }
+            }
+        }
+    }
+
+    pub fn on_action_supprimer(&mut self, _: &Supprimer, _: &mut Window, cx: &mut Context<Self>) {
+        self.execute_supprimer(cx);
+    }
+
+    pub fn execute_supprimer(&mut self, cx: &mut Context<Self>) {
+        let pane_id = self.state.active_pane_id.clone();
+        if let Some(pane) = self.state.layout.find_pane(&pane_id) {
+            let paths: Vec<String> = pane.active_tab().selected_paths.iter().cloned().collect();
+            if !paths.is_empty() {
+                if let Ok(_) = trash::delete_all(&paths) {
+                    self.state.refresh_sidebar();
+                    self.reconcile_watchers();
+                    cx.notify();
+                }
+            }
         }
     }
 
@@ -702,46 +811,37 @@ impl Render for OxydeApp {
         let win_w = size.width.as_f32();
         let win_h = size.height.as_f32();
 
+        use crate::ui::components::title_bar::TITLEBAR_H;
         self.list_width = (win_w - self.sidebar_width - 4.0).max(1.0);
-        self.list_height = win_h.max(1.0);
+        self.list_height = (win_h - TITLEBAR_H).max(1.0);
 
         if let Some(DragTarget::SelectionRectangle { ref pane_id, current_pos, .. }) = self.drag_target {
             let p_id = pane_id.clone();
             let pos = current_pos;
             self.handle_selection_drag(p_id, pos, cx);
         }
-
         self.clamp_scrolls();
-
+ 
         let mut root = div()
             .size_full()
             .bg(cx.theme().background)
             .text_color(cx.theme().text)
             .font_family("Inter")
             .flex()
+            .flex_col()
             .text_size(px(13.0))
             .font_weight(FontWeight::LIGHT)
-            .on_action({
-                let h = handle.clone();
-                move |_: &ToutSelectionner, _, cx| {
-                    let _ = h.update(cx, |this, cx| {
-                        let pane_id = this.state.active_pane_id.clone();
-                        this.select_all(&pane_id, cx);
-                    });
-                }
-            })
-            .on_action({
-                let h = handle.clone();
-                move |_: &Annuler, _, cx| {
-                    let _ = h.update(cx, |this, cx| this.execute_undo(cx));
-                }
-            })
-            .on_action({
-                let h = handle.clone();
-                move |_: &Refaire, _, cx| {
-                    let _ = h.update(cx, |this, cx| this.execute_redo(cx));
-                }
-            })
+            .on_action(cx.listener(Self::on_action_tout_selectionner))
+            .on_action(cx.listener(Self::on_action_annuler))
+            .on_action(cx.listener(Self::on_action_refaire))
+            .on_action(cx.listener(Self::on_action_copier))
+            .on_action(cx.listener(Self::on_action_couper))
+            .on_action(cx.listener(Self::on_action_coller))
+            .on_action(cx.listener(Self::on_action_ouvrir))
+            .on_action(cx.listener(Self::on_action_renommer))
+            .on_action(cx.listener(Self::on_action_supprimer));
+
+        root = root
             .on_modifiers_changed({
                 let h = handle.clone();
                 move |e: &ModifiersChangedEvent, _, cx| {
@@ -940,35 +1040,47 @@ impl Render for OxydeApp {
                     v.go_forward(&p_id, cx)
                 }); }
             })
-            .child(
+            .child({
+                // ── Custom title bar ──────────────────────────────────────
+                use crate::ui::components::title_bar::render_title_bar;
+                render_title_bar(self, handle.clone(), _window.is_maximized(), cx)
+            })
+            .child({
+                // ── Horizontal content area (sidebar + panes) ─────────────
+                let layout_tree = self.state.layout.clone();
                 div()
-                    .w(px(self.sidebar_width))
-                    .h_full()
-                    .flex_none()
-                    .child(render_sidebar(self, handle.clone(), cx))
-            )
-            .child(
-                div()
-                    .id("sidebar-resize-handle")
-                    .w(px(4.0))
-                    .h_full()
-                    .bg(rgb(0x1a1a1a))
-                    .cursor_col_resize()
-                    .hover(|s| s.bg(rgb(0x0078d4)))
-                    .active(|s| s.bg(rgb(0x0078d4)))
-                    .on_mouse_down(MouseButton::Left, {
-                        let h = handle.clone();
-                        move |e, _, cx| {
-                            let _ = h.update(cx, |this, _| {
-                                this.drag_target = Some(DragTarget::SidebarResize);
-                                this.grab_offset = e.position.x.as_f32() - this.sidebar_width;
-                            });
-                        }
-                    })
-            );
-        
-        let layout_tree = self.state.layout.clone();
-        root = root.child(div().flex_1().h_full().child(self.render_layout_node(&layout_tree, handle.clone(), cx)));
+                    .flex()
+                    .flex_1()
+                    .w_full()
+                    .overflow_hidden()
+                    .child(
+                        div()
+                            .w(px(self.sidebar_width))
+                            .h_full()
+                            .flex_none()
+                            .child(render_sidebar(self, handle.clone(), cx))
+                    )
+                    .child(
+                        div()
+                            .id("sidebar-resize-handle")
+                            .w(px(4.0))
+                            .h_full()
+                            .bg(rgb(0x1a1a1a))
+                            .cursor_col_resize()
+                            .hover(|s| s.bg(rgb(0x0078d4)))
+                            .active(|s| s.bg(rgb(0x0078d4)))
+                            .on_mouse_down(MouseButton::Left, {
+                                let h = handle.clone();
+                                move |e, _, cx| {
+                                    let _ = h.update(cx, |this, _| {
+                                        this.drag_target = Some(DragTarget::SidebarResize);
+                                        this.grab_offset = e.position.x.as_f32() - this.sidebar_width;
+                                    });
+                                }
+                            })
+                    )
+                    .child(div().flex_1().h_full().child(self.render_layout_node(&layout_tree, handle.clone(), cx)))
+            });
         
         // CONTEXT MENU OVERLAY
         for (m_idx, instance) in self.context_menus.iter().enumerate() {
@@ -1175,6 +1287,10 @@ impl Render for OxydeApp {
                                                 let parent_right = parent_left + this.context_menus.get(m_idx)
                                                     .map(|m| m.width)
                                                     .unwrap_or_default();
+                                                // Compute Y from parent menu position + item index (reliable, no canvas-bounds dependency)
+                                                let parent_pos_y = this.context_menus.get(m_idx)
+                                                    .map(|m| m.position.y)
+                                                    .unwrap_or_default();
                                                 this.submenu_close_timer = None;
                                                 this.submenu_timer = Some(cx.spawn(move |_, cx: &mut AsyncApp| {
                                                     let mut cx_val = cx.clone();
@@ -1191,7 +1307,9 @@ impl Render for OxydeApp {
                                                                     } else {
                                                                         parent_right - px(2.0) // TopLeft anchor: left edge at parent right
                                                                     };
-                                                                    sub_pos.y -= px(8.0);
+                                                                    // Y: parent menu top + border(1) + padding(4) + ix * item_h
+                                                                    // minus submenu border(1) + padding(4) → nets to ix * item_h
+                                                                    sub_pos.y = parent_pos_y + px(ix_inner as f32 * 26.0);
                                                                     (on_h)(sub_pos, open_left, app);
                                                                 }
                                                             }
@@ -1356,6 +1474,10 @@ impl Render for OxydeApp {
                                                 let parent_right = parent_left + this.context_menus.get(m_idx)
                                                     .map(|m| m.width)
                                                     .unwrap_or_default();
+                                                let parent_pos_y = this.context_menus.get(m_idx)
+                                                    .map(|m| m.position.y)
+                                                    .unwrap_or_default();
+                                                let ix_cap = ix;
 
                                                 this.submenu_close_timer = None;
                                                 this.submenu_timer = Some(cx.spawn(move |_, cx: &mut AsyncApp| {
@@ -1384,7 +1506,7 @@ impl Render for OxydeApp {
                                                                         } else {
                                                                             parent_right - px(2.0) // TopLeft: left edge at parent right
                                                                         };
-                                                                        new_pos.y -= px(8.0);
+                                                                        new_pos.y = parent_pos_y + px(ix_cap as f32 * 26.0);
 
                                                                         this.context_menus.push(ContextMenuInstance {
                                                                             position: new_pos,
@@ -1479,7 +1601,7 @@ impl Render for OxydeApp {
                             })
                         },
                         is_dragging: false,
-                        header: Some(input.clone().into_any_element()),
+                        header: Some(div().w(px(200.0)).h(px(32.0)).child(input.clone()).into_any_element()),
                         on_item_hover: None,
                         on_width_calculated: Some(std::rc::Rc::new({
                             let h = h.clone();
@@ -1508,15 +1630,14 @@ impl Render for OxydeApp {
                     } else {
                         anchored()
                             .position(pos)
+                            .snap_to_window()
                             .child(content_element)
                     }
                 )
             );
         }
 
-        if let Some(req) = self.tooltip_request.as_ref() {
-            root = root.child(ManualTooltipElement { data: req.clone() });
-        }
+
 
         root
     }

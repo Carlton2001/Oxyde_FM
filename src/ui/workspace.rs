@@ -846,4 +846,14 @@ impl WorkspaceState {
         self.refresh_sidebar();
     }
 
+    pub fn _collapse_all_sidebar_path(&mut self, path: String) {
+        let norm_path = path.replace("\\", "/");
+        let target_prefix = if norm_path.ends_with("/") { norm_path.clone() } else { format!("{}/", norm_path) };
+        self.expanded_paths.retain(|p| {
+            let norm_p = p.replace("\\", "/");
+            norm_p != norm_path && !norm_p.starts_with(&target_prefix)
+        });
+        self.refresh_sidebar();
+    }
+
 }

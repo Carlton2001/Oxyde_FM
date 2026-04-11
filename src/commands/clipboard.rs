@@ -133,7 +133,9 @@ pub fn set_clipboard_files(paths: Vec<String>, is_cut: bool) -> Result<(), Comma
         let mut total_chars = 0;
 
         for path in &validated_paths {
-            let wide: Vec<u16> = OsStr::new(path)
+            // Normalize path to use backslashes on Windows for better clipboard compatibility
+            let normalized = path.replace('/', "\\");
+            let wide: Vec<u16> = OsStr::new(&normalized)
                 .encode_wide()
                 .chain(std::iter::once(0))
                 .collect();

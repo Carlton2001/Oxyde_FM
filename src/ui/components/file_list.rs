@@ -2,11 +2,25 @@ use gpui::*;
 use gpui::prelude::*;
 use oxyde_lib::models::FileEntry;
 use crate::ui::app::{OxydeApp, DragTarget, ContextMenuContent, ContextMenuInstance, FileDragData, FileDragPreview};
+use crate::ui::components::tooltip::Tooltip;
 use crate::ui::style::{ROW_HEIGHT, format_size, format_date};
 use crate::ui::components::scrollbar::{render_scrollbar, ScrollbarAxis, ZED_TRACK_WIDTH};
 use crate::ui::theme::{OxydeTheme, ThemeContext, PixelsExt};
 use crate::ui::workspace::{SortColumn, SortDirection};
 
+
+/// Returns the display type label for a file entry.
+/// Symlinks and junctions are identified before extension/dir detection.
+fn file_type_label(f: &FileEntry) -> String {
+    if f.is_symlink  { return "Symlink".to_string(); }
+    if f.is_junction { return "Junction".to_string(); }
+    if f.is_dir      { return "Dossier".to_string(); }
+    std::path::Path::new(&f.name)
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|s| s.to_uppercase())
+        .unwrap_or_else(|| "Fichier".to_string())
+}
 
 pub fn render_file_list(view: &OxydeApp, pane_id: String, handle: Entity<OxydeApp>, cx: &mut Context<OxydeApp>) -> impl IntoElement {
     let p_id_cap = pane_id.clone();
@@ -77,18 +91,6 @@ pub fn render_file_list(view: &OxydeApp, pane_id: String, handle: Entity<OxydeAp
         .child(
             div()
                 .size_full()
-                .on_mouse_move({
-                    let h = handle.clone();
-                    move |_, _, cx| {
-                        let _ = h.update(cx, |this, cx| {
-                            if this.tooltip_request.is_some() || this.tooltip_timer.is_some() {
-                                this.tooltip_request = None;
-                                this.tooltip_timer = None;
-                                cx.notify();
-                            }
-                        });
-                    }
-                })
                 .child(
                     div()
                         .absolute()
@@ -118,6 +120,12 @@ pub fn render_file_list(view: &OxydeApp, pane_id: String, handle: Entity<OxydeAp
                                             let p_id = p_id_for_list.clone();
                                             let h = h_inner.clone();
 
+                                            {
+                                            let file_name_tt = file.name.clone();
+                                            let path_tt = path.clone();
+                                            let ext_tt = file_type_label(file);
+                                            let size_tt = format_size(file.size, is_dir, file.is_calculated);
+                                            let date_tt = format_date(file.modified);
                                             div()
                                                 .id(SharedString::from(format!("file-row-{}", path.to_string())))
                                                 .flex()
@@ -126,18 +134,7 @@ pub fn render_file_list(view: &OxydeApp, pane_id: String, handle: Entity<OxydeAp
                                                 .w(px(total_w))
                                                 .bg(if is_selected { theme.selected } else if is_active_pane { theme.active_background } else { theme.background })
                                                 .when(!is_selected, |s| s.hover(|s| s.bg(theme.hover)))
-                                                .on_mouse_move({
-                                                    let h = h.clone();
-                                                    move |_, _, cx| {
-                                                        let _ = h.update(cx, |this, cx| {
-                                                            if this.tooltip_request.is_some() || this.tooltip_timer.is_some() {
-                                                                this.tooltip_request = None;
-                                                                this.tooltip_timer = None;
-                                                                cx.notify();
-                                                            }
-                                                        });
-                                                    }
-                                                })
+                                                .tooltip(Tooltip::for_file_full(file_name_tt, path_tt, ext_tt, size_tt, date_tt))
                                                 .on_mouse_down(MouseButton::Left, {
                                                     let p = path.clone();
                                                     let h_inner_inner = h.clone();
@@ -221,13 +218,11 @@ pub fn render_file_list(view: &OxydeApp, pane_id: String, handle: Entity<OxydeAp
                                                               this.context_menus.clear();
                                                               this.context_menus.push(ContextMenuInstance {
                                                                   position: pos,
-                                                                  content: ContextMenuContent::Items(super::oxyde_context_menu_items(h_inner_inner.clone()), None),
+                                                                  content: ContextMenuContent::Items(super::oxyde_context_menu_items(h_inner_inner.clone(), is_dir, p_for_right_cap.clone()), None),
                                                                   scroll_handle: UniformListScrollHandle::new(),
                                                                   width: px(0.0),
                                     open_left: false,
                                                               });
-                                                               this.tooltip_request = None;
-                                                               this.tooltip_timer = None;
                                                               cx.notify();
                                                           });
                                                      }
@@ -284,104 +279,26 @@ pub fn render_file_list(view: &OxydeApp, pane_id: String, handle: Entity<OxydeAp
                                                             });
                                                         })
                                                 })
-                                                .child(
+                                                .child({
+                                                    let path_str = path.clone();
+                                                    let file_name = file.name.clone();
+                                                    let is_dir = is_dir;
+
                                                     div()
                                                         .w(px(name_w))
                                                         .h_full()
                                                         .flex()
                                                         .items_center()
                                                         .overflow_hidden()
-                                                        .child({
-                                                            let path_str = path.clone();
-                                                            let file_name = file.name.clone();
-                                                            let is_dir = is_dir;
-                                                            let file_size = file.size;
-                                                            let file_is_calculated = file.is_calculated;
-                                                            let file_modified = file.modified;
-                                                            
+                                                        .child(
                                                             div()
                                                                 .id(SharedString::from(format!("file-content-{}", path_str)))
                                                                 .h_full()
                                                                 .px(px(8.0))
                                                                 .flex()
-                                                                .items_center()                                                                .on_mouse_move({
-                                                                    let h = h.clone();
-                                                                    let file_name = file_name.clone();
-                                                                    let is_dir = is_dir;
-                                                                    let file_size = file_size;
-                                                                    let file_is_calculated = file_is_calculated;
-                                                                    let file_modified = file_modified;
-                                                                    let path_for_tooltip = path_str.clone();
-                                                                    move |e, _, cx| {
-                                                                        cx.stop_propagation();
-                                                                        let path_inner = path_for_tooltip.clone();
-                                                                        let _ = h.update(cx, |this, cx| {
-                                                                            let name = file_name.clone();
-                                                                            let type_str = if is_dir { "Dossier".to_string() } else { std::path::Path::new(&name).extension().and_then(|e| e.to_str()).map(|s| s.to_uppercase()).unwrap_or("Fichier".to_string()) };
-                                                                            let size_str = format_size(file_size, is_dir, file_is_calculated);
-                                                                            let date_str = format_date(file_modified);
-                                                                            
-                                                                            let mut data = crate::ui::app::TooltipData {
-                                                                                name,
-                                                                                type_str,
-                                                                                size_str,
-                                                                                date_str,
-                                                                                full_path: Some(path_inner.clone()),
-                                                                                position: e.position,
-                                                                                view: None,
-                                                                            };
-
-                                                                            if let Some(existing) = this.tooltip_request.as_mut() {
-                                                                                if existing.full_path.as_ref() == data.full_path.as_ref() {
-                                                                                    // Même fichier, on garde la vue existante mais on met à jour la position
-                                                                                    data.view = existing.view.clone();
-                                                                                } else {
-                                                                                    // Nouveau fichier, on crée une nouvelle vue
-                                                                                    data.view = Some(crate::ui::components::tooltip::Tooltip::new_for_file_full(
-                                                                                        data.name.clone(),
-                                                                                        path_inner.clone(),
-                                                                                        data.type_str.clone(),
-                                                                                        data.size_str.clone(),
-                                                                                        data.date_str.clone(),
-                                                                                        cx,
-                                                                                    ).into());
-                                                                                }
-                                                                                this.tooltip_request = Some(data);
-                                                                                cx.notify();
-                                                                            } else if this.tooltip_timer.is_none() {
-                                                                                let h_inner = h.clone();
-                                                                                let path_timer = path_inner.clone();
-                                                                                this.tooltip_timer = Some(cx.spawn(move |_, cx: &mut AsyncApp| {
-                                                                                    let mut cx = cx.clone();
-                                                                                    let h_inner = h_inner.clone();
-                                                                                    let path_timer = path_timer.clone();
-                                                                                    async move {
-                                                                                        cx.background_executor().timer(std::time::Duration::from_millis(500)).await;
-                                                                                        let _ = h_inner.update(&mut cx, |this, cx| {
-                                                                                            // On capture la position ACTUELLE de la souris
-                                                                                            data.position = this.mouse_pos;
-                                                                                            // On crée la vue au moment où on décide d'afficher le tooltip
-                                                                                            data.view = Some(crate::ui::components::tooltip::Tooltip::new_for_file_full(
-                                                                                                data.name.clone(),
-                                                                                                path_timer.clone(),
-                                                                                                data.type_str.clone(),
-                                                                                                data.size_str.clone(),
-                                                                                                data.date_str.clone(),
-                                                                                                cx,
-                                                                                            ).into());
-                                                                                            this.tooltip_request = Some(data);
-                                                                                            this.tooltip_timer = None;
-                                                                                            cx.notify();
-                                                                                        });
-                                                                                    }
-                                                                                }));
-                                                                            }
-                                                                        });
-                                                                    }
-                                                                })
-
+                                                                .items_center()
                                                                 .child({
-                                                                    let icon_type = crate::ui::components::icons::get_icon_type(&file.name, is_dir, Some(&path_str));
+                                                                    let icon_type = crate::ui::components::icons::get_icon_type(&file_name, is_dir, Some(&path_str), file.is_symlink, file.is_junction);
                                                                     svg()
                                                                         .path(icon_type.path())
                                                                         .size_4()
@@ -391,18 +308,32 @@ pub fn render_file_list(view: &OxydeApp, pane_id: String, handle: Entity<OxydeAp
                                                                 })
                                                                 .child(
                                                                     div()
+                                                                        .flex_1()
                                                                         .overflow_hidden()
-                                                                        .text_ellipsis()
-                                                                        .font_weight(FontWeight::MEDIUM)
-                                                                        .text_color(theme.text)
-                                                                        .child(file.name.clone())
+                                                                        .child({
+                                                                            let app_view = h.read(cx);
+                                                                            if app_view.editing_path.as_ref() == Some(&path_str) {
+                                                                                if let Some(edit_view) = &app_view.editing_view {
+                                                                                    div().h(px(ROW_HEIGHT)).w_full().child(edit_view.clone()).into_any_element()
+                                                                                } else {
+                                                                                    div().child(file_name.clone()).into_any_element()
+                                                                                }
+                                                                            } else {
+                                                                                div()
+                                                                                    .text_ellipsis()
+                                                                                    .font_weight(FontWeight::MEDIUM)
+                                                                                    .text_color(theme.text)
+                                                                                    .child(file_name.clone())
+                                                                                    .into_any_element()
+                                                                            }
+                                                                        })
                                                                 )
-                                                        })
-                                                )
-                                                .child(div().w(px(type_w)).px(px(8.0)).text_color(theme.text_muted).text_ellipsis().text_size(px(12.0)).child(if is_dir { "Dossier".to_string() } else { std::path::Path::new(&file.name).extension().and_then(|e| e.to_str()).map(|s| s.to_uppercase()).unwrap_or("Fichier".to_string()) }))
+                                                        )
+                                                })
+                                                .child(div().w(px(type_w)).px(px(8.0)).text_color(theme.text_muted).text_ellipsis().text_size(px(12.0)).child(file_type_label(file)))
                                                 .child(div().w(px(size_w)).px(px(8.0)).flex().justify_end().text_color(theme.text_muted).text_ellipsis().text_size(px(12.0)).child(format_size(file.size, is_dir, file.is_calculated)))
                                                 .child(div().w(px(date_w)).px(px(8.0)).text_color(theme.text_muted).text_ellipsis().text_size(px(12.0)).child(format_date(file.modified)))
-                                        }).collect::<Vec<_>>()
+                                            }}).collect::<Vec<_>>()
                                     }
                                 }
                             )
@@ -448,8 +379,6 @@ pub fn render_file_list(view: &OxydeApp, pane_id: String, handle: Entity<OxydeAp
                                               width: px(0.0),
                                     open_left: false,
                                           });
-                                          this.tooltip_request = None;
-                                          this.tooltip_timer = None;
                                           cx.notify();
                                       });
                                  }
@@ -636,10 +565,7 @@ fn render_headers(view: &OxydeApp, pane_id: String, handle: Entity<OxydeApp>, na
     let type_filtered = if tab.filter_types.is_empty() { false } else {
         let mut all_types = std::collections::HashSet::new();
         for f in &tab.files {
-            if f.is_dir { all_types.insert("Dossier".to_string()); }
-            else if let Some(ext) = std::path::Path::new(&f.name).extension().and_then(|e| e.to_str()) {
-                all_types.insert(ext.to_uppercase());
-            }
+            all_types.insert(file_type_label(f));
         }
         !all_types.iter().all(|t| tab.filter_types.contains(t))
     };
@@ -750,37 +676,13 @@ pub fn get_type_filter_items(h: Entity<OxydeApp>, pid: String, tab_files: Vec<Fi
     use crate::ui::components::dropdown::{DropdownItem, IconName};
     
     let mut exts = std::collections::HashSet::new();
-    let mut dirs_present = false;
     for f in &tab_files {
-        if f.is_dir { dirs_present = true; }
-        else if let Some(e) = std::path::Path::new(&f.name).extension().and_then(|e| e.to_str()) { exts.insert(e.to_uppercase()); }
+        exts.insert(file_type_label(f));
     }
     let mut sorted_exts: Vec<String> = exts.into_iter().collect();
     sorted_exts.sort();
 
     let mut items = Vec::new();
-    
-    // Dossiers
-    if dirs_present {
-        let h_dir = h.clone();
-        let pid_dir = pid.clone();
-        let is_sel = current_filters.contains("Dossier");
-        
-        items.push(DropdownItem {
-            label: "Dossier".to_string(),
-            icon: Some(if is_sel { IconName::Check } else { IconName::Square }),
-            stay_open: true,
-            has_submenu: false,
-            on_click: std::rc::Rc::new(move |_, app| {
-                let pid_cap = pid_dir.clone();
-                let _ = h_dir.update(app, |this, cx| {
-                    this.toggle_filter_type(&pid_cap, "Dossier".to_string(), cx);
-                    this.open_type_filter_menu(&pid_cap, pos, cx);
-                });
-            }),
-            on_hover: None,
-        });
-    }
 
     for ext in sorted_exts {
         let h_ext = h.clone();

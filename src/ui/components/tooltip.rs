@@ -55,22 +55,6 @@ impl Tooltip {
         }
     }
 
-    /// Crée un constructeur de tooltip détaillé pour un fichier.
-    pub fn for_file(name: String, ext: String, size: String, date: String) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
-        move |_, cx| {
-            cx.new(|_| Self {
-                title: SharedString::from(name.clone()),
-                meta: None,
-                file_info: Some(FileInfo {
-                    ext: ext.clone(),
-                    size: size.clone(),
-                    date: date.clone(),
-                }),
-                preview_view: None,
-            }).into()
-        }
-    }
-
     /// Crée un constructeur de tooltip complet pour un fichier avec preview possible.
     pub fn for_file_full(name: String, path: String, ext: String, size: String, date: String) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
         let path_clone = path.clone();
@@ -179,31 +163,44 @@ impl PreviewTask {
             let mut cx = cx.clone();
             async move {
                 if preview_type == PreviewType::Video {
-                    // Bounded channel (size 2) — blocking_send in the WMF thread provides
-                    // natural backpressure: it blocks until the async task has consumed the
-                    // previous frame, so WMF never runs ahead of the display rate.
-                    let (tx, mut rx) = tokio::sync::mpsc::channel::<(Arc<RenderImage>, Duration)>(2);
+                    // Channel size 4: gives the decode thread a small buffer so it is never
+                    // starved while the async side is sleeping, without letting it run
+                    // arbitrarily far ahead.
+                    let (tx, mut rx) = tokio::sync::mpsc::channel::<(Arc<RenderImage>, Duration)>(4);
 
                     let path_clone = path.clone();
                     std::thread::spawn(move || {
-                        let _ = ::oxyde_lib::commands::thumbnails::stream_video_frames(path_clone, move |rgba, duration| {
-                            // WMF ARGB32 → bytes are already [B,G,R,A] = BGRA, no swap needed.
+                        let _ = ::oxyde_lib::commands::thumbnails::stream_video_frames(path_clone, move |rgba, pts| {
                             let frame = Arc::new(RenderImage::new(vec![image::Frame::new(rgba)]));
-                            tx.blocking_send((frame, duration)).is_ok()
+                            tx.blocking_send((frame, pts)).is_ok()
                         });
                     });
 
-                    // Cap at 15fps — GPUI re-renders the whole window on notify(),
-                    // so 30fps would double the render load for a tooltip preview.
-                    const MIN_FRAME_MS: u64 = 66;
-                    while let Some((frame, duration)) = rx.recv().await {
+                    // PTS-based playback: sleep until wall-clock time matches the frame's
+                    // presentation timestamp.  `start` is reset whenever the PTS resets to
+                    // near zero (video looped), keeping timing accurate across restarts.
+                    let mut start = std::time::Instant::now();
+                    let mut last_pts = Duration::ZERO;
+
+                    while let Some((frame, pts)) = rx.recv().await {
+                        // Detect loop restart: PTS jumped back by more than 500 ms.
+                        if pts + Duration::from_millis(500) < last_pts {
+                            start = std::time::Instant::now();
+                        }
+                        last_pts = pts;
+
                         let res = this.update(&mut cx, |this, cx| {
                             this.data = Some(PreviewData::Image(frame));
                             cx.notify();
                         });
                         if res.is_err() { break; }
-                        let wait = duration.max(Duration::from_millis(MIN_FRAME_MS));
-                        cx.background_executor().timer(wait).await;
+
+                        // Sleep only as long as needed to stay on schedule.
+                        // If we are already late, skip the sleep (drop-frame behaviour).
+                        let elapsed = start.elapsed();
+                        if pts > elapsed {
+                            cx.background_executor().timer(pts - elapsed).await;
+                        }
                     }
                     return;
                 }

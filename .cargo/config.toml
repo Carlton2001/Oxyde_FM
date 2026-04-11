@@ -1,0 +1,8 @@
+# ---------------------------------------------------------------------------
+# Build configuration — Oxyde
+# ---------------------------------------------------------------------------
+
+# (Placeholder for future cross-platform video support via FFmpeg)
+# When targeting Linux/Mac, add here:
+#   FFMPEG_DIR = "/path/to/ffmpeg-shared"
+#   LIBCLANG_PATH = "/path/to/llvm/bin"

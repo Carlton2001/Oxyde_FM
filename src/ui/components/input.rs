@@ -29,10 +29,11 @@ pub struct TextInput {
     on_escape: Box<dyn Fn(&mut Window, &mut App)>,
     cursor_visible: bool,
     blink_epoch: usize,
+    pub minimal: bool,
 }
 
 impl TextInput {
-    pub fn new(cx: &mut Context<Self>, placeholder: impl Into<SharedString>, initial_text: String, on_change: impl Fn(&str, &mut Window, &mut App) + 'static, on_enter: impl Fn(&mut Window, &mut App) + 'static, on_escape: impl Fn(&mut Window, &mut App) + 'static, window: &mut Window) -> Self {
+    pub fn new(cx: &mut Context<Self>, placeholder: impl Into<SharedString>, initial_text: String, on_change: impl Fn(&str, &mut Window, &mut App) + 'static, on_enter: impl Fn(&mut Window, &mut App) + 'static, on_escape: impl Fn(&mut Window, &mut App) + 'static, minimal: bool, initial_selection: Option<std::ops::Range<usize>>, window: &mut Window) -> Self {
         let len = initial_text.len();
         let focus_handle = cx.focus_handle();
         
@@ -49,7 +50,7 @@ impl TextInput {
             focus_handle,
             content: initial_text,
             placeholder: placeholder.into(),
-            selected_range: len..len,
+            selected_range: initial_selection.unwrap_or(len..len),
             last_layout: None,
             last_bounds: None,
             on_change: Box::new(on_change),
@@ -57,6 +58,7 @@ impl TextInput {
             on_escape: Box::new(on_escape),
             cursor_visible: true,
             blink_epoch: 0,
+            minimal,
         }
     }
 
@@ -121,7 +123,10 @@ impl TextInput {
     }
 
     fn move_left(&mut self, _: &Left, _: &mut Window, cx: &mut Context<Self>) {
-        if self.selected_range.start > 0 {
+        if !self.selected_range.is_empty() {
+            self.selected_range = self.selected_range.start..self.selected_range.start;
+            self.reset_blinking(cx);
+        } else if self.selected_range.start > 0 {
             let prev = self.content.grapheme_indices(true).rev().find(|(i, _)| *i < self.selected_range.start).map(|(i, _)| i).unwrap_or(0);
             self.selected_range = prev..prev;
             self.reset_blinking(cx);
@@ -129,7 +134,10 @@ impl TextInput {
     }
 
     fn move_right(&mut self, _: &Right, _: &mut Window, cx: &mut Context<Self>) {
-        if self.selected_range.end < self.content.len() {
+        if !self.selected_range.is_empty() {
+            self.selected_range = self.selected_range.end..self.selected_range.end;
+            self.reset_blinking(cx);
+        } else if self.selected_range.end < self.content.len() {
             let next = self.content.grapheme_indices(true).find(|(i, _)| *i > self.selected_range.start).map(|(i, _)| i).unwrap_or(self.content.len());
             self.selected_range = next..next;
             self.reset_blinking(cx);
@@ -184,12 +192,12 @@ impl Render for TextInput {
             .on_mouse_down(MouseButton::Left, move |_, window, _| {
                 window.focus(&focus_handle);
             })
-            .bg(if is_focused { hsla(0.0, 0.0, 0.18, 1.0) } else { hsla(0.0, 0.0, 0.16, 1.0) })
+            .bg(if is_focused { hsla(0.0, 0.0, 0.16, 1.0) } else { hsla(0.0, 0.0, 0.12, 1.0) })
             .border_1()
-            .border_color(hsla(0.0, 0.0, 0.25, 1.0))
-            .rounded_md()
-            .px_3()
-            .h_8()
+            .border_color(if is_focused { hsla(0.6, 1.0, 0.5, 0.6) } else { hsla(0.0, 0.0, 0.25, 1.0) })
+            .rounded_sm()
+            .when(self.minimal, |s| s.h_full())
+            .when(!self.minimal, |s| s.h_8().px_2())
             .w_full()
             .child(
                 div()
@@ -199,7 +207,7 @@ impl Render for TextInput {
                     .cursor(CursorStyle::IBeam)
                     .child(TextInputElement { input: cx.entity() })
             )
-            .when(!self.content.is_empty(), |s: Div| {
+            .when(!self.minimal && !self.content.is_empty(), |s: Div| {
                 let h_clear = cx.entity().clone();
                 s.child(
                     div()

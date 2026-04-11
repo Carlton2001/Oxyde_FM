@@ -1,10 +1,21 @@
 use gpui::*;
 use gpui::prelude::*;
 use crate::ui::app::{OxydeApp, FileDragData};
-// use gpui_component::{button::{Button, ButtonVariants}, IconName, Size as ComponentSize, Sizable};
 use crate::ui::components::dropdown::IconName;
 use crate::ui::components::tooltip::Tooltip;
 use crate::ui::theme::ThemeContext;
+use oxyde_lib::models::TransactionType;
+
+fn op_label(op: &TransactionType) -> &'static str {
+    match op {
+        TransactionType::Copy      => "Copie",
+        TransactionType::Move      => "Déplacement",
+        TransactionType::Rename    => "Renommage",
+        TransactionType::Delete    => "Suppression",
+        TransactionType::NewFolder => "Nouveau dossier",
+        TransactionType::Restore   => "Restauration",
+    }
+}
 
 use oxyde_lib::models::FileEntry;
 
@@ -37,6 +48,16 @@ pub fn render_top_bar(view: &OxydeApp, pane_id: String, handle: Entity<OxydeApp>
 
     let can_go_back = !active_tab.back_stack.is_empty();
     let can_go_forward = !active_tab.forward_stack.is_empty();
+
+    let history_state = view.history.get_state();
+    let can_undo = !history_state.undo_stack.is_empty();
+    let can_redo = !history_state.redo_stack.is_empty();
+    let has_history_actions = can_undo || can_redo;
+
+    let undo_tooltip = history_state.undo_stack.last()
+        .map(|t| format!("Annuler : {}", op_label(&t.op_type)));
+    let redo_tooltip = history_state.redo_stack.last()
+        .map(|t| format!("Rétablir : {}", op_label(&t.op_type)));
 
     // Shared constants for consistent look
     let icon_active   = theme.text_muted;
@@ -147,6 +168,75 @@ pub fn render_top_bar(view: &OxydeApp, pane_id: String, handle: Entity<OxydeApp>
                 .mx_3()
                 .bg(theme.border)
         )
+        // Undo / Redo block — only rendered when at least one action is available
+        .when(has_history_actions, |bar| {
+            bar
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap_1()
+                        .when(can_undo, |d| {
+                            let h = handle.clone();
+                            let tip = undo_tooltip.clone().unwrap_or_default();
+                            d.child(
+                                div()
+                                    .id("undo-btn")
+                                    .w_6()
+                                    .h_6()
+                                    .flex()
+                                    .items_center()
+                                    .justify_center()
+                                    .rounded_md()
+                                    .cursor_pointer()
+                                    .hover(move |s| s.bg(hover_bg))
+                                    .tooltip(Tooltip::with_meta("Annuler", tip))
+                                    .on_mouse_down(MouseButton::Left, move |_, _, cx| {
+                                        let _ = h.update(cx, |this, cx| this.execute_undo(cx));
+                                    })
+                                    .child(
+                                        svg()
+                                            .path("icons/undo.svg")
+                                            .size_4()
+                                            .text_color(icon_active)
+                                    )
+                            )
+                        })
+                        .when(can_redo, |d| {
+                            let h = handle.clone();
+                            let tip = redo_tooltip.clone().unwrap_or_default();
+                            d.child(
+                                div()
+                                    .id("redo-btn")
+                                    .w_6()
+                                    .h_6()
+                                    .flex()
+                                    .items_center()
+                                    .justify_center()
+                                    .rounded_md()
+                                    .cursor_pointer()
+                                    .hover(move |s| s.bg(hover_bg))
+                                    .tooltip(Tooltip::with_meta("Rétablir", tip))
+                                    .on_mouse_down(MouseButton::Left, move |_, _, cx| {
+                                        let _ = h.update(cx, |this, cx| this.execute_redo(cx));
+                                    })
+                                    .child(
+                                        svg()
+                                            .path("icons/redo.svg")
+                                            .size_4()
+                                            .text_color(icon_active)
+                                    )
+                            )
+                        })
+                )
+                .child(
+                    div()
+                        .w(px(1.0))
+                        .h(px(16.0))
+                        .mx_3()
+                        .bg(theme.border)
+                )
+        })
         .child(
             div()
                 .flex()

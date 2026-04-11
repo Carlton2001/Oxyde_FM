@@ -14,15 +14,16 @@ pub enum IconType {
     Disc,
     FileCode,
     Link,
+    Link2,
     ExternalLink,
     FileSpreadsheet,
     FileStack,
     Database,
-    Terminal,
     Key,
     ShieldCheck,
     Box,
     HardDrive,
+    Network,
     Globe,
     Trash,
 }
@@ -30,159 +31,172 @@ pub enum IconType {
 impl IconType {
     pub fn path(&self) -> &'static str {
         match self {
-            Self::Folder => "icons/folder.svg",
-            Self::File => "icons/file.svg",
-            Self::FileText => "icons/file-text.svg",
-            Self::FileImage => "icons/file-image.svg",
-            Self::FileVideo => "icons/file-video.svg",
-            Self::Music => "icons/music.svg",
-            Self::Package => "icons/package.svg",
-            Self::Archive => "icons/archive.svg",
-            Self::Disc => "icons/disc.svg",
-            Self::FileCode => "icons/file-code.svg",
-            Self::Link => "icons/link.svg",
-            Self::ExternalLink => "icons/external-link.svg",
+            Self::Folder        => "icons/folder.svg",
+            Self::File          => "icons/file.svg",
+            Self::FileText      => "icons/file-text.svg",
+            Self::FileImage     => "icons/file-image.svg",
+            Self::FileVideo     => "icons/file-video.svg",
+            Self::Music         => "icons/music.svg",
+            Self::Package       => "icons/package.svg",
+            Self::Archive       => "icons/archive.svg",
+            Self::Disc          => "icons/disc.svg",
+            Self::FileCode      => "icons/file-code.svg",
+            Self::Link          => "icons/link.svg",
+            Self::Link2         => "icons/link2.svg",
+            Self::ExternalLink  => "icons/external-link.svg",
             Self::FileSpreadsheet => "icons/file-spreadsheet.svg",
-            Self::FileStack => "icons/file-stack.svg",
-            Self::Database => "icons/database.svg",
-            Self::Terminal => "icons/terminal.svg",
-            Self::Key => "icons/key.svg",
-            Self::ShieldCheck => "icons/shield-check.svg",
-            Self::Box => "icons/box.svg",
-            Self::HardDrive => "icons/hard-drive.svg",
-            Self::Globe => "icons/globe.svg",
-            Self::Trash => "icons/trash.svg",
+            Self::FileStack     => "icons/file-stack.svg",
+            Self::Database      => "icons/database.svg",
+            Self::Key           => "icons/key.svg",
+            Self::ShieldCheck   => "icons/shield-check.svg",
+            Self::Box           => "icons/box.svg",
+            Self::HardDrive     => "icons/hard-drive.svg",
+            Self::Network       => "icons/network.svg",
+            Self::Globe         => "icons/globe.svg",
+            Self::Trash         => "icons/trash.svg",
         }
     }
 }
 
+// ---------------------------------------------------------------------------
+// Extension sets — O(1) lookup, mirrors fileIcons.tsx from V1
+// ---------------------------------------------------------------------------
+
 pub static IMAGE_EXTENSIONS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
-    let mut s = HashSet::new();
-    s.extend(["png", "jpg", "jpeg", "gif", "bmp", "webp", "svg", "ico", "tiff", "tif"]);
-    s
+    ["png", "jpg", "jpeg", "gif", "bmp", "webp", "svg", "ico", "tiff", "tif"].into()
 });
 
+/// Subset of images that can be previewed inline (tooltip / inspector).
 pub static PREVIEWABLE_EXTENSIONS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
-    let mut s = HashSet::new();
-    s.extend(["png", "jpg", "jpeg", "gif", "bmp", "webp", "svg", "ico"]);
-    s
+    ["png", "jpg", "jpeg", "gif", "bmp", "webp", "svg", "ico"].into()
 });
 
 pub static PREVIEWABLE_VIDEO_EXTENSIONS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
-    let mut s = HashSet::new();
-    s.extend(["mp4", "webm", "ogv", "mov", "m4v", "3gp", "mp4v"]);
-    s
+    ["mp4", "webm", "ogv", "mov", "m4v", "3gp", "mp4v"].into()
+});
+
+pub static PREVIEWABLE_OFFICE_EXTENSIONS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
+    ["docx", "xlsx", "pptx", "odt", "ods", "odp"].into()
 });
 
 pub static AUDIO_EXTENSIONS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
-    let mut s = HashSet::new();
-    s.extend(["mp3", "wav", "ogg", "flac", "aac", "m4a", "wma", "mid", "midi"]);
-    s
+    ["mp3", "wav", "ogg", "flac", "aac", "m4a", "wma", "mid", "midi"].into()
 });
 
 pub static VIDEO_EXTENSIONS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
-    let mut s = HashSet::new();
-    s.extend(["mp4", "webm", "ogv", "mov", "m4v", "3gp", "mp4v", "mkv", "avi", "wmv", "flv", "mpg", "mpeg"]);
-    s
+    [
+        "mp4", "webm", "ogv", "mov", "m4v", "3gp", "mp4v",
+        "mkv", "avi", "wmv", "flv", "mpg", "mpeg",
+    ].into()
 });
 
 pub static EXECUTABLE_EXTENSIONS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
-    let mut s = HashSet::new();
-    s.extend(["exe", "msi", "msix", "appx", "bat", "cmd", "ps1", "sh", "jar", "com"]);
-    s
+    ["exe", "msi", "msix", "appx", "bat", "cmd", "ps1", "sh", "jar", "com"].into()
 });
 
 pub static ARCHIVE_EXTENSIONS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
-    let mut s = HashSet::new();
-    s.extend(["zip", "rar", "7z", "tar", "gz", "bz2", "xz", "cab", "tgz", "zst", "tbz2", "tzst", "txz"]);
-    s
+    ["zip", "rar", "7z", "tar", "gz", "bz2", "xz", "cab", "tgz", "zst", "tbz2", "tzst", "txz"].into()
 });
 
 pub static PDF_EXTENSIONS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
-    let mut s = HashSet::new();
-    s.extend(["pdf"]);
-    s
+    ["pdf"].into()
 });
 
 pub static DISK_EXTENSIONS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
-    let mut s = HashSet::new();
-    s.extend(["iso", "img", "vmdk", "vhd", "vhdx"]);
-    s
+    ["iso", "img", "vmdk", "vhd", "vhdx"].into()
 });
 
 pub static CODE_EXTENSIONS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
-    let mut s = HashSet::new();
-    s.extend([
+    [
+        // Web
         "js", "ts", "tsx", "jsx", "html", "css", "scss", "sass", "less", "wasm",
-        "rs", "py", "java", "cpp", "c", "h", "hpp", "cs", "go", "php", "rb", "swift", "kt", "dart",
-        "sql", "sh", "bat", "ps1", "cmd", "vbs", "pl", "lua", "r", "m", "f90", "f", "jl", "scala",
-        "elm", "erl", "ex", "exs", "clj", "cljs", "lisp", "scm", "ml", "mli", "asm", "s",
-        "json", "xml", "yaml", "yml", "md", "toml", "ini", "cfg", "conf", "config", "env",
-        "graphql", "gql", "proto", "dockerfile", "makefile", "cmake", "sln", "csproj", "vcxproj"
-    ]);
-    s
+        // Languages
+        "rs", "py", "java", "cpp", "c", "h", "hpp", "cs", "go", "php", "rb",
+        "swift", "kt", "dart", "sql", "sh", "bat", "ps1", "cmd", "vbs", "pl",
+        "lua", "r", "m", "f90", "f", "jl", "scala", "elm", "erl", "ex", "exs",
+        "clj", "cljs", "lisp", "scm", "ml", "mli", "asm", "s",
+        // Data & Config
+        "json", "xml", "yaml", "yml", "md", "toml", "ini", "cfg", "conf",
+        "config", "env", "graphql", "gql", "proto", "dockerfile", "makefile",
+        "cmake", "sln", "csproj", "vcxproj",
+    ].into()
 });
 
 pub static TEXT_BASE_EXTENSIONS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
-    let mut s = HashSet::new();
-    s.extend(["txt", "log", "nfo", "inf", "ini", "cfg", "conf", "config", "bak", "tmp", "csv", "tsv"]);
-    s
+    ["txt", "log", "nfo", "inf", "ini", "cfg", "conf", "config", "bak", "tmp", "csv", "tsv"].into()
 });
 
 pub static WORD_EXTENSIONS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
-    let mut s = HashSet::new();
-    s.extend(["doc", "docx", "odt", "rtf", "pages", "dot", "dotx"]);
-    s
+    ["doc", "docx", "odt", "rtf", "pages", "dot", "dotx"].into()
 });
 
 pub static EXCEL_EXTENSIONS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
-    let mut s = HashSet::new();
-    s.extend(["xls", "xlsx", "ods", "csv", "tsv", "numbers", "xlsm"]);
-    s
+    ["xls", "xlsx", "ods", "csv", "tsv", "numbers", "xlsm"].into()
 });
 
 pub static POWERPOINT_EXTENSIONS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
-    let mut s = HashSet::new();
-    s.extend(["ppt", "pptx", "odp", "key", "pps", "ppsx"]);
-    s
+    ["ppt", "pptx", "odp", "key", "pps", "ppsx"].into()
 });
 
 pub static DATABASE_EXTENSIONS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
-    let mut s = HashSet::new();
-    s.extend(["accdb", "mdb", "db", "sqlite", "sqlite3"]);
-    s
+    ["accdb", "mdb", "db", "sqlite", "sqlite3"].into()
 });
 
 pub static CERT_EXTENSIONS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
-    let mut s = HashSet::new();
-    s.extend(["pem", "crt", "cer", "key", "p12", "pfx", "pub"]);
-    s
+    ["pem", "crt", "cer", "key", "p12", "pfx", "pub"].into()
 });
 
 pub static SYSTEM_EXTENSIONS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
-    let mut s = HashSet::new();
-    s.extend(["dll", "sys", "ocx", "drv", "cpl", "scr"]);
-    s
+    ["dll", "sys", "ocx", "drv", "cpl", "scr"].into()
 });
 
-pub fn get_icon_type(name: &str, is_dir: bool, path: Option<&str>) -> IconType {
-    if is_dir {
-        return IconType::Folder;
-    }
+// ---------------------------------------------------------------------------
+// Icon resolution — mirrors getFileIcon() logic from V1
+// ---------------------------------------------------------------------------
 
-    if let Some(path) = path {
-        // Virtual paths
-        if path == "__network_vincinity__" {
+pub fn get_icon_type(
+    name: &str,
+    is_dir: bool,
+    path: Option<&str>,
+    is_symlink: bool,
+    is_junction: bool,
+) -> IconType {
+    // 1. Virtual / special paths
+    if let Some(p) = path {
+        if p == "__network_vincinity__" {
             return IconType::Globe;
         }
-        if path == "trash://" {
+        if p == "trash://" {
             return IconType::Trash;
         }
-
-        // Drive roots (C:\)
-        if path.len() <= 3 && path.chars().next().map(|c| c.is_ascii_alphabetic()).unwrap_or(false) && (path.ends_with(":\\") || path.ends_with(":")) {
-             return IconType::HardDrive;
+        // Windows Shell items (CLSID paths, network vicinity expansions)
+        if p.starts_with("::{") || p.starts_with('?') {
+            return IconType::Network;
         }
+        // UNC server roots (\\SERVER — one component, not a share)
+        if p.starts_with("\\\\") {
+            let parts: Vec<&str> = p.split('\\').filter(|s| !s.is_empty()).collect();
+            if parts.len() <= 1 {
+                return IconType::Network;
+            }
+        }
+        // Drive roots (C:\ or C:)
+        if p.len() <= 3
+            && p.chars().next().map(|c| c.is_ascii_alphabetic()).unwrap_or(false)
+            && (p.ends_with(":\\") || p.ends_with(':'))
+        {
+            return IconType::HardDrive;
+        }
+    }
+
+    // 2. Symlinks / junctions
+    if is_symlink || is_junction {
+        return IconType::Link2;
+    }
+
+    // 3. Directories
+    if is_dir {
+        return IconType::Folder;
     }
 
     let ext = std::path::Path::new(name)
@@ -190,67 +204,41 @@ pub fn get_icon_type(name: &str, is_dir: bool, path: Option<&str>) -> IconType {
         .and_then(|e| e.to_str())
         .map(|e| e.to_lowercase())
         .unwrap_or_default();
+    let ext = ext.as_str();
 
-    if IMAGE_EXTENSIONS.contains(ext.as_str()) {
-        return IconType::FileImage;
-    }
-    if AUDIO_EXTENSIONS.contains(ext.as_str()) {
-        return IconType::Music;
-    }
-    if VIDEO_EXTENSIONS.contains(ext.as_str()) {
-        return IconType::FileVideo;
-    }
-    if WORD_EXTENSIONS.contains(ext.as_str()) {
-        return IconType::FileText;
-    }
-    if EXCEL_EXTENSIONS.contains(ext.as_str()) {
-        return IconType::FileSpreadsheet;
-    }
-    if POWERPOINT_EXTENSIONS.contains(ext.as_str()) {
-        return IconType::FileStack;
-    }
-    if DATABASE_EXTENSIONS.contains(ext.as_str()) {
-        return IconType::Database;
-    }
-    if CERT_EXTENSIONS.contains(ext.as_str()) {
-        return IconType::Key;
-    }
-    if SYSTEM_EXTENSIONS.contains(ext.as_str()) {
-        return IconType::ShieldCheck;
-    }
-    if ext == "msix" || ext == "appx" {
-        return IconType::Box;
-    }
-    if EXECUTABLE_EXTENSIONS.contains(ext.as_str()) {
-        return IconType::Package;
-    }
-    if ["bat", "cmd", "ps1", "sh"].contains(&ext.as_str()) {
-        return IconType::Terminal;
-    }
-    if ARCHIVE_EXTENSIONS.contains(ext.as_str()) {
-        return IconType::Archive;
-    }
-    if PDF_EXTENSIONS.contains(ext.as_str()) {
-        return IconType::FileText; // PDF often uses file-text or dedicated icon
-    }
-    if DISK_EXTENSIONS.contains(ext.as_str()) {
-        return IconType::Disc;
-    }
-    if CODE_EXTENSIONS.contains(ext.as_str()) {
-        return IconType::FileCode;
-    }
-    if TEXT_BASE_EXTENSIONS.contains(ext.as_str()) {
-        return IconType::FileText;
-    }
-    if ext == "lnk" {
-        return IconType::ExternalLink;
-    }
-    if ["url", "website", "webloc"].contains(&ext.as_str()) {
-        return IconType::Link;
-    }
+    if IMAGE_EXTENSIONS.contains(ext)       { return IconType::FileImage; }
+    if AUDIO_EXTENSIONS.contains(ext)       { return IconType::Music; }
+    if VIDEO_EXTENSIONS.contains(ext)       { return IconType::FileVideo; }
+
+    // Office productivity
+    if WORD_EXTENSIONS.contains(ext)        { return IconType::FileText; }
+    if EXCEL_EXTENSIONS.contains(ext)       { return IconType::FileSpreadsheet; }
+    if POWERPOINT_EXTENSIONS.contains(ext)  { return IconType::FileStack; }
+
+    // Specialised types
+    if DATABASE_EXTENSIONS.contains(ext)    { return IconType::Database; }
+    if CERT_EXTENSIONS.contains(ext)        { return IconType::Key; }
+    if SYSTEM_EXTENSIONS.contains(ext)      { return IconType::ShieldCheck; }
+
+    // Executables & installers
+    if ext == "msix" || ext == "appx"       { return IconType::Box; }
+    if EXECUTABLE_EXTENSIONS.contains(ext)  { return IconType::Package; }
+
+    if ARCHIVE_EXTENSIONS.contains(ext)     { return IconType::Archive; }
+    if PDF_EXTENSIONS.contains(ext)         { return IconType::FileText; }
+    if DISK_EXTENSIONS.contains(ext)        { return IconType::Disc; }
+    if CODE_EXTENSIONS.contains(ext)        { return IconType::FileCode; }
+    if TEXT_BASE_EXTENSIONS.contains(ext)   { return IconType::FileText; }
+
+    if ext == "lnk"                         { return IconType::ExternalLink; }
+    if matches!(ext, "url" | "website" | "webloc") { return IconType::Link; }
 
     IconType::File
 }
+
+// ---------------------------------------------------------------------------
+// Preview type resolution
+// ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PreviewType {
@@ -269,26 +257,14 @@ pub fn get_preview_type(name: &str) -> PreviewType {
         .and_then(|e| e.to_str())
         .map(|e| e.to_lowercase())
         .unwrap_or_default();
+    let ext = ext.as_str();
 
-    if PREVIEWABLE_EXTENSIONS.contains(ext.as_str()) {
-        return PreviewType::Image;
-    }
-    if PREVIEWABLE_VIDEO_EXTENSIONS.contains(ext.as_str()) {
-        return PreviewType::Video;
-    }
-    if PDF_EXTENSIONS.contains(ext.as_str()) {
-        return PreviewType::Pdf;
-    }
-    if PDF_EXTENSIONS.contains(ext.as_str()) {
-        return PreviewType::Pdf;
-    }
-    if ["docx", "xlsx", "pptx", "odt", "ods", "odp"].contains(&ext.as_str()) {
-        return PreviewType::Office;
-    }
-    if ext == "html" || ext == "htm" {
-        return PreviewType::Html;
-    }
-    if TEXT_BASE_EXTENSIONS.contains(ext.as_str()) || CODE_EXTENSIONS.contains(ext.as_str()) {
+    if PREVIEWABLE_EXTENSIONS.contains(ext)        { return PreviewType::Image; }
+    if PREVIEWABLE_VIDEO_EXTENSIONS.contains(ext)  { return PreviewType::Video; }
+    if PDF_EXTENSIONS.contains(ext)                { return PreviewType::Pdf; }
+    if PREVIEWABLE_OFFICE_EXTENSIONS.contains(ext) { return PreviewType::Office; }
+    if ext == "html" || ext == "htm"               { return PreviewType::Html; }
+    if TEXT_BASE_EXTENSIONS.contains(ext) || CODE_EXTENSIONS.contains(ext) {
         return PreviewType::Text;
     }
 

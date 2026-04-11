@@ -172,6 +172,8 @@ impl OxydeApp {
                         this.context_menus.clear();
                     });
                 },
+                false,
+                None,
                 window
             )
         });

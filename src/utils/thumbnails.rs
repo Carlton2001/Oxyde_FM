@@ -6,7 +6,7 @@ use std::time::Duration;
 
 /// Target thumbnail size in pixels (longest side).
 const THUMB_SIZE: u32 = 256;
-const VIDEO_THUMB_SIZE: u32 = 256;
+const VIDEO_THUMB_SIZE: u32 = 320;
 
 #[cfg(target_os = "windows")]
 pub fn get_thumbnail_raw(path: String) -> Result<RgbaImage, CommandError> {
@@ -29,99 +29,90 @@ where
         let res = (|| -> Result<(), CommandError> {
             let wide_path = windows::core::HSTRING::from(&path);
 
-            let mut attributes: Option<IMFAttributes> = None;
-            MFCreateAttributes(&mut attributes, 2).ok();
-            if let Some(attr) = &attributes {
-                attr.SetUINT32(&MF_SOURCE_READER_ENABLE_VIDEO_PROCESSING, 1)
-                    .ok();
-                attr.SetUINT32(&MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS, 1)
-                    .ok();
-            }
-
-            let reader: IMFSourceReader = MFCreateSourceReaderFromURL(
-                windows::core::PCWSTR(wide_path.as_ptr()),
-                attributes.as_ref(),
-            )
-            .map_err(|e| CommandError::Other(format!("MFCreateSourceReaderFromURL: {e}")))?;
-
-            reader
-                .SetStreamSelection(MF_SOURCE_READER_ALL_STREAMS.0 as u32, false)
-                .ok();
-            reader
-                .SetStreamSelection(MF_SOURCE_READER_FIRST_VIDEO_STREAM.0 as u32, true)
-                .ok();
-
-            // ── Read native dimensions BEFORE touching the output type ──────────
-            // GetCurrentMediaType here returns the decoded source format (e.g. NV12
-            // at 3840×2160) with true content dimensions.
-            // SetCurrentMediaType with MF_MT_FRAME_SIZE is silently ignored for many
-            // codecs — the buffer is always delivered at native resolution.
-            let src_type = reader
-                .GetCurrentMediaType(MF_SOURCE_READER_FIRST_VIDEO_STREAM.0 as u32)
-                .map_err(|e| CommandError::Other(format!("GetCurrentMediaType(src): {e}")))?;
-
-            let src_size = src_type.GetUINT64(&MF_MT_FRAME_SIZE).unwrap_or(0);
-            let src_w = ((src_size >> 32) as u32).max(1);
-            let src_h = (src_size as u32).max(1);
-
-            let fps_packed = src_type
-                .GetUINT64(&MF_MT_FRAME_RATE)
-                .unwrap_or((30u64 << 32) | 1);
-            let fps_num = (fps_packed >> 32) as u32;
-            let fps_den = (fps_packed & 0xFFFF_FFFF) as u32;
-            let frame_duration =
-                Duration::from_micros(1_000_000 * fps_den as u64 / fps_num.max(1) as u64);
-
-            // ── Request RGB32 output (format conversion only, no size constraint) ─
-            let out_req = MFCreateMediaType()
-                .map_err(|e| CommandError::Other(format!("MFCreateMediaType: {e}")))?;
-            out_req.SetGUID(&MF_MT_MAJOR_TYPE, &MFMediaType_Video).ok();
-            out_req.SetGUID(&MF_MT_SUBTYPE, &MFVideoFormat_RGB32).ok();
-            reader
-                .SetCurrentMediaType(MF_SOURCE_READER_FIRST_VIDEO_STREAM.0 as u32, None, &out_req)
-                .ok();
-
-            // ── Thumbnail output size: aspect-ratio-preserved, max VIDEO_THUMB_SIZE ─
-            let (out_w, out_h) = if src_w >= src_h {
-                let h = ((VIDEO_THUMB_SIZE as u64 * src_h as u64) / src_w as u64).max(1) as u32;
-                (VIDEO_THUMB_SIZE, h)
-            } else {
-                let w = ((VIDEO_THUMB_SIZE as u64 * src_w as u64) / src_h as u64).max(1) as u32;
-                (w, VIDEO_THUMB_SIZE)
-            };
-
-            // RGB32 row stride = src_w * 4 (no column padding for standard video widths).
-            // Codec block alignment only adds extra rows at the bottom; we stay within src_h.
-            let src_stride = src_w * 4;
-
+            // Outer loop — restarts the reader from the beginning when the video ends.
             loop {
-                let mut flags = 0u32;
-                let mut sample: Option<IMFSample> = None;
-                if reader
-                    .ReadSample(
+                let mut attributes: Option<IMFAttributes> = None;
+                MFCreateAttributes(&mut attributes, 2).ok();
+                if let Some(attr) = &attributes {
+                    attr.SetUINT32(&MF_SOURCE_READER_ENABLE_VIDEO_PROCESSING, 1).ok();
+                    attr.SetUINT32(&MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS, 1).ok();
+                }
+
+                let reader: IMFSourceReader = match MFCreateSourceReaderFromURL(
+                    windows::core::PCWSTR(wide_path.as_ptr()),
+                    attributes.as_ref(),
+                ) {
+                    Ok(r) => r,
+                    Err(_) => break,
+                };
+
+                reader.SetStreamSelection(MF_SOURCE_READER_ALL_STREAMS.0 as u32, false).ok();
+                reader.SetStreamSelection(MF_SOURCE_READER_FIRST_VIDEO_STREAM.0 as u32, true).ok();
+
+                // Read native dimensions from source media type.
+                let src_type = match reader.GetCurrentMediaType(MF_SOURCE_READER_FIRST_VIDEO_STREAM.0 as u32) {
+                    Ok(t) => t,
+                    Err(_) => break,
+                };
+
+                let src_size = src_type.GetUINT64(&MF_MT_FRAME_SIZE).unwrap_or(0);
+                let src_w = ((src_size >> 32) as u32).max(1);
+                let src_h = (src_size as u32).max(1);
+                let src_stride = src_w * 4;
+
+                // Request RGB32 output.
+                let out_req = match MFCreateMediaType() {
+                    Ok(t) => t,
+                    Err(_) => break,
+                };
+                out_req.SetGUID(&MF_MT_MAJOR_TYPE, &MFMediaType_Video).ok();
+                out_req.SetGUID(&MF_MT_SUBTYPE, &MFVideoFormat_RGB32).ok();
+                reader.SetCurrentMediaType(MF_SOURCE_READER_FIRST_VIDEO_STREAM.0 as u32, None, &out_req).ok();
+
+                // Aspect-ratio-preserving output size.
+                let (out_w, out_h) = if src_w >= src_h {
+                    let h = ((VIDEO_THUMB_SIZE as u64 * src_h as u64) / src_w as u64).max(1) as u32;
+                    (VIDEO_THUMB_SIZE, h)
+                } else {
+                    let w = ((VIDEO_THUMB_SIZE as u64 * src_w as u64) / src_h as u64).max(1) as u32;
+                    (w, VIDEO_THUMB_SIZE)
+                };
+
+                // Inner decode loop — reads frames and sends them with their actual PTS.
+                let mut caller_stopped = false;
+                loop {
+                    let mut flags = 0u32;
+                    let mut sample: Option<IMFSample> = None;
+                    if reader.ReadSample(
                         MF_SOURCE_READER_FIRST_VIDEO_STREAM.0 as u32,
-                        0,
-                        None,
-                        Some(&mut flags),
-                        None,
-                        Some(&mut sample),
-                    )
-                    .is_err()
-                {
-                    break;
-                }
+                        0, None, Some(&mut flags), None, Some(&mut sample),
+                    ).is_err() {
+                        break;
+                    }
 
-                if flags & MF_SOURCE_READERF_ENDOFSTREAM.0 as u32 != 0 {
-                    break;
-                }
+                    if flags & MF_SOURCE_READERF_ENDOFSTREAM.0 as u32 != 0 {
+                        break; // natural end → outer loop will restart reader
+                    }
 
-                if let Some(s) = sample {
-                    if let Ok(frame) = subsample_frame(s, src_w, src_h, src_stride, out_w, out_h) {
-                        if !on_frame(frame, frame_duration) {
-                            break;
+                    if let Some(s) = sample {
+                        // Actual presentation timestamp in 100-nanosecond WMF units.
+                        let pts_100ns = s.GetSampleTime().unwrap_or(0);
+                        let pts = Duration::from_nanos(pts_100ns as u64 * 100);
+
+                        if let Ok(frame) = subsample_frame(s, src_w, src_h, src_stride, out_w, out_h) {
+                            if !on_frame(frame, pts) {
+                                caller_stopped = true;
+                                break;
+                            }
                         }
                     }
                 }
+
+                if caller_stopped {
+                    break; // receiver dropped — stop the outer loop too
+                }
+                // Video ended naturally — small pause before restarting from the top.
+                std::thread::sleep(Duration::from_millis(200));
             }
             Ok(())
         })();
@@ -132,10 +123,6 @@ where
     }
 }
 
-/// Point-samples a native-resolution RGB32 WMF frame down to (out_w × out_h).
-///
-/// The WMF buffer (e.g. 33 MB for 4K) is read directly through the locked pointer
-/// and released immediately — only out_w*out_h*4 bytes are ever allocated.
 #[cfg(target_os = "windows")]
 fn subsample_frame(
     sample: windows::Win32::Media::MediaFoundation::IMFSample,
@@ -157,21 +144,38 @@ fn subsample_frame(
             .map_err(|e| CommandError::Other(format!("Lock: {e}")))?;
 
         let mut out = vec![0u8; (out_w * out_h * 4) as usize];
+        let src_w_f = src_w as f32;
+        let src_h_f = src_h as f32;
+        let out_w_f = out_w as f32;
+        let out_h_f = out_h as f32;
+        let stride = src_stride as usize;
 
-        // Integer point sampling: src_x = x * src_w / out_w  (floor)
+        // Bilinear interpolation with center-aligned sampling.
+        // RGB32 layout: [B, G, R, X] → output [B, G, R, A=255]
         for y in 0..out_h as usize {
-            let src_y = (y * src_h as usize) / out_h as usize;
-            let src_row = src_y * src_stride as usize;
-            let dst_row = y * out_w as usize * 4;
+            let fy = (y as f32 + 0.5) * src_h_f / out_h_f - 0.5;
+            let y0 = (fy as i32).clamp(0, src_h as i32 - 1) as usize;
+            let y1 = (y0 + 1).min(src_h as usize - 1);
+            let wy1 = (fy - y0 as f32).max(0.0);
+            let wy0 = 1.0 - wy1;
+
             for x in 0..out_w as usize {
-                let src_x = (x * src_w as usize) / out_w as usize;
-                let src_off = src_row + src_x * 4;
-                let dst_off = dst_row + x * 4;
-                // RGB32 layout: [B, G, R, X] — GPUI expects [B, G, R, A]
-                let p = ptr.add(src_off);
-                out[dst_off] = *p;
-                out[dst_off + 1] = *p.add(1);
-                out[dst_off + 2] = *p.add(2);
+                let fx = (x as f32 + 0.5) * src_w_f / out_w_f - 0.5;
+                let x0 = (fx as i32).clamp(0, src_w as i32 - 1) as usize;
+                let x1 = (x0 + 1).min(src_w as usize - 1);
+                let wx1 = (fx - x0 as f32).max(0.0);
+                let wx0 = 1.0 - wx1;
+
+                let dst_off = (y * out_w as usize + x) * 4;
+
+                for c in 0..3usize {
+                    let p00 = *ptr.add(y0 * stride + x0 * 4 + c) as f32;
+                    let p10 = *ptr.add(y0 * stride + x1 * 4 + c) as f32;
+                    let p01 = *ptr.add(y1 * stride + x0 * 4 + c) as f32;
+                    let p11 = *ptr.add(y1 * stride + x1 * 4 + c) as f32;
+                    let val = wy0 * (wx0 * p00 + wx1 * p10) + wy1 * (wx0 * p01 + wx1 * p11);
+                    out[dst_off + c] = val as u8;
+                }
                 out[dst_off + 3] = 255;
             }
         }

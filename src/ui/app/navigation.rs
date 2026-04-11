@@ -48,16 +48,12 @@ impl OxydeApp {
         if let Some(pane) = self.state.find_pane_mut(pane_id) {
             pane.active_tab_index = tab_idx;
             self.state.active_pane_id = pane_id.to_string();
-            self.tooltip_request = None;
-            self.tooltip_timer = None;
             cx.notify();
         }
     }
 
     pub fn close_tab(&mut self, pane_id: &str, tab_idx: usize, cx: &mut Context<Self>) {
         self.state.close_tab_id(pane_id, tab_idx);
-        self.tooltip_request = None;
-        self.tooltip_timer = None;
         self.reconcile_watchers();
         cx.notify();
     }
@@ -70,9 +66,7 @@ impl OxydeApp {
             active_tab.filter_types.clear();
             active_tab.filter_name.clear();
             active_tab.selected_paths.clear();
-            active_tab.list_scroll = UniformListScrollHandle::new(); 
-            self.tooltip_request = None;
-            self.tooltip_timer = None;
+            active_tab.list_scroll = UniformListScrollHandle::new();
             cx.notify();
             let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
             if let Ok(response) = rt.block_on(list_dir(path.clone(), None, None, None, None)) {
