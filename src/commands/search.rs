@@ -1,25 +1,22 @@
-use crate::models::{FileEntry, SessionManager};
 use crate::models::session::SearchContext;
+use crate::models::{FileEntry, SessionManager};
 
-use log::info;
+use crate::utils::archive::{is_archive, ArchiveFormat};
+use crate::utils::hardware::{get_physical_disk_id, is_network_path, is_ssd};
+use dashmap::DashMap;
 use glob::Pattern;
+use iso9660_core::iso9660entry::{ISO9660Record, IsISO9660Record};
+use log::info;
+use once_cell::sync::Lazy;
 use regex::{Regex, RegexBuilder};
-use std::time::SystemTime;
-use std::sync::{Arc, Mutex};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::thread;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read};
-use crate::utils::archive::{ArchiveFormat, is_archive};
-use crate::utils::hardware::{get_physical_disk_id, is_ssd, is_network_path};
-use dashmap::DashMap;
-use once_cell::sync::Lazy;
-use iso9660_core::iso9660entry::{IsISO9660Record, ISO9660Record};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::SystemTime;
 
-#[cfg(target_os = "windows")]
-use windows::Win32::System::Threading::{
-    GetCurrentThread, SetThreadPriority, THREAD_MODE_BACKGROUND_BEGIN, THREAD_MODE_BACKGROUND_END,
-};
+use crate::platform::{platform, ThreadPriority};
 
 /*
 #[derive(Clone, serde::Serialize)]
@@ -34,8 +31,8 @@ struct SearchEvent {
 
 #[derive(Clone)]
 enum SearchPattern {
-    Glob(Pattern, bool),    // (pattern, ignore_accents)
-    Regex(Regex, bool),   // (regex, ignore_accents)
+    Glob(Pattern, bool),         // (pattern, ignore_accents)
+    Regex(Regex, bool),          // (regex, ignore_accents)
     Literal(String, bool, bool), // (query, case_sensitive, ignore_accents)
 }
 
@@ -45,7 +42,11 @@ impl SearchPattern {
     fn matches(&self, text: &str) -> bool {
         match self {
             SearchPattern::Glob(p, ia) => {
-                let target = if *ia { crate::utils::remove_accents(text).to_lowercase() } else { text.to_lowercase() };
+                let target = if *ia {
+                    crate::utils::remove_accents(text).to_lowercase()
+                } else {
+                    text.to_lowercase()
+                };
                 p.matches(&target)
             }
             SearchPattern::Regex(r, ia) => {
@@ -57,7 +58,10 @@ impl SearchPattern {
             }
             SearchPattern::Literal(q, cs, ia) => {
                 let (target, query) = if *ia {
-                    (crate::utils::remove_accents(text), crate::utils::remove_accents(q))
+                    (
+                        crate::utils::remove_accents(text),
+                        crate::utils::remove_accents(q),
+                    )
                 } else {
                     (text.to_string(), q.clone())
                 };
@@ -96,36 +100,61 @@ fn search_in_archive(
             if let Ok(file) = File::open(archive_path) {
                 if let Ok(mut archive) = zip::ZipArchive::new(file) {
                     for i in 0..archive.len() {
-                        if cancellation.load(Ordering::Relaxed) { break; }
+                        if cancellation.load(Ordering::Relaxed) {
+                            break;
+                        }
                         if let Ok(file) = archive.by_index(i) {
                             let name_with_path = file.name().replace('\\', "/");
                             let last_part = name_with_path.split('/').next_back().unwrap_or("");
-                            if last_part.is_empty() { continue; }
+                            if last_part.is_empty() {
+                                continue;
+                            }
 
                             if params.pattern.matches(last_part) {
                                 let is_dir = file.is_dir();
                                 let size = if is_dir { 0 } else { file.size() };
-                                
+
                                 // Basic size filter
                                 if !is_dir {
-                                    if let Some(min) = params.min_size { if size < min { continue; } }
-                                    if let Some(max) = params.max_size { if size > max { continue; } }
+                                    if let Some(min) = params.min_size {
+                                        if size < min {
+                                            continue;
+                                        }
+                                    }
+                                    if let Some(max) = params.max_size {
+                                        if size > max {
+                                            continue;
+                                        }
+                                    }
                                 }
 
-                                let modified = file.last_modified()
+                                let modified = file
+                                    .last_modified()
                                     .and_then(|dt| {
-                                        let t: Result<time::OffsetDateTime, _> = dt.try_into();
+                                        let t: Result<chrono::NaiveDateTime, _> = dt.try_into();
                                         t.ok()
                                     })
-                                    .map(|ts| ts.unix_timestamp() as u64 * 1000)
+                                    .map(|ts| ts.and_utc().timestamp_millis() as u64)
                                     .unwrap_or(0);
-                                
-                                if let Some(min) = params.min_date { if modified < min { continue; } }
-                                if let Some(max) = params.max_date { if modified > max { continue; } }
+
+                                if let Some(min) = params.min_date {
+                                    if modified < min {
+                                        continue;
+                                    }
+                                }
+                                if let Some(max) = params.max_date {
+                                    if modified > max {
+                                        continue;
+                                    }
+                                }
 
                                 results.push(FileEntry {
                                     name: last_part.to_string(),
-                                    path: format!("{}\\{}", archive_path.to_string_lossy(), name_with_path.replace('/', "\\")),
+                                    path: format!(
+                                        "{}\\{}",
+                                        archive_path.to_string_lossy(),
+                                        name_with_path.replace('/', "\\")
+                                    ),
                                     is_dir,
                                     is_hidden: false,
                                     size,
@@ -143,23 +172,39 @@ fn search_in_archive(
                 if let Ok(len) = file.metadata().map(|m| m.len()) {
                     if let Ok(mut reader) = sevenz_rust::SevenZReader::new(file, len, "".into()) {
                         let _ = reader.for_each_entries(|entry, _| {
-                            if cancellation.load(Ordering::Relaxed) { return Ok(false); }
+                            if cancellation.load(Ordering::Relaxed) {
+                                return Ok(false);
+                            }
                             let name_with_path = entry.name().replace('\\', "/");
                             let last_part = name_with_path.split('/').next_back().unwrap_or("");
-                            if last_part.is_empty() { return Ok(true); }
+                            if last_part.is_empty() {
+                                return Ok(true);
+                            }
 
                             if params.pattern.matches(last_part) {
                                 let is_dir = entry.is_directory();
                                 let size = entry.size();
 
                                 if !is_dir {
-                                    if let Some(min) = params.min_size { if size < min { return Ok(true); } }
-                                    if let Some(max) = params.max_size { if size > max { return Ok(true); } }
+                                    if let Some(min) = params.min_size {
+                                        if size < min {
+                                            return Ok(true);
+                                        }
+                                    }
+                                    if let Some(max) = params.max_size {
+                                        if size > max {
+                                            return Ok(true);
+                                        }
+                                    }
                                 }
 
                                 results.push(FileEntry {
                                     name: last_part.to_string(),
-                                    path: format!("{}\\{}", archive_path.to_string_lossy(), name_with_path.replace('/', "\\")),
+                                    path: format!(
+                                        "{}\\{}",
+                                        archive_path.to_string_lossy(),
+                                        name_with_path.replace('/', "\\")
+                                    ),
                                     is_dir,
                                     is_hidden: false,
                                     size,
@@ -175,8 +220,12 @@ fn search_in_archive(
                 }
             }
         }
-        ArchiveFormat::Tar | ArchiveFormat::TarGz | ArchiveFormat::TarXz | ArchiveFormat::TarZst | ArchiveFormat::TarBz2 => {
-             if let Ok(file) = File::open(archive_path) {
+        ArchiveFormat::Tar
+        | ArchiveFormat::TarGz
+        | ArchiveFormat::TarXz
+        | ArchiveFormat::TarZst
+        | ArchiveFormat::TarBz2 => {
+            if let Ok(file) = File::open(archive_path) {
                 let reader: Box<dyn Read> = match format {
                     ArchiveFormat::TarGz => Box::new(flate2::read::GzDecoder::new(file)),
                     ArchiveFormat::TarXz => Box::new(xz2::read::XzDecoder::new(file)),
@@ -191,28 +240,52 @@ fn search_in_archive(
                 let mut archive = tar::Archive::new(reader);
                 if let Ok(entries) = archive.entries() {
                     for entry in entries.flatten() {
-                        if cancellation.load(Ordering::Relaxed) { break; }
+                        if cancellation.load(Ordering::Relaxed) {
+                            break;
+                        }
                         if let Ok(path) = entry.path() {
                             let name_with_path = path.to_string_lossy().replace('\\', "/");
                             let last_part = name_with_path.split('/').next_back().unwrap_or("");
-                            if last_part.is_empty() { continue; }
+                            if last_part.is_empty() {
+                                continue;
+                            }
 
                             if params.pattern.matches(last_part) {
                                 let is_dir = entry.header().entry_type().is_dir();
                                 let size = entry.header().size().unwrap_or(0);
 
                                 if !is_dir {
-                                    if let Some(min) = params.min_size { if size < min { continue; } }
-                                    if let Some(max) = params.max_size { if size > max { continue; } }
+                                    if let Some(min) = params.min_size {
+                                        if size < min {
+                                            continue;
+                                        }
+                                    }
+                                    if let Some(max) = params.max_size {
+                                        if size > max {
+                                            continue;
+                                        }
+                                    }
                                 }
 
                                 let modified = entry.header().mtime().unwrap_or(0) * 1000;
-                                if let Some(min) = params.min_date { if modified < min { continue; } }
-                                if let Some(max) = params.max_date { if modified > max { continue; } }
+                                if let Some(min) = params.min_date {
+                                    if modified < min {
+                                        continue;
+                                    }
+                                }
+                                if let Some(max) = params.max_date {
+                                    if modified > max {
+                                        continue;
+                                    }
+                                }
 
                                 results.push(FileEntry {
                                     name: last_part.to_string(),
-                                    path: format!("{}\\{}", archive_path.to_string_lossy(), name_with_path.replace('/', "\\")),
+                                    path: format!(
+                                        "{}\\{}",
+                                        archive_path.to_string_lossy(),
+                                        name_with_path.replace('/', "\\")
+                                    ),
                                     is_dir,
                                     is_hidden: false,
                                     size,
@@ -223,12 +296,19 @@ fn search_in_archive(
                         }
                     }
                 }
-             }
+            }
         }
         ArchiveFormat::Iso => {
             if let Ok(file) = File::open(archive_path) {
                 if let Ok(mut iso) = iso9660_core::ISO9660::load(file) {
-                    search_in_iso(&mut iso, "/", params, cancellation, archive_path, &mut results);
+                    search_in_iso(
+                        &mut iso,
+                        "/",
+                        params,
+                        cancellation,
+                        archive_path,
+                        &mut results,
+                    );
                 }
             }
         }
@@ -246,34 +326,40 @@ fn search_in_iso(
     archive_path: &std::path::Path,
     results: &mut Vec<FileEntry>,
 ) {
-    if cancellation.load(Ordering::Relaxed) { return; }
-    
+    if cancellation.load(Ordering::Relaxed) {
+        return;
+    }
+
     let mut iter = match iso.listdir(internal_path) {
         Ok(it) => it,
         Err(_) => return,
     };
-    
+
     let mut records = Vec::new();
     while let Some(rec) = iter.next(iso) {
         records.push(rec);
     }
-    
+
     for rec in records {
-        if cancellation.load(Ordering::Relaxed) { break; }
-        
+        if cancellation.load(Ordering::Relaxed) {
+            break;
+        }
+
         let name = match &rec {
             ISO9660Record::Directory(d) => d.identifier(),
             ISO9660Record::File(f) => f.identifier(),
         };
-        if name == "." || name == ".." { continue; }
-        
+        if name == "." || name == ".." {
+            continue;
+        }
+
         let display_name = name.split(';').next().unwrap_or(name);
         let new_internal = if internal_path == "/" {
             format!("/{}", display_name)
         } else {
             format!("{}/{}", internal_path.trim_end_matches('/'), display_name)
         };
-        
+
         if params.pattern.matches(display_name) {
             let is_dir = matches!(rec, ISO9660Record::Directory(_));
             let size = match &rec {
@@ -283,15 +369,27 @@ fn search_in_iso(
 
             // Filters
             if !is_dir {
-                if let Some(min) = params.min_size { if size < min { continue; } }
-                if let Some(max) = params.max_size { if size > max { continue; } }
+                if let Some(min) = params.min_size {
+                    if size < min {
+                        continue;
+                    }
+                }
+                if let Some(max) = params.max_size {
+                    if size > max {
+                        continue;
+                    }
+                }
             }
-            
+
             // Note: date filtering is skipped for ISO as we don't parse it yet from this crate
 
             results.push(FileEntry {
                 name: display_name.to_string(),
-                path: format!("{}\\{}", archive_path.to_string_lossy(), new_internal.trim_start_matches('/').replace('/', "\\")),
+                path: format!(
+                    "{}\\{}",
+                    archive_path.to_string_lossy(),
+                    new_internal.trim_start_matches('/').replace('/', "\\")
+                ),
                 is_dir,
                 size,
                 folders_count: None,
@@ -299,19 +397,40 @@ fn search_in_iso(
                 ..FileEntry::default()
             });
         }
-        
+
         if matches!(&rec, ISO9660Record::Directory(_)) {
-            search_in_iso(iso, &new_internal, params, cancellation, archive_path, results);
+            search_in_iso(
+                iso,
+                &new_internal,
+                params,
+                cancellation,
+                archive_path,
+                results,
+            );
         }
     }
 }
 
-
 fn is_office_doc(path: &std::path::Path) -> bool {
-    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
-    matches!(ext.as_str(), 
-        "docx" | "xlsx" | "pptx" | "docm" | "xlsm" | "pptm" |
-        "odt" | "ods" | "odp" | "ott" | "ots" | "otp"
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+    matches!(
+        ext.as_str(),
+        "docx"
+            | "xlsx"
+            | "pptx"
+            | "docm"
+            | "xlsm"
+            | "pptm"
+            | "odt"
+            | "ods"
+            | "odp"
+            | "ott"
+            | "ots"
+            | "otp"
     )
 }
 
@@ -319,7 +438,7 @@ fn is_binary_file(path: &std::path::Path) -> bool {
     if is_office_doc(path) {
         return false;
     }
-    
+
     let mut file = match File::open(path) {
         Ok(f) => f,
         Err(_) => return true,
@@ -327,14 +446,16 @@ fn is_binary_file(path: &std::path::Path) -> bool {
 
     let mut buffer = [0u8; 1024];
     match file.read(&mut buffer) {
-        Ok(n) => {
-            buffer[..n].contains(&0)
-        }
+        Ok(n) => buffer[..n].contains(&0),
         Err(_) => true,
     }
 }
 
-fn office_file_contains_content(path: &std::path::Path, pattern: &Regex, ignore_accents: bool) -> bool {
+fn office_file_contains_content(
+    path: &std::path::Path,
+    pattern: &Regex,
+    ignore_accents: bool,
+) -> bool {
     let file = match File::open(path) {
         Ok(f) => f,
         Err(_) => return false,
@@ -345,16 +466,24 @@ fn office_file_contains_content(path: &std::path::Path, pattern: &Regex, ignore_
         Err(_) => return false,
     };
 
-    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_lowercase();
     let targets = match ext.as_str() {
         "docx" | "docm" => vec!["word/document.xml"],
         "xlsx" | "xlsm" => vec!["xl/sharedStrings.xml"], // Shared strings is where 99% of text lives
         "pptx" | "pptm" => {
             // Powerpoint is tricky, slides are separate. We'll check the first 5 slides for performance
-            vec!["ppt/slides/slide1.xml", "ppt/slides/slide2.xml", "ppt/slides/slide3.xml"]
-        },
+            vec![
+                "ppt/slides/slide1.xml",
+                "ppt/slides/slide2.xml",
+                "ppt/slides/slide3.xml",
+            ]
+        }
         "odt" | "ods" | "odp" | "ott" | "ots" | "otp" => vec!["content.xml"],
-        _ => vec!["content.xml", "word/document.xml"]
+        _ => vec!["content.xml", "word/document.xml"],
     };
 
     for target in targets {
@@ -364,7 +493,7 @@ fn office_file_contains_content(path: &std::path::Path, pattern: &Regex, ignore_
                 let mut in_tag = false;
                 let mut tag_buffer = String::new();
                 let mut stripped = String::with_capacity(content.len() / 2);
-                
+
                 for c in content.chars() {
                     if c == '<' {
                         in_tag = true;
@@ -372,9 +501,14 @@ fn office_file_contains_content(path: &std::path::Path, pattern: &Regex, ignore_
                     } else if c == '>' {
                         in_tag = false;
                         let tl = &tag_buffer;
-                        if tl.starts_with("w:p") || tl.starts_with("/w:p") ||
-                           tl.starts_with("w:br") || tl.starts_with("text:p") ||
-                           tl.starts_with("/text:p") || tl == "p" || tl == "/p" {
+                        if tl.starts_with("w:p")
+                            || tl.starts_with("/w:p")
+                            || tl.starts_with("w:br")
+                            || tl.starts_with("text:p")
+                            || tl.starts_with("/text:p")
+                            || tl == "p"
+                            || tl == "/p"
+                        {
                             stripped.push('\n');
                         }
                     } else if in_tag {
@@ -386,7 +520,11 @@ fn office_file_contains_content(path: &std::path::Path, pattern: &Regex, ignore_
                     }
                 }
 
-                let check_text = if ignore_accents { crate::utils::remove_accents(&stripped) } else { stripped };
+                let check_text = if ignore_accents {
+                    crate::utils::remove_accents(&stripped)
+                } else {
+                    stripped
+                };
                 for line in check_text.lines() {
                     if pattern.is_match(line) {
                         return true;
@@ -399,7 +537,12 @@ fn office_file_contains_content(path: &std::path::Path, pattern: &Regex, ignore_
     false
 }
 
-fn file_contains_content(path: &std::path::Path, pattern: &Regex, ignore_accents: bool, ssd_hint: bool) -> bool {
+fn file_contains_content(
+    path: &std::path::Path,
+    pattern: &Regex,
+    ignore_accents: bool,
+    ssd_hint: bool,
+) -> bool {
     if is_binary_file(path) {
         return false;
     }
@@ -409,7 +552,10 @@ fn file_contains_content(path: &std::path::Path, pattern: &Regex, ignore_accents
     // Hardware-aware throttling
     if !ssd_hint {
         let vol_id = get_physical_disk_id(path);
-        let lock = DISK_IO_LOCKS.entry(vol_id).or_insert_with(|| Arc::new(Mutex::new(()))).clone();
+        let lock = DISK_IO_LOCKS
+            .entry(vol_id)
+            .or_insert_with(|| Arc::new(Mutex::new(())))
+            .clone();
         let _guard = lock.lock().unwrap();
         if is_office {
             office_file_contains_content(path, pattern, ignore_accents)
@@ -428,7 +574,7 @@ fn read_file_and_check(path: &std::path::Path, pattern: &Regex, ignore_accents: 
         Ok(f) => f,
         Err(_) => return false,
     };
-    
+
     let reader = BufReader::new(file);
     for line in reader.lines().map_while(Result::ok) {
         if ignore_accents {
@@ -441,7 +587,6 @@ fn read_file_and_check(path: &std::path::Path, pattern: &Regex, ignore_accents: 
     }
     false
 }
-
 
 #[allow(clippy::too_many_arguments)]
 pub async fn start_search(
@@ -462,7 +607,7 @@ pub async fn start_search(
     content_regex: Option<bool>,
     ignore_accents: Option<bool>,
     search_in_archives: Option<bool>,
-    _request_id: Option<u64>
+    _request_id: Option<u64>,
 ) -> Result<(), String> {
     let cancellation = Arc::new(AtomicBool::new(false));
     let cancel_thread = cancellation.clone();
@@ -470,19 +615,29 @@ pub async fn start_search(
     // 1. Setup Session Context
     let root_path = {
         let mut session = session_manager.0.lock().map_err(|e| e.to_string())?;
-        let panel = if panel_id == "left" { &mut session.left_panel } else { &mut session.right_panel };
-        
+        let panel = if panel_id == "left" {
+            &mut session.left_panel
+        } else {
+            &mut session.right_panel
+        };
+
         let mut path_to_search = if let Some(root) = search_root {
             std::path::PathBuf::from(root)
         } else {
-            panel.tabs.iter()
+            panel
+                .tabs
+                .iter()
                 .find(|t| t.id == panel.active_tab_id)
                 .map(|t| t.path.clone())
                 .unwrap_or_else(|| std::path::PathBuf::from("C:\\"))
         };
 
-        if path_to_search.is_absolute() && path_to_search.to_string_lossy().len() == 2 && path_to_search.to_string_lossy().ends_with(':') {
-            path_to_search = std::path::PathBuf::from(format!("{}\\", path_to_search.to_string_lossy()));
+        if path_to_search.is_absolute()
+            && path_to_search.to_string_lossy().len() == 2
+            && path_to_search.to_string_lossy().ends_with(':')
+        {
+            path_to_search =
+                std::path::PathBuf::from(format!("{}\\", path_to_search.to_string_lossy()));
         }
 
         panel.search_context = Some(SearchContext {
@@ -492,12 +647,15 @@ pub async fn start_search(
             is_searching: true,
             cancellation_token: Some(cancellation),
         });
-        
+
         path_to_search
     };
 
-    info!("Starting advanced search in {:?} for '{}'", root_path, query);
-    
+    info!(
+        "Starting advanced search in {:?} for '{}'",
+        root_path, query
+    );
+
     if !root_path.exists() {
         return Err(format!("Search root path does not exist: {:?}", root_path));
     }
@@ -506,16 +664,24 @@ pub async fn start_search(
     let is_regex = regex.unwrap_or(false);
     let is_case_sensitive = case_sensitive.unwrap_or(false);
     let should_ignore_accents = ignore_accents.unwrap_or(false);
-    
+
     let search_pattern = if is_regex {
-        let pattern_str = if should_ignore_accents { crate::utils::remove_accents(&query) } else { query.clone() };
+        let pattern_str = if should_ignore_accents {
+            crate::utils::remove_accents(&query)
+        } else {
+            query.clone()
+        };
         let r = RegexBuilder::new(&pattern_str)
             .case_insensitive(!is_case_sensitive)
             .build()
             .map_err(|e| format!("Invalid regex: {}", e))?;
         SearchPattern::Regex(r, should_ignore_accents)
     } else if query.contains('*') || query.contains('?') {
-        let pattern_str = if should_ignore_accents { crate::utils::remove_accents(&query).to_lowercase() } else { query.to_lowercase() };
+        let pattern_str = if should_ignore_accents {
+            crate::utils::remove_accents(&query).to_lowercase()
+        } else {
+            query.to_lowercase()
+        };
         let p = Pattern::new(&pattern_str).map_err(|e| e.to_string())?;
         SearchPattern::Glob(p, should_ignore_accents)
     } else {
@@ -529,10 +695,12 @@ pub async fn start_search(
         } else {
             regex::escape(&cq)
         };
-        Some(RegexBuilder::new(&pattern)
-            .case_insensitive(!is_case_sensitive)
-            .build()
-            .map_err(|e| format!("Invalid content pattern: {}", e))?)
+        Some(
+            RegexBuilder::new(&pattern)
+                .case_insensitive(!is_case_sensitive)
+                .build()
+                .map_err(|e| format!("Invalid content pattern: {}", e))?,
+        )
     } else {
         None
     };
@@ -541,15 +709,15 @@ pub async fn start_search(
     let (search_limit, is_turbo, show_hidden, show_system) = {
         let config = config_manager.0.lock().unwrap();
         (
-            config.search_limit as usize, 
+            config.search_limit as usize,
             config.default_turbo_mode,
             config.show_hidden,
-            config.show_system
+            config.show_system,
         )
     };
     let is_recursive = recursive.unwrap_or(true);
     let should_search_archives = search_in_archives.unwrap_or(false);
-    
+
     let search_params = Arc::new(SearchParams {
         pattern: search_pattern,
         min_size,
@@ -557,7 +725,7 @@ pub async fn start_search(
         min_date,
         max_date,
     });
-    
+
     let root_path_for_hardware = root_path.clone();
     let panel_id_clone = panel_id.clone();
     thread::spawn(move || {
@@ -565,16 +733,13 @@ pub async fn start_search(
         let is_target_ssd = is_ssd(&root_path_for_hardware);
         let is_network = is_network_path(&root_path_for_hardware);
 
-        #[cfg(target_os = "windows")]
         if !is_turbo && !is_network {
-            unsafe {
-                let _ = SetThreadPriority(GetCurrentThread(), THREAD_MODE_BACKGROUND_BEGIN);
-            }
+            platform().set_thread_priority(ThreadPriority::Background);
         }
 
         let max_depth = if !is_recursive { 1 } else { usize::MAX };
         let num_threads = if is_target_ssd { 16 } else { 2 };
-        
+
         let filtered_walker = jwalk::WalkDir::new(&root_path)
             .skip_hidden(!show_hidden)
             .max_depth(max_depth)
@@ -585,11 +750,11 @@ pub async fn start_search(
                         if let Ok(entry) = res {
                             if entry.file_type().is_dir() {
                                 let name = entry.file_name().to_string_lossy().to_ascii_lowercase();
-                                if name == "windows" 
-                                    || name == "programdata" 
-                                    || name == "$recycle.bin" 
+                                if name == "windows"
+                                    || name == "programdata"
+                                    || name == "$recycle.bin"
                                     || name == "system volume information"
-                                    || name == "winsxs" 
+                                    || name == "winsxs"
                                 {
                                     return false;
                                 }
@@ -605,9 +770,13 @@ pub async fn start_search(
         let mut files_processed: u64 = 0;
 
         for entry in filtered_walker.filter_map(|e| e.ok()) {
-            if cancel_thread.load(Ordering::Relaxed) { break; }
-            if entry.depth == 0 { continue; }
-            
+            if cancel_thread.load(Ordering::Relaxed) {
+                break;
+            }
+            if entry.depth == 0 {
+                continue;
+            }
+
             files_processed += 1;
             if !is_turbo && !is_network && files_processed.is_multiple_of(100) {
                 std::thread::sleep(std::time::Duration::from_millis(1));
@@ -616,38 +785,82 @@ pub async fn start_search(
             let path = entry.path();
             let name = match path.file_name() {
                 Some(n) => n.to_string_lossy().to_string(),
-                None => if path == root_path { String::new() } else { path.to_string_lossy().to_string() }
+                None => {
+                    if path == root_path {
+                        String::new()
+                    } else {
+                        path.to_string_lossy().to_string()
+                    }
+                }
             };
 
-            if name.is_empty() { continue; }
+            if name.is_empty() {
+                continue;
+            }
 
             let matches_name = search_params.pattern.matches(&name);
-            
+
             if matches_name {
                 if let Ok(metadata) = entry.metadata() {
                     let is_dir = metadata.is_dir();
-                    let (is_hidden_attr, is_system_attr, _) = crate::utils::get_file_attributes(&metadata, &name);
+                    let (is_hidden_attr, is_system_attr, _) =
+                        crate::utils::get_file_attributes(&metadata, &name);
 
-                    if !show_hidden && is_hidden_attr { continue; }
-                    if !show_system && is_system_attr { continue; }
+                    if !show_hidden && is_hidden_attr {
+                        continue;
+                    }
+                    if !show_system && is_system_attr {
+                        continue;
+                    }
 
-                    if is_dir && (search_params.min_size.is_some() || search_params.max_size.is_some() || content_regex_pattern.is_some()) {
+                    if is_dir
+                        && (search_params.min_size.is_some()
+                            || search_params.max_size.is_some()
+                            || content_regex_pattern.is_some())
+                    {
                         continue;
                     }
 
                     if !is_dir {
                         let size = metadata.len();
-                        if let Some(min) = search_params.min_size { if size < min { continue; } }
-                        if let Some(max) = search_params.max_size { if size > max { continue; } }
+                        if let Some(min) = search_params.min_size {
+                            if size < min {
+                                continue;
+                            }
+                        }
+                        if let Some(max) = search_params.max_size {
+                            if size > max {
+                                continue;
+                            }
+                        }
                     }
 
-                    let modified = metadata.modified().unwrap_or(SystemTime::UNIX_EPOCH)
-                        .duration_since(SystemTime::UNIX_EPOCH).unwrap_or_default().as_millis() as u64;
-                    if let Some(min) = search_params.min_date { if modified < min { continue; } }
-                    if let Some(max) = search_params.max_date { if modified > max { continue; } }
+                    let modified = metadata
+                        .modified()
+                        .unwrap_or(SystemTime::UNIX_EPOCH)
+                        .duration_since(SystemTime::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_millis() as u64;
+                    if let Some(min) = search_params.min_date {
+                        if modified < min {
+                            continue;
+                        }
+                    }
+                    if let Some(max) = search_params.max_date {
+                        if modified > max {
+                            continue;
+                        }
+                    }
 
                     if let Some(ref c_reg) = content_regex_pattern {
-                        if is_dir || !file_contains_content(&path, c_reg, should_ignore_accents, is_target_ssd) {
+                        if is_dir
+                            || !file_contains_content(
+                                &path,
+                                c_reg,
+                                should_ignore_accents,
+                                is_target_ssd,
+                            )
+                        {
                             continue;
                         }
                     }
@@ -671,29 +884,40 @@ pub async fn start_search(
                         deleted_time: None,
                     });
 
-                    if total_results.len() >= search_limit { break; }
+                    if total_results.len() >= search_limit {
+                        break;
+                    }
                 }
             }
-            
+
             if should_search_archives && is_archive(&path) {
                 if let Ok(metadata) = entry.metadata() {
                     if !metadata.is_dir() {
-                        let internal_results = search_in_archive(&path, &search_params, &cancel_thread);
+                        let internal_results =
+                            search_in_archive(&path, &search_params, &cancel_thread);
                         for res in internal_results {
                             total_results.push(res);
-                            if total_results.len() >= search_limit { break; }
+                            if total_results.len() >= search_limit {
+                                break;
+                            }
                         }
                     }
                 }
             }
 
-            if total_results.len() >= search_limit { break; }
+            if total_results.len() >= search_limit {
+                break;
+            }
         }
 
         // Save results to session
         if let Ok(mut session) = session_manager.0.lock() {
-            let panel = if panel_id_clone == "left" { &mut session.left_panel } else { &mut session.right_panel };
-            
+            let panel = if panel_id_clone == "left" {
+                &mut session.left_panel
+            } else {
+                &mut session.right_panel
+            };
+
             let config = panel.sort_config.clone();
             crate::commands::io::sort_file_entries(&mut total_results, &config);
 
@@ -703,11 +927,8 @@ pub async fn start_search(
             }
         }
 
-        #[cfg(target_os = "windows")]
         if !is_turbo {
-            unsafe {
-                let _ = SetThreadPriority(GetCurrentThread(), THREAD_MODE_BACKGROUND_END);
-            }
+            platform().set_thread_priority(ThreadPriority::Normal);
         }
     });
 
@@ -717,10 +938,14 @@ pub async fn start_search(
 pub async fn cancel_search(
     session_manager: &SessionManager,
     panel_id: String,
-    tab_id: Option<String>
+    tab_id: Option<String>,
 ) -> Result<(), String> {
     let mut session = session_manager.0.lock().map_err(|e| e.to_string())?;
-    let panel = if panel_id == "left" { &mut session.left_panel } else { &mut session.right_panel };
+    let panel = if panel_id == "left" {
+        &mut session.left_panel
+    } else {
+        &mut session.right_panel
+    };
 
     if let Some(ctx) = &mut panel.search_context {
         if let Some(ref tid) = tab_id {

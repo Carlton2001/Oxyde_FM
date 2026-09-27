@@ -1,19 +1,21 @@
 use crate::models::{
-    FileEntry, FileProperties, FileSummary, FolderSizeResult, CommandError, TransactionDetails
+    CommandError, FileEntry, FileProperties, FileSummary, FolderSizeResult, TransactionDetails,
 };
 use crate::utils::path_security::validate_path;
+use log::info;
+use serde::Serialize;
 use std::fs;
 use std::path::PathBuf;
 use std::time::SystemTime;
-use log::info;
-use serde::Serialize;
 
 #[cfg(target_os = "windows")]
-use windows::Win32::UI::Shell::PropertiesSystem::{SHGetPropertyStoreFromParsingName, IPropertyStore, GPS_DEFAULT};
+use windows::core::{GUID, PCWSTR};
 #[cfg(target_os = "windows")]
 use windows::Win32::System::Com::IBindCtx;
 #[cfg(target_os = "windows")]
-use windows::core::{GUID, PCWSTR};
+use windows::Win32::UI::Shell::PropertiesSystem::{
+    IPropertyStore, SHGetPropertyStoreFromParsingName, GPS_DEFAULT,
+};
 
 #[derive(Serialize)]
 pub struct DirResponse {
@@ -32,16 +34,22 @@ pub struct DirBatchEvent {
     pub request_id: Option<u64>,
 }
 
-pub fn get_file_entry_from_metadata(metadata: &fs::Metadata, name: &str, path: &std::path::Path) -> FileEntry {
-    let modified = metadata.modified()
+pub fn get_file_entry_from_metadata(
+    metadata: &fs::Metadata,
+    name: &str,
+    path: &std::path::Path,
+) -> FileEntry {
+    let modified = metadata
+        .modified()
         .unwrap_or(SystemTime::UNIX_EPOCH)
         .duration_since(SystemTime::UNIX_EPOCH)
         .unwrap_or_default()
         .as_millis() as u64;
 
-    let (is_hidden, is_system, is_reparse_point) = crate::utils::get_file_attributes(metadata, name);
+    let (is_hidden, is_system, is_reparse_point) =
+        crate::utils::get_file_attributes(metadata, name);
     let is_readonly = metadata.permissions().readonly();
-    let is_dir = metadata.is_dir(); 
+    let is_dir = metadata.is_dir();
     let is_symlink = metadata.file_type().is_symlink();
     let is_junction = is_reparse_point && is_dir && !is_symlink;
     let size = if is_dir { 0 } else { metadata.len() };
@@ -78,8 +86,12 @@ pub async fn list_dir(
     let sort_config = sort_config.unwrap_or_default();
 
     if path == "trash://" {
-        let entries = crate::commands::ops::list_trash()?.into_iter().map(|t| {
-            FileEntry {
+        let trash_items = tokio::task::spawn_blocking(crate::commands::ops::list_trash)
+            .await
+            .map_err(|error| CommandError::IoError(error.to_string()))??;
+        let entries = trash_items
+            .into_iter()
+            .map(|t| FileEntry {
                 name: t.name,
                 path: t.path,
                 is_dir: t.is_dir,
@@ -96,43 +108,84 @@ pub async fn list_dir(
                 files_count: None,
                 original_path: Some(t.original_path),
                 deleted_time: Some(t.deleted_time as i64),
-            }
-        }).collect();
+            })
+            .collect();
         return Ok(DirResponse {
             entries,
-            summary: FileSummary { count: 0, total_size: 0, files_count: 0, folders_count: 0, parent_path: Some(path) },
+            summary: FileSummary {
+                count: 0,
+                total_size: 0,
+                files_count: 0,
+                folders_count: 0,
+                parent_path: Some(path),
+            },
             is_complete: true,
             is_protected: false,
         });
     }
 
+    #[cfg(target_os = "windows")]
     if path == "__network_vincinity__" {
-        let entries = crate::commands::network::list_network_vicinity().await?;
+        let entries =
+            tokio::task::spawn_blocking(|| crate::platform::platform().list_network_vicinity())
+                .await
+                .map_err(|error| CommandError::IoError(error.to_string()))?
+                .map_err(CommandError::SystemError)?;
         return Ok(DirResponse {
             entries,
-            summary: FileSummary { count: 0, total_size: 0, files_count: 0, folders_count: 0, parent_path: Some(path) },
+            summary: FileSummary {
+                count: 0,
+                total_size: 0,
+                files_count: 0,
+                folders_count: 0,
+                parent_path: Some(path),
+            },
             is_complete: true,
             is_protected: false,
         });
     }
 
+    tokio::task::spawn_blocking(move || {
+        list_dir_blocking(path, sort_config, show_hidden, show_system)
+    })
+    .await
+    .map_err(|e| CommandError::IoError(e.to_string()))?
+}
+
+fn list_dir_blocking(
+    path: String,
+    sort_config: crate::models::session::SortConfig,
+    show_hidden: bool,
+    show_system: bool,
+) -> Result<DirResponse, CommandError> {
     let path_buf = PathBuf::from(&path);
     let mut entries = Vec::new();
-    
-    if let Ok(dir) = std::fs::read_dir(&path_buf) {
-        for entry in dir.filter_map(Result::ok) {
-            let metadata = entry.metadata().map_err(|e| CommandError::IoError(e.to_string()))?;
+
+    {
+        let dir = std::fs::read_dir(&path_buf).map_err(|e| CommandError::IoError(e.to_string()))?;
+        for entry in dir {
+            let entry = entry.map_err(|e| CommandError::IoError(e.to_string()))?;
+            let metadata = entry
+                .metadata()
+                .map_err(|e| CommandError::IoError(e.to_string()))?;
             let name = entry.file_name().to_string_lossy().to_string();
-            
+
             let (is_hidden, is_system, _) = crate::utils::get_file_attributes(&metadata, &name);
-            
-            if !show_hidden && is_hidden { continue; }
-            if !show_system && is_system { continue; }
-            
+
+            // System flag takes precedence: once is_system is true, only show_system matters.
+            // Hidden check is only applied to non-system files (mirrors React V1 logic).
+            if is_system {
+                if !show_system {
+                    continue;
+                }
+            } else if is_hidden && !show_hidden {
+                continue;
+            }
+
             entries.push(crate::models::get_file_entry_from_path(&entry.path())?);
         }
     }
-    
+
     sort_file_entries(&mut entries, &sort_config);
     let summary = calculate_summary(&entries, Some(path));
 
@@ -145,8 +198,8 @@ pub async fn list_dir(
 }
 
 pub fn sort_file_entries(entries: &mut [FileEntry], config: &crate::models::session::SortConfig) {
-    use crate::models::session::SortField;
     use crate::models::session::SortDirection;
+    use crate::models::session::SortField;
 
     entries.sort_unstable_by(|a, b| {
         // Folders-first by default.
@@ -163,15 +216,38 @@ pub fn sort_file_entries(entries: &mut [FileEntry], config: &crate::models::sess
 
         let cmp = match config.field {
             SortField::Name => crate::utils::compare_natural(&a.name, &b.name),
-            SortField::Size => a.size.cmp(&b.size).then_with(|| crate::utils::compare_natural(&a.name, &b.name)),
-            SortField::Date => a.modified.cmp(&b.modified).then_with(|| crate::utils::compare_natural(&a.name, &b.name)),
+            SortField::Size => a
+                .size
+                .cmp(&b.size)
+                .then_with(|| crate::utils::compare_natural(&a.name, &b.name)),
+            SortField::Date => a
+                .modified
+                .cmp(&b.modified)
+                .then_with(|| crate::utils::compare_natural(&a.name, &b.name)),
             SortField::Type => {
-                let ext_a = std::path::Path::new(&a.name).extension().and_then(|s| s.to_str()).unwrap_or("").to_lowercase();
-                let ext_b = std::path::Path::new(&b.name).extension().and_then(|s| s.to_str()).unwrap_or("").to_lowercase();
-                ext_a.cmp(&ext_b).then_with(|| crate::utils::compare_natural(&a.name, &b.name))
-            },
-            SortField::Location => a.path.to_lowercase().cmp(&b.path.to_lowercase()).then_with(|| crate::utils::compare_natural(&a.name, &b.name)),
-            SortField::DeletedDate => a.deleted_time.cmp(&b.deleted_time).then_with(|| crate::utils::compare_natural(&a.name, &b.name)),
+                let ext_a = std::path::Path::new(&a.name)
+                    .extension()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("")
+                    .to_lowercase();
+                let ext_b = std::path::Path::new(&b.name)
+                    .extension()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("")
+                    .to_lowercase();
+                ext_a
+                    .cmp(&ext_b)
+                    .then_with(|| crate::utils::compare_natural(&a.name, &b.name))
+            }
+            SortField::Location => a
+                .path
+                .to_lowercase()
+                .cmp(&b.path.to_lowercase())
+                .then_with(|| crate::utils::compare_natural(&a.name, &b.name)),
+            SortField::DeletedDate => a
+                .deleted_time
+                .cmp(&b.deleted_time)
+                .then_with(|| crate::utils::compare_natural(&a.name, &b.name)),
         };
 
         match config.direction {
@@ -209,7 +285,7 @@ pub async fn create_dir(path: String) -> Result<(), CommandError> {
     let p_abs = pb.to_string_lossy().to_string();
     info!("Creating directory: {:?}", pb);
     fs::create_dir_all(&pb)?;
-    
+
     let _tx_details = TransactionDetails {
         paths: vec![p_abs],
         target_dir: None,
@@ -227,10 +303,10 @@ pub async fn rename_item(old_path: String, new_path: String) -> Result<(), Comma
     let new_pb = validate_path(&new_path)?;
     let old_abs = old_pb.to_string_lossy().to_string();
     let new_abs = new_pb.to_string_lossy().to_string();
-    
+
     info!("Renaming {:?} to {:?}", old_pb, new_pb);
     fs::rename(old_pb, new_pb)?;
-    
+
     let _tx_details = TransactionDetails {
         paths: vec![],
         target_dir: None,
@@ -239,20 +315,21 @@ pub async fn rename_item(old_path: String, new_path: String) -> Result<(), Comma
         created_files: None,
     };
     // History push logic removed
-    
+
     Ok(())
 }
 
-
-
 pub fn get_file_properties(path: String) -> Result<FileProperties, CommandError> {
-    if path.starts_with("::{") || path.starts_with("?") || (path.starts_with("\\\\") && path.split('\\').filter(|s| !s.is_empty()).count() == 1) {
+    if path.starts_with("::{")
+        || path.starts_with("?")
+        || (path.starts_with("\\\\") && path.split('\\').filter(|s| !s.is_empty()).count() == 1)
+    {
         // Handle shell items (Network devices or Computer roots)
         let mut props = FileProperties {
             // ... (rest initialized in code)
             name: path.split('\\').next_back().unwrap_or(&path).to_string(), // Best effort name
             path: path.clone(),
-            parent: "Voisinage Réseau".to_string(),
+            parent: "Réseau".to_string(),
             is_dir: false,
             size: 0,
             is_calculated: true,
@@ -279,13 +356,20 @@ pub fn get_file_properties(path: String) -> Result<FileProperties, CommandError>
 
         #[cfg(target_os = "windows")]
         unsafe {
-            use windows::Win32::System::Com::{CoInitializeEx, CoUninitialize, COINIT_MULTITHREADED};
             use windows::Win32::Foundation::PROPERTYKEY;
-            
+            use windows::Win32::System::Com::{
+                CoInitializeEx, CoUninitialize, COINIT_MULTITHREADED,
+            };
+
             let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
-            
+
             let wide_path: Vec<u16> = path.encode_utf16().chain(std::iter::once(0)).collect();
-            if let Ok(store) = SHGetPropertyStoreFromParsingName::<_, Option<&IBindCtx>, IPropertyStore>(PCWSTR(wide_path.as_ptr()), None, GPS_DEFAULT) {
+            if let Ok(store) = SHGetPropertyStoreFromParsingName::<
+                _,
+                Option<&IBindCtx>,
+                IPropertyStore,
+            >(PCWSTR(wide_path.as_ptr()), None, GPS_DEFAULT)
+            {
                 let mut d_props = Vec::new();
                 // Debug out what properties are actually here
                 if let Ok(count) = store.GetCount() {
@@ -306,15 +390,28 @@ pub fn get_file_properties(path: String) -> Result<FileProperties, CommandError>
                 }
                 props.debug_props = Some(d_props);
 
-                let get_prop = |guid_values: (u32, u16, u16, [u8; 8]), pid: u32| -> Option<String> {
+                let get_prop = |guid_values: (u32, u16, u16, [u8; 8]),
+                                pid: u32|
+                 -> Option<String> {
                     let key = PROPERTYKEY {
-                        fmtid: GUID::from_values(guid_values.0, guid_values.1, guid_values.2, guid_values.3),
+                        fmtid: GUID::from_values(
+                            guid_values.0,
+                            guid_values.1,
+                            guid_values.2,
+                            guid_values.3,
+                        ),
                         pid,
                     };
                     if let Ok(var) = store.GetValue(&key) {
-                        if let Ok(pwstr) = windows::Win32::System::Com::StructuredStorage::PropVariantToStringAlloc(&var) {
+                        if let Ok(pwstr) =
+                            windows::Win32::System::Com::StructuredStorage::PropVariantToStringAlloc(
+                                &var,
+                            )
+                        {
                             let val = pwstr.to_string().unwrap_or_default();
-                            windows::Win32::System::Com::CoTaskMemFree(Some(pwstr.as_ptr() as *const _));
+                            windows::Win32::System::Com::CoTaskMemFree(Some(
+                                pwstr.as_ptr() as *const _
+                            ));
                             if !val.is_empty() {
                                 return Some(val);
                             }
@@ -324,37 +421,102 @@ pub fn get_file_properties(path: String) -> Result<FileProperties, CommandError>
                 };
 
                 // PKEY_Device_Manufacturer {A45C2502-DFC5-491D-8F1D-DC141151D4B2}, 7
-                props.manufacturer = get_prop((0xA45C2502, 0xDFC5, 0x491D, [0x8F, 0x1D, 0xDC, 0x14, 0x11, 0x51, 0xD4, 0xB2]), 7);
+                props.manufacturer = get_prop(
+                    (
+                        0xA45C2502,
+                        0xDFC5,
+                        0x491D,
+                        [0x8F, 0x1D, 0xDC, 0x14, 0x11, 0x51, 0xD4, 0xB2],
+                    ),
+                    7,
+                );
                 // PKEY_Device_ModelName {A45C2502-DFC5-491D-8F1D-DC141151D4B2}, 11
-                props.model_name = get_prop((0xA45C2502, 0xDFC5, 0x491D, [0x8F, 0x1D, 0xDC, 0x14, 0x11, 0x51, 0xD4, 0xB2]), 11);
+                props.model_name = get_prop(
+                    (
+                        0xA45C2502,
+                        0xDFC5,
+                        0x491D,
+                        [0x8F, 0x1D, 0xDC, 0x14, 0x11, 0x51, 0xD4, 0xB2],
+                    ),
+                    11,
+                );
                 // PKEY_Device_ModelNumber {A45C2502-DFC5-491D-8F1D-DC141151D4B2}, 12
-                props.model_number = get_prop((0xA45C2502, 0xDFC5, 0x491D, [0x8F, 0x1D, 0xDC, 0x14, 0x11, 0x51, 0xD4, 0xB2]), 12);
+                props.model_number = get_prop(
+                    (
+                        0xA45C2502,
+                        0xDFC5,
+                        0x491D,
+                        [0x8F, 0x1D, 0xDC, 0x14, 0x11, 0x51, 0xD4, 0xB2],
+                    ),
+                    12,
+                );
                 // PKEY_Device_SerialNumber {A45C2502-DFC5-491D-8F1D-DC141151D4B2}, 15
-                props.serial_number = get_prop((0xA45C2502, 0xDFC5, 0x491D, [0x8F, 0x1D, 0xDC, 0x14, 0x11, 0x51, 0xD4, 0xB2]), 15);
-                
+                props.serial_number = get_prop(
+                    (
+                        0xA45C2502,
+                        0xDFC5,
+                        0x491D,
+                        [0x8F, 0x1D, 0xDC, 0x14, 0x11, 0x51, 0xD4, 0xB2],
+                    ),
+                    15,
+                );
+
                 // PKEY_Devices_IpAddress {65AD9E1B-0A09-40A4-9780-45C31E310531}, 3
-                props.ip_address = get_prop((0x65AD9E1B, 0x0A09, 0x40A4, [0x97, 0x80, 0x45, 0xC3, 0x1E, 0x31, 0x05, 0x31]), 3);
+                props.ip_address = get_prop(
+                    (
+                        0x65AD9E1B,
+                        0x0A09,
+                        0x40A4,
+                        [0x97, 0x80, 0x45, 0xC3, 0x1E, 0x31, 0x05, 0x31],
+                    ),
+                    3,
+                );
                 // PKEY_Devices_MacAddress {65AD9E1B-0A09-40A4-9780-45C31E310531}, 2
-                props.mac_address = get_prop((0x65AD9E1B, 0x0A09, 0x40A4, [0x97, 0x80, 0x45, 0xC3, 0x1E, 0x31, 0x05, 0x31]), 2);
+                props.mac_address = get_prop(
+                    (
+                        0x65AD9E1B,
+                        0x0A09,
+                        0x40A4,
+                        [0x97, 0x80, 0x45, 0xC3, 0x1E, 0x31, 0x05, 0x31],
+                    ),
+                    2,
+                );
                 // PKEY_Devices_DiscoveryId {65AD9E1B-0A09-40A4-9780-45C31E310531}, 10 (Unique ID)
-                props.unique_id = get_prop((0x65AD9E1B, 0x0A09, 0x40A4, [0x97, 0x80, 0x45, 0xC3, 0x1E, 0x31, 0x05, 0x31]), 10);
-                
+                props.unique_id = get_prop(
+                    (
+                        0x65AD9E1B,
+                        0x0A09,
+                        0x40A4,
+                        [0x97, 0x80, 0x45, 0xC3, 0x1E, 0x31, 0x05, 0x31],
+                    ),
+                    10,
+                );
+
                 // For name, sometimes PKEY_Device_FriendlyName {A45C2502-DFC5-491D-8F1D-DC141151D4B2}, 14 is better
-                if let Some(friendly) = get_prop((0xA45C2502, 0xDFC5, 0x491D, [0x8F, 0x1D, 0xDC, 0x14, 0x11, 0x51, 0xD4, 0xB2]), 14) {
+                if let Some(friendly) = get_prop(
+                    (
+                        0xA45C2502,
+                        0xDFC5,
+                        0x491D,
+                        [0x8F, 0x1D, 0xDC, 0x14, 0x11, 0x51, 0xD4, 0xB2],
+                    ),
+                    14,
+                ) {
                     props.name = friendly;
                 }
 
                 // Check for webpage verb again to be sure
-                props.has_web_page = Some(props.ip_address.is_some() || props.name.to_lowercase() == "bbox");
+                props.has_web_page =
+                    Some(props.ip_address.is_some() || props.name.to_lowercase() == "bbox");
             } else {
-                props.debug_props = Some(vec!["SHGetPropertyStoreFromParsingName failed".to_string()]);
+                props.debug_props =
+                    Some(vec!["SHGetPropertyStoreFromParsingName failed".to_string()]);
             }
             CoUninitialize();
         }
 
         return Ok(props);
     }
-
 
     let path_buf = validate_path(&path)?;
     let metadata = fs::metadata(&path_buf)?;
@@ -458,18 +620,24 @@ pub fn get_file_properties(path: String) -> Result<FileProperties, CommandError>
 
 #[cfg(target_os = "windows")]
 fn get_shortcut_info(path: &std::path::Path) -> Option<crate::models::ShortcutInfo> {
-    use windows::core::{Interface, PCWSTR, HSTRING};
-    use windows::Win32::System::Com::{CoCreateInstance, CLSCTX_INPROC_SERVER, CoInitializeEx, COINIT_APARTMENTTHREADED, CoUninitialize, IPersistFile, STGM_READ};
-    use windows::Win32::UI::Shell::{IShellLinkW, ShellLink};
+    use windows::core::{Interface, HSTRING, PCWSTR};
     use windows::Win32::Storage::FileSystem::WIN32_FIND_DATAW;
+    use windows::Win32::System::Com::{
+        CoCreateInstance, CoInitializeEx, CoUninitialize, IPersistFile, CLSCTX_INPROC_SERVER,
+        COINIT_APARTMENTTHREADED, STGM_READ,
+    };
+    use windows::Win32::UI::Shell::{IShellLinkW, ShellLink};
 
-    if !path.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("lnk")) {
+    if !path
+        .extension()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("lnk"))
+    {
         return None;
     }
 
     unsafe {
         let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
-        
+
         let link: IShellLinkW = match CoCreateInstance(&ShellLink, None, CLSCTX_INPROC_SERVER) {
             Ok(l) => l,
             Err(_) => {
@@ -495,24 +663,34 @@ fn get_shortcut_info(path: &std::path::Path) -> Option<crate::models::ShortcutIn
         let mut target_buf = [0u16; 1024];
         let mut find_data = WIN32_FIND_DATAW::default();
         let _ = link.GetPath(&mut target_buf, &mut find_data, 0);
-        let target = String::from_utf16_lossy(&target_buf).trim_matches('\0').to_string();
+        let target = String::from_utf16_lossy(&target_buf)
+            .trim_matches('\0')
+            .to_string();
 
         let mut args_buf = [0u16; 1024];
         let _ = link.GetArguments(&mut args_buf);
-        let arguments = String::from_utf16_lossy(&args_buf).trim_matches('\0').to_string();
+        let arguments = String::from_utf16_lossy(&args_buf)
+            .trim_matches('\0')
+            .to_string();
 
         let mut dir_buf = [0u16; 1024];
         let _ = link.GetWorkingDirectory(&mut dir_buf);
-        let working_dir = String::from_utf16_lossy(&dir_buf).trim_matches('\0').to_string();
+        let working_dir = String::from_utf16_lossy(&dir_buf)
+            .trim_matches('\0')
+            .to_string();
 
         let mut desc_buf = [0u16; 1024];
         let _ = link.GetDescription(&mut desc_buf);
-        let description = String::from_utf16_lossy(&desc_buf).trim_matches('\0').to_string();
+        let description = String::from_utf16_lossy(&desc_buf)
+            .trim_matches('\0')
+            .to_string();
 
         let mut icon_buf = [0u16; 260];
         let mut icon_index = 0i32;
         let _ = link.GetIconLocation(&mut icon_buf, &mut icon_index);
-        let icon_location = String::from_utf16_lossy(&icon_buf).trim_matches('\0').to_string();
+        let icon_location = String::from_utf16_lossy(&icon_buf)
+            .trim_matches('\0')
+            .to_string();
 
         let run_window = link.GetShowCmd().map(|cmd| cmd.0).unwrap_or(1);
 
@@ -537,7 +715,8 @@ fn get_shortcut_info(_path: &std::path::Path) -> Option<crate::models::ShortcutI
 
 /// Retourne le chemin cible d'un raccourci (.lnk sur Windows, .desktop sur Linux).
 pub fn resolve_shortcut_target(path: &str) -> Option<String> {
-    get_shortcut_info(std::path::Path::new(path)).map(|info| info.target)
+    get_shortcut_info(std::path::Path::new(path))
+        .map(|info| info.target)
         .or_else(|| crate::platform::platform().resolve_shortcut(path))
 }
 
@@ -597,42 +776,24 @@ pub async fn get_files_summary(paths: Vec<String>) -> Result<FileSummary, Comman
     })
 }
 
-
 pub async fn show_system_properties(path: String) -> Result<(), CommandError> {
     let normalized_path = if path.starts_with("::{") || path.starts_with("?") {
         path
     } else {
         validate_path(&path)?.to_string_lossy().into_owned()
     };
-    #[cfg(target_os = "windows")]
-    {
-        use windows::core::{HSTRING, PCWSTR};
-        use windows::Win32::UI::Shell::{SHObjectProperties, SHOP_FILEPATH};
-
-        let wide_path = HSTRING::from(&normalized_path);
-
-        unsafe {
-            let success = SHObjectProperties(
-                None,
-                SHOP_FILEPATH,
-                PCWSTR(wide_path.as_ptr()),
-                PCWSTR::null(),
-            );
-
-            if !success.as_bool() {
-                return Err(CommandError::SystemError("Failed to open system properties".to_string()));
-            }
-        }
-    }
+    crate::platform::platform().show_properties_dialog(&normalized_path);
     Ok(())
 }
 
 pub async fn calculate_folder_size(path: String) -> Result<FolderSizeResult, CommandError> {
     let pb = validate_path(&path)?;
-    
+
     tokio::task::spawn_blocking(move || {
         if !pb.is_dir() {
-            return Err(CommandError::PathError("Path is not a directory".to_string()));
+            return Err(CommandError::PathError(
+                "Path is not a directory".to_string(),
+            ));
         }
 
         let mut size = 0;
@@ -654,30 +815,42 @@ pub async fn calculate_folder_size(path: String) -> Result<FolderSizeResult, Com
             folders_count,
             files_count,
         })
-    }).await.map_err(|e| CommandError::SystemError(format!("Task join error: {}", e)))?
+    })
+    .await
+    .map_err(|e| CommandError::SystemError(format!("Task join error: {}", e)))?
 }
 
-pub async fn set_shortcut_info(path: String, info: crate::models::ShortcutInfo) -> Result<(), CommandError> {
+pub async fn set_shortcut_info(
+    path: String,
+    info: crate::models::ShortcutInfo,
+) -> Result<(), CommandError> {
     #[cfg(target_os = "windows")]
     {
-        use windows::core::{Interface, PCWSTR, HSTRING};
-        use windows::Win32::System::Com::{CoCreateInstance, CLSCTX_INPROC_SERVER, CoInitializeEx, COINIT_APARTMENTTHREADED, CoUninitialize, IPersistFile, STGM_READWRITE};
-        use windows::Win32::UI::Shell::{IShellLinkW, ShellLink};
         use std::path::PathBuf;
+        use windows::core::{Interface, HSTRING, PCWSTR};
+        use windows::Win32::System::Com::{
+            CoCreateInstance, CoInitializeEx, CoUninitialize, IPersistFile, CLSCTX_INPROC_SERVER,
+            COINIT_APARTMENTTHREADED, STGM_READWRITE,
+        };
+        use windows::Win32::UI::Shell::{IShellLinkW, ShellLink};
 
         let path_buf = PathBuf::from(&path);
-        
+
         unsafe {
             let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
-            
-            let link: IShellLinkW = CoCreateInstance(&ShellLink, None, CLSCTX_INPROC_SERVER)
-                .map_err(|e| CommandError::SystemError(format!("CoCreateInstance failed: {}", e)))?;
 
-            let persist: IPersistFile = link.cast()
-                .map_err(|e| CommandError::SystemError(format!("Cast to IPersistFile failed: {}", e)))?;
+            let link: IShellLinkW = CoCreateInstance(&ShellLink, None, CLSCTX_INPROC_SERVER)
+                .map_err(|e| {
+                    CommandError::SystemError(format!("CoCreateInstance failed: {}", e))
+                })?;
+
+            let persist: IPersistFile = link.cast().map_err(|e| {
+                CommandError::SystemError(format!("Cast to IPersistFile failed: {}", e))
+            })?;
 
             let wide_path = HSTRING::from(path_buf.to_string_lossy().as_ref());
-            persist.Load(PCWSTR(wide_path.as_ptr()), STGM_READWRITE)
+            persist
+                .Load(PCWSTR(wide_path.as_ptr()), STGM_READWRITE)
                 .map_err(|e| CommandError::SystemError(format!("Load failed: {}", e)))?;
 
             let wide_target = HSTRING::from(info.target);
@@ -690,20 +863,40 @@ pub async fn set_shortcut_info(path: String, info: crate::models::ShortcutInfo) 
 
             let wide_dir = HSTRING::from(info.working_dir);
             link.SetWorkingDirectory(PCWSTR(wide_dir.as_ptr()))
-                .map_err(|e| CommandError::SystemError(format!("SetWorkingDirectory failed: {}", e)))?;
+                .map_err(|e| {
+                    CommandError::SystemError(format!("SetWorkingDirectory failed: {}", e))
+                })?;
 
             let wide_desc = HSTRING::from(info.description);
             link.SetDescription(PCWSTR(wide_desc.as_ptr()))
                 .map_err(|e| CommandError::SystemError(format!("SetDescription failed: {}", e)))?;
 
-            link.SetShowCmd(windows::Win32::UI::WindowsAndMessaging::SHOW_WINDOW_CMD(info.run_window))
-                .map_err(|e| CommandError::SystemError(format!("SetShowCmd failed: {}", e)))?;
+            link.SetShowCmd(windows::Win32::UI::WindowsAndMessaging::SHOW_WINDOW_CMD(
+                info.run_window,
+            ))
+            .map_err(|e| CommandError::SystemError(format!("SetShowCmd failed: {}", e)))?;
 
-            persist.Save(PCWSTR(wide_path.as_ptr()), true)
+            persist
+                .Save(PCWSTR(wide_path.as_ptr()), true)
                 .map_err(|e| CommandError::SystemError(format!("Save failed: {}", e)))?;
 
             CoUninitialize();
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod directory_tests {
+    use super::*;
+
+    #[test]
+    fn missing_directory_is_an_error_instead_of_an_empty_listing() {
+        let root = tempfile::tempdir().unwrap();
+        let missing = root.path().join("missing").to_string_lossy().into_owned();
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        assert!(runtime
+            .block_on(list_dir(missing, None, None, None, None))
+            .is_err());
+    }
 }

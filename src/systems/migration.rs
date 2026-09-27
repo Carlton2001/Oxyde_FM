@@ -1,9 +1,8 @@
 use std::fs;
 
-
 pub fn run_migration() {
     let old_id = "com.oxyde.app";
-    
+
     let config_dir = dirs::config_dir().map(|p| p.join("oxyde"));
     let local_data_dir = dirs::data_local_dir().map(|p| p.join("oxyde"));
 
@@ -16,7 +15,9 @@ pub fn run_migration() {
                 if let Ok(entries) = fs::read_dir(&old_config_dir) {
                     for entry in entries.flatten() {
                         let target = new_config_dir.join(entry.file_name());
-                        if target.exists() { let _ = fs::remove_file(&target); }
+                        if target.exists() {
+                            let _ = fs::remove_file(&target);
+                        }
                         let _ = fs::rename(entry.path(), &target);
                     }
                 }
@@ -34,7 +35,9 @@ pub fn run_migration() {
                 if let Ok(entries) = fs::read_dir(&old_local_dir) {
                     for entry in entries.flatten() {
                         let target = new_local_dir.join(entry.file_name());
-                        if target.exists() && target.is_file() { let _ = fs::remove_file(&target); }
+                        if target.exists() && target.is_file() {
+                            let _ = fs::remove_file(&target);
+                        }
                         let _ = fs::rename(entry.path(), &target);
                     }
                 }

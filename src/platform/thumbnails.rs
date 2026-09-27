@@ -13,6 +13,48 @@ pub fn get_thumbnail_raw(path: String) -> Result<RgbaImage, CommandError> {
     shell_thumbnail_raw(&path)
 }
 
+#[cfg(not(target_os = "windows"))]
+pub fn get_thumbnail_raw(path: String) -> Result<RgbaImage, CommandError> {
+    image::open(path)
+        .map(|image| image.thumbnail(THUMB_SIZE, THUMB_SIZE).to_rgba8())
+        .map_err(|error| CommandError::Other(error.to_string()))
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn get_office_thumbnail_raw(path: String) -> Result<RgbaImage, CommandError> {
+    let file = fs::File::open(path).map_err(|error| CommandError::IoError(error.to_string()))?;
+    let mut archive =
+        zip::ZipArchive::new(file).map_err(|error| CommandError::Other(error.to_string()))?;
+    for name in ["docProps/thumbnail.jpeg", "Thumbnails/thumbnail.png"] {
+        if let Ok(mut entry) = archive.by_name(name) {
+            let mut bytes = Vec::new();
+            std::io::Read::read_to_end(&mut entry, &mut bytes)
+                .map_err(|error| CommandError::IoError(error.to_string()))?;
+            return image::load_from_memory(&bytes)
+                .map(|image| image.thumbnail(THUMB_SIZE, THUMB_SIZE).to_rgba8())
+                .map_err(|error| CommandError::Other(error.to_string()));
+        }
+    }
+    Err(CommandError::Other("No office thumbnail".to_string()))
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn get_pdf_thumbnail_raw(_path: String) -> Result<RgbaImage, CommandError> {
+    Err(CommandError::Other(
+        "PDF thumbnail is unavailable on this platform".to_string(),
+    ))
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn stream_video_frames_sync<F>(_path: String, _on_frame: F) -> Result<(), CommandError>
+where
+    F: FnMut(RgbaImage, Duration) -> bool,
+{
+    Err(CommandError::Other(
+        "Video preview is unavailable on this platform".to_string(),
+    ))
+}
+
 #[cfg(target_os = "windows")]
 pub fn stream_video_frames_sync<F>(path: String, mut on_frame: F) -> Result<(), CommandError>
 where
@@ -26,7 +68,7 @@ where
         );
         let _ = MFStartup(MF_SDK_VERSION, MFSTARTUP_FULL);
 
-        let res = (|| -> Result<(), CommandError> {
+        let res: Result<(), CommandError> = {
             let wide_path = windows::core::HSTRING::from(&path);
 
             // Outer loop — restarts the reader from the beginning when the video ends.
@@ -34,8 +76,10 @@ where
                 let mut attributes: Option<IMFAttributes> = None;
                 MFCreateAttributes(&mut attributes, 2).ok();
                 if let Some(attr) = &attributes {
-                    attr.SetUINT32(&MF_SOURCE_READER_ENABLE_VIDEO_PROCESSING, 1).ok();
-                    attr.SetUINT32(&MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS, 1).ok();
+                    attr.SetUINT32(&MF_SOURCE_READER_ENABLE_VIDEO_PROCESSING, 1)
+                        .ok();
+                    attr.SetUINT32(&MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS, 1)
+                        .ok();
                 }
 
                 let reader: IMFSourceReader = match MFCreateSourceReaderFromURL(
@@ -46,11 +90,17 @@ where
                     Err(_) => break,
                 };
 
-                reader.SetStreamSelection(MF_SOURCE_READER_ALL_STREAMS.0 as u32, false).ok();
-                reader.SetStreamSelection(MF_SOURCE_READER_FIRST_VIDEO_STREAM.0 as u32, true).ok();
+                reader
+                    .SetStreamSelection(MF_SOURCE_READER_ALL_STREAMS.0 as u32, false)
+                    .ok();
+                reader
+                    .SetStreamSelection(MF_SOURCE_READER_FIRST_VIDEO_STREAM.0 as u32, true)
+                    .ok();
 
                 // Read native dimensions from source media type.
-                let src_type = match reader.GetCurrentMediaType(MF_SOURCE_READER_FIRST_VIDEO_STREAM.0 as u32) {
+                let src_type = match reader
+                    .GetCurrentMediaType(MF_SOURCE_READER_FIRST_VIDEO_STREAM.0 as u32)
+                {
                     Ok(t) => t,
                     Err(_) => break,
                 };
@@ -67,7 +117,13 @@ where
                 };
                 out_req.SetGUID(&MF_MT_MAJOR_TYPE, &MFMediaType_Video).ok();
                 out_req.SetGUID(&MF_MT_SUBTYPE, &MFVideoFormat_RGB32).ok();
-                reader.SetCurrentMediaType(MF_SOURCE_READER_FIRST_VIDEO_STREAM.0 as u32, None, &out_req).ok();
+                reader
+                    .SetCurrentMediaType(
+                        MF_SOURCE_READER_FIRST_VIDEO_STREAM.0 as u32,
+                        None,
+                        &out_req,
+                    )
+                    .ok();
 
                 // Aspect-ratio-preserving output size.
                 let (out_w, out_h) = if src_w >= src_h {
@@ -83,10 +139,17 @@ where
                 loop {
                     let mut flags = 0u32;
                     let mut sample: Option<IMFSample> = None;
-                    if reader.ReadSample(
-                        MF_SOURCE_READER_FIRST_VIDEO_STREAM.0 as u32,
-                        0, None, Some(&mut flags), None, Some(&mut sample),
-                    ).is_err() {
+                    if reader
+                        .ReadSample(
+                            MF_SOURCE_READER_FIRST_VIDEO_STREAM.0 as u32,
+                            0,
+                            None,
+                            Some(&mut flags),
+                            None,
+                            Some(&mut sample),
+                        )
+                        .is_err()
+                    {
                         break;
                     }
 
@@ -99,7 +162,9 @@ where
                         let pts_100ns = s.GetSampleTime().unwrap_or(0);
                         let pts = Duration::from_nanos(pts_100ns as u64 * 100);
 
-                        if let Ok(frame) = subsample_frame(s, src_w, src_h, src_stride, out_w, out_h) {
+                        if let Ok(frame) =
+                            subsample_frame(s, src_w, src_h, src_stride, out_w, out_h)
+                        {
                             if !on_frame(frame, pts) {
                                 caller_stopped = true;
                                 break;
@@ -115,10 +180,10 @@ where
                 std::thread::sleep(Duration::from_millis(200));
             }
             Ok(())
-        })();
+        };
 
         let _ = MFShutdown();
-        let _ = windows::Win32::System::Com::CoUninitialize();
+        windows::Win32::System::Com::CoUninitialize();
         res
     }
 }
@@ -226,8 +291,8 @@ pub fn get_pdf_thumbnail_raw(path: String) -> Result<RgbaImage, CommandError> {
                 path_str = path_str.chars().skip(4).collect();
             }
             let hstring_path = windows::core::HSTRING::from(&path_str);
-            let file = StorageFile::GetFileFromPathAsync(&hstring_path)?.get()?;
-            let doc = PdfDocument::LoadFromFileAsync(&file)?.get()?;
+            let file = StorageFile::GetFileFromPathAsync(&hstring_path)?.join()?;
+            let doc = PdfDocument::LoadFromFileAsync(&file)?.join()?;
             if doc.PageCount()? == 0 {
                 return Err(CommandError::Other("Empty PDF".to_string()));
             }
@@ -236,9 +301,9 @@ pub fn get_pdf_thumbnail_raw(path: String) -> Result<RgbaImage, CommandError> {
             let options = PdfPageRenderOptions::new()?;
             options.SetDestinationWidth(THUMB_SIZE * 2)?;
             page.RenderWithOptionsToStreamAsync(&stream, &options)?
-                .get()?;
-            let decoder = BitmapDecoder::CreateAsync(&stream)?.get()?;
-            let pixel_data = decoder.GetPixelDataAsync()?.get()?;
+                .join()?;
+            let decoder = BitmapDecoder::CreateAsync(&stream)?.join()?;
+            let pixel_data = decoder.GetPixelDataAsync()?.join()?;
             let pixels = pixel_data.DetachPixelData()?;
             let width = decoder.PixelWidth()?;
             let height = decoder.PixelHeight()?;
@@ -352,13 +417,12 @@ pub fn get_office_text_preview(path: String) -> Result<String, CommandError> {
                     if !preview.ends_with(' ') && !preview.ends_with('\n') {
                         preview.push(' ');
                     }
-                } else if tag_content.starts_with("w:p")
+                } else if (tag_content.starts_with("w:p")
                     || tag_content == "/w:p"
-                    || tag_content == "text:p"
+                    || tag_content == "text:p")
+                    && !preview.ends_with('\n')
                 {
-                    if !preview.ends_with('\n') {
-                        preview.push('\n');
-                    }
+                    preview.push('\n');
                 }
             } else if in_tag {
                 if tag_content.len() < 10 {

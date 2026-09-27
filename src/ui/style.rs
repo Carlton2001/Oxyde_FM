@@ -1,6 +1,6 @@
 use gpui::*;
-use std::sync::Arc;
 use lazy_static::lazy_static;
+use std::sync::Arc;
 
 lazy_static! {
     pub static ref TNUM: FontFeatures = FontFeatures(Arc::new(vec![("tnum".to_string(), 1)]));
@@ -9,8 +9,12 @@ lazy_static! {
 pub const ROW_HEIGHT: f32 = 28.0;
 
 pub fn format_size(size: u64, is_dir: bool, is_calculated: bool) -> String {
-    if is_dir && !is_calculated { return String::new(); }
-    if !is_dir && size == 0 { return "0 o".to_string(); }
+    if is_dir && !is_calculated {
+        return String::new();
+    }
+    if !is_dir && size == 0 {
+        return "0 o".to_string();
+    }
     const KB: u64 = 1024;
     const MB: u64 = KB * 1024;
     const GB: u64 = MB * 1024;
@@ -27,10 +31,16 @@ pub fn format_size(size: u64, is_dir: bool, is_calculated: bool) -> String {
 }
 
 pub fn format_date(timestamp_ms: u64) -> String {
-    use chrono::{Local, DateTime};
-    if timestamp_ms == 0 { return "–".to_string(); }
+    use chrono::{DateTime, Local};
+    if timestamp_ms == 0 {
+        return "–".to_string();
+    }
     DateTime::from_timestamp_millis(timestamp_ms as i64)
-        .map(|dt| dt.with_timezone(&Local).format("%d/%m/%Y %H:%M:%S").to_string())
+        .map(|dt| {
+            dt.with_timezone(&Local)
+                .format("%d/%m/%Y %H:%M:%S")
+                .to_string()
+        })
         .unwrap_or_else(|| "–".to_string())
 }
 

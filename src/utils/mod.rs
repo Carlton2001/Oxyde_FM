@@ -1,30 +1,71 @@
 use std::fs::Metadata;
 
-#[cfg(target_os = "windows")]
-use std::os::windows::fs::MetadataExt;
-
-pub mod path_security;
 pub mod archive;
-pub mod thumbnails;
-pub mod hardware;
+pub mod path_security;
+
+pub mod hardware {
+    pub fn is_network_path(path: &std::path::Path) -> bool {
+        crate::platform::platform().is_network_path(path)
+    }
+
+    pub fn get_physical_disk_id(path: &std::path::Path) -> u64 {
+        crate::platform::platform().physical_disk_id(path)
+    }
+
+    pub fn is_ssd(path: &std::path::Path) -> bool {
+        crate::platform::platform().is_ssd(path)
+    }
+}
+
+pub mod thumbnails {
+    pub fn get_thumbnail_raw(
+        path: String,
+    ) -> Result<image::RgbaImage, crate::models::CommandError> {
+        crate::platform::platform().thumbnail(path)
+    }
+
+    pub fn get_office_thumbnail_raw(
+        path: String,
+    ) -> Result<image::RgbaImage, crate::models::CommandError> {
+        crate::platform::platform().office_thumbnail(path)
+    }
+
+    pub fn get_pdf_thumbnail_raw(
+        path: String,
+    ) -> Result<image::RgbaImage, crate::models::CommandError> {
+        crate::platform::platform().pdf_thumbnail(path)
+    }
+
+    pub fn stream_video_frames_sync<F>(
+        path: String,
+        on_frame: F,
+    ) -> Result<(), crate::models::CommandError>
+    where
+        F: FnMut(image::RgbaImage, std::time::Duration) -> bool + Send + 'static,
+    {
+        crate::platform::platform().video_frames(path, Box::new(on_frame))
+    }
+
+    pub fn get_office_text_preview(path: String) -> Result<String, crate::models::CommandError> {
+        crate::platform::platform().office_text_preview(path)
+    }
+}
 
 use unicode_normalization::UnicodeNormalization;
 
 /// Removes accents from a string
 pub fn remove_accents(s: &str) -> String {
-    s.nfd()
-        .filter(|c| !char_is_mark(*c))
-        .collect()
+    s.nfd().filter(|c| !char_is_mark(*c)).collect()
 }
 
 fn char_is_mark(c: char) -> bool {
     // Unicode mark category starts from '\u{0300}' to '\u{036F}' for basic accents
     // We check if the character is in the combining diacritical marks block
-    ('\u{0300}'..='\u{036F}').contains(&c) || 
-    ('\u{1AB0}'..='\u{1AFF}').contains(&c) ||
-    ('\u{1DC0}'..='\u{1DFF}').contains(&c) ||
-    ('\u{20D0}'..='\u{20FF}').contains(&c) ||
-    ('\u{FE20}'..='\u{FE2F}').contains(&c)
+    ('\u{0300}'..='\u{036F}').contains(&c)
+        || ('\u{1AB0}'..='\u{1AFF}').contains(&c)
+        || ('\u{1DC0}'..='\u{1DFF}').contains(&c)
+        || ('\u{20D0}'..='\u{20FF}').contains(&c)
+        || ('\u{FE20}'..='\u{FE2F}').contains(&c)
 }
 
 /// Natural sorting comparison for strings (handles numeric segments correctly).
@@ -81,7 +122,7 @@ pub fn compare_natural(a: &str, b: &str) -> std::cmp::Ordering {
                     // Case-insensitive lexicographical comparison
                     let ac_low = (ac as char).to_lowercase().next().unwrap_or(ac as char);
                     let bc_low = (bc as char).to_lowercase().next().unwrap_or(bc as char);
-                    
+
                     if ac_low != bc_low {
                         return ac_low.cmp(&bc_low);
                     }
@@ -97,17 +138,8 @@ pub fn compare_natural(a: &str, b: &str) -> std::cmp::Ordering {
 }
 
 /// Returns (is_hidden, is_system, is_reparse_point) attributes from metadata
-pub fn get_file_attributes(metadata: &Metadata, _file_name: &str) -> (bool, bool, bool) {
-    #[cfg(target_os = "windows")]
-    {
-        let attrs = metadata.file_attributes();
-        let is_hidden = (attrs & 0x2) != 0 || _file_name.starts_with('.');
-        (is_hidden, (attrs & 0x4) != 0, (attrs & 0x400) != 0)
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        (file_name.starts_with('.'), false, false)
-    }
+pub fn get_file_attributes(metadata: &Metadata, file_name: &str) -> (bool, bool, bool) {
+    crate::platform::platform().file_attributes(metadata, file_name)
 }
 
 #[cfg(test)]
@@ -121,10 +153,10 @@ mod tests {
         let dir = tempdir().unwrap();
         let file_path = dir.path().join("test.txt");
         fs::write(&file_path, "hello").unwrap();
-        
+
         let metadata = fs::metadata(&file_path).unwrap();
         let (hidden, system, _) = get_file_attributes(&metadata, "test.txt");
-        
+
         // On Windows, a new file is usually not hidden or system by default
         assert!(!hidden);
         assert!(!system);

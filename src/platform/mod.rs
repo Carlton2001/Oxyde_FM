@@ -1,10 +1,60 @@
 use crate::models::{DriveInfo, QuickAccessItem};
 
+#[derive(Clone, Copy)]
+pub enum ThreadPriority {
+    Background,
+    Normal,
+    High,
+}
+
 /// Abstraction des opérations spécifiques à l'OS.
 /// Toute fonctionnalité native (lecteurs, ouverture, raccourcis, etc.)
 /// doit passer par ce trait plutôt qu'appeler directement les API OS.
 pub trait Platform: Send + Sync {
     fn name(&self) -> &'static str;
+
+    /// Returns hidden, system, and reparse point flags for a directory entry.
+    fn file_attributes(&self, metadata: &std::fs::Metadata, name: &str) -> (bool, bool, bool);
+
+    /// Adjusts the current worker thread's scheduling priority.
+    fn set_thread_priority(&self, priority: ThreadPriority);
+
+    /// Deletes files permanently or sends them to the system trash.
+    fn shell_delete(&self, paths: &[std::path::PathBuf], recycle: bool) -> Result<(), String>;
+
+    /// Lists entries in the operating system's network neighborhood.
+    fn list_network_vicinity(&self) -> Result<Vec<crate::models::FileEntry>, String>;
+
+    fn is_network_path(&self, path: &std::path::Path) -> bool;
+    fn physical_disk_id(&self, path: &std::path::Path) -> u64;
+    fn is_ssd(&self, path: &std::path::Path) -> bool;
+
+    fn thumbnail(&self, path: String) -> Result<image::RgbaImage, crate::models::CommandError> {
+        thumbnails::get_thumbnail_raw(path)
+    }
+
+    fn office_thumbnail(
+        &self,
+        path: String,
+    ) -> Result<image::RgbaImage, crate::models::CommandError> {
+        thumbnails::get_office_thumbnail_raw(path)
+    }
+
+    fn pdf_thumbnail(&self, path: String) -> Result<image::RgbaImage, crate::models::CommandError> {
+        thumbnails::get_pdf_thumbnail_raw(path)
+    }
+
+    fn video_frames(
+        &self,
+        path: String,
+        on_frame: Box<dyn FnMut(image::RgbaImage, std::time::Duration) -> bool + Send>,
+    ) -> Result<(), crate::models::CommandError> {
+        thumbnails::stream_video_frames_sync(path, on_frame)
+    }
+
+    fn office_text_preview(&self, path: String) -> Result<String, crate::models::CommandError> {
+        thumbnails::get_office_text_preview(path)
+    }
 
     /// Liste les points de montage / lecteurs disponibles.
     fn list_drives(&self, skip_hardware_info: bool) -> Vec<DriveInfo>;
@@ -27,17 +77,33 @@ pub trait Platform: Send + Sync {
 
     /// Définit l'icône de l'application pour la barre des tâches et la fenêtre.
     fn set_application_icon(&self, icon_bytes: &[u8]);
+
+    /// Transfers selected file paths through the native file clipboard.
+    fn set_clipboard_files(&self, paths: Vec<String>, cut: bool) -> Result<(), String>;
+
+    /// Reads file paths and their copy/move intent from the native clipboard.
+    fn get_clipboard_files(&self) -> Result<(Vec<String>, bool), String>;
 }
 
 #[cfg(target_os = "windows")]
-mod windows_impl;
+pub mod clipboard;
+mod hardware;
+#[cfg(target_os = "windows")]
+pub mod icons;
 #[cfg(not(target_os = "windows"))]
 mod linux_impl;
-
 #[cfg(target_os = "windows")]
-use windows_impl::WindowsPlatform as CurrentPlatform;
+pub mod network;
+mod thumbnails;
+#[cfg(target_os = "windows")]
+mod windows_drives;
+#[cfg(target_os = "windows")]
+mod windows_impl;
+
 #[cfg(not(target_os = "windows"))]
 use linux_impl::LinuxPlatform as CurrentPlatform;
+#[cfg(target_os = "windows")]
+use windows_impl::WindowsPlatform as CurrentPlatform;
 
 /// Retourne l'implémentation platform courante (singleton).
 pub fn platform() -> &'static dyn Platform {

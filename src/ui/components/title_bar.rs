@@ -1,6 +1,6 @@
-use gpui::*;
-use crate::ui::app::{OxydeApp, ContextMenuContent, ContextMenuInstance};
+use crate::ui::app::OxydeApp;
 use crate::ui::theme::ThemeContext;
+use gpui::*;
 
 pub const TITLEBAR_H: f32 = 36.0;
 
@@ -13,9 +13,9 @@ pub fn render_title_bar(
     let theme = *cx.theme();
 
     let btn_hover_bg: Hsla = rgba(0xffffff12).into();
-    let icon_color: Hsla   = rgba(0xffffffaa).into();
+    let icon_color: Hsla = rgba(0xffffffaa).into();
 
-    // ── Oxyde app button (left) ──────────────────────────────────────────────
+    // ── Oxyde app button (left) → opens Settings directly ───────────────────
     let h_menu = handle.clone();
     let app_button = div()
         .id("oxyde-app-btn")
@@ -29,40 +29,19 @@ pub fn render_title_bar(
         .hover(move |s| s.bg(btn_hover_bg))
         .cursor_pointer()
         .on_mouse_down(MouseButton::Left, move |_, _, cx| {
-            let _ = h_menu.update(cx, |this, cx| {
-                // Toggle: if app menu already open, close it
-                if this.context_menus.first()
-                    .map(|m| matches!(&m.content, ContextMenuContent::Items(_, _)))
-                    .unwrap_or(false)
-                {
-                    this.context_menus.clear();
-                    cx.notify();
-                    return;
-                }
+            h_menu.update(cx, |this, cx| {
                 this.context_menus.clear();
-                let items = crate::ui::components::app_menu_items(this.handle.clone().unwrap());
-                this.context_menus.push(ContextMenuInstance {
-                    position: Point::new(px(0.0), px(TITLEBAR_H)),
-                    content: ContextMenuContent::Items(items, None),
-                    scroll_handle: UniformListScrollHandle::new(),
-                    width: px(0.0),
-                    open_left: false,
-                });
+                this.settings_open = !this.settings_open;
                 cx.notify();
             });
         })
-        .child(
-            img("icons/logo.png")
-                .w(px(16.0))
-                .h(px(16.0))
-                .flex_none()
-        )
+        .child(img("icons/logo.png").w(px(16.0)).h(px(16.0)).flex_none())
         .child(
             div()
                 .text_size(px(12.0))
                 .font_weight(FontWeight::MEDIUM)
                 .text_color(theme.text)
-                .child("Oxyde")
+                .child("Oxyde"),
         );
 
     // ── Draggable center area ────────────────────────────────────────────────
@@ -95,7 +74,7 @@ pub fn render_title_bar(
                 svg()
                     .path("icons/window-minimize.svg")
                     .size_3()
-                    .text_color(icon_color)
+                    .text_color(icon_color),
             )
     };
 
@@ -118,12 +97,7 @@ pub fn render_title_bar(
         .on_mouse_down(MouseButton::Left, |_, window, _| {
             window.zoom_window();
         })
-        .child(
-            svg()
-                .path(maximize_icon)
-                .size_3()
-                .text_color(icon_color)
-        );
+        .child(svg().path(maximize_icon).size_3().text_color(icon_color));
 
     let close_btn = div()
         .id("wc-close")
@@ -139,12 +113,7 @@ pub fn render_title_bar(
         .on_mouse_down(MouseButton::Left, |_, window, _| {
             window.remove_window();
         })
-        .child(
-            svg()
-                .path("icons/x.svg")
-                .size_3()
-                .text_color(icon_color)
-        );
+        .child(svg().path("icons/x.svg").size_3().text_color(icon_color));
 
     // ── Assemble ─────────────────────────────────────────────────────────────
     div()

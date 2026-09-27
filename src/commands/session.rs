@@ -1,12 +1,15 @@
-use crate::models::{CommandError, SessionManager, SessionState, Tab};
 use crate::models::session::PanelState;
+use crate::models::{CommandError, SessionManager, SessionState, Tab};
 use std::path::PathBuf;
 use std::sync::MutexGuard;
 use uuid::Uuid;
 
 /// lock session state helper
 fn lock_session(state: &SessionManager) -> Result<MutexGuard<'_, SessionState>, CommandError> {
-    state.0.lock().map_err(|_| CommandError::SystemError("Failed to lock session state".into()))
+    state
+        .0
+        .lock()
+        .map_err(|_| CommandError::SystemError("Failed to lock session state".into()))
 }
 
 pub fn get_session_state(state: &SessionManager) -> Result<SessionState, CommandError> {
@@ -21,7 +24,7 @@ pub fn create_tab(
     background: Option<bool>,
 ) -> Result<String, CommandError> {
     let mut session = lock_session(state)?;
-    
+
     let new_id = Uuid::new_v4().to_string();
     let new_tab = Tab {
         id: new_id.clone(),
@@ -33,7 +36,7 @@ pub fn create_tab(
 
     let panel = session.get_panel_mut(&panel_id);
     panel.tabs.push(new_tab);
-    
+
     if !background.unwrap_or(false) {
         panel.active_tab_id = new_id.clone();
         session.active_panel = panel_id.clone();
@@ -43,16 +46,13 @@ pub fn create_tab(
 
     drop(session);
     state.save()?;
-    
+
     Ok(new_id)
 }
 
-pub fn close_tab(
-    state: &SessionManager,
-    tab_id: String,
-) -> Result<(), CommandError> {
+pub fn close_tab(state: &SessionManager, tab_id: String) -> Result<(), CommandError> {
     let mut session = lock_session(state)?;
-    
+
     let remove_from_panel = |panel: &mut PanelState| -> bool {
         if let Some(pos) = panel.tabs.iter().position(|t| t.id == tab_id) {
             panel.tabs.remove(pos);
@@ -81,7 +81,7 @@ pub fn close_tab(
     if !remove_from_panel(&mut session.left_panel) {
         remove_from_panel(&mut session.right_panel);
     }
-    
+
     session.left_panel.update_watcher();
     session.right_panel.update_watcher();
 
@@ -90,10 +90,7 @@ pub fn close_tab(
     Ok(())
 }
 
-pub fn switch_tab(
-    state: &SessionManager,
-    tab_id: String,
-) -> Result<(), CommandError> {
+pub fn switch_tab(state: &SessionManager, tab_id: String) -> Result<(), CommandError> {
     let mut session = lock_session(state)?;
 
     if session.left_panel.tabs.iter().any(|t| t.id == tab_id) {
@@ -105,7 +102,7 @@ pub fn switch_tab(
     } else {
         return Err(CommandError::Other("Tab not found".to_string()));
     }
-    
+
     session.left_panel.update_watcher();
     session.right_panel.update_watcher();
 
@@ -121,7 +118,7 @@ pub fn active_tab_navigate(
     version: Option<u64>,
 ) -> Result<(), CommandError> {
     let mut session = lock_session(state)?;
-    
+
     {
         let panel = session.get_panel_mut(&panel_id);
         if let Some(tab) = panel.tabs.iter_mut().find(|t| t.id == panel.active_tab_id) {
@@ -142,20 +139,17 @@ pub fn active_tab_navigate(
     }
 
     session.get_panel_mut(&panel_id).update_watcher();
-    
+
     drop(session);
     state.save()?;
     Ok(())
 }
 
-pub fn set_active_panel(
-    state: &SessionManager,
-    panel_id: String,
-) -> Result<(), CommandError> {
+pub fn set_active_panel(state: &SessionManager, panel_id: String) -> Result<(), CommandError> {
     let mut session = lock_session(state)?;
-    
+
     if panel_id != "left" && panel_id != "right" {
-         return Err(CommandError::Other("Invalid panel ID".to_string()));
+        return Err(CommandError::Other("Invalid panel ID".to_string()));
     }
 
     session.active_panel = panel_id;
@@ -164,10 +158,7 @@ pub fn set_active_panel(
     Ok(())
 }
 
-pub fn duplicate_tab(
-    state: &SessionManager,
-    tab_id: String,
-) -> Result<(), CommandError> {
+pub fn duplicate_tab(state: &SessionManager, tab_id: String) -> Result<(), CommandError> {
     let mut session = lock_session(state)?;
 
     let duplicate_in_panel = |panel: &mut PanelState| -> bool {
@@ -191,7 +182,7 @@ pub fn duplicate_tab(
     if !duplicate_in_panel(&mut session.left_panel) {
         duplicate_in_panel(&mut session.right_panel);
     }
-    
+
     session.left_panel.update_watcher();
     session.right_panel.update_watcher();
 
@@ -200,10 +191,7 @@ pub fn duplicate_tab(
     Ok(())
 }
 
-pub fn close_other_tabs(
-    state: &SessionManager,
-    tab_id: String,
-) -> Result<(), CommandError> {
+pub fn close_other_tabs(state: &SessionManager, tab_id: String) -> Result<(), CommandError> {
     let mut session = lock_session(state)?;
 
     let handle_panel = |panel: &mut PanelState| -> bool {
@@ -256,26 +244,32 @@ pub fn update_sort_config(
     sort_config: crate::models::session::SortConfig,
 ) -> Result<(), CommandError> {
     let mut session = lock_session(state)?;
-    
+
     session.get_panel_mut(&panel_id).sort_config = sort_config;
-    
+
     drop(session);
     state.save()?;
     Ok(())
 }
 
-pub fn swap_panels(
-    state: &SessionManager,
-) -> Result<(), CommandError> {
+pub fn swap_panels(state: &SessionManager) -> Result<(), CommandError> {
     let mut session_guard = lock_session(state)?;
     let session = &mut *session_guard;
-    
+
     let l_active_id = session.left_panel.active_tab_id.clone();
     let r_active_id = session.right_panel.active_tab_id.clone();
 
     {
-        let l_tab = session.left_panel.tabs.iter_mut().find(|t| t.id == l_active_id);
-        let r_tab = session.right_panel.tabs.iter_mut().find(|t| t.id == r_active_id);
+        let l_tab = session
+            .left_panel
+            .tabs
+            .iter_mut()
+            .find(|t| t.id == l_active_id);
+        let r_tab = session
+            .right_panel
+            .tabs
+            .iter_mut()
+            .find(|t| t.id == r_active_id);
 
         if let (Some(lt), Some(rt)) = (l_tab, r_tab) {
             std::mem::swap(&mut lt.path, &mut rt.path);
@@ -283,9 +277,18 @@ pub fn swap_panels(
         }
     }
 
-    std::mem::swap(&mut session.left_panel.search_context, &mut session.right_panel.search_context);
-    std::mem::swap(&mut session.left_panel.sort_config, &mut session.right_panel.sort_config);
-    std::mem::swap(&mut session.left_panel.cached_results, &mut session.right_panel.cached_results);
+    std::mem::swap(
+        &mut session.left_panel.search_context,
+        &mut session.right_panel.search_context,
+    );
+    std::mem::swap(
+        &mut session.left_panel.sort_config,
+        &mut session.right_panel.sort_config,
+    );
+    std::mem::swap(
+        &mut session.left_panel.cached_results,
+        &mut session.right_panel.cached_results,
+    );
 
     if let Some(ctx) = &mut session.left_panel.search_context {
         ctx.tab_id = l_active_id;
@@ -296,7 +299,7 @@ pub fn swap_panels(
 
     session.left_panel.update_watcher();
     session.right_panel.update_watcher();
-    
+
     drop(session_guard);
     state.save()?;
     Ok(())

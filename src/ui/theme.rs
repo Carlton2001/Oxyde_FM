@@ -1,19 +1,19 @@
-use gpui::*;
 use gpui::Render;
+use gpui::*;
 
 #[derive(Debug, Clone, Copy)]
 pub struct OxydeTheme {
-    pub background: Hsla,      // Fond principal (FileList)
+    pub background: Hsla,        // Fond principal (FileList)
     pub active_background: Hsla, // Fond du panneau actif
-    pub sidebar: Hsla,         // Sidebar et panneaux latéraux
-    pub header: Hsla,          // TopBar / TabBar
-    pub surface: Hsla,         // Éléments de surface (Dropdowns, Modals)
-    pub border: Hsla,          // Bordures subtiles
-    pub text: Hsla,            // Texte principal
-    pub text_muted: Hsla,      // Texte secondaire / Headers
-    pub accent: Hsla,          // Couleur d'action (Blue Zed-like)
-    pub hover: Hsla,           // État Hover
-    pub selected: Hsla,        // État sélectionné / Focus
+    pub sidebar: Hsla,           // Sidebar et panneaux latéraux
+    pub header: Hsla,            // TopBar / TabBar
+    pub surface: Hsla,           // Éléments de surface (Dropdowns, Modals)
+    pub border: Hsla,            // Bordures subtiles
+    pub text: Hsla,              // Texte principal
+    pub text_muted: Hsla,        // Texte secondaire / Headers
+    pub accent: Hsla,            // Couleur d'action (Blue Zed-like)
+    pub hover: Hsla,             // État Hover
+    pub selected: Hsla,          // État sélectionné / Focus
 }
 
 impl Global for OxydeTheme {}

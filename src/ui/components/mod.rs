@@ -1,19 +1,24 @@
-pub mod sidebar;
-pub mod top_bar;
-pub mod file_list;
-pub mod scrollbar;
-pub mod tabs;
 pub mod dropdown;
-pub mod input;
-pub mod tooltip;
+pub mod file_list;
 pub mod icons;
+pub mod input;
+pub mod scrollbar;
+pub mod settings;
+pub mod sidebar;
+pub mod tabs;
 pub mod title_bar;
+pub mod tooltip;
+pub mod top_bar;
 
 use gpui::*;
 
-pub fn oxyde_context_menu_items(h_app: Entity<crate::ui::app::OxydeApp>, is_dir: bool, path: String) -> Vec<crate::ui::components::dropdown::DropdownItem> {
+pub fn oxyde_context_menu_items(
+    h_app: Entity<crate::ui::app::OxydeApp>,
+    is_dir: bool,
+    path: String,
+) -> Vec<crate::ui::components::dropdown::DropdownItem> {
     use crate::ui::components::dropdown::IconName;
-    
+
     let mut items = vec![];
 
     items.push(crate::ui::components::dropdown::DropdownItem {
@@ -21,12 +26,15 @@ pub fn oxyde_context_menu_items(h_app: Entity<crate::ui::app::OxydeApp>, is_dir:
         icon: Some(IconName::FolderOpen),
         stay_open: false,
         has_submenu: false,
+        is_dimmed: false,
         on_click: std::rc::Rc::new({
             let h = h_app.clone();
-            move |_, app| { let _ = h.update(app, |this, cx| {
-                this.context_menus.clear();
-                this.execute_ouvrir(cx);
-            }); }
+            move |_, app| {
+                h.update(app, |this, cx| {
+                    this.context_menus.clear();
+                    this.execute_ouvrir(cx);
+                });
+            }
         }),
         on_hover: None,
     });
@@ -37,14 +45,17 @@ pub fn oxyde_context_menu_items(h_app: Entity<crate::ui::app::OxydeApp>, is_dir:
             icon: Some(IconName::Copy),
             stay_open: false,
             has_submenu: false,
+            is_dimmed: false,
             on_click: std::rc::Rc::new({
                 let h = h_app.clone();
                 let p = path.clone();
-                move |_, app| { let _ = h.update(app, |this, cx| {
-                    this.context_menus.clear();
-                    let p_id = this.state.active_pane_id.clone();
-                    this.add_tab(&p_id, p.clone(), false, cx);
-                }); }
+                move |_, app| {
+                    h.update(app, |this, cx| {
+                        this.context_menus.clear();
+                        let p_id = this.state.active_pane_id.clone();
+                        this.add_tab(&p_id, p.clone(), false, cx);
+                    });
+                }
             }),
             on_hover: None,
         });
@@ -54,14 +65,18 @@ pub fn oxyde_context_menu_items(h_app: Entity<crate::ui::app::OxydeApp>, is_dir:
             icon: None,
             stay_open: false,
             has_submenu: false,
+            is_dimmed: false,
             on_click: std::rc::Rc::new({
                 let h = h_app.clone();
                 let p = path.clone();
-                move |_, app| { let _ = h.update(app, |this, _cx| {
-                    this.context_menus.clear();
-                    let _ = oxyde_lib::commands::system::add_to_quick_access(p.clone());
-                    this.state.refresh_sidebar();
-                }); }
+                move |_, app| {
+                    h.update(app, |this, cx| {
+                        this.context_menus.clear();
+                        let _ = oxyde_lib::commands::system::add_to_quick_access(p.clone());
+                        this.state.reload_quick_access_and_refresh();
+                        cx.notify();
+                    });
+                }
             }),
             on_hover: None,
         });
@@ -72,12 +87,15 @@ pub fn oxyde_context_menu_items(h_app: Entity<crate::ui::app::OxydeApp>, is_dir:
         icon: Some(IconName::Minimize),
         stay_open: false,
         has_submenu: false,
+        is_dimmed: false,
         on_click: std::rc::Rc::new({
             let h = h_app.clone();
-            move |_, app| { let _ = h.update(app, |this, cx| {
-                this.context_menus.clear();
-                this.execute_couper(cx);
-            }); }
+            move |_, app| {
+                h.update(app, |this, cx| {
+                    this.context_menus.clear();
+                    this.execute_couper(cx);
+                });
+            }
         }),
         on_hover: None,
     });
@@ -87,12 +105,15 @@ pub fn oxyde_context_menu_items(h_app: Entity<crate::ui::app::OxydeApp>, is_dir:
         icon: Some(IconName::Copy),
         stay_open: false,
         has_submenu: false,
+        is_dimmed: false,
         on_click: std::rc::Rc::new({
             let h = h_app.clone();
-            move |_, app| { let _ = h.update(app, |this, cx| {
-                this.context_menus.clear();
-                this.execute_copier(cx);
-            }); }
+            move |_, app| {
+                h.update(app, |this, cx| {
+                    this.context_menus.clear();
+                    this.execute_copier(cx);
+                });
+            }
         }),
         on_hover: None,
     });
@@ -102,12 +123,15 @@ pub fn oxyde_context_menu_items(h_app: Entity<crate::ui::app::OxydeApp>, is_dir:
         icon: Some(IconName::Plus),
         stay_open: false,
         has_submenu: false,
+        is_dimmed: false,
         on_click: std::rc::Rc::new({
             let h = h_app.clone();
-            move |_, app| { let _ = h.update(app, |this, cx| {
-                this.context_menus.clear();
-                this.execute_coller(cx);
-            }); }
+            move |_, app| {
+                h.update(app, |this, cx| {
+                    this.context_menus.clear();
+                    this.execute_coller(cx);
+                });
+            }
         }),
         on_hover: None,
     });
@@ -117,12 +141,15 @@ pub fn oxyde_context_menu_items(h_app: Entity<crate::ui::app::OxydeApp>, is_dir:
         icon: Some(IconName::ALargeSmall),
         stay_open: false,
         has_submenu: false,
+        is_dimmed: false,
         on_click: std::rc::Rc::new({
             let h = h_app.clone();
-            move |window, app| { let _ = h.update(app, |this, cx| {
-                this.context_menus.clear();
-                this.execute_renommer(window, cx);
-            }); }
+            move |window, app| {
+                h.update(app, |this, cx| {
+                    this.context_menus.clear();
+                    this.execute_renommer(window, cx);
+                });
+            }
         }),
         on_hover: None,
     });
@@ -132,12 +159,15 @@ pub fn oxyde_context_menu_items(h_app: Entity<crate::ui::app::OxydeApp>, is_dir:
         icon: Some(IconName::Delete),
         stay_open: false,
         has_submenu: false,
+        is_dimmed: false,
         on_click: std::rc::Rc::new({
             let h = h_app.clone();
-            move |_, app| { let _ = h.update(app, |this, cx| {
-                this.context_menus.clear();
-                this.execute_supprimer(cx);
-            }); }
+            move |_, app| {
+                h.update(app, |this, cx| {
+                    this.context_menus.clear();
+                    this.execute_supprimer(cx);
+                });
+            }
         }),
         on_hover: None,
     });
@@ -147,13 +177,16 @@ pub fn oxyde_context_menu_items(h_app: Entity<crate::ui::app::OxydeApp>, is_dir:
         icon: None,
         stay_open: false,
         has_submenu: false,
+        is_dimmed: false,
         on_click: std::rc::Rc::new({
             let h = h_app.clone();
             let p = path.clone();
-            move |_, app| { let _ = h.update(app, |this, _cx| {
-                this.context_menus.clear();
-                oxyde_lib::platform::platform().show_properties_dialog(&p);
-            }); }
+            move |_, app| {
+                h.update(app, |this, _cx| {
+                    this.context_menus.clear();
+                    oxyde_lib::platform::platform().show_properties_dialog(&p);
+                });
+            }
         }),
         on_hover: None,
     });
@@ -162,12 +195,12 @@ pub fn oxyde_context_menu_items(h_app: Entity<crate::ui::app::OxydeApp>, is_dir:
         label: "Plus d'options".to_string(),
         icon: None,
         stay_open: true,
-        has_submenu: true,
+        has_submenu: true, is_dimmed: false,
         on_click: std::rc::Rc::new(|_, _| {}),
         on_hover: Some(std::rc::Rc::new({
             let h = h_app.clone();
             move |sub_pos, open_left, app| {
-                let _ = h.update(app, |this, cx| {
+                h.update(app, |this, cx| {
                     let pane_id = this.state.active_pane_id.clone();
                     if let Some(pane) = this.state.layout.find_pane(&pane_id) {
                         let tab = pane.active_tab();
@@ -208,18 +241,19 @@ pub fn pane_context_menu_items(
     pane_id: String,
 ) -> Vec<crate::ui::components::dropdown::DropdownItem> {
     use crate::ui::components::dropdown::IconName;
-    
+
     vec![
         crate::ui::components::dropdown::DropdownItem {
             label: "Nouveau dossier".to_string(),
             icon: Some(IconName::Plus),
             stay_open: false,
             has_submenu: false,
+            is_dimmed: false,
             on_click: std::rc::Rc::new({
                 let h = h_app.clone();
                 let p_id = pane_id.clone();
-                move |_, app| { 
-                    let _ = h.update(app, |this, cx| {
+                move |_, app| {
+                    h.update(app, |this, cx| {
                         this.context_menus.clear();
                         this.create_new_folder(&p_id, cx);
                     });
@@ -232,10 +266,11 @@ pub fn pane_context_menu_items(
             icon: Some(IconName::Plus),
             stay_open: false,
             has_submenu: false,
+            is_dimmed: false,
             on_click: std::rc::Rc::new({
                 let h = h_app.clone();
-                move |_, app| { 
-                    let _ = h.update(app, |this, cx| {
+                move |_, app| {
+                    h.update(app, |this, cx| {
                         this.context_menus.clear();
                         this.execute_coller(cx);
                     });
@@ -248,11 +283,12 @@ pub fn pane_context_menu_items(
             icon: None,
             stay_open: false,
             has_submenu: false,
+            is_dimmed: false,
             on_click: std::rc::Rc::new({
                 let h = h_app.clone();
                 let p_id = pane_id.clone();
-                move |_, app| { 
-                    let _ = h.update(app, |this, cx| {
+                move |_, app| {
+                    h.update(app, |this, cx| {
                         this.context_menus.clear();
                         if let Some(pane) = this.state.layout.find_pane(&p_id) {
                             let path = pane.active_tab().path.clone();
@@ -269,12 +305,13 @@ pub fn pane_context_menu_items(
             icon: None,
             stay_open: true,
             has_submenu: true,
+            is_dimmed: false,
             on_click: std::rc::Rc::new(|_, _| {}),
             on_hover: Some(std::rc::Rc::new({
                 let h = h_app.clone();
                 let p_id = pane_id.clone();
                 move |sub_pos, open_left, app| {
-                    let _ = h.update(app, |this, cx| {
+                    h.update(app, |this, cx| {
                         if let Some(pane) = this.state.layout.find_pane(&p_id) {
                             let path = pane.active_tab().path.clone();
                             use crate::ui::app::ContextMenuContent;
@@ -306,64 +343,25 @@ pub fn pane_context_menu_items(
     ]
 }
 
-/// Items for the Oxyde app menu (title bar left button).
-pub fn app_menu_items(
-    h_app: Entity<crate::ui::app::OxydeApp>,
-) -> Vec<crate::ui::components::dropdown::DropdownItem> {
-    use crate::ui::components::dropdown::IconName;
-
-    vec![
-        crate::ui::components::dropdown::DropdownItem {
-            label: "Préférences".to_string(),
-            icon: Some(IconName::Square), // placeholder until settings icon exists
-            stay_open: false,
-            has_submenu: false,
-            on_click: std::rc::Rc::new({
-                let h = h_app.clone();
-                move |_, app| {
-                    let _ = h.update(app, |this, _| {
-                        this.context_menus.clear();
-                    });
-                }
-            }),
-            on_hover: None,
-        },
-        crate::ui::components::dropdown::DropdownItem {
-            label: "À propos d'Oxyde".to_string(),
-            icon: Some(IconName::Square),
-            stay_open: false,
-            has_submenu: false,
-            on_click: std::rc::Rc::new({
-                let h = h_app.clone();
-                move |_, app| {
-                    let _ = h.update(app, |this, _| {
-                        this.context_menus.clear();
-                    });
-                }
-            }),
-            on_hover: None,
-        },
-    ]
-}
-
 pub fn tab_context_menu_items(
     h_app: Entity<crate::ui::app::OxydeApp>,
     pane_id: String,
     tab_idx: usize,
 ) -> Vec<crate::ui::components::dropdown::DropdownItem> {
     use crate::ui::components::dropdown::IconName;
-    
+
     vec![
         crate::ui::components::dropdown::DropdownItem {
             label: "Dupliquer l'onglet".to_string(),
             icon: Some(IconName::Plus),
             stay_open: false,
             has_submenu: false,
+            is_dimmed: false,
             on_click: std::rc::Rc::new({
                 let h = h_app.clone();
                 let p_id = pane_id.clone();
-                move |_, app| { 
-                    let _ = h.update(app, |this, cx| {
+                move |_, app| {
+                    h.update(app, |this, cx| {
                         this.context_menus.clear();
                         this.state.duplicate_tab(&p_id, tab_idx);
                         cx.notify();
@@ -377,11 +375,12 @@ pub fn tab_context_menu_items(
             icon: Some(IconName::X),
             stay_open: false,
             has_submenu: false,
+            is_dimmed: false,
             on_click: std::rc::Rc::new({
                 let h = h_app.clone();
                 let p_id = pane_id.clone();
-                move |_, app| { 
-                    let _ = h.update(app, |this, cx| {
+                move |_, app| {
+                    h.update(app, |this, cx| {
                         this.context_menus.clear();
                         this.state.close_other_tabs(&p_id, tab_idx);
                         cx.notify();
@@ -395,11 +394,12 @@ pub fn tab_context_menu_items(
             icon: Some(IconName::Delete),
             stay_open: false,
             has_submenu: false,
+            is_dimmed: false,
             on_click: std::rc::Rc::new({
                 let h = h_app.clone();
                 let p_id = pane_id.clone();
-                move |_, app| { 
-                    let _ = h.update(app, |this, cx| {
+                move |_, app| {
+                    h.update(app, |this, cx| {
                         this.context_menus.clear();
                         this.state.close_tab_id(&p_id, tab_idx);
                         cx.notify();

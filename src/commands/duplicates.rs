@@ -1,14 +1,14 @@
 use crate::models::{CommandError, FileEntry};
+use dashmap::DashMap;
+use jwalk::WalkDir;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{Read, BufReader};
+use std::io::{BufReader, Read};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
-use jwalk::WalkDir;
-use dashmap::DashMap;
 
 use crate::utils::hardware::{get_physical_disk_id, is_ssd};
 
@@ -49,10 +49,14 @@ pub struct DuplicateSearchOptions {
 
 const PARTIAL_HASH_SIZE: usize = 4096;
 
-fn calculate_hash<P: AsRef<Path>>(path: P, limit: Option<usize>, from_end: bool) -> Result<blake3::Hash, std::io::Error> {
+fn calculate_hash<P: AsRef<Path>>(
+    path: P,
+    limit: Option<usize>,
+    from_end: bool,
+) -> Result<blake3::Hash, std::io::Error> {
     let mut file = File::open(path.as_ref())?;
     let mut hasher = blake3::Hasher::new();
-    
+
     if let Some(limit) = limit {
         if from_end {
             let metadata = file.metadata()?;
@@ -62,7 +66,7 @@ fn calculate_hash<P: AsRef<Path>>(path: P, limit: Option<usize>, from_end: bool)
                 file.seek(std::io::SeekFrom::End(-(limit as i64)))?;
             }
         }
-        
+
         let mut reader = BufReader::new(file);
         let mut buffer = vec![0; limit];
         let bytes_read = reader.read(&mut buffer)?;
@@ -71,7 +75,7 @@ fn calculate_hash<P: AsRef<Path>>(path: P, limit: Option<usize>, from_end: bool)
         let mut reader = BufReader::new(file);
         std::io::copy(&mut reader, &mut hasher)?;
     }
-    
+
     Ok(hasher.finalize())
 }
 
@@ -82,7 +86,7 @@ pub async fn find_duplicates(
 ) -> Result<Vec<DuplicateGroup>, CommandError> {
     state.0.store(false, Ordering::Relaxed);
     let cancel_flag = state.0.clone();
-    
+
     tokio::task::spawn_blocking(move || {
         // 1. Collect all files and group by selected criteria (Parallel Scan)
         #[derive(PartialEq, Eq, Hash, Debug)]
@@ -91,53 +95,82 @@ pub async fn find_duplicates(
             size: Option<u64>,
         }
 
-        let initial_groups: Arc<Mutex<HashMap<GroupKey, Vec<PathBuf>>>> = Arc::new(Mutex::new(HashMap::new()));
+        let initial_groups: Arc<Mutex<HashMap<GroupKey, Vec<PathBuf>>>> =
+            Arc::new(Mutex::new(HashMap::new()));
         let file_count = Arc::new(AtomicUsize::new(0));
 
         paths.par_iter().for_each(|path_str| {
-            if cancel_flag.load(Ordering::Relaxed) { return; }
-            
+            if cancel_flag.load(Ordering::Relaxed) {
+                return;
+            }
+
             let mut root_path = PathBuf::from(path_str);
-            if cfg!(windows) && root_path.to_string_lossy().len() == 2 && root_path.to_string_lossy().ends_with(':') {
+            if cfg!(windows)
+                && root_path.to_string_lossy().len() == 2
+                && root_path.to_string_lossy().ends_with(':')
+            {
                 root_path = PathBuf::from(format!("{}\\", root_path.to_string_lossy()));
             }
 
-            if !root_path.exists() { return; }
-            
+            if !root_path.exists() {
+                return;
+            }
+
             let is_target_ssd = is_ssd(&root_path);
             let num_threads = if is_target_ssd { 16 } else { 2 };
-            
+
             for entry in WalkDir::new(root_path)
                 .parallelism(jwalk::Parallelism::RayonNewPool(num_threads))
                 .into_iter()
-                .filter_map(|e| e.ok()) 
+                .filter_map(|e| e.ok())
             {
-                if cancel_flag.load(Ordering::Relaxed) { break; }
+                if cancel_flag.load(Ordering::Relaxed) {
+                    break;
+                }
                 if entry.file_type().is_file() {
                     if let Ok(metadata) = entry.metadata() {
                         let size = metadata.len();
                         // If no criteria selected, skip (shouldn't happen with UI)
-                        if !options.by_name && !options.by_size && !options.by_content { continue; }
+                        if !options.by_name && !options.by_size && !options.by_content {
+                            continue;
+                        }
 
-                        let mut key = GroupKey { name: None, size: None };
+                        let mut key = GroupKey {
+                            name: None,
+                            size: None,
+                        };
                         if options.by_name {
-                            key.name = Some(entry.file_name().to_string_lossy().to_string().to_lowercase());
+                            key.name = Some(
+                                entry
+                                    .file_name()
+                                    .to_string_lossy()
+                                    .to_string()
+                                    .to_lowercase(),
+                            );
                         }
                         if options.by_size || options.by_content {
                             key.size = Some(size);
                         }
 
                         let mut groups = initial_groups.lock().unwrap();
-                        groups.entry(key).or_default().push(entry.path().to_path_buf());
+                        groups
+                            .entry(key)
+                            .or_default()
+                            .push(entry.path().to_path_buf());
                         file_count.fetch_add(1, Ordering::Relaxed);
                     }
                 }
             }
         });
 
-        let initial_groups = Arc::try_unwrap(initial_groups).unwrap().into_inner().unwrap();
-        
-        if cancel_flag.load(Ordering::Relaxed) { return Ok(vec![]); }
+        let initial_groups = Arc::try_unwrap(initial_groups)
+            .unwrap()
+            .into_inner()
+            .unwrap();
+
+        if cancel_flag.load(Ordering::Relaxed) {
+            return Ok(vec![]);
+        }
 
         // Filter groups with at least 2 files
         let groups_to_process: Vec<(u64, Vec<PathBuf>)> = initial_groups
@@ -160,13 +193,16 @@ pub async fn find_duplicates(
                     result_groups.push(DuplicateGroup { size, files });
                 }
             }
-            result_groups.sort_by(|a, b| b.size.cmp(&a.size));
+            result_groups.sort_by_key(|group| std::cmp::Reverse(group.size));
             return Ok(result_groups);
         }
 
         // --- HASHING LOGIC (only if by_content is true) ---
-            
-        let total_to_hash = groups_to_process.iter().map(|(_, files)| files.len()).sum::<usize>();
+
+        let total_to_hash = groups_to_process
+            .iter()
+            .map(|(_, files)| files.len())
+            .sum::<usize>();
         if total_to_hash == 0 {
             return Ok(vec![]);
         }
@@ -182,21 +218,35 @@ pub async fn find_duplicates(
         let partial_results: Vec<Option<(u64, PathBuf, blake3::Hash)>> = flat_potential
             .into_par_iter()
             .map(|(size, path)| {
-                if cancel_flag.load(Ordering::Relaxed) { return None; }
+                if cancel_flag.load(Ordering::Relaxed) {
+                    return None;
+                }
                 let vol_id = get_physical_disk_id(&path);
-                let lock = vol_semaphores.entry(vol_id).or_insert_with(|| Arc::new(Mutex::new(()))).clone();
+                let lock = vol_semaphores
+                    .entry(vol_id)
+                    .or_insert_with(|| Arc::new(Mutex::new(())))
+                    .clone();
                 let _guard = lock.lock().unwrap();
-                let limit = if size > PARTIAL_HASH_SIZE as u64 { Some(PARTIAL_HASH_SIZE) } else { None };
+                let limit = if size > PARTIAL_HASH_SIZE as u64 {
+                    Some(PARTIAL_HASH_SIZE)
+                } else {
+                    None
+                };
                 let hash = calculate_hash(&path, limit, false).ok()?;
                 Some((size, path, hash))
             })
             .collect();
 
-        if cancel_flag.load(Ordering::Relaxed) { return Ok(vec![]); }
+        if cancel_flag.load(Ordering::Relaxed) {
+            return Ok(vec![]);
+        }
 
         let mut partial_start_groups: HashMap<(u64, blake3::Hash), Vec<PathBuf>> = HashMap::new();
         for res in partial_results.into_iter().flatten() {
-            partial_start_groups.entry((res.0, res.2)).or_default().push(res.1);
+            partial_start_groups
+                .entry((res.0, res.2))
+                .or_default()
+                .push(res.1);
         }
 
         let mut end_check_list = Vec::new();
@@ -209,26 +259,42 @@ pub async fn find_duplicates(
         }
 
         let total_end = end_check_list.len();
-        if total_end == 0 { return Ok(vec![]); }
+        if total_end == 0 {
+            return Ok(vec![]);
+        }
 
         let partial_end_results: Vec<Option<(u64, PathBuf, blake3::Hash)>> = end_check_list
             .into_par_iter()
             .map(|(size, path)| {
-                if cancel_flag.load(Ordering::Relaxed) { return None; }
+                if cancel_flag.load(Ordering::Relaxed) {
+                    return None;
+                }
                 let vol_id = get_physical_disk_id(&path);
-                let lock = vol_semaphores.entry(vol_id).or_insert_with(|| Arc::new(Mutex::new(()))).clone();
+                let lock = vol_semaphores
+                    .entry(vol_id)
+                    .or_insert_with(|| Arc::new(Mutex::new(())))
+                    .clone();
                 let _guard = lock.lock().unwrap();
-                let limit = if size > PARTIAL_HASH_SIZE as u64 { Some(PARTIAL_HASH_SIZE) } else { None };
+                let limit = if size > PARTIAL_HASH_SIZE as u64 {
+                    Some(PARTIAL_HASH_SIZE)
+                } else {
+                    None
+                };
                 let hash = calculate_hash(&path, limit, true).ok()?;
                 Some((size, path, hash))
             })
             .collect();
 
-        if cancel_flag.load(Ordering::Relaxed) { return Ok(vec![]); }
+        if cancel_flag.load(Ordering::Relaxed) {
+            return Ok(vec![]);
+        }
 
         let mut partial_end_groups: HashMap<(u64, blake3::Hash), Vec<PathBuf>> = HashMap::new();
         for res in partial_end_results.into_iter().flatten() {
-            partial_end_groups.entry((res.0, res.2)).or_default().push(res.1);
+            partial_end_groups
+                .entry((res.0, res.2))
+                .or_default()
+                .push(res.1);
         }
 
         let mut final_check_list = Vec::new();
@@ -241,21 +307,30 @@ pub async fn find_duplicates(
         }
 
         let total_final = final_check_list.len();
-        if total_final == 0 { return Ok(vec![]); }
+        if total_final == 0 {
+            return Ok(vec![]);
+        }
 
         let full_results: Vec<Option<(u64, PathBuf, blake3::Hash)>> = final_check_list
             .into_par_iter()
             .map(|(size, path)| {
-                if cancel_flag.load(Ordering::Relaxed) { return None; }
+                if cancel_flag.load(Ordering::Relaxed) {
+                    return None;
+                }
                 let vol_id = get_physical_disk_id(&path);
-                let lock = vol_semaphores.entry(vol_id).or_insert_with(|| Arc::new(Mutex::new(()))).clone();
+                let lock = vol_semaphores
+                    .entry(vol_id)
+                    .or_insert_with(|| Arc::new(Mutex::new(())))
+                    .clone();
                 let _guard = lock.lock().unwrap();
                 let hash = calculate_hash(&path, None, false).ok()?;
                 Some((size, path, hash))
             })
             .collect();
 
-        if cancel_flag.load(Ordering::Relaxed) { return Ok(vec![]); }
+        if cancel_flag.load(Ordering::Relaxed) {
+            return Ok(vec![]);
+        }
 
         let mut final_groups: HashMap<(u64, blake3::Hash), Vec<PathBuf>> = HashMap::new();
         for res in full_results.into_iter().flatten() {
@@ -277,9 +352,11 @@ pub async fn find_duplicates(
             }
         }
 
-        result_groups.sort_by(|a, b| b.size.cmp(&a.size));
+        result_groups.sort_by_key(|group| std::cmp::Reverse(group.size));
         Ok(result_groups)
-    }).await.map_err(|e| CommandError::IoError(format!("Task execution failed: {}", e)))?
+    })
+    .await
+    .map_err(|e| CommandError::IoError(format!("Task execution failed: {}", e)))?
 }
 
 pub fn cancel_find_duplicates(state: &DuplicateSearchState) {

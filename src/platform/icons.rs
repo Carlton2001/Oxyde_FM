@@ -1,26 +1,27 @@
 #![cfg(target_os = "windows")]
 
+use crate::models::CommandError;
 use image::RgbaImage;
+use lazy_static::lazy_static;
+use std::collections::HashMap;
+use std::fs;
 use std::io::Cursor;
 use std::os::windows::ffi::OsStrExt;
+use std::path::PathBuf;
+use std::sync::Mutex;
 use windows::core::PCWSTR;
-use windows::Win32::UI::Shell::{
-    SHGetFileInfoW, SHFILEINFOW, SHGFI_ICON, SHGFI_LARGEICON, SHGFI_SMALLICON, SHGFI_SYSICONINDEX,
-    SHGetImageList, SHIL_JUMBO,
+use windows::Win32::Graphics::Gdi::{
+    CreateCompatibleDC, CreateDIBSection, DeleteDC, DeleteObject, GetDC, GetObjectW, ReleaseDC,
+    SelectObject, BITMAP, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS, HGDIOBJ,
 };
 use windows::Win32::UI::Controls::IImageList;
-use windows::Win32::UI::WindowsAndMessaging::{DestroyIcon, HICON, GetIconInfo, DrawIconEx, DI_NORMAL};
-use windows::Win32::Graphics::Gdi::{
-    GetDC, ReleaseDC, DeleteObject, CreateCompatibleDC, DeleteDC, HGDIOBJ, 
-    CreateDIBSection, SelectObject, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS,
-    GetObjectW, BITMAP
+use windows::Win32::UI::Shell::{
+    SHGetFileInfoW, SHGetImageList, SHFILEINFOW, SHGFI_ICON, SHGFI_LARGEICON, SHGFI_SMALLICON,
+    SHGFI_SYSICONINDEX, SHIL_JUMBO,
 };
-use crate::models::CommandError;
-use std::collections::HashMap;
-use std::sync::Mutex;
-use lazy_static::lazy_static;
-use std::path::PathBuf;
-use std::fs;
+use windows::Win32::UI::WindowsAndMessaging::{
+    DestroyIcon, DrawIconEx, GetIconInfo, DI_NORMAL, HICON,
+};
 
 lazy_static! {
     static ref ICON_CACHE: Mutex<HashMap<String, Vec<u8>>> = Mutex::new(HashMap::new());
@@ -34,7 +35,7 @@ pub fn purge_icon_cache() {
 
 pub fn get_file_icon(path: String, size: String) -> Result<Vec<u8>, CommandError> {
     let cache_dir = dirs::cache_dir().map(|p| p.join("oxyde").join("icons"));
-    
+
     // Virtual path logic (copying the folder "C:\Windows" spirit)
     let (real_path, use_attributes) = if let Some(ext) = path.strip_prefix("oxyde_ext_") {
         (format!("C:\\template.{}", ext), true)
@@ -54,11 +55,11 @@ pub fn get_file_icon(path: String, size: String) -> Result<Vec<u8>, CommandError
 }
 
 pub fn extract_icon_png(
-    path: &str, 
-    size: &str, 
-    use_attributes: bool, 
+    path: &str,
+    size: &str,
+    use_attributes: bool,
     cache_dir: Option<PathBuf>,
-    cache_key: String
+    cache_key: String,
 ) -> Result<Vec<u8>, String> {
     let wide_path: Vec<u16> = std::ffi::OsStr::new(path)
         .encode_wide()
@@ -66,8 +67,13 @@ pub fn extract_icon_png(
         .collect();
 
     let mut shfileinfo = SHFILEINFOW::default();
-    let mut flags = SHGFI_SYSICONINDEX | if size == "small" { SHGFI_SMALLICON } else { SHGFI_LARGEICON };
-    
+    let mut flags = SHGFI_SYSICONINDEX
+        | if size == "small" {
+            SHGFI_SMALLICON
+        } else {
+            SHGFI_LARGEICON
+        };
+
     let mut attributes = windows::Win32::Storage::FileSystem::FILE_FLAGS_AND_ATTRIBUTES(0);
     if use_attributes {
         flags |= windows::Win32::UI::Shell::SHGFI_USEFILEATTRIBUTES;
@@ -82,7 +88,7 @@ pub fn extract_icon_png(
             std::mem::size_of::<SHFILEINFOW>() as u32,
             flags,
         );
-        
+
         let icon_index = shfileinfo.iIcon;
 
         // We don't check for 0 here anymore as SHGFI_USEFILEATTRIBUTES can be tricky
@@ -108,9 +114,13 @@ pub fn extract_icon_png(
         }
 
         // Try to get high quality icon (JUMBO = 256, EXTRALARGE = 48)
-        let list_id = if size == "small" { 2 } else { SHIL_JUMBO as i32 }; 
+        let list_id = if size == "small" {
+            2
+        } else {
+            SHIL_JUMBO as i32
+        };
         let image_list: windows::core::Result<IImageList> = SHGetImageList(list_id);
-        
+
         let mut hicon = HICON::default();
         if let Ok(list) = image_list {
             hicon = list.GetIcon(icon_index, 0).unwrap_or_default();
@@ -118,7 +128,12 @@ pub fn extract_icon_png(
 
         if hicon.is_invalid() {
             let mut shfileinfo_fallback = SHFILEINFOW::default();
-            let fallback_flags = SHGFI_ICON | if size == "small" { SHGFI_SMALLICON } else { SHGFI_LARGEICON };
+            let fallback_flags = SHGFI_ICON
+                | if size == "small" {
+                    SHGFI_SMALLICON
+                } else {
+                    SHGFI_LARGEICON
+                };
             SHGetFileInfoW(
                 PCWSTR(wide_path.as_ptr()),
                 windows::Win32::Storage::FileSystem::FILE_FLAGS_AND_ATTRIBUTES(0),
@@ -134,8 +149,8 @@ pub fn extract_icon_png(
         }
 
         // Target size for display (Retina/High DPI friendly)
-        let target_size = if size == "small" { 32 } else { 96 }; 
-        
+        let target_size = if size == "small" { 32 } else { 96 };
+
         let icon_bitmap = match icon_to_bitmap(hicon, target_size) {
             Ok(b) => b,
             Err(e) => {
@@ -149,16 +164,16 @@ pub fn extract_icon_png(
         // Encode to PNG
         let mut png_buffer = Vec::new();
         let mut cursor = Cursor::new(&mut png_buffer);
-        
+
         if let Err(e) = icon_bitmap.write_to(&mut cursor, image::ImageFormat::Png) {
-             return Err(format!("Failed to encode icon to PNG: {}", e));
+            return Err(format!("Failed to encode icon to PNG: {}", e));
         }
 
         // Save to disk cache
         if let Some(ref dir) = cache_dir {
-             let _ = fs::create_dir_all(dir);
-             let file_path = dir.join(format!("{}.png", cache_key));
-             let _ = fs::write(file_path, &png_buffer);
+            let _ = fs::create_dir_all(dir);
+            let file_path = dir.join(format!("{}.png", cache_key));
+            let _ = fs::write(file_path, &png_buffer);
         }
 
         {
@@ -185,7 +200,7 @@ fn icon_to_bitmap(hicon: HICON, target_size: i32) -> Result<RgbaImage, String> {
             let _ = DeleteObject(HGDIOBJ(icon_info.hbmMask.0));
             return Err("GetIconInfo failed".to_string());
         }
-        
+
         // Clean up handle from GetIconInfo later
         let hbm_color = icon_info.hbmColor;
         let hbm_mask = icon_info.hbmMask;
@@ -193,19 +208,23 @@ fn icon_to_bitmap(hicon: HICON, target_size: i32) -> Result<RgbaImage, String> {
         let mut actual_width = 0;
         let mut actual_height = 0;
         let mut bitmap: BITMAP = std::mem::zeroed();
-        
-        if !hbm_color.is_invalid() && GetObjectW(
-            HGDIOBJ(hbm_color.0), 
-            std::mem::size_of::<BITMAP>() as i32, 
-            Some(&mut bitmap as *mut _ as *mut _)
-        ) > 0 {
+
+        if !hbm_color.is_invalid()
+            && GetObjectW(
+                HGDIOBJ(hbm_color.0),
+                std::mem::size_of::<BITMAP>() as i32,
+                Some(&mut bitmap as *mut _ as *mut _),
+            ) > 0
+        {
             actual_width = bitmap.bmWidth;
             actual_height = bitmap.bmHeight;
-        } else if !hbm_mask.is_invalid() && GetObjectW(
-            HGDIOBJ(hbm_mask.0), 
-            std::mem::size_of::<BITMAP>() as i32, 
-            Some(&mut bitmap as *mut _ as *mut _)
-        ) > 0 {
+        } else if !hbm_mask.is_invalid()
+            && GetObjectW(
+                HGDIOBJ(hbm_mask.0),
+                std::mem::size_of::<BITMAP>() as i32,
+                Some(&mut bitmap as *mut _ as *mut _),
+            ) > 0
+        {
             actual_width = bitmap.bmWidth;
             actual_height = bitmap.bmHeight / 2; // Mask bitmap is double height (XOR + AND)
         }
@@ -231,7 +250,7 @@ fn icon_to_bitmap(hicon: HICON, target_size: i32) -> Result<RgbaImage, String> {
             let _ = DeleteObject(HGDIOBJ(hbm_mask.0));
             return Err("CreateCompatibleDC failed".to_string());
         }
-        
+
         let bi = BITMAPINFO {
             bmiHeader: BITMAPINFOHEADER {
                 biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
@@ -252,8 +271,9 @@ fn icon_to_bitmap(hicon: HICON, target_size: i32) -> Result<RgbaImage, String> {
             DIB_RGB_COLORS,
             &mut bits,
             None,
-            0
-        ).map_err(|e| {
+            0,
+        )
+        .map_err(|e| {
             let _ = DeleteDC(mem_dc);
             let _ = ReleaseDC(None, dc);
             let _ = DeleteObject(HGDIOBJ(hbm_color.0));
@@ -264,7 +284,19 @@ fn icon_to_bitmap(hicon: HICON, target_size: i32) -> Result<RgbaImage, String> {
         let old_obj = SelectObject(mem_dc, HGDIOBJ(h_bitmap.0));
 
         // Draw at native size
-        if DrawIconEx(mem_dc, 0, 0, hicon, actual_width, actual_height, 0, None, DI_NORMAL).is_err() {
+        if DrawIconEx(
+            mem_dc,
+            0,
+            0,
+            hicon,
+            actual_width,
+            actual_height,
+            0,
+            None,
+            DI_NORMAL,
+        )
+        .is_err()
+        {
             let _ = SelectObject(mem_dc, old_obj);
             let _ = DeleteObject(HGDIOBJ(h_bitmap.0));
             let _ = DeleteDC(mem_dc);
@@ -276,12 +308,12 @@ fn icon_to_bitmap(hicon: HICON, target_size: i32) -> Result<RgbaImage, String> {
 
         let num_pixels = (actual_width * actual_height) as usize;
         let src_pixels = std::slice::from_raw_parts(bits as *const u32, num_pixels);
-        
+
         let mut rgba_pixels = Vec::with_capacity(num_pixels * 4);
         for &pixel in src_pixels {
             rgba_pixels.push(((pixel >> 16) & 0xFF) as u8); // R
-            rgba_pixels.push(((pixel >> 8) & 0xFF) as u8);  // G
-            rgba_pixels.push((pixel & 0xFF) as u8);         // B
+            rgba_pixels.push(((pixel >> 8) & 0xFF) as u8); // G
+            rgba_pixels.push((pixel & 0xFF) as u8); // B
             rgba_pixels.push(((pixel >> 24) & 0xFF) as u8); // A
         }
 
@@ -293,11 +325,12 @@ fn icon_to_bitmap(hicon: HICON, target_size: i32) -> Result<RgbaImage, String> {
         let _ = DeleteObject(HGDIOBJ(hbm_color.0));
         let _ = DeleteObject(HGDIOBJ(hbm_mask.0));
 
-        let native_image = RgbaImage::from_raw(actual_width as u32, actual_height as u32, rgba_pixels)
-            .ok_or_else(|| "Failed to create RgbaImage".to_string())?;
+        let native_image =
+            RgbaImage::from_raw(actual_width as u32, actual_height as u32, rgba_pixels)
+                .ok_or_else(|| "Failed to create RgbaImage".to_string())?;
 
         // --- SMART RENDERING PIPELINE ---
-        
+
         // 1. CONTENT-AWARE CROPPING (Always enabled to fix tiny icons in large canvases)
         let mut min_x = actual_width as u32;
         let mut max_x = 0;
@@ -306,12 +339,21 @@ fn icon_to_bitmap(hicon: HICON, target_size: i32) -> Result<RgbaImage, String> {
         let mut has_content = false;
 
         for (x, y, pixel) in native_image.enumerate_pixels() {
-            if pixel[3] > 8 { // Alpha threshold
+            if pixel[3] > 8 {
+                // Alpha threshold
                 has_content = true;
-                if x < min_x { min_x = x; }
-                if x > max_x { max_x = x; }
-                if y < min_y { min_y = y; }
-                if y > max_y { max_y = y; }
+                if x < min_x {
+                    min_x = x;
+                }
+                if x > max_x {
+                    max_x = x;
+                }
+                if y < min_y {
+                    min_y = y;
+                }
+                if y > max_y {
+                    max_y = y;
+                }
             }
         }
 
@@ -338,7 +380,12 @@ fn icon_to_bitmap(hicon: HICON, target_size: i32) -> Result<RgbaImage, String> {
         };
 
         // Step A: Upscale to 2x Target with smooth CatmullRom
-        let upscaled = image::imageops::resize(&processed_img, nw, nh, image::imageops::FilterType::CatmullRom);
+        let upscaled = image::imageops::resize(
+            &processed_img,
+            nw,
+            nh,
+            image::imageops::FilterType::CatmullRom,
+        );
 
         // Step B: Center on 2x Canvas
         let mut canvas_2x = RgbaImage::new(intermediate_size, intermediate_size);
@@ -348,6 +395,11 @@ fn icon_to_bitmap(hicon: HICON, target_size: i32) -> Result<RgbaImage, String> {
 
         // Step C: Downscale to Final Target with high-precision Lanczos3
         // This is the "magic" for smooth corners.
-        Ok(image::imageops::resize(&canvas_2x, target_size as u32, target_size as u32, image::imageops::FilterType::Lanczos3))
+        Ok(image::imageops::resize(
+            &canvas_2x,
+            target_size as u32,
+            target_size as u32,
+            image::imageops::FilterType::Lanczos3,
+        ))
     }
 }

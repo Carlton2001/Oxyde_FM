@@ -1,8 +1,8 @@
-use gpui::*;
-use gpui::prelude::FluentBuilder;
-use crate::ui::theme::OxydeTheme;
-use crate::ui::style::TNUM;
 use crate::ui::components::icons::{get_preview_type, PreviewType};
+use crate::ui::style::TNUM;
+use crate::ui::theme::OxydeTheme;
+use gpui::prelude::FluentBuilder;
+use gpui::*;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -29,7 +29,9 @@ enum PreviewData {
 impl Tooltip {
     /// Crée un constructeur de tooltip simple affichant un texte.
     #[allow(dead_code)]
-    pub fn text(title: impl Into<SharedString>) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
+    pub fn text(
+        title: impl Into<SharedString>,
+    ) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
         let title = title.into();
         move |_, cx| {
             cx.new(|_| Self {
@@ -37,12 +39,16 @@ impl Tooltip {
                 meta: None,
                 file_info: None,
                 preview_view: None,
-            }).into()
+            })
+            .into()
         }
     }
 
     /// Crée un constructeur de tooltip avec un texte principal et un sous-texte (méta/raccourci).
-    pub fn with_meta(title: impl Into<SharedString>, meta: impl Into<SharedString>) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
+    pub fn with_meta(
+        title: impl Into<SharedString>,
+        meta: impl Into<SharedString>,
+    ) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
         let title = title.into();
         let meta = meta.into();
         move |_, cx| {
@@ -51,19 +57,63 @@ impl Tooltip {
                 meta: Some(meta.clone()),
                 file_info: None,
                 preview_view: None,
-            }).into()
+            })
+            .into()
+        }
+    }
+
+    /// Crée un constructeur de tooltip pour un fichier sans aperçu média (nom + métadonnées uniquement).
+    pub fn for_file_no_preview(
+        name: String,
+        ext: String,
+        size: String,
+        date: String,
+    ) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
+        move |_, cx| {
+            cx.new(|_| Self {
+                title: SharedString::from(name.clone()),
+                meta: None,
+                file_info: Some(FileInfo {
+                    ext: ext.clone(),
+                    size: size.clone(),
+                    date: date.clone(),
+                }),
+                preview_view: None,
+            })
+            .into()
         }
     }
 
     /// Crée un constructeur de tooltip complet pour un fichier avec preview possible.
-    pub fn for_file_full(name: String, path: String, ext: String, size: String, date: String) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
+    pub fn for_file_full(
+        name: String,
+        path: String,
+        ext: String,
+        size: String,
+        date: String,
+    ) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
         let path_clone = path.clone();
         move |_, cx| {
-            Self::new_for_file_full(name.clone(), path_clone.clone(), ext.clone(), size.clone(), date.clone(), cx).into()
+            Self::new_for_file_full(
+                name.clone(),
+                path_clone.clone(),
+                ext.clone(),
+                size.clone(),
+                date.clone(),
+                cx,
+            )
+            .into()
         }
     }
 
-    pub fn new_for_file_full(name: String, path: String, ext: String, size: String, date: String, cx: &mut App) -> Entity<Self> {
+    pub fn new_for_file_full(
+        name: String,
+        path: String,
+        ext: String,
+        size: String,
+        date: String,
+        cx: &mut App,
+    ) -> Entity<Self> {
         let preview_type = get_preview_type(&name);
         cx.new(|cx| {
             let preview_view = if preview_type != PreviewType::None {
@@ -75,11 +125,7 @@ impl Tooltip {
             Self {
                 title: SharedString::from(name),
                 meta: None,
-                file_info: Some(FileInfo {
-                    ext,
-                    size,
-                    date,
-                }),
+                file_info: Some(FileInfo { ext, size, date }),
                 preview_view,
             }
         })
@@ -106,10 +152,14 @@ impl Render for Tooltip {
             .child(
                 div()
                     .max_w(px(400.0))
-                    .text_color(if self.file_info.is_some() { theme.accent } else { theme.text })
+                    .text_color(if self.file_info.is_some() {
+                        theme.accent
+                    } else {
+                        theme.text
+                    })
                     .text_size(px(12.0))
                     .font_weight(FontWeight::MEDIUM)
-                    .child(self.title.clone())
+                    .child(self.title.clone()),
             )
             .when_some(self.meta.clone(), |this, meta| {
                 this.child(
@@ -117,7 +167,7 @@ impl Render for Tooltip {
                         .max_w(px(350.0))
                         .text_color(theme.text_muted)
                         .text_size(px(11.0))
-                        .child(meta)
+                        .child(meta),
                 )
             })
             .when_some(self.file_info.as_ref(), |this, info| {
@@ -129,7 +179,7 @@ impl Render for Tooltip {
                         .text_color(theme.text_muted)
                         .child(format!("Type : {}", info.ext))
                         .child(format!("Taille : {}", info.size))
-                        .child(format!("Modifié le : {}", info.date))
+                        .child(format!("Modifié le : {}", info.date)),
                 )
             })
             .when_some(self.preview_view.clone(), |this, view| {
@@ -139,17 +189,17 @@ impl Render for Tooltip {
                         .border_t_1()
                         .border_color(theme.border)
                         .pt_2()
-                        .child(view)
+                        .child(view),
                 )
             });
 
-        box_div.text_style().get_or_insert_with(Default::default).font_features = Some(TNUM.clone());
+        box_div
+            .text_style()
+            .get_or_insert_with(Default::default)
+            .font_features = Some(TNUM.clone());
 
         // Décalage pour éviter que le tooltip n'apparaisse exactement sous le pointeur de la souris
-        div()
-            .pl(px(8.0))
-            .pt(px(10.0))
-            .child(box_div)
+        div().pl(px(8.0)).pt(px(10.0)).child(box_div)
     }
 }
 
@@ -166,14 +216,19 @@ impl PreviewTask {
                     // Channel size 4: gives the decode thread a small buffer so it is never
                     // starved while the async side is sleeping, without letting it run
                     // arbitrarily far ahead.
-                    let (tx, mut rx) = tokio::sync::mpsc::channel::<(Arc<RenderImage>, Duration)>(4);
+                    let (tx, mut rx) =
+                        tokio::sync::mpsc::channel::<(Arc<RenderImage>, Duration)>(4);
 
                     let path_clone = path.clone();
                     std::thread::spawn(move || {
-                        let _ = ::oxyde_lib::commands::thumbnails::stream_video_frames(path_clone, move |rgba, pts| {
-                            let frame = Arc::new(RenderImage::new(vec![image::Frame::new(rgba)]));
-                            tx.blocking_send((frame, pts)).is_ok()
-                        });
+                        let _ = ::oxyde_lib::commands::thumbnails::stream_video_frames(
+                            path_clone,
+                            move |rgba, pts| {
+                                let frame =
+                                    Arc::new(RenderImage::new(vec![image::Frame::new(rgba)]));
+                                tx.blocking_send((frame, pts)).is_ok()
+                            },
+                        );
                     });
 
                     // PTS-based playback: sleep until wall-clock time matches the frame's
@@ -193,7 +248,9 @@ impl PreviewTask {
                             this.data = Some(PreviewData::Image(frame));
                             cx.notify();
                         });
-                        if res.is_err() { break; }
+                        if res.is_err() {
+                            break;
+                        }
 
                         // Sleep only as long as needed to stay on schedule.
                         // If we are already late, skip the sleep (drop-frame behaviour).
@@ -208,9 +265,23 @@ impl PreviewTask {
                 let preview = match preview_type {
                     PreviewType::Image | PreviewType::Office | PreviewType::Pdf => {
                         let rgba_img = match preview_type {
-                            PreviewType::Image => ::oxyde_lib::commands::thumbnails::get_image_thumbnail(path.clone()).await.ok(),
-                            PreviewType::Office => ::oxyde_lib::commands::thumbnails::get_office_thumbnail(path.clone()).await.ok(),
-                            PreviewType::Pdf => ::oxyde_lib::commands::thumbnails::get_pdf_thumbnail(path.clone()).await.ok(),
+                            PreviewType::Image => {
+                                ::oxyde_lib::commands::thumbnails::get_image_thumbnail(path.clone())
+                                    .await
+                                    .ok()
+                            }
+                            PreviewType::Office => {
+                                ::oxyde_lib::commands::thumbnails::get_office_thumbnail(
+                                    path.clone(),
+                                )
+                                .await
+                                .ok()
+                            }
+                            PreviewType::Pdf => {
+                                ::oxyde_lib::commands::thumbnails::get_pdf_thumbnail(path.clone())
+                                    .await
+                                    .ok()
+                            }
                             _ => None,
                         };
 
@@ -220,8 +291,14 @@ impl PreviewTask {
                             Some(PreviewData::Image(Arc::new(RenderImage::new(vec![frame]))))
                         } else if preview_type == PreviewType::Office {
                             // Fallback to text for Office if no image
-                            if let Ok(content) = ::oxyde_lib::commands::thumbnails::get_office_text_preview(path.clone()).await {
-                                let snippet = content.lines().take(15).collect::<Vec<_>>().join("\n");
+                            if let Ok(content) =
+                                ::oxyde_lib::commands::thumbnails::get_office_text_preview(
+                                    path.clone(),
+                                )
+                                .await
+                            {
+                                let snippet =
+                                    content.lines().take(15).collect::<Vec<_>>().join("\n");
                                 Some(PreviewData::Text(snippet))
                             } else {
                                 None
@@ -248,7 +325,8 @@ impl PreviewTask {
                     });
                 }
             }
-        }).detach();
+        })
+        .detach();
 
         Self { data: None }
     }
@@ -258,23 +336,25 @@ impl Render for PreviewTask {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = OxydeTheme::global(cx);
         if let Some(preview) = &self.data {
-            div()
-                .child(match preview {
-                    PreviewData::Image(render_img) => {
-                        div()
-                            .w(px(250.0)) // Largeur fixe raisonnable
-                            .child(img(render_img.clone()).size_full())
-                    }
-                    PreviewData::Text(t) => {
-                        div()
-                            .max_w(px(350.0))
-                            .max_h(px(200.0))
-                            .overflow_hidden()
-                            .text_size(px(10.0))
-                            .text_color(theme.text)
-                            .child(t.clone())
-                    }
-                })
+            div().child(match preview {
+                PreviewData::Image(render_img) => {
+                    div()
+                        .w(px(250.0)) // Largeur fixe raisonnable
+                        .child(img(render_img.clone()).size_full())
+                }
+                PreviewData::Text(t) => div()
+                    .max_w(px(350.0))
+                    .max_h(px(200.0))
+                    .overflow_hidden()
+                    .rounded_md()
+                    .bg(rgba(0x0d1117ff_u32))
+                    .px(px(10.0))
+                    .py(px(8.0))
+                    .text_size(px(10.0))
+                    .font_family("JetBrains Mono")
+                    .text_color(rgba(0xe6edf3ff_u32))
+                    .child(t.clone()),
+            })
         } else {
             div()
                 .text_size(px(10.0))

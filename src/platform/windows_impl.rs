@@ -1,17 +1,123 @@
+use super::{Platform, ThreadPriority};
 use crate::models::{DriveInfo, QuickAccessItem};
-use super::Platform;
 
 pub struct WindowsPlatform;
 
 impl WindowsPlatform {
-    pub fn new() -> Self { Self }
+    pub fn new() -> Self {
+        Self
+    }
 }
 
 impl Platform for WindowsPlatform {
-    fn name(&self) -> &'static str { "windows" }
+    fn is_network_path(&self, path: &std::path::Path) -> bool {
+        super::hardware::is_network_path(path)
+    }
+
+    fn physical_disk_id(&self, path: &std::path::Path) -> u64 {
+        super::hardware::get_physical_disk_id(path)
+    }
+
+    fn is_ssd(&self, path: &std::path::Path) -> bool {
+        super::hardware::is_ssd(path)
+    }
+
+    fn list_network_vicinity(&self) -> Result<Vec<crate::models::FileEntry>, String> {
+        super::network::list_network_vicinity().map_err(|error| error.to_string())
+    }
+
+    fn shell_delete(&self, paths: &[std::path::PathBuf], recycle: bool) -> Result<(), String> {
+        use windows::core::PCWSTR;
+        use windows::Win32::Foundation::HWND;
+        use windows::Win32::UI::Shell::{
+            SHFileOperationW, FOF_ALLOWUNDO, FOF_NOCONFIRMATION, FOF_NOERRORUI, FOF_NO_UI,
+            FOF_SILENT, FO_DELETE, SHFILEOPSTRUCTW,
+        };
+        if paths.is_empty() {
+            return Ok(());
+        }
+        let mut buffer = Vec::new();
+        for path in paths {
+            buffer.extend(path.to_string_lossy().replace('/', "\\").encode_utf16());
+            buffer.push(0);
+        }
+        buffer.push(0);
+        let mut flags = FOF_NOCONFIRMATION.0 | FOF_NOERRORUI.0 | FOF_SILENT.0;
+        if recycle {
+            flags |= FOF_ALLOWUNDO.0;
+        } else {
+            flags |= FOF_NO_UI.0;
+        }
+        let mut operation = SHFILEOPSTRUCTW {
+            hwnd: HWND(std::ptr::null_mut()),
+            wFunc: FO_DELETE,
+            pFrom: PCWSTR(buffer.as_ptr()),
+            pTo: PCWSTR::null(),
+            fFlags: flags as u16,
+            fAnyOperationsAborted: Default::default(),
+            hNameMappings: std::ptr::null_mut(),
+            lpszProgressTitle: PCWSTR::null(),
+        };
+        unsafe {
+            let code = SHFileOperationW(&mut operation);
+            if code != 0 {
+                if recycle && (code == 0x4C7 || code == 0x80070005u32 as i32) {
+                    return Err(
+                        "TrashFull: Operation cancelled or requires administrator rights"
+                            .to_string(),
+                    );
+                }
+                return Err(format!(
+                    "Windows Shell error (0x{code:X}) while deleting files"
+                ));
+            }
+            if operation.fAnyOperationsAborted.as_bool() {
+                return Err("Deletion was aborted".to_string());
+            }
+        }
+        Ok(())
+    }
+
+    fn set_thread_priority(&self, priority: ThreadPriority) {
+        use windows::Win32::System::Threading::{
+            GetCurrentThread, SetThreadPriority, THREAD_MODE_BACKGROUND_BEGIN,
+            THREAD_MODE_BACKGROUND_END, THREAD_PRIORITY_HIGHEST,
+        };
+        let native_priority = match priority {
+            ThreadPriority::Background => THREAD_MODE_BACKGROUND_BEGIN,
+            ThreadPriority::Normal => THREAD_MODE_BACKGROUND_END,
+            ThreadPriority::High => THREAD_PRIORITY_HIGHEST,
+        };
+        unsafe {
+            let _ = SetThreadPriority(GetCurrentThread(), native_priority);
+        }
+    }
+
+    fn file_attributes(&self, metadata: &std::fs::Metadata, name: &str) -> (bool, bool, bool) {
+        use std::os::windows::fs::MetadataExt;
+        let attrs = metadata.file_attributes();
+        (
+            (attrs & 0x2) != 0 || name.starts_with('.'),
+            (attrs & 0x4) != 0,
+            (attrs & 0x400) != 0,
+        )
+    }
+
+    fn set_clipboard_files(&self, paths: Vec<String>, cut: bool) -> Result<(), String> {
+        crate::commands::clipboard::set_clipboard_files(paths, cut)
+            .map_err(|error| format!("{error:?}"))
+    }
+
+    fn get_clipboard_files(&self) -> Result<(Vec<String>, bool), String> {
+        crate::commands::clipboard::get_clipboard_files().map_err(|error| format!("{error:?}"))
+    }
+
+    fn name(&self) -> &'static str {
+        "windows"
+    }
 
     fn list_drives(&self, skip_hardware_info: bool) -> Vec<DriveInfo> {
-        crate::commands::system::get_drives(Some(skip_hardware_info))
+        super::windows_drives::list_drives(skip_hardware_info)
     }
 
     fn open_item(&self, path: &str) -> Result<(), String> {
@@ -31,7 +137,10 @@ impl Platform for WindowsPlatform {
                     SW_SHOWNORMAL,
                 );
                 if res.0 as usize <= 32 {
-                    return Err(format!("ShellExecuteW failed avec le code {}", res.0 as usize));
+                    return Err(format!(
+                        "ShellExecuteW failed avec le code {}",
+                        res.0 as usize
+                    ));
                 }
             }
         } else {
@@ -48,7 +157,55 @@ impl Platform for WindowsPlatform {
     }
 
     fn get_accent_color(&self) -> String {
-        crate::commands::system::get_accent_color()
+        #[cfg(target_os = "windows")]
+        {
+            use windows::core::PCWSTR;
+            use windows::Win32::System::Registry::{
+                RegOpenKeyExW, RegQueryValueExW, HKEY, HKEY_CURRENT_USER, KEY_READ, REG_DWORD,
+                REG_VALUE_TYPE,
+            };
+
+            let subkey: Vec<u16> = "Software\\Microsoft\\Windows\\DWM\0"
+                .encode_utf16()
+                .collect();
+            let value_name: Vec<u16> = "AccentColor\0".encode_utf16().collect();
+            let mut hkey: HKEY = HKEY::default();
+
+            unsafe {
+                if RegOpenKeyExW(
+                    HKEY_CURRENT_USER,
+                    PCWSTR(subkey.as_ptr()),
+                    Some(0),
+                    KEY_READ,
+                    &mut hkey,
+                )
+                .is_ok()
+                {
+                    let mut color_type: REG_VALUE_TYPE = REG_VALUE_TYPE::default();
+                    let mut color_value: u32 = 0;
+                    let mut data_len: u32 = std::mem::size_of::<u32>() as u32;
+
+                    if RegQueryValueExW(
+                        hkey,
+                        PCWSTR(value_name.as_ptr()),
+                        None,
+                        Some(&mut color_type),
+                        Some(&mut color_value as *mut u32 as *mut u8),
+                        Some(&mut data_len),
+                    )
+                    .is_ok()
+                        && color_type == REG_DWORD
+                    {
+                        // AccentColor is in ABGR format (0xAABBGGRR)
+                        let r = (color_value & 0xFF) as u8;
+                        let g = ((color_value >> 8) & 0xFF) as u8;
+                        let b = ((color_value >> 16) & 0xFF) as u8;
+                        return format!("#{:02x}{:02x}{:02x}", r, g, b);
+                    }
+                }
+            }
+        }
+        "#0078d7".to_string() // Default Windows Blue
     }
 
     fn resolve_shortcut(&self, path: &str) -> Option<String> {
@@ -60,25 +217,45 @@ impl Platform for WindowsPlatform {
 
     fn show_properties_dialog(&self, path: &str) {
         use windows::core::{HSTRING, PCWSTR};
-        use windows::Win32::UI::Shell::{ShellExecuteExW, SHELLEXECUTEINFOW, SEE_MASK_INVOKEIDLIST};
+        use windows::Win32::UI::Shell::{
+            ShellExecuteExW, SEE_MASK_INVOKEIDLIST, SHELLEXECUTEINFOW,
+        };
         use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
 
-        // Normalize path: replace / with \ and ensure drive roots have a trailing backslash (e.g. "C:\" instead of "C:")
-        let mut normalized = path.replace('/', "\\");
-        if normalized.len() == 2 && normalized.ends_with(':') {
-            normalized.push('\\');
+        // Map virtual paths to their real Windows Shell equivalents.
+        // trash://              → Recycle Bin CLSID
+        // __network_vincinity__ → open "Réseau et Internet" in Windows Settings
+        if path == "__network_vincinity__" {
+            std::thread::spawn(|| {
+                let _ = std::process::Command::new("explorer.exe")
+                    .arg("ms-settings:network")
+                    .spawn();
+            });
+            return;
         }
+
+        let normalized = if path == "trash://" {
+            "::{645FF040-5081-101B-9F08-00AA002F954E}".to_string()
+        } else {
+            let mut s = path.replace('/', "\\");
+            if s.len() == 2 && s.ends_with(':') {
+                s.push('\\');
+            }
+            s
+        };
 
         std::thread::spawn(move || {
             let wide_path = HSTRING::from(&normalized);
             let verb = HSTRING::from("properties");
-            
-            let mut info = SHELLEXECUTEINFOW::default();
-            info.cbSize = std::mem::size_of::<SHELLEXECUTEINFOW>() as u32;
-            info.fMask = SEE_MASK_INVOKEIDLIST;
-            info.lpVerb = PCWSTR(verb.as_ptr());
-            info.lpFile = PCWSTR(wide_path.as_ptr());
-            info.nShow = SW_SHOWNORMAL.0 as i32;
+
+            let mut info = SHELLEXECUTEINFOW {
+                cbSize: std::mem::size_of::<SHELLEXECUTEINFOW>() as u32,
+                fMask: SEE_MASK_INVOKEIDLIST,
+                lpVerb: PCWSTR(verb.as_ptr()),
+                lpFile: PCWSTR(wide_path.as_ptr()),
+                nShow: SW_SHOWNORMAL.0,
+                ..Default::default()
+            };
 
             unsafe {
                 let _ = ShellExecuteExW(&mut info);
@@ -87,26 +264,37 @@ impl Platform for WindowsPlatform {
     }
 
     fn set_application_icon(&self, icon_bytes: &[u8]) {
+        use windows::Win32::Foundation::{LPARAM, WPARAM};
         use windows::Win32::UI::WindowsAndMessaging::{
-            GetForegroundWindow, SendMessageW, WM_SETICON, ICON_BIG, ICON_SMALL,
-            CreateIconFromResourceEx, LR_DEFAULTSIZE,
+            CreateIconFromResourceEx, GetForegroundWindow, SendMessageW, ICON_BIG, ICON_SMALL,
+            LR_DEFAULTSIZE, WM_SETICON,
         };
-        use windows::Win32::Foundation::{WPARAM, LPARAM};
 
         unsafe {
             let hicon = CreateIconFromResourceEx(
                 icon_bytes,
                 true,       // fIcon: true for icon, false for cursor
                 0x00030000, // dwVersion: standard value for icons
-                0, 0,       // width/height: use default
+                0,
+                0, // width/height: use default
                 LR_DEFAULTSIZE,
             );
             if let Ok(icon) = hicon {
                 // On récupère la fenêtre au premier plan (celle de GPUI qui vient d'ouvrir)
                 let hwnd = GetForegroundWindow();
                 if !hwnd.is_invalid() {
-                    let _ = SendMessageW(hwnd, WM_SETICON, Some(WPARAM(ICON_BIG as usize)), Some(LPARAM(icon.0 as isize)));
-                    let _ = SendMessageW(hwnd, WM_SETICON, Some(WPARAM(ICON_SMALL as usize)), Some(LPARAM(icon.0 as isize)));
+                    let _ = SendMessageW(
+                        hwnd,
+                        WM_SETICON,
+                        Some(WPARAM(ICON_BIG as usize)),
+                        Some(LPARAM(icon.0 as isize)),
+                    );
+                    let _ = SendMessageW(
+                        hwnd,
+                        WM_SETICON,
+                        Some(WPARAM(ICON_SMALL as usize)),
+                        Some(LPARAM(icon.0 as isize)),
+                    );
                 }
             }
         }

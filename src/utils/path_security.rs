@@ -1,5 +1,5 @@
-use std::path::{Path, PathBuf};
 use crate::models::CommandError;
+use std::path::{Path, PathBuf};
 
 /// Validates that a path is absolute and exists (optional).
 /// For a File Manager, we generally want to allow access to any valid system path.
@@ -7,7 +7,10 @@ use crate::models::CommandError;
 pub fn validate_path(path_str: &str) -> Result<PathBuf, CommandError> {
     let mut path = PathBuf::from(path_str);
     if !path.is_absolute() {
-        return Err(CommandError::PathError(format!("Path must be absolute: {}", path_str)));
+        return Err(CommandError::PathError(format!(
+            "Path must be absolute: {}",
+            path_str
+        )));
     }
 
     #[cfg(target_os = "windows")]
@@ -17,7 +20,7 @@ pub fn validate_path(path_str: &str) -> Result<PathBuf, CommandError> {
             let name_str = file_name.to_string_lossy();
             let trimmed_name = name_str.trim_end_matches(['.', ' ']);
             if (!trimmed_name.is_empty() || name_str.is_empty()) && trimmed_name != name_str {
-                 needs_update = Some(trimmed_name.to_string());
+                needs_update = Some(trimmed_name.to_string());
             }
         }
         if let Some(new_name) = needs_update {
@@ -62,7 +65,7 @@ mod tests {
     #[test]
     fn test_safe_join() {
         let base = PathBuf::from("C:\\Base");
-        
+
         // Normal join
         let joined = safe_join(&base, "sub/file.txt").unwrap();
         assert_eq!(joined, PathBuf::from("C:\\Base\\sub/file.txt"));

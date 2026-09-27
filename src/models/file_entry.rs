@@ -1,7 +1,7 @@
+use crate::models::CommandError;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::time::SystemTime;
-use crate::models::CommandError;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct FileEntry {
@@ -174,35 +174,42 @@ pub struct NetResource {
 
 pub fn get_file_entry_from_path(path: &Path) -> Result<FileEntry, CommandError> {
     // Use symlink_metadata to get attributes of the link itself (e.g. Hidden/System on 'Documents and Settings')
-    let metadata = std::fs::symlink_metadata(path).map_err(|e| CommandError::IoError(e.to_string()))?;
-    let name = path.file_name().unwrap_or_default().to_string_lossy().to_string();
-    
-    let modified = metadata.modified()
+    let metadata =
+        std::fs::symlink_metadata(path).map_err(|e| CommandError::IoError(e.to_string()))?;
+    let name = path
+        .file_name()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .to_string();
+
+    let modified = metadata
+        .modified()
         .unwrap_or(SystemTime::UNIX_EPOCH)
         .duration_since(SystemTime::UNIX_EPOCH)
         .unwrap_or_default()
         .as_millis() as u64;
 
-    let (is_hidden, is_system, is_reparse_point) = crate::utils::get_file_attributes(&metadata, &name);
-    
+    let (is_hidden, is_system, is_reparse_point) =
+        crate::utils::get_file_attributes(&metadata, &name);
+
     let is_readonly = metadata.permissions().readonly();
-    
+
     // For is_dir, we want to know if it behaves like a directory.
     // On Windows, a Junction/SymlinkDir has the Directory attribute in its symlink_metadata too.
-    let is_dir = metadata.is_dir(); 
-    
+    let is_dir = metadata.is_dir();
+
     let is_symlink = metadata.file_type().is_symlink();
-    
-    // On Windows, junctions are reparse points that are dirs but (historically) returned false for is_symlink in older Rust, 
-    // but modern Rust might return true. 
+
+    // On Windows, junctions are reparse points that are dirs but (historically) returned false for is_symlink in older Rust,
+    // but modern Rust might return true.
     // Secure check: It is a junction if it is a reparse point, is a directory, and (is_symlink logic is variable).
     // Let's rely on our explicit reparse_point check.
-    // If it is a symlink AND a dir, it is a symlink-to-dir. 
+    // If it is a symlink AND a dir, it is a symlink-to-dir.
     // If it is a reparse point AND a dir AND NOT a symlink (strictly), it is a junction.
     // However, Rust's `is_symlink()` now often covers junctions too.
-    // For UI purposes, we just want to know "Is it a fancy link?". 
+    // For UI purposes, we just want to know "Is it a fancy link?".
     // We will separate them if possible, but identifying it as a System+Hidden item is the priority.
-    
+
     let is_junction = is_reparse_point && is_dir && !is_symlink;
 
     // Retrieve size: if it's a file, get len. If symlink/junction, size is usually 0/irrelevant for listing.

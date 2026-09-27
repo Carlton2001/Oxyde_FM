@@ -3,14 +3,12 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Mutex;
 
-use notify::{Config, Event, RecommendedWatcher, RecursiveMode, Watcher};
-use std::sync::Arc;
-use std::fs;
 use crate::models::file_entry::FileEntry;
 use crate::models::CommandError;
+use notify::{Config, Event, RecommendedWatcher, RecursiveMode, Watcher};
+use std::fs;
 use std::sync::atomic::AtomicBool;
-
-
+use std::sync::Arc;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -72,7 +70,7 @@ pub struct SearchContext {
 pub struct CachedResults {
     pub path: PathBuf,
     #[serde(skip)] // Do NOT send cached entries via session state
-    pub entries: Vec<FileEntry>, 
+    pub entries: Vec<FileEntry>,
     pub summary: crate::models::FileSummary,
     pub config: SortConfig,
     pub show_hidden: bool,
@@ -98,7 +96,9 @@ pub struct PanelState {
 
 impl PanelState {
     pub fn update_watcher(&mut self) {
-        let active_path = self.tabs.iter()
+        let active_path = self
+            .tabs
+            .iter()
             .find(|t| t.id == self.active_tab_id)
             .map(|t| t.path.clone())
             .unwrap_or_else(|| PathBuf::from("C:\\"));
@@ -106,7 +106,10 @@ impl PanelState {
         // Skip watching virtual paths (like trash:// or search://)
         let path_str = active_path.to_string_lossy().to_lowercase();
         let path_str = path_str.replace('\\', "/");
-        if path_str.starts_with("trash://") || path_str.starts_with("search://") || path_str == "__network_vincinity__" {
+        if path_str.starts_with("trash://")
+            || path_str.starts_with("search://")
+            || path_str == "__network_vincinity__"
+        {
             self.watcher = None;
             self.watched_path = None;
             return;
@@ -116,21 +119,25 @@ impl PanelState {
         if self.watched_path.as_ref() == Some(&active_path) && self.watcher.is_some() {
             return;
         }
-        
+
         match RecommendedWatcher::new(
             move |res: Result<Event, notify::Error>| match res {
                 Ok(event) => {
                     let kind = format!("{:?}", event.kind);
-                    if kind.contains("Access") { return; } // Filter noisy events
+                    if kind.contains("Access") {
+                        return;
+                    } // Filter noisy events
 
-                    let _paths: Vec<String> = event.paths.iter()
+                    let _paths: Vec<String> = event
+                        .paths
+                        .iter()
                         .map(|p| p.to_string_lossy().replace("\\\\?\\", "").to_string())
                         .collect();
-                    
+
                     // In GPUI, we'll need a different way to notify the UI
                     // For now, just log or use a channel if available later
                     log::info!("FS Change: {} {:?}", kind, _paths);
-                },
+                }
                 Err(e) => log::error!("Watch error: {:?}", e),
             },
             Config::default(),
@@ -138,12 +145,16 @@ impl PanelState {
             Ok(mut watcher) => {
                 if let Err(e) = watcher.watch(&active_path, RecursiveMode::NonRecursive) {
                     // Don't log as ERROR for things we might not have access to (system folders)
-                    log::warn!("Could not watch {:?} (Protected or Virtual): {}", active_path, e);
+                    log::warn!(
+                        "Could not watch {:?} (Protected or Virtual): {}",
+                        active_path,
+                        e
+                    );
                 } else {
                     self.watched_path = Some(active_path);
                     self.watcher = Some(Arc::new(Mutex::new(watcher)));
                 }
-            },
+            }
             Err(e) => log::error!("Failed to create watcher: {}", e),
         }
     }
@@ -159,7 +170,11 @@ pub struct SessionState {
 impl SessionState {
     /// Get a mutable reference to the panel identified by `id` ("left" or "right").
     pub fn get_panel_mut(&mut self, id: &str) -> &mut PanelState {
-        if id == "left" { &mut self.left_panel } else { &mut self.right_panel }
+        if id == "left" {
+            &mut self.left_panel
+        } else {
+            &mut self.right_panel
+        }
     }
 }
 
@@ -211,18 +226,22 @@ impl Default for SessionManager {
 
 impl SessionManager {
     pub fn save(&self) -> Result<(), CommandError> {
-        let session = self.0.lock().map_err(|_| CommandError::SystemError("Failed to lock session state".to_string()))?;
+        let session = self
+            .0
+            .lock()
+            .map_err(|_| CommandError::SystemError("Failed to lock session state".to_string()))?;
         let config_dir = dirs::data_dir()
             .ok_or_else(|| CommandError::SystemError("Failed to get data directory".to_string()))?
             .join("oxyde");
-        
+
         if !config_dir.exists() {
             fs::create_dir_all(&config_dir).map_err(|e| CommandError::IoError(e.to_string()))?;
         }
-        
+
         let session_path = config_dir.join("session.json");
-        let json = serde_json::to_string_pretty(&*session).map_err(|e| CommandError::Other(e.to_string()))?;
-        
+        let json = serde_json::to_string_pretty(&*session)
+            .map_err(|e| CommandError::Other(e.to_string()))?;
+
         fs::write(session_path, json).map_err(|e| CommandError::IoError(e.to_string()))?;
         Ok(())
     }
@@ -234,16 +253,19 @@ impl SessionManager {
         let session_path = config_dir.join("session.json");
 
         if session_path.exists() {
-            let content = fs::read_to_string(session_path).map_err(|e| CommandError::IoError(e.to_string()))?;
+            let content = fs::read_to_string(session_path)
+                .map_err(|e| CommandError::IoError(e.to_string()))?;
             match serde_json::from_str::<SessionState>(&content) {
                 Ok(mut loaded_session) => {
                     // Update watchers for the loaded paths
                     loaded_session.left_panel.update_watcher();
                     loaded_session.right_panel.update_watcher();
 
-                    let mut session = self.0.lock().map_err(|_| CommandError::SystemError("Failed to lock session state".to_string()))?;
+                    let mut session = self.0.lock().map_err(|_| {
+                        CommandError::SystemError("Failed to lock session state".to_string())
+                    })?;
                     *session = loaded_session;
-                },
+                }
                 Err(e) => log::error!("Failed to parse session.json: {}", e),
             }
         }

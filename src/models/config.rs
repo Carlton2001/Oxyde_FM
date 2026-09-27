@@ -1,11 +1,13 @@
+use crate::models::CommandError;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::sync::Mutex;
 #[cfg(target_os = "windows")]
-use windows::Win32::System::Registry::{RegOpenKeyExW, RegQueryValueExW, HKEY_CURRENT_USER, KEY_READ};
-#[cfg(target_os = "windows")]
 use windows::core::PCWSTR;
-use crate::models::CommandError;
+#[cfg(target_os = "windows")]
+use windows::Win32::System::Registry::{
+    RegOpenKeyExW, RegQueryValueExW, HKEY_CURRENT_USER, KEY_READ,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TrashDriveSettings {
@@ -60,7 +62,9 @@ pub struct AppConfig {
     pub first_launch: bool,
 }
 
-fn default_true() -> bool { true }
+fn default_true() -> bool {
+    true
+}
 
 impl Default for AppConfig {
     fn default() -> Self {
@@ -70,15 +74,37 @@ impl Default for AppConfig {
             let mut apps_use_light = 0u32;
             let mut data_len = std::mem::size_of::<u32>() as u32;
             let theme = unsafe {
-                let subkey: Vec<u16> = "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize\0"
-                    .encode_utf16()
-                    .collect();
+                let subkey: Vec<u16> =
+                    "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize\0"
+                        .encode_utf16()
+                        .collect();
                 let value_name: Vec<u16> = "AppsUseLightTheme\0".encode_utf16().collect();
                 let mut hkey = windows::Win32::System::Registry::HKEY::default();
-                
-                if RegOpenKeyExW(HKEY_CURRENT_USER, PCWSTR(subkey.as_ptr()), Some(0), KEY_READ, &mut hkey).is_ok() {
-                    if RegQueryValueExW(hkey, PCWSTR(value_name.as_ptr()), None, None, Some(&mut apps_use_light as *mut u32 as *mut u8), Some(&mut data_len)).is_ok() {
-                        if apps_use_light == 1 { "oxyde-light".to_string() } else { "oxyde-dark".to_string() }
+
+                if RegOpenKeyExW(
+                    HKEY_CURRENT_USER,
+                    PCWSTR(subkey.as_ptr()),
+                    Some(0),
+                    KEY_READ,
+                    &mut hkey,
+                )
+                .is_ok()
+                {
+                    if RegQueryValueExW(
+                        hkey,
+                        PCWSTR(value_name.as_ptr()),
+                        None,
+                        None,
+                        Some(&mut apps_use_light as *mut u32 as *mut u8),
+                        Some(&mut data_len),
+                    )
+                    .is_ok()
+                    {
+                        if apps_use_light == 1 {
+                            "oxyde-light".to_string()
+                        } else {
+                            "oxyde-dark".to_string()
+                        }
                     } else {
                         "oxyde-dark".to_string()
                     }
@@ -89,7 +115,11 @@ impl Default for AppConfig {
             // 2. Detect Language
             let language = unsafe {
                 let len = windows::Win32::Globalization::GetUserDefaultUILanguage();
-                if len == 0x040c { "fr".to_string() } else { "en".to_string() }
+                if len == 0x040c {
+                    "fr".to_string()
+                } else {
+                    "en".to_string()
+                }
             };
 
             // 3. Detect Date Format (Simplified)
@@ -112,7 +142,11 @@ impl Default for AppConfig {
         };
 
         #[cfg(not(target_os = "windows"))]
-        let (theme, language, date_format) = ("oxyde-dark".to_string(), "en".to_string(), "European".to_string());
+        let (theme, language, date_format) = (
+            "oxyde-dark".to_string(),
+            "en".to_string(),
+            "European".to_string(),
+        );
 
         Self {
             theme,
@@ -154,7 +188,10 @@ impl ConfigManager {
     }
 
     pub fn save(&self) -> Result<(), CommandError> {
-        let config = self.0.lock().map_err(|_| CommandError::SystemError("Failed to lock config".to_string()))?;
+        let config = self
+            .0
+            .lock()
+            .map_err(|_| CommandError::SystemError("Failed to lock config".to_string()))?;
         self.save_config(&config)
     }
 
@@ -162,14 +199,15 @@ impl ConfigManager {
         let config_dir = dirs::config_dir()
             .ok_or_else(|| CommandError::SystemError("Failed to get config directory".to_string()))?
             .join("oxyde");
-        
+
         if !config_dir.exists() {
             fs::create_dir_all(&config_dir).map_err(|e| CommandError::IoError(e.to_string()))?;
         }
-        
+
         let config_path = config_dir.join("config.json");
-        let json = serde_json::to_string_pretty(config).map_err(|e| CommandError::Other(e.to_string()))?;
-        
+        let json =
+            serde_json::to_string_pretty(config).map_err(|e| CommandError::Other(e.to_string()))?;
+
         fs::write(config_path, json).map_err(|e| CommandError::IoError(e.to_string()))?;
         Ok(())
     }
@@ -181,10 +219,15 @@ impl ConfigManager {
         let config_path = config_dir.join("config.json");
 
         if config_path.exists() {
-            let content = fs::read_to_string(config_path).map_err(|e| CommandError::IoError(e.to_string()))?;
-            let loaded_config: AppConfig = serde_json::from_str(&content).map_err(|e| CommandError::Other(e.to_string()))?;
-            
-            let mut config = self.0.lock().map_err(|_| CommandError::SystemError("Failed to lock config".to_string()))?;
+            let content = fs::read_to_string(config_path)
+                .map_err(|e| CommandError::IoError(e.to_string()))?;
+            let loaded_config: AppConfig =
+                serde_json::from_str(&content).map_err(|e| CommandError::Other(e.to_string()))?;
+
+            let mut config = self
+                .0
+                .lock()
+                .map_err(|_| CommandError::SystemError("Failed to lock config".to_string()))?;
             *config = loaded_config;
         }
         Ok(())

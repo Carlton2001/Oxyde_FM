@@ -1,6 +1,6 @@
-use std::sync::Mutex;
-use serde::{Deserialize, Serialize};
 use crate::models::transaction::Transaction;
+use serde::{Deserialize, Serialize};
+use std::sync::Mutex;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct HistoryState {
@@ -25,7 +25,7 @@ impl HistoryManager {
         if let Ok(mut state) = self.0.lock() {
             state.undo_stack.push(transaction);
             state.redo_stack.clear(); // New action clears redo history
-            
+
             // Cap history to prevent memory leaks
             if state.undo_stack.len() > 100 {
                 state.undo_stack.remove(0);
@@ -54,7 +54,7 @@ impl HistoryManager {
             state.redo_stack.push(transaction);
         }
     }
-    
+
     // For manual push back to undo if redo succeeds
     pub fn push_undo_raw(&self, transaction: Transaction) {
         if let Ok(mut state) = self.0.lock() {
@@ -65,7 +65,7 @@ impl HistoryManager {
     pub fn get_state(&self) -> HistoryState {
         self.0.lock().map(|s| (*s).clone()).unwrap_or_default()
     }
-    
+
     pub fn clear(&self) {
         if let Ok(mut state) = self.0.lock() {
             state.undo_stack.clear();

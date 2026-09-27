@@ -1,18 +1,22 @@
 pub mod error;
 pub mod file_entry;
-pub mod session;
-pub mod progress;
-pub mod transaction;
 pub mod history;
+pub mod progress;
+pub mod session;
+pub mod transaction;
 
 pub use error::CommandError;
 pub type Result<T> = std::result::Result<T, CommandError>;
 
-pub use file_entry::{FileEntry, FileProperties, ShortcutInfo, FileSummary, FolderSizeResult, DriveInfo, WinMenuItem, QuickAccessItem, ConflictEntry, ConflictResponse, ConflictAction, TrashEntry, SidebarNode, SnapRect, NetResource, get_file_entry_from_path};
-pub use session::{SessionState, SessionManager, Tab};
 pub use config::{AppConfig, ConfigManager, TrashDriveSettings};
-pub use progress::ProgressEvent;
-pub use transaction::{Transaction, TransactionType, TransactionDetails};
+pub use file_entry::{
+    get_file_entry_from_path, ConflictAction, ConflictEntry, ConflictResponse, DriveInfo,
+    FileEntry, FileProperties, FileSummary, FolderSizeResult, NetResource, QuickAccessItem,
+    ShortcutInfo, SidebarNode, SnapRect, TrashEntry, WinMenuItem,
+};
 pub use history::HistoryManager;
+pub use progress::ProgressEvent;
+pub use session::{SessionManager, SessionState, Tab};
+pub use transaction::{Transaction, TransactionDetails, TransactionType};
 
 pub mod config;

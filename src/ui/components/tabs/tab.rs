@@ -1,6 +1,6 @@
-use std::cmp::Ordering;
-use gpui::*;
 use gpui::prelude::*;
+use gpui::*;
+use std::cmp::Ordering;
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum TabPosition {
@@ -29,7 +29,12 @@ impl Render for TabDragPreview {
             .flex()
             .items_center()
             .gap_2()
-            .child(svg().path("icons/folder.svg").size_3_5().text_color(rgb(0x0078d4)))
+            .child(
+                svg()
+                    .path("icons/folder.svg")
+                    .size_3_5()
+                    .text_color(rgb(0x0078d4)),
+            )
             .child(self.label.clone())
     }
 }
@@ -92,7 +97,10 @@ impl Tab {
         self
     }
 
-    pub fn on_right_click(mut self, f: impl Fn(&mut Window, &mut App, Point<Pixels>) + 'static) -> Self {
+    pub fn on_right_click(
+        mut self,
+        f: impl Fn(&mut Window, &mut App, Point<Pixels>) + 'static,
+    ) -> Self {
         self.on_right_click = Some(Box::new(f));
         self
     }
@@ -105,7 +113,7 @@ impl Tab {
     pub fn on_drag<T: Clone + 'static>(
         mut self,
         data: T,
-        f: impl Fn(&mut Window, &mut App) -> Entity<TabDragPreview> + 'static
+        f: impl Fn(&mut Window, &mut App) -> Entity<TabDragPreview> + 'static,
     ) -> Self {
         self.drag_refinement = Some(Box::new(move |el: Stateful<Div>| {
             el.on_drag(data, move |_, _, window, cx| f(window, cx))
@@ -113,7 +121,7 @@ impl Tab {
         self
     }
 
-    pub fn is_dragging(mut self, dragging: bool) -> Self {
+    pub fn with_dragging(mut self, dragging: bool) -> Self {
         self.is_dragging = dragging;
         self
     }
@@ -144,31 +152,39 @@ impl RenderOnce for Tab {
             .items_center()
             .text_color(text_color)
             .group("tab");
-            
+
         if let Some(on_click) = self.on_click {
-            container = container.on_mouse_down(MouseButton::Left, move |_, window, cx| on_click(window, cx));
+            container = container
+                .on_mouse_down(MouseButton::Left, move |_, window, cx| on_click(window, cx));
         }
 
         if let Some(on_middle_click) = self.on_middle_click {
-            container = container.on_mouse_down(MouseButton::Middle, move |_, window, cx| on_middle_click(window, cx));
+            container = container.on_mouse_down(MouseButton::Middle, move |_, window, cx| {
+                on_middle_click(window, cx)
+            });
         }
 
         if let Some(on_right_click) = self.on_right_click {
-            container = container.on_mouse_down(MouseButton::Right, move |e, window, cx| on_right_click(window, cx, e.position));
+            container = container.on_mouse_down(MouseButton::Right, move |e, window, cx| {
+                on_right_click(window, cx, e.position)
+            });
         }
 
         if let Some(refinement) = self.drag_refinement {
             container = refinement(container);
         }
-        
+
         container = container.when(self.is_dragging, |s| s.opacity(0.1));
-        
+
         container = match self.position {
             TabPosition::First => {
                 if self.selected {
                     container.border_r_1().border_color(rgb(0x161719))
                 } else {
-                    container.border_r_1().border_b_1().border_color(rgb(0x161719))
+                    container
+                        .border_r_1()
+                        .border_b_1()
+                        .border_color(rgb(0x161719))
                 }
             }
             TabPosition::Last => {
@@ -178,21 +194,24 @@ impl RenderOnce for Tab {
                     container.border_b_1().border_color(rgb(0x161719))
                 }
             }
-            TabPosition::Middle(Ordering::Greater) | TabPosition::Middle(Ordering::Less) | TabPosition::Middle(Ordering::Equal) => {
-                container.border_r_1().border_b_1().border_color(rgb(0x161719))
-            }
+            TabPosition::Middle(Ordering::Greater)
+            | TabPosition::Middle(Ordering::Less)
+            | TabPosition::Middle(Ordering::Equal) => container
+                .border_r_1()
+                .border_b_1()
+                .border_color(rgb(0x161719)),
         };
 
         // Active tab top indicator (Zed-like)
         if self.selected {
-             container = container.child(
-                 div()
-                     .absolute()
-                     .top_0()
-                     .w_full()
-                     .h(px(2.0))
-                     .bg(rgb(0x0078d4))
-             );
+            container = container.child(
+                div()
+                    .absolute()
+                    .top_0()
+                    .w_full()
+                    .h(px(2.0))
+                    .bg(rgb(0x0078d4)),
+            );
         }
 
         container = container.child(
@@ -201,40 +220,51 @@ impl RenderOnce for Tab {
                 .left_0()
                 .w(px(2.0))
                 .h_full()
-                .when(self.is_drop_target, |s| s.bg(rgb(0x0078d4)))
+                .when(self.is_drop_target, |s| s.bg(rgb(0x0078d4))),
         );
 
-        container
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .pl_3()
-                    .pr(if self.on_close.is_some() { px(12.0) } else { px(20.0) })
-                    .gap_2()
-                    .when_some(self.icon, |s, icon| {
-                        s.child(svg().path(icon).size_3_5().text_color(if self.selected { rgb(0x0078d4) } else { rgb(0x666666) }))
-                    })
-                    .child(div().text_ellipsis().child(self.label.clone()))
-                    .when_some(self.on_close, |s, on_close| {
-                        s.child(
-                            div()
-                                .p_0p5()
-                                .rounded_sm()
-                                .hover(|st: StyleRefinement| st.bg(rgb(0x333333)))
-                                .on_mouse_down(MouseButton::Left, move |_, _window, cx| {
-                                    cx.stop_propagation();
-                                    (on_close)(_window, cx);
-                                })
-                                .child(
-                                    svg()
-                                        .path("icons/x.svg")
-                                        .size_3()
-                                        .text_color(if self.selected { rgb(0x888888) } else { rgb(0x666666) })
-                                        .group_hover("tab", |st| st.text_color(rgb(0xcccccc)))
-                                )
-                        )
-                    })
-            )
+        container.child(
+            div()
+                .flex()
+                .items_center()
+                .pl_3()
+                .pr(if self.on_close.is_some() {
+                    px(12.0)
+                } else {
+                    px(20.0)
+                })
+                .gap_2()
+                .when_some(self.icon, |s, icon| {
+                    s.child(svg().path(icon).size_3_5().text_color(if self.selected {
+                        rgb(0x0078d4)
+                    } else {
+                        rgb(0x666666)
+                    }))
+                })
+                .child(div().text_ellipsis().child(self.label.clone()))
+                .when_some(self.on_close, |s, on_close| {
+                    s.child(
+                        div()
+                            .p_0p5()
+                            .rounded_sm()
+                            .hover(|st: StyleRefinement| st.bg(rgb(0x333333)))
+                            .on_mouse_down(MouseButton::Left, move |_, _window, cx| {
+                                cx.stop_propagation();
+                                (on_close)(_window, cx);
+                            })
+                            .child(
+                                svg()
+                                    .path("icons/x.svg")
+                                    .size_3()
+                                    .text_color(if self.selected {
+                                        rgb(0x888888)
+                                    } else {
+                                        rgb(0x666666)
+                                    })
+                                    .group_hover("tab", |st| st.text_color(rgb(0xcccccc))),
+                            ),
+                    )
+                }),
+        )
     }
 }

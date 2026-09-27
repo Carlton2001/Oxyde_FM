@@ -2,8 +2,8 @@
 
 mod ui;
 
-use gpui::*;
 use crate::ui::app::OxydeApp;
+use gpui::*;
 
 fn main() {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("off"))
@@ -17,18 +17,26 @@ fn main() {
     let _guard = _rt.enter();
 
     let asset_source = crate::ui::assets::EmbeddedAssetSource::new();
-    Application::new()
-        .with_assets(asset_source)
-        .run(|cx| {
+    Application::new().with_assets(asset_source).run(|cx| {
         let assets = crate::ui::assets::EmbeddedAssetSource::new();
         assets.load_fonts(cx).expect("fonts could not be loaded");
         cx.set_global(crate::ui::theme::OxydeTheme::dark());
         crate::ui::components::input::bind_keys(cx);
         OxydeApp::bind_keys(cx);
-        let app = cx.new(|cx| OxydeApp::empty(cx));
-        let _ = app.update(cx, |this, cx| {
+        let app = cx.new(OxydeApp::empty);
+        app.update(cx, |this, cx| {
             this.handle = Some(app.clone());
             this.start_watcher_task(cx);
+            let pane_id = this.state.active_pane_id.clone();
+            if let Some(pane) = this.state.find_pane(&pane_id) {
+                this.request_tab_files(
+                    &pane_id,
+                    pane.active_tab_index,
+                    pane.active_tab().path.clone(),
+                    false,
+                    cx,
+                );
+            }
         });
         cx.open_window(
             WindowOptions {
@@ -36,7 +44,11 @@ fn main() {
                     origin: point(px(100.0), px(100.0)),
                     size: size(px(1200.0), px(800.0)),
                 })),
-                titlebar: Some(TitlebarOptions { appears_transparent: true, title: None, ..Default::default() }),
+                titlebar: Some(TitlebarOptions {
+                    appears_transparent: true,
+                    title: None,
+                    ..Default::default()
+                }),
                 ..Default::default()
             },
             move |window, cx| {
@@ -51,6 +63,7 @@ fn main() {
                 });
                 app
             },
-        ).expect("window opens");
+        )
+        .expect("window opens");
     });
 }

@@ -50,11 +50,10 @@ impl Icon {
 
 impl RenderOnce for Icon {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
-        let color = self.color.unwrap_or_else(|| crate::ui::theme::OxydeTheme::global(cx).text_muted);
-        
-        svg()
-            .path(self.path)
-            .size(self.size.px())
-            .text_color(color)
+        let color = self
+            .color
+            .unwrap_or_else(|| crate::ui::theme::OxydeTheme::global(cx).text_muted);
+
+        svg().path(self.path).size(self.size.px()).text_color(color)
     }
 }

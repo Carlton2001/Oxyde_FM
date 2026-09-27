@@ -1,5 +1,8 @@
 #![cfg(target_os = "windows")]
 
+use crate::models::CommandError;
+use crate::utils::path_security::validate_path;
+use log::{info, warn};
 use std::ffi::OsStr;
 use std::os::windows::ffi::OsStrExt;
 use windows::core::PCWSTR;
@@ -10,9 +13,6 @@ use windows::Win32::System::DataExchange::{
 use windows::Win32::System::Memory::{GlobalAlloc, GlobalLock, GlobalUnlock, GMEM_MOVEABLE};
 use windows::Win32::System::Ole::{CF_HDROP, CF_UNICODETEXT};
 use windows::Win32::UI::Shell::{IShellItem, SHCreateItemFromParsingName, DROPFILES};
-use crate::models::CommandError;
-use crate::utils::path_security::validate_path;
-use log::{info, warn};
 
 // Custom format for Preferred DropEffect
 fn get_drop_effect_format() -> u32 {
@@ -108,18 +108,22 @@ pub fn get_clipboard_files() -> Result<(Vec<String>, bool), CommandError> {
 
 pub fn set_clipboard_files(paths: Vec<String>, is_cut: bool) -> Result<(), CommandError> {
     info!("Setting clipboard (cut={}): {:?}", is_cut, paths);
-    let validated_paths: Vec<String> = paths.iter()
+    let validated_paths: Vec<String> = paths
+        .iter()
         .map(|p| validate_path(p).map(|pb: std::path::PathBuf| pb.to_string_lossy().to_string()))
         .collect::<Result<Vec<String>, CommandError>>()?;
 
     unsafe {
         // Open clipboard
-        OpenClipboard(None).map_err(|e| CommandError::SystemError(format!("Failed to open clipboard: {:?}", e)))?;
+        OpenClipboard(None)
+            .map_err(|e| CommandError::SystemError(format!("Failed to open clipboard: {:?}", e)))?;
 
         // Empty clipboard
         if EmptyClipboard().is_err() {
             let _ = CloseClipboard();
-            return Err(CommandError::SystemError("Failed to empty clipboard".to_string()));
+            return Err(CommandError::SystemError(
+                "Failed to empty clipboard".to_string(),
+            ));
         }
 
         if paths.is_empty() {
@@ -155,7 +159,9 @@ pub fn set_clipboard_files(paths: Vec<String>, is_cut: bool) -> Result<(), Comma
         let ptr = GlobalLock(hglobal);
         if ptr.is_null() {
             let _ = CloseClipboard();
-            return Err(CommandError::SystemError("Failed to lock memory".to_string()));
+            return Err(CommandError::SystemError(
+                "Failed to lock memory".to_string(),
+            ));
         }
 
         // Write DROPFILES header
@@ -212,7 +218,9 @@ pub fn set_clipboard_files(paths: Vec<String>, is_cut: bool) -> Result<(), Comma
 pub fn get_clipboard_text() -> Result<String, CommandError> {
     unsafe {
         if OpenClipboard(None).is_err() {
-            return Err(CommandError::SystemError("Failed to open clipboard".to_string()));
+            return Err(CommandError::SystemError(
+                "Failed to open clipboard".to_string(),
+            ));
         }
 
         let mut result = String::new();
@@ -222,19 +230,19 @@ pub fn get_clipboard_text() -> Result<String, CommandError> {
                     HANDLE,
                     windows::Win32::Foundation::HGLOBAL,
                 >(handle));
-                
+
                 if !ptr.is_null() {
                     let mut len = 0;
                     let wide_ptr = ptr as *const u16;
                     while *wide_ptr.add(len) != 0 {
                         len += 1;
                     }
-                    
+
                     let slice = std::slice::from_raw_parts(wide_ptr, len);
                     if let Ok(s) = String::from_utf16(slice) {
                         result = s;
                     }
-                    
+
                     let _ = GlobalUnlock(std::mem::transmute::<
                         HANDLE,
                         windows::Win32::Foundation::HGLOBAL,
@@ -250,11 +258,14 @@ pub fn get_clipboard_text() -> Result<String, CommandError> {
 
 pub fn set_clipboard_text(text: String) -> Result<(), CommandError> {
     unsafe {
-        OpenClipboard(None).map_err(|e| CommandError::SystemError(format!("Failed to open clipboard: {:?}", e)))?;
-        
+        OpenClipboard(None)
+            .map_err(|e| CommandError::SystemError(format!("Failed to open clipboard: {:?}", e)))?;
+
         if EmptyClipboard().is_err() {
             let _ = CloseClipboard();
-            return Err(CommandError::SystemError("Failed to empty clipboard".to_string()));
+            return Err(CommandError::SystemError(
+                "Failed to empty clipboard".to_string(),
+            ));
         }
 
         let wide_chars: Vec<u16> = text.encode_utf16().chain(std::iter::once(0)).collect();
@@ -268,7 +279,9 @@ pub fn set_clipboard_text(text: String) -> Result<(), CommandError> {
         let ptr = GlobalLock(hglobal);
         if ptr.is_null() {
             let _ = CloseClipboard();
-            return Err(CommandError::SystemError("Failed to lock memory".to_string()));
+            return Err(CommandError::SystemError(
+                "Failed to lock memory".to_string(),
+            ));
         }
 
         std::ptr::copy_nonoverlapping(wide_chars.as_ptr(), ptr as *mut u16, wide_chars.len());
@@ -289,7 +302,8 @@ pub fn set_clipboard_text(text: String) -> Result<(), CommandError> {
 /// Uses OleSetClipboard with IDataObject so files stay in trash until paste
 pub fn set_clipboard_from_trash(trash_paths: Vec<String>) -> Result<Vec<String>, CommandError> {
     info!("Setting clipboard from trash: {:?}", trash_paths);
-    let validated_paths: Vec<String> = trash_paths.iter()
+    let validated_paths: Vec<String> = trash_paths
+        .iter()
         .map(|p| validate_path(p).map(|pb: std::path::PathBuf| pb.to_string_lossy().to_string()))
         .collect::<Result<Vec<String>, CommandError>>()?;
 
@@ -320,7 +334,9 @@ pub fn set_clipboard_from_trash(trash_paths: Vec<String>) -> Result<Vec<String>,
 
         if shell_items.is_empty() {
             CoUninitialize();
-            return Err(CommandError::SystemError("Failed to create shell items from trash paths".to_string()));
+            return Err(CommandError::SystemError(
+                "Failed to create shell items from trash paths".to_string(),
+            ));
         }
 
         // Create IShellItemArray from multiple items using PIDLs
@@ -342,7 +358,9 @@ pub fn set_clipboard_from_trash(trash_paths: Vec<String>) -> Result<Vec<String>,
 
         if pidl_holders.is_empty() {
             CoUninitialize();
-            return Err(CommandError::SystemError("Failed to get PIDLs from shell items".to_string()));
+            return Err(CommandError::SystemError(
+                "Failed to get PIDLs from shell items".to_string(),
+            ));
         }
 
         // Convert PIDLIST_ABSOLUTE to const ITEMIDLIST pointers for SHCreateShellItemArrayFromIDLists
@@ -376,7 +394,10 @@ pub fn set_clipboard_from_trash(trash_paths: Vec<String>) -> Result<Vec<String>,
             Ok(obj) => obj,
             Err(e) => {
                 CoUninitialize();
-                return Err(CommandError::SystemError(format!("Failed to get IDataObject: {:?}", e)));
+                return Err(CommandError::SystemError(format!(
+                    "Failed to get IDataObject: {:?}",
+                    e
+                )));
             }
         };
 
@@ -396,7 +417,10 @@ pub fn set_clipboard_from_trash(trash_paths: Vec<String>) -> Result<Vec<String>,
 
         match result {
             Ok(_) => Ok(validated_paths),
-            Err(e) => Err(CommandError::SystemError(format!("OleSetClipboard failed: {:?}", e))),
+            Err(e) => Err(CommandError::SystemError(format!(
+                "OleSetClipboard failed: {:?}",
+                e
+            ))),
         }
     }
 }

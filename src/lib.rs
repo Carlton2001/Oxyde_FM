@@ -1,11 +1,11 @@
 pub mod commands;
 pub mod models;
-pub mod utils;
-pub mod systems;
 pub mod platform;
+pub mod systems;
+pub mod utils;
 
-use std::sync::Mutex;
 use crate::models::SnapRect;
+use std::sync::Mutex;
 
 #[derive(Default)]
 pub struct WindowState {

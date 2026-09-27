@@ -1,113 +1,180 @@
+use crate::models::{CommandError, FileEntry};
+pub use crate::utils::archive::{is_archive, split_virtual_path, ArchiveFormat};
+use crate::utils::path_security::validate_path;
+use bzip2::read::BzDecoder;
+use flate2::read::GzDecoder;
+use iso9660_core::iso9660entry::{ISO9660Record, IsISO9660Record};
+use log::info;
+use sevenz_rust;
+use std::collections::HashSet;
 use std::fs::{self, File};
 use std::io;
 use std::path::{Path, PathBuf};
-use crate::models::{FileEntry, CommandError};
-use crate::utils::path_security::validate_path;
-pub use crate::utils::archive::{ArchiveFormat, is_archive, split_virtual_path};
-use log::info;
 use std::sync::atomic::{AtomicBool, Ordering};
-use iso9660_core::iso9660entry::{ISO9660Record, IsISO9660Record};
-use zip::ZipArchive;
-use sevenz_rust;
-use std::collections::HashSet;
-use flate2::read::GzDecoder;
+use tar::Archive as TarArchive;
 use xz2::read::XzDecoder;
-use bzip2::read::BzDecoder;
+use zip::ZipArchive;
 use zstd::stream::read::Decoder as ZstdDecoder;
 use zstd::stream::write::Encoder as ZstdEncoder;
-use tar::Archive as TarArchive;
 
 pub struct ArchiveState(pub AtomicBool);
 
-pub fn remove_items_from_archive(archive_path: PathBuf, internal_paths: Vec<String>) -> Result<(), CommandError> {
-    let format = ArchiveFormat::from_path(&archive_path).ok_or(CommandError::ArchiveError("Unsupported archive format".to_string()))?;
-    
+struct TemporaryArchive(PathBuf);
+
+impl Drop for TemporaryArchive {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.0);
+    }
+}
+
+pub fn remove_items_from_archive(
+    archive_path: PathBuf,
+    internal_paths: Vec<String>,
+) -> Result<(), CommandError> {
+    let format = ArchiveFormat::from_path(&archive_path).ok_or(CommandError::ArchiveError(
+        "Unsupported archive format".to_string(),
+    ))?;
+
     match format {
         ArchiveFormat::Zip => remove_from_zip(&archive_path, &internal_paths),
-        _ => Err(CommandError::ArchiveError("Deleting from this archive format is not supported yet.".to_string())),
+        _ => Err(CommandError::ArchiveError(
+            "Deleting from this archive format is not supported yet.".to_string(),
+        )),
     }
 }
 
 fn remove_from_zip(archive_path: &Path, internal_paths: &[String]) -> Result<(), CommandError> {
     let file = File::open(archive_path).map_err(|e| CommandError::IoError(e.to_string()))?;
-    let mut archive = ZipArchive::new(file).map_err(|e| CommandError::ArchiveError(e.to_string()))?;
-    
-    let temp_file_path = archive_path.with_extension("zip.tmp");
-    let temp_file = File::create(&temp_file_path).map_err(|e| CommandError::IoError(e.to_string()))?;
+    let mut archive =
+        ZipArchive::new(file).map_err(|e| CommandError::ArchiveError(e.to_string()))?;
+
+    let temp_file_path = archive_path.with_extension(format!("{}.zip.tmp", uuid::Uuid::new_v4()));
+    let temp_file =
+        File::create_new(&temp_file_path).map_err(|e| CommandError::IoError(e.to_string()))?;
+    let _temp_guard = TemporaryArchive(temp_file_path.clone());
     let mut writer = zip::ZipWriter::new(temp_file);
 
     for i in 0..archive.len() {
-        let entry = archive.by_index(i).map_err(|e| CommandError::ArchiveError(e.to_string()))?;
+        let entry = archive
+            .by_index(i)
+            .map_err(|e| CommandError::ArchiveError(e.to_string()))?;
         let entry_name = entry.name().to_string();
-        
+
         let should_remove = internal_paths.iter().any(|p| {
             let normalized_p = p.replace('\\', "/");
             let normalized_archive_entry = entry_name.replace('\\', "/");
-            
+
             if normalized_archive_entry == normalized_p {
                 return true;
             }
-            
+
             let dir_prefix = if normalized_p.ends_with('/') {
                 normalized_p.clone()
             } else {
                 format!("{}/", normalized_p)
             };
-            
+
             normalized_archive_entry.starts_with(&dir_prefix)
         });
 
         if !should_remove {
-            writer.raw_copy_file(entry).map_err(|e| CommandError::ArchiveError(e.to_string()))?;
+            writer
+                .raw_copy_file(entry)
+                .map_err(|e| CommandError::ArchiveError(e.to_string()))?;
         }
     }
-    
-    let _ = writer.finish().map_err(|e| CommandError::ArchiveError(e.to_string()))?;
-    
+
+    let _ = writer
+        .finish()
+        .map_err(|e| CommandError::ArchiveError(e.to_string()))?;
+
     drop(archive);
-    
-    std::fs::remove_file(archive_path).map_err(|e| CommandError::IoError(e.to_string()))?;
-    std::fs::rename(temp_file_path, archive_path).map_err(|e| CommandError::IoError(e.to_string()))?;
+
+    // Windows cannot rename over an existing file. Keep the original until the
+    // replacement is in place, and restore it if that last rename fails.
+    let backup_path = archive_path.with_extension(format!("{}.zip.bak", uuid::Uuid::new_v4()));
+    if let Err(error) = fs::rename(archive_path, &backup_path) {
+        let _ = fs::remove_file(&temp_file_path);
+        return Err(CommandError::IoError(error.to_string()));
+    }
+    if let Err(error) = fs::rename(&temp_file_path, archive_path) {
+        let restore = fs::rename(&backup_path, archive_path);
+        let _ = fs::remove_file(&temp_file_path);
+        return Err(CommandError::IoError(match restore {
+            Ok(()) => error.to_string(),
+            Err(restore_error) => format!(
+                "Could not replace archive ({error}); original preserved at {} but could not be restored ({restore_error})",
+                backup_path.display()
+            ),
+        }));
+    }
+    // The replacement is valid; a failed backup cleanup is harmless and can be
+    // retried by the user without losing either archive.
+    let _ = fs::remove_file(&backup_path);
 
     Ok(())
 }
 
-pub fn list_archive_contents(archive_path: String, internal_path: String) -> Result<Vec<FileEntry>, CommandError> {
+pub fn list_archive_contents(
+    archive_path: String,
+    internal_path: String,
+) -> Result<Vec<FileEntry>, CommandError> {
     let path_buf = validate_path(&archive_path)?;
     let path = path_buf.as_path();
-    let format = ArchiveFormat::from_path(path).ok_or(CommandError::ArchiveError("Unsupported archive format".to_string()))?;
+    let format = ArchiveFormat::from_path(path).ok_or(CommandError::ArchiveError(
+        "Unsupported archive format".to_string(),
+    ))?;
 
     match format {
         ArchiveFormat::Zip => list_zip(path, &internal_path),
         ArchiveFormat::SevenZip => list_seven_zip(path, &internal_path),
-        ArchiveFormat::Tar | ArchiveFormat::TarGz | ArchiveFormat::TarXz | ArchiveFormat::TarZst | ArchiveFormat::TarBz2 => list_tar(path, &internal_path, format),
+        ArchiveFormat::Tar
+        | ArchiveFormat::TarGz
+        | ArchiveFormat::TarXz
+        | ArchiveFormat::TarZst
+        | ArchiveFormat::TarBz2 => list_tar(path, &internal_path, format),
         ArchiveFormat::Iso => list_iso(path, &internal_path),
-        ArchiveFormat::Rar => Err(CommandError::ArchiveError("Rar navigation not supported yet. Please extract it first.".to_string())),
+        ArchiveFormat::Rar => Err(CommandError::ArchiveError(
+            "Rar navigation not supported yet. Please extract it first.".to_string(),
+        )),
     }
 }
 
 fn list_iso(path: &Path, internal_prefix: &str) -> Result<Vec<FileEntry>, CommandError> {
     let file = File::open(path).map_err(|e| CommandError::IoError(e.to_string()))?;
-    let mut iso = iso9660_core::ISO9660::load(file).map_err(|e| CommandError::ArchiveError(format!("{:?}", e)))?;
-    
-    let internal_path = if internal_prefix.is_empty() { "/" } else { internal_prefix };
+    let mut iso = iso9660_core::ISO9660::load(file)
+        .map_err(|e| CommandError::ArchiveError(format!("{:?}", e)))?;
+
+    let internal_path = if internal_prefix.is_empty() {
+        "/"
+    } else {
+        internal_prefix
+    };
     let mut results = Vec::new();
 
-    let mut entries_iter = iso.listdir(internal_path).map_err(|e| CommandError::ArchiveError(format!("{:?}", e)))?;
-    
+    let mut entries_iter = iso
+        .listdir(internal_path)
+        .map_err(|e| CommandError::ArchiveError(format!("{:?}", e)))?;
+
     loop {
         let record = entries_iter.next(&mut iso);
-        let Some(rec) = record else { break; };
-        
+        let Some(rec) = record else {
+            break;
+        };
+
         let name = match &rec {
             ISO9660Record::Directory(d) => d.identifier(),
             ISO9660Record::File(f) => f.identifier(),
         };
 
-        if name == "." || name == ".." { continue; }
-        
+        if name == "." || name == ".." {
+            continue;
+        }
+
         let display_name = name.split(';').next().unwrap_or(name).to_string();
-        if display_name.is_empty() { continue; }
+        if display_name.is_empty() {
+            continue;
+        }
 
         let is_dir = matches!(rec, ISO9660Record::Directory(_));
         let size = match &rec {
@@ -115,12 +182,20 @@ fn list_iso(path: &Path, internal_prefix: &str) -> Result<Vec<FileEntry>, Comman
             _ => 0,
         };
 
-        let internal_norm = internal_prefix.trim_start_matches(['/', '\\']).replace('/', "\\");
+        let internal_norm = internal_prefix
+            .trim_start_matches(['/', '\\'])
+            .replace('/', "\\");
         let full_virtual_path = if internal_norm.is_empty() {
             format!("{}\\{}", path.to_string_lossy(), display_name)
         } else {
-            format!("{}\\{}\\{}", path.to_string_lossy(), internal_norm, display_name)
-        }.replace("\\\\", "\\");
+            format!(
+                "{}\\{}\\{}",
+                path.to_string_lossy(),
+                internal_norm,
+                display_name
+            )
+        }
+        .replace("\\\\", "\\");
 
         results.push(FileEntry {
             name: display_name,
@@ -147,27 +222,47 @@ fn list_iso(path: &Path, internal_prefix: &str) -> Result<Vec<FileEntry>, Comman
 
 fn list_zip(path: &Path, internal_prefix: &str) -> Result<Vec<FileEntry>, CommandError> {
     let file = File::open(path).map_err(|e| CommandError::IoError(e.to_string()))?;
-    let mut archive = ZipArchive::new(file).map_err(|e| CommandError::ArchiveError(e.to_string()))?;
+    let mut archive =
+        ZipArchive::new(file).map_err(|e| CommandError::ArchiveError(e.to_string()))?;
     let mut entries = Vec::new();
-    let prefix = if internal_prefix.is_empty() { "".to_string() } else { format!("{}/", internal_prefix.trim_end_matches('/')) };
+    let prefix = if internal_prefix.is_empty() {
+        "".to_string()
+    } else {
+        format!("{}/", internal_prefix.trim_end_matches('/'))
+    };
 
     let mut seen: HashSet<String> = HashSet::new();
 
     for i in 0..archive.len() {
-        let file = archive.by_index(i).map_err(|e| CommandError::ArchiveError(e.to_string()))?;
+        let file = archive
+            .by_index(i)
+            .map_err(|e| CommandError::ArchiveError(e.to_string()))?;
         let name = file.name().replace('\\', "/");
-        
+
         if name.starts_with(&prefix) && name != prefix {
             let relative = &name[prefix.len()..];
-            let parts: Vec<&str> = relative.split('/').filter(|s| !s.is_empty()).collect::<Vec<_>>();
-            if parts.is_empty() { continue; }
-            
+            let parts: Vec<&str> = relative
+                .split('/')
+                .filter(|s| !s.is_empty())
+                .collect::<Vec<_>>();
+            if parts.is_empty() {
+                continue;
+            }
+
             let entry_name = parts[0].to_string();
-            if seen.contains(&entry_name) { continue; }
+            if seen.contains(&entry_name) {
+                continue;
+            }
             seen.insert(entry_name.clone());
 
             let is_dir = file.is_dir() || parts.len() > 1;
-            let full_virtual_path = format!("{}\\{}\\{}", path.to_string_lossy(), internal_prefix.replace('/', "\\"), entry_name).replace("\\\\", "\\");
+            let full_virtual_path = format!(
+                "{}\\{}\\{}",
+                path.to_string_lossy(),
+                internal_prefix.replace('/', "\\"),
+                entry_name
+            )
+            .replace("\\\\", "\\");
 
             entries.push(FileEntry {
                 name: entry_name,
@@ -181,12 +276,13 @@ fn list_zip(path: &Path, internal_prefix: &str) -> Result<Vec<FileEntry>, Comman
                 is_calculated: false,
                 folders_count: None,
                 files_count: None,
-                modified: file.last_modified()
+                modified: file
+                    .last_modified()
                     .and_then(|dt| {
-                        let t: Result<time::OffsetDateTime, _> = dt.try_into();
+                        let t: Result<chrono::NaiveDateTime, _> = dt.try_into();
                         t.ok()
                     })
-                    .map(|ts| ts.unix_timestamp() as u64 * 1000)
+                    .map(|ts| ts.and_utc().timestamp_millis() as u64)
                     .unwrap_or(0),
                 is_readonly: false,
                 is_protected: false,
@@ -200,76 +296,115 @@ fn list_zip(path: &Path, internal_prefix: &str) -> Result<Vec<FileEntry>, Comman
 
 fn list_seven_zip(path: &Path, internal_prefix: &str) -> Result<Vec<FileEntry>, CommandError> {
     let file = File::open(path).map_err(|e| CommandError::IoError(e.to_string()))?;
-    let len = file.metadata().map_err(|e| CommandError::IoError(e.to_string()))?.len();
-    let mut reader = sevenz_rust::SevenZReader::new(file, len, "".into()).map_err(|e| CommandError::ArchiveError(e.to_string()))?;
+    let len = file
+        .metadata()
+        .map_err(|e| CommandError::IoError(e.to_string()))?
+        .len();
+    let mut reader = sevenz_rust::SevenZReader::new(file, len, "".into())
+        .map_err(|e| CommandError::ArchiveError(e.to_string()))?;
     let mut entries = Vec::new();
-    let prefix = if internal_prefix.is_empty() { "".to_string() } else { format!("{}/", internal_prefix.trim_end_matches('/')) };
+    let prefix = if internal_prefix.is_empty() {
+        "".to_string()
+    } else {
+        format!("{}/", internal_prefix.trim_end_matches('/'))
+    };
     let mut seen: HashSet<String> = HashSet::new();
 
-    reader.for_each_entries(|entry, _reader| {
-        let name = entry.name().replace('\\', "/");
-        if name.starts_with(&prefix) && name != prefix {
-             let relative = &name[prefix.len()..];
-             let parts: Vec<&str> = relative.split('/').filter(|s| !s.is_empty()).collect::<Vec<_>>();
-             if !parts.is_empty() {
-                 let entry_name = parts[0].to_string();
-                 if !seen.contains(&entry_name) {
-                     seen.insert(entry_name.clone());
-                     let is_dir = entry.is_directory() || parts.len() > 1;
-                     entries.push(FileEntry {
-                        name: entry_name.clone(),
-                        path: format!("{}\\{}", path.to_string_lossy(), name.replace('/', "\\")),
-                        is_dir,
-                        is_hidden: false,
-                        is_system: false,
-                        is_symlink: false,
-                        is_junction: false,
-                        size: entry.size(),
-                        is_calculated: false,
-                        folders_count: None,
-                        files_count: None,
-                        modified: 0, 
-                        is_readonly: false,
-                        is_protected: false,
-                        original_path: None,
-                        deleted_time: None,
-                    });
-                 }
-             }
-        }
-        Ok(true)
-    }).map_err(|e| CommandError::ArchiveError(e.to_string()))?;
+    reader
+        .for_each_entries(|entry, _reader| {
+            let name = entry.name().replace('\\', "/");
+            if name.starts_with(&prefix) && name != prefix {
+                let relative = &name[prefix.len()..];
+                let parts: Vec<&str> = relative
+                    .split('/')
+                    .filter(|s| !s.is_empty())
+                    .collect::<Vec<_>>();
+                if !parts.is_empty() {
+                    let entry_name = parts[0].to_string();
+                    if !seen.contains(&entry_name) {
+                        seen.insert(entry_name.clone());
+                        let is_dir = entry.is_directory() || parts.len() > 1;
+                        entries.push(FileEntry {
+                            name: entry_name.clone(),
+                            path: format!(
+                                "{}\\{}",
+                                path.to_string_lossy(),
+                                name.replace('/', "\\")
+                            ),
+                            is_dir,
+                            is_hidden: false,
+                            is_system: false,
+                            is_symlink: false,
+                            is_junction: false,
+                            size: entry.size(),
+                            is_calculated: false,
+                            folders_count: None,
+                            files_count: None,
+                            modified: 0,
+                            is_readonly: false,
+                            is_protected: false,
+                            original_path: None,
+                            deleted_time: None,
+                        });
+                    }
+                }
+            }
+            Ok(true)
+        })
+        .map_err(|e| CommandError::ArchiveError(e.to_string()))?;
 
     Ok(entries)
 }
 
-fn list_tar(path: &Path, internal_prefix: &str, format: ArchiveFormat) -> Result<Vec<FileEntry>, CommandError> {
+fn list_tar(
+    path: &Path,
+    internal_prefix: &str,
+    format: ArchiveFormat,
+) -> Result<Vec<FileEntry>, CommandError> {
     let file = File::open(path).map_err(|e| CommandError::IoError(e.to_string()))?;
     let reader: Box<dyn io::Read> = match format {
         ArchiveFormat::TarGz => Box::new(GzDecoder::new(file)),
         ArchiveFormat::TarXz => Box::new(XzDecoder::new(file)),
         ArchiveFormat::TarBz2 => Box::new(BzDecoder::new(file)),
-        ArchiveFormat::TarZst => Box::new(ZstdDecoder::new(file).map_err(|e| CommandError::IoError(e.to_string()))?),
+        ArchiveFormat::TarZst => {
+            Box::new(ZstdDecoder::new(file).map_err(|e| CommandError::IoError(e.to_string()))?)
+        }
         _ => Box::new(file),
     };
 
     let mut archive = TarArchive::new(reader);
     let mut entries = Vec::new();
-    let prefix = if internal_prefix.is_empty() { "".to_string() } else { format!("{}/", internal_prefix.trim_end_matches('/')) };
+    let prefix = if internal_prefix.is_empty() {
+        "".to_string()
+    } else {
+        format!("{}/", internal_prefix.trim_end_matches('/'))
+    };
     let mut seen: HashSet<String> = HashSet::new();
 
-    for entry in archive.entries().map_err(|e| CommandError::ArchiveError(e.to_string()))? {
+    for entry in archive
+        .entries()
+        .map_err(|e| CommandError::ArchiveError(e.to_string()))?
+    {
         let entry = entry.map_err(|e| CommandError::ArchiveError(e.to_string()))?;
-        let path_field = entry.path().map_err(|e| CommandError::ArchiveError(e.to_string()))?;
+        let path_field = entry
+            .path()
+            .map_err(|e| CommandError::ArchiveError(e.to_string()))?;
         let name = path_field.to_string_lossy().replace('\\', "/");
 
         if name.starts_with(&prefix) && name != prefix {
             let relative = &name[prefix.len()..];
-            let parts: Vec<&str> = relative.split('/').filter(|s| !s.is_empty()).collect::<Vec<_>>();
-            if parts.is_empty() { continue; }
-            
+            let parts: Vec<&str> = relative
+                .split('/')
+                .filter(|s| !s.is_empty())
+                .collect::<Vec<_>>();
+            if parts.is_empty() {
+                continue;
+            }
+
             let entry_name = parts[0].to_string();
-            if seen.contains(&entry_name) { continue; }
+            if seen.contains(&entry_name) {
+                continue;
+            }
             seen.insert(entry_name.clone());
 
             let is_dir = entry.header().entry_type().is_dir() || parts.len() > 1;
@@ -296,11 +431,17 @@ fn list_tar(path: &Path, internal_prefix: &str, format: ArchiveFormat) -> Result
     Ok(entries)
 }
 
-pub async fn extract_archive(archive_path: String, target_dir: String, state: &ArchiveState) -> Result<(), CommandError> {
+pub async fn extract_archive(
+    archive_path: String,
+    target_dir: String,
+    state: &ArchiveState,
+) -> Result<(), CommandError> {
     state.0.store(false, Ordering::Relaxed);
     let path_buf = validate_path(&archive_path)?;
     let path = path_buf.as_path();
-    let format = ArchiveFormat::from_path(path).ok_or(CommandError::ArchiveError("Unsupported archive format".to_string()))?;
+    let format = ArchiveFormat::from_path(path).ok_or(CommandError::ArchiveError(
+        "Unsupported archive format".to_string(),
+    ))?;
     let target_buf = validate_path(&target_dir)?;
     let target = target_buf.as_path();
 
@@ -313,29 +454,43 @@ pub async fn extract_archive(archive_path: String, target_dir: String, state: &A
     match format {
         ArchiveFormat::Zip => {
             let file = File::open(path).map_err(|e| CommandError::IoError(e.to_string()))?;
-            let mut archive = ZipArchive::new(file).map_err(|e| CommandError::ArchiveError(e.to_string()))?;
-            archive.extract(target).map_err(|e| CommandError::ArchiveError(e.to_string()))?;
+            let mut archive =
+                ZipArchive::new(file).map_err(|e| CommandError::ArchiveError(e.to_string()))?;
+            archive
+                .extract(target)
+                .map_err(|e| CommandError::ArchiveError(e.to_string()))?;
         }
         ArchiveFormat::SevenZip => {
-            sevenz_rust::decompress_file(path, target).map_err(|e| CommandError::ArchiveError(e.to_string()))?;
+            sevenz_rust::decompress_file(path, target)
+                .map_err(|e| CommandError::ArchiveError(e.to_string()))?;
         }
-        ArchiveFormat::Tar | ArchiveFormat::TarGz | ArchiveFormat::TarXz | ArchiveFormat::TarZst | ArchiveFormat::TarBz2 => {
+        ArchiveFormat::Tar
+        | ArchiveFormat::TarGz
+        | ArchiveFormat::TarXz
+        | ArchiveFormat::TarZst
+        | ArchiveFormat::TarBz2 => {
             let file = File::open(path).map_err(|e| CommandError::IoError(e.to_string()))?;
             let reader: Box<dyn io::Read> = match format {
                 ArchiveFormat::TarGz => Box::new(GzDecoder::new(file)),
                 ArchiveFormat::TarXz => Box::new(XzDecoder::new(file)),
                 ArchiveFormat::TarBz2 => Box::new(BzDecoder::new(file)),
-                ArchiveFormat::TarZst => Box::new(ZstdDecoder::new(file).map_err(|e| CommandError::IoError(e.to_string()))?),
+                ArchiveFormat::TarZst => Box::new(
+                    ZstdDecoder::new(file).map_err(|e| CommandError::IoError(e.to_string()))?,
+                ),
                 _ => Box::new(file),
             };
             let mut archive = TarArchive::new(reader);
-            archive.unpack(target).map_err(|e| CommandError::ArchiveError(e.to_string()))?;
+            archive
+                .unpack(target)
+                .map_err(|e| CommandError::ArchiveError(e.to_string()))?;
         }
         ArchiveFormat::Iso => {
             extract_iso(&archive_path, &target_dir)?;
         }
         ArchiveFormat::Rar => {
-            return Err(CommandError::ArchiveError("Rar extraction requires external tools (like 7-Zip or WinRAR).".to_string()));
+            return Err(CommandError::ArchiveError(
+                "Rar extraction requires external tools (like 7-Zip or WinRAR).".to_string(),
+            ));
         }
     }
     Ok(())
@@ -343,62 +498,77 @@ pub async fn extract_archive(archive_path: String, target_dir: String, state: &A
 
 fn extract_iso(archive_path: &str, target_dir: &str) -> Result<(), CommandError> {
     let file = File::open(archive_path).map_err(|e| CommandError::IoError(e.to_string()))?;
-    let mut iso = iso9660_core::ISO9660::load(file).map_err(|e| CommandError::ArchiveError(format!("{:?}", e)))?;
-    
+    let mut iso = iso9660_core::ISO9660::load(file)
+        .map_err(|e| CommandError::ArchiveError(format!("{:?}", e)))?;
+
     extract_iso_recursive(&mut iso, "/", target_dir)
 }
 
 fn extract_iso_recursive<T: iso9660_core::block_device::ISORead>(
     iso: &mut iso9660_core::ISO9660<T>,
     internal_path: &str,
-    target_base: &str
+    target_base: &str,
 ) -> Result<(), CommandError> {
-    let mut iter = iso.listdir(internal_path).map_err(|e| CommandError::ArchiveError(format!("{:?}", e)))?;
-    
+    let mut iter = iso
+        .listdir(internal_path)
+        .map_err(|e| CommandError::ArchiveError(format!("{:?}", e)))?;
+
     let mut records = Vec::new();
     while let Some(record) = iter.next(iso) {
         records.push(record);
     }
-    
+
     for rec in records {
         let name = match &rec {
             ISO9660Record::Directory(d) => d.identifier(),
             ISO9660Record::File(f) => f.identifier(),
         };
 
-        if name == "." || name == ".." { continue; }
-        
+        if name == "." || name == ".." {
+            continue;
+        }
+
         let display_name = name.split(';').next().unwrap_or(name);
         let new_internal = if internal_path == "/" {
             format!("/{}", display_name)
         } else {
             format!("{}/{}", internal_path.trim_end_matches('/'), display_name)
         };
-        
+
         let relative_path = new_internal.trim_start_matches('/').replace('/', "\\");
         let target_path = Path::new(target_base).join(&relative_path);
-        
+
         match rec {
             ISO9660Record::Directory(_) => {
-                fs::create_dir_all(&target_path).map_err(|e| CommandError::IoError(e.to_string()))?;
+                fs::create_dir_all(&target_path)
+                    .map_err(|e| CommandError::IoError(e.to_string()))?;
                 extract_iso_recursive(iso, &new_internal, target_base)?;
             }
             ISO9660Record::File(_) => {
                 if let Some(parent) = target_path.parent() {
                     fs::create_dir_all(parent).map_err(|e| CommandError::IoError(e.to_string()))?;
                 }
-                
-                let size = iso.total_size(&new_internal).map_err(|e| CommandError::ArchiveError(format!("{:?}", e)))?;
-                let mut writer = File::create(target_path).map_err(|e| CommandError::IoError(e.to_string()))?;
-                
+
+                let size = iso
+                    .total_size(&new_internal)
+                    .map_err(|e| CommandError::ArchiveError(format!("{:?}", e)))?;
+                let mut writer =
+                    File::create(target_path).map_err(|e| CommandError::IoError(e.to_string()))?;
+
                 let mut offset = 0;
                 let mut buf = [0u8; 65536];
                 while offset < size {
                     let to_read = std::cmp::min(buf.len(), size - offset);
-                    let n = iso.read(&new_internal, &mut buf[..to_read], offset).map_err(|e| CommandError::ArchiveError(format!("{:?}", e)))?;
-                    if n == 0 { break; }
+                    let n = iso
+                        .read(&new_internal, &mut buf[..to_read], offset)
+                        .map_err(|e| CommandError::ArchiveError(format!("{:?}", e)))?;
+                    if n == 0 {
+                        break;
+                    }
                     use std::io::Write;
-                    writer.write_all(&buf[..n]).map_err(|e| CommandError::IoError(e.to_string()))?;
+                    writer
+                        .write_all(&buf[..n])
+                        .map_err(|e| CommandError::IoError(e.to_string()))?;
                     offset += n;
                 }
             }
@@ -412,39 +582,71 @@ pub async fn cancel_archive_operation(state: &ArchiveState) -> Result<(), Comman
     Ok(())
 }
 
-pub async fn compress_to_archive(paths: Vec<String>, archive_path: String, format: String, quality: String, state: &ArchiveState) -> Result<(), CommandError> {
+pub async fn compress_to_archive(
+    paths: Vec<String>,
+    archive_path: String,
+    format: String,
+    quality: String,
+    state: &ArchiveState,
+) -> Result<(), CommandError> {
     state.0.store(false, Ordering::Relaxed);
     let target_path_buf = validate_path(&archive_path)?;
     let target_path = target_path_buf.as_path();
-    
+
+    if target_path.exists() {
+        return Err(CommandError::ArchiveError(format!(
+            "Archive already exists: {}",
+            target_path.display()
+        )));
+    }
+
     info!("Compressing {:?} items to {:?}", paths.len(), target_path);
-    
-    let result = match format.to_lowercase().as_str() {
-        "zip" => compress_zip(paths, target_path, &quality, &state),
-        "7z" => compress_seven_zip(paths, target_path, &quality, &state),
-        "tar" => compress_tar(paths, target_path, false, &state),
-        "zst" | "tar.zst" => compress_tar_zst(paths, target_path, &quality, &state),
+
+    let temporary_path =
+        target_path.with_extension(format!("{}.archive.tmp", uuid::Uuid::new_v4()));
+    let _temporary_guard = TemporaryArchive(temporary_path.clone());
+
+    match format.to_lowercase().as_str() {
+        "zip" => compress_zip(paths, &temporary_path, &quality, state),
+        "7z" => compress_seven_zip(paths, &temporary_path, &quality, state),
+        "tar" => compress_tar(paths, &temporary_path, false, state),
+        "zst" | "tar.zst" => compress_tar_zst(paths, &temporary_path, &quality, state),
         _ => Err(CommandError::ArchiveError("Unsupported format".to_string())),
-    };
+    }?;
 
-    if result.is_err()
-        && target_path.exists() {
-            let _ = fs::remove_file(target_path);
+    // hard_link creates the final name only if it is still free. Some removable
+    // filesystems do not support hard links, so use rename there on Windows.
+    if fs::hard_link(&temporary_path, target_path).is_err() {
+        if target_path.exists() {
+            return Err(CommandError::ArchiveError(format!(
+                "Archive already exists: {}",
+                target_path.display()
+            )));
         }
-
-    result
+        fs::rename(&temporary_path, target_path)
+            .map_err(|error| CommandError::IoError(error.to_string()))?;
+    }
+    Ok(())
 }
 
-pub async fn add_to_archive(paths: Vec<String>, archive_path: String, state: &ArchiveState) -> Result<(), CommandError> {
+pub async fn add_to_archive(
+    paths: Vec<String>,
+    archive_path: String,
+    state: &ArchiveState,
+) -> Result<(), CommandError> {
     state.0.store(false, Ordering::Relaxed);
     let target_path_buf = validate_path(&archive_path)?;
     let target_path = target_path_buf.as_path();
-    
-    let format = ArchiveFormat::from_path(target_path).ok_or(CommandError::ArchiveError("Unsupported archive format".to_string()))?;
-    
+
+    let format = ArchiveFormat::from_path(target_path).ok_or(CommandError::ArchiveError(
+        "Unsupported archive format".to_string(),
+    ))?;
+
     match format {
-        ArchiveFormat::Zip => add_to_zip(paths, target_path, &state),
-        _ => Err(CommandError::ArchiveError("Adding to this archive format is not supported yet.".to_string())),
+        ArchiveFormat::Zip => add_to_zip(paths, target_path, state),
+        _ => Err(CommandError::ArchiveError(
+            "Adding to this archive format is not supported yet.".to_string(),
+        )),
     }
 }
 
@@ -455,55 +657,74 @@ fn add_to_zip(paths: Vec<String>, target: &Path, state: &ArchiveState) -> Result
         .open(target)
         .map_err(|e| CommandError::IoError(e.to_string()))?;
 
-    let mut zip = zip::ZipWriter::new_append(file).map_err(|e| CommandError::ArchiveError(e.to_string()))?;
-    
+    let mut zip =
+        zip::ZipWriter::new_append(file).map_err(|e| CommandError::ArchiveError(e.to_string()))?;
+
     let options = zip::write::SimpleFileOptions::default()
         .compression_method(zip::CompressionMethod::Deflated)
         .unix_permissions(0o755);
 
     for p in paths {
-        if state.0.load(Ordering::Relaxed) { return Err(CommandError::Other("Cancelled".into())); }
+        if state.0.load(Ordering::Relaxed) {
+            return Err(CommandError::Other("Cancelled".into()));
+        }
         let path = Path::new(&p);
         let parent = path.parent().unwrap_or(path);
-        
+
         if path.is_dir() {
             for entry in walkdir::WalkDir::new(path) {
-                if state.0.load(Ordering::Relaxed) { return Err(CommandError::Other("Cancelled".into())); }
+                if state.0.load(Ordering::Relaxed) {
+                    return Err(CommandError::Other("Cancelled".into()));
+                }
                 let entry = entry.map_err(|e| CommandError::IoError(e.to_string()))?;
                 let entry_path = entry.path();
-                let name = entry_path.strip_prefix(parent).map_err(|e| CommandError::PathError(e.to_string()))?;
+                let name = entry_path
+                    .strip_prefix(parent)
+                    .map_err(|e| CommandError::PathError(e.to_string()))?;
                 let name_str = name.to_string_lossy().replace('\\', "/");
-                
+
                 if entry.file_type().is_dir() {
-                    zip.add_directory(name_str, options).map_err(|e| CommandError::ArchiveError(e.to_string()))?;
+                    zip.add_directory(name_str, options)
+                        .map_err(|e| CommandError::ArchiveError(e.to_string()))?;
                 } else {
-                    zip.start_file(name_str, options).map_err(|e| CommandError::ArchiveError(e.to_string()))?;
-                    let mut f = File::open(entry_path).map_err(|e| CommandError::IoError(e.to_string()))?;
+                    zip.start_file(name_str, options)
+                        .map_err(|e| CommandError::ArchiveError(e.to_string()))?;
+                    let mut f =
+                        File::open(entry_path).map_err(|e| CommandError::IoError(e.to_string()))?;
                     io::copy(&mut f, &mut zip).map_err(|e| CommandError::IoError(e.to_string()))?;
                 }
             }
         } else {
-            let name = path.file_name().ok_or(CommandError::PathError("Invalid path".to_string()))?;
-            zip.start_file(name.to_string_lossy().replace('\\', "/"), options).map_err(|e| CommandError::ArchiveError(e.to_string()))?;
+            let name = path
+                .file_name()
+                .ok_or(CommandError::PathError("Invalid path".to_string()))?;
+            zip.start_file(name.to_string_lossy().replace('\\', "/"), options)
+                .map_err(|e| CommandError::ArchiveError(e.to_string()))?;
             let mut f = File::open(path).map_err(|e| CommandError::IoError(e.to_string()))?;
             io::copy(&mut f, &mut zip).map_err(|e| CommandError::IoError(e.to_string()))?;
         }
     }
 
-    zip.finish().map_err(|e| CommandError::ArchiveError(e.to_string()))?;
+    zip.finish()
+        .map_err(|e| CommandError::ArchiveError(e.to_string()))?;
     Ok(())
 }
 
-fn compress_zip(paths: Vec<String>, target: &Path, quality: &str, state: &ArchiveState) -> Result<(), CommandError> {
+fn compress_zip(
+    paths: Vec<String>,
+    target: &Path,
+    quality: &str,
+    state: &ArchiveState,
+) -> Result<(), CommandError> {
     let file = File::create(target).map_err(|e| CommandError::IoError(e.to_string()))?;
     let mut zip = zip::ZipWriter::new(io::BufWriter::with_capacity(128 * 1024, file));
-    
+
     let method = match quality {
         "fast" => zip::CompressionMethod::Deflated,
         "best" => zip::CompressionMethod::Deflated,
         _ => zip::CompressionMethod::Deflated,
     };
-    
+
     let level = match quality {
         "fast" => Some(1),
         "best" => Some(9),
@@ -516,46 +737,69 @@ fn compress_zip(paths: Vec<String>, target: &Path, quality: &str, state: &Archiv
         .unix_permissions(0o755);
 
     for p in paths {
-        if state.0.load(Ordering::Relaxed) { return Err(CommandError::Other("Cancelled".into())); }
+        if state.0.load(Ordering::Relaxed) {
+            return Err(CommandError::Other("Cancelled".into()));
+        }
         let path = Path::new(&p);
         let parent = path.parent().unwrap_or(path);
-        
+
         if path.is_dir() {
             for entry in walkdir::WalkDir::new(path) {
-                if state.0.load(Ordering::Relaxed) { return Err(CommandError::Other("Cancelled".into())); }
+                if state.0.load(Ordering::Relaxed) {
+                    return Err(CommandError::Other("Cancelled".into()));
+                }
                 let entry = entry.map_err(|e| CommandError::IoError(e.to_string()))?;
                 let entry_path = entry.path();
-                let name = entry_path.strip_prefix(parent).map_err(|e| CommandError::PathError(e.to_string()))?;
+                let name = entry_path
+                    .strip_prefix(parent)
+                    .map_err(|e| CommandError::PathError(e.to_string()))?;
                 let name_str = name.to_string_lossy().replace('\\', "/");
-                
+
                 if entry.file_type().is_dir() {
-                    zip.add_directory(name_str, options).map_err(|e| CommandError::ArchiveError(e.to_string()))?;
+                    zip.add_directory(name_str, options)
+                        .map_err(|e| CommandError::ArchiveError(e.to_string()))?;
                 } else {
-                    zip.start_file(name_str, options).map_err(|e| CommandError::ArchiveError(e.to_string()))?;
-                    let mut f = File::open(entry_path).map_err(|e| CommandError::IoError(e.to_string()))?;
+                    zip.start_file(name_str, options)
+                        .map_err(|e| CommandError::ArchiveError(e.to_string()))?;
+                    let mut f =
+                        File::open(entry_path).map_err(|e| CommandError::IoError(e.to_string()))?;
                     io::copy(&mut f, &mut zip).map_err(|e| CommandError::IoError(e.to_string()))?;
                 }
             }
         } else {
-            let name = path.file_name().ok_or(CommandError::PathError("Invalid path".to_string()))?;
-            zip.start_file(name.to_string_lossy().replace('\\', "/"), options).map_err(|e| CommandError::ArchiveError(e.to_string()))?;
+            let name = path
+                .file_name()
+                .ok_or(CommandError::PathError("Invalid path".to_string()))?;
+            zip.start_file(name.to_string_lossy().replace('\\', "/"), options)
+                .map_err(|e| CommandError::ArchiveError(e.to_string()))?;
             let mut f = File::open(path).map_err(|e| CommandError::IoError(e.to_string()))?;
             io::copy(&mut f, &mut zip).map_err(|e| CommandError::IoError(e.to_string()))?;
         }
     }
 
-    zip.finish().map_err(|e| CommandError::ArchiveError(e.to_string()))?;
+    zip.finish()
+        .map_err(|e| CommandError::ArchiveError(e.to_string()))?;
     Ok(())
 }
 
-fn compress_seven_zip(paths: Vec<String>, target: &Path, _quality: &str, state: &ArchiveState) -> Result<(), CommandError> {
-    if paths.is_empty() { return Ok(()); }
-    
+fn compress_seven_zip(
+    paths: Vec<String>,
+    target: &Path,
+    _quality: &str,
+    state: &ArchiveState,
+) -> Result<(), CommandError> {
+    if paths.is_empty() {
+        return Ok(());
+    }
+
     let file = File::create(target).map_err(|e| CommandError::IoError(e.to_string()))?;
-    let mut writer = sevenz_rust::SevenZWriter::new(file).map_err(|e| CommandError::ArchiveError(e.to_string()))?;
-    
+    let mut writer = sevenz_rust::SevenZWriter::new(file)
+        .map_err(|e| CommandError::ArchiveError(e.to_string()))?;
+
     for p in paths {
-        if state.0.load(Ordering::Relaxed) { return Err(CommandError::Other("Cancelled".into())); }
+        if state.0.load(Ordering::Relaxed) {
+            return Err(CommandError::Other("Cancelled".into()));
+        }
         let path = Path::new(&p);
         if path.is_dir() {
             add_dir_to_sevenz(&mut writer, path, path.parent().unwrap_or(path), state)?;
@@ -563,21 +807,28 @@ fn compress_seven_zip(paths: Vec<String>, target: &Path, _quality: &str, state: 
             add_file_to_sevenz(&mut writer, path, path.parent().unwrap_or(path))?;
         }
     }
-    writer.finish().map_err(|e| CommandError::ArchiveError(e.to_string()))?;
+    writer
+        .finish()
+        .map_err(|e| CommandError::ArchiveError(e.to_string()))?;
     Ok(())
 }
 
 fn add_file_to_sevenz<W: io::Write + io::Seek>(
     writer: &mut sevenz_rust::SevenZWriter<W>,
     path: &Path,
-    base: &Path
+    base: &Path,
 ) -> Result<(), CommandError> {
     let f = File::open(path).map_err(|e| CommandError::IoError(e.to_string()))?;
-    let name = path.strip_prefix(base).map_err(|e| CommandError::PathError(e.to_string()))?.to_string_lossy();
-    writer.push_archive_entry(
-        sevenz_rust::SevenZArchiveEntry::from_path(path, name.into()),
-        Some(&mut io::BufReader::with_capacity(128 * 1024, f))
-    ).map_err(|e| CommandError::ArchiveError(e.to_string()))?;
+    let name = path
+        .strip_prefix(base)
+        .map_err(|e| CommandError::PathError(e.to_string()))?
+        .to_string_lossy();
+    writer
+        .push_archive_entry(
+            sevenz_rust::SevenZArchiveEntry::from_path(path, name.into()),
+            Some(&mut io::BufReader::with_capacity(128 * 1024, f)),
+        )
+        .map_err(|e| CommandError::ArchiveError(e.to_string()))?;
     Ok(())
 }
 
@@ -585,16 +836,23 @@ fn add_dir_to_sevenz<W: io::Write + io::Seek>(
     writer: &mut sevenz_rust::SevenZWriter<W>,
     path: &Path,
     base: &Path,
-    state: &ArchiveState
+    state: &ArchiveState,
 ) -> Result<(), CommandError> {
-    let name = path.strip_prefix(base).map_err(|e| CommandError::PathError(e.to_string()))?.to_string_lossy();
-    writer.push_archive_entry(
-        sevenz_rust::SevenZArchiveEntry::from_path(path, name.into()),
-        None::<&mut File>
-    ).map_err(|e| CommandError::ArchiveError(e.to_string()))?;
-    
+    let name = path
+        .strip_prefix(base)
+        .map_err(|e| CommandError::PathError(e.to_string()))?
+        .to_string_lossy();
+    writer
+        .push_archive_entry(
+            sevenz_rust::SevenZArchiveEntry::from_path(path, name.into()),
+            None::<&mut File>,
+        )
+        .map_err(|e| CommandError::ArchiveError(e.to_string()))?;
+
     for entry in fs::read_dir(path).map_err(|e| CommandError::IoError(e.to_string()))? {
-        if state.0.load(Ordering::Relaxed) { return Err(CommandError::Other("Cancelled".into())); }
+        if state.0.load(Ordering::Relaxed) {
+            return Err(CommandError::Other("Cancelled".into()));
+        }
         let entry = entry.map_err(|e| CommandError::IoError(e.to_string()))?;
         let p = entry.path();
         if p.is_dir() {
@@ -606,54 +864,138 @@ fn add_dir_to_sevenz<W: io::Write + io::Seek>(
     Ok(())
 }
 
-fn compress_tar(paths: Vec<String>, target: &Path, _gz: bool, state: &ArchiveState) -> Result<(), CommandError> {
+fn compress_tar(
+    paths: Vec<String>,
+    target: &Path,
+    _gz: bool,
+    state: &ArchiveState,
+) -> Result<(), CommandError> {
     let file = File::create(target).map_err(|e| CommandError::IoError(e.to_string()))?;
     let mut tar = tar::Builder::new(io::BufWriter::with_capacity(128 * 1024, file));
 
     for p in paths {
-        if state.0.load(Ordering::Relaxed) { return Err(CommandError::Other("Cancelled".into())); }
+        if state.0.load(Ordering::Relaxed) {
+            return Err(CommandError::Other("Cancelled".into()));
+        }
         let path = Path::new(&p);
-        let name = path.file_name().ok_or(CommandError::PathError("Invalid path".to_string()))?;
+        let name = path
+            .file_name()
+            .ok_or(CommandError::PathError("Invalid path".to_string()))?;
         if path.is_dir() {
-            tar.append_dir_all(name, path).map_err(|e| CommandError::ArchiveError(e.to_string()))?;
+            tar.append_dir_all(name, path)
+                .map_err(|e| CommandError::ArchiveError(e.to_string()))?;
         } else {
             let f = File::open(path).map_err(|e| CommandError::IoError(e.to_string()))?;
             let mut header = tar::Header::new_gnu();
-            header.set_path(name).map_err(|e| CommandError::ArchiveError(e.to_string()))?;
-            header.set_size(f.metadata().map_err(|e| CommandError::IoError(e.to_string()))?.len());
+            header
+                .set_path(name)
+                .map_err(|e| CommandError::ArchiveError(e.to_string()))?;
+            header.set_size(
+                f.metadata()
+                    .map_err(|e| CommandError::IoError(e.to_string()))?
+                    .len(),
+            );
             header.set_cksum();
-            tar.append(&header, &mut io::BufReader::with_capacity(128 * 1024, f)).map_err(|e| CommandError::ArchiveError(e.to_string()))?;
+            tar.append(&header, &mut io::BufReader::with_capacity(128 * 1024, f))
+                .map_err(|e| CommandError::ArchiveError(e.to_string()))?;
         }
     }
-    tar.finish().map_err(|e| CommandError::ArchiveError(e.to_string()))?;
+    tar.finish()
+        .map_err(|e| CommandError::ArchiveError(e.to_string()))?;
     Ok(())
 }
 
-fn compress_tar_zst(paths: Vec<String>, target: &Path, quality: &str, state: &ArchiveState) -> Result<(), CommandError> {
+fn compress_tar_zst(
+    paths: Vec<String>,
+    target: &Path,
+    quality: &str,
+    state: &ArchiveState,
+) -> Result<(), CommandError> {
     let file = File::create(target).map_err(|e| CommandError::IoError(e.to_string()))?;
     let level = match quality {
         "fast" => 1,
         "best" => 19,
         _ => 3,
     };
-    let zstd = ZstdEncoder::new(file, level).map_err(|e| CommandError::IoError(e.to_string()))?.auto_finish();
+    let zstd = ZstdEncoder::new(file, level)
+        .map_err(|e| CommandError::IoError(e.to_string()))?
+        .auto_finish();
     let mut tar = tar::Builder::new(zstd);
 
     for p in paths {
-        if state.0.load(Ordering::Relaxed) { return Err(CommandError::Other("Cancelled".into())); }
+        if state.0.load(Ordering::Relaxed) {
+            return Err(CommandError::Other("Cancelled".into()));
+        }
         let path = Path::new(&p);
-        let name = path.file_name().ok_or(CommandError::PathError("Invalid path".to_string()))?;
+        let name = path
+            .file_name()
+            .ok_or(CommandError::PathError("Invalid path".to_string()))?;
         if path.is_dir() {
-            tar.append_dir_all(name, path).map_err(|e| CommandError::ArchiveError(e.to_string()))?;
+            tar.append_dir_all(name, path)
+                .map_err(|e| CommandError::ArchiveError(e.to_string()))?;
         } else {
             let f = File::open(path).map_err(|e| CommandError::IoError(e.to_string()))?;
             let mut header = tar::Header::new_gnu();
-            header.set_path(name).map_err(|e| CommandError::ArchiveError(e.to_string()))?;
-            header.set_size(f.metadata().map_err(|e| CommandError::IoError(e.to_string()))?.len());
+            header
+                .set_path(name)
+                .map_err(|e| CommandError::ArchiveError(e.to_string()))?;
+            header.set_size(
+                f.metadata()
+                    .map_err(|e| CommandError::IoError(e.to_string()))?
+                    .len(),
+            );
             header.set_cksum();
-            tar.append(&header, &mut io::BufReader::with_capacity(128 * 1024, f)).map_err(|e| CommandError::ArchiveError(e.to_string()))?;
+            tar.append(&header, &mut io::BufReader::with_capacity(128 * 1024, f))
+                .map_err(|e| CommandError::ArchiveError(e.to_string()))?;
         }
     }
-    tar.finish().map_err(|e| CommandError::ArchiveError(e.to_string()))?;
+    tar.finish()
+        .map_err(|e| CommandError::ArchiveError(e.to_string()))?;
     Ok(())
+}
+
+#[cfg(test)]
+mod archive_tests {
+    use super::*;
+    use std::io::Write;
+
+    #[test]
+    fn removing_zip_item_keeps_other_entries_and_cleans_temporary_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("sample.zip");
+        let file = File::create(&path).unwrap();
+        let mut writer = zip::ZipWriter::new(file);
+        for (name, contents) in [("keep.txt", &b"keep"[..]), ("remove.txt", &b"remove"[..])] {
+            writer
+                .start_file(name, zip::write::SimpleFileOptions::default())
+                .unwrap();
+            writer.write_all(contents).unwrap();
+        }
+        writer.finish().unwrap();
+
+        remove_items_from_archive(path.clone(), vec!["remove.txt".into()]).unwrap();
+
+        let mut archive = ZipArchive::new(File::open(&path).unwrap()).unwrap();
+        assert_eq!(archive.len(), 1);
+        assert_eq!(archive.by_index(0).unwrap().name(), "keep.txt");
+        assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn compression_does_not_overwrite_an_existing_archive() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("existing.zip");
+        fs::write(&path, b"original").unwrap();
+        let state = ArchiveState(AtomicBool::new(false));
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        let result = runtime.block_on(compress_to_archive(
+            Vec::new(),
+            path.to_string_lossy().into_owned(),
+            "zip".into(),
+            "fast".into(),
+            &state,
+        ));
+        assert!(result.is_err());
+        assert_eq!(fs::read(path).unwrap(), b"original");
+    }
 }

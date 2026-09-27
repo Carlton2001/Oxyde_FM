@@ -1,19 +1,19 @@
-use gpui::*;
-use gpui::prelude::*;
-use crate::ui::app::{OxydeApp, FileDragData};
+use crate::ui::app::{FileDragData, OxydeApp};
 use crate::ui::components::dropdown::IconName;
 use crate::ui::components::tooltip::Tooltip;
 use crate::ui::theme::ThemeContext;
+use gpui::prelude::*;
+use gpui::*;
 use oxyde_lib::models::TransactionType;
 
 fn op_label(op: &TransactionType) -> &'static str {
     match op {
-        TransactionType::Copy      => "Copie",
-        TransactionType::Move      => "Déplacement",
-        TransactionType::Rename    => "Renommage",
-        TransactionType::Delete    => "Suppression",
+        TransactionType::Copy => "Copie",
+        TransactionType::Move => "Déplacement",
+        TransactionType::Rename => "Renommage",
+        TransactionType::Delete => "Suppression",
         TransactionType::NewFolder => "Nouveau dossier",
-        TransactionType::Restore   => "Restauration",
+        TransactionType::Restore => "Restauration",
     }
 }
 
@@ -34,38 +34,50 @@ fn drive_display(part: &str, view: &OxydeApp) -> String {
     part.to_string()
 }
 
-pub fn render_top_bar(view: &OxydeApp, pane_id: String, handle: Entity<OxydeApp>, _cx: &mut Context<OxydeApp>) -> impl IntoElement {
+pub fn render_top_bar(
+    view: &OxydeApp,
+    pane_id: String,
+    handle: Entity<OxydeApp>,
+    _cx: &mut Context<OxydeApp>,
+) -> impl IntoElement {
     let pane = view.state.layout.find_pane(&pane_id).expect("pane exists");
     let active_tab = pane.active_tab();
     let current_path = active_tab.path.clone();
     let theme = *_cx.theme();
 
     let path_parts: Vec<&str> = current_path
-        .split(|c| c == '/' || c == '\\')
+        .split(['/', '\\'])
         .filter(|s: &&str| !s.is_empty())
         .collect();
     let total_parts = path_parts.len();
 
     let can_go_back = !active_tab.back_stack.is_empty();
     let can_go_forward = !active_tab.forward_stack.is_empty();
+    let show_tooltips = view.context_menus.is_empty();
+    let show_hidden_setting = view.show_hidden;
+    let show_system_setting = view.show_system;
 
     let history_state = view.history.get_state();
     let can_undo = !history_state.undo_stack.is_empty();
     let can_redo = !history_state.redo_stack.is_empty();
     let has_history_actions = can_undo || can_redo;
 
-    let undo_tooltip = history_state.undo_stack.last()
+    let undo_tooltip = history_state
+        .undo_stack
+        .last()
         .map(|t| format!("Annuler : {}", op_label(&t.op_type)));
-    let redo_tooltip = history_state.redo_stack.last()
+    let redo_tooltip = history_state
+        .redo_stack
+        .last()
         .map(|t| format!("Rétablir : {}", op_label(&t.op_type)));
 
     // Shared constants for consistent look
-    let icon_active   = theme.text_muted;
+    let icon_active = theme.text_muted;
     let icon_disabled = rgba(0xffffff18).into();
-    let hover_bg: Hsla  = rgba(0xffffff0a).into();
-    let crumb_sep: Hsla    = rgba(0xffffff44).into(); // chevrons — dim separator
+    let hover_bg: Hsla = rgba(0xffffff0a).into();
+    let crumb_sep: Hsla = rgba(0xffffff44).into(); // chevrons — dim separator
     let crumb_parent: Hsla = rgba(0xffffffaa).into(); // parent segments — readable but recessed
-    let crumb_current = theme.text;              // current segment — full brightness
+    let crumb_current = theme.text; // current segment — full brightness
 
     div()
         .h(px(32.0))
@@ -95,10 +107,10 @@ pub fn render_top_bar(view: &OxydeApp, pane_id: String, handle: Entity<OxydeApp>
                         let p_id = pane_id.clone();
                         btn = btn
                             .hover(move |s| s.bg(hover_bg))
-                            .tooltip(Tooltip::with_meta("Précédent", "Alt+Gauche"))
+                            .when(show_tooltips, |d| d.tooltip(Tooltip::with_meta("Précédent", "Alt+Gauche")))
                             .on_mouse_down(MouseButton::Left, {
                                 let h = handle.clone();
-                                move |_, _, cx| { let _ = h.update(cx, |v: &mut OxydeApp, cx| v.go_back(&p_id, cx)); }
+                                move |_, _, cx| { h.update(cx, |v: &mut OxydeApp, cx| v.go_back(&p_id, cx)); }
                             });
                     }
 
@@ -119,10 +131,10 @@ pub fn render_top_bar(view: &OxydeApp, pane_id: String, handle: Entity<OxydeApp>
                         .justify_center()
                         .rounded_md()
                         .hover(move |s| s.bg(hover_bg))
-                        .tooltip(Tooltip::text("Actualiser"))
+                        .when(show_tooltips, |d| d.tooltip(Tooltip::text("Actualiser")))
                         .on_mouse_down(MouseButton::Left, {
                             let h = handle.clone();
-                            move |_, _, cx| { let _ = h.update(cx, |this, cx| this.refresh_all(cx)); }
+                            move |_, _, cx| { h.update(cx, |this, cx| this.refresh_all(cx)); }
                         })
                         .child(
                             svg()
@@ -145,10 +157,10 @@ pub fn render_top_bar(view: &OxydeApp, pane_id: String, handle: Entity<OxydeApp>
                         let p_id = pane_id.clone();
                         btn = btn
                             .hover(move |s| s.bg(hover_bg))
-                            .tooltip(Tooltip::with_meta("Suivant", "Alt+Droite"))
+                            .when(show_tooltips, |d| d.tooltip(Tooltip::with_meta("Suivant", "Alt+Droite")))
                             .on_mouse_down(MouseButton::Left, {
                                 let h = handle.clone();
-                                move |_, _, cx| { let _ = h.update(cx, |v: &mut OxydeApp, cx| v.go_forward(&p_id, cx)); }
+                                move |_, _, cx| { h.update(cx, |v: &mut OxydeApp, cx| v.go_forward(&p_id, cx)); }
                             });
                     }
 
@@ -190,9 +202,9 @@ pub fn render_top_bar(view: &OxydeApp, pane_id: String, handle: Entity<OxydeApp>
                                     .rounded_md()
                                     .cursor_pointer()
                                     .hover(move |s| s.bg(hover_bg))
-                                    .tooltip(Tooltip::with_meta("Annuler", tip))
+                                    .when(show_tooltips, |d| d.tooltip(Tooltip::with_meta("Annuler", tip)))
                                     .on_mouse_down(MouseButton::Left, move |_, _, cx| {
-                                        let _ = h.update(cx, |this, cx| this.execute_undo(cx));
+                                        h.update(cx, |this, cx| this.execute_undo(cx));
                                     })
                                     .child(
                                         svg()
@@ -216,9 +228,9 @@ pub fn render_top_bar(view: &OxydeApp, pane_id: String, handle: Entity<OxydeApp>
                                     .rounded_md()
                                     .cursor_pointer()
                                     .hover(move |s| s.bg(hover_bg))
-                                    .tooltip(Tooltip::with_meta("Rétablir", tip))
+                                    .when(show_tooltips, |d| d.tooltip(Tooltip::with_meta("Rétablir", tip)))
                                     .on_mouse_down(MouseButton::Left, move |_, _, cx| {
-                                        let _ = h.update(cx, |this, cx| this.execute_redo(cx));
+                                        h.update(cx, |this, cx| this.execute_redo(cx));
                                     })
                                     .child(
                                         svg()
@@ -289,6 +301,8 @@ pub fn render_top_bar(view: &OxydeApp, pane_id: String, handle: Entity<OxydeApp>
                                                let p_id_cap = p_id.clone();
                                                let path_cap = parent_path_cap.clone();
                                                let idx_cap = index;
+                                               let show_hidden_cap = show_hidden_setting;
+                                               let show_system_cap = show_system_setting;
                                                move |_, _, cx: &mut App| {
                                                    let handle = handle.clone();
                                                    let p_id_cap = p_id_cap.clone();
@@ -300,9 +314,9 @@ pub fn render_top_bar(view: &OxydeApp, pane_id: String, handle: Entity<OxydeApp>
                                                        let path_cap = path_cap.clone();
                                                        let idx_cap = idx_cap;
                                                        async move {
-                                                           if let Ok(dirs) = oxyde_lib::commands::io::list_dir(path_cap.clone(), None, None, None, None).await {
+                                                           if let Ok(dirs) = oxyde_lib::commands::io::list_dir(path_cap.clone(), None, Some(show_hidden_cap), Some(show_system_cap), None).await {
                                                                 let _ = cx.update(|cx| {
-                                                                    let _ = handle.update(cx, |this, cx| {
+                                                                    handle.update(cx, |this, cx| {
                                                                         let filtered_entries: Vec<FileEntry> = dirs.entries.into_iter().filter(|e| e.is_dir).collect();
                                                                         this.breadcrumb_menu = Some((p_id_cap, path_cap, idx_cap, filtered_entries));
                                                                         cx.notify();
@@ -324,13 +338,15 @@ pub fn render_top_bar(view: &OxydeApp, pane_id: String, handle: Entity<OxydeApp>
                                                         let h = handle.clone();
                                                         let p_id = p_id.clone();
                                                         let entry_path = entry.path.clone();
+                                                        let is_dimmed = entry.is_hidden || entry.is_system;
                                                         crate::ui::components::dropdown::DropdownItem {
                                                             label: entry.name.clone(),
                                                             icon: Some(IconName::FolderOpen),
                                                             stay_open: false,
                                                             has_submenu: false,
+                                                            is_dimmed,
                                                             on_click: std::rc::Rc::new(move |_, app| {
-                                                                let _ = h.update(app, |this, cx| {
+                                                                h.update(app, |this, cx| {
                                                                     this.navigate_to(&p_id, entry_path.clone(), cx);
                                                                     this.breadcrumb_menu = None;
                                                                 });
@@ -354,7 +370,7 @@ pub fn render_top_bar(view: &OxydeApp, pane_id: String, handle: Entity<OxydeApp>
                                                                         on_close: {
                                                                             let h = handle.clone();
                                                                             std::rc::Rc::new(move |_, app| {
-                                                                                let _ = h.update(app, |this, _| {
+                                                                                h.update(app, |this, _| {
                                                                                     this.breadcrumb_menu = None;
                                                                                 });
                                                                             })
@@ -409,7 +425,7 @@ pub fn render_top_bar(view: &OxydeApp, pane_id: String, handle: Entity<OxydeApp>
                                      let p_id_cap = p_id.clone();
                                      let nav_path = target_path.clone();
                                      move |_, _, cx| {
-                                         let _ = h.update(cx, |this: &mut OxydeApp, cx| {
+                                         h.update(cx, |this: &mut OxydeApp, cx| {
                                              this.navigate_to(&p_id_cap, nav_path.clone(), cx);
                                          });
                                      }
@@ -422,7 +438,7 @@ pub fn render_top_bar(view: &OxydeApp, pane_id: String, handle: Entity<OxydeApp>
                                     let default_copy = data.paths.first()
                                         .map(|s| crate::ui::app::drives_differ(s, &tgt))
                                         .unwrap_or(false);
-                                    let _ = h_over.update(cx, |this, cx| {
+                                    h_over.update(cx, |this, cx| {
                                         if this.drag_target_default_copy != default_copy {
                                             this.drag_target_default_copy = default_copy;
                                             this.update_drag_copy_mode(cx);
@@ -437,7 +453,7 @@ pub fn render_top_bar(view: &OxydeApp, pane_id: String, handle: Entity<OxydeApp>
                                 move |data: &FileDragData, _, cx| {
                                     let paths = data.paths.clone();
                                     let target = tgt.clone();
-                                    let _ = h_drop.update(cx, |this, cx| {
+                                    h_drop.update(cx, |this, cx| {
                                         if this.drag_copy_mode {
                                             this.execute_file_copy(paths, target, cx);
                                         } else {

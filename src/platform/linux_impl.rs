@@ -1,22 +1,91 @@
+use super::{Platform, ThreadPriority};
 use crate::models::{DriveInfo, QuickAccessItem};
-use super::Platform;
 
 pub struct LinuxPlatform;
 
 impl LinuxPlatform {
-    pub fn new() -> Self { Self }
+    pub fn new() -> Self {
+        Self
+    }
 }
 
 impl Platform for LinuxPlatform {
-    fn name(&self) -> &'static str { "linux" }
+    fn is_network_path(&self, path: &std::path::Path) -> bool {
+        super::hardware::is_network_path(path)
+    }
+
+    fn physical_disk_id(&self, path: &std::path::Path) -> u64 {
+        super::hardware::get_physical_disk_id(path)
+    }
+
+    fn is_ssd(&self, path: &std::path::Path) -> bool {
+        super::hardware::is_ssd(path)
+    }
+
+    fn list_network_vicinity(&self) -> Result<Vec<crate::models::FileEntry>, String> {
+        Err("Network neighborhood is unavailable on this platform".to_string())
+    }
+
+    fn shell_delete(&self, paths: &[std::path::PathBuf], recycle: bool) -> Result<(), String> {
+        if recycle {
+            return trash::delete_all(paths).map_err(|error| error.to_string());
+        }
+        for path in paths {
+            let kind = std::fs::symlink_metadata(path)
+                .map_err(|error| error.to_string())?
+                .file_type();
+            if kind.is_dir() {
+                std::fs::remove_dir_all(path).map_err(|error| error.to_string())?;
+            } else {
+                std::fs::remove_file(path).map_err(|error| error.to_string())?;
+            }
+        }
+        Ok(())
+    }
+
+    fn set_thread_priority(&self, _priority: ThreadPriority) {}
+
+    fn file_attributes(&self, _metadata: &std::fs::Metadata, name: &str) -> (bool, bool, bool) {
+        (name.starts_with('.'), false, false)
+    }
+
+    fn set_clipboard_files(&self, _paths: Vec<String>, _cut: bool) -> Result<(), String> {
+        Err("File clipboard is not available on this platform yet".to_string())
+    }
+
+    fn get_clipboard_files(&self) -> Result<(Vec<String>, bool), String> {
+        Err("File clipboard is not available on this platform yet".to_string())
+    }
+
+    fn name(&self) -> &'static str {
+        "linux"
+    }
 
     fn list_drives(&self, _skip_hardware_info: bool) -> Vec<DriveInfo> {
         // Systèmes de fichiers virtuels à ignorer
         const SKIP_FS: &[&str] = &[
-            "proc", "sysfs", "devtmpfs", "devpts", "tmpfs", "cgroup", "cgroup2",
-            "pstore", "bpf", "tracefs", "debugfs", "hugetlbfs", "mqueue",
-            "fusectl", "configfs", "ramfs", "overlay", "aufs", "squashfs",
-            "efivarfs", "securityfs", "autofs",
+            "proc",
+            "sysfs",
+            "devtmpfs",
+            "devpts",
+            "tmpfs",
+            "cgroup",
+            "cgroup2",
+            "pstore",
+            "bpf",
+            "tracefs",
+            "debugfs",
+            "hugetlbfs",
+            "mqueue",
+            "fusectl",
+            "configfs",
+            "ramfs",
+            "overlay",
+            "aufs",
+            "squashfs",
+            "efivarfs",
+            "securityfs",
+            "autofs",
         ];
 
         let content = std::fs::read_to_string("/proc/mounts").unwrap_or_default();
@@ -24,17 +93,21 @@ impl Platform for LinuxPlatform {
             .lines()
             .filter_map(|line| {
                 let mut parts = line.splitn(4, ' ');
-                let device    = parts.next()?;
-                let mount     = parts.next()?;
-                let fs_type   = parts.next()?;
-                let options   = parts.next().unwrap_or("");
+                let device = parts.next()?;
+                let mount = parts.next()?;
+                let fs_type = parts.next()?;
+                let options = parts.next().unwrap_or("");
 
-                if SKIP_FS.contains(&fs_type) { return None; }
+                if SKIP_FS.contains(&fs_type) {
+                    return None;
+                }
                 if mount.starts_with("/proc")
                     || mount.starts_with("/sys")
                     || mount.starts_with("/dev/pts")
                     || mount.starts_with("/run")
-                { return None; }
+                {
+                    return None;
+                }
 
                 let label = if mount == "/" {
                     "Root".to_string()
@@ -45,15 +118,29 @@ impl Platform for LinuxPlatform {
                         .unwrap_or_else(|| mount.to_string())
                 };
 
-                let drive_type = if device.starts_with("//") || device.starts_with("cifs") || fs_type == "nfs" || fs_type == "nfs4" || fs_type == "smbfs" {
+                let drive_type = if device.starts_with("//")
+                    || device.starts_with("cifs")
+                    || fs_type == "nfs"
+                    || fs_type == "nfs4"
+                    || fs_type == "smbfs"
+                {
                     "remote"
-                } else if device.starts_with("/dev/sr") || device.starts_with("/dev/cdrom") || fs_type == "iso9660" || fs_type == "udf" {
+                } else if device.starts_with("/dev/sr")
+                    || device.starts_with("/dev/cdrom")
+                    || fs_type == "iso9660"
+                    || fs_type == "udf"
+                {
                     "cdrom"
-                } else if device.starts_with("/dev/sd") || device.starts_with("/dev/nvme") || device.starts_with("/dev/mmcblk") || device.starts_with("/dev/vd") {
+                } else if device.starts_with("/dev/sd")
+                    || device.starts_with("/dev/nvme")
+                    || device.starts_with("/dev/mmcblk")
+                    || device.starts_with("/dev/vd")
+                {
                     "fixed"
                 } else {
                     "fixed"
-                }.to_string();
+                }
+                .to_string();
 
                 let is_readonly = options.split(',').any(|o| o == "ro");
 
@@ -67,7 +154,11 @@ impl Platform for LinuxPlatform {
                     free_bytes: 0,
                     media_type: None,
                     physical_id: None,
-                    remote_path: if device.starts_with("//") { Some(device.to_string()) } else { None },
+                    remote_path: if device.starts_with("//") {
+                        Some(device.to_string())
+                    } else {
+                        None
+                    },
                 })
             })
             .collect();
@@ -104,17 +195,24 @@ impl Platform for LinuxPlatform {
 
         let content = match std::fs::read_to_string(&bookmarks_path) {
             Ok(c) => c,
-            Err(_) => return vec![QuickAccessItem { name: "Dossier personnel".to_string(), path: home.to_string_lossy().to_string() }],
+            Err(_) => {
+                return vec![QuickAccessItem {
+                    name: "Dossier personnel".to_string(),
+                    path: home.to_string_lossy().to_string(),
+                }]
+            }
         };
 
         content
             .lines()
             .filter_map(|line| {
                 let line = line.trim();
-                if line.is_empty() { return None; }
+                if line.is_empty() {
+                    return None;
+                }
 
                 let mut parts = line.splitn(2, ' ');
-                let uri  = parts.next()?;
+                let uri = parts.next()?;
                 let name_hint = parts.next();
 
                 let path = uri.strip_prefix("file://")?;
@@ -122,16 +220,17 @@ impl Platform for LinuxPlatform {
                     .decode_utf8_lossy()
                     .to_string();
 
-                let name = name_hint
-                    .map(|n| n.to_string())
-                    .unwrap_or_else(|| {
-                        std::path::Path::new(&decoded)
-                            .file_name()
-                            .map(|n| n.to_string_lossy().to_string())
-                            .unwrap_or_else(|| decoded.clone())
-                    });
+                let name = name_hint.map(|n| n.to_string()).unwrap_or_else(|| {
+                    std::path::Path::new(&decoded)
+                        .file_name()
+                        .map(|n| n.to_string_lossy().to_string())
+                        .unwrap_or_else(|| decoded.clone())
+                });
 
-                Some(QuickAccessItem { name, path: decoded })
+                Some(QuickAccessItem {
+                    name,
+                    path: decoded,
+                })
             })
             .collect()
     }

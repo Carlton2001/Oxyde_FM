@@ -1,7 +1,10 @@
-use crate::models::{AppConfig, ConfigManager, CommandError};
+use crate::models::{AppConfig, CommandError, ConfigManager};
 
 pub fn get_config(state: &ConfigManager) -> Result<AppConfig, CommandError> {
-    let config = state.0.lock().map_err(|_| CommandError::SystemError("Failed to lock config".to_string()))?;
+    let config = state
+        .0
+        .lock()
+        .map_err(|_| CommandError::SystemError("Failed to lock config".to_string()))?;
     Ok(config.clone())
 }
 
@@ -10,8 +13,11 @@ pub fn set_config_value(
     key: String,
     value: String,
 ) -> Result<(), CommandError> {
-    let mut config = state.0.lock().map_err(|_| CommandError::SystemError("Failed to lock config".to_string()))?;
-    
+    let mut config = state
+        .0
+        .lock()
+        .map_err(|_| CommandError::SystemError("Failed to lock config".to_string()))?;
+
     match key.as_str() {
         "theme" => config.theme = value,
         "language" => config.language = value,
@@ -44,17 +50,21 @@ pub fn set_trash_settings(
     state: &ConfigManager,
     settings: Vec<crate::models::TrashDriveSettings>,
 ) -> Result<(), CommandError> {
-    let mut config = state.0.lock().map_err(|_| CommandError::SystemError("Failed to lock config".to_string()))?;
+    let mut config = state
+        .0
+        .lock()
+        .map_err(|_| CommandError::SystemError("Failed to lock config".to_string()))?;
     config.trash_drive_settings = settings;
     state.save_config(&config)?;
     Ok(())
 }
 
-pub fn reset_config_to_default(
-    state: &ConfigManager,
-) -> Result<(), CommandError> {
+pub fn reset_config_to_default(state: &ConfigManager) -> Result<(), CommandError> {
     let default_config = AppConfig::default();
-    let mut config = state.0.lock().map_err(|_| CommandError::SystemError("Failed to lock config".to_string()))?;
+    let mut config = state
+        .0
+        .lock()
+        .map_err(|_| CommandError::SystemError("Failed to lock config".to_string()))?;
     *config = default_config;
     state.save_config(&config)?;
     Ok(())

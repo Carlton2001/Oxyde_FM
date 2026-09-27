@@ -1,20 +1,27 @@
-use gpui::*;
-use gpui::prelude::*;
-use oxyde_lib::models::FileEntry;
-use crate::ui::app::{OxydeApp, DragTarget, ContextMenuContent, ContextMenuInstance, FileDragData, FileDragPreview};
-use crate::ui::components::tooltip::Tooltip;
-use crate::ui::style::{ROW_HEIGHT, format_size, format_date};
+use crate::ui::app::{
+    ContextMenuContent, ContextMenuInstance, DragTarget, FileDragData, FileDragPreview, OxydeApp,
+};
 use crate::ui::components::scrollbar::{render_scrollbar, ScrollbarAxis, ZED_TRACK_WIDTH};
-use crate::ui::theme::{OxydeTheme, ThemeContext, PixelsExt};
+use crate::ui::components::tooltip::Tooltip;
+use crate::ui::style::{format_date, format_size, ROW_HEIGHT};
+use crate::ui::theme::{OxydeTheme, PixelsExt, ThemeContext};
 use crate::ui::workspace::{SortColumn, SortDirection};
-
+use gpui::prelude::*;
+use gpui::*;
+use oxyde_lib::models::FileEntry;
 
 /// Returns the display type label for a file entry.
 /// Symlinks and junctions are identified before extension/dir detection.
 fn file_type_label(f: &FileEntry) -> String {
-    if f.is_symlink  { return "Symlink".to_string(); }
-    if f.is_junction { return "Junction".to_string(); }
-    if f.is_dir      { return "Dossier".to_string(); }
+    if f.is_symlink {
+        return "Symlink".to_string();
+    }
+    if f.is_junction {
+        return "Junction".to_string();
+    }
+    if f.is_dir {
+        return "Dossier".to_string();
+    }
     std::path::Path::new(&f.name)
         .extension()
         .and_then(|e| e.to_str())
@@ -22,15 +29,23 @@ fn file_type_label(f: &FileEntry) -> String {
         .unwrap_or_else(|| "Fichier".to_string())
 }
 
-pub fn render_file_list(view: &OxydeApp, pane_id: String, handle: Entity<OxydeApp>, cx: &mut Context<OxydeApp>) -> impl IntoElement {
+pub fn render_file_list(
+    view: &OxydeApp,
+    pane_id: String,
+    handle: Entity<OxydeApp>,
+    cx: &mut Context<OxydeApp>,
+) -> impl IntoElement {
     let p_id_cap = pane_id.clone();
     let theme = cx.theme();
     let pane = view.state.layout.find_pane(&pane_id).expect("pane exists");
     let active_tab = pane.active_tab();
     let files = active_tab.filtered_files().to_vec();
     let count = files.len() as f32;
-    
-    let pane_size = view.pane_sizes.get(&pane_id).cloned().unwrap_or(Size { width: view.list_width, height: view.list_height });
+
+    let pane_size = view.pane_sizes.get(&pane_id).cloned().unwrap_or(Size {
+        width: view.list_width,
+        height: view.list_height,
+    });
     let pane_viewport_w = pane_size.width.max(1.0);
 
     let list_container_h = (pane_size.height - 64.0).max(1.0);
@@ -47,6 +62,8 @@ pub fn render_file_list(view: &OxydeApp, pane_id: String, handle: Entity<OxydeAp
 
     let is_active_pane = view.state.active_pane_id == pane_id;
     let is_dragging_v = matches!(view.drag_target, Some(DragTarget::FileListV { ref pane_id, .. }) if pane_id == &p_id_cap);
+    let show_tooltips = view.context_menus.is_empty();
+    let show_media_previews = view.show_media_previews;
 
     let selected_paths = active_tab.selected_paths.clone();
 
@@ -68,7 +85,7 @@ pub fn render_file_list(view: &OxydeApp, pane_id: String, handle: Entity<OxydeAp
                             origin: Point { x: bounds.origin.x.as_f32(), y: bounds.origin.y.as_f32() },
                             size: Size { width: bounds.size.width.as_f32(), height: bounds.size.height.as_f32() },
                         };
-                        let _ = h.update(cx, |this, _| {
+                        h.update(cx, |this, _| {
                             this.list_bounds.insert(p_id.clone(), b);
                         });
                     }
@@ -109,7 +126,6 @@ pub fn render_file_list(view: &OxydeApp, pane_id: String, handle: Entity<OxydeAp
                                     let h_inner = handle.clone();
                                     let p_id_for_list = pane_id.clone();
                                     let selected_paths = selected_paths.clone();
-                                    let is_active_pane = is_active_pane;
                                     move |range, _, cx| {
                                         range.map(|i| {
                                             let theme = OxydeTheme::global(cx);
@@ -126,15 +142,18 @@ pub fn render_file_list(view: &OxydeApp, pane_id: String, handle: Entity<OxydeAp
                                             let ext_tt = file_type_label(file);
                                             let size_tt = format_size(file.size, is_dir, file.is_calculated);
                                             let date_tt = format_date(file.modified);
+                                            let is_dimmed = file.is_hidden || file.is_system;
                                             div()
-                                                .id(SharedString::from(format!("file-row-{}", path.to_string())))
+                                                .id(SharedString::from(format!("file-row-{}", path)))
                                                 .flex()
                                                 .items_center()
                                                 .h(px(ROW_HEIGHT))
                                                 .w(px(total_w))
                                                 .bg(if is_selected { theme.selected } else if is_active_pane { theme.active_background } else { theme.background })
+                                                .when(is_dimmed, |d| d.opacity(0.5))
                                                 .when(!is_selected, |s| s.hover(|s| s.bg(theme.hover)))
-                                                .tooltip(Tooltip::for_file_full(file_name_tt, path_tt, ext_tt, size_tt, date_tt))
+                                                .when(show_tooltips && show_media_previews, |d| d.tooltip(Tooltip::for_file_full(file_name_tt.clone(), path_tt, ext_tt.clone(), size_tt.clone(), date_tt.clone())))
+                                                .when(show_tooltips && !show_media_previews, |d| d.tooltip(Tooltip::for_file_no_preview(file_name_tt, ext_tt, size_tt, date_tt)))
                                                 .on_mouse_down(MouseButton::Left, {
                                                     let p = path.clone();
                                                     let h_inner_inner = h.clone();
@@ -143,7 +162,7 @@ pub fn render_file_list(view: &OxydeApp, pane_id: String, handle: Entity<OxydeAp
                                                         cx.stop_propagation();
                                                         let multi = e.modifiers.control;
                                                         let shift = e.modifiers.shift;
-                                                        let _ = h_inner_inner.update(cx, |this, cx| {
+                                                        h_inner_inner.update(cx, |this, cx| {
                                                             this.state.active_pane_id = p_id_cap.clone();
                                                             // If file is already part of a multi-selection and no modifier
                                                             // is held, preserve the selection so dragging all files works.
@@ -160,7 +179,7 @@ pub fn render_file_list(view: &OxydeApp, pane_id: String, handle: Entity<OxydeAp
                                                             }
                                                         });
                                                         if e.click_count == 2 && is_dir {
-                                                            let _ = h_inner_inner.update(cx, |v, cx| v.navigate_to(&p_id_cap, p.clone(), cx));
+                                                            h_inner_inner.update(cx, |v, cx| v.navigate_to(&p_id_cap, p.clone(), cx));
                                                         }
                                                     }
                                                 })
@@ -174,7 +193,7 @@ pub fn render_file_list(view: &OxydeApp, pane_id: String, handle: Entity<OxydeAp
                                                         if event.modifiers().control || event.modifiers().shift {
                                                             return;
                                                         }
-                                                        let _ = h.update(cx, |this, cx| {
+                                                        h.update(cx, |this, cx| {
                                                             let is_multi = this.state.find_pane(&p_id_cap)
                                                                 .map(|pane| pane.active_tab().selected_paths.len() > 1)
                                                                 .unwrap_or(false);
@@ -197,7 +216,7 @@ pub fn render_file_list(view: &OxydeApp, pane_id: String, handle: Entity<OxydeAp
                                                     move |_, _, cx| {
                                                         cx.stop_propagation();
                                                         if is_dir {
-                                                            let _ = h_inner_inner.update(cx, |v, cx| v.add_tab(&p_id_cap, p.clone(), false, cx));
+                                                            h_inner_inner.update(cx, |v, cx| v.add_tab(&p_id_cap, p.clone(), false, cx));
                                                         }
                                                     }
                                                 })
@@ -210,7 +229,7 @@ pub fn render_file_list(view: &OxydeApp, pane_id: String, handle: Entity<OxydeAp
                                                          let pos = e.position;
                                                          let p_id_cap_cap = p_id_cap.clone();
                                                          let p_for_right_cap = p_for_right.clone();
-                                                          let _ = h_inner_inner.update(cx, |this, cx| {
+                                                          h_inner_inner.update(cx, |this, cx| {
                                                               this.state.active_pane_id = p_id_cap_cap.clone();
                                                               if !this.state.find_pane(&p_id_cap_cap).map(|p| p.active_tab().selected_paths.contains(&p_for_right_cap)).unwrap_or(false) {
                                                                   this.toggle_selection(&p_id_cap_cap, p_for_right_cap.clone(), false, false, cx);
@@ -258,7 +277,7 @@ pub fn render_file_list(view: &OxydeApp, pane_id: String, handle: Entity<OxydeAp
                                                                 let default_copy = data.paths.first()
                                                                     .map(|s| crate::ui::app::drives_differ(s, &tgt))
                                                                     .unwrap_or(false);
-                                                                let _ = h_over.update(cx, |this, cx| {
+                                                                h_over.update(cx, |this, cx| {
                                                                     if this.drag_target_default_copy != default_copy {
                                                                         this.drag_target_default_copy = default_copy;
                                                                         this.update_drag_copy_mode(cx);
@@ -270,7 +289,7 @@ pub fn render_file_list(view: &OxydeApp, pane_id: String, handle: Entity<OxydeAp
                                                         .on_drop(move |data: &FileDragData, _, cx| {
                                                             let paths = data.paths.clone();
                                                             let target = target_path.clone();
-                                                            let _ = h_drop.update(cx, |this, cx| {
+                                                            h_drop.update(cx, |this, cx| {
                                                                 if this.drag_copy_mode {
                                                                     this.execute_file_copy(paths, target, cx);
                                                                 } else {
@@ -282,7 +301,6 @@ pub fn render_file_list(view: &OxydeApp, pane_id: String, handle: Entity<OxydeAp
                                                 .child({
                                                     let path_str = path.clone();
                                                     let file_name = file.name.clone();
-                                                    let is_dir = is_dir;
 
                                                     div()
                                                         .w(px(name_w))
@@ -343,7 +361,7 @@ pub fn render_file_list(view: &OxydeApp, pane_id: String, handle: Entity<OxydeAp
                                 move |e, _, cx| {
                                     let pos = e.position;
                                     let modifiers = e.modifiers;
-                                    let _ = h.update(cx, |this, cx| {
+                                    h.update(cx, |this, cx| {
                                         this.state.active_pane_id = p_id_cap.clone();
                                         if !modifiers.control && !modifiers.shift {
                                             if let Some(pane) = this.state.find_pane_mut(&p_id_cap) {
@@ -369,7 +387,7 @@ pub fn render_file_list(view: &OxydeApp, pane_id: String, handle: Entity<OxydeAp
                                  move |e, _, cx| {
                                      let pos = e.position;
                                      let p_id_cap_cap = p_id_cap.clone();
-                                      let _ = h.update(cx, |this, cx| {
+                                      h.update(cx, |this, cx| {
                                           this.state.active_pane_id = p_id_cap_cap.clone();
                                           this.context_menus.clear();
                                           this.context_menus.push(ContextMenuInstance {
@@ -392,7 +410,7 @@ pub fn render_file_list(view: &OxydeApp, pane_id: String, handle: Entity<OxydeAp
                                         let default_copy = data.paths.first()
                                             .map(|s| crate::ui::app::drives_differ(s, &current_path))
                                             .unwrap_or(false);
-                                        let _ = h_over.update(cx, |this, cx| {
+                                        h_over.update(cx, |this, cx| {
                                             if this.drag_target_default_copy != default_copy {
                                                 this.drag_target_default_copy = default_copy;
                                                 this.update_drag_copy_mode(cx);
@@ -409,7 +427,7 @@ pub fn render_file_list(view: &OxydeApp, pane_id: String, handle: Entity<OxydeAp
                                 let p_id_cap = pane_id.clone();
                                 move |data: &FileDragData, _, cx| {
                                     let paths = data.paths.clone();
-                                    let _ = h.update(cx, |this, cx| {
+                                    h.update(cx, |this, cx| {
                                         let target = this.state.find_pane(&p_id_cap)
                                             .map(|p| p.active_tab().path.clone())
                                             .unwrap_or_default();
@@ -443,7 +461,7 @@ pub fn render_file_list(view: &OxydeApp, pane_id: String, handle: Entity<OxydeAp
                         cx.stop_propagation();
                         let pos = e.position;
                         let modifiers = e.modifiers;
-                        let _ = h.update(cx, |this, cx| {
+                        h.update(cx, |this, cx| {
                             this.state.active_pane_id = p_id_cap.clone();
                             if !modifiers.control && !modifiers.shift {
                                 if let Some(pane) = this.state.find_pane_mut(&p_id_cap) {
@@ -478,7 +496,7 @@ pub fn render_file_list(view: &OxydeApp, pane_id: String, handle: Entity<OxydeAp
                         cx.stop_propagation();
                         let pos = e.position;
                         let modifiers = e.modifiers;
-                        let _ = h.update(cx, |this, cx| {
+                        h.update(cx, |this, cx| {
                             this.state.active_pane_id = p_id_cap.clone();
                             if !modifiers.control && !modifiers.shift {
                                 if let Some(pane) = this.state.find_pane_mut(&p_id_cap) {
@@ -502,15 +520,25 @@ pub fn render_file_list(view: &OxydeApp, pane_id: String, handle: Entity<OxydeAp
     ;
 
     // Selection Rectangle
-    if let Some(DragTarget::SelectionRectangle { pane_id: ref drag_pane_id, start_pos, current_pos, .. }) = view.drag_target {
+    if let Some(DragTarget::SelectionRectangle {
+        pane_id: ref drag_pane_id,
+        start_pos,
+        current_pos,
+        ..
+    }) = view.drag_target
+    {
         if drag_pane_id == &pane_id {
-            let list_origin = view.list_bounds.get(&pane_id).map(|b| b.origin).unwrap_or(Point { x: 0.0, y: 0.0 });
-            
+            let list_origin = view
+                .list_bounds
+                .get(&pane_id)
+                .map(|b| b.origin)
+                .unwrap_or(Point { x: 0.0, y: 0.0 });
+
             let rect_x = start_pos.x.as_f32().min(current_pos.x.as_f32()) - list_origin.x;
             let rect_y = start_pos.y.as_f32().min(current_pos.y.as_f32()) - list_origin.y;
             let rect_w = (start_pos.x.as_f32() - current_pos.x.as_f32()).abs();
             let rect_h = (start_pos.y.as_f32() - current_pos.y.as_f32()).abs();
-            
+
             container = container.child(
                 div()
                     .absolute()
@@ -520,23 +548,50 @@ pub fn render_file_list(view: &OxydeApp, pane_id: String, handle: Entity<OxydeAp
                     .h(px(rect_h))
                     .bg(theme.selected)
                     .border_1()
-                    .border_color(theme.accent)
+                    .border_color(theme.accent),
             );
         }
     }
 
     let pane_suffix = format!("pane-{}", pane_id);
-    let v_offset = -active_tab.list_scroll.0.borrow().base_handle.offset().y.as_f32();
-    
+    let v_offset = -active_tab
+        .list_scroll
+        .0
+        .borrow()
+        .base_handle
+        .offset()
+        .y
+        .as_f32();
+
     // Vertical scrollbar overlay
     container = container.child(
-        div().absolute().top(px(ROW_HEIGHT)).right_0().bottom_0().w(px(ZED_TRACK_WIDTH))
-            .child(render_scrollbar(handle.clone(), ScrollbarAxis::Vertical, v_v_h, content_h, v_offset, is_dragging_v, format!("v-{}", pane_suffix), None, {
-                let p_id = p_id_cap.clone();
-                move |this, track_id, v_h, c_h, _| {
-                    this.drag_target = Some(DragTarget::FileListV { pane_id: p_id.clone(), viewport_h: v_h, content_h: c_h, track_id });
-                }
-            }))
+        div()
+            .absolute()
+            .top(px(ROW_HEIGHT))
+            .right_0()
+            .bottom_0()
+            .w(px(ZED_TRACK_WIDTH))
+            .child(render_scrollbar(
+                handle.clone(),
+                ScrollbarAxis::Vertical,
+                v_v_h,
+                content_h,
+                v_offset,
+                is_dragging_v,
+                format!("v-{}", pane_suffix),
+                None,
+                {
+                    let p_id = p_id_cap.clone();
+                    move |this, track_id, v_h, c_h, _| {
+                        this.drag_target = Some(DragTarget::FileListV {
+                            pane_id: p_id.clone(),
+                            viewport_h: v_h,
+                            content_h: c_h,
+                            track_id,
+                        });
+                    }
+                },
+            )),
     );
 
     // Horizontal scrollbar overlay
@@ -549,11 +604,20 @@ pub fn render_file_list(view: &OxydeApp, pane_id: String, handle: Entity<OxydeAp
                 }
             }))
     );
-    
+
     container
 }
 
-fn render_headers(view: &OxydeApp, pane_id: String, handle: Entity<OxydeApp>, name_w: f32, type_w: f32, size_w: f32, date_w: f32, theme: &OxydeTheme) -> impl IntoElement {
+fn render_headers(
+    view: &OxydeApp,
+    pane_id: String,
+    handle: Entity<OxydeApp>,
+    name_w: f32,
+    type_w: f32,
+    size_w: f32,
+    date_w: f32,
+    theme: &OxydeTheme,
+) -> impl IntoElement {
     let pane = view.state.layout.find_pane(&pane_id).expect("pane exists");
     let tab = pane.active_tab();
     let current_col = tab.sort_column;
@@ -561,8 +625,10 @@ fn render_headers(view: &OxydeApp, pane_id: String, handle: Entity<OxydeApp>, na
 
     // Check filters
     let name_filtered = !tab.filter_name.is_empty();
-    
-    let type_filtered = if tab.filter_types.is_empty() { false } else {
+
+    let type_filtered = if tab.filter_types.is_empty() {
+        false
+    } else {
         let mut all_types = std::collections::HashSet::new();
         for f in &tab.files {
             all_types.insert(file_type_label(f));
@@ -570,90 +636,192 @@ fn render_headers(view: &OxydeApp, pane_id: String, handle: Entity<OxydeApp>, na
         !all_types.iter().all(|t| tab.filter_types.contains(t))
     };
 
-    let size_filtered = if tab.filter_sizes.is_empty() { false } else {
+    let size_filtered = if tab.filter_sizes.is_empty() {
+        false
+    } else {
         use crate::ui::workspace::SizeCategory;
-        let categories = [SizeCategory::Minuscule, SizeCategory::Petit, SizeCategory::Moyen, SizeCategory::Grand, SizeCategory::Huge];
+        let categories = [
+            SizeCategory::Minuscule,
+            SizeCategory::Petit,
+            SizeCategory::Moyen,
+            SizeCategory::Grand,
+            SizeCategory::Huge,
+        ];
         let mut present = std::collections::HashSet::new();
         for f in &tab.files {
             for cat in &categories {
-                if cat.matches(f.size) { present.insert(*cat); break; }
+                if cat.matches(f.size) {
+                    present.insert(*cat);
+                    break;
+                }
             }
         }
         !present.iter().all(|c| tab.filter_sizes.contains(c))
     };
 
-    let date_filtered = if tab.filter_dates.is_empty() { false } else {
+    let date_filtered = if tab.filter_dates.is_empty() {
+        false
+    } else {
         use crate::ui::workspace::DateCategory;
-        let categories = [DateCategory::Aujourdhui, DateCategory::Hier, DateCategory::CetteSemaine, DateCategory::LaSemaineDerniere, DateCategory::PlusAncien];
+        let categories = [
+            DateCategory::Aujourdhui,
+            DateCategory::Hier,
+            DateCategory::CetteSemaine,
+            DateCategory::LaSemaineDerniere,
+            DateCategory::PlusAncien,
+        ];
         let mut present = std::collections::HashSet::new();
         for f in &tab.files {
             for cat in &categories {
-                if cat.matches(f.modified) { present.insert(*cat); break; }
+                if cat.matches(f.modified) {
+                    present.insert(*cat);
+                    break;
+                }
             }
         }
         !present.iter().all(|c| tab.filter_dates.contains(c))
     };
 
-    div().flex().items_center().h(px(ROW_HEIGHT)).text_color(theme.text_muted).font_weight(FontWeight::BOLD)
-        .child(header_cell("Nom", name_w, current_col == SortColumn::Name, current_dir, name_filtered, theme, {
-            let h = handle.clone(); let pid = pane_id.clone(); move |_, _, cx| { let _ = h.update(cx, |this, cx| this.toggle_sort(&pid, SortColumn::Name, cx)); }
-        })
-        .on_mouse_down(MouseButton::Right, {
-            let h = handle.clone();
-            let pid = pane_id.clone();
-            move |e, window, cx| {
-                let pos = e.position;
-                let _ = h.update(cx, |this, cx| this.open_name_filter(&pid, pos, window, cx));
-            }
-        }))
-        .child(header_cell("Type", type_w, current_col == SortColumn::Type, current_dir, type_filtered, theme, {
-            let h = handle.clone(); let pid = pane_id.clone(); move |_, _, cx| { let _ = h.update(cx, |this, cx| this.toggle_sort(&pid, SortColumn::Type, cx)); }
-        })
-        .on_mouse_down(MouseButton::Right, {
-             let h = handle.clone();
-             let pid = pane_id.clone();
-             move |e, _, cx| {
-                 let pos = e.position;
-                 let _ = h.update(cx, |this, cx| this.open_type_filter_menu(&pid, pos, cx));
-             }
-        }))
-        .child(header_cell("Taille", size_w, current_col == SortColumn::Size, current_dir, size_filtered, theme, {
-            let h = handle.clone(); let pid = pane_id.clone(); move |_, _, cx| { let _ = h.update(cx, |this, cx| this.toggle_sort(&pid, SortColumn::Size, cx)); }
-        })
-        .on_mouse_down(MouseButton::Right, {
-             let h = handle.clone();
-             let pid = pane_id.clone();
-             move |e, _, cx| {
-                 let pos = e.position;
-                 let _ = h.update(cx, |this, cx| this.open_size_filter_menu(&pid, pos, cx));
-             }
-        }))
-        .child(header_cell("Modifié le", date_w, current_col == SortColumn::Modified, current_dir, date_filtered, theme, {
-            let h = handle.clone(); let pid = pane_id.clone(); move |_, _, cx| { let _ = h.update(cx, |this, cx| this.toggle_sort(&pid, SortColumn::Modified, cx)); }
-        })
-        .on_mouse_down(MouseButton::Right, {
-             let h = handle.clone();
-             let pid = pane_id.clone();
-             move |e, _, cx| {
-                 let pos = e.position;
-                 let _ = h.update(cx, |this, cx| this.open_date_filter_menu(&pid, pos, cx));
-             }
-        }))
+    div()
+        .flex()
+        .items_center()
+        .h(px(ROW_HEIGHT))
+        .text_color(theme.text_muted)
+        .font_weight(FontWeight::BOLD)
+        .child(
+            header_cell(
+                "Nom",
+                name_w,
+                current_col == SortColumn::Name,
+                current_dir,
+                name_filtered,
+                theme,
+                {
+                    let h = handle.clone();
+                    let pid = pane_id.clone();
+                    move |_, _, cx| {
+                        h.update(cx, |this, cx| this.toggle_sort(&pid, SortColumn::Name, cx));
+                    }
+                },
+            )
+            .on_mouse_down(MouseButton::Right, {
+                let h = handle.clone();
+                let pid = pane_id.clone();
+                move |e, window, cx| {
+                    let pos = e.position;
+                    h.update(cx, |this, cx| this.open_name_filter(&pid, pos, window, cx));
+                }
+            }),
+        )
+        .child(
+            header_cell(
+                "Type",
+                type_w,
+                current_col == SortColumn::Type,
+                current_dir,
+                type_filtered,
+                theme,
+                {
+                    let h = handle.clone();
+                    let pid = pane_id.clone();
+                    move |_, _, cx| {
+                        h.update(cx, |this, cx| this.toggle_sort(&pid, SortColumn::Type, cx));
+                    }
+                },
+            )
+            .on_mouse_down(MouseButton::Right, {
+                let h = handle.clone();
+                let pid = pane_id.clone();
+                move |e, _, cx| {
+                    let pos = e.position;
+                    h.update(cx, |this, cx| this.open_type_filter_menu(&pid, pos, cx));
+                }
+            }),
+        )
+        .child(
+            header_cell(
+                "Taille",
+                size_w,
+                current_col == SortColumn::Size,
+                current_dir,
+                size_filtered,
+                theme,
+                {
+                    let h = handle.clone();
+                    let pid = pane_id.clone();
+                    move |_, _, cx| {
+                        h.update(cx, |this, cx| this.toggle_sort(&pid, SortColumn::Size, cx));
+                    }
+                },
+            )
+            .on_mouse_down(MouseButton::Right, {
+                let h = handle.clone();
+                let pid = pane_id.clone();
+                move |e, _, cx| {
+                    let pos = e.position;
+                    h.update(cx, |this, cx| this.open_size_filter_menu(&pid, pos, cx));
+                }
+            }),
+        )
+        .child(
+            header_cell(
+                "Modifié le",
+                date_w,
+                current_col == SortColumn::Modified,
+                current_dir,
+                date_filtered,
+                theme,
+                {
+                    let h = handle.clone();
+                    let pid = pane_id.clone();
+                    move |_, _, cx| {
+                        h.update(cx, |this, cx| {
+                            this.toggle_sort(&pid, SortColumn::Modified, cx)
+                        });
+                    }
+                },
+            )
+            .on_mouse_down(MouseButton::Right, {
+                let h = handle.clone();
+                let pid = pane_id.clone();
+                move |e, _, cx| {
+                    let pos = e.position;
+                    h.update(cx, |this, cx| this.open_date_filter_menu(&pid, pos, cx));
+                }
+            }),
+        )
 }
 
-fn header_cell(label: &str, width: f32, is_active: bool, direction: SortDirection, is_filtered: bool, theme: &OxydeTheme, on_click: impl Fn(&MouseDownEvent, &mut Window, &mut App) + 'static) -> Div {
+fn header_cell(
+    label: &str,
+    width: f32,
+    is_active: bool,
+    direction: SortDirection,
+    is_filtered: bool,
+    theme: &OxydeTheme,
+    on_click: impl Fn(&MouseDownEvent, &mut Window, &mut App) + 'static,
+) -> Div {
     div()
         .w(px(width))
         .px(px(8.0))
         .h_full()
         .flex()
         .items_center()
-        .child(div().flex_1().overflow_hidden().text_ellipsis().child(label.to_string()))
         .child(
             div()
-                .ml_1()
-                .when(is_filtered, |s| s.child(svg().path("icons/filter.svg").size_3().text_color(theme.accent)))
+                .flex_1()
+                .overflow_hidden()
+                .text_ellipsis()
+                .child(label.to_string()),
         )
+        .child(div().ml_1().when(is_filtered, |s| {
+            s.child(
+                svg()
+                    .path("icons/filter.svg")
+                    .size_3()
+                    .text_color(theme.accent),
+            )
+        }))
         .child(
             div()
                 .w(px(16.0))
@@ -662,19 +830,29 @@ fn header_cell(label: &str, width: f32, is_active: bool, direction: SortDirectio
                 .when(is_active, |s| {
                     s.child(
                         svg()
-                            .path(if direction == SortDirection::Ascending { "icons/arrow-up.svg" } else { "icons/arrow-down.svg" })
+                            .path(if direction == SortDirection::Ascending {
+                                "icons/arrow-up.svg"
+                            } else {
+                                "icons/arrow-down.svg"
+                            })
                             .size_3()
-                            .text_color(theme.accent)
+                            .text_color(theme.accent),
                     )
-                })
+                }),
         )
         .hover(|s| s.bg(rgba(0xffffff05)))
         .on_mouse_down(MouseButton::Left, on_click)
 }
 
-pub fn get_type_filter_items(h: Entity<OxydeApp>, pid: String, tab_files: Vec<FileEntry>, current_filters: std::collections::HashSet<String>, pos: Point<Pixels>) -> Vec<crate::ui::components::dropdown::DropdownItem> {
+pub fn get_type_filter_items(
+    h: Entity<OxydeApp>,
+    pid: String,
+    tab_files: Vec<FileEntry>,
+    current_filters: std::collections::HashSet<String>,
+    pos: Point<Pixels>,
+) -> Vec<crate::ui::components::dropdown::DropdownItem> {
     use crate::ui::components::dropdown::{DropdownItem, IconName};
-    
+
     let mut exts = std::collections::HashSet::new();
     for f in &tab_files {
         exts.insert(file_type_label(f));
@@ -692,13 +870,18 @@ pub fn get_type_filter_items(h: Entity<OxydeApp>, pid: String, tab_files: Vec<Fi
 
         items.push(DropdownItem {
             label: ext,
-            icon: Some(if is_sel { IconName::Check } else { IconName::Square }),
+            icon: Some(if is_sel {
+                IconName::Check
+            } else {
+                IconName::Square
+            }),
             stay_open: true,
             has_submenu: false,
+            is_dimmed: false,
             on_click: std::rc::Rc::new(move |_, app| {
                 let pid_cap = pid_ext.clone();
                 let e_inner = e_cap.clone();
-                let _ = h_ext.update(app, |this, cx| {
+                h_ext.update(app, |this, cx| {
                     this.toggle_filter_type(&pid_cap, e_inner, cx);
                     this.open_type_filter_menu(&pid_cap, pos, cx);
                 });
@@ -706,15 +889,21 @@ pub fn get_type_filter_items(h: Entity<OxydeApp>, pid: String, tab_files: Vec<Fi
             on_hover: None,
         });
     }
-    
+
     items
 }
 
-pub fn get_date_filter_items(handle: Entity<OxydeApp>, pane_id: String, files: Vec<oxyde_lib::models::FileEntry>, current_filters: std::collections::HashSet<crate::ui::workspace::DateCategory>, pos: Point<Pixels>) -> Vec<crate::ui::components::dropdown::DropdownItem> {
-    use crate::ui::workspace::DateCategory;
+pub fn get_date_filter_items(
+    handle: Entity<OxydeApp>,
+    pane_id: String,
+    files: Vec<oxyde_lib::models::FileEntry>,
+    current_filters: std::collections::HashSet<crate::ui::workspace::DateCategory>,
+    pos: Point<Pixels>,
+) -> Vec<crate::ui::components::dropdown::DropdownItem> {
     use crate::ui::components::dropdown::{DropdownItem, IconName};
+    use crate::ui::workspace::DateCategory;
     use std::rc::Rc;
-    
+
     let categories = [
         DateCategory::Aujourdhui,
         DateCategory::Hier,
@@ -732,25 +921,32 @@ pub fn get_date_filter_items(handle: Entity<OxydeApp>, pane_id: String, files: V
             }
         }
     }
-    
+
     let mut items = Vec::new();
-    
+
     for cat in categories {
-        if !present_categories.contains(&cat) { continue; }
-        
+        if !present_categories.contains(&cat) {
+            continue;
+        }
+
         let h = handle.clone();
         let pid = pane_id.clone();
         let active = current_filters.contains(&cat);
         let c_cat = cat;
-        
+
         items.push(DropdownItem {
             label: cat.label().to_string(),
-            icon: Some(if active { IconName::Check } else { IconName::Square }),
+            icon: Some(if active {
+                IconName::Check
+            } else {
+                IconName::Square
+            }),
             stay_open: true,
             has_submenu: false,
+            is_dimmed: false,
             on_click: Rc::new(move |_, cx| {
                 let pid_inner = pid.clone();
-                let _ = h.update(cx, |this, cx| {
+                h.update(cx, |this, cx| {
                     this.update_filter_date(&pid_inner, c_cat, !active, cx);
                     this.open_date_filter_menu(&pid_inner, pos, cx);
                 });
@@ -758,15 +954,21 @@ pub fn get_date_filter_items(handle: Entity<OxydeApp>, pane_id: String, files: V
             on_hover: None,
         });
     }
-    
+
     items
 }
 
-pub fn get_size_filter_items(handle: Entity<OxydeApp>, pane_id: String, files: Vec<oxyde_lib::models::FileEntry>, current_filters: std::collections::HashSet<crate::ui::workspace::SizeCategory>, pos: Point<Pixels>) -> Vec<crate::ui::components::dropdown::DropdownItem> {
-    use crate::ui::workspace::SizeCategory;
+pub fn get_size_filter_items(
+    handle: Entity<OxydeApp>,
+    pane_id: String,
+    files: Vec<oxyde_lib::models::FileEntry>,
+    current_filters: std::collections::HashSet<crate::ui::workspace::SizeCategory>,
+    pos: Point<Pixels>,
+) -> Vec<crate::ui::components::dropdown::DropdownItem> {
     use crate::ui::components::dropdown::{DropdownItem, IconName};
+    use crate::ui::workspace::SizeCategory;
     use std::rc::Rc;
-    
+
     let categories = [
         SizeCategory::Minuscule,
         SizeCategory::Petit,
@@ -784,25 +986,32 @@ pub fn get_size_filter_items(handle: Entity<OxydeApp>, pane_id: String, files: V
             }
         }
     }
-    
+
     let mut items = Vec::new();
-    
+
     for cat in categories {
-        if !present_categories.contains(&cat) { continue; }
-        
+        if !present_categories.contains(&cat) {
+            continue;
+        }
+
         let h = handle.clone();
         let pid = pane_id.clone();
         let active = current_filters.contains(&cat);
         let c_cat = cat;
-        
+
         items.push(DropdownItem {
             label: cat.label().to_string(),
-            icon: Some(if active { IconName::Check } else { IconName::Square }),
+            icon: Some(if active {
+                IconName::Check
+            } else {
+                IconName::Square
+            }),
             stay_open: true,
             has_submenu: false,
+            is_dimmed: false,
             on_click: Rc::new(move |_, cx| {
                 let pid_inner = pid.clone();
-                let _ = h.update(cx, |this, cx| {
+                h.update(cx, |this, cx| {
                     this.update_filter_size(&pid_inner, c_cat, !active, cx);
                     this.open_size_filter_menu(&pid_inner, pos, cx);
                 });
@@ -810,6 +1019,6 @@ pub fn get_size_filter_items(handle: Entity<OxydeApp>, pane_id: String, files: V
             on_hover: None,
         });
     }
-    
+
     items
 }
