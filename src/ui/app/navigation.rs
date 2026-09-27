@@ -104,6 +104,23 @@ impl OxydeApp {
         cx.notify();
     }
 
+    /// Duplicate a tab and populate the new tab's file list.
+    ///
+    /// `WorkspaceState::duplicate_tab` only updates the synchronous UI state;
+    /// directory contents are loaded through `request_tab_files`.
+    pub fn duplicate_tab(&mut self, pane_id: &str, tab_idx: usize, cx: &mut Context<Self>) {
+        self.state.duplicate_tab(pane_id, tab_idx);
+
+        if let Some(pane) = self.state.find_pane(pane_id) {
+            let new_tab_idx = pane.active_tab_index;
+            let path = pane.active_tab().path.clone();
+            self.request_tab_files(pane_id, new_tab_idx, path, false, cx);
+        }
+
+        self.reconcile_watchers();
+        cx.notify();
+    }
+
     pub fn switch_tab(&mut self, pane_id: &str, tab_idx: usize, cx: &mut Context<Self>) {
         if let Some(pane) = self.state.find_pane_mut(pane_id) {
             pane.active_tab_index = tab_idx;

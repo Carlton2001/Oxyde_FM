@@ -363,8 +363,7 @@ pub fn tab_context_menu_items(
                 move |_, app| {
                     h.update(app, |this, cx| {
                         this.context_menus.clear();
-                        this.state.duplicate_tab(&p_id, tab_idx);
-                        cx.notify();
+                        this.duplicate_tab(&p_id, tab_idx, cx);
                     });
                 }
             }),

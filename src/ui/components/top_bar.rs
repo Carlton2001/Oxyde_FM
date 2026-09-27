@@ -360,7 +360,8 @@ pub fn render_top_bar(
                                                             anchored()
                                                                 .anchor(Anchor::BottomLeft)
                                                                 .child(
-                                                                    _cx.new(|_| crate::ui::components::dropdown::GenericDropdown {
+                                                                    crate::ui::components::dropdown::GenericDropdown {
+                                                                        id: "breadcrumb-dropdown".into(),
                                                                         h_app: handle.clone(),
                                                                         items,
                                                                         scroll_handle: view.breadcrumb_scroll.clone(),
@@ -386,7 +387,7 @@ pub fn render_top_bar(
                                                                         on_item_hover: None,
                                                                         on_width_calculated: None,
                                                                         on_hover_change: None,
-                                                                    })
+                                                                    }
                                                                 )
                                                         )
                                                     )

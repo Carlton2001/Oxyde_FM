@@ -1690,7 +1690,8 @@ impl Render for OxydeApp {
                         .collect();
 
                     let items_cap = items.clone();
-                    cx.new(|_| GenericDropdown {
+                    GenericDropdown {
+                        id: ("context-menu", m_idx).into(),
                         h_app: h.clone(),
                         items: dropdown_items,
                         scroll_handle,
@@ -1699,12 +1700,19 @@ impl Render for OxydeApp {
                         on_close: {
                             let h = h.clone();
                             std::rc::Rc::new(move |_, cx| {
-                                h.update(cx, |this, _| { this.context_menus.clear(); });
+                                h.update(cx, |this, _| {
+                                    this.context_menus.clear();
+                                });
                             })
                         },
                         on_drag: {
                             std::rc::Rc::new(move |this, tid, vh, ch, _| {
-                                this.drag_target = Some(DragTarget::ContextMenuV { menu_idx: m_idx, viewport_h: vh, content_h: ch, track_id: tid });
+                                this.drag_target = Some(DragTarget::ContextMenuV {
+                                    menu_idx: m_idx,
+                                    viewport_h: vh,
+                                    content_h: ch,
+                                    track_id: tid,
+                                });
                             })
                         },
                         is_dragging: is_v_dragging,
@@ -1712,11 +1720,7 @@ impl Render for OxydeApp {
                         on_item_hover: Some(std::rc::Rc::new({
                             let h_app = h.clone();
                             let items_val = items_cap.clone();
-                            let hovered_idx = std::rc::Rc::new(std::cell::Cell::new(None));
                             move |ix, item_pos, cx| {
-                                if hovered_idx.get() == Some(ix) { return; }
-                                hovered_idx.set(Some(ix));
-
                                 if let Some(it) = items_val.get(ix) {
                                     let has_submenu = it.on_hover.is_some();
                                     let h_inner = h_app.clone();
@@ -1729,41 +1733,75 @@ impl Render for OxydeApp {
                                         cx.defer(move |cx| {
                                             let _h_inner_spawn = h_inner.clone();
                                             h_inner.update(cx, |this, cx| {
-                                                let parent_left = this.context_menus.get(m_idx)
+                                                let parent_left = this
+                                                    .context_menus
+                                                    .get(m_idx)
                                                     .map(|m| m.position.x)
                                                     .unwrap_or_default();
-                                                let parent_right = parent_left + this.context_menus.get(m_idx)
-                                                    .map(|m| m.width)
-                                                    .unwrap_or_default();
+                                                let parent_right = parent_left
+                                                    + this
+                                                        .context_menus
+                                                        .get(m_idx)
+                                                        .map(|m| m.width)
+                                                        .unwrap_or_default();
                                                 // Compute Y from parent menu position + item index (reliable, no canvas-bounds dependency)
-                                                let parent_pos_y = this.context_menus.get(m_idx)
+                                                let parent_pos_y = this
+                                                    .context_menus
+                                                    .get(m_idx)
                                                     .map(|m| m.position.y)
                                                     .unwrap_or_default();
                                                 this.submenu_close_timer = None;
-                                                this.submenu_timer = Some(cx.spawn(move |_, cx: &mut AsyncApp| {
-                                                    let mut cx_val = cx.clone();
-                                                    async move {
-                                                        cx_val.background_executor().timer(std::time::Duration::from_millis(150)).await;
-                                                        let _ = window_handle_inner.update(&mut cx_val, |_, _window, app| {
-                                                            let viewport_w = _window.viewport_size().width;
-                                                            let open_left = parent_right + px(220.0) > viewport_w;
-                                                            if let Some(it) = items_inner.get(ix_inner) {
-                                                                if let Some(on_h) = it.on_hover.clone() {
-                                                                    let mut sub_pos = pos_inner;
-                                                                    sub_pos.x = if open_left {
-                                                                        parent_left + px(2.0) // TopRight anchor: right edge at parent left
-                                                                    } else {
-                                                                        parent_right - px(2.0) // TopLeft anchor: left edge at parent right
-                                                                    };
-                                                                    // Y: parent menu top + border(1) + padding(4) + ix * item_h
-                                                                    // minus submenu border(1) + padding(4) → nets to ix * item_h
-                                                                    sub_pos.y = parent_pos_y + px(ix_inner as f32 * 26.0);
-                                                                    (on_h)(sub_pos, open_left, app);
-                                                                }
-                                                            }
-                                                        });
-                                                    }
-                                                }));
+                                                this.submenu_timer =
+                                                    Some(cx.spawn(move |_, cx: &mut AsyncApp| {
+                                                        let mut cx_val = cx.clone();
+                                                        async move {
+                                                            cx_val
+                                                                .background_executor()
+                                                                .timer(std::time::Duration::ZERO)
+                                                                .await;
+                                                            let _ = window_handle_inner.update(
+                                                                &mut cx_val,
+                                                                |_, _window, app| {
+                                                                    let viewport_w = _window
+                                                                        .viewport_size()
+                                                                        .width;
+                                                                    let open_left = parent_right
+                                                                        + px(220.0)
+                                                                        > viewport_w;
+                                                                    if let Some(it) =
+                                                                        items_inner.get(ix_inner)
+                                                                    {
+                                                                        if let Some(on_h) =
+                                                                            it.on_hover.clone()
+                                                                        {
+                                                                            let mut sub_pos =
+                                                                                pos_inner;
+                                                                            sub_pos.x = if open_left
+                                                                            {
+                                                                                parent_left
+                                                                                    + px(2.0)
+                                                                            // TopRight anchor: right edge at parent left
+                                                                            } else {
+                                                                                parent_right
+                                                                                    - px(2.0)
+                                                                                // TopLeft anchor: left edge at parent right
+                                                                            };
+                                                                            // Y: parent menu top + border(1) + padding(4) + ix * item_h
+                                                                            // minus submenu border(1) + padding(4) → nets to ix * item_h
+                                                                            sub_pos.y = parent_pos_y
+                                                                                + px(ix_inner
+                                                                                    as f32
+                                                                                    * 26.0);
+                                                                            (on_h)(
+                                                                                sub_pos, open_left,
+                                                                                app,
+                                                                            );
+                                                                        }
+                                                                    }
+                                                                },
+                                                            );
+                                                        }
+                                                    }));
                                             });
                                         });
                                     } else {
@@ -1808,33 +1846,44 @@ impl Render for OxydeApp {
                             let h = h.clone();
                             move |is_hovering: bool, cx: &mut App| {
                                 if is_hovering {
-                                    h.update(cx, |this, _| { this.submenu_close_timer = None; });
+                                    h.update(cx, |this, _| {
+                                        this.submenu_close_timer = None;
+                                    });
                                 } else {
                                     let h_close = h.clone();
                                     let wh = window_handle;
                                     h.update(cx, |this, cx| {
-                                        this.submenu_close_timer = Some(cx.spawn(move |_, cx: &mut AsyncApp| {
-                                            let mut cx_val = cx.clone();
-                                            async move {
-                                                cx_val.background_executor().timer(std::time::Duration::from_millis(250)).await;
-                                                let _ = wh.update(&mut cx_val, |_, _, cx| {
-                                                    let h_inner = h_close.clone();
-                                                    cx.defer(move |cx| {
-                                                        h_inner.update(cx, |this, cx| {
-                                                            if this.context_menus.len() > m_idx + 1 {
-                                                                this.context_menus.truncate(m_idx + 1);
-                                                                cx.notify();
-                                                            }
+                                        this.submenu_close_timer =
+                                            Some(cx.spawn(move |_, cx: &mut AsyncApp| {
+                                                let mut cx_val = cx.clone();
+                                                async move {
+                                                    cx_val
+                                                        .background_executor()
+                                                        .timer(std::time::Duration::from_millis(
+                                                            250,
+                                                        ))
+                                                        .await;
+                                                    let _ = wh.update(&mut cx_val, |_, _, cx| {
+                                                        let h_inner = h_close.clone();
+                                                        cx.defer(move |cx| {
+                                                            h_inner.update(cx, |this, cx| {
+                                                                if this.context_menus.len()
+                                                                    > m_idx + 1
+                                                                {
+                                                                    this.context_menus
+                                                                        .truncate(m_idx + 1);
+                                                                    cx.notify();
+                                                                }
+                                                            });
                                                         });
                                                     });
-                                                });
-                                            }
-                                        }));
+                                                }
+                                            }));
                                     });
                                 }
                             }
                         })),
-                    })
+                    }
                 }
                 ContextMenuContent::NativeItems {
                     path,
@@ -1877,7 +1926,8 @@ impl Render for OxydeApp {
                         }
                     }).collect();
 
-                    cx.new(|_| GenericDropdown {
+                    GenericDropdown {
+                        id: ("context-menu", m_idx).into(),
                         h_app: h.clone(),
                         items: dropdown_items,
                         scroll_handle,
@@ -1886,12 +1936,19 @@ impl Render for OxydeApp {
                         on_close: {
                             let h = h.clone();
                             std::rc::Rc::new(move |_, cx| {
-                                h.update(cx, |this, _| { this.context_menus.clear(); });
+                                h.update(cx, |this, _| {
+                                    this.context_menus.clear();
+                                });
                             })
                         },
                         on_drag: {
                             std::rc::Rc::new(move |this, tid, vh, ch, _| {
-                                this.drag_target = Some(DragTarget::ContextMenuV { menu_idx: m_idx, viewport_h: vh, content_h: ch, track_id: tid });
+                                this.drag_target = Some(DragTarget::ContextMenuV {
+                                    menu_idx: m_idx,
+                                    viewport_h: vh,
+                                    content_h: ch,
+                                    track_id: tid,
+                                });
                             })
                         },
                         is_dragging: is_v_dragging,
@@ -1899,11 +1956,7 @@ impl Render for OxydeApp {
                         on_item_hover: Some(std::rc::Rc::new({
                             let h_app = h.clone();
                             let items_val = items_cap.clone();
-                            let hovered_idx = std::rc::Rc::new(std::cell::Cell::new(None));
                             move |ix, item_pos, cx| {
-                                if hovered_idx.get() == Some(ix) { return; }
-                                hovered_idx.set(Some(ix));
-
                                 if let Some(it) = items_val.get(ix) {
                                     let h_inner = h_app.clone();
                                     let path_inner = path_cap.clone();
@@ -1933,7 +1986,7 @@ impl Render for OxydeApp {
                                                 this.submenu_timer = Some(cx.spawn(move |_, cx: &mut AsyncApp| {
                                                     let mut cx_val = cx.clone();
                                                     async move {
-                                                        cx_val.background_executor().timer(std::time::Duration::from_millis(150)).await;
+                                                        cx_val.background_executor().timer(std::time::Duration::ZERO).await;
                                                         let _ = window_handle_inner.update(&mut cx_val, |_, _window, cx| {
                                                             let viewport_w = _window.viewport_size().width;
                                                             let open_left = parent_right + px(220.0) > viewport_w;
@@ -2002,35 +2055,47 @@ impl Render for OxydeApp {
                             let h = h.clone();
                             move |is_hovering: bool, cx: &mut App| {
                                 if is_hovering {
-                                    h.update(cx, |this, _| { this.submenu_close_timer = None; });
+                                    h.update(cx, |this, _| {
+                                        this.submenu_close_timer = None;
+                                    });
                                 } else {
                                     let h_close = h.clone();
                                     let wh = window_handle;
                                     h.update(cx, |this, cx| {
-                                        this.submenu_close_timer = Some(cx.spawn(move |_, cx: &mut AsyncApp| {
-                                            let mut cx_val = cx.clone();
-                                            async move {
-                                                cx_val.background_executor().timer(std::time::Duration::from_millis(250)).await;
-                                                let _ = wh.update(&mut cx_val, |_, _, cx| {
-                                                    let h_inner = h_close.clone();
-                                                    cx.defer(move |cx| {
-                                                        h_inner.update(cx, |this, cx| {
-                                                            if this.context_menus.len() > m_idx + 1 {
-                                                                this.context_menus.truncate(m_idx + 1);
-                                                                cx.notify();
-                                                            }
+                                        this.submenu_close_timer =
+                                            Some(cx.spawn(move |_, cx: &mut AsyncApp| {
+                                                let mut cx_val = cx.clone();
+                                                async move {
+                                                    cx_val
+                                                        .background_executor()
+                                                        .timer(std::time::Duration::from_millis(
+                                                            250,
+                                                        ))
+                                                        .await;
+                                                    let _ = wh.update(&mut cx_val, |_, _, cx| {
+                                                        let h_inner = h_close.clone();
+                                                        cx.defer(move |cx| {
+                                                            h_inner.update(cx, |this, cx| {
+                                                                if this.context_menus.len()
+                                                                    > m_idx + 1
+                                                                {
+                                                                    this.context_menus
+                                                                        .truncate(m_idx + 1);
+                                                                    cx.notify();
+                                                                }
+                                                            });
                                                         });
                                                     });
-                                                });
-                                            }
-                                        }));
+                                                }
+                                            }));
                                     });
                                 }
                             }
                         })),
-                    })
+                    }
                 }
-                ContextMenuContent::NameFilter { input } => cx.new(|_| GenericDropdown {
+                ContextMenuContent::NameFilter { input } => GenericDropdown {
+                    id: ("context-menu", m_idx).into(),
                     h_app: h.clone(),
                     items: vec![],
                     scroll_handle,
@@ -2074,7 +2139,7 @@ impl Render for OxydeApp {
                         }
                     })),
                     on_hover_change: None,
-                }),
+                },
             };
 
             root = root.child(deferred(if instance.open_left {

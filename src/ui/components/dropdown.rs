@@ -68,7 +68,9 @@ impl DropdownItem {
     }
 }
 
+#[derive(IntoElement)]
 pub struct GenericDropdown {
+    pub id: ElementId,
     pub items: Vec<DropdownItem>,
     pub scroll_handle: UniformListScrollHandle,
     pub h_app: Entity<OxydeApp>,
@@ -84,15 +86,15 @@ pub struct GenericDropdown {
     pub on_hover_change: Option<Rc<dyn Fn(bool, &mut App)>>,
 }
 
-impl Render for GenericDropdown {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+impl RenderOnce for GenericDropdown {
+    fn render(mut self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         use crate::ui::theme::OxydeTheme;
         let theme = *OxydeTheme::global(cx);
 
         // Menu-specific colors — richer and more visible than the generic theme values
         let menu_bg: Hsla = rgb(0x1e1f23).into();
         let menu_border: Hsla = rgba(0xffffff14).into(); // ~8% white — subtle but visible
-        let item_hover: Hsla = rgba(0xffffff12).into(); // ~7% white on item hover
+        let item_hover: Hsla = rgb(0x30343b).into(); // Distinct but restrained hover state
         let icon_color: Hsla = rgba(0xffffff55).into(); // ~33% white for icons
         let chevron_color: Hsla = rgba(0xffffff33).into(); // ~20% white for chevron arrow
 
@@ -147,8 +149,8 @@ impl Render for GenericDropdown {
 
         div()
             .occlude()
-            .id("generic-dropdown")
-            .on_mouse_move(|_, _, _| {})
+            .id(self.id)
+            .cursor_default()
             .flex_col()
             // 4px vertical padding; 4px horizontal so item hover doesn't bleed to edge
             .py(px(4.0))
@@ -179,6 +181,9 @@ impl Render for GenericDropdown {
                                     let on_h = on_hover_list.clone();
 
                                     div()
+                                        // Interactive elements need a stable identity for GPUI to
+                                        // retain their hover state while `uniform_list` recycles rows.
+                                        .id(("dropdown-item", ix))
                                         .w(px(list_w_inner))
                                         .h(px(item_h))
                                         .px(px(8.0))
@@ -187,22 +192,12 @@ impl Render for GenericDropdown {
                                         .rounded(px(5.0))
                                         .when(item.is_dimmed, |d| d.opacity(0.5))
                                         .hover(|s| s.bg(item_hover))
-                                        .cursor_pointer()
-                                        .child(
-                                            canvas(
-                                                |bounds, _, _| bounds,
-                                                move |bounds, _, window, cx| {
-                                                    if let Some(on_h) = &on_h {
-                                                        if bounds.contains(&window.mouse_position())
-                                                        {
-                                                            (on_h)(ix, bounds.origin, cx);
-                                                        }
-                                                    }
-                                                },
-                                            )
-                                            .absolute()
-                                            .size_full(),
-                                        )
+                                        .cursor_default()
+                                        .on_mouse_move(move |event, _window, cx| {
+                                            if let Some(on_h) = &on_h {
+                                                (on_h)(ix, event.position, cx);
+                                            }
+                                        })
                                         .on_mouse_down(MouseButton::Left, move |_, window, cx| {
                                             (on_click)(window, cx);
                                             if !stay_open {
