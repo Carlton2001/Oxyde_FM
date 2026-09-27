@@ -55,10 +55,10 @@ impl ParentElement for TabBar {
 }
 
 impl IntoElement for TabBar {
-    type Element = Component<Self>;
+    type Element = ViewElement<Self>;
 
     fn into_element(self) -> Self::Element {
-        Component::new(self)
+        ViewElement::new(self)
     }
 }
 
@@ -81,7 +81,7 @@ impl RenderOnce for TabBar {
                 div().relative().flex_1().h_full().child(
                     h_flex()
                         .id("tabs-scroll")
-                        .flex_grow()
+                        .flex_grow(1.0)
                         .overflow_x_scroll()
                         .track_scroll(&self.scroll_handle)
                         .children(self.children)

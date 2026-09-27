@@ -32,7 +32,7 @@ impl OxydeApp {
             let mut cx = cx.clone();
             async move {
                 let result = oxyde_lib::commands::sidebar::get_sidebar_nodes(path.clone()).await;
-                let _ = handle.update(&mut cx, move |this, cx| {
+                handle.update(&mut cx, move |this, cx| {
                     if this.pending_sidebar_requests.get(&path) != Some(&request_id) {
                         return;
                     }
@@ -172,7 +172,7 @@ impl OxydeApp {
                     None,
                 )
                 .await;
-                let _ = handle.update(&mut cx, move |this, cx| {
+                handle.update(&mut cx, move |this, cx| {
                     if this.pending_file_requests.get(&tab_id) != Some(&request_id) {
                         return;
                     }

@@ -1,6 +1,5 @@
 use crate::ui::app::{DragTarget, OxydeApp};
 use crate::ui::style::ROW_HEIGHT;
-use crate::ui::theme::PixelsExt;
 use gpui::*;
 
 impl OxydeApp {

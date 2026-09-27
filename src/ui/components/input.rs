@@ -277,8 +277,8 @@ impl Render for TextInput {
             .on_action(cx.listener(Self::escape))
             .on_action(cx.listener(Self::move_left))
             .on_action(cx.listener(Self::move_right))
-            .on_mouse_down(MouseButton::Left, move |_, window, _| {
-                window.focus(&focus_handle);
+            .on_mouse_down(MouseButton::Left, move |_, window, cx| {
+                window.focus(&focus_handle, cx);
             })
             .bg(if is_focused {
                 hsla(0.0, 0.0, 0.16, 1.0)
@@ -428,8 +428,15 @@ impl Element for TextInputElement {
             let line_h = window.line_height();
             let y_offset = (bounds.size.height - line_h) / 2.0;
 
-            line.paint(bounds.origin + point(px(0.0), y_offset), line_h, window, cx)
-                .unwrap();
+            line.paint(
+                bounds.origin + point(px(0.0), y_offset),
+                line_h,
+                TextAlign::Left,
+                None,
+                window,
+                cx,
+            )
+            .unwrap();
 
             let input = input_handle.read(cx);
             if focus_handle.is_focused(window) && input.cursor_visible {

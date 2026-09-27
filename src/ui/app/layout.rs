@@ -1,5 +1,5 @@
 use crate::ui::app::{DragTarget, FileDragData, OxydeApp};
-pub use crate::ui::theme::{PixelsExt, ThemeContext};
+pub use crate::ui::theme::ThemeContext;
 pub use gpui::prelude::*;
 use gpui::*;
 
@@ -259,8 +259,8 @@ impl OxydeApp {
                     container = container.child(
                         div()
                             .flex_basis(relative(weights[i] / total_weight.max(0.1)))
-                            .flex_grow()
-                            .flex_shrink()
+                            .flex_grow(1.0)
+                            .flex_shrink(1.0)
                             .size_full()
                             .overflow_hidden()
                             .child(self.render_layout_node(child, handle.clone(), cx)),

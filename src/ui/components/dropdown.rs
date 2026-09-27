@@ -1,6 +1,5 @@
 use crate::ui::app::OxydeApp;
 use crate::ui::components::scrollbar::{render_scrollbar, ScrollbarAxis, ZED_TRACK_WIDTH};
-use crate::ui::theme::PixelsExt;
 use gpui::prelude::*;
 use gpui::*;
 use std::rc::Rc;
@@ -273,7 +272,7 @@ impl Render for GenericDropdown {
                                 .collect::<Vec<_>>()
                         }
                     })
-                    .track_scroll(scroll_handle.clone())
+                    .track_scroll(&scroll_handle)
                     .size_full(),
                 ),
             )

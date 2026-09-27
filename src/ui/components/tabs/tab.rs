@@ -128,10 +128,10 @@ impl Tab {
 }
 
 impl IntoElement for Tab {
-    type Element = Component<Self>;
+    type Element = ViewElement<Self>;
 
     fn into_element(self) -> Self::Element {
-        Component::new(self)
+        ViewElement::new(self)
     }
 }
 

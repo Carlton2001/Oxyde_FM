@@ -283,8 +283,8 @@ impl OxydeApp {
         cx.notify();
 
         let focus_handle = input.read(cx).focus_handle.clone();
-        cx.on_next_frame(window, move |_, window, _| {
-            window.focus(&focus_handle);
+        cx.on_next_frame(window, move |_, window, cx| {
+            window.focus(&focus_handle, cx);
         });
     }
 }

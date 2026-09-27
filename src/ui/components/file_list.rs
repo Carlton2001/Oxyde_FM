@@ -4,7 +4,7 @@ use crate::ui::app::{
 use crate::ui::components::scrollbar::{render_scrollbar, ScrollbarAxis, ZED_TRACK_WIDTH};
 use crate::ui::components::tooltip::Tooltip;
 use crate::ui::style::{format_date, format_size, ROW_HEIGHT};
-use crate::ui::theme::{OxydeTheme, PixelsExt, ThemeContext};
+use crate::ui::theme::{OxydeTheme, ThemeContext};
 use crate::ui::workspace::{SortColumn, SortDirection};
 use gpui::prelude::*;
 use gpui::*;
@@ -441,7 +441,7 @@ pub fn render_file_list(
                                     });
                                 }
                             })
-                            .track_scroll(active_tab.list_scroll.clone())
+                            .track_scroll(&active_tab.list_scroll)
                             .size_full()
                         )
                 )

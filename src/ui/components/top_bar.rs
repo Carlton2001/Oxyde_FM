@@ -315,7 +315,7 @@ pub fn render_top_bar(
                                                        let idx_cap = idx_cap;
                                                        async move {
                                                            if let Ok(dirs) = oxyde_lib::commands::io::list_dir(path_cap.clone(), None, Some(show_hidden_cap), Some(show_system_cap), None).await {
-                                                                let _ = cx.update(|cx| {
+                                                                cx.update(|cx| {
                                                                     handle.update(cx, |this, cx| {
                                                                         let filtered_entries: Vec<FileEntry> = dirs.entries.into_iter().filter(|e| e.is_dir).collect();
                                                                         this.breadcrumb_menu = Some((p_id_cap, path_cap, idx_cap, filtered_entries));
@@ -358,7 +358,7 @@ pub fn render_top_bar(
                                                     this.child(
                                                         deferred(
                                                             anchored()
-                                                                .anchor(Corner::BottomLeft)
+                                                                .anchor(Anchor::BottomLeft)
                                                                 .child(
                                                                     _cx.new(|_| crate::ui::components::dropdown::GenericDropdown {
                                                                         h_app: handle.clone(),

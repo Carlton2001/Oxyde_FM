@@ -1,4 +1,4 @@
-pub use crate::ui::theme::{OxydeTheme, PixelsExt, ThemeContext};
+pub use crate::ui::theme::{OxydeTheme, ThemeContext};
 pub use crate::ui::workspace::WorkspaceState;
 pub use gpui::prelude::*;
 use gpui::*;
@@ -115,7 +115,7 @@ pub struct ContextMenuInstance {
     pub content: ContextMenuContent,
     pub scroll_handle: UniformListScrollHandle,
     pub width: Pixels,
-    /// If true, the menu opens to the LEFT of its anchor (use Corner::TopRight).
+    /// If true, the menu opens to the LEFT of its anchor (use Anchor::TopRight).
     pub open_left: bool,
 }
 
@@ -359,7 +359,7 @@ impl OxydeApp {
                 if let Ok(Err(error)) = &result {
                     log::warn!("Undo failed: {error:?}");
                 }
-                let _ = handle.update(&mut cx, |_, cx| cx.notify());
+                handle.update(&mut cx, |_, cx| cx.notify());
             }
         })
         .detach();
@@ -381,7 +381,7 @@ impl OxydeApp {
                 if let Ok(Err(error)) = &result {
                     log::warn!("Redo failed: {error:?}");
                 }
-                let _ = handle.update(&mut cx, |_, cx| cx.notify());
+                handle.update(&mut cx, |_, cx| cx.notify());
             }
         })
         .detach();
@@ -542,7 +542,7 @@ impl OxydeApp {
                 });
 
                 let focus_handle = view.read(cx).focus_handle.clone();
-                window.focus(&focus_handle);
+                window.focus(&focus_handle, cx);
                 self.editing_view = Some(view);
                 cx.notify();
             }
@@ -571,7 +571,7 @@ impl OxydeApp {
                     runtime.block_on(oxyde_lib::commands::io::rename_item(old_path, new_path))
                 })
                 .await;
-                let _ = handle.update(&mut cx, |this, cx| match result {
+                handle.update(&mut cx, |this, cx| match result {
                     Ok(Ok(())) => {
                         this.editing_path = None;
                         this.reconcile_watchers();
@@ -672,7 +672,7 @@ impl OxydeApp {
                 async move {
                     let result =
                         tokio::task::spawn_blocking(move || trash::delete_all(&paths)).await;
-                    let _ = handle.update(&mut cx, |this, cx| match result {
+                    handle.update(&mut cx, |this, cx| match result {
                         Ok(Ok(())) => {
                             this.state.refresh_sidebar();
                             this.reconcile_watchers();
@@ -778,7 +778,7 @@ impl OxydeApp {
                     }
                 })
                 .await;
-                let _ = handle.update(&mut cx, |this, cx| {
+                handle.update(&mut cx, |this, cx| {
                     if let Ok(moved) = moved {
                         if !moved.is_empty() {
                             this.history.push(Transaction::new(
@@ -876,7 +876,7 @@ impl OxydeApp {
                     }
                 })
                 .await;
-                let _ = handle.update(&mut cx, |this, cx| {
+                handle.update(&mut cx, |this, cx| {
                     if let Ok(copied) = copied {
                         if !copied.is_empty() {
                             this.history.push(Transaction::new(
@@ -935,7 +935,7 @@ impl OxydeApp {
                         }
                     })
                     .await;
-                    let _ = handle.update(&mut cx, |this, cx| match created {
+                    handle.update(&mut cx, |this, cx| match created {
                         Ok(Ok(folder_path)) => {
                             this.history.push(Transaction::new(
                                 TransactionType::NewFolder,
@@ -1036,7 +1036,7 @@ impl OxydeApp {
                         vec![]
                     };
                     if !changed.is_empty() {
-                        let _ = h.update(&mut cx, |this, cx| {
+                        h.update(&mut cx, |this, cx| {
                             // Refresh only affected expanded paths off the UI thread.
                             for path in &changed {
                                 if this.state.expanded_paths.contains(path) {
@@ -1130,9 +1130,7 @@ impl Render for OxydeApp {
             }
         });
 
-        root.text_style()
-            .get_or_insert_with(Default::default)
-            .font_features = Some(TNUM.clone());
+        root.text_style().font_features = Some(TNUM.clone());
 
         root = root
             .on_mouse_move({
@@ -2083,7 +2081,7 @@ impl Render for OxydeApp {
                 // Snap (no corner-switch) so the submenu extends left from parent_left
                 anchored()
                     .position(pos)
-                    .anchor(Corner::TopRight)
+                    .anchor(Anchor::TopRight)
                     .snap_to_window()
                     .child(content_element)
             } else {

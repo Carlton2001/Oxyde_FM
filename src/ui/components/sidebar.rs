@@ -4,7 +4,7 @@ use crate::ui::app::{
 use crate::ui::components::dropdown::{DropdownItem, IconName};
 use crate::ui::components::scrollbar::{render_scrollbar, ScrollbarAxis};
 use crate::ui::components::tooltip::Tooltip;
-use crate::ui::theme::{OxydeTheme, PixelsExt, ThemeContext};
+use crate::ui::theme::{OxydeTheme, ThemeContext};
 use crate::ui::workspace::SidebarItem;
 use gpui::prelude::*;
 use gpui::*;
@@ -754,7 +754,7 @@ pub fn render_sidebar(
                                     }).collect::<Vec<_>>()
                                 }
                             )
-                            .track_scroll(view.sidebar_scroll.clone())
+                            .track_scroll(&view.sidebar_scroll)
                             .size_full()
                         })
                 )

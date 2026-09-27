@@ -17,53 +17,55 @@ fn main() {
     let _guard = _rt.enter();
 
     let asset_source = crate::ui::assets::EmbeddedAssetSource::new();
-    Application::new().with_assets(asset_source).run(|cx| {
-        let assets = crate::ui::assets::EmbeddedAssetSource::new();
-        assets.load_fonts(cx).expect("fonts could not be loaded");
-        cx.set_global(crate::ui::theme::OxydeTheme::dark());
-        crate::ui::components::input::bind_keys(cx);
-        OxydeApp::bind_keys(cx);
-        let app = cx.new(OxydeApp::empty);
-        app.update(cx, |this, cx| {
-            this.handle = Some(app.clone());
-            this.start_watcher_task(cx);
-            let pane_id = this.state.active_pane_id.clone();
-            if let Some(pane) = this.state.find_pane(&pane_id) {
-                this.request_tab_files(
-                    &pane_id,
-                    pane.active_tab_index,
-                    pane.active_tab().path.clone(),
-                    false,
-                    cx,
-                );
-            }
-        });
-        cx.open_window(
-            WindowOptions {
-                window_bounds: Some(WindowBounds::Windowed(Bounds {
-                    origin: point(px(100.0), px(100.0)),
-                    size: size(px(1200.0), px(800.0)),
-                })),
-                titlebar: Some(TitlebarOptions {
-                    appears_transparent: true,
-                    title: None,
+    gpui_platform::application()
+        .with_assets(asset_source)
+        .run(|cx| {
+            let assets = crate::ui::assets::EmbeddedAssetSource::new();
+            assets.load_fonts(cx).expect("fonts could not be loaded");
+            cx.set_global(crate::ui::theme::OxydeTheme::dark());
+            crate::ui::components::input::bind_keys(cx);
+            OxydeApp::bind_keys(cx);
+            let app = cx.new(OxydeApp::empty);
+            app.update(cx, |this, cx| {
+                this.handle = Some(app.clone());
+                this.start_watcher_task(cx);
+                let pane_id = this.state.active_pane_id.clone();
+                if let Some(pane) = this.state.find_pane(&pane_id) {
+                    this.request_tab_files(
+                        &pane_id,
+                        pane.active_tab_index,
+                        pane.active_tab().path.clone(),
+                        false,
+                        cx,
+                    );
+                }
+            });
+            cx.open_window(
+                WindowOptions {
+                    window_bounds: Some(WindowBounds::Windowed(Bounds {
+                        origin: point(px(100.0), px(100.0)),
+                        size: size(px(1200.0), px(800.0)),
+                    })),
+                    titlebar: Some(TitlebarOptions {
+                        appears_transparent: true,
+                        title: None,
+                        ..Default::default()
+                    }),
                     ..Default::default()
-                }),
-                ..Default::default()
-            },
-            move |window, cx| {
-                let focus_handle = app.read(cx).focus_handle.clone();
-                window.on_next_frame(move |window, _| {
-                    window.focus(&focus_handle);
-                    // On charge l'icône PNG (pour Windows)
-                    let assets = crate::ui::assets::EmbeddedAssetSource::new();
-                    if let Ok(Some(icon_bytes)) = assets.load("icons/logo.png") {
-                        oxyde_lib::platform::platform().set_application_icon(&icon_bytes);
-                    }
-                });
-                app
-            },
-        )
-        .expect("window opens");
-    });
+                },
+                move |window, cx| {
+                    let focus_handle = app.read(cx).focus_handle.clone();
+                    window.on_next_frame(move |window, cx| {
+                        window.focus(&focus_handle, cx);
+                        // On charge l'icône PNG (pour Windows)
+                        let assets = crate::ui::assets::EmbeddedAssetSource::new();
+                        if let Ok(Some(icon_bytes)) = assets.load("icons/logo.png") {
+                            oxyde_lib::platform::platform().set_application_icon(&icon_bytes);
+                        }
+                    });
+                    app
+                },
+            )
+            .expect("window opens");
+        });
 }

@@ -193,10 +193,7 @@ impl Render for Tooltip {
                 )
             });
 
-        box_div
-            .text_style()
-            .get_or_insert_with(Default::default)
-            .font_features = Some(TNUM.clone());
+        box_div.text_style().font_features = Some(TNUM.clone());
 
         // Décalage pour éviter que le tooltip n'apparaisse exactement sous le pointeur de la souris
         div().pl(px(8.0)).pt(px(10.0)).child(box_div)

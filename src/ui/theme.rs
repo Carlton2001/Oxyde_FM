@@ -51,13 +51,3 @@ impl<'a, V: Render> ThemeContext for Context<'a, V> {
         OxydeTheme::global(self)
     }
 }
-
-pub trait PixelsExt {
-    fn as_f32(&self) -> f32;
-}
-
-impl PixelsExt for Pixels {
-    fn as_f32(&self) -> f32 {
-        self.to_f64() as f32
-    }
-}
