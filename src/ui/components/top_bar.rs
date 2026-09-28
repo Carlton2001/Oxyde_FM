@@ -400,7 +400,6 @@ pub fn render_top_bar(
                                                                         id: "breadcrumb-dropdown".into(),
                                                                         h_app: handle.clone(),
                                                                         items,
-                                                                        hovered_item: None,
                                                                         scroll_handle: view.breadcrumb_scroll.clone(),
                                                                         width: None,
                                                                         max_height: 360.0,

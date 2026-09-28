@@ -72,8 +72,6 @@ impl DropdownItem {
 pub struct GenericDropdown {
     pub id: ElementId,
     pub items: Vec<DropdownItem>,
-    /// App-tracked row hover for context menus whose rows are virtualized.
-    pub hovered_item: Option<usize>,
     pub scroll_handle: UniformListScrollHandle,
     pub h_app: Entity<OxydeApp>,
     pub on_drag: Rc<dyn Fn(&mut OxydeApp, String, f32, f32, &mut App)>,
@@ -149,7 +147,6 @@ impl RenderOnce for GenericDropdown {
         };
 
         let on_item_hover = self.on_item_hover.clone();
-        let hovered_item = self.hovered_item;
 
         div()
             .occlude()
@@ -182,6 +179,7 @@ impl RenderOnce for GenericDropdown {
                                     let on_click = item.on_click.clone();
                                     let on_close_inner = on_close.clone();
                                     let stay_open = item.stay_open;
+                                    let is_dimmed = item.is_dimmed;
                                     let on_h = on_hover_list.clone();
 
                                     div()
@@ -194,9 +192,10 @@ impl RenderOnce for GenericDropdown {
                                         .flex()
                                         .items_center()
                                         .rounded(px(5.0))
-                                        .when(item.is_dimmed, |d| d.opacity(0.5))
-                                        .when(hovered_item == Some(ix), |d| d.bg(item_hover))
-                                        .hover(|s| s.bg(item_hover))
+                                        .when(item.is_dimmed, |d| d.opacity(0.42))
+                                        .when(!item.is_dimmed, |d| {
+                                            d.hover(|s| s.bg(item_hover))
+                                        })
                                         .cursor_default()
                                         .on_mouse_move(move |event, _window, cx| {
                                             if let Some(on_h) = &on_h {
@@ -204,9 +203,11 @@ impl RenderOnce for GenericDropdown {
                                             }
                                         })
                                         .on_mouse_down(MouseButton::Left, move |_, window, cx| {
-                                            (on_click)(window, cx);
-                                            if !stay_open {
-                                                (on_close_inner)(window, cx);
+                                            if !is_dimmed {
+                                                (on_click)(window, cx);
+                                                if !stay_open {
+                                                    (on_close_inner)(window, cx);
+                                                }
                                             }
                                         })
                                         // Icon slot — always 16px wide for alignment
@@ -246,7 +247,11 @@ impl RenderOnce for GenericDropdown {
                                                                 }
                                                             })
                                                             .size_full()
-                                                            .text_color(icon_color),
+                                                            .text_color(if item.is_dimmed {
+                                                                rgba(0xffffff44).into()
+                                                            } else {
+                                                                icon_color
+                                                            }),
                                                     )
                                                 }),
                                         )
@@ -255,7 +260,11 @@ impl RenderOnce for GenericDropdown {
                                             div()
                                                 .flex_1()
                                                 .text_size(px(13.0))
-                                                .text_color(theme.text)
+                                                .text_color(if item.is_dimmed {
+                                                    theme.text_muted
+                                                } else {
+                                                    theme.text
+                                                })
                                                 .child(item.label.clone()),
                                         )
                                         // Submenu arrow
@@ -276,28 +285,30 @@ impl RenderOnce for GenericDropdown {
                     .size_full(),
                 ),
             )
-            .child({
-                let current_scroll = scroll_handle
-                    .0
-                    .borrow()
-                    .base_handle
-                    .offset()
-                    .y
-                    .as_f32()
-                    .abs();
-                render_scrollbar(
-                    h_app_copy,
-                    ScrollbarAxis::Vertical,
-                    viewport_h,
-                    content_h,
-                    current_scroll,
-                    is_dragging,
-                    "context-menu-scrollbar".to_string(),
-                    None,
-                    move |this, tid, vh, ch, cx| {
-                        (on_drag)(this, tid, vh, ch, cx);
-                    },
-                )
+            .when(has_scrollbar, |menu| {
+                menu.child({
+                    let current_scroll = scroll_handle
+                        .0
+                        .borrow()
+                        .base_handle
+                        .offset()
+                        .y
+                        .as_f32()
+                        .abs();
+                    render_scrollbar(
+                        h_app_copy,
+                        ScrollbarAxis::Vertical,
+                        viewport_h,
+                        content_h,
+                        current_scroll,
+                        is_dragging,
+                        "context-menu-scrollbar".to_string(),
+                        None,
+                        move |this, tid, vh, ch, cx| {
+                            (on_drag)(this, tid, vh, ch, cx);
+                        },
+                    )
+                })
             })
             .on_mouse_down_out({
                 let on_close = self.on_close.clone();

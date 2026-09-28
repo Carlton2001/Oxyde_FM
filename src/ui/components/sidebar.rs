@@ -315,8 +315,12 @@ pub fn render_sidebar(
     let viewport_h = view.list_height;
     let content_h = (sidebar_items.len() as f32 * SIDEBAR_ROW_H).max(1.0);
 
-    // Which path is currently "selected" (highlighted) in the sidebar
-    let selected_path = view.sidebar_selected_path.clone();
+    // Highlight only the folder currently open in the active pane's active tab.
+    let selected_path = view
+        .state
+        .layout
+        .find_pane(&view.state.active_pane_id)
+        .map(|pane| pane.active_tab().path.clone());
     let show_tooltips = view.context_menus.is_empty();
 
     let mut container = div()
@@ -555,6 +559,7 @@ pub fn render_sidebar(
                                                             .on_mouse_down(MouseButton::Left, {
                                                                 let h = h.clone(); let p = path.clone();
                                                                 move |_, _, cx| {
+                                                                    cx.stop_propagation();
                                                                     h.update(cx, |view, cx| {
                                                                         view.toggle_sidebar_path(p.clone(), cx);
                                                                     });
@@ -686,6 +691,7 @@ pub fn render_sidebar(
                                                                 .on_mouse_down(MouseButton::Left, {
                                                                     let h = h.clone(); let p = path.clone();
                                                                     move |_, _, cx| {
+                                                                        cx.stop_propagation();
                                                                         h.update(cx, |view, cx| {
                                                                             view.toggle_sidebar_path(p.clone(), cx);
                                                                         });

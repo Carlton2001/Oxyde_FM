@@ -132,20 +132,30 @@ struct PendingFileOperation {
 }
 
 fn context_menu_contains_point(menu: &ContextMenuInstance, position: Point<Pixels>) -> bool {
-    let (item_count, header_height) = match &menu.content {
-        ContextMenuContent::Items(items, header) => {
-            (items.len(), if header.is_some() { 36.0 } else { 0.0 })
-        }
-        ContextMenuContent::NativeItems { items, .. } => (items.len(), 0.0),
-        ContextMenuContent::NameFilter { .. } => (1, 20.0),
-    };
-    let height = px((item_count as f32 * 26.0).min(480.0) + header_height + 10.0);
+    let height = context_menu_height(menu);
     let left = if menu.open_left {
         menu.position.x - menu.width
     } else {
         menu.position.x
     };
     Bounds::new(point(left, menu.position.y), size(menu.width, height)).contains(&position)
+}
+
+fn context_menu_height(menu: &ContextMenuInstance) -> Pixels {
+    let (item_count, header_height) = match &menu.content {
+        ContextMenuContent::Items(items, header) => {
+            (items.len(), if header.is_some() { 46.0 } else { 10.0 })
+        }
+        ContextMenuContent::NativeItems { items, .. } => (items.len(), 10.0),
+        ContextMenuContent::NameFilter { .. } => (1, 46.0),
+    };
+    px((item_count as f32 * 26.0).min(480.0) + header_height)
+}
+
+fn context_menu_visible_top(requested_top: Pixels, menu_height: Pixels, viewport_height: Pixels) -> Pixels {
+    requested_top
+        .min((viewport_height - menu_height).max(px(0.0)))
+        .max(px(0.0))
 }
 
 /// Returns true if `src` and `dst` are on different drives/volumes.
@@ -302,6 +312,7 @@ pub struct OxydeApp {
     pub(crate) next_file_request: u64,
     pub(crate) next_native_menu_request: u64,
     pub(crate) pending_file_requests: std::collections::HashMap<String, u64>,
+    pub folder_has_subdirs: std::collections::HashMap<String, bool>,
     pub(crate) pending_sidebar_requests: std::collections::HashMap<String, u64>,
     pub history: std::sync::Arc<oxyde_lib::models::HistoryManager>,
     pub focus_handle: FocusHandle,
@@ -329,6 +340,7 @@ pub struct OxydeApp {
     pub scrollbar_origins: std::collections::HashMap<String, Point<f32>>,
     pub breadcrumb_menu: Option<(String, String, usize, Vec<FileEntry>)>, // (pane_id, path, index, dirs)
     pub context_menus: Vec<ContextMenuInstance>,
+    pub(crate) context_anchor_points: std::collections::HashMap<String, Point<Pixels>>,
     pub submenu_timer: Option<Task<()>>,
     pub submenu_close_timer: Option<Task<()>>,
     pub dragging_tab: Option<(String, usize)>,
@@ -590,6 +602,7 @@ impl OxydeApp {
             next_file_request: 0,
             next_native_menu_request: 0,
             pending_file_requests: std::collections::HashMap::new(),
+            folder_has_subdirs: std::collections::HashMap::new(),
             pending_sidebar_requests: std::collections::HashMap::new(),
             history: std::sync::Arc::new(oxyde_lib::models::HistoryManager::new()),
             focus_handle: cx.focus_handle(),
@@ -617,6 +630,7 @@ impl OxydeApp {
             scrollbar_origins: std::collections::HashMap::new(),
             breadcrumb_menu: None,
             context_menus: Vec::new(),
+            context_anchor_points: std::collections::HashMap::new(),
             submenu_timer: None,
             submenu_close_timer: None,
             dragging_tab: None,
@@ -1987,6 +2001,7 @@ impl Render for OxydeApp {
                                 pid_cap
                             )))
                             .label(label)
+                            .label_size(13.0)
                             .variant(crate::ui::elements::button::ButtonVariant::Subtle)
                             .on_click(move |_, cx| {
                                 let pid_inner = pid_cap.clone();
@@ -2008,8 +2023,10 @@ impl Render for OxydeApp {
                                                     tab.filter_types.insert(ext.to_uppercase());
                                                 }
                                             }
+                                            tab.update_cache();
                                         }
                                     }
+                                    cx.notify();
                                     this.context_menus.truncate(m_idx + 1);
                                     this.open_type_filter_menu(&pid_inner, pos, cx);
                                 });
@@ -2056,6 +2073,7 @@ impl Render for OxydeApp {
                                 pid_cap
                             )))
                             .label(label)
+                            .label_size(13.0)
                             .variant(crate::ui::elements::button::ButtonVariant::Subtle)
                             .on_click(move |_, cx| {
                                 let pid_inner = pid_cap.clone();
@@ -2071,8 +2089,10 @@ impl Render for OxydeApp {
                                             tab.filter_sizes.insert(SizeCategory::Moyen);
                                             tab.filter_sizes.insert(SizeCategory::Grand);
                                             tab.filter_sizes.insert(SizeCategory::Huge);
+                                            tab.update_cache();
                                         }
                                     }
+                                    cx.notify();
                                     this.context_menus.truncate(m_idx + 1);
                                     this.open_size_filter_menu(&pid_inner, pos, cx);
                                 });
@@ -2119,6 +2139,7 @@ impl Render for OxydeApp {
                                 pid_cap
                             )))
                             .label(label)
+                            .label_size(13.0)
                             .variant(crate::ui::elements::button::ButtonVariant::Subtle)
                             .on_click(move |_, cx| {
                                 let pid_inner = pid_cap.clone();
@@ -2135,8 +2156,10 @@ impl Render for OxydeApp {
                                             tab.filter_dates
                                                 .insert(DateCategory::LaSemaineDerniere);
                                             tab.filter_dates.insert(DateCategory::PlusAncien);
+                                            tab.update_cache();
                                         }
                                     }
+                                    cx.notify();
                                     this.context_menus.truncate(m_idx + 1);
                                     this.open_date_filter_menu(&pid_inner, pos, cx);
                                 });
@@ -2154,7 +2177,7 @@ impl Render for OxydeApp {
                                 icon: it.icon.clone(),
                                 stay_open: it.stay_open,
                                 has_submenu: it.has_submenu,
-                                is_dimmed: false,
+                                is_dimmed: it.is_dimmed,
                                 on_click: std::rc::Rc::new(move |window, app| {
                                     (on_click)(window, app);
                                 }),
@@ -2168,7 +2191,6 @@ impl Render for OxydeApp {
                         id: ("context-menu", m_idx).into(),
                         h_app: h.clone(),
                         items: dropdown_items,
-                        hovered_item: instance.hovered_item,
                         scroll_handle,
                         width: None,
                         max_height: 480.0,
@@ -2261,6 +2283,11 @@ impl Render for OxydeApp {
                                                     .get(m_idx)
                                                     .map(|m| m.position.y)
                                                     .unwrap_or_default();
+                                                let parent_menu_height = this
+                                                    .context_menus
+                                                    .get(m_idx)
+                                                    .map(context_menu_height)
+                                                    .unwrap_or_default();
                                                 this.submenu_close_timer = None;
                                                 this.submenu_timer =
                                                     Some(cx.spawn(move |_, cx: &mut AsyncApp| {
@@ -2276,6 +2303,11 @@ impl Render for OxydeApp {
                                                                     let viewport_w = _window
                                                                         .viewport_size()
                                                                         .width;
+                                                                    let parent_visible_y = context_menu_visible_top(
+                                                                        parent_pos_y,
+                                                                        parent_menu_height,
+                                                                        _window.viewport_size().height,
+                                                                    );
                                                                     let open_left = parent_right
                                                                         + px(220.0)
                                                                         > viewport_w;
@@ -2299,7 +2331,7 @@ impl Render for OxydeApp {
                                                                             };
                                                                             // Y: parent menu top + border(1) + padding(4) + ix * item_h
                                                                             // minus submenu border(1) + padding(4) → nets to ix * item_h
-                                                                            sub_pos.y = parent_pos_y
+                                                                            sub_pos.y = parent_visible_y
                                                                                 + px(ix_inner
                                                                                     as f32
                                                                                     * 26.0);
@@ -2454,7 +2486,6 @@ impl Render for OxydeApp {
                         id: ("context-menu", m_idx).into(),
                         h_app: h.clone(),
                         items: dropdown_items,
-                        hovered_item: instance.hovered_item,
                         scroll_handle,
                         width: None,
                         max_height: 480.0,
@@ -2541,6 +2572,9 @@ impl Render for OxydeApp {
                                                 let parent_pos_y = this.context_menus.get(m_idx)
                                                     .map(|m| m.position.y)
                                                     .unwrap_or_default();
+                                                let parent_menu_height = this.context_menus.get(m_idx)
+                                                    .map(context_menu_height)
+                                                    .unwrap_or_default();
                                                 let ix_cap = ix;
 
                                                 this.submenu_close_timer = None;
@@ -2550,6 +2584,11 @@ impl Render for OxydeApp {
                                                         cx_val.background_executor().timer(std::time::Duration::ZERO).await;
                                                         let _ = window_handle_inner.update(&mut cx_val, |_, _window, cx| {
                                                             let viewport_w = _window.viewport_size().width;
+                                                            let parent_visible_y = context_menu_visible_top(
+                                                                parent_pos_y,
+                                                                parent_menu_height,
+                                                                _window.viewport_size().height,
+                                                            );
                                                             let open_left = parent_right + px(220.0) > viewport_w;
                                                             let app_handle = h_inner_spawn.clone();
                                                             let path_cap = path_cap.clone();
@@ -2569,7 +2608,7 @@ impl Render for OxydeApp {
                                                                         } else {
                                                                             parent_right - px(2.0) // TopLeft: left edge at parent right
                                                                         };
-                                                                        new_pos.y = parent_pos_y + px(ix_cap as f32 * 26.0);
+                                                                        new_pos.y = parent_visible_y + px(ix_cap as f32 * 26.0);
 
                                                                         this.context_menus.push(ContextMenuInstance {
                                                                             position: new_pos,
@@ -2666,9 +2705,8 @@ impl Render for OxydeApp {
                     id: ("context-menu", m_idx).into(),
                     h_app: h.clone(),
                     items: vec![],
-                    hovered_item: instance.hovered_item,
                     scroll_handle,
-                    width: None,
+                    width: Some(200.0),
                     max_height: 480.0,
                     on_close: {
                         let h = h.clone();

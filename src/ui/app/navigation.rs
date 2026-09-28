@@ -227,6 +227,7 @@ impl OxydeApp {
                     None,
                 )
                 .await;
+                let handle_for_subdirectory_check = handle.clone();
                 handle.update(&mut cx, move |this, cx| {
                     if this.pending_file_requests.get(&tab_id) != Some(&request_id) {
                         return;
@@ -234,6 +235,7 @@ impl OxydeApp {
                     this.pending_file_requests.remove(&tab_id);
                     // A tab can be moved to another pane while its listing is in flight.
                     // Its stable id, not the pane captured at request time, owns the result.
+                    let mut refresh_subdirectory_flags = false;
                     if let Some(tab) = this.state.find_tab_mut(&tab_id) {
                         if tab.path != path {
                             return;
@@ -244,6 +246,7 @@ impl OxydeApp {
                                 tab.sort_files();
                                 tab.update_cache();
                                 tab.load_status = crate::ui::workspace::TabLoadStatus::Ready;
+                                refresh_subdirectory_flags = path != "trash://";
                                 if reset_scroll {
                                     tab.list_scroll = UniformListScrollHandle::new();
                                 }
@@ -258,6 +261,33 @@ impl OxydeApp {
                             }
                         }
                         cx.notify();
+                    }
+                    if refresh_subdirectory_flags {
+                        let handle = handle_for_subdirectory_check.clone();
+                        let tab_id = tab_id.clone();
+                        let directory = path.clone();
+                        cx.spawn(move |_, cx: &mut AsyncApp| {
+                            let mut cx = cx.clone();
+                            async move {
+                                if let Ok(nodes) = oxyde_lib::commands::sidebar::get_sidebar_nodes(directory.clone()).await {
+                                    handle.update(&mut cx, |this, cx| {
+                                        let tab_is_still_here = this
+                                            .state
+                                            .find_tab_mut(&tab_id)
+                                            .map(|tab| tab.path == directory)
+                                            .unwrap_or(false);
+                                        if !tab_is_still_here {
+                                            return;
+                                        }
+                                        for node in nodes {
+                                            this.folder_has_subdirs.insert(node.path, node.has_subdirs);
+                                        }
+                                        cx.notify();
+                                    });
+                                }
+                            }
+                        })
+                        .detach();
                     }
                 });
             }

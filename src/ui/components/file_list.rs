@@ -124,6 +124,7 @@ pub fn render_file_list(
     let inline_rename_view = view.editing_view.clone();
     let inline_rename_error = view.rename_error.clone();
     let rename_shake_id = view.rename_shake_id;
+    let folder_subdirectory_flags = view.folder_has_subdirs.clone();
 
     let mut container = div()
         .flex_1()
@@ -184,13 +185,17 @@ pub fn render_file_list(
                                     let h_inner = handle.clone();
                                     let p_id_for_list = pane_id.clone();
                                     let selected_paths = selected_paths.clone();
+                                    let folder_subdirectory_flags = folder_subdirectory_flags.clone();
                                     move |range, _, cx| {
+                                        let folder_subdirectory_flags = folder_subdirectory_flags.clone();
                                         range.map(|i| {
                                             let theme = OxydeTheme::global(cx);
                                             let file = &files[i];
                                             let is_dir = file.is_dir;
                                             let path = file.path.clone();
                                             let is_selected = selected_paths.contains(&path);
+                                            let has_subdirectories = is_dir
+                                                && folder_subdirectory_flags.get(&path).copied().unwrap_or(false);
                                             let p_id = p_id_for_list.clone();
                                             let h = h_inner.clone();
                                             let inline_editing = inline_rename
@@ -452,7 +457,7 @@ pub fn render_file_list(
                                                                     None => {
                                                                         let h_click = h.clone();
                                                                         let click_path = path.clone();
-                                                                        div()
+                                                                        let name = div()
                                                                             .flex_1()
                                                                             .overflow_hidden()
                                                                             .text_ellipsis()
@@ -470,8 +475,30 @@ pub fn render_file_list(
                                                                                         cx,
                                                                                     );
                                                                                 });
-                                                                            })
-                                                                            .into_any_element()
+                                                                            });
+                                                                        if has_subdirectories {
+                                                                            div()
+                                                                                .flex_1()
+                                                                                .min_w_0()
+                                                                                .flex()
+                                                                                .items_center()
+                                                                                .overflow_hidden()
+                                                                                .child(name)
+                                                                                .child(
+                                                                                    div()
+                                                                                        .ml_2()
+                                                                                        .flex_none()
+                                                                                        .child(
+                                                                                            svg()
+                                                                                                .path("icons/chevron-right.svg")
+                                                                                                .size_3()
+                                                                                                .text_color(theme.text_muted.opacity(0.65)),
+                                                                                        ),
+                                                                                )
+                                                                                .into_any_element()
+                                                                        } else {
+                                                                            name.into_any_element()
+                                                                        }
                                                                     }
                                                                 })
                                                         )
@@ -693,15 +720,22 @@ pub fn render_file_list(
         .y
         .as_f32();
 
-    // Vertical scrollbar overlay
-    container = container.child(
-        div()
-            .absolute()
-            .top(px(ROW_HEIGHT))
-            .right_0()
-            .bottom(px(STATUS_BAR_HEIGHT))
-            .w(px(ZED_TRACK_WIDTH))
-            .child(render_scrollbar(
+    // Vertical scrollbar and its scroll-to-top affordance.
+    let v_ratio = (v_v_h / content_h.max(1.0)).min(1.0);
+    let v_thumb_size = (v_v_h * v_ratio).max(40.0).min(v_v_h);
+    let v_max_offset = (content_h - v_v_h).max(1.0);
+    let v_thumb_pos = (v_offset / v_max_offset).clamp(0.0, 1.0) * (v_v_h - v_thumb_size);
+    let scroll_button_top = (v_thumb_pos + v_thumb_size / 2.0 - 16.0)
+        .clamp(4.0, (v_v_h - 36.0).max(4.0));
+
+    let mut vertical_scroll_zone = div()
+        .absolute()
+        .top(px(ROW_HEIGHT))
+        .right_0()
+        .bottom(px(STATUS_BAR_HEIGHT))
+        .w(px(58.0))
+        .group("file-list-scroll-zone")
+        .child(render_scrollbar(
                 handle.clone(),
                 ScrollbarAxis::Vertical,
                 v_v_h,
@@ -721,8 +755,53 @@ pub fn render_file_list(
                         });
                     }
                 },
-            )),
-    );
+            ));
+
+    if v_offset > ROW_HEIGHT * 2.0 && content_h > v_v_h {
+        let h_scroll_top = handle.clone();
+        let pane_id_scroll_top = pane_id.clone();
+        vertical_scroll_zone = vertical_scroll_zone.child(
+            div()
+                .id(format!("scroll-to-top-{pane_id_scroll_top}"))
+                .absolute()
+                .top(px(scroll_button_top))
+                .right(px(16.0))
+                .w(px(32.0))
+                .h(px(32.0))
+                .flex()
+                .items_center()
+                .justify_center()
+                .rounded(px(8.0))
+                .bg(theme.accent)
+                .shadow_md()
+                .opacity(0.0)
+                .group_hover("file-list-scroll-zone", |style| style.opacity(1.0))
+                .hover(|style| style.opacity(0.9))
+                .cursor_pointer()
+                .on_mouse_down(MouseButton::Left, move |_, _, cx| {
+                    cx.stop_propagation();
+                    h_scroll_top.update(cx, |this, cx| {
+                        if let Some(pane) = this.state.find_pane_mut(&pane_id_scroll_top) {
+                            pane.active_tab_mut()
+                                .list_scroll
+                                .0
+                                .borrow()
+                                .base_handle
+                                .set_offset(point(px(0.0), px(0.0)));
+                        }
+                        cx.notify();
+                    });
+                })
+                .child(
+                    svg()
+                        .path("icons/arrow-up.svg")
+                        .w(px(16.0))
+                        .h(px(16.0))
+                        .text_color(theme.text),
+                ),
+        );
+    }
+    container = container.child(vertical_scroll_zone);
 
     // Horizontal scrollbar overlay
     container = container.child(
@@ -872,6 +951,8 @@ fn render_headers(
                 current_dir,
                 name_filtered,
                 theme,
+                handle.clone(),
+                format!("filter-{}-name", pane_id),
                 {
                     let h = handle.clone();
                     let pid = pane_id.clone();
@@ -883,9 +964,13 @@ fn render_headers(
             .on_mouse_down(MouseButton::Right, {
                 let h = handle.clone();
                 let pid = pane_id.clone();
+                let anchor_key = format!("filter-{}-name", pane_id);
                 move |e, window, cx| {
-                    let pos = e.position;
-                    h.update(cx, |this, cx| this.open_name_filter(&pid, pos, window, cx));
+                    let fallback = e.position;
+                    h.update(cx, |this, cx| {
+                        let anchor = this.context_anchor_points.get(&anchor_key).copied().unwrap_or(fallback);
+                        this.open_name_filter(&pid, anchor, window, cx);
+                    });
                 }
             }),
         )
@@ -897,6 +982,8 @@ fn render_headers(
                 current_dir,
                 type_filtered,
                 theme,
+                handle.clone(),
+                format!("filter-{}-type", pane_id),
                 {
                     let h = handle.clone();
                     let pid = pane_id.clone();
@@ -908,9 +995,13 @@ fn render_headers(
             .on_mouse_down(MouseButton::Right, {
                 let h = handle.clone();
                 let pid = pane_id.clone();
+                let anchor_key = format!("filter-{}-type", pane_id);
                 move |e, _, cx| {
-                    let pos = e.position;
-                    h.update(cx, |this, cx| this.open_type_filter_menu(&pid, pos, cx));
+                    let fallback = e.position;
+                    h.update(cx, |this, cx| {
+                        let anchor = this.context_anchor_points.get(&anchor_key).copied().unwrap_or(fallback);
+                        this.open_type_filter_menu(&pid, anchor, cx);
+                    });
                 }
             }),
         )
@@ -922,6 +1013,8 @@ fn render_headers(
                 current_dir,
                 size_filtered,
                 theme,
+                handle.clone(),
+                format!("filter-{}-size", pane_id),
                 {
                     let h = handle.clone();
                     let pid = pane_id.clone();
@@ -933,9 +1026,13 @@ fn render_headers(
             .on_mouse_down(MouseButton::Right, {
                 let h = handle.clone();
                 let pid = pane_id.clone();
+                let anchor_key = format!("filter-{}-size", pane_id);
                 move |e, _, cx| {
-                    let pos = e.position;
-                    h.update(cx, |this, cx| this.open_size_filter_menu(&pid, pos, cx));
+                    let fallback = e.position;
+                    h.update(cx, |this, cx| {
+                        let anchor = this.context_anchor_points.get(&anchor_key).copied().unwrap_or(fallback);
+                        this.open_size_filter_menu(&pid, anchor, cx);
+                    });
                 }
             }),
         )
@@ -947,6 +1044,8 @@ fn render_headers(
                 current_dir,
                 date_filtered,
                 theme,
+                handle.clone(),
+                format!("filter-{}-date", pane_id),
                 {
                     let h = handle.clone();
                     let pid = pane_id.clone();
@@ -960,9 +1059,13 @@ fn render_headers(
             .on_mouse_down(MouseButton::Right, {
                 let h = handle.clone();
                 let pid = pane_id.clone();
+                let anchor_key = format!("filter-{}-date", pane_id);
                 move |e, _, cx| {
-                    let pos = e.position;
-                    h.update(cx, |this, cx| this.open_date_filter_menu(&pid, pos, cx));
+                    let fallback = e.position;
+                    h.update(cx, |this, cx| {
+                        let anchor = this.context_anchor_points.get(&anchor_key).copied().unwrap_or(fallback);
+                        this.open_date_filter_menu(&pid, anchor, cx);
+                    });
                 }
             }),
         )
@@ -975,9 +1078,13 @@ fn header_cell(
     direction: SortDirection,
     is_filtered: bool,
     theme: &OxydeTheme,
+    handle: Entity<OxydeApp>,
+    anchor_key: String,
     on_click: impl Fn(&MouseDownEvent, &mut Window, &mut App) + 'static,
 ) -> Div {
+    let anchor_handle = handle.clone();
     div()
+        .relative()
         .w(px(width))
         .px(px(8.0))
         .h_full()
@@ -1015,6 +1122,18 @@ fn header_cell(
                             .text_color(theme.accent),
                     )
                 }),
+        )
+        .child(
+            canvas(|bounds, _, _| bounds, move |_, bounds, _, cx| {
+                // The dropdown has a small internal left inset; shift the filter
+                // menu back slightly so its visible edge aligns with the header.
+                let anchor = point(bounds.left() - px(4.0), bounds.bottom());
+                anchor_handle.update(cx, |this, _| {
+                    this.context_anchor_points.insert(anchor_key.clone(), anchor);
+                });
+            })
+            .absolute()
+            .size_full(),
         )
         .hover(|s| s.bg(rgba(0xffffff05)))
         .on_mouse_down(MouseButton::Left, on_click)

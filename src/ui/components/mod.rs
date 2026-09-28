@@ -311,6 +311,8 @@ pub fn tab_context_menu_items(
     h_app: Entity<crate::ui::app::OxydeApp>,
     pane_id: String,
     tab_idx: usize,
+    can_close_tab: bool,
+    can_close_other_tabs: bool,
 ) -> Vec<crate::ui::components::dropdown::DropdownItem> {
     use crate::ui::components::dropdown::IconName;
 
@@ -338,7 +340,7 @@ pub fn tab_context_menu_items(
             icon: Some(IconName::X),
             stay_open: false,
             has_submenu: false,
-            is_dimmed: false,
+            is_dimmed: !can_close_other_tabs,
             on_click: std::rc::Rc::new({
                 let h = h_app.clone();
                 let p_id = pane_id.clone();
@@ -356,7 +358,7 @@ pub fn tab_context_menu_items(
             icon: Some(IconName::Delete),
             stay_open: false,
             has_submenu: false,
-            is_dimmed: false,
+            is_dimmed: !can_close_tab,
             on_click: std::rc::Rc::new({
                 let h = h_app.clone();
                 let p_id = pane_id.clone();

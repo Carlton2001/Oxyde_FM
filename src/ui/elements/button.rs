@@ -15,6 +15,7 @@ pub enum ButtonVariant {
 pub struct Button {
     id: ElementId,
     label: Option<SharedString>,
+    label_size: Option<f32>,
     icon: Option<SharedString>,
     variant: ButtonVariant,
     on_click: Option<Box<dyn Fn(&mut Window, &mut App) + 'static>>,
@@ -28,6 +29,7 @@ impl Button {
         Self {
             id: id.into(),
             label: None,
+            label_size: None,
             icon: None,
             variant: ButtonVariant::Ghost,
             on_click: None,
@@ -38,6 +40,11 @@ impl Button {
 
     pub fn label(mut self, label: impl Into<SharedString>) -> Self {
         self.label = Some(label.into());
+        self
+    }
+
+    pub fn label_size(mut self, size: f32) -> Self {
+        self.label_size = Some(size);
         self
     }
 
@@ -118,7 +125,8 @@ impl RenderOnce for Button {
             .children(self.label.map(|label| {
                 div()
                     .ml_2()
-                    .text_sm()
+                    .when_some(self.label_size, |label, size| label.text_size(px(size)))
+                    .when(self.label_size.is_none(), |label| label.text_sm())
                     .font_weight(FontWeight::MEDIUM)
                     .text_color(text_color)
                     .child(label)

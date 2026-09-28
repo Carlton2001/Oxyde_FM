@@ -297,6 +297,10 @@ impl OxydeApp {
             .child({
                 let active_idx = pane.active_tab_index;
                 let tabs_count = pane.tabs.len();
+                let mut pane_count = 0;
+                self.state.layout.visit_panes(&mut |_| pane_count += 1);
+                let can_close_tab = pane_count > 1 || tabs_count > 1;
+                let can_close_other_tabs = tabs_count > 1;
                 let is_drop_target_at_end = self.drop_target_pane.as_ref() == Some(&p_id)
                     && self.drop_target_idx == Some(tabs_count);
 
@@ -358,6 +362,7 @@ impl OxydeApp {
                     let label_cap = label.clone();
                     let tab_path = tab_data.path.clone();
                     let is_dragging = self.dragging_tab == Some((p_id.clone(), t_ix));
+                    let context_anchor_key = format!("tab-{}-{}", p_id, t_ix);
 
                     let tab = Tab::new(
                         SharedString::from(format!("tab-{}-{}", p_id, t_ix)),
@@ -373,20 +378,34 @@ impl OxydeApp {
                             h.update(cx, |this, cx| this.switch_tab(&p_id_cap, t_ix, cx));
                         }
                     })
+                    .on_bounds({
+                        let h = h.clone();
+                        let anchor_key = context_anchor_key.clone();
+                        move |bounds, cx| {
+                            let anchor = point(bounds.left(), bounds.bottom());
+                            h.update(cx, |this, _| {
+                                this.context_anchor_points.insert(anchor_key.clone(), anchor);
+                            });
+                        }
+                    })
                     .on_right_click({
                         let h = h.clone();
                         let p_id_cap = p_id.clone();
+                        let anchor_key = context_anchor_key.clone();
                         move |_, cx, pos| {
                             h.update(cx, |this, cx| {
                                 use crate::ui::app::{ContextMenuContent, ContextMenuInstance};
+                                let position = this.context_anchor_points.get(&anchor_key).copied().unwrap_or(pos);
                                 this.context_menus.clear();
                                 this.context_menus.push(ContextMenuInstance {
-                                    position: pos,
+                                    position,
                                     content: ContextMenuContent::Items(
                                         crate::ui::components::tab_context_menu_items(
                                             h.clone(),
                                             p_id_cap.clone(),
                                             t_ix,
+                                            can_close_tab,
+                                            can_close_other_tabs,
                                         ),
                                         None,
                                     ),
@@ -400,14 +419,14 @@ impl OxydeApp {
                             });
                         }
                     })
-                    .on_middle_click({
+                    .when(can_close_tab, |tab| tab.on_middle_click({
                         let h = h.clone();
                         let p_id_cap = p_id.clone();
                         move |_, cx| {
                             h.update(cx, |this, cx| this.close_tab(&p_id_cap, t_ix, cx));
                         }
-                    })
-                    .when(tabs_count > 1, |s| {
+                    }))
+                    .when(can_close_tab, |s| {
                         let h = h.clone();
                         let p_id_cap = p_id.clone();
                         s.on_close(move |_, cx| {

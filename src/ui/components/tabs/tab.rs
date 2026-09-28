@@ -48,6 +48,7 @@ pub struct Tab {
     on_click: Option<Box<dyn Fn(&mut Window, &mut App) + 'static>>,
     on_middle_click: Option<Box<dyn Fn(&mut Window, &mut App) + 'static>>,
     on_right_click: Option<Box<dyn Fn(&mut Window, &mut App, Point<Pixels>) + 'static>>,
+    on_bounds: Option<Box<dyn Fn(Bounds<Pixels>, &mut App) + 'static>>,
     on_close: Option<Box<dyn Fn(&mut Window, &mut App) + 'static>>,
     drag_refinement: Option<Box<dyn FnOnce(Stateful<Div>) -> Stateful<Div> + 'static>>,
     is_drop_target: bool,
@@ -65,6 +66,7 @@ impl Tab {
             on_click: None,
             on_middle_click: None,
             on_right_click: None,
+            on_bounds: None,
             on_close: None,
             drag_refinement: None,
             is_drop_target: false,
@@ -102,6 +104,14 @@ impl Tab {
         f: impl Fn(&mut Window, &mut App, Point<Pixels>) + 'static,
     ) -> Self {
         self.on_right_click = Some(Box::new(f));
+        self
+    }
+
+    pub fn on_bounds(
+        mut self,
+        f: impl Fn(Bounds<Pixels>, &mut App) + 'static,
+    ) -> Self {
+        self.on_bounds = Some(Box::new(f));
         self
     }
 
@@ -223,7 +233,7 @@ impl RenderOnce for Tab {
                 .when(self.is_drop_target, |s| s.bg(rgb(0x0078d4))),
         );
 
-        container.child(
+        container = container.child(
             div()
                 .flex()
                 .items_center()
@@ -265,6 +275,18 @@ impl RenderOnce for Tab {
                             ),
                     )
                 }),
-        )
+        );
+
+        if let Some(on_bounds) = self.on_bounds {
+            container = container.child(
+                canvas(|bounds, _, _| bounds, move |_, bounds, _, cx| {
+                    on_bounds(bounds, cx);
+                })
+                .absolute()
+                .size_full(),
+            );
+        }
+
+        container
     }
 }
