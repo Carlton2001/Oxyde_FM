@@ -210,6 +210,9 @@ impl TextInput {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        // Keep text selection clicks from reaching parent rows (for example, the
+        // file list row hosting the inline rename field).
+        cx.stop_propagation();
         window.focus(&self.focus_handle, cx);
         let index = self.byte_index_for_position(event.position);
         if event.click_count >= 3 {

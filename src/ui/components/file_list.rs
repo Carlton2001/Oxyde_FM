@@ -81,6 +81,7 @@ pub fn render_file_list(
     let inline_rename_path = view.editing_path.clone();
     let inline_rename_view = view.editing_view.clone();
     let inline_rename_error = view.rename_error.clone();
+    let rename_shake_id = view.rename_shake_id;
 
     let mut container = div()
         .flex_1()
@@ -201,8 +202,12 @@ pub fn render_file_list(
                                                                 this.toggle_selection(&p_id_cap, p.clone(), multi, shift, cx);
                                                             }
                                                         });
-                                                        if e.click_count == 2 && is_dir {
-                                                            h_inner_inner.update(cx, |v, cx| v.navigate_to(&p_id_cap, p.clone(), cx));
+                                                        if e.click_count == 2 {
+                                                            if is_dir {
+                                                                h_inner_inner.update(cx, |v, cx| v.navigate_to(&p_id_cap, p.clone(), cx));
+                                                            } else {
+                                                                let _ = oxyde_lib::platform::platform().open_item(&p);
+                                                            }
                                                         }
                                                     }
                                                 })
@@ -367,15 +372,41 @@ pub fn render_file_list(
                                                                         .text_color(if is_dir { theme.accent } else { theme.text_muted })
                                                                 })
                                                                 .child(match editing_view {
-                                                                    Some(editing_view) => div()
-                                                                        .id(SharedString::from(format!("inline-rename-{}", path)))
-                                                                        .flex_1()
-                                                                        .h_full()
-                                                                        .when_some(rename_error, |field, error| {
-                                                                            field.tooltip(Tooltip::text(error))
-                                                                        })
-                                                                        .child(editing_view.into_any_element())
-                                                                        .into_any_element(),
+                                                                    Some(editing_view) => {
+                                                                        let has_error = rename_error.is_some();
+                                                                        let field = div()
+                                                                            .id(SharedString::from(format!("inline-rename-{}", path)))
+                                                                            .flex_1()
+                                                                            .min_w_0()
+                                                                            // The name cell has 8 px horizontal padding on each side,
+                                                                            // then a 16 px icon and its 8 px right margin.
+                                                                            .w(px((name_w - 40.0).max(1.0)))
+                                                                            .h_full()
+                                                                            .flex()
+                                                                            .items_center()
+                                                                            .when_some(rename_error, |field, error| {
+                                                                                field
+                                                                                    .tooltip(Tooltip::text(error))
+                                                                                    .border_1()
+                                                                                    .border_color(rgb(0xff5555))
+                                                                                    .rounded_sm()
+                                                                            })
+                                                                            .child(editing_view.into_any_element())
+                                                                            ;
+                                                                        if has_error {
+                                                                            field.with_animation(
+                                                                                SharedString::from(format!("rename-shake-{rename_shake_id}")),
+                                                                                Animation::new(std::time::Duration::from_millis(480)),
+                                                                                |field, delta| {
+                                                                                    let amplitude = (1.0 - delta) * 8.0;
+                                                                                    let offset = (delta * std::f32::consts::PI * 8.0).sin() * amplitude;
+                                                                                    field.relative().left(px(offset))
+                                                                                },
+                                                                            ).into_any_element()
+                                                                        } else {
+                                                                            field.into_any_element()
+                                                                        }
+                                                                    },
                                                                     None => {
                                                                         let h_click = h.clone();
                                                                         let click_path = path.clone();

@@ -1,6 +1,7 @@
 use crate::ui::app::{FileDragData, OxydeApp};
 use crate::ui::components::dropdown::IconName;
 use crate::ui::components::tooltip::Tooltip;
+use crate::ui::style::ROW_HEIGHT;
 use crate::ui::theme::ThemeContext;
 use gpui::prelude::*;
 use gpui::*;
@@ -255,7 +256,42 @@ pub fn render_top_bar(
                 .items_center()
                 .flex_1()
                 .overflow_hidden()
-                .children({
+                .when(view.breadcrumb_editing && view.breadcrumb_pane_id.as_deref() == Some(pane_id.as_str()), |bar| {
+                    if let Some(input) = view.editing_view.clone() {
+                        let field = div()
+                            .w_full()
+                            .h_full()
+                            .when(view.breadcrumb_invalid, |field| {
+                                field.border_1().border_color(rgb(0xff5555)).rounded_sm()
+                            })
+                            .child(input.clone());
+                        let field_shell = div()
+                            .flex_1()
+                            .min_w_0()
+                            .h(px(ROW_HEIGHT))
+                            // Reserve room for the shake so the input border stays inside
+                            // the breadcrumb's clipped viewport at both horizontal extremes.
+                            .px(px(8.0))
+                            .flex()
+                            .items_center()
+                            .child(field);
+                        if view.breadcrumb_invalid {
+                            let animation_id = SharedString::from(format!("breadcrumb-shake-{}", view.breadcrumb_shake_id));
+                            bar.child(field_shell.with_animation(
+                                animation_id,
+                                Animation::new(std::time::Duration::from_millis(480)),
+                                |field_shell, delta| {
+                                    let amplitude = (1.0 - delta) * 8.0;
+                                    let offset = (delta * std::f32::consts::PI * 8.0).sin() * amplitude;
+                                    field_shell.relative().left(px(offset))
+                                },
+                            ))
+                        } else {
+                            bar.child(field_shell)
+                        }
+                    } else { bar }
+                })
+                .when(!(view.breadcrumb_editing && view.breadcrumb_pane_id.as_deref() == Some(pane_id.as_str())), |bar| bar.children({
                     let mut accumulated_path = String::new();
                     let mut elements: Vec<AnyElement> = Vec::new();
 
@@ -422,18 +458,19 @@ pub fn render_top_bar(
                             .rounded_md()
                             .text_color(seg_color)
                             .when(is_last, |d| d.font_weight(FontWeight::MEDIUM))
-                            .when(!is_last, |d| {
-                                d.hover(move |s| s.text_color(theme.text_muted).bg(hover_bg))
-                                 .on_mouse_down(MouseButton::Left, {
-                                     let h = handle.clone();
-                                     let p_id_cap = p_id.clone();
-                                     let nav_path = target_path.clone();
-                                     move |_, _, cx| {
-                                         h.update(cx, |this: &mut OxydeApp, cx| {
-                                             this.navigate_to(&p_id_cap, nav_path.clone(), cx);
-                                         });
-                                     }
-                                 })
+                            .when(!is_last, |d| d.hover(move |s| s.text_color(theme.text_muted).bg(hover_bg)))
+                            .on_mouse_down(MouseButton::Left, {
+                                let h = handle.clone();
+                                let p = pane_id.clone();
+                                let nav_path = target_path.clone();
+                                let is_current = is_last;
+                                move |event, window, cx| {
+                                    if event.click_count >= 2 {
+                                        h.update(cx, |this, cx| this.begin_breadcrumb_edit(p.clone(), window, cx));
+                                    } else if !is_current {
+                                        h.update(cx, |this, cx| this.navigate_to(&p, nav_path.clone(), cx));
+                                    }
+                                }
                             })
                             .drag_over::<FileDragData>({
                                 let h_over = handle.clone();
@@ -470,7 +507,22 @@ pub fn render_top_bar(
 
                         elements.push(seg.into_any_element());
                     }
+                    let blank_handle = handle.clone();
+                    let blank_pane = pane_id.clone();
+                    elements.push(
+                        div()
+                            .id("breadcrumb-edit-blank")
+                            .flex_1()
+                            .min_w(px(24.0))
+                            .h_full()
+                            .on_mouse_down(MouseButton::Left, move |_, window, cx| {
+                                blank_handle.update(cx, |this, cx| {
+                                    this.begin_breadcrumb_edit(blank_pane.clone(), window, cx);
+                                });
+                            })
+                            .into_any_element(),
+                    );
                     elements
-                })
+                }))
         )
 }

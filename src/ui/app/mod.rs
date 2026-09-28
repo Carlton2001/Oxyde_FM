@@ -353,12 +353,18 @@ pub struct OxydeApp {
     pub editing_text: String,
     pub editing_view: Option<Entity<TextInput>>,
     pub inline_rename: bool,
+    pub breadcrumb_editing: bool,
+    pub breadcrumb_text: String,
+    pub breadcrumb_pane_id: Option<String>,
+    pub breadcrumb_shake_id: u64,
+    pub breadcrumb_invalid: bool,
     rename_click_candidate: Option<(String, std::time::Instant)>,
     rename_pending: bool,
     rename_generation: u64,
     pending_file_operation: Option<PendingFileOperation>,
     file_operation_notice: Option<String>,
     pub(crate) rename_error: Option<String>,
+    pub(crate) rename_shake_id: u64,
 
     // ── Settings ─────────────────────────────────────────────────────────────
     pub show_hidden: bool,
@@ -629,12 +635,18 @@ impl OxydeApp {
             editing_text: String::new(),
             editing_view: None,
             inline_rename: false,
+            breadcrumb_editing: false,
+            breadcrumb_text: String::new(),
+            breadcrumb_pane_id: None,
+            breadcrumb_shake_id: 0,
+            breadcrumb_invalid: false,
             rename_click_candidate: None,
             rename_pending: false,
             rename_generation: 0,
             pending_file_operation: None,
             file_operation_notice: None,
             rename_error: None,
+            rename_shake_id: 0,
             show_hidden: false,
             show_system: false,
             show_media_previews: true,
@@ -773,7 +785,11 @@ impl OxydeApp {
                 {
                     let handle = handle.clone();
                     move |text, _window, cx| {
-                        handle.update(cx, |this, _| this.editing_text = text.to_string());
+                        handle.update(cx, |this, cx| {
+                            this.editing_text = text.to_string();
+                            this.rename_error = None;
+                            cx.notify();
+                        });
                     }
                 },
                 {
@@ -797,7 +813,7 @@ impl OxydeApp {
                     }
                 },
                 true,
-                inline,
+                false,
                 inline,
                 initial_selection,
                 window,
@@ -807,6 +823,89 @@ impl OxydeApp {
         let focus_handle = view.read(cx).focus_handle.clone();
         self.editing_view = Some(view);
         window.focus(&focus_handle, cx);
+        cx.notify();
+    }
+
+    pub(crate) fn begin_breadcrumb_edit(
+        &mut self,
+        pane_id: String,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.inline_rename || self.editing_path.is_some() {
+            return;
+        }
+        let Some(path) = self.state.layout.find_pane(&pane_id).map(|pane| pane.active_tab().path.clone()) else {
+            return;
+        };
+        let Some(handle) = self.handle.clone() else { return; };
+        self.breadcrumb_editing = true;
+        self.breadcrumb_text = path.clone();
+        self.breadcrumb_invalid = false;
+        self.breadcrumb_pane_id = Some(pane_id);
+        let input = cx.new(|cx| TextInput::new(
+            cx,
+            "Chemin d’accès",
+            path.clone(),
+            {
+                let handle = handle.clone();
+                move |text, _, cx| handle.update(cx, |this, cx| {
+                    this.breadcrumb_text = text.to_string();
+                    this.breadcrumb_invalid = false;
+                    cx.notify();
+                })
+            },
+            {
+                let handle = handle.clone();
+                move |_, cx| handle.update(cx, |this, cx| this.submit_breadcrumb_edit(cx))
+            },
+            {
+                let handle = handle.clone();
+                move |_, cx| handle.update(cx, |this, cx| this.cancel_breadcrumb_edit(cx))
+            },
+            {
+                let handle = handle.clone();
+                move |input, has_selection, position, window, cx| {
+                    handle.update(cx, |this, cx| this.open_text_context_menu(input, has_selection, position, window, cx));
+                }
+            },
+            true,
+            false,
+            true,
+            Some(0..path.len()),
+            window,
+        ));
+        let focus = input.read(cx).focus_handle.clone();
+        self.editing_view = Some(input);
+        window.focus(&focus, cx);
+        cx.notify();
+    }
+
+    pub(crate) fn submit_breadcrumb_edit(&mut self, cx: &mut Context<Self>) {
+        if !self.breadcrumb_editing || !self.context_menus.is_empty() { return; }
+        let path = self.breadcrumb_text.trim().to_string();
+        if !std::path::Path::new(&path).is_dir() {
+            self.breadcrumb_shake_id = self.breadcrumb_shake_id.wrapping_add(1);
+            self.breadcrumb_invalid = true;
+            cx.notify();
+            return;
+        }
+        let pane_id = self.breadcrumb_pane_id.take();
+        self.breadcrumb_editing = false;
+        self.breadcrumb_invalid = false;
+        self.editing_view = None;
+        if let Some(pane_id) = pane_id {
+            if !path.is_empty() { self.navigate_to(&pane_id, path, cx); }
+        }
+        cx.notify();
+    }
+
+    pub(crate) fn cancel_breadcrumb_edit(&mut self, cx: &mut Context<Self>) {
+        self.breadcrumb_editing = false;
+        self.breadcrumb_invalid = false;
+        self.breadcrumb_pane_id = None;
+        self.editing_view = None;
+        self.context_menus.clear();
         cx.notify();
     }
 
@@ -830,6 +929,7 @@ impl OxydeApp {
         }
         if self.editing_text.trim().is_empty() {
             self.rename_error = Some("Le nom ne peut pas être vide.".to_string());
+            self.rename_shake_id = self.rename_shake_id.wrapping_add(1);
             cx.notify();
             return;
         }
@@ -953,12 +1053,14 @@ impl OxydeApp {
                         Ok(Err(error)) => {
                             log::warn!("Rename failed: {error:?}");
                             this.rename_error = Some(crate::ui::errors::rename_message(&error));
+                            this.rename_shake_id = this.rename_shake_id.wrapping_add(1);
                             cx.notify();
                         }
                         Err(error) => {
                             log::warn!("Rename task failed: {error}");
                             this.rename_error =
                                 Some("Le renommage a échoué. Réessayez.".to_string());
+                            this.rename_shake_id = this.rename_shake_id.wrapping_add(1);
                             cx.notify();
                         }
                     }
