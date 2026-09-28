@@ -352,8 +352,13 @@ pub struct OxydeApp {
     pub editing_path: Option<String>,
     pub editing_text: String,
     pub editing_view: Option<Entity<TextInput>>,
+    pub inline_rename: bool,
+    rename_click_candidate: Option<(String, std::time::Instant)>,
+    rename_pending: bool,
+    rename_generation: u64,
     pending_file_operation: Option<PendingFileOperation>,
     file_operation_notice: Option<String>,
+    pub(crate) rename_error: Option<String>,
 
     // ── Settings ─────────────────────────────────────────────────────────────
     pub show_hidden: bool,
@@ -623,8 +628,13 @@ impl OxydeApp {
             editing_path: None,
             editing_text: String::new(),
             editing_view: None,
+            inline_rename: false,
+            rename_click_candidate: None,
+            rename_pending: false,
+            rename_generation: 0,
             pending_file_operation: None,
             file_operation_notice: None,
+            rename_error: None,
             show_hidden: false,
             show_system: false,
             show_media_previews: true,
@@ -669,72 +679,232 @@ impl OxydeApp {
 
     pub fn execute_renommer(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let pane_id = self.state.active_pane_id.clone();
-        if let Some(pane) = self.state.layout.find_pane(&pane_id) {
-            let selected: Vec<String> = pane.active_tab().selected_paths.iter().cloned().collect();
-            if let Some(path) = selected.first() {
-                self.editing_path = Some(path.clone());
-                let initial_name = std::path::Path::new(path)
-                    .file_name()
-                    .and_then(|n| n.to_str())
-                    .unwrap_or("")
-                    .to_string();
-                self.editing_text = initial_name.clone();
-
-                let stem_len = std::path::Path::new(&initial_name)
-                    .file_stem()
-                    .and_then(|s| s.to_str())
-                    .map(|s| s.len())
-                    .unwrap_or(initial_name.len());
-                let initial_selection = Some(0..stem_len);
-
-                let path_cap = path.clone();
-                let handle = self.handle.clone().unwrap();
-
-                let view = cx.new(|cx| {
-                    TextInput::new(
-                        cx,
-                        "Nom du fichier",
-                        initial_name,
-                        {
-                            let handle = handle.clone();
-                            move |txt, _window, cx| {
-                                handle.update(cx, |this, _| {
-                                    this.editing_text = txt.to_string();
-                                });
-                            }
-                        },
-                        {
-                            let handle = handle.clone();
-                            let p = path_cap.clone();
-                            move |_window, cx| {
-                                handle.update(cx, |this, cx| {
-                                    let new_name = this.editing_text.clone();
-                                    this.execute_file_rename(p.clone(), new_name, cx);
-                                    this.editing_view = None;
-                                });
-                            }
-                        },
-                        {
-                            let handle = handle.clone();
-                            move |_window, cx| {
-                                handle.update(cx, |this, _| {
-                                    this.editing_path = None;
-                                    this.editing_view = None;
-                                });
-                            }
-                        },
-                        true,
-                        initial_selection,
-                        window,
-                    )
-                });
-
-                let focus_handle = view.read(cx).focus_handle.clone();
-                window.focus(&focus_handle, cx);
-                self.editing_view = Some(view);
-                cx.notify();
-            }
+        let selected = self.state.layout.find_pane(&pane_id).and_then(|pane| {
+            let tab = pane.active_tab();
+            tab.selected_paths.iter().next().cloned().map(|path| {
+                let is_dir = tab
+                    .files
+                    .iter()
+                    .any(|file| file.path == path && file.is_dir);
+                (path, is_dir)
+            })
+        });
+        if let Some((path, is_dir)) = selected {
+            self.begin_rename(path, is_dir, false, window, cx);
         }
+    }
+
+    pub(crate) fn handle_slow_rename_click(
+        &mut self,
+        path: String,
+        is_dir: bool,
+        click_count: usize,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let now = std::time::Instant::now();
+        let previous = self.rename_click_candidate.take();
+        let is_same_selected_item = self
+            .state
+            .layout
+            .find_pane(&self.state.active_pane_id)
+            .map(|pane| pane.active_tab().selected_paths.contains(&path))
+            .unwrap_or(false);
+        let is_slow_second_click = previous
+            .as_ref()
+            .map(|(previous_path, previous_at)| {
+                previous_path == &path
+                    && now.duration_since(*previous_at) >= std::time::Duration::from_millis(250)
+                    && now.duration_since(*previous_at) <= std::time::Duration::from_secs(2)
+            })
+            .unwrap_or(false);
+
+        if self.inline_rename || self.editing_path.is_some() {
+            return;
+        }
+
+        if is_same_selected_item && is_slow_second_click {
+            self.begin_rename(path, is_dir, true, window, cx);
+        } else if click_count <= 1 {
+            self.rename_click_candidate = Some((path, now));
+        }
+    }
+
+    fn begin_rename(
+        &mut self,
+        path: String,
+        is_dir: bool,
+        inline: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let initial_name = std::path::Path::new(&path)
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("")
+            .to_string();
+        let selected_len = if is_dir {
+            initial_name.len()
+        } else {
+            std::path::Path::new(&initial_name)
+                .file_stem()
+                .and_then(|stem| stem.to_str())
+                .map(str::len)
+                .unwrap_or(initial_name.len())
+        };
+        let initial_selection = Some(0..selected_len);
+        let Some(handle) = self.handle.clone() else {
+            return;
+        };
+
+        self.rename_generation = self.rename_generation.wrapping_add(1);
+        self.rename_pending = false;
+        self.rename_click_candidate = None;
+        self.editing_path = Some(path);
+        self.editing_text = initial_name.clone();
+        self.rename_error = None;
+        self.inline_rename = inline;
+
+        let view = cx.new(|cx| {
+            TextInput::new(
+                cx,
+                "Nom du fichier",
+                initial_name,
+                {
+                    let handle = handle.clone();
+                    move |text, _window, cx| {
+                        handle.update(cx, |this, _| this.editing_text = text.to_string());
+                    }
+                },
+                {
+                    let handle = handle.clone();
+                    move |_window, cx| {
+                        handle.update(cx, |this, cx| this.submit_rename(cx));
+                    }
+                },
+                {
+                    let handle = handle.clone();
+                    move |_window, cx| {
+                        handle.update(cx, |this, cx| this.cancel_rename(cx));
+                    }
+                },
+                {
+                    let handle = handle.clone();
+                    move |input, has_selection, position, window, cx| {
+                        handle.update(cx, |this, cx| {
+                            this.open_text_context_menu(input, has_selection, position, window, cx)
+                        });
+                    }
+                },
+                true,
+                inline,
+                inline,
+                initial_selection,
+                window,
+            )
+        });
+
+        let focus_handle = view.read(cx).focus_handle.clone();
+        self.editing_view = Some(view);
+        window.focus(&focus_handle, cx);
+        cx.notify();
+    }
+
+    pub(crate) fn submit_rename(&mut self, cx: &mut Context<Self>) {
+        if self.inline_rename && !self.context_menus.is_empty() {
+            return;
+        }
+        if self.rename_pending {
+            return;
+        }
+        let Some(path) = self.editing_path.clone() else {
+            return;
+        };
+        let current_name = std::path::Path::new(&path)
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("");
+        if self.editing_text == current_name {
+            self.cancel_rename(cx);
+            return;
+        }
+        if self.editing_text.trim().is_empty() {
+            self.rename_error = Some("Le nom ne peut pas être vide.".to_string());
+            cx.notify();
+            return;
+        }
+        self.rename_pending = true;
+        self.execute_file_rename(path, self.editing_text.clone(), cx);
+    }
+
+    pub(crate) fn cancel_rename(&mut self, cx: &mut Context<Self>) {
+        self.rename_generation = self.rename_generation.wrapping_add(1);
+        self.editing_path = None;
+        self.editing_view = None;
+        self.inline_rename = false;
+        self.rename_pending = false;
+        self.rename_error = None;
+        cx.notify();
+    }
+
+    pub(crate) fn open_text_context_menu(
+        &mut self,
+        input: Entity<TextInput>,
+        has_selection: bool,
+        position: Point<Pixels>,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        use crate::ui::components::dropdown::{DropdownItem, IconName};
+
+        let Some(handle) = self.handle.clone() else {
+            return;
+        };
+        let can_paste = cx
+            .read_from_clipboard()
+            .and_then(|clipboard| clipboard.text())
+            .is_some();
+
+        let mut items = Vec::new();
+        for (label, command, is_dimmed) in [
+            ("Couper", 0u8, !has_selection),
+            ("Copier", 1u8, !has_selection),
+            ("Coller", 2u8, !can_paste),
+            ("Tout sélectionner", 3u8, false),
+        ] {
+            let h = handle.clone();
+            let target_input = input.clone();
+            let mut item = DropdownItem::new(label, move |window, app| {
+                target_input.update(app, |input, cx| match command {
+                    0 => input.cut_selected_text(window, cx),
+                    1 => input.copy_selected_text(cx),
+                    2 => input.paste_from_clipboard(window, cx),
+                    _ => input.select_all_text(cx),
+                });
+                h.update(app, |_this, cx| {
+                    cx.notify();
+                });
+            });
+            item.icon = match command {
+                1 => Some(IconName::Copy),
+                3 => Some(IconName::ALargeSmall),
+                _ => None,
+            };
+            item.is_dimmed = is_dimmed;
+            items.push(item);
+        }
+
+        self.context_menus.clear();
+        self.context_menus.push(ContextMenuInstance {
+            position,
+            content: ContextMenuContent::Items(items, None),
+            scroll_handle: UniformListScrollHandle::new(),
+            width: px(0.0),
+            open_left: false,
+            hovered_item: None,
+            native_request_id: None,
+        });
+        cx.notify();
     }
 
     pub fn execute_file_rename(
@@ -749,8 +919,11 @@ impl OxydeApp {
         let new_path = parent.join(new_name).to_string_lossy().to_string();
 
         let Some(handle) = self.handle.clone() else {
+            self.rename_pending = false;
             return;
         };
+        let generation = self.rename_generation;
+        let path_for_check = old_path.clone();
         cx.spawn(move |_, cx: &mut AsyncApp| {
             let mut cx = cx.clone();
             async move {
@@ -759,14 +932,36 @@ impl OxydeApp {
                     runtime.block_on(oxyde_lib::commands::io::rename_item(old_path, new_path))
                 })
                 .await;
-                handle.update(&mut cx, |this, cx| match result {
-                    Ok(Ok(())) => {
-                        this.editing_path = None;
+                handle.update(&mut cx, |this, cx| {
+                    let current_attempt = this.rename_generation == generation
+                        && this.editing_path.as_deref() == Some(path_for_check.as_str());
+                    if let Ok(Ok(())) = &result {
                         this.reconcile_watchers();
-                        cx.notify();
                     }
-                    Ok(Err(error)) => log::warn!("Rename failed: {error:?}"),
-                    Err(error) => log::warn!("Rename task failed: {error}"),
+                    if !current_attempt {
+                        return;
+                    }
+                    this.rename_pending = false;
+                    match result {
+                        Ok(Ok(())) => {
+                            this.editing_path = None;
+                            this.editing_view = None;
+                            this.inline_rename = false;
+                            this.rename_error = None;
+                            cx.notify();
+                        }
+                        Ok(Err(error)) => {
+                            log::warn!("Rename failed: {error:?}");
+                            this.rename_error = Some(crate::ui::errors::rename_message(&error));
+                            cx.notify();
+                        }
+                        Err(error) => {
+                            log::warn!("Rename task failed: {error}");
+                            this.rename_error =
+                                Some("Le renommage a échoué. Réessayez.".to_string());
+                            cx.notify();
+                        }
+                    }
                 });
             }
         })
@@ -1630,6 +1825,18 @@ impl Render for OxydeApp {
                         cx,
                     )))
             });
+
+        // Keep modal content below transient context menus in the render tree:
+        // a text field inside the rename dialog can open its own context menu.
+        if self.editing_path.is_some() && !self.inline_rename {
+            root = root.child(deferred(
+                crate::ui::components::rename_dialog::render_rename_dialog(
+                    self,
+                    handle.clone(),
+                    cx,
+                ),
+            ));
+        }
 
         // CONTEXT MENU OVERLAY
         for (m_idx, instance) in self.context_menus.iter().enumerate() {

@@ -14,6 +14,26 @@ pub fn path_load_message(error: &CommandError) -> String {
     }
 }
 
+pub fn rename_message(error: &CommandError) -> String {
+    match error {
+        CommandError::IoError(message)
+            if message.to_ascii_lowercase().contains("already exists") =>
+        {
+            "Un fichier ou un dossier portant déjà ce nom existe ici.".to_string()
+        }
+        CommandError::PathNotFound(_) => {
+            "L’élément à renommer n’existe plus ou n’est plus accessible.".to_string()
+        }
+        CommandError::AccessDenied(_) => {
+            "Le renommage est refusé. Vérifiez les autorisations de cet élément.".to_string()
+        }
+        CommandError::IoError(_) | CommandError::PathError(_) => {
+            "Le renommage a échoué. Vérifiez le nom et réessayez.".to_string()
+        }
+        _ => "Impossible de renommer cet élément pour le moment.".to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -31,6 +51,16 @@ mod tests {
         assert_eq!(
             path_load_message(&CommandError::IoError("os error 3".into())),
             "Impossible d’ouvrir ce dossier. Vérifiez le chemin et réessayez."
+        );
+    }
+
+    #[test]
+    fn rename_conflicts_are_localized_without_os_error_details() {
+        assert_eq!(
+            rename_message(&CommandError::IoError(
+                "Rename target already exists: D:\\Tests\\2".to_string()
+            )),
+            "Un fichier ou un dossier portant déjà ce nom existe ici."
         );
     }
 }

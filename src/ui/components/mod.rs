@@ -2,6 +2,7 @@ pub mod dropdown;
 pub mod file_list;
 pub mod icons;
 pub mod input;
+pub mod rename_dialog;
 pub mod scrollbar;
 pub mod settings;
 pub mod sidebar;

@@ -249,6 +249,7 @@ impl OxydeApp {
             let h_enter = h_cap.clone();
             let h_esc = h_cap.clone();
             let pid_esc = pid_cap.clone();
+            let h_context = h_cap.clone();
 
             crate::ui::components::input::TextInput::new(
                 cx,
@@ -270,6 +271,13 @@ impl OxydeApp {
                         this.context_menus.clear();
                     });
                 },
+                move |input, has_selection, position, window, cx| {
+                    h_context.update(cx, |this, cx| {
+                        this.open_text_context_menu(input, has_selection, position, window, cx)
+                    });
+                },
+                false,
+                false,
                 false,
                 None,
                 window,

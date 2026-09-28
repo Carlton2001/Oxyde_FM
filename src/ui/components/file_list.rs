@@ -77,6 +77,10 @@ pub fn render_file_list(
     let show_media_previews = view.show_media_previews;
 
     let selected_paths = active_tab.selected_paths.clone();
+    let inline_rename = view.inline_rename;
+    let inline_rename_path = view.editing_path.clone();
+    let inline_rename_view = view.editing_view.clone();
+    let inline_rename_error = view.rename_error.clone();
 
     let mut container = div()
         .flex_1()
@@ -146,6 +150,14 @@ pub fn render_file_list(
                                             let is_selected = selected_paths.contains(&path);
                                             let p_id = p_id_for_list.clone();
                                             let h = h_inner.clone();
+                                            let inline_editing = inline_rename
+                                                && inline_rename_path.as_deref() == Some(path.as_str());
+                                            let editing_view = inline_editing
+                                                .then(|| inline_rename_view.clone())
+                                                .flatten();
+                                            let rename_error = inline_editing
+                                                .then(|| inline_rename_error.clone())
+                                                .flatten();
 
                                             {
                                             let file_name_tt = file.name.clone();
@@ -235,12 +247,21 @@ pub fn render_file_list(
                                                      let h_inner_inner = h.clone();
                                                      let p_id_cap = p_id.clone();
                                                      let p_for_right = path.clone();
-                                                     move |e, _, cx| {
+                                                     move |e, window, cx| {
                                                          cx.stop_propagation();
                                                          let pos = e.position;
                                                          let p_id_cap_cap = p_id_cap.clone();
                                                          let p_for_right_cap = p_for_right.clone();
+                                                          let mut editing_input = None;
+                                                          let mut open_text_menu = false;
                                                           h_inner_inner.update(cx, |this, cx| {
+                                                              if this.inline_rename
+                                                                  && this.editing_path.as_deref() == Some(p_for_right_cap.as_str())
+                                                              {
+                                                                  editing_input = this.editing_view.clone();
+                                                                  open_text_menu = this.context_menus.is_empty();
+                                                                  return;
+                                                              }
                                                               this.state.active_pane_id = p_id_cap_cap.clone();
                                                               if !this.state.find_pane(&p_id_cap_cap).map(|p| p.active_tab().selected_paths.contains(&p_for_right_cap)).unwrap_or(false) {
                                                                   this.toggle_selection(&p_id_cap_cap, p_for_right_cap.clone(), false, false, cx);
@@ -257,6 +278,14 @@ pub fn render_file_list(
                                                               });
                                                               cx.notify();
                                                           });
+                                                          if open_text_menu {
+                                                              if let Some(input) = editing_input {
+                                                                  let has_selection = input.read(cx).has_selection();
+                                                                  h_inner_inner.update(cx, |this, cx| {
+                                                                      this.open_text_context_menu(input, has_selection, pos, window, cx);
+                                                                  });
+                                                              }
+                                                          }
                                                      }
                                                  })
                                                 .on_drag({
@@ -337,28 +366,41 @@ pub fn render_file_list(
                                                                         .mr_2()
                                                                         .text_color(if is_dir { theme.accent } else { theme.text_muted })
                                                                 })
-                                                                .child(
-                                                                    div()
+                                                                .child(match editing_view {
+                                                                    Some(editing_view) => div()
+                                                                        .id(SharedString::from(format!("inline-rename-{}", path)))
                                                                         .flex_1()
-                                                                        .overflow_hidden()
-                                                                        .child({
-                                                                            let app_view = h.read(cx);
-                                                                            if app_view.editing_path.as_ref() == Some(&path_str) {
-                                                                                if let Some(edit_view) = &app_view.editing_view {
-                                                                                    div().h(px(ROW_HEIGHT)).w_full().child(edit_view.clone()).into_any_element()
-                                                                                } else {
-                                                                                    div().child(file_name.clone()).into_any_element()
-                                                                                }
-                                                                            } else {
-                                                                                div()
-                                                                                    .text_ellipsis()
-                                                                                    .font_weight(FontWeight::MEDIUM)
-                                                                                    .text_color(theme.text)
-                                                                                    .child(file_name.clone())
-                                                                                    .into_any_element()
-                                                                            }
+                                                                        .h_full()
+                                                                        .when_some(rename_error, |field, error| {
+                                                                            field.tooltip(Tooltip::text(error))
                                                                         })
-                                                                )
+                                                                        .child(editing_view.into_any_element())
+                                                                        .into_any_element(),
+                                                                    None => {
+                                                                        let h_click = h.clone();
+                                                                        let click_path = path.clone();
+                                                                        div()
+                                                                            .flex_1()
+                                                                            .overflow_hidden()
+                                                                            .text_ellipsis()
+                                                                            .font_weight(FontWeight::MEDIUM)
+                                                                            .text_color(theme.text)
+                                                                            .child(file_name.clone())
+                                                                            .on_mouse_down(MouseButton::Left, move |event, window, cx| {
+                                                                                let path = click_path.clone();
+                                                                                h_click.update(cx, |this, cx| {
+                                                                                    this.handle_slow_rename_click(
+                                                                                        path,
+                                                                                        is_dir,
+                                                                                        event.click_count,
+                                                                                        window,
+                                                                                        cx,
+                                                                                    );
+                                                                                });
+                                                                            })
+                                                                            .into_any_element()
+                                                                    }
+                                                                })
                                                         )
                                                 })
                                                 .child(div().w(px(type_w)).px(px(8.0)).text_color(theme.text_muted).text_ellipsis().text_size(px(12.0)).child(file_type_label(file)))

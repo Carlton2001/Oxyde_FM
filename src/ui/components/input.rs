@@ -4,7 +4,7 @@ use unicode_segmentation::*;
 
 actions!(
     input,
-    [Backspace, Delete, Left, Right, Home, End, SelectAll, Enter, Escape]
+    [Backspace, Delete, Left, Right, Home, End, SelectAll, Enter, Escape, Copy, Cut, Paste]
 );
 
 pub fn bind_keys(cx: &mut App) {
@@ -18,6 +18,9 @@ pub fn bind_keys(cx: &mut App) {
         KeyBinding::new("home", Home, Some("TextInput")),
         KeyBinding::new("end", End, Some("TextInput")),
         KeyBinding::new("ctrl-a", SelectAll, Some("TextInput")),
+        KeyBinding::new("ctrl-c", Copy, Some("TextInput")),
+        KeyBinding::new("ctrl-x", Cut, Some("TextInput")),
+        KeyBinding::new("ctrl-v", Paste, Some("TextInput")),
     ]);
 }
 pub struct TextInput {
@@ -25,14 +28,20 @@ pub struct TextInput {
     content: String,
     placeholder: SharedString,
     selected_range: std::ops::Range<usize>,
+    selection_anchor: usize,
+    selection_reversed: bool,
+    is_selecting: bool,
     last_layout: Option<ShapedLine>,
     last_bounds: Option<Bounds<Pixels>>,
     on_change: Box<dyn Fn(&str, &mut Window, &mut App)>,
     on_enter: Box<dyn Fn(&mut Window, &mut App)>,
     on_escape: Box<dyn Fn(&mut Window, &mut App)>,
+    on_context_menu: Box<dyn Fn(Entity<TextInput>, bool, Point<Pixels>, &mut Window, &mut App)>,
     cursor_visible: bool,
     blink_epoch: usize,
     pub minimal: bool,
+    compact: bool,
+    submit_on_outside: bool,
 }
 
 impl TextInput {
@@ -43,11 +52,17 @@ impl TextInput {
         on_change: impl Fn(&str, &mut Window, &mut App) + 'static,
         on_enter: impl Fn(&mut Window, &mut App) + 'static,
         on_escape: impl Fn(&mut Window, &mut App) + 'static,
+        on_context_menu: impl Fn(Entity<TextInput>, bool, Point<Pixels>, &mut Window, &mut App)
+            + 'static,
         minimal: bool,
+        compact: bool,
+        submit_on_outside: bool,
         initial_selection: Option<std::ops::Range<usize>>,
         window: &mut Window,
     ) -> Self {
         let len = initial_text.len();
+        let selected_range = initial_selection.unwrap_or(len..len);
+        let selection_anchor = selected_range.start;
         let focus_handle = cx.focus_handle();
 
         cx.on_focus(&focus_handle, window, |this, _, cx| {
@@ -65,15 +80,21 @@ impl TextInput {
             focus_handle,
             content: initial_text,
             placeholder: placeholder.into(),
-            selected_range: initial_selection.unwrap_or(len..len),
+            selected_range,
+            selection_anchor,
+            selection_reversed: false,
+            is_selecting: false,
             last_layout: None,
             last_bounds: None,
             on_change: Box::new(on_change),
             on_enter: Box::new(on_enter),
             on_escape: Box::new(on_escape),
+            on_context_menu: Box::new(on_context_menu),
             cursor_visible: true,
             blink_epoch: 0,
             minimal,
+            compact,
+            submit_on_outside,
         }
     }
 
@@ -139,6 +160,170 @@ impl TextInput {
         self.utf16_offset_for_byte(range.start)..self.utf16_offset_for_byte(range.end)
     }
 
+    fn byte_index_for_position(&self, position: Point<Pixels>) -> usize {
+        let (Some(bounds), Some(line)) = (&self.last_bounds, &self.last_layout) else {
+            return 0;
+        };
+        line.closest_index_for_x(position.x - bounds.left())
+            .min(self.content.len())
+    }
+
+    fn select_word_at(&mut self, byte_index: usize) {
+        if self.content.is_empty() {
+            self.selected_range = 0..0;
+            self.selection_anchor = 0;
+            return;
+        }
+        let chars: Vec<(usize, char)> = self.content.char_indices().collect();
+        let char_index = chars
+            .iter()
+            .position(|(start, character)| {
+                let end = *start + character.len_utf8();
+                byte_index >= *start && byte_index < end
+            })
+            .unwrap_or_else(|| chars.len().saturating_sub(1));
+        let is_word = |character: char| character.is_alphanumeric() || character == '_';
+        let selected_char = chars[char_index].1;
+        let mut start = char_index;
+        let mut end = char_index + 1;
+        if is_word(selected_char) {
+            while start > 0 && is_word(chars[start - 1].1) {
+                start -= 1;
+            }
+            while end < chars.len() && is_word(chars[end].1) {
+                end += 1;
+            }
+        }
+        let byte_start = chars[start].0;
+        let byte_end = chars
+            .get(end)
+            .map(|(offset, _)| *offset)
+            .unwrap_or(self.content.len());
+        self.selected_range = byte_start..byte_end;
+        self.selection_anchor = byte_start;
+        self.selection_reversed = false;
+    }
+
+    fn on_mouse_down(
+        &mut self,
+        event: &MouseDownEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        window.focus(&self.focus_handle, cx);
+        let index = self.byte_index_for_position(event.position);
+        if event.click_count >= 3 {
+            self.selected_range = 0..self.content.len();
+            self.selection_anchor = 0;
+            self.selection_reversed = false;
+            self.is_selecting = false;
+        } else if event.click_count == 2 {
+            self.select_word_at(index);
+            self.is_selecting = false;
+        } else if event.modifiers.shift {
+            let anchor = self.selection_anchor;
+            self.selected_range = anchor.min(index)..anchor.max(index);
+            self.selection_reversed = index < anchor;
+            self.is_selecting = true;
+        } else {
+            self.selection_anchor = index;
+            self.selected_range = index..index;
+            self.selection_reversed = false;
+            self.is_selecting = true;
+        }
+        self.reset_blinking(cx);
+    }
+
+    fn on_mouse_move(&mut self, event: &MouseMoveEvent, _: &mut Window, cx: &mut Context<Self>) {
+        if !self.is_selecting {
+            return;
+        }
+        let index = self.byte_index_for_position(event.position);
+        self.selected_range = self.selection_anchor.min(index)..self.selection_anchor.max(index);
+        self.selection_reversed = index < self.selection_anchor;
+        self.cursor_visible = self.selected_range.is_empty();
+        cx.notify();
+    }
+
+    fn on_mouse_up(&mut self, _: &MouseUpEvent, _: &mut Window, _: &mut Context<Self>) {
+        self.is_selecting = false;
+    }
+
+    fn on_right_mouse_down(
+        &mut self,
+        event: &MouseDownEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        cx.stop_propagation();
+        let input = cx.entity();
+        (self.on_context_menu)(input, self.has_selection(), event.position, window, cx);
+    }
+
+    pub fn has_selection(&self) -> bool {
+        !self.selected_range.is_empty()
+    }
+
+    pub fn copy_selected_text(&self, cx: &mut Context<Self>) {
+        if let Some(text) = self.content.get(self.selected_range.clone()) {
+            if !text.is_empty() {
+                cx.write_to_clipboard(ClipboardItem::new_string(text.to_string()));
+            }
+        }
+    }
+
+    pub fn cut_selected_text(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.selected_range.is_empty() {
+            self.copy_selected_text(cx);
+            self.replace_text_in_range(None, "", window, cx);
+        }
+    }
+
+    pub fn paste_from_clipboard(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(text) = cx.read_from_clipboard().and_then(|item| item.text()) {
+            let text = text.replace('\r', " ").replace('\n', " ");
+            self.replace_text_in_range(None, &text, window, cx);
+        }
+    }
+
+    pub fn select_all_text(&mut self, cx: &mut Context<Self>) {
+        self.selected_range = 0..self.content.len();
+        self.selection_anchor = 0;
+        self.selection_reversed = false;
+        self.reset_blinking(cx);
+    }
+
+    fn copy(&mut self, _: &Copy, _: &mut Window, cx: &mut Context<Self>) {
+        self.copy_selected_text(cx);
+    }
+
+    fn cut(&mut self, _: &Cut, window: &mut Window, cx: &mut Context<Self>) {
+        self.cut_selected_text(window, cx);
+    }
+
+    fn paste(&mut self, _: &Paste, window: &mut Window, cx: &mut Context<Self>) {
+        self.paste_from_clipboard(window, cx);
+    }
+
+    fn select_all(&mut self, _: &SelectAll, _: &mut Window, cx: &mut Context<Self>) {
+        self.select_all_text(cx);
+    }
+
+    fn home(&mut self, _: &Home, _: &mut Window, cx: &mut Context<Self>) {
+        self.selected_range = 0..0;
+        self.selection_anchor = 0;
+        self.selection_reversed = false;
+        self.reset_blinking(cx);
+    }
+
+    fn end(&mut self, _: &End, _: &mut Window, cx: &mut Context<Self>) {
+        let end = self.content.len();
+        self.selected_range = end..end;
+        self.selection_anchor = end;
+        self.selection_reversed = false;
+        self.reset_blinking(cx);
+    }
+
     fn backspace(&mut self, _: &Backspace, window: &mut Window, cx: &mut Context<Self>) {
         if self.selected_range.is_empty() && self.selected_range.start > 0 {
             let prev = self
@@ -151,9 +336,14 @@ impl TextInput {
             self.content
                 .replace_range(prev..self.selected_range.start, "");
             self.selected_range = prev..prev;
+            self.selection_anchor = prev;
+            self.selection_reversed = false;
         } else {
+            let cursor = self.selected_range.start;
             self.content.replace_range(self.selected_range.clone(), "");
-            self.selected_range = self.selected_range.start..self.selected_range.start;
+            self.selected_range = cursor..cursor;
+            self.selection_anchor = cursor;
+            self.selection_reversed = false;
         }
         (self.on_change)(&self.content, window, cx);
         self.reset_blinking(cx);
@@ -169,9 +359,15 @@ impl TextInput {
                 .unwrap_or(self.content.len());
             self.content
                 .replace_range(self.selected_range.start..next, "");
-        } else {
-            self.content.replace_range(self.selected_range.clone(), "");
             self.selected_range = self.selected_range.start..self.selected_range.start;
+            self.selection_anchor = self.selected_range.start;
+            self.selection_reversed = false;
+        } else {
+            let cursor = self.selected_range.start;
+            self.content.replace_range(self.selected_range.clone(), "");
+            self.selected_range = cursor..cursor;
+            self.selection_anchor = cursor;
+            self.selection_reversed = false;
         }
         (self.on_change)(&self.content, window, cx);
         self.reset_blinking(cx);
@@ -185,9 +381,22 @@ impl TextInput {
         (self.on_escape)(window, cx);
     }
 
+    fn submit_on_outside_click(
+        &mut self,
+        event: &MouseDownEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if event.button == MouseButton::Left {
+            (self.on_enter)(window, cx);
+        }
+    }
+
     fn move_left(&mut self, _: &Left, _: &mut Window, cx: &mut Context<Self>) {
         if !self.selected_range.is_empty() {
             self.selected_range = self.selected_range.start..self.selected_range.start;
+            self.selection_anchor = self.selected_range.start;
+            self.selection_reversed = false;
             self.reset_blinking(cx);
         } else if self.selected_range.start > 0 {
             let prev = self
@@ -198,6 +407,8 @@ impl TextInput {
                 .map(|(i, _)| i)
                 .unwrap_or(0);
             self.selected_range = prev..prev;
+            self.selection_anchor = prev;
+            self.selection_reversed = false;
             self.reset_blinking(cx);
         }
     }
@@ -205,6 +416,8 @@ impl TextInput {
     fn move_right(&mut self, _: &Right, _: &mut Window, cx: &mut Context<Self>) {
         if !self.selected_range.is_empty() {
             self.selected_range = self.selected_range.end..self.selected_range.end;
+            self.selection_anchor = self.selected_range.start;
+            self.selection_reversed = false;
             self.reset_blinking(cx);
         } else if self.selected_range.end < self.content.len() {
             let next = self
@@ -214,6 +427,8 @@ impl TextInput {
                 .map(|(i, _)| i)
                 .unwrap_or(self.content.len());
             self.selected_range = next..next;
+            self.selection_anchor = next;
+            self.selection_reversed = false;
             self.reset_blinking(cx);
         }
     }
@@ -239,7 +454,7 @@ impl EntityInputHandler for TextInput {
     ) -> Option<UTF16Selection> {
         Some(UTF16Selection {
             range: self.range_to_utf16(self.selected_range.clone()),
-            reversed: false,
+            reversed: self.selection_reversed,
         })
     }
     fn marked_text_range(
@@ -263,6 +478,9 @@ impl EntityInputHandler for TextInput {
         self.content.replace_range(range.clone(), new_text);
         let new_pos = range.start + new_text.len();
         self.selected_range = new_pos..new_pos;
+        self.selection_anchor = new_pos;
+        self.selection_reversed = false;
+        self.is_selecting = false;
         (self.on_change)(&self.content, window, cx);
         self.reset_blinking(cx);
     }
@@ -321,22 +539,39 @@ impl Render for TextInput {
             .on_action(cx.listener(Self::escape))
             .on_action(cx.listener(Self::move_left))
             .on_action(cx.listener(Self::move_right))
-            .on_mouse_down(MouseButton::Left, move |_, window, cx| {
-                window.focus(&focus_handle, cx);
+            .on_action(cx.listener(Self::select_all))
+            .on_action(cx.listener(Self::copy))
+            .on_action(cx.listener(Self::cut))
+            .on_action(cx.listener(Self::paste))
+            .on_action(cx.listener(Self::home))
+            .on_action(cx.listener(Self::end))
+            .on_mouse_down(MouseButton::Left, cx.listener(Self::on_mouse_down))
+            .on_mouse_down(MouseButton::Right, cx.listener(Self::on_right_mouse_down))
+            .when(self.submit_on_outside, |div| {
+                div.on_mouse_down_out(cx.listener(Self::submit_on_outside_click))
             })
-            .bg(if is_focused {
+            .on_mouse_up(MouseButton::Left, cx.listener(Self::on_mouse_up))
+            .on_mouse_up_out(MouseButton::Left, cx.listener(Self::on_mouse_up))
+            .on_mouse_move(cx.listener(Self::on_mouse_move))
+            .bg(if self.compact {
+                hsla(0.0, 0.0, 0.0, 0.0)
+            } else if is_focused {
                 hsla(0.0, 0.0, 0.16, 1.0)
             } else {
                 hsla(0.0, 0.0, 0.12, 1.0)
             })
             .border_1()
-            .border_color(if is_focused {
+            .border_color(if self.compact {
+                hsla(0.0, 0.0, 0.0, 0.0)
+            } else if is_focused {
                 hsla(0.6, 1.0, 0.5, 0.6)
             } else {
                 hsla(0.0, 0.0, 0.25, 1.0)
             })
             .rounded_sm()
-            .when(self.minimal, |s| s.h_full())
+            .when(self.compact, |s| s.rounded_none())
+            .when(self.minimal && !self.compact, |s| s.h_full().px_3().py_2())
+            .when(self.minimal && self.compact, |s| s.h_full().px(px(0.0)))
             .when(!self.minimal, |s| s.h_8().px_2())
             .w_full()
             .child(
@@ -425,6 +660,7 @@ impl Element for TextInputElement {
         } else {
             input.content.clone().into()
         };
+        let selected_range = input.selected_range.clone();
         let style = window.text_style();
         let color = if input.content.is_empty() {
             hsla(0.0, 0.0, 0.45, 1.0)
@@ -432,18 +668,51 @@ impl Element for TextInputElement {
             style.color
         };
 
-        // Use a fixed font size or the window's current text style
-        let line = window.text_system().shape_line(
-            content.clone(),
-            style.font_size.to_pixels(window.rem_size()),
-            &[TextRun {
+        let mut runs = Vec::with_capacity(3);
+        if !input.content.is_empty() && !selected_range.is_empty() {
+            if selected_range.start > 0 {
+                runs.push(TextRun {
+                    len: selected_range.start,
+                    font: style.font(),
+                    color,
+                    background_color: None,
+                    underline: None,
+                    strikethrough: None,
+                });
+            }
+            runs.push(TextRun {
+                len: selected_range.end - selected_range.start,
+                font: style.font(),
+                color,
+                background_color: Some(hsla(0.60, 0.90, 0.52, 0.95)),
+                underline: None,
+                strikethrough: None,
+            });
+            if selected_range.end < input.content.len() {
+                runs.push(TextRun {
+                    len: input.content.len() - selected_range.end,
+                    font: style.font(),
+                    color,
+                    background_color: None,
+                    underline: None,
+                    strikethrough: None,
+                });
+            }
+        } else {
+            runs.push(TextRun {
                 len: content.len(),
                 font: style.font(),
                 color,
                 background_color: None,
                 underline: None,
                 strikethrough: None,
-            }],
+            });
+        }
+
+        let line = window.text_system().shape_line(
+            content.clone(),
+            style.font_size.to_pixels(window.rem_size()),
+            &runs,
             None,
         );
 
@@ -472,6 +741,20 @@ impl Element for TextInputElement {
             let line_h = window.line_height();
             let y_offset = (bounds.size.height - line_h) / 2.0;
 
+            let input = input_handle.read(cx);
+            let selected_range = input.selected_range.clone();
+            let cursor_visible = input.cursor_visible;
+            if !selected_range.is_empty() {
+                line.paint_background(
+                    bounds.origin + point(px(0.0), y_offset),
+                    line_h,
+                    TextAlign::Left,
+                    None,
+                    window,
+                    cx,
+                )
+                .unwrap();
+            }
             line.paint(
                 bounds.origin + point(px(0.0), y_offset),
                 line_h,
@@ -481,10 +764,8 @@ impl Element for TextInputElement {
                 cx,
             )
             .unwrap();
-
-            let input = input_handle.read(cx);
-            if focus_handle.is_focused(window) && input.cursor_visible {
-                let cursor_x = line.x_for_index(input.selected_range.start);
+            if focus_handle.is_focused(window) && cursor_visible && selected_range.is_empty() {
+                let cursor_x = line.x_for_index(selected_range.start);
                 let cursor_h = line_h * 0.8;
                 let cursor_y = bounds.top() + y_offset + (line_h - cursor_h) / 2.0;
                 window.paint_quad(fill(
