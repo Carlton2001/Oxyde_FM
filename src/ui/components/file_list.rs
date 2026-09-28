@@ -10,6 +10,8 @@ use gpui::prelude::*;
 use gpui::*;
 use oxyde_lib::models::FileEntry;
 
+const STATUS_BAR_HEIGHT: f32 = 28.0;
+
 /// Returns the display type label for a file entry.
 /// Symlinks and junctions are identified before extension/dir detection.
 fn file_type_label(f: &FileEntry) -> String {
@@ -27,6 +29,14 @@ fn file_type_label(f: &FileEntry) -> String {
         .and_then(|e| e.to_str())
         .map(|s| s.to_uppercase())
         .unwrap_or_else(|| "Fichier".to_string())
+}
+
+fn status_size(bytes: u64) -> String {
+    if bytes < 1024 {
+        format!("{bytes} Octets")
+    } else {
+        format_size(bytes, false, false)
+    }
 }
 
 pub fn render_file_list(
@@ -59,8 +69,8 @@ pub fn render_file_list(
     });
     let pane_viewport_w = pane_size.width.max(1.0);
 
-    let list_container_h = (pane_size.height - 64.0).max(1.0);
-    let v_v_h = (list_container_h - 28.0).max(1.0);
+    let v_v_h = (pane_size.height - 32.0 - ROW_HEIGHT - STATUS_BAR_HEIGHT - ZED_TRACK_WIDTH)
+        .max(1.0);
     let content_h = (count * ROW_HEIGHT).max(1.0);
 
     let type_w = active_tab.type_col_width;
@@ -77,6 +87,38 @@ pub fn render_file_list(
     let show_media_previews = view.show_media_previews;
 
     let selected_paths = active_tab.selected_paths.clone();
+    let displayed_folders = files.iter().filter(|file| file.is_dir).count();
+    let displayed_files = files.len().saturating_sub(displayed_folders);
+    let selected_entries: Vec<&FileEntry> = files
+        .iter()
+        .filter(|file| selected_paths.contains(&file.path))
+        .collect();
+    let selected_folders = selected_entries.iter().filter(|file| file.is_dir).count();
+    let selected_files = selected_entries.len().saturating_sub(selected_folders);
+    let selected_bytes: u64 = selected_entries
+        .iter()
+        .filter(|file| !file.is_dir || file.is_calculated)
+        .map(|file| file.size)
+        .sum();
+    let selection_summary = if selected_entries.is_empty() {
+        None
+    } else {
+        let selected_count = selected_entries.len();
+        let selected_label = match (selected_folders, selected_files) {
+            (0, files) => format!("{files} fichier{}", if files > 1 { "s" } else { "" }),
+            (folders, 0) => format!("{folders} dossier{}", if folders > 1 { "s" } else { "" }),
+            (folders, files) => format!(
+                "{folders} dossier{} et {files} fichier{}",
+                if folders > 1 { "s" } else { "" },
+                if files > 1 { "s" } else { "" },
+            ),
+        };
+        Some(format!(
+            "{selected_label} sélectionné{} ({})",
+            if selected_count > 1 { "s" } else { "" },
+            status_size(selected_bytes),
+        ))
+    };
     let inline_rename = view.inline_rename;
     let inline_rename_path = view.editing_path.clone();
     let inline_rename_view = view.editing_view.clone();
@@ -657,7 +699,7 @@ pub fn render_file_list(
             .absolute()
             .top(px(ROW_HEIGHT))
             .right_0()
-            .bottom_0()
+            .bottom(px(STATUS_BAR_HEIGHT))
             .w(px(ZED_TRACK_WIDTH))
             .child(render_scrollbar(
                 handle.clone(),
@@ -684,7 +726,7 @@ pub fn render_file_list(
 
     // Horizontal scrollbar overlay
     container = container.child(
-        div().absolute().left_0().bottom_0().right(px(ZED_TRACK_WIDTH)).h(px(ZED_TRACK_WIDTH))
+        div().absolute().left_0().bottom(px(STATUS_BAR_HEIGHT)).right(px(ZED_TRACK_WIDTH)).h(px(ZED_TRACK_WIDTH))
             .child(render_scrollbar(handle.clone(), ScrollbarAxis::Horizontal, pane_viewport_w, total_w + 28.0, -active_tab.list_scroll_h.offset().x.as_f32(), matches!(view.drag_target, Some(DragTarget::FileListH { ref pane_id, .. }) if pane_id == &p_id_cap), format!("h-{}", pane_suffix), None, {
                 let p_id = p_id_cap.clone();
                 move |this, track_id, v_w, c_w, _| {
@@ -707,6 +749,37 @@ pub fn render_file_list(
                 .child(message),
         );
     }
+
+    let folders_label = format!(
+        "{displayed_folders} dossier{}",
+        if displayed_folders > 1 { "s" } else { "" }
+    );
+    let files_label = format!(
+        "{displayed_files} fichier{}",
+        if displayed_files > 1 { "s" } else { "" }
+    );
+    container = container.child(
+        div()
+            .absolute()
+            .left_0()
+            .right_0()
+            .bottom_0()
+            .h(px(STATUS_BAR_HEIGHT))
+            .flex()
+            .items_center()
+            .gap_3()
+            .px_3()
+            .bg(theme.header)
+            .border_t_1()
+            .border_color(theme.border)
+            .text_size(px(12.0))
+            .text_color(theme.text_muted)
+            .child(format!("{folders_label}, {files_label}"))
+            .when_some(selection_summary, |bar, summary| {
+                bar.child("•")
+                    .child(div().text_color(theme.accent).child(summary))
+            }),
+    );
 
     container
 }
