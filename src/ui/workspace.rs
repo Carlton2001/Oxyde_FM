@@ -2,7 +2,55 @@ use crate::ui::i18n::Message;
 use gpui::{ScrollHandle, UniformListScrollHandle};
 use oxyde_lib::commands::system::{get_drives, get_quick_access_items};
 use oxyde_lib::models::{DriveInfo, FileEntry, QuickAccessItem, SidebarNode};
+use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
+
+pub const WORKSPACE_CONFIG_KEY: &str = "workspace_state";
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SavedWorkspace {
+    pub layout: SavedLayoutNode,
+    pub active_pane_id: String,
+    #[serde(default = "default_sidebar_width")]
+    pub sidebar_width: f32,
+}
+
+fn default_sidebar_width() -> f32 {
+    260.0
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum SavedLayoutNode {
+    Pane {
+        id: String,
+        tabs: Vec<SavedTab>,
+        active_tab_index: usize,
+    },
+    Split {
+        id: String,
+        axis: SavedLayoutAxis,
+        children: Vec<SavedLayoutNode>,
+        weights: Vec<f32>,
+    },
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SavedLayoutAxis {
+    Horizontal,
+    Vertical,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SavedTab {
+    pub id: String,
+    pub path: String,
+    #[serde(default)]
+    pub back_stack: Vec<String>,
+    #[serde(default)]
+    pub forward_stack: Vec<String>,
+}
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum SortColumn {
@@ -347,6 +395,101 @@ pub enum LayoutNode {
     },
 }
 
+impl SavedLayoutNode {
+    fn from_layout(layout: &LayoutNode) -> Self {
+        match layout {
+            LayoutNode::Pane(pane) => Self::Pane {
+                id: pane.id.clone(),
+                tabs: pane
+                    .tabs
+                    .iter()
+                    .map(|tab| SavedTab {
+                        id: tab.id.clone(),
+                        path: tab.path.clone(),
+                        back_stack: tab.back_stack.clone(),
+                        forward_stack: tab.forward_stack.clone(),
+                    })
+                    .collect(),
+                active_tab_index: pane.active_tab_index,
+            },
+            LayoutNode::Split {
+                id,
+                axis,
+                children,
+                weights,
+            } => Self::Split {
+                id: id.clone(),
+                axis: match axis {
+                    LayoutAxis::Horizontal => SavedLayoutAxis::Horizontal,
+                    LayoutAxis::Vertical => SavedLayoutAxis::Vertical,
+                },
+                children: children.iter().map(Self::from_layout).collect(),
+                weights: weights.clone(),
+            },
+        }
+    }
+
+    fn into_layout(self) -> Option<LayoutNode> {
+        match self {
+            Self::Pane {
+                id,
+                tabs,
+                active_tab_index,
+            } => {
+                let tabs: Vec<TabState> = tabs
+                    .into_iter()
+                    .filter(|tab| !tab.path.is_empty())
+                    .map(|tab| {
+                        let mut state = TabState::new(tab.id, tab.path);
+                        state.back_stack = tab.back_stack;
+                        state.forward_stack = tab.forward_stack;
+                        state
+                    })
+                    .collect();
+                if tabs.is_empty() {
+                    return None;
+                }
+                Some(LayoutNode::Pane(Box::new(PaneState {
+                    id,
+                    active_tab_index: active_tab_index.min(tabs.len() - 1),
+                    tabs,
+                })))
+            }
+            Self::Split {
+                id,
+                axis,
+                children,
+                weights,
+            } => {
+                let children: Option<Vec<LayoutNode>> =
+                    children.into_iter().map(Self::into_layout).collect();
+                let children = children?;
+                if children.len() < 2 {
+                    return children.into_iter().next();
+                }
+                let weights = if weights.len() == children.len()
+                    && weights
+                        .iter()
+                        .all(|weight| weight.is_finite() && *weight > 0.0)
+                {
+                    weights
+                } else {
+                    vec![1.0; children.len()]
+                };
+                Some(LayoutNode::Split {
+                    id,
+                    axis: match axis {
+                        SavedLayoutAxis::Horizontal => LayoutAxis::Horizontal,
+                        SavedLayoutAxis::Vertical => LayoutAxis::Vertical,
+                    },
+                    children,
+                    weights,
+                })
+            }
+        }
+    }
+}
+
 impl LayoutNode {
     #[allow(dead_code)]
     pub fn is_pane(&self) -> bool {
@@ -596,6 +739,55 @@ impl WorkspaceState {
 
         state.refresh_sidebar();
         state
+    }
+
+    pub fn saved_snapshot(&self, sidebar_width: f32) -> SavedWorkspace {
+        SavedWorkspace {
+            layout: SavedLayoutNode::from_layout(&self.layout),
+            active_pane_id: self.active_pane_id.clone(),
+            sidebar_width: if sidebar_width.is_finite() {
+                sidebar_width.clamp(150.0, 600.0)
+            } else {
+                default_sidebar_width()
+            },
+        }
+    }
+
+    pub fn from_saved_snapshot(snapshot: SavedWorkspace) -> Option<(Self, f32)> {
+        let layout = snapshot.layout.into_layout()?;
+        let mut state = Self::new();
+        state.layout = layout;
+
+        let mut first_pane_id = None;
+        let mut next_tab_id = 1u64;
+        state.layout.visit_panes(&mut |pane| {
+            if first_pane_id.is_none() {
+                first_pane_id = Some(pane.id.clone());
+            }
+            for tab in &pane.tabs {
+                if let Some(id) = tab
+                    .id
+                    .strip_prefix("tab-")
+                    .and_then(|id| id.parse::<u64>().ok())
+                {
+                    next_tab_id = next_tab_id.max(id.saturating_add(1));
+                }
+            }
+        });
+        state.active_pane_id = if state.find_pane(&snapshot.active_pane_id).is_some() {
+            snapshot.active_pane_id
+        } else {
+            first_pane_id?
+        };
+        state.next_tab_id = next_tab_id;
+        state.refresh_sidebar();
+
+        let sidebar_width = if snapshot.sidebar_width.is_finite() {
+            snapshot.sidebar_width.clamp(150.0, 600.0)
+        } else {
+            default_sidebar_width()
+        };
+        Some((state, sidebar_width))
     }
 
     #[allow(dead_code)]
@@ -1097,6 +1289,44 @@ mod tests {
         let mut pane_count = 0;
         state.layout.visit_panes(&mut |_| pane_count += 1);
         assert_eq!(pane_count, 2);
+    }
+
+    #[test]
+    fn saved_workspace_restores_split_panels_and_open_tab_paths() {
+        let mut state = WorkspaceState::new();
+        let source_pane_id = state.active_pane_id.clone();
+        state.add_tab(&source_pane_id, "D:/first".to_string(), true);
+        state.add_tab(&source_pane_id, "E:/active".to_string(), true);
+        state.split_tab_to_axis(
+            &source_pane_id,
+            2,
+            &source_pane_id,
+            LayoutAxis::Horizontal,
+            true,
+        );
+
+        let active_pane_id = state.active_pane_id.clone();
+        state.add_tab(&active_pane_id, "F:/second".to_string(), true);
+        if let LayoutNode::Split { weights, .. } = &mut state.layout {
+            *weights = vec![1.4, 0.6];
+        } else {
+            panic!("expected a split layout");
+        }
+
+        let value = serde_json::to_value(state.saved_snapshot(320.0)).unwrap();
+        let snapshot: SavedWorkspace = serde_json::from_value(value).unwrap();
+        let (restored, sidebar_width) = WorkspaceState::from_saved_snapshot(snapshot).unwrap();
+
+        assert_eq!(sidebar_width, 320.0);
+        assert_eq!(restored.active_pane_id, active_pane_id);
+        let pane = restored.find_pane(&active_pane_id).unwrap();
+        assert_eq!(pane.tabs.len(), 2);
+        assert_eq!(pane.tabs[0].path, "E:/active");
+        assert_eq!(pane.active_tab().path, "F:/second");
+        match &restored.layout {
+            LayoutNode::Split { weights, .. } => assert_eq!(weights, &[1.4, 0.6]),
+            LayoutNode::Pane(_) => panic!("expected split layout after restore"),
+        }
     }
 
     #[test]

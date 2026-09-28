@@ -1,5 +1,5 @@
-use crate::ui::i18n::{FluentArgs, I18nContext, Message};
 use crate::ui::app::{DragTarget, FileDragData, OxydeApp};
+use crate::ui::i18n::{FluentArgs, I18nContext, Message};
 pub use crate::ui::theme::ThemeContext;
 pub use gpui::prelude::*;
 use gpui::*;
@@ -334,7 +334,9 @@ impl OxydeApp {
                                         {
                                             let mut args = FluentArgs::new();
                                             args.set("drive", norm_drive);
-                                            cx.i18n().text_with_args(Message::LocalDrive, &args).to_string()
+                                            cx.i18n()
+                                                .text_with_args(Message::LocalDrive, &args)
+                                                .to_string()
                                         }
                                     } else {
                                         format!("{} ({})", drive.label, norm_drive)
@@ -388,7 +390,8 @@ impl OxydeApp {
                         move |bounds, cx| {
                             let anchor = point(bounds.left(), bounds.bottom());
                             h.update(cx, |this, _| {
-                                this.context_anchor_points.insert(anchor_key.clone(), anchor);
+                                this.context_anchor_points
+                                    .insert(anchor_key.clone(), anchor);
                             });
                         }
                     })
@@ -399,7 +402,11 @@ impl OxydeApp {
                         move |_, cx, pos| {
                             h.update(cx, |this, cx| {
                                 use crate::ui::app::{ContextMenuContent, ContextMenuInstance};
-                                let position = this.context_anchor_points.get(&anchor_key).copied().unwrap_or(pos);
+                                let position = this
+                                    .context_anchor_points
+                                    .get(&anchor_key)
+                                    .copied()
+                                    .unwrap_or(pos);
                                 this.context_menus.clear();
                                 this.context_menus.push(ContextMenuInstance {
                                     position,
@@ -425,13 +432,15 @@ impl OxydeApp {
                             });
                         }
                     })
-                    .when(can_close_tab, |tab| tab.on_middle_click({
-                        let h = h.clone();
-                        let p_id_cap = p_id.clone();
-                        move |_, cx| {
-                            h.update(cx, |this, cx| this.close_tab(&p_id_cap, t_ix, cx));
-                        }
-                    }))
+                    .when(can_close_tab, |tab| {
+                        tab.on_middle_click({
+                            let h = h.clone();
+                            let p_id_cap = p_id.clone();
+                            move |_, cx| {
+                                h.update(cx, |this, cx| this.close_tab(&p_id_cap, t_ix, cx));
+                            }
+                        })
+                    })
                     .when(can_close_tab, |s| {
                         let h = h.clone();
                         let p_id_cap = p_id.clone();
@@ -556,6 +565,7 @@ impl OxydeApp {
                                                 this.drop_target_pane = None;
                                                 this.dragging_tab = None;
                                                 this.reconcile_watchers();
+                                                this.save_workspace(cx);
                                                 cx.notify();
                                             });
                                         }
@@ -620,6 +630,7 @@ impl OxydeApp {
                                                 this.drop_target_pane = None;
                                                 this.dragging_tab = None;
                                                 this.reconcile_watchers();
+                                                this.save_workspace(cx);
                                                 cx.notify();
                                             });
                                         }
@@ -711,6 +722,7 @@ impl OxydeApp {
                                     this.drop_target_pane = None;
                                     this.dragging_tab = None;
                                     this.reconcile_watchers();
+                                    this.save_workspace(cx);
                                     cx.notify();
                                 });
                             }
@@ -764,6 +776,7 @@ impl OxydeApp {
                                 this.drop_target_pane = None;
                                 this.dragging_tab = None;
                                 this.reconcile_watchers();
+                                this.save_workspace(cx);
                                 cx.notify();
                             });
                         }
@@ -878,6 +891,7 @@ impl OxydeApp {
                                         this.drop_target_idx = None;
                                         this.drop_target_pane = None;
                                         this.reconcile_watchers();
+                                        this.save_workspace(cx);
                                         cx.notify();
                                     });
                                 }
@@ -925,6 +939,7 @@ impl OxydeApp {
                                         this.drop_target_idx = None;
                                         this.drop_target_pane = None;
                                         this.reconcile_watchers();
+                                        this.save_workspace(cx);
                                         cx.notify();
                                     });
                                 }
@@ -972,6 +987,7 @@ impl OxydeApp {
                                         this.drop_target_idx = None;
                                         this.drop_target_pane = None;
                                         this.reconcile_watchers();
+                                        this.save_workspace(cx);
                                         cx.notify();
                                     });
                                 }
@@ -1019,6 +1035,7 @@ impl OxydeApp {
                                         this.drop_target_idx = None;
                                         this.drop_target_pane = None;
                                         this.reconcile_watchers();
+                                        this.save_workspace(cx);
                                         cx.notify();
                                     });
                                 }

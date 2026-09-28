@@ -3,9 +3,9 @@ use crate::ui::app::{
 };
 use crate::ui::components::scrollbar::{render_scrollbar, ScrollbarAxis, ZED_TRACK_WIDTH};
 use crate::ui::components::tooltip::Tooltip;
+use crate::ui::format::{format_date, format_number, format_size};
 use crate::ui::i18n::{FluentArgs, I18nContext, Message};
 use crate::ui::style::ROW_HEIGHT;
-use crate::ui::format::{format_date, format_size, format_number};
 use crate::ui::theme::{OxydeTheme, ThemeContext};
 use crate::ui::workspace::{SortColumn, SortDirection, TabLoadStatus};
 use gpui::prelude::*;
@@ -45,7 +45,9 @@ fn file_type_display(f: &FileEntry, i18n: &crate::ui::i18n::I18n) -> String {
     } else {
         None
     };
-    message.map(|message| i18n.text(message).to_string()).unwrap_or_else(|| file_type_label(f))
+    message
+        .map(|message| i18n.text(message).to_string())
+        .unwrap_or_else(|| file_type_label(f))
 }
 
 pub fn render_file_list(
@@ -79,8 +81,8 @@ pub fn render_file_list(
     });
     let pane_viewport_w = pane_size.width.max(1.0);
 
-    let v_v_h = (pane_size.height - 32.0 - ROW_HEIGHT - STATUS_BAR_HEIGHT - ZED_TRACK_WIDTH)
-        .max(1.0);
+    let v_v_h =
+        (pane_size.height - 32.0 - ROW_HEIGHT - STATUS_BAR_HEIGHT - ZED_TRACK_WIDTH).max(1.0);
     let content_h = (count * ROW_HEIGHT).max(1.0);
 
     let type_w = active_tab.type_col_width;
@@ -115,7 +117,10 @@ pub fn render_file_list(
     } else {
         let mut args = FluentArgs::new();
         args.set("count", selected_entries.len());
-        args.set("number", format_number(selected_entries.len() as u64, language));
+        args.set(
+            "number",
+            format_number(selected_entries.len() as u64, language),
+        );
         args.set("folder_count", selected_folders);
         args.set("file_count", selected_files);
         args.set("folders", format_number(selected_folders as u64, language));
@@ -243,7 +248,7 @@ pub fn render_file_list(
                                                         let multi = e.modifiers.control;
                                                         let shift = e.modifiers.shift;
                                                         h_inner_inner.update(cx, |this, cx| {
-                                                            this.state.active_pane_id = p_id_cap.clone();
+                                                            this.activate_pane(&p_id_cap, cx);
                                                             // If file is already part of a multi-selection and no modifier
                                                             // is held, preserve the selection so dragging all files works.
                                                             // on_click will narrow the selection if no drag happens.
@@ -323,7 +328,7 @@ pub fn render_file_list(
                                                                   open_text_menu = this.context_menus.is_empty();
                                                                   return;
                                                               }
-                                                              this.state.active_pane_id = p_id_cap_cap.clone();
+                                                              this.activate_pane(&p_id_cap_cap, cx);
                                                               if !this.state.find_pane(&p_id_cap_cap).map(|p| p.active_tab().selected_paths.contains(&p_for_right_cap)).unwrap_or(false) {
                                                                   this.toggle_selection(&p_id_cap_cap, p_for_right_cap.clone(), false, false, cx);
                                                               }
@@ -527,7 +532,7 @@ pub fn render_file_list(
                                     let pos = e.position;
                                     let modifiers = e.modifiers;
                                     h.update(cx, |this, cx| {
-                                        this.state.active_pane_id = p_id_cap.clone();
+                                        this.activate_pane(&p_id_cap, cx);
                                         if !modifiers.control && !modifiers.shift {
                                             if let Some(pane) = this.state.find_pane_mut(&p_id_cap) {
                                                 let tab = pane.active_tab_mut();
@@ -553,7 +558,7 @@ pub fn render_file_list(
                                      let pos = e.position;
                                      let p_id_cap_cap = p_id_cap.clone();
                                       h.update(cx, |this, cx| {
-                                          this.state.active_pane_id = p_id_cap_cap.clone();
+                                          this.activate_pane(&p_id_cap_cap, cx);
                                           this.context_menus.clear();
                                           this.context_menus.push(ContextMenuInstance {
                                               position: pos,
@@ -630,7 +635,7 @@ pub fn render_file_list(
                         let pos = e.position;
                         let modifiers = e.modifiers;
                         h.update(cx, |this, cx| {
-                            this.state.active_pane_id = p_id_cap.clone();
+                            this.activate_pane(&p_id_cap, cx);
                             if !modifiers.control && !modifiers.shift {
                                 if let Some(pane) = this.state.find_pane_mut(&p_id_cap) {
                                     let tab = pane.active_tab_mut();
@@ -665,7 +670,7 @@ pub fn render_file_list(
                         let pos = e.position;
                         let modifiers = e.modifiers;
                         h.update(cx, |this, cx| {
-                            this.state.active_pane_id = p_id_cap.clone();
+                            this.activate_pane(&p_id_cap, cx);
                             if !modifiers.control && !modifiers.shift {
                                 if let Some(pane) = this.state.find_pane_mut(&p_id_cap) {
                                     let tab = pane.active_tab_mut();
@@ -736,8 +741,8 @@ pub fn render_file_list(
     let v_thumb_size = (v_v_h * v_ratio).max(40.0).min(v_v_h);
     let v_max_offset = (content_h - v_v_h).max(1.0);
     let v_thumb_pos = (v_offset / v_max_offset).clamp(0.0, 1.0) * (v_v_h - v_thumb_size);
-    let scroll_button_top = (v_thumb_pos + v_thumb_size / 2.0 - 16.0)
-        .clamp(4.0, (v_v_h - 36.0).max(4.0));
+    let scroll_button_top =
+        (v_thumb_pos + v_thumb_size / 2.0 - 16.0).clamp(4.0, (v_v_h - 36.0).max(4.0));
 
     let mut vertical_scroll_zone = div()
         .absolute()
@@ -747,27 +752,27 @@ pub fn render_file_list(
         .w(px(58.0))
         .group("file-list-scroll-zone")
         .child(render_scrollbar(
-                theme,
-                handle.clone(),
-                ScrollbarAxis::Vertical,
-                v_v_h,
-                content_h,
-                v_offset,
-                is_dragging_v,
-                format!("v-{}", pane_suffix),
-                None,
-                {
-                    let p_id = p_id_cap.clone();
-                    move |this, track_id, v_h, c_h, _| {
-                        this.drag_target = Some(DragTarget::FileListV {
-                            pane_id: p_id.clone(),
-                            viewport_h: v_h,
-                            content_h: c_h,
-                            track_id,
-                        });
-                    }
-                },
-            ));
+            theme,
+            handle.clone(),
+            ScrollbarAxis::Vertical,
+            v_v_h,
+            content_h,
+            v_offset,
+            is_dragging_v,
+            format!("v-{}", pane_suffix),
+            None,
+            {
+                let p_id = p_id_cap.clone();
+                move |this, track_id, v_h, c_h, _| {
+                    this.drag_target = Some(DragTarget::FileListV {
+                        pane_id: p_id.clone(),
+                        viewport_h: v_h,
+                        content_h: c_h,
+                        track_id,
+                    });
+                }
+            },
+        ));
 
     if v_offset > ROW_HEIGHT * 2.0 && content_h > v_v_h {
         let h_scroll_top = handle.clone();
@@ -981,7 +986,11 @@ fn render_headers(
                 move |e, window, cx| {
                     let fallback = e.position;
                     h.update(cx, |this, cx| {
-                        let anchor = this.context_anchor_points.get(&anchor_key).copied().unwrap_or(fallback);
+                        let anchor = this
+                            .context_anchor_points
+                            .get(&anchor_key)
+                            .copied()
+                            .unwrap_or(fallback);
                         this.open_name_filter(&pid, anchor, window, cx);
                     });
                 }
@@ -1012,7 +1021,11 @@ fn render_headers(
                 move |e, _, cx| {
                     let fallback = e.position;
                     h.update(cx, |this, cx| {
-                        let anchor = this.context_anchor_points.get(&anchor_key).copied().unwrap_or(fallback);
+                        let anchor = this
+                            .context_anchor_points
+                            .get(&anchor_key)
+                            .copied()
+                            .unwrap_or(fallback);
                         this.open_type_filter_menu(&pid, anchor, cx);
                     });
                 }
@@ -1043,7 +1056,11 @@ fn render_headers(
                 move |e, _, cx| {
                     let fallback = e.position;
                     h.update(cx, |this, cx| {
-                        let anchor = this.context_anchor_points.get(&anchor_key).copied().unwrap_or(fallback);
+                        let anchor = this
+                            .context_anchor_points
+                            .get(&anchor_key)
+                            .copied()
+                            .unwrap_or(fallback);
                         this.open_size_filter_menu(&pid, anchor, cx);
                     });
                 }
@@ -1076,7 +1093,11 @@ fn render_headers(
                 move |e, _, cx| {
                     let fallback = e.position;
                     h.update(cx, |this, cx| {
-                        let anchor = this.context_anchor_points.get(&anchor_key).copied().unwrap_or(fallback);
+                        let anchor = this
+                            .context_anchor_points
+                            .get(&anchor_key)
+                            .copied()
+                            .unwrap_or(fallback);
                         this.open_date_filter_menu(&pid, anchor, cx);
                     });
                 }
@@ -1137,14 +1158,18 @@ fn header_cell(
                 }),
         )
         .child(
-            canvas(|bounds, _, _| bounds, move |_, bounds, _, cx| {
-                // The dropdown has a small internal left inset; shift the filter
-                // menu back slightly so its visible edge aligns with the header.
-                let anchor = point(bounds.left() - px(4.0), bounds.bottom());
-                anchor_handle.update(cx, |this, _| {
-                    this.context_anchor_points.insert(anchor_key.clone(), anchor);
-                });
-            })
+            canvas(
+                |bounds, _, _| bounds,
+                move |_, bounds, _, cx| {
+                    // The dropdown has a small internal left inset; shift the filter
+                    // menu back slightly so its visible edge aligns with the header.
+                    let anchor = point(bounds.left() - px(4.0), bounds.bottom());
+                    anchor_handle.update(cx, |this, _| {
+                        this.context_anchor_points
+                            .insert(anchor_key.clone(), anchor);
+                    });
+                },
+            )
             .absolute()
             .size_full(),
         )

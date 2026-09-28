@@ -156,9 +156,11 @@ fn context_menu_contains_point(
 
 fn context_menu_height(menu: &ContextMenuInstance, viewport_height: Pixels) -> Pixels {
     let (item_count, header_height, max_height) = match &menu.content {
-        ContextMenuContent::Items(items, header) => {
-            (items.len(), if header.is_some() { 42.0 } else { 6.0 }, 480.0)
-        }
+        ContextMenuContent::Items(items, header) => (
+            items.len(),
+            if header.is_some() { 42.0 } else { 6.0 },
+            480.0,
+        ),
         ContextMenuContent::NativeItems { items, .. } => {
             (items.len(), 6.0, native_menu_max_height(viewport_height))
         }
@@ -167,7 +169,11 @@ fn context_menu_height(menu: &ContextMenuInstance, viewport_height: Pixels) -> P
     px((item_count as f32 * 26.0).min(max_height) + header_height + menu.bottom_padding)
 }
 
-fn context_menu_visible_top(requested_top: Pixels, menu_height: Pixels, viewport_height: Pixels) -> Pixels {
+fn context_menu_visible_top(
+    requested_top: Pixels,
+    menu_height: Pixels,
+    viewport_height: Pixels,
+) -> Pixels {
     requested_top
         .min((viewport_height - menu_height).max(px(0.0)))
         .max(px(0.0))
@@ -272,8 +278,13 @@ impl Render for FileDragPreview {
             ("icons/file.svg", {
                 let mut args = FluentArgs::new();
                 args.set("count", self.paths.len());
-                args.set("number", crate::ui::format::format_number(self.paths.len() as u64, cx.i18n().language()));
-                cx.i18n().text_with_args(Message::DragItems, &args).to_string()
+                args.set(
+                    "number",
+                    crate::ui::format::format_number(self.paths.len() as u64, cx.i18n().language()),
+                );
+                cx.i18n()
+                    .text_with_args(Message::DragItems, &args)
+                    .to_string()
             })
         };
 
@@ -319,8 +330,18 @@ impl Render for FileDragPreview {
                     div()
                         .flex()
                         .gap(px(4.0))
-                        .child(drag_op_pill("+Ctrl", cx.i18n().text(Message::DragCopy).as_ref(), is_copy, &theme))
-                        .child(drag_op_pill("+Shift", cx.i18n().text(Message::DragMove).as_ref(), !is_copy, &theme)),
+                        .child(drag_op_pill(
+                            "+Ctrl",
+                            cx.i18n().text(Message::DragCopy).as_ref(),
+                            is_copy,
+                            &theme,
+                        ))
+                        .child(drag_op_pill(
+                            "+Shift",
+                            cx.i18n().text(Message::DragMove).as_ref(),
+                            !is_copy,
+                            &theme,
+                        )),
                 ),
         )
     }
@@ -486,12 +507,16 @@ impl OxydeApp {
                     Ok(Err(error)) => {
                         let mut args = FluentArgs::new();
                         args.set("detail", error.to_string());
-                        Err(i18n.text_with_args(Message::NativeMenuFailed, &args).to_string())
+                        Err(i18n
+                            .text_with_args(Message::NativeMenuFailed, &args)
+                            .to_string())
                     }
                     Err(error) => {
                         let mut args = FluentArgs::new();
                         args.set("detail", error.to_string());
-                        Err(i18n.text_with_args(Message::NativeMenuFailed, &args).to_string())
+                        Err(i18n
+                            .text_with_args(Message::NativeMenuFailed, &args)
+                            .to_string())
                     }
                 };
                 handle.update(&mut cx, move |this, cx| {
@@ -640,8 +665,26 @@ impl OxydeApp {
         load_failed: bool,
         cx: &mut Context<Self>,
     ) -> Self {
+        let restored_workspace = config
+            .extra
+            .get(crate::ui::workspace::WORKSPACE_CONFIG_KEY)
+            .cloned()
+            .and_then(|value| {
+                match serde_json::from_value::<crate::ui::workspace::SavedWorkspace>(value) {
+                    Ok(snapshot) => {
+                        crate::ui::workspace::WorkspaceState::from_saved_snapshot(snapshot)
+                    }
+                    Err(error) => {
+                        log::warn!("Cannot restore saved workspace: {error:?}");
+                        None
+                    }
+                }
+            });
+        let (state, sidebar_width) =
+            restored_workspace.unwrap_or_else(|| (WorkspaceState::new(), 260.0));
+
         Self {
-            state: WorkspaceState::new(),
+            state,
             handle: None,
             next_file_request: 0,
             next_native_menu_request: 0,
@@ -662,7 +705,7 @@ impl OxydeApp {
             highlight_bottom_zone: false,
             highlight_split_pane: None,
             grab_offset: 0.0,
-            sidebar_width: 260.0,
+            sidebar_width,
             sidebar_content_width: 260.0,
             sidebar_selected_path: None,
             list_height: 800.0,
@@ -908,46 +951,59 @@ impl OxydeApp {
         if self.inline_rename || self.editing_path.is_some() {
             return;
         }
-        let Some(path) = self.state.layout.find_pane(&pane_id).map(|pane| pane.active_tab().path.clone()) else {
+        let Some(path) = self
+            .state
+            .layout
+            .find_pane(&pane_id)
+            .map(|pane| pane.active_tab().path.clone())
+        else {
             return;
         };
-        let Some(handle) = self.handle.clone() else { return; };
+        let Some(handle) = self.handle.clone() else {
+            return;
+        };
         self.breadcrumb_editing = true;
         self.breadcrumb_text = path.clone();
         self.breadcrumb_invalid = false;
         self.breadcrumb_pane_id = Some(pane_id);
-        let input = cx.new(|cx| TextInput::new(
-            cx,
-            cx.i18n().text(Message::PathPlaceholder).to_string(),
-            path.clone(),
-            {
-                let handle = handle.clone();
-                move |text, _, cx| handle.update(cx, |this, cx| {
-                    this.breadcrumb_text = text.to_string();
-                    this.breadcrumb_invalid = false;
-                    cx.notify();
-                })
-            },
-            {
-                let handle = handle.clone();
-                move |_, cx| handle.update(cx, |this, cx| this.submit_breadcrumb_edit(cx))
-            },
-            {
-                let handle = handle.clone();
-                move |_, cx| handle.update(cx, |this, cx| this.cancel_breadcrumb_edit(cx))
-            },
-            {
-                let handle = handle.clone();
-                move |input, has_selection, position, window, cx| {
-                    handle.update(cx, |this, cx| this.open_text_context_menu(input, has_selection, position, window, cx));
-                }
-            },
-            true,
-            false,
-            true,
-            Some(0..path.len()),
-            window,
-        ));
+        let input = cx.new(|cx| {
+            TextInput::new(
+                cx,
+                cx.i18n().text(Message::PathPlaceholder).to_string(),
+                path.clone(),
+                {
+                    let handle = handle.clone();
+                    move |text, _, cx| {
+                        handle.update(cx, |this, cx| {
+                            this.breadcrumb_text = text.to_string();
+                            this.breadcrumb_invalid = false;
+                            cx.notify();
+                        })
+                    }
+                },
+                {
+                    let handle = handle.clone();
+                    move |_, cx| handle.update(cx, |this, cx| this.submit_breadcrumb_edit(cx))
+                },
+                {
+                    let handle = handle.clone();
+                    move |_, cx| handle.update(cx, |this, cx| this.cancel_breadcrumb_edit(cx))
+                },
+                {
+                    let handle = handle.clone();
+                    move |input, has_selection, position, window, cx| {
+                        handle.update(cx, |this, cx| {
+                            this.open_text_context_menu(input, has_selection, position, window, cx)
+                        });
+                    }
+                },
+                true,
+                false,
+                true,
+                Some(0..path.len()),
+                window,
+            )
+        });
         let focus = input.read(cx).focus_handle.clone();
         self.editing_view = Some(input);
         window.focus(&focus, cx);
@@ -955,7 +1011,9 @@ impl OxydeApp {
     }
 
     pub(crate) fn submit_breadcrumb_edit(&mut self, cx: &mut Context<Self>) {
-        if !self.breadcrumb_editing || !self.context_menus.is_empty() { return; }
+        if !self.breadcrumb_editing || !self.context_menus.is_empty() {
+            return;
+        }
         let path = self.breadcrumb_text.trim().to_string();
         if !std::path::Path::new(&path).is_dir() {
             self.breadcrumb_shake_id = self.breadcrumb_shake_id.wrapping_add(1);
@@ -968,7 +1026,9 @@ impl OxydeApp {
         self.breadcrumb_invalid = false;
         self.editing_view = None;
         if let Some(pane_id) = pane_id {
-            if !path.is_empty() { self.navigate_to(&pane_id, path, cx); }
+            if !path.is_empty() {
+                self.navigate_to(&pane_id, path, cx);
+            }
         }
         cx.notify();
     }
@@ -1047,17 +1107,18 @@ impl OxydeApp {
         ] {
             let h = handle.clone();
             let target_input = input.clone();
-            let mut item = DropdownItem::new(cx.i18n().text(label).to_string(), move |window, app| {
-                target_input.update(app, |input, cx| match command {
-                    0 => input.cut_selected_text(window, cx),
-                    1 => input.copy_selected_text(cx),
-                    2 => input.paste_from_clipboard(window, cx),
-                    _ => input.select_all_text(cx),
+            let mut item =
+                DropdownItem::new(cx.i18n().text(label).to_string(), move |window, app| {
+                    target_input.update(app, |input, cx| match command {
+                        0 => input.cut_selected_text(window, cx),
+                        1 => input.copy_selected_text(cx),
+                        2 => input.paste_from_clipboard(window, cx),
+                        _ => input.select_all_text(cx),
+                    });
+                    h.update(app, |_this, cx| {
+                        cx.notify();
+                    });
                 });
-                h.update(app, |_this, cx| {
-                    cx.notify();
-                });
-            });
             item.icon = match command {
                 1 => Some(IconName::Copy),
                 3 => Some(IconName::ALargeSmall),
@@ -1456,8 +1517,7 @@ impl OxydeApp {
                                 } else {
                                     let mut args = FluentArgs::new();
                                     args.set("number", counter);
-                                    i18n
-                                        .text_with_args(Message::NewFolderNumbered, &args)
+                                    i18n.text_with_args(Message::NewFolderNumbered, &args)
                                         .replace(['\u{2068}', '\u{2069}'], "")
                                 };
                                 let path = std::path::Path::new(&current_path).join(name);
@@ -1466,7 +1526,7 @@ impl OxydeApp {
                                     Err(error)
                                         if error.kind() == std::io::ErrorKind::AlreadyExists =>
                                     {
-                                        continue
+                                        continue;
                                     }
                                     Err(error) => return Err(error),
                                 }
@@ -1925,6 +1985,10 @@ impl Render for OxydeApp {
                 move |_, _window, cx| {
                     h.update(cx, |this, cx| {
                         let mut needs_notify = false;
+                        let workspace_layout_changed = matches!(
+                            this.drag_target.as_ref(),
+                            Some(DragTarget::PaneResize { .. } | DragTarget::SidebarResize)
+                        );
                         if this.drag_target.is_some() {
                             this.drag_target = None;
                             needs_notify = true;
@@ -1941,6 +2005,9 @@ impl Render for OxydeApp {
                         if this.highlight_split_pane.is_some() {
                             this.highlight_split_pane = None;
                             needs_notify = true;
+                        }
+                        if workspace_layout_changed {
+                            this.save_workspace(cx);
                         }
                         if needs_notify {
                             cx.notify();
@@ -2285,7 +2352,11 @@ impl Render for OxydeApp {
                                     let inside_sibling = this.context_menus.iter().enumerate().any(
                                         |(index, menu)| {
                                             index != m_idx
-                                                && context_menu_contains_point(menu, position, px(win_h))
+                                                && context_menu_contains_point(
+                                                    menu,
+                                                    position,
+                                                    px(win_h),
+                                                )
                                         },
                                     );
                                     if !inside_sibling {
@@ -2359,7 +2430,9 @@ impl Render for OxydeApp {
                                                 let parent_menu_height = this
                                                     .context_menus
                                                     .get(m_idx)
-                                                    .map(|menu| context_menu_height(menu, px(win_h)))
+                                                    .map(|menu| {
+                                                        context_menu_height(menu, px(win_h))
+                                                    })
                                                     .unwrap_or_default();
                                                 this.submenu_close_timer = None;
                                                 this.submenu_timer =
@@ -2376,11 +2449,14 @@ impl Render for OxydeApp {
                                                                     let viewport_w = _window
                                                                         .viewport_size()
                                                                         .width;
-                                                                    let parent_visible_y = context_menu_visible_top(
-                                                                        parent_pos_y,
-                                                                        parent_menu_height,
-                                                                        _window.viewport_size().height,
-                                                                    );
+                                                                    let parent_visible_y =
+                                                                        context_menu_visible_top(
+                                                                            parent_pos_y,
+                                                                            parent_menu_height,
+                                                                            _window
+                                                                                .viewport_size()
+                                                                                .height,
+                                                                        );
                                                                     let open_left = parent_right
                                                                         + px(220.0)
                                                                         > viewport_w;
@@ -2404,10 +2480,11 @@ impl Render for OxydeApp {
                                                                             };
                                                                             // Y: parent menu top + border(1) + padding(4) + ix * item_h
                                                                             // minus submenu border(1) + padding(4) → nets to ix * item_h
-                                                                            sub_pos.y = parent_visible_y
-                                                                                + px(ix_inner
-                                                                                    as f32
-                                                                                    * 26.0);
+                                                                            sub_pos.y =
+                                                                                parent_visible_y
+                                                                                    + px(ix_inner
+                                                                                        as f32
+                                                                                        * 26.0);
                                                                             (on_h)(
                                                                                 sub_pos, open_left,
                                                                                 app,
@@ -2590,7 +2667,11 @@ impl Render for OxydeApp {
                                     let inside_sibling = this.context_menus.iter().enumerate().any(
                                         |(index, menu)| {
                                             index != m_idx
-                                                && context_menu_contains_point(menu, position, px(win_h))
+                                                && context_menu_contains_point(
+                                                    menu,
+                                                    position,
+                                                    px(win_h),
+                                                )
                                         },
                                     );
                                     if !inside_sibling {
@@ -2813,7 +2894,11 @@ impl Render for OxydeApp {
                                 let inside_sibling =
                                     this.context_menus.iter().enumerate().any(|(index, menu)| {
                                         index != m_idx
-                                            && context_menu_contains_point(menu, position, px(win_h))
+                                            && context_menu_contains_point(
+                                                menu,
+                                                position,
+                                                px(win_h),
+                                            )
                                     });
                                 if !inside_sibling {
                                     this.context_menus.clear();

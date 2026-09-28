@@ -5,6 +5,23 @@ use gpui::Context;
 use oxyde_lib::models::ConfigManager;
 
 impl OxydeApp {
+    pub(crate) fn save_workspace(&mut self, cx: &mut Context<Self>) {
+        if self.preferences_load_failed {
+            return;
+        }
+        let snapshot = self.state.saved_snapshot(self.sidebar_width);
+        match serde_json::to_value(snapshot) {
+            Ok(snapshot) => {
+                self.config.extra.insert(
+                    crate::ui::workspace::WORKSPACE_CONFIG_KEY.to_string(),
+                    snapshot,
+                );
+                self.save_preferences(cx);
+            }
+            Err(error) => log::warn!("Cannot serialize workspace state: {error:?}"),
+        }
+    }
+
     pub(crate) fn set_theme(&mut self, theme: ThemeId, cx: &mut Context<Self>) {
         if self.theme_id == theme {
             return;

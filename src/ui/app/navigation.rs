@@ -3,6 +3,13 @@ use gpui::*;
 use oxyde_lib::commands::io::list_dir;
 
 impl OxydeApp {
+    pub(crate) fn activate_pane(&mut self, pane_id: &str, cx: &mut Context<Self>) {
+        if self.state.find_pane(pane_id).is_some() && self.state.active_pane_id != pane_id {
+            self.state.active_pane_id = pane_id.to_string();
+            self.save_workspace(cx);
+        }
+    }
+
     pub fn toggle_sidebar_path(&mut self, path: String, cx: &mut Context<Self>) {
         self.state.toggle_sidebar_path(path.clone());
         self.reconcile_watchers();
@@ -101,6 +108,7 @@ impl OxydeApp {
             self.request_tab_files(pane_id, tab_idx, path, false, cx);
         }
         self.reconcile_watchers();
+        self.save_workspace(cx);
         cx.notify();
     }
 
@@ -120,6 +128,7 @@ impl OxydeApp {
         }
 
         self.reconcile_watchers();
+        self.save_workspace(cx);
         cx.notify();
     }
 
@@ -142,6 +151,7 @@ impl OxydeApp {
         if let Some(path) = load_path {
             self.request_tab_files(pane_id, tab_idx, path, false, cx);
         }
+        self.save_workspace(cx);
         cx.notify();
     }
 
@@ -159,12 +169,14 @@ impl OxydeApp {
             self.request_tab_files(pane_id, index, path, false, cx);
         }
         self.reconcile_watchers();
+        self.save_workspace(cx);
         cx.notify();
     }
 
     pub fn close_other_tabs(&mut self, pane_id: &str, tab_idx: usize, cx: &mut Context<Self>) {
         self.state.close_other_tabs(pane_id, tab_idx);
         self.reconcile_watchers();
+        self.save_workspace(cx);
         cx.notify();
     }
 
@@ -186,6 +198,7 @@ impl OxydeApp {
             active_tab.list_scroll_h.set_offset(point(px(0.0), px(0.0)));
             self.request_tab_files(pane_id, tab_idx, path, true, cx);
             self.reconcile_watchers();
+            self.save_workspace(cx);
             cx.notify();
         }
     }
@@ -269,7 +282,11 @@ impl OxydeApp {
                         cx.spawn(move |_, cx: &mut AsyncApp| {
                             let mut cx = cx.clone();
                             async move {
-                                if let Ok(nodes) = oxyde_lib::commands::sidebar::get_sidebar_nodes(directory.clone()).await {
+                                if let Ok(nodes) = oxyde_lib::commands::sidebar::get_sidebar_nodes(
+                                    directory.clone(),
+                                )
+                                .await
+                                {
                                     handle.update(&mut cx, |this, cx| {
                                         let tab_is_still_here = this
                                             .state
@@ -280,7 +297,8 @@ impl OxydeApp {
                                             return;
                                         }
                                         for node in nodes {
-                                            this.folder_has_subdirs.insert(node.path, node.has_subdirs);
+                                            this.folder_has_subdirs
+                                                .insert(node.path, node.has_subdirs);
                                         }
                                         cx.notify();
                                     });

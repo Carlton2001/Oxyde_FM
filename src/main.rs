@@ -46,16 +46,8 @@ fn main() {
             app.update(cx, |this, cx| {
                 this.handle = Some(app.clone());
                 this.start_watcher_task(cx);
-                let pane_id = this.state.active_pane_id.clone();
-                if let Some(pane) = this.state.find_pane(&pane_id) {
-                    this.request_tab_files(
-                        &pane_id,
-                        pane.active_tab_index,
-                        pane.active_tab().path.clone(),
-                        false,
-                        cx,
-                    );
-                }
+                this.reconcile_watchers();
+                this.refresh_all_tabs(cx);
             });
             cx.open_window(
                 WindowOptions {
