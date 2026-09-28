@@ -439,6 +439,7 @@ pub fn render_sidebar(
                                                                     content: ContextMenuContent::Items(items, None),
                                                                     scroll_handle: UniformListScrollHandle::new(),
                                                                     width: px(0.0),
+                                                                    bottom_padding: 3.0,
                                                                     open_left: false,
                                                                     hovered_item: None,
                                                                     native_request_id: None,
@@ -548,6 +549,7 @@ pub fn render_sidebar(
                                                                     content: ContextMenuContent::Items(items, None),
                                                                     scroll_handle: UniformListScrollHandle::new(),
                                                                     width: px(0.0),
+                                                                    bottom_padding: 3.0,
                                                                     open_left: false,
                                                                     hovered_item: None,
                                                                     native_request_id: None,
@@ -679,6 +681,7 @@ pub fn render_sidebar(
                                                                     content: ContextMenuContent::Items(items, None),
                                                                     scroll_handle: UniformListScrollHandle::new(),
                                                                     width: px(0.0),
+                                                                    bottom_padding: 3.0,
                                                                     open_left: false,
                                                                     hovered_item: None,
                                                                     native_request_id: None,
@@ -836,7 +839,6 @@ pub fn render_sidebar(
             .right_0()
             .bottom_0()
             .w(px(4.0))
-            .cursor_col_resize()
             .on_mouse_down(MouseButton::Left, {
                 let h = handle.clone();
                 move |e, _, cx| {

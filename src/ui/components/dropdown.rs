@@ -17,6 +17,85 @@ pub enum IconName {
     HardDrive,
     Copy,
     Minimize,
+    Shield,
+    Printer,
+    Settings,
+    Play,
+    Search,
+    Code,
+    Terminal,
+    GitBranch,
+    Share,
+    Cast,
+    Pin,
+    ArchiveRestore,
+    Refresh,
+    CloudOff,
+    CheckCircle,
+    Pencil,
+    ExternalLink,
+    ShieldCheck,
+    Archive,
+}
+
+/// Match the semantic Lucide icon used by the former Tauri context menu.
+pub fn native_menu_icon(verb: Option<&str>, label: &str) -> Option<IconName> {
+    let verb = verb.unwrap_or_default().to_lowercase();
+    let label = label.to_lowercase();
+    let has = |terms: &[&str]| terms.iter().any(|term| label.contains(term));
+
+    if verb == "runas" || has(&["administrateur", "administrator"]) {
+        Some(IconName::Shield)
+    } else if verb == "open" || has(&["ouvrir", "open"]) {
+        Some(IconName::ExternalLink)
+    } else if verb == "print" || has(&["imprimer", "print"]) {
+        Some(IconName::Printer)
+    } else if verb == "properties" || has(&["propriétés", "properties"]) {
+        Some(IconName::Settings)
+    } else if verb == "play" || has(&["jouer", "lecture", "play"]) {
+        Some(IconName::Play)
+    } else if verb == "edit" || has(&["modifier", "edit"]) {
+        Some(IconName::Pencil)
+    } else if verb == "find" || has(&["rechercher", "find"]) {
+        Some(IconName::Search)
+    } else if has(&["code", "visual studio"]) {
+        Some(IconName::Code)
+    } else if has(&["terminal", "powershell", "cmd"]) {
+        Some(IconName::Terminal)
+    } else if has(&["git ", "github", "commit", "tortoisegit"]) {
+        Some(IconName::GitBranch)
+    } else if verb == "share" || has(&["partager", "share"]) {
+        Some(IconName::Share)
+    } else if has(&[
+        "scan",
+        "defender",
+        "antivirus",
+        "malware",
+        "eset",
+        "kaspersky",
+        "norton",
+        "bitdefender",
+    ]) {
+        Some(IconName::ShieldCheck)
+    } else if verb == "cast" || has(&["diffuser", "cast"]) {
+        Some(IconName::Cast)
+    } else if verb == "pin" || has(&["épingler", "pin", "accès rapide"]) {
+        Some(IconName::Pin)
+    } else if verb == "format" || has(&["formater", "format"]) {
+        Some(IconName::HardDrive)
+    } else if has(&["extraire", "extract", "unzip"]) {
+        Some(IconName::ArchiveRestore)
+    } else if has(&["compresser", "compress", "zip", "rar", "7z", "ajouter à"]) {
+        Some(IconName::Archive)
+    } else if has(&["synchroniser", "sync"]) {
+        Some(IconName::Refresh)
+    } else if has(&["libérer de l'espace", "free up space"]) {
+        Some(IconName::CloudOff)
+    } else if has(&["toujours conserver", "always keep"]) {
+        Some(IconName::CheckCircle)
+    } else {
+        None
+    }
 }
 
 #[derive(Clone)]
@@ -72,6 +151,10 @@ impl DropdownItem {
 pub struct GenericDropdown {
     pub id: ElementId,
     pub items: Vec<DropdownItem>,
+    /// Keep labels aligned when some rows have no icon.
+    pub reserve_icon_space: bool,
+    pub is_context_menu: bool,
+    pub bottom_padding: f32,
     pub scroll_handle: UniformListScrollHandle,
     pub h_app: Entity<OxydeApp>,
     pub on_drag: Rc<dyn Fn(&mut OxydeApp, String, f32, f32, &mut App)>,
@@ -118,15 +201,24 @@ impl RenderOnce for GenericDropdown {
                 }],
                 None,
             );
-            // icon(16) + gap(8) + text + chevron(16) + item-px(8*2) + container-px(4*2)
-            calculated_width = calculated_width.max(line.width.as_f32() + 60.0);
+            let icon_width = if item.icon.is_some() || self.reserve_icon_space {
+                24.0
+            } else {
+                0.0
+            };
+            let chevron_width = if item.has_submenu { 14.0 } else { 0.0 };
+            // Row padding (16) + optional icon slot + optional submenu arrow.
+            calculated_width = calculated_width
+                .max(line.width.as_f32() + 16.0 + icon_width + chevron_width);
         }
 
         let width = self.width.unwrap_or(calculated_width);
+        let right_padding = if self.is_context_menu { 5.0 } else { 4.0 };
+        let outer_width = width + 4.0 + right_padding;
 
-        // Report computed width (including 8px horizontal container padding)
+        // Report computed width including the menu's horizontal padding.
         if let Some(on_width) = self.on_width_calculated.take() {
-            (on_width)(px(width + 8.0), cx);
+            (on_width)(px(outer_width), cx);
         }
 
         let h_app_copy = self.h_app.clone();
@@ -147,16 +239,17 @@ impl RenderOnce for GenericDropdown {
         };
 
         let on_item_hover = self.on_item_hover.clone();
+        let reserve_icon_space = self.reserve_icon_space;
 
         div()
             .occlude()
             .id(self.id)
-            .cursor_default()
             .flex_col()
-            // 4px vertical padding; 4px horizontal so item hover doesn't bleed to edge
-            .py(px(4.0))
-            .px(px(4.0))
-            .w(px(width + 8.0))
+            .pt(px(4.0))
+            .pb(px(self.bottom_padding))
+            .pl(px(4.0))
+            .pr(px(right_padding))
+            .w(px(outer_width))
             .bg(menu_bg)
             .border_1()
             .border_color(menu_border)
@@ -193,10 +286,7 @@ impl RenderOnce for GenericDropdown {
                                         .items_center()
                                         .rounded(px(5.0))
                                         .when(item.is_dimmed, |d| d.opacity(0.42))
-                                        .when(!item.is_dimmed, |d| {
-                                            d.hover(|s| s.bg(item_hover))
-                                        })
-                                        .cursor_default()
+                                        .when(!item.is_dimmed, |d| d.hover(|s| s.bg(item_hover)))
                                         .on_mouse_move(move |event, _window, cx| {
                                             if let Some(on_h) = &on_h {
                                                 (on_h)(ix, event.position, cx);
@@ -210,51 +300,114 @@ impl RenderOnce for GenericDropdown {
                                                 }
                                             }
                                         })
-                                        // Icon slot — always 16px wide for alignment
-                                        .child(
-                                            div()
-                                                .flex_none()
-                                                .w(px(16.0))
-                                                .h(px(16.0))
-                                                .mr(px(8.0))
-                                                .when_some(item.icon.as_ref(), |d, icon| {
-                                                    d.child(
-                                                        svg()
-                                                            .path(match icon {
-                                                                IconName::Plus => "icons/plus.svg",
-                                                                IconName::ALargeSmall => {
-                                                                    "icons/a-large-small.svg"
-                                                                }
-                                                                IconName::Delete => {
-                                                                    "icons/delete.svg"
-                                                                }
-                                                                IconName::Check => {
-                                                                    "icons/check.svg"
-                                                                }
-                                                                IconName::Square => {
-                                                                    "icons/square.svg"
-                                                                }
-                                                                IconName::X => "icons/x.svg",
-                                                                IconName::FolderOpen => {
-                                                                    "icons/folder-open.svg"
-                                                                }
-                                                                IconName::HardDrive => {
-                                                                    "icons/hard-drive.svg"
-                                                                }
-                                                                IconName::Copy => "icons/copy.svg",
-                                                                IconName::Minimize => {
-                                                                    "icons/minimize.svg"
-                                                                }
-                                                            })
-                                                            .size_full()
-                                                            .text_color(if item.is_dimmed {
-                                                                theme.icon_disabled
-                                                            } else {
-                                                                icon_color
-                                                            }),
-                                                    )
-                                                }),
-                                        )
+                                        // Nested Shell menus omit the empty icon column.
+                                        .when(item.icon.is_some() || reserve_icon_space, |row| {
+                                            row.child(
+                                                div()
+                                                    .flex_none()
+                                                    .w(px(16.0))
+                                                    .h(px(16.0))
+                                                    .mr(px(8.0))
+                                                    .when_some(item.icon.as_ref(), |d, icon| {
+                                                        d.child(
+                                                            svg()
+                                                                .path(match icon {
+                                                                    IconName::Plus => {
+                                                                        "icons/plus.svg"
+                                                                    }
+                                                                    IconName::ALargeSmall => {
+                                                                        "icons/a-large-small.svg"
+                                                                    }
+                                                                    IconName::Delete => {
+                                                                        "icons/delete.svg"
+                                                                    }
+                                                                    IconName::Check => {
+                                                                        "icons/check.svg"
+                                                                    }
+                                                                    IconName::Square => {
+                                                                        "icons/square.svg"
+                                                                    }
+                                                                    IconName::X => "icons/x.svg",
+                                                                    IconName::FolderOpen => {
+                                                                        "icons/folder-open.svg"
+                                                                    }
+                                                                    IconName::HardDrive => {
+                                                                        "icons/hard-drive.svg"
+                                                                    }
+                                                                    IconName::Copy => {
+                                                                        "icons/copy.svg"
+                                                                    }
+                                                                    IconName::Minimize => {
+                                                                        "icons/minimize.svg"
+                                                                    }
+                                                                    IconName::Shield => {
+                                                                        "icons/shield.svg"
+                                                                    }
+                                                                    IconName::Printer => {
+                                                                        "icons/printer.svg"
+                                                                    }
+                                                                    IconName::Settings => {
+                                                                        "icons/settings.svg"
+                                                                    }
+                                                                    IconName::Play => {
+                                                                        "icons/play.svg"
+                                                                    }
+                                                                    IconName::Search => {
+                                                                        "icons/search.svg"
+                                                                    }
+                                                                    IconName::Code => {
+                                                                        "icons/code.svg"
+                                                                    }
+                                                                    IconName::Terminal => {
+                                                                        "icons/terminal.svg"
+                                                                    }
+                                                                    IconName::GitBranch => {
+                                                                        "icons/git-branch.svg"
+                                                                    }
+                                                                    IconName::Share => {
+                                                                        "icons/share-2.svg"
+                                                                    }
+                                                                    IconName::Cast => {
+                                                                        "icons/cast.svg"
+                                                                    }
+                                                                    IconName::Pin => {
+                                                                        "icons/pin.svg"
+                                                                    }
+                                                                    IconName::ArchiveRestore => {
+                                                                        "icons/archive-restore.svg"
+                                                                    }
+                                                                    IconName::Refresh => {
+                                                                        "icons/refresh-cw.svg"
+                                                                    }
+                                                                    IconName::CloudOff => {
+                                                                        "icons/cloud-off.svg"
+                                                                    }
+                                                                    IconName::CheckCircle => {
+                                                                        "icons/circle-check.svg"
+                                                                    }
+                                                                    IconName::Pencil => {
+                                                                        "icons/pencil.svg"
+                                                                    }
+                                                                    IconName::ExternalLink => {
+                                                                        "icons/external-link.svg"
+                                                                    }
+                                                                    IconName::ShieldCheck => {
+                                                                        "icons/shield-check.svg"
+                                                                    }
+                                                                    IconName::Archive => {
+                                                                        "icons/archive.svg"
+                                                                    }
+                                                                })
+                                                                .size_full()
+                                                                .text_color(if item.is_dimmed {
+                                                                    theme.icon_disabled
+                                                                } else {
+                                                                    icon_color
+                                                                }),
+                                                        )
+                                                    }),
+                                            )
+                                        })
                                         // Label
                                         .child(
                                             div()

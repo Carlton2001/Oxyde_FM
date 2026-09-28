@@ -172,7 +172,6 @@ pub fn render_settings_panel(
                 .px(px(8.0))
                 .py(px(4.0))
                 .rounded_md()
-                .cursor_pointer()
                 .text_size(px(12.0))
                 .text_color(theme.text_muted)
                 .hover(|style| style.bg(theme.control_hover))
@@ -215,7 +214,6 @@ fn choice(
         .py(px(6.0))
         .ml(px(4.0))
         .rounded_md()
-        .cursor_pointer()
         .text_size(px(12.0))
         .bg(if selected {
             theme.selected
@@ -280,7 +278,6 @@ fn settings_row(
                 .flex()
                 .items_center()
                 .flex_none()
-                .cursor_pointer()
                 .pl(px(if value { 22.0 } else { 2.0 }))
                 .on_mouse_down(MouseButton::Left, move |_, _, cx| {
                     handle.update(cx, |view, cx| on_toggle(view, cx));

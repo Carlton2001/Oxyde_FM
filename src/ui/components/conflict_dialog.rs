@@ -37,7 +37,6 @@ pub fn render_conflict_dialog(
             .px(px(12.0))
             .py(px(8.0))
             .rounded_md()
-            .cursor_pointer()
             .hover(|d| d.bg(theme.control_hover))
             .child(cx.i18n().text(Message::Cancel))
             .on_mouse_down(MouseButton::Left, move |_, _, cx| {
@@ -50,7 +49,6 @@ pub fn render_conflict_dialog(
             .px(px(12.0))
             .py(px(8.0))
             .rounded_md()
-            .cursor_pointer()
             .hover(|d| d.bg(theme.control_hover))
             .child(cx.i18n().text(Message::ConflictSkipAll))
             .on_mouse_down(MouseButton::Left, move |_, _, cx| {
@@ -65,7 +63,6 @@ pub fn render_conflict_dialog(
             .px(px(12.0))
             .py(px(8.0))
             .rounded_md()
-            .cursor_pointer()
             .bg(theme.accent)
             .text_color(theme.text_on_accent)
             .hover(|d| d.opacity(0.85))

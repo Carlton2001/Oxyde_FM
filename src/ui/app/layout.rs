@@ -204,7 +204,6 @@ impl OxydeApp {
                                 div()
                                     .w(px(4.0)) // Wider grab area
                                     .h_full()
-                                    .cursor(CursorStyle::ResizeLeftRight)
                                     .child(
                                         div()
                                             .size_full()
@@ -231,7 +230,6 @@ impl OxydeApp {
                             crate::ui::workspace::LayoutAxis::Vertical => div()
                                 .h(px(4.0))
                                 .w_full()
-                                .cursor(CursorStyle::ResizeUpDown)
                                 .child(
                                     div()
                                         .size_full()
@@ -418,6 +416,7 @@ impl OxydeApp {
                                     ),
                                     scroll_handle: gpui::UniformListScrollHandle::new(),
                                     width: px(0.0),
+                                    bottom_padding: 3.0,
                                     open_left: false,
                                     hovered_item: None,
                                     native_request_id: None,

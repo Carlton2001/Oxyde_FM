@@ -543,6 +543,7 @@ impl Render for TextInput {
             .items_center()
             .key_context("TextInput")
             .track_focus(&focus_handle)
+            .cursor(CursorStyle::IBeam)
             .on_action(cx.listener(Self::backspace))
             .on_action(cx.listener(Self::delete))
             .on_action(cx.listener(Self::enter))
@@ -580,16 +581,15 @@ impl Render for TextInput {
             })
             .rounded_sm()
             .when(self.compact, |s| s.rounded_none())
-            .when(self.minimal && !self.compact, |s| s.h_full().px_3().py_2())
+            .when(self.minimal && !self.compact, |s| s.h_full().px_3())
             .when(self.minimal && self.compact, |s| s.h_full().px(px(0.0)))
-            .when(!self.minimal, |s| s.h_8().px_2())
+            .when(!self.minimal, |s| s.h_full().px_3())
             .w_full()
             .child(
                 div()
                     .flex_1()
                     .flex()
                     .items_center()
-                    .cursor(CursorStyle::IBeam)
                     .child(TextInputElement { input: cx.entity() }),
             )
             .when(!self.minimal && !self.content.is_empty(), |s: Div| {

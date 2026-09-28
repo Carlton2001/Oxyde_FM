@@ -333,7 +333,8 @@ pub fn render_file_list(
                                                                   content: ContextMenuContent::Items(super::oxyde_context_menu_items(cx.i18n(), h_inner_inner.clone(), is_dir, p_for_right_cap.clone()), None),
                                                                   scroll_handle: UniformListScrollHandle::new(),
                                                                   width: px(0.0),
-                                    open_left: false,
+                                                                  bottom_padding: 0.0,
+                                                                  open_left: false,
                                     hovered_item: None,
                                     native_request_id: None,
                                                               });
@@ -559,7 +560,8 @@ pub fn render_file_list(
                                               content: ContextMenuContent::Items(super::pane_context_menu_items(cx.i18n(), h.clone(), p_id_cap_cap), None),
                                               scroll_handle: UniformListScrollHandle::new(),
                                               width: px(0.0),
-                                    open_left: false,
+                                              bottom_padding: 0.0,
+                                              open_left: false,
                                     hovered_item: None,
                                     native_request_id: None,
                                           });
@@ -787,7 +789,6 @@ pub fn render_file_list(
                 .opacity(0.0)
                 .group_hover("file-list-scroll-zone", |style| style.opacity(1.0))
                 .hover(|style| style.opacity(0.9))
-                .cursor_pointer()
                 .on_mouse_down(MouseButton::Left, move |_, _, cx| {
                     cx.stop_propagation();
                     h_scroll_top.update(cx, |this, cx| {

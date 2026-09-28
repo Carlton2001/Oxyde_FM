@@ -117,6 +117,7 @@ pub struct ContextMenuInstance {
     pub content: ContextMenuContent,
     pub scroll_handle: UniformListScrollHandle,
     pub width: Pixels,
+    pub bottom_padding: f32,
     /// If true, the menu opens to the LEFT of its anchor (use Anchor::TopRight).
     pub open_left: bool,
     pub hovered_item: Option<usize>,
@@ -133,25 +134,37 @@ struct PendingFileOperation {
     runtime: tokio::runtime::Handle,
 }
 
-fn context_menu_contains_point(menu: &ContextMenuInstance, position: Point<Pixels>) -> bool {
-    let height = context_menu_height(menu);
+fn native_menu_max_height(viewport_height: Pixels) -> f32 {
+    // Leave 8 px on each side, in addition to the menu's 6 px of chrome.
+    (viewport_height.as_f32() - 22.0).max(26.0)
+}
+
+fn context_menu_contains_point(
+    menu: &ContextMenuInstance,
+    position: Point<Pixels>,
+    viewport_height: Pixels,
+) -> bool {
+    let height = context_menu_height(menu, viewport_height);
     let left = if menu.open_left {
         menu.position.x - menu.width
     } else {
         menu.position.x
     };
-    Bounds::new(point(left, menu.position.y), size(menu.width, height)).contains(&position)
+    let top = context_menu_visible_top(menu.position.y, height, viewport_height);
+    Bounds::new(point(left, top), size(menu.width, height)).contains(&position)
 }
 
-fn context_menu_height(menu: &ContextMenuInstance) -> Pixels {
-    let (item_count, header_height) = match &menu.content {
+fn context_menu_height(menu: &ContextMenuInstance, viewport_height: Pixels) -> Pixels {
+    let (item_count, header_height, max_height) = match &menu.content {
         ContextMenuContent::Items(items, header) => {
-            (items.len(), if header.is_some() { 46.0 } else { 10.0 })
+            (items.len(), if header.is_some() { 42.0 } else { 6.0 }, 480.0)
         }
-        ContextMenuContent::NativeItems { items, .. } => (items.len(), 10.0),
-        ContextMenuContent::NameFilter { .. } => (1, 46.0),
+        ContextMenuContent::NativeItems { items, .. } => {
+            (items.len(), 6.0, native_menu_max_height(viewport_height))
+        }
+        ContextMenuContent::NameFilter { .. } => (0, crate::ui::style::ROW_HEIGHT + 8.0, 480.0),
     };
-    px((item_count as f32 * 26.0).min(480.0) + header_height)
+    px((item_count as f32 * 26.0).min(max_height) + header_height + menu.bottom_padding)
 }
 
 fn context_menu_visible_top(requested_top: Pixels, menu_height: Pixels, viewport_height: Pixels) -> Pixels {
@@ -449,6 +462,7 @@ impl OxydeApp {
             },
             scroll_handle: UniformListScrollHandle::new(),
             width: px(0.0),
+            bottom_padding: 0.0,
             open_left,
             hovered_item: None,
             native_request_id: Some(request_id),
@@ -1059,6 +1073,7 @@ impl OxydeApp {
             content: ContextMenuContent::Items(items, None),
             scroll_handle: UniformListScrollHandle::new(),
             width: px(0.0),
+            bottom_padding: 0.0,
             open_left: false,
             hovered_item: None,
             native_request_id: None,
@@ -1977,7 +1992,6 @@ impl Render for OxydeApp {
                             .w(px(4.0))
                             .h_full()
                             .bg(theme.menu_surface)
-                            .cursor_col_resize()
                             .hover(|s| s.bg(theme.accent))
                             .active(|s| s.bg(theme.accent))
                             .on_mouse_down(MouseButton::Left, {
@@ -2247,6 +2261,9 @@ impl Render for OxydeApp {
                         id: ("context-menu", m_idx).into(),
                         h_app: h.clone(),
                         items: dropdown_items,
+                        reserve_icon_space: true,
+                        is_context_menu: true,
+                        bottom_padding: instance.bottom_padding,
                         scroll_handle,
                         width: None,
                         max_height: 480.0,
@@ -2268,7 +2285,7 @@ impl Render for OxydeApp {
                                     let inside_sibling = this.context_menus.iter().enumerate().any(
                                         |(index, menu)| {
                                             index != m_idx
-                                                && context_menu_contains_point(menu, position)
+                                                && context_menu_contains_point(menu, position, px(win_h))
                                         },
                                     );
                                     if !inside_sibling {
@@ -2342,7 +2359,7 @@ impl Render for OxydeApp {
                                                 let parent_menu_height = this
                                                     .context_menus
                                                     .get(m_idx)
-                                                    .map(context_menu_height)
+                                                    .map(|menu| context_menu_height(menu, px(win_h)))
                                                     .unwrap_or_default();
                                                 this.submenu_close_timer = None;
                                                 this.submenu_timer =
@@ -2509,7 +2526,14 @@ impl Render for OxydeApp {
 
                             crate::ui::components::dropdown::DropdownItem {
                                 label: it.label.clone(),
-                                icon: None,
+                                icon: if m_idx == 1 {
+                                    crate::ui::components::dropdown::native_menu_icon(
+                                        it.verb.as_deref(),
+                                        &it.label,
+                                    )
+                                } else {
+                                    None
+                                },
                                 stay_open: has_sub,
                                 has_submenu: has_sub,
                                 // Windows returns -1 for popup entries that own a submenu.
@@ -2542,9 +2566,12 @@ impl Render for OxydeApp {
                         id: ("context-menu", m_idx).into(),
                         h_app: h.clone(),
                         items: dropdown_items,
+                        reserve_icon_space: m_idx == 1,
+                        is_context_menu: true,
+                        bottom_padding: instance.bottom_padding,
                         scroll_handle,
                         width: None,
-                        max_height: 480.0,
+                        max_height: native_menu_max_height(px(win_h)),
                         on_close: {
                             let h = h.clone();
                             std::rc::Rc::new(move |_, cx| {
@@ -2563,7 +2590,7 @@ impl Render for OxydeApp {
                                     let inside_sibling = this.context_menus.iter().enumerate().any(
                                         |(index, menu)| {
                                             index != m_idx
-                                                && context_menu_contains_point(menu, position)
+                                                && context_menu_contains_point(menu, position, px(win_h))
                                         },
                                     );
                                     if !inside_sibling {
@@ -2629,7 +2656,7 @@ impl Render for OxydeApp {
                                                     .map(|m| m.position.y)
                                                     .unwrap_or_default();
                                                 let parent_menu_height = this.context_menus.get(m_idx)
-                                                    .map(context_menu_height)
+                                                    .map(|menu| context_menu_height(menu, px(win_h)))
                                                     .unwrap_or_default();
                                                 let ix_cap = ix;
 
@@ -2677,8 +2704,9 @@ impl Render for OxydeApp {
                                                                                 items: sub_items_cap
                                                                             },
                                                                             scroll_handle: UniformListScrollHandle::new(),
-                                                                            width: px(0.0),
-                                                                        });
+                                    width: px(0.0),
+                                    bottom_padding: 0.0,
+                                });
                                                                         cx.notify();
                                                                     }
                                                                 });
@@ -2761,6 +2789,9 @@ impl Render for OxydeApp {
                     id: ("context-menu", m_idx).into(),
                     h_app: h.clone(),
                     items: vec![],
+                    reserve_icon_space: true,
+                    is_context_menu: true,
+                    bottom_padding: instance.bottom_padding,
                     scroll_handle,
                     width: Some(200.0),
                     max_height: 480.0,
@@ -2782,7 +2813,7 @@ impl Render for OxydeApp {
                                 let inside_sibling =
                                     this.context_menus.iter().enumerate().any(|(index, menu)| {
                                         index != m_idx
-                                            && context_menu_contains_point(menu, position)
+                                            && context_menu_contains_point(menu, position, px(win_h))
                                     });
                                 if !inside_sibling {
                                     this.context_menus.clear();
@@ -2807,7 +2838,7 @@ impl Render for OxydeApp {
                     header: Some(
                         div()
                             .w(px(200.0))
-                            .h(px(32.0))
+                            .h(px(crate::ui::style::ROW_HEIGHT))
                             .child(input.clone())
                             .into_any_element(),
                     ),
@@ -2875,7 +2906,6 @@ impl Render for OxydeApp {
                         .px(px(12.0))
                         .py(px(8.0))
                         .rounded_md()
-                        .cursor_pointer()
                         .hover(|d| d.bg(theme.control_hover))
                         .child(cx.i18n().text(Message::Close))
                         .on_mouse_down(MouseButton::Left, move |_, _, cx| {

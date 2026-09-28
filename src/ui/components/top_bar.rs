@@ -210,7 +210,6 @@ pub fn render_top_bar(
                                     .items_center()
                                     .justify_center()
                                     .rounded_md()
-                                    .cursor_pointer()
                                     .hover(move |s| s.bg(hover_bg))
                                     .when(show_tooltips, |d| d.tooltip(Tooltip::with_meta(_cx.i18n().text(Message::Undo), tip)))
                                     .on_mouse_down(MouseButton::Left, move |_, _, cx| {
@@ -236,7 +235,6 @@ pub fn render_top_bar(
                                     .items_center()
                                     .justify_center()
                                     .rounded_md()
-                                    .cursor_pointer()
                                     .hover(move |s| s.bg(hover_bg))
                                     .when(show_tooltips, |d| d.tooltip(Tooltip::with_meta(_cx.i18n().text(Message::Redo), tip)))
                                     .on_mouse_down(MouseButton::Left, move |_, _, cx| {
@@ -409,6 +407,9 @@ pub fn render_top_bar(
                                                                         id: "breadcrumb-dropdown".into(),
                                                                         h_app: handle.clone(),
                                                                         items,
+                                                                        reserve_icon_space: true,
+                                                                        is_context_menu: false,
+                                                                        bottom_padding: 0.0,
                                                                         scroll_handle: view.breadcrumb_scroll.clone(),
                                                                         width: None,
                                                                         max_height: 360.0,

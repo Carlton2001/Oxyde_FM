@@ -27,7 +27,6 @@ pub fn render_title_bar(
         .rounded_none()
         .flex_none()
         .hover(move |s| s.bg(btn_hover_bg))
-        .cursor_pointer()
         .on_mouse_down(MouseButton::Left, move |_, _, cx| {
             h_menu.update(cx, |this, cx| {
                 this.context_menus.clear();
@@ -66,7 +65,6 @@ pub fn render_title_bar(
             .flex_none()
             .window_control_area(WindowControlArea::Min)
             .hover(move |s| s.bg(btn_hover_bg))
-            .cursor_pointer()
             .on_mouse_down(MouseButton::Left, |_, window, _| {
                 window.minimize_window();
             })
@@ -93,7 +91,6 @@ pub fn render_title_bar(
         .flex_none()
         .window_control_area(WindowControlArea::Max)
         .hover(move |s| s.bg(btn_hover_bg))
-        .cursor_pointer()
         .on_mouse_down(MouseButton::Left, |_, window, _| {
             window.zoom_window();
         })
@@ -110,7 +107,6 @@ pub fn render_title_bar(
         .flex_none()
         .window_control_area(WindowControlArea::Close)
         .hover(|s| s.bg(theme.danger_hover))
-        .cursor_pointer()
         .on_mouse_down(MouseButton::Left, |_, window, _| {
             window.remove_window();
         })
