@@ -115,7 +115,7 @@ impl RenderOnce for TabBar {
                                     .items_center()
                                     .justify_center()
                                     .rounded_md()
-                                    .hover(|s| s.bg(rgba(0xffffff10)))
+                                    .hover(|s| s.bg(theme.hover))
                                     .on_mouse_down(MouseButton::Left, move |_, window, cx| {
                                         on_new_tab(window, cx);
                                     })

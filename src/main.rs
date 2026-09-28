@@ -16,16 +16,33 @@ fn main() {
         .expect("Failed to create Tokio runtime");
     let _guard = _rt.enter();
 
+    let config_path = oxyde_lib::models::ConfigManager::config_path().ok();
+    let (config, load_failed) = match config_path.as_deref() {
+        Some(path) => match oxyde_lib::models::ConfigManager::read_from_path(path) {
+            Ok(config) => (config, false),
+            Err(error) => {
+                log::warn!("Cannot load preferences: {error:?}");
+                (oxyde_lib::models::AppConfig::default(), true)
+            }
+        },
+        None => (oxyde_lib::models::AppConfig::default(), true),
+    };
+
     let asset_source = crate::ui::assets::EmbeddedAssetSource::new();
     gpui_platform::application()
         .with_assets(asset_source)
-        .run(|cx| {
+        .run(move |cx| {
             let assets = crate::ui::assets::EmbeddedAssetSource::new();
             assets.load_fonts(cx).expect("fonts could not be loaded");
-            cx.set_global(crate::ui::theme::OxydeTheme::dark());
+            cx.set_global(crate::ui::theme::OxydeTheme::for_id(
+                crate::ui::theme::ThemeId::from_id(&config.theme),
+            ));
+            cx.set_global(crate::ui::i18n::I18n::for_language(
+                crate::ui::i18n::Language::from_id(&config.language),
+            ));
             crate::ui::components::input::bind_keys(cx);
             OxydeApp::bind_keys(cx);
-            let app = cx.new(OxydeApp::empty);
+            let app = cx.new(|cx| OxydeApp::new(config, config_path, load_failed, cx));
             app.update(cx, |this, cx| {
                 this.handle = Some(app.clone());
                 this.start_watcher_task(cx);

@@ -1,5 +1,7 @@
 use crate::ui::components::icons::{get_preview_type, PreviewType};
 use crate::ui::style::TNUM;
+use crate::ui::i18n::{FluentArgs, I18nContext, Message};
+use crate::ui::format::{format_date, format_size};
 use crate::ui::theme::OxydeTheme;
 use gpui::prelude::FluentBuilder;
 use gpui::*;
@@ -16,8 +18,8 @@ pub struct Tooltip {
 
 struct FileInfo {
     ext: String,
-    size: String,
-    date: String,
+    size: (u64, bool, bool),
+    date: u64,
 }
 
 #[derive(Clone)]
@@ -66,8 +68,8 @@ impl Tooltip {
     pub fn for_file_no_preview(
         name: String,
         ext: String,
-        size: String,
-        date: String,
+        size: (u64, bool, bool),
+        date: u64,
     ) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
         move |_, cx| {
             cx.new(|_| Self {
@@ -89,8 +91,8 @@ impl Tooltip {
         name: String,
         path: String,
         ext: String,
-        size: String,
-        date: String,
+        size: (u64, bool, bool),
+        date: u64,
     ) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
         let path_clone = path.clone();
         move |_, cx| {
@@ -110,8 +112,8 @@ impl Tooltip {
         name: String,
         path: String,
         ext: String,
-        size: String,
-        date: String,
+        size: (u64, bool, bool),
+        date: u64,
         cx: &mut App,
     ) -> Entity<Self> {
         let preview_type = get_preview_type(&name);
@@ -171,15 +173,30 @@ impl Render for Tooltip {
                 )
             })
             .when_some(self.file_info.as_ref(), |this, info| {
+                let i18n = cx.i18n();
+                let mut args = FluentArgs::new();
+                let type_label = match info.ext.as_str() {
+                    "Dossier" => i18n.text(Message::FileTypeFolder).to_string(),
+                    "Fichier" => i18n.text(Message::FileTypeFile).to_string(),
+                    "Symlink" => i18n.text(Message::FileTypeSymlink).to_string(),
+                    "Junction" => i18n.text(Message::FileTypeJunction).to_string(),
+                    _ => info.ext.clone(),
+                };
+                args.set("value", type_label);
+                let file_type = i18n.text_with_args(Message::TooltipType, &args);
+                args.set("value", format_size(info.size.0, info.size.1, info.size.2, i18n.language()));
+                let file_size = i18n.text_with_args(Message::TooltipSize, &args);
+                args.set("value", format_date(info.date, i18n.language()));
+                let modified = i18n.text_with_args(Message::TooltipModified, &args);
                 this.child(
                     div()
                         .flex()
                         .flex_col()
                         .text_size(px(11.0))
                         .text_color(theme.text_muted)
-                        .child(format!("Type : {}", info.ext))
-                        .child(format!("Taille : {}", info.size))
-                        .child(format!("Modifié le : {}", info.date)),
+                        .child(file_type)
+                        .child(file_size)
+                        .child(modified),
                 )
             })
             .when_some(self.preview_view.clone(), |this, view| {
@@ -344,19 +361,19 @@ impl Render for PreviewTask {
                     .max_h(px(200.0))
                     .overflow_hidden()
                     .rounded_md()
-                    .bg(rgba(0x0d1117ff_u32))
+                    .bg(theme.active_background)
                     .px(px(10.0))
                     .py(px(8.0))
                     .text_size(px(10.0))
                     .font_family("JetBrains Mono")
-                    .text_color(rgba(0xe6edf3ff_u32))
+                    .text_color(theme.text)
                     .child(t.clone()),
             })
         } else {
             div()
                 .text_size(px(10.0))
                 .text_color(theme.text_muted)
-                .child("Chargement de l'aperçu...")
+                .child(cx.i18n().text(Message::PreviewLoading))
         }
     }
 }

@@ -1,3 +1,4 @@
+use crate::ui::i18n::{FluentArgs, I18nContext, Message};
 use crate::ui::app::{DragTarget, FileDragData, OxydeApp};
 pub use crate::ui::theme::ThemeContext;
 pub use gpui::prelude::*;
@@ -283,6 +284,7 @@ impl OxydeApp {
 
         let h = handle.clone();
         let p_id = pane.id.clone();
+        let theme = *cx.theme();
 
         div()
             .id(SharedString::from(format!(
@@ -331,7 +333,11 @@ impl OxydeApp {
                                 let norm_tab = tab_data.path.trim_end_matches(['/', '\\']);
                                 if norm_drive.eq_ignore_ascii_case(norm_tab) {
                                     drive_name = Some(if drive.label.is_empty() {
-                                        format!("Disque local ({})", norm_drive)
+                                        {
+                                            let mut args = FluentArgs::new();
+                                            args.set("drive", norm_drive);
+                                            cx.i18n().text_with_args(Message::LocalDrive, &args).to_string()
+                                        }
                                     } else {
                                         format!("{} ({})", drive.label, norm_drive)
                                     });
@@ -347,7 +353,7 @@ impl OxydeApp {
                             .path
                             .split(['/', '\\'])
                             .rfind(|p| !p.is_empty())
-                            .unwrap_or("Unknown")
+                            .unwrap_or(cx.i18n().text(Message::UnknownItem).as_ref())
                             .to_string()
                     };
 
@@ -401,6 +407,7 @@ impl OxydeApp {
                                     position,
                                     content: ContextMenuContent::Items(
                                         crate::ui::components::tab_context_menu_items(
+                                            cx.i18n(),
                                             h.clone(),
                                             p_id_cap.clone(),
                                             t_ix,
@@ -470,7 +477,7 @@ impl OxydeApp {
                                                     this.update_drag_copy_mode(cx);
                                                 }
                                             });
-                                            style.bg(rgba(0x0078d430))
+                                            style.bg(theme.selection_hover)
                                         }
                                     })
                                     .on_drop({
@@ -627,7 +634,7 @@ impl OxydeApp {
                                     .left_0()
                                     .w(px(2.0))
                                     .h_full()
-                                    .bg(rgb(0x0078d4))
+                                    .bg(theme.accent)
                                     .when(
                                         self.drop_target_pane.as_ref() == Some(&p_id_cap)
                                             && self.drop_target_idx == Some(t_ix),
@@ -648,7 +655,7 @@ impl OxydeApp {
                                         .right_0()
                                         .w(px(2.0))
                                         .h_full()
-                                        .bg(rgb(0x0078d4))
+                                        .bg(theme.accent)
                                         .when(
                                             self.drop_target_pane.as_ref() == Some(&p_id_cap)
                                                 && self.drop_target_idx == Some(tabs_count),
@@ -786,9 +793,9 @@ impl OxydeApp {
                                             .left_0()
                                             .h_full()
                                             .w_1_2()
-                                            .bg(rgba(0x0078d422))
+                                            .bg(theme.selected)
                                             .border_r_1()
-                                            .border_color(rgb(0x0078d4)),
+                                            .border_color(theme.accent),
                                     )
                                 })
                                 .when(self.highlight_right_zone, |s| {
@@ -798,9 +805,9 @@ impl OxydeApp {
                                             .right_0()
                                             .h_full()
                                             .w_1_2()
-                                            .bg(rgba(0x0078d422))
+                                            .bg(theme.selected)
                                             .border_l_1()
-                                            .border_color(rgb(0x0078d4)),
+                                            .border_color(theme.accent),
                                     )
                                 })
                                 .when(self.highlight_top_zone, |s| {
@@ -810,9 +817,9 @@ impl OxydeApp {
                                             .top_0()
                                             .w_full()
                                             .h_1_2()
-                                            .bg(rgba(0x0078d422))
+                                            .bg(theme.selected)
                                             .border_b_1()
-                                            .border_color(rgb(0x0078d4)),
+                                            .border_color(theme.accent),
                                     )
                                 })
                                 .when(self.highlight_bottom_zone, |s| {
@@ -822,9 +829,9 @@ impl OxydeApp {
                                             .bottom_0()
                                             .w_full()
                                             .h_1_2()
-                                            .bg(rgba(0x0078d422))
+                                            .bg(theme.selected)
                                             .border_t_1()
-                                            .border_color(rgb(0x0078d4)),
+                                            .border_color(theme.accent),
                                     )
                                 }),
                         )

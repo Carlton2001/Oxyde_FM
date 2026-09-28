@@ -1,6 +1,7 @@
 use crate::ui::app::OxydeApp;
 use gpui::prelude::*;
 use gpui::*;
+use crate::ui::theme::OxydeTheme;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum ScrollbarAxis {
@@ -15,6 +16,7 @@ const ZED_THUMB_WIDTH_HOVER: f32 = 10.0;
 
 /// Composant Scrollbar Visuel Réutilisable "Zed-like"
 pub fn render_scrollbar(
+    theme: OxydeTheme,
     handle: Entity<OxydeApp>,
     axis: ScrollbarAxis,
     viewport_size: f32,
@@ -43,7 +45,7 @@ pub fn render_scrollbar(
 
     let mut thumb = div()
         .absolute()
-        .bg(rgba(0x55555544)) // Plus subtil par défaut
+        .bg(theme.scrollbar_thumb) // Plus subtil par défaut
         .rounded_md();
 
     if is_v {
@@ -55,13 +57,13 @@ pub fn render_scrollbar(
             .group_hover("scroll-track", |s| {
                 s.w(px(ZED_THUMB_WIDTH_HOVER))
                     .right(px(1.0))
-                    .bg(rgba(0xaaaaaaff))
+                    .bg(theme.scrollbar_thumb_hover)
             });
         if is_dragging {
             thumb = thumb
                 .w(px(ZED_THUMB_WIDTH_HOVER))
                 .right(px(1.0))
-                .bg(rgba(0xffffffff));
+                .bg(theme.scrollbar_thumb_drag);
         }
     } else {
         thumb = thumb
@@ -72,13 +74,13 @@ pub fn render_scrollbar(
             .group_hover("scroll-track", |s| {
                 s.h(px(ZED_THUMB_WIDTH_HOVER))
                     .bottom(px(1.0))
-                    .bg(rgba(0xaaaaaaff))
+                    .bg(theme.scrollbar_thumb_hover)
             });
         if is_dragging {
             thumb = thumb
                 .h(px(ZED_THUMB_WIDTH_HOVER))
                 .bottom(px(1.0))
-                .bg(rgba(0xffffffff));
+                .bg(theme.scrollbar_thumb_drag);
         }
     }
 
@@ -101,7 +103,7 @@ pub fn render_scrollbar(
         .when(!is_v, |s: Stateful<Div>| {
             s.left_0().bottom_0().right_0().h(px(ZED_TRACK_WIDTH))
         })
-        .hover(|s| s.bg(rgba(0xffffff11)))
+        .hover(|s| s.bg(theme.scrollbar_track_hover))
         .child(
             canvas(
                 |bounds, _, _| bounds,

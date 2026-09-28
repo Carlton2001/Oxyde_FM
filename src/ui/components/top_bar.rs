@@ -3,18 +3,19 @@ use crate::ui::components::dropdown::IconName;
 use crate::ui::components::tooltip::Tooltip;
 use crate::ui::style::ROW_HEIGHT;
 use crate::ui::theme::ThemeContext;
+use crate::ui::i18n::{FluentArgs, I18nContext, Message};
 use gpui::prelude::*;
 use gpui::*;
 use oxyde_lib::models::TransactionType;
 
-fn op_label(op: &TransactionType) -> &'static str {
+fn op_label(op: &TransactionType) -> Message {
     match op {
-        TransactionType::Copy => "Copie",
-        TransactionType::Move => "Déplacement",
-        TransactionType::Rename => "Renommage",
-        TransactionType::Delete => "Suppression",
-        TransactionType::NewFolder => "Nouveau dossier",
-        TransactionType::Restore => "Restauration",
+        TransactionType::Copy => Message::OpCopy,
+        TransactionType::Move => Message::OpMove,
+        TransactionType::Rename => Message::OpRename,
+        TransactionType::Delete => Message::OpDelete,
+        TransactionType::NewFolder => Message::OpNewFolder,
+        TransactionType::Restore => Message::OpRestore,
     }
 }
 
@@ -66,18 +67,26 @@ pub fn render_top_bar(
     let undo_tooltip = history_state
         .undo_stack
         .last()
-        .map(|t| format!("Annuler : {}", op_label(&t.op_type)));
+        .map(|t| {
+            let mut args = FluentArgs::new();
+            args.set("operation", _cx.i18n().text(op_label(&t.op_type)).to_string());
+            _cx.i18n().text_with_args(Message::UndoOperation, &args).to_string()
+        });
     let redo_tooltip = history_state
         .redo_stack
         .last()
-        .map(|t| format!("Rétablir : {}", op_label(&t.op_type)));
+        .map(|t| {
+            let mut args = FluentArgs::new();
+            args.set("operation", _cx.i18n().text(op_label(&t.op_type)).to_string());
+            _cx.i18n().text_with_args(Message::RedoOperation, &args).to_string()
+        });
 
     // Shared constants for consistent look
     let icon_active = theme.text_muted;
-    let icon_disabled = rgba(0xffffff18).into();
-    let hover_bg: Hsla = rgba(0xffffff0a).into();
-    let crumb_sep: Hsla = rgba(0xffffff44).into(); // chevrons — dim separator
-    let crumb_parent: Hsla = rgba(0xffffffaa).into(); // parent segments — readable but recessed
+    let icon_disabled = theme.icon_disabled;
+    let hover_bg: Hsla = theme.control_hover;
+    let crumb_sep: Hsla = theme.icon_muted; // chevrons — dim separator
+    let crumb_parent: Hsla = theme.text_muted; // parent segments — readable but recessed
     let crumb_current = theme.text; // current segment — full brightness
 
     div()
@@ -108,7 +117,7 @@ pub fn render_top_bar(
                         let p_id = pane_id.clone();
                         btn = btn
                             .hover(move |s| s.bg(hover_bg))
-                            .when(show_tooltips, |d| d.tooltip(Tooltip::with_meta("Précédent", "Alt+Gauche")))
+                            .when(show_tooltips, |d| d.tooltip(Tooltip::with_meta(_cx.i18n().text(Message::Back), _cx.i18n().text(Message::ShortcutBack))))
                             .on_mouse_down(MouseButton::Left, {
                                 let h = handle.clone();
                                 move |_, _, cx| { h.update(cx, |v: &mut OxydeApp, cx| v.go_back(&p_id, cx)); }
@@ -132,7 +141,7 @@ pub fn render_top_bar(
                         .justify_center()
                         .rounded_md()
                         .hover(move |s| s.bg(hover_bg))
-                        .when(show_tooltips, |d| d.tooltip(Tooltip::text("Actualiser")))
+                        .when(show_tooltips, |d| d.tooltip(Tooltip::text(_cx.i18n().text(Message::Refresh))))
                         .on_mouse_down(MouseButton::Left, {
                             let h = handle.clone();
                             move |_, _, cx| { h.update(cx, |this, cx| this.refresh_all(cx)); }
@@ -158,7 +167,7 @@ pub fn render_top_bar(
                         let p_id = pane_id.clone();
                         btn = btn
                             .hover(move |s| s.bg(hover_bg))
-                            .when(show_tooltips, |d| d.tooltip(Tooltip::with_meta("Suivant", "Alt+Droite")))
+                            .when(show_tooltips, |d| d.tooltip(Tooltip::with_meta(_cx.i18n().text(Message::Forward), _cx.i18n().text(Message::ShortcutForward))))
                             .on_mouse_down(MouseButton::Left, {
                                 let h = handle.clone();
                                 move |_, _, cx| { h.update(cx, |v: &mut OxydeApp, cx| v.go_forward(&p_id, cx)); }
@@ -203,7 +212,7 @@ pub fn render_top_bar(
                                     .rounded_md()
                                     .cursor_pointer()
                                     .hover(move |s| s.bg(hover_bg))
-                                    .when(show_tooltips, |d| d.tooltip(Tooltip::with_meta("Annuler", tip)))
+                                    .when(show_tooltips, |d| d.tooltip(Tooltip::with_meta(_cx.i18n().text(Message::Undo), tip)))
                                     .on_mouse_down(MouseButton::Left, move |_, _, cx| {
                                         h.update(cx, |this, cx| this.execute_undo(cx));
                                     })
@@ -229,7 +238,7 @@ pub fn render_top_bar(
                                     .rounded_md()
                                     .cursor_pointer()
                                     .hover(move |s| s.bg(hover_bg))
-                                    .when(show_tooltips, |d| d.tooltip(Tooltip::with_meta("Rétablir", tip)))
+                                    .when(show_tooltips, |d| d.tooltip(Tooltip::with_meta(_cx.i18n().text(Message::Redo), tip)))
                                     .on_mouse_down(MouseButton::Left, move |_, _, cx| {
                                         h.update(cx, |this, cx| this.execute_redo(cx));
                                     })
@@ -262,7 +271,7 @@ pub fn render_top_bar(
                             .w_full()
                             .h_full()
                             .when(view.breadcrumb_invalid, |field| {
-                                field.border_1().border_color(rgb(0xff5555)).rounded_sm()
+                                field.border_1().border_color(theme.error).rounded_sm()
                             })
                             .child(input.clone());
                         let field_shell = div()
@@ -484,7 +493,7 @@ pub fn render_top_bar(
                                             this.update_drag_copy_mode(cx);
                                         }
                                     });
-                                    style.bg(rgba(0x0078d430)).text_color(rgb(0xffffff))
+                                    style.bg(theme.selection_hover).text_color(theme.text_on_accent)
                                 }
                             })
                             .on_drop({

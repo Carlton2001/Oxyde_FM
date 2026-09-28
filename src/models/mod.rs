@@ -2,6 +2,7 @@ pub mod error;
 pub mod file_entry;
 pub mod history;
 pub mod progress;
+pub mod preferences;
 pub mod session;
 pub mod transaction;
 

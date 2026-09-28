@@ -1,6 +1,7 @@
 use gpui::prelude::*;
 use gpui::*;
 use std::cmp::Ordering;
+use crate::ui::theme::ThemeContext;
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum TabPosition {
@@ -14,15 +15,16 @@ pub struct TabDragPreview {
 }
 
 impl Render for TabDragPreview {
-    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let theme = *cx.theme();
         div()
             .px_4()
             .h(px(32.0))
-            .bg(rgb(0x38393d))
+            .bg(theme.tab_active)
             .rounded_sm()
             .border_1()
-            .border_color(rgb(0x4a4b4f))
-            .text_color(rgb(0xcccccc))
+            .border_color(theme.menu_border)
+            .text_color(theme.text)
             .text_sm()
             .opacity(0.95)
             .shadow_lg()
@@ -33,7 +35,7 @@ impl Render for TabDragPreview {
                 svg()
                     .path("icons/folder.svg")
                     .size_3_5()
-                    .text_color(rgb(0x0078d4)),
+                    .text_color(theme.accent),
             )
             .child(self.label.clone())
     }
@@ -146,11 +148,12 @@ impl IntoElement for Tab {
 }
 
 impl RenderOnce for Tab {
-    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
+    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+        let theme = *cx.theme();
         let (text_color, bg_color) = if self.selected {
-            (rgb(0xcccccc), rgb(0x38393d))
+            (theme.text, theme.tab_active)
         } else {
-            (rgb(0x999999), rgb(0x1f2023))
+            (theme.text_muted, theme.header)
         };
 
         let mut container = div()
@@ -189,19 +192,19 @@ impl RenderOnce for Tab {
         container = match self.position {
             TabPosition::First => {
                 if self.selected {
-                    container.border_r_1().border_color(rgb(0x161719))
+                    container.border_r_1().border_color(theme.border)
                 } else {
                     container
                         .border_r_1()
                         .border_b_1()
-                        .border_color(rgb(0x161719))
+                        .border_color(theme.border)
                 }
             }
             TabPosition::Last => {
                 if self.selected {
                     container
                 } else {
-                    container.border_b_1().border_color(rgb(0x161719))
+                    container.border_b_1().border_color(theme.border)
                 }
             }
             TabPosition::Middle(Ordering::Greater)
@@ -209,7 +212,7 @@ impl RenderOnce for Tab {
             | TabPosition::Middle(Ordering::Equal) => container
                 .border_r_1()
                 .border_b_1()
-                .border_color(rgb(0x161719)),
+                .border_color(theme.border),
         };
 
         // Active tab top indicator (Zed-like)
@@ -220,7 +223,7 @@ impl RenderOnce for Tab {
                     .top_0()
                     .w_full()
                     .h(px(2.0))
-                    .bg(rgb(0x0078d4)),
+                    .bg(theme.accent),
             );
         }
 
@@ -230,7 +233,7 @@ impl RenderOnce for Tab {
                 .left_0()
                 .w(px(2.0))
                 .h_full()
-                .when(self.is_drop_target, |s| s.bg(rgb(0x0078d4))),
+                .when(self.is_drop_target, |s| s.bg(theme.accent)),
         );
 
         container = container.child(
@@ -246,9 +249,9 @@ impl RenderOnce for Tab {
                 .gap_2()
                 .when_some(self.icon, |s, icon| {
                     s.child(svg().path(icon).size_3_5().text_color(if self.selected {
-                        rgb(0x0078d4)
+                        theme.accent
                     } else {
-                        rgb(0x666666)
+                        theme.icon_muted
                     }))
                 })
                 .child(div().text_ellipsis().child(self.label.clone()))
@@ -257,7 +260,7 @@ impl RenderOnce for Tab {
                         div()
                             .p_0p5()
                             .rounded_sm()
-                            .hover(|st: StyleRefinement| st.bg(rgb(0x333333)))
+                            .hover(|st: StyleRefinement| st.bg(theme.tab_close_hover))
                             .on_mouse_down(MouseButton::Left, move |_, _window, cx| {
                                 cx.stop_propagation();
                                 (on_close)(_window, cx);
@@ -267,11 +270,11 @@ impl RenderOnce for Tab {
                                     .path("icons/x.svg")
                                     .size_3()
                                     .text_color(if self.selected {
-                                        rgb(0x888888)
+                                        theme.icon_muted
                                     } else {
-                                        rgb(0x666666)
+                                        theme.icon_muted
                                     })
-                                    .group_hover("tab", |st| st.text_color(rgb(0xcccccc))),
+                                    .group_hover("tab", |st| st.text_color(theme.text)),
                             ),
                     )
                 }),

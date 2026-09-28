@@ -12,8 +12,8 @@ pub fn render_title_bar(
 ) -> impl IntoElement {
     let theme = *cx.theme();
 
-    let btn_hover_bg: Hsla = rgba(0xffffff12).into();
-    let icon_color: Hsla = rgba(0xffffffaa).into();
+    let btn_hover_bg: Hsla = theme.control_hover;
+    let icon_color: Hsla = theme.text_muted;
 
     // ── Oxyde app button (left) → opens Settings directly ───────────────────
     let h_menu = handle.clone();
@@ -101,6 +101,7 @@ pub fn render_title_bar(
 
     let close_btn = div()
         .id("wc-close")
+        .group("window-close")
         .w(px(46.0))
         .h_full()
         .flex()
@@ -108,12 +109,18 @@ pub fn render_title_bar(
         .justify_center()
         .flex_none()
         .window_control_area(WindowControlArea::Close)
-        .hover(|s| s.bg(rgb(0xc42b1c)))
+        .hover(|s| s.bg(theme.danger_hover))
         .cursor_pointer()
         .on_mouse_down(MouseButton::Left, |_, window, _| {
             window.remove_window();
         })
-        .child(svg().path("icons/x.svg").size_3().text_color(icon_color));
+        .child(
+            svg()
+                .path("icons/x.svg")
+                .size_3()
+                .text_color(icon_color)
+                .group_hover("window-close", |s| s.text_color(theme.text_on_danger)),
+        );
 
     // ── Assemble ─────────────────────────────────────────────────────────────
     div()

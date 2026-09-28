@@ -81,14 +81,15 @@ impl RenderOnce for Button {
         // Define colors based on variant and selection
         let (bg, border_color, text_color) = match (self.variant, self.selected) {
             (_, true) => (theme.selected, theme.accent, theme.text),
-            (ButtonVariant::Primary, _) => (theme.accent, theme.accent, rgb(0xffffff).into()),
-            (ButtonVariant::Subtle, _) => (rgba(0xffffff03).into(), theme.border, theme.text),
+            (ButtonVariant::Primary, _) => (theme.accent, theme.accent, theme.text_on_accent),
+            (ButtonVariant::Subtle, _) => (theme.surface, theme.border, theme.text),
             (ButtonVariant::Ghost, _) => (
                 hsla(0.0, 0.0, 0.0, 0.0),
                 hsla(0.0, 0.0, 0.0, 0.0),
                 theme.text_muted,
             ),
         };
+        let filled = self.variant == ButtonVariant::Primary && !self.selected;
 
         div()
             .id(self.id)
@@ -103,11 +104,19 @@ impl RenderOnce for Button {
             .border_1()
             .border_color(border_color)
             .hover(|style| {
-                style
-                    .bg(theme.hover)
-                    .border_color(theme.accent.opacity(0.5))
+                if filled {
+                    style.bg(theme.accent).border_color(theme.accent)
+                } else {
+                    style.bg(theme.hover).border_color(theme.accent.opacity(0.5))
+                }
             })
-            .active(|style| style.bg(theme.selected).border_color(theme.accent))
+            .active(|style| {
+                if filled {
+                    style.bg(theme.accent).border_color(theme.accent)
+                } else {
+                    style.bg(theme.selected).border_color(theme.accent)
+                }
+            })
             .when_some(self.on_click, |container, on_click| {
                 container
                     .on_mouse_down(MouseButton::Left, move |_, window, cx| on_click(window, cx))

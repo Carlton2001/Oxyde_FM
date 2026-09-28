@@ -1,3 +1,4 @@
+use crate::ui::i18n::Message;
 use gpui::{ScrollHandle, UniformListScrollHandle};
 use oxyde_lib::commands::system::{get_drives, get_quick_access_items};
 use oxyde_lib::models::{DriveInfo, FileEntry, QuickAccessItem, SidebarNode};
@@ -19,7 +20,7 @@ pub enum SortDirection {
 
 #[derive(Clone, Debug)]
 pub enum SidebarItem {
-    Header(String),
+    Header(Message),
     Pinned {
         item: QuickAccessItem,
     },
@@ -44,13 +45,13 @@ pub enum SizeCategory {
 }
 
 impl SizeCategory {
-    pub fn label(&self) -> &'static str {
+    pub fn message(&self) -> Message {
         match self {
-            Self::Minuscule => "Minuscule (< 10 Ko)",
-            Self::Petit => "Petit (10 Ko - 1 Mo)",
-            Self::Moyen => "Moyen (1 Mo - 100 Mo)",
-            Self::Grand => "Grand (100 Mo - 1 Go)",
-            Self::Huge => "Très grand (> 1 Go)",
+            Self::Minuscule => Message::SizeTiny,
+            Self::Petit => Message::SizeSmall,
+            Self::Moyen => Message::SizeMedium,
+            Self::Grand => Message::SizeLarge,
+            Self::Huge => Message::SizeHuge,
         }
     }
 
@@ -78,13 +79,13 @@ pub enum DateCategory {
 }
 
 impl DateCategory {
-    pub fn label(&self) -> &'static str {
+    pub fn message(&self) -> Message {
         match self {
-            Self::Aujourdhui => "Aujourd'hui",
-            Self::Hier => "Hier",
-            Self::CetteSemaine => "Cette semaine",
-            Self::LaSemaineDerniere => "La semaine dernière",
-            Self::PlusAncien => "Plus ancien",
+            Self::Aujourdhui => Message::DateToday,
+            Self::Hier => Message::DateYesterday,
+            Self::CetteSemaine => Message::DateThisWeek,
+            Self::LaSemaineDerniere => Message::DateLastWeek,
+            Self::PlusAncien => Message::DateOlder,
         }
     }
 
@@ -135,7 +136,7 @@ pub struct TabState {
 pub enum TabLoadStatus {
     Loading,
     Ready,
-    Error(String),
+    Error(Message),
 }
 
 impl TabState {
@@ -215,12 +216,15 @@ impl TabState {
     }
 
     pub fn recalculate_column_widths(&mut self) {
-        use crate::ui::style::{format_date, format_size};
-        let measure = |txt: &str| txt.len() as f32 * 6.5;
+        use crate::ui::format::{format_date, format_size};
+        use crate::ui::i18n::Language;
+        let measure = |txt: &str| txt.chars().count() as f32 * 6.5;
 
-        let mut max_type_w = measure("Type");
-        let mut max_size_w = measure("Taille");
-        let mut max_date_w = measure("Modifié le");
+        // Width reservations cover the longest built-in labels in both catalogs.
+        // These are layout measurements, not user-facing strings.
+        let mut max_type_w: f32 = 15.0 * 6.5;
+        let mut max_size_w: f32 = 6.0 * 6.5;
+        let mut max_date_w: f32 = 13.0 * 6.5;
 
         // We use the full files list instead of cached_filtered_files
         // to keep columns stable while the user interacts with filters.
@@ -236,11 +240,14 @@ impl TabState {
             };
             max_type_w = max_type_w.max(measure(&type_str));
 
-            let size_str = format_size(f.size, f.is_dir, f.is_calculated);
-            max_size_w = max_size_w.max(measure(&size_str));
-
-            let date_str = format_date(f.modified);
-            max_date_w = max_date_w.max(measure(&date_str));
+            // Reserve enough width for both supported display languages.
+            // This keeps columns stable when the user switches language.
+            for language in [Language::French, Language::English] {
+                let size_str = format_size(f.size, f.is_dir, f.is_calculated, language);
+                max_size_w = max_size_w.max(measure(&size_str));
+                let date_str = format_date(f.modified, language);
+                max_date_w = max_date_w.max(measure(&date_str));
+            }
         }
 
         self.type_col_width = (max_type_w + 36.0).max(70.0);
@@ -908,13 +915,13 @@ impl WorkspaceState {
         let mut new_items = Vec::new();
 
         if !self.pinned_items.is_empty() {
-            new_items.push(SidebarItem::Header("ACCÈS RAPIDE".to_string()));
+            new_items.push(SidebarItem::Header(Message::SidebarQuickAccess));
             for item in &self.pinned_items {
                 new_items.push(SidebarItem::Pinned { item: item.clone() });
             }
         }
 
-        new_items.push(SidebarItem::Header("LECTEURS".to_string()));
+        new_items.push(SidebarItem::Header(Message::SidebarDrives));
 
         for drive in &self.drives {
             let is_expanded = self.expanded_paths.contains(&drive.path);
@@ -928,7 +935,7 @@ impl WorkspaceState {
             }
         }
 
-        new_items.push(SidebarItem::Header("EMPLACEMENTS".to_string()));
+        new_items.push(SidebarItem::Header(Message::SidebarLocations));
         #[cfg(target_os = "windows")]
         new_items.push(SidebarItem::Pinned {
             item: QuickAccessItem {

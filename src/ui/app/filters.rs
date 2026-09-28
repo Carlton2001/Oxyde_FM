@@ -1,3 +1,4 @@
+use crate::ui::i18n::{I18nContext, Message};
 use crate::ui::app::{ContextMenuContent, ContextMenuHeader, ContextMenuInstance, OxydeApp};
 use gpui::*;
 
@@ -32,6 +33,7 @@ impl OxydeApp {
             let tab_files = tab.files.clone();
             let current_filters = tab.filter_types.clone();
             let items = crate::ui::components::file_list::get_type_filter_items(
+                cx.i18n(),
                 self.handle.as_ref().unwrap().clone(),
                 pane_id.to_string(),
                 tab_files,
@@ -69,6 +71,7 @@ impl OxydeApp {
             let tab_files = tab.files.clone();
             let current_filters = tab.filter_sizes.clone();
             let items = crate::ui::components::file_list::get_size_filter_items(
+                cx.i18n(),
                 self.handle.as_ref().unwrap().clone(),
                 pane_id.to_string(),
                 tab_files,
@@ -125,6 +128,7 @@ impl OxydeApp {
             let tab_files = tab.files.clone();
             let current_filters = tab.filter_dates.clone();
             let items = crate::ui::components::file_list::get_date_filter_items(
+                cx.i18n(),
                 self.handle.as_ref().unwrap().clone(),
                 pane_id.to_string(),
                 tab_files,
@@ -253,7 +257,7 @@ impl OxydeApp {
 
             crate::ui::components::input::TextInput::new(
                 cx,
-                "Filtrer par nom...",
+                cx.i18n().text(Message::NameFilterPlaceholder).to_string(),
                 initial_text,
                 move |text, _, cx| {
                     h_change.update(cx, |this, cx| {

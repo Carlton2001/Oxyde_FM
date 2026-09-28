@@ -5,22 +5,28 @@ use crate::ui::components::dropdown::{DropdownItem, IconName};
 use crate::ui::components::scrollbar::{render_scrollbar, ScrollbarAxis};
 use crate::ui::components::tooltip::Tooltip;
 use crate::ui::theme::{OxydeTheme, ThemeContext};
+use crate::ui::i18n::{I18n, I18nContext, Message};
 use crate::ui::workspace::SidebarItem;
 use gpui::prelude::*;
 use gpui::*;
 
 const SIDEBAR_ROW_H: f32 = 28.0;
+
+fn pinned_display_name(item: &oxyde_lib::models::QuickAccessItem, i18n: &I18n) -> String {
+    match item.path.as_str() {
+        "__network_vincinity__" => i18n.text(Message::SidebarNetwork).to_string(),
+        "trash://" => i18n.text(Message::SidebarTrash).to_string(),
+        _ => item.name.clone(),
+    }
+}
 // Selection / hover colours
-const SEL_BG: u32 = 0x0078d428; // blue ~16% opacity
-const SEL_HOV: u32 = 0x0078d440; // blue ~25% on hover-while-selected
-const ITEM_HOV: u32 = 0xffffff0d; // ~5% white for idle hover
 
 // ── Per-item right-click menus ───────────────────────────────────────────────
 
-fn pinned_context_menu(h: Entity<OxydeApp>, path: String) -> Vec<DropdownItem> {
+fn pinned_context_menu(i18n: &I18n, h: Entity<OxydeApp>, path: String) -> Vec<DropdownItem> {
     vec![
         DropdownItem {
-            label: "Ouvrir".to_string(),
+            label: i18n.text(Message::Open).to_string(),
             icon: Some(IconName::FolderOpen),
             stay_open: false,
             has_submenu: false,
@@ -39,7 +45,7 @@ fn pinned_context_menu(h: Entity<OxydeApp>, path: String) -> Vec<DropdownItem> {
             on_hover: None,
         },
         DropdownItem {
-            label: "Ouvrir dans un nouvel onglet".to_string(),
+            label: i18n.text(Message::OpenNewTab).to_string(),
             icon: Some(IconName::Copy),
             stay_open: false,
             has_submenu: false,
@@ -58,7 +64,7 @@ fn pinned_context_menu(h: Entity<OxydeApp>, path: String) -> Vec<DropdownItem> {
             on_hover: None,
         },
         DropdownItem {
-            label: "Désépingler de l'accès rapide".to_string(),
+            label: i18n.text(Message::UnpinQuickAccess).to_string(),
             icon: Some(IconName::X),
             stay_open: false,
             has_submenu: false,
@@ -78,7 +84,7 @@ fn pinned_context_menu(h: Entity<OxydeApp>, path: String) -> Vec<DropdownItem> {
             on_hover: None,
         },
         DropdownItem {
-            label: "Propriétés".to_string(),
+            label: i18n.text(Message::Properties).to_string(),
             icon: None,
             stay_open: false,
             has_submenu: false,
@@ -98,10 +104,10 @@ fn pinned_context_menu(h: Entity<OxydeApp>, path: String) -> Vec<DropdownItem> {
     ]
 }
 
-fn location_context_menu(h: Entity<OxydeApp>, path: String) -> Vec<DropdownItem> {
+fn location_context_menu(i18n: &I18n, h: Entity<OxydeApp>, path: String) -> Vec<DropdownItem> {
     vec![
         DropdownItem {
-            label: "Ouvrir".to_string(),
+            label: i18n.text(Message::Open).to_string(),
             icon: Some(IconName::FolderOpen),
             stay_open: false,
             has_submenu: false,
@@ -120,7 +126,7 @@ fn location_context_menu(h: Entity<OxydeApp>, path: String) -> Vec<DropdownItem>
             on_hover: None,
         },
         DropdownItem {
-            label: "Propriétés".to_string(),
+            label: i18n.text(Message::Properties).to_string(),
             icon: None,
             stay_open: false,
             has_submenu: false,
@@ -140,10 +146,10 @@ fn location_context_menu(h: Entity<OxydeApp>, path: String) -> Vec<DropdownItem>
     ]
 }
 
-fn drive_context_menu(h: Entity<OxydeApp>, path: String) -> Vec<DropdownItem> {
+fn drive_context_menu(i18n: &I18n, h: Entity<OxydeApp>, path: String) -> Vec<DropdownItem> {
     vec![
         DropdownItem {
-            label: "Ouvrir".to_string(),
+            label: i18n.text(Message::Open).to_string(),
             icon: Some(IconName::FolderOpen),
             stay_open: false,
             has_submenu: false,
@@ -162,7 +168,7 @@ fn drive_context_menu(h: Entity<OxydeApp>, path: String) -> Vec<DropdownItem> {
             on_hover: None,
         },
         DropdownItem {
-            label: "Ouvrir dans un nouvel onglet".to_string(),
+            label: i18n.text(Message::OpenNewTab).to_string(),
             icon: Some(IconName::Copy),
             stay_open: false,
             has_submenu: false,
@@ -181,7 +187,7 @@ fn drive_context_menu(h: Entity<OxydeApp>, path: String) -> Vec<DropdownItem> {
             on_hover: None,
         },
         DropdownItem {
-            label: "Propriétés".to_string(),
+            label: i18n.text(Message::Properties).to_string(),
             icon: None,
             stay_open: false,
             has_submenu: false,
@@ -201,10 +207,10 @@ fn drive_context_menu(h: Entity<OxydeApp>, path: String) -> Vec<DropdownItem> {
     ]
 }
 
-fn directory_context_menu(h: Entity<OxydeApp>, path: String) -> Vec<DropdownItem> {
+fn directory_context_menu(i18n: &I18n, h: Entity<OxydeApp>, path: String) -> Vec<DropdownItem> {
     vec![
         DropdownItem {
-            label: "Ouvrir".to_string(),
+            label: i18n.text(Message::Open).to_string(),
             icon: Some(IconName::FolderOpen),
             stay_open: false,
             has_submenu: false,
@@ -223,7 +229,7 @@ fn directory_context_menu(h: Entity<OxydeApp>, path: String) -> Vec<DropdownItem
             on_hover: None,
         },
         DropdownItem {
-            label: "Ouvrir dans un nouvel onglet".to_string(),
+            label: i18n.text(Message::OpenNewTab).to_string(),
             icon: Some(IconName::Copy),
             stay_open: false,
             has_submenu: false,
@@ -290,8 +296,8 @@ pub fn render_sidebar(
     let calculated_content_w = sidebar_items
         .iter()
         .map(|item| match item {
-            SidebarItem::Header(h) => h.len() as f32 * 8.0 + 20.0,
-            SidebarItem::Pinned { item } => item.name.len() as f32 * 7.0 + 60.0,
+            SidebarItem::Header(h) => _cx.i18n().text(*h).len() as f32 * 8.0 + 20.0,
+            SidebarItem::Pinned { item } => pinned_display_name(item, _cx.i18n()).len() as f32 * 7.0 + 60.0,
             SidebarItem::Drive { drive, .. } => {
                 (drive.label.len() + drive.path.len() + 3) as f32 * 7.0 + 60.0
             }
@@ -370,7 +376,7 @@ pub fn render_sidebar(
                                                     .text_size(px(11.0))
                                                     .font_weight(FontWeight::SEMIBOLD)
                                                     .text_color(theme.text_muted)
-                                                    .child(label.clone())
+                                                    .child(cx.i18n().text(*label))
                                                     .into_any_element()
                                             }
 
@@ -378,8 +384,8 @@ pub fn render_sidebar(
                                             SidebarItem::Pinned { item } => {
                                                 let path      = item.path.clone();
                                                 let is_sel    = sel.as_deref() == Some(&path);
-                                                let sel_bg:   Hsla = rgba(SEL_BG).into();
-                                                let hov_bg:   Hsla = if is_sel { rgba(SEL_HOV).into() } else { rgba(ITEM_HOV).into() };
+                                                let sel_bg:   Hsla = theme.selected;
+                                                let hov_bg:   Hsla = if is_sel { theme.selection_hover } else { theme.hover };
                                                 let is_dimmed = item.name.starts_with('.');
 
                                                 div()
@@ -392,7 +398,7 @@ pub fn render_sidebar(
                                                     .when(is_dimmed, |d| d.opacity(0.5))
                                                     .when(is_sel, |d| d.bg(sel_bg))
                                                     .hover(move |s| s.bg(hov_bg))
-                                                    .when(show_tooltips, |d| d.tooltip(Tooltip::with_meta(item.name.clone(), path.clone())))
+                                                    .when(show_tooltips, |d| d.tooltip(Tooltip::with_meta(pinned_display_name(item, cx.i18n()), path.clone())))
                                                     // Left click → select + navigate
                                                     .on_mouse_down(MouseButton::Left, {
                                                         let h = h.clone(); let p = path.clone();
@@ -421,9 +427,9 @@ pub fn render_sidebar(
                                                         move |e, _, cx| {
                                                             let pos   = e.position;
                                                             let items = if is_qa {
-                                                                pinned_context_menu(h.clone(), p.clone())
+                                                                pinned_context_menu(cx.i18n(), h.clone(), p.clone())
                                                             } else {
-                                                                location_context_menu(h.clone(), p.clone())
+                                                                location_context_menu(cx.i18n(), h.clone(), p.clone())
                                                             };
                                                             h.update(cx, |this, cx| {
                                                                 this.sidebar_selected_path = Some(p.clone());
@@ -451,7 +457,7 @@ pub fn render_sidebar(
                                                     .child(
                                                         div().flex_1().text_ellipsis().overflow_hidden()
                                                             .text_color(theme.text)
-                                                            .child(item.name.clone())
+                                                            .child(pinned_display_name(item, cx.i18n()))
                                                     )
                                                     .drag_over::<FileDragData>({
                                                         let h = h.clone(); let tgt = path.clone();
@@ -465,7 +471,7 @@ pub fn render_sidebar(
                                                                     this.update_drag_copy_mode(cx);
                                                                 }
                                                             });
-                                                            style.bg(rgba(0x0078d440))
+                                                            style.bg(theme.drag_hover)
                                                         }
                                                     })
                                                     .on_drop({
@@ -489,8 +495,8 @@ pub fn render_sidebar(
                                                 let path       = drive.path.clone();
                                                 let is_sel     = sel.as_deref() == Some(&path);
                                                 let is_exp     = *is_expanded;
-                                                let sel_bg:    Hsla = rgba(SEL_BG).into();
-                                                let hov_bg:    Hsla = if is_sel { rgba(SEL_HOV).into() } else { rgba(ITEM_HOV).into() };
+                                                let sel_bg:    Hsla = theme.selected;
+                                                let hov_bg:    Hsla = if is_sel { theme.selection_hover } else { theme.hover };
                                                 let label      = format!("{} ({})", drive.label, drive.path);
 
                                                 div()
@@ -533,7 +539,7 @@ pub fn render_sidebar(
                                                         let h = h.clone(); let p = path.clone();
                                                         move |e, _, cx| {
                                                             let pos   = e.position;
-                                                            let items = drive_context_menu(h.clone(), p.clone());
+                                                            let items = drive_context_menu(cx.i18n(), h.clone(), p.clone());
                                                             h.update(cx, |this, cx| {
                                                                 this.sidebar_selected_path = Some(p.clone());
                                                                 this.context_menus.clear();
@@ -555,7 +561,7 @@ pub fn render_sidebar(
                                                         div()
                                                             .w_4().h_4().mr_1()
                                                             .flex().items_center().justify_center().flex_shrink_0()
-                                                            .hover(|s| s.bg(rgba(ITEM_HOV)).rounded_md())
+                                                            .hover(|s| s.bg(theme.hover).rounded_md())
                                                             .on_mouse_down(MouseButton::Left, {
                                                                 let h = h.clone(); let p = path.clone();
                                                                 move |_, _, cx| {
@@ -592,7 +598,7 @@ pub fn render_sidebar(
                                                                     this.update_drag_copy_mode(cx);
                                                                 }
                                                             });
-                                                            style.bg(rgba(0x0078d440))
+                                                            style.bg(theme.drag_hover)
                                                         }
                                                     })
                                                     .on_drop({
@@ -618,8 +624,8 @@ pub fn render_sidebar(
                                                 let is_exp     = *is_expanded;
                                                 let has_subs   = node.has_subdirs;
                                                 let depth_px   = 8.0 + (*depth as f32 * 12.0);
-                                                let sel_bg:    Hsla = rgba(SEL_BG).into();
-                                                let hov_bg:    Hsla = if is_sel { rgba(SEL_HOV).into() } else { rgba(ITEM_HOV).into() };
+                                                let sel_bg:    Hsla = theme.selected;
+                                                let hov_bg:    Hsla = if is_sel { theme.selection_hover } else { theme.hover };
                                                 let is_dimmed  = node.is_hidden || node.is_system;
 
                                                 div()
@@ -664,7 +670,7 @@ pub fn render_sidebar(
                                                         let h = h.clone(); let p = path.clone();
                                                         move |e, _, cx| {
                                                             let pos   = e.position;
-                                                            let items = directory_context_menu(h.clone(), p.clone());
+                                                            let items = directory_context_menu(cx.i18n(), h.clone(), p.clone());
                                                             h.update(cx, |this, cx| {
                                                                 this.sidebar_selected_path = Some(p.clone());
                                                                 this.context_menus.clear();
@@ -687,7 +693,7 @@ pub fn render_sidebar(
                                                             .w_4().h_4().mr_1()
                                                             .flex().items_center().justify_center().flex_shrink_0()
                                                             .when(has_subs, |d| d
-                                                                .hover(|s| s.bg(rgba(ITEM_HOV)).rounded_md())
+                                                                .hover(|s| s.bg(theme.hover).rounded_md())
                                                                 .on_mouse_down(MouseButton::Left, {
                                                                     let h = h.clone(); let p = path.clone();
                                                                     move |_, _, cx| {
@@ -743,7 +749,7 @@ pub fn render_sidebar(
                                                                     this.update_drag_copy_mode(cx);
                                                                 }
                                                             });
-                                                            style.bg(rgba(0x0078d440))
+                                                            style.bg(theme.drag_hover)
                                                         }
                                                     })
                                                     .on_drop({
@@ -783,6 +789,7 @@ pub fn render_sidebar(
             .y
             .as_f32();
         render_scrollbar(
+            theme,
             handle.clone(),
             ScrollbarAxis::Vertical,
             viewport_h,
@@ -803,6 +810,7 @@ pub fn render_sidebar(
 
     // Horizontal scrollbar
     container = container.child(render_scrollbar(
+            theme,
         handle.clone(),
         ScrollbarAxis::Horizontal,
         viewport_w,

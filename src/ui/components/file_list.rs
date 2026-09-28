@@ -3,7 +3,9 @@ use crate::ui::app::{
 };
 use crate::ui::components::scrollbar::{render_scrollbar, ScrollbarAxis, ZED_TRACK_WIDTH};
 use crate::ui::components::tooltip::Tooltip;
-use crate::ui::style::{format_date, format_size, ROW_HEIGHT};
+use crate::ui::i18n::{FluentArgs, I18nContext, Message};
+use crate::ui::style::ROW_HEIGHT;
+use crate::ui::format::{format_date, format_size, format_number};
 use crate::ui::theme::{OxydeTheme, ThemeContext};
 use crate::ui::workspace::{SortColumn, SortDirection, TabLoadStatus};
 use gpui::prelude::*;
@@ -31,12 +33,19 @@ fn file_type_label(f: &FileEntry) -> String {
         .unwrap_or_else(|| "Fichier".to_string())
 }
 
-fn status_size(bytes: u64) -> String {
-    if bytes < 1024 {
-        format!("{bytes} Octets")
+fn file_type_display(f: &FileEntry, i18n: &crate::ui::i18n::I18n) -> String {
+    let message = if f.is_symlink {
+        Some(Message::FileTypeSymlink)
+    } else if f.is_junction {
+        Some(Message::FileTypeJunction)
+    } else if f.is_dir {
+        Some(Message::FileTypeFolder)
+    } else if std::path::Path::new(&f.name).extension().is_none() {
+        Some(Message::FileTypeFile)
     } else {
-        format_size(bytes, false, false)
-    }
+        None
+    };
+    message.map(|message| i18n.text(message).to_string()).unwrap_or_else(|| file_type_label(f))
 }
 
 pub fn render_file_list(
@@ -46,7 +55,8 @@ pub fn render_file_list(
     cx: &mut Context<OxydeApp>,
 ) -> impl IntoElement {
     let p_id_cap = pane_id.clone();
-    let theme = cx.theme();
+    let theme = *cx.theme();
+    let language = cx.i18n().language();
     let pane = view.state.layout.find_pane(&pane_id).expect("pane exists");
     let active_tab = pane.active_tab();
     let files = active_tab.filtered_files().to_vec();
@@ -54,12 +64,12 @@ pub fn render_file_list(
     let empty_message = if !files.is_empty() {
         None
     } else if !active_tab.files.is_empty() {
-        Some("Aucun élément ne correspond aux filtres.".to_string())
+        Some(cx.i18n().text(Message::EmptyFiltered).to_string())
     } else {
         match &active_tab.load_status {
-            TabLoadStatus::Loading => Some("Chargement du dossier…".to_string()),
-            TabLoadStatus::Ready => Some("Ce dossier est vide.".to_string()),
-            TabLoadStatus::Error(message) => Some(message.clone()),
+            TabLoadStatus::Loading => Some(cx.i18n().text(Message::FolderLoading).to_string()),
+            TabLoadStatus::Ready => Some(cx.i18n().text(Message::FolderEmpty).to_string()),
+            TabLoadStatus::Error(message) => Some(cx.i18n().text(*message).to_string()),
         }
     };
 
@@ -103,26 +113,25 @@ pub fn render_file_list(
     let selection_summary = if selected_entries.is_empty() {
         None
     } else {
-        let selected_count = selected_entries.len();
-        let selected_label = match (selected_folders, selected_files) {
-            (0, files) => format!("{files} fichier{}", if files > 1 { "s" } else { "" }),
-            (folders, 0) => format!("{folders} dossier{}", if folders > 1 { "s" } else { "" }),
-            (folders, files) => format!(
-                "{folders} dossier{} et {files} fichier{}",
-                if folders > 1 { "s" } else { "" },
-                if files > 1 { "s" } else { "" },
-            ),
+        let mut args = FluentArgs::new();
+        args.set("count", selected_entries.len());
+        args.set("number", format_number(selected_entries.len() as u64, language));
+        args.set("folder_count", selected_folders);
+        args.set("file_count", selected_files);
+        args.set("folders", format_number(selected_folders as u64, language));
+        args.set("files", format_number(selected_files as u64, language));
+        args.set("size", format_size(selected_bytes, false, false, language));
+        let message = match (selected_folders, selected_files) {
+            (0, _) => Message::SelectedFiles,
+            (_, 0) => Message::SelectedFolders,
+            _ => Message::SelectedMixed,
         };
-        Some(format!(
-            "{selected_label} sélectionné{} ({})",
-            if selected_count > 1 { "s" } else { "" },
-            status_size(selected_bytes),
-        ))
+        Some(cx.i18n().text_with_args(message, &args))
     };
     let inline_rename = view.inline_rename;
     let inline_rename_path = view.editing_path.clone();
     let inline_rename_view = view.editing_view.clone();
-    let inline_rename_error = view.rename_error.clone();
+    let inline_rename_error = view.rename_error.map(|message| cx.i18n().text(message));
     let rename_shake_id = view.rename_shake_id;
     let folder_subdirectory_flags = view.folder_has_subdirs.clone();
 
@@ -175,7 +184,7 @@ pub fn render_file_list(
                         .h_full()
                         .flex()
                         .flex_col()
-                        .child(render_headers(view, pane_id.clone(), handle.clone(), name_w, type_w, size_w, date_w, theme))
+                        .child(render_headers(view, pane_id.clone(), handle.clone(), name_w, type_w, size_w, date_w, &theme, cx.i18n()))
                         .child(
                             uniform_list(
                                 SharedString::from(format!("file-list-{}", pane_id)),
@@ -189,7 +198,7 @@ pub fn render_file_list(
                                     move |range, _, cx| {
                                         let folder_subdirectory_flags = folder_subdirectory_flags.clone();
                                         range.map(|i| {
-                                            let theme = OxydeTheme::global(cx);
+                                            let theme = *OxydeTheme::global(cx);
                                             let file = &files[i];
                                             let is_dir = file.is_dir;
                                             let path = file.path.clone();
@@ -211,8 +220,8 @@ pub fn render_file_list(
                                             let file_name_tt = file.name.clone();
                                             let path_tt = path.clone();
                                             let ext_tt = file_type_label(file);
-                                            let size_tt = format_size(file.size, is_dir, file.is_calculated);
-                                            let date_tt = format_date(file.modified);
+                                            let size_tt = (file.size, is_dir, file.is_calculated);
+                                            let date_tt = file.modified;
                                             let is_dimmed = file.is_hidden || file.is_system;
                                             div()
                                                 .id(SharedString::from(format!("file-row-{}", path)))
@@ -321,7 +330,7 @@ pub fn render_file_list(
                                                               this.context_menus.clear();
                                                               this.context_menus.push(ContextMenuInstance {
                                                                   position: pos,
-                                                                  content: ContextMenuContent::Items(super::oxyde_context_menu_items(h_inner_inner.clone(), is_dir, p_for_right_cap.clone()), None),
+                                                                  content: ContextMenuContent::Items(super::oxyde_context_menu_items(cx.i18n(), h_inner_inner.clone(), is_dir, p_for_right_cap.clone()), None),
                                                                   scroll_handle: UniformListScrollHandle::new(),
                                                                   width: px(0.0),
                                     open_left: false,
@@ -377,7 +386,7 @@ pub fn render_file_list(
                                                                         this.update_drag_copy_mode(cx);
                                                                     }
                                                                 });
-                                                                style.bg(rgba(0x0078d440))
+                                                                style.bg(theme.drag_hover)
                                                             }
                                                         })
                                                         .on_drop(move |data: &FileDragData, _, cx| {
@@ -435,7 +444,7 @@ pub fn render_file_list(
                                                                                 field
                                                                                     .tooltip(Tooltip::text(error))
                                                                                     .border_1()
-                                                                                    .border_color(rgb(0xff5555))
+                                                                                    .border_color(theme.error)
                                                                                     .rounded_sm()
                                                                             })
                                                                             .child(editing_view.into_any_element())
@@ -503,9 +512,9 @@ pub fn render_file_list(
                                                                 })
                                                         )
                                                 })
-                                                .child(div().w(px(type_w)).px(px(8.0)).text_color(theme.text_muted).text_ellipsis().text_size(px(12.0)).child(file_type_label(file)))
-                                                .child(div().w(px(size_w)).px(px(8.0)).flex().justify_end().text_color(theme.text_muted).text_ellipsis().text_size(px(12.0)).child(format_size(file.size, is_dir, file.is_calculated)))
-                                                .child(div().w(px(date_w)).px(px(8.0)).text_color(theme.text_muted).text_ellipsis().text_size(px(12.0)).child(format_date(file.modified)))
+                                                .child(div().w(px(type_w)).px(px(8.0)).text_color(theme.text_muted).text_ellipsis().text_size(px(12.0)).child(file_type_display(file, cx.i18n())))
+                                                .child(div().w(px(size_w)).px(px(8.0)).flex().justify_end().text_color(theme.text_muted).text_ellipsis().text_size(px(12.0)).child(format_size(file.size, is_dir, file.is_calculated, language)))
+                                                .child(div().w(px(date_w)).px(px(8.0)).text_color(theme.text_muted).text_ellipsis().text_size(px(12.0)).child(format_date(file.modified, language)))
                                             }}).collect::<Vec<_>>()
                                     }
                                 }
@@ -547,7 +556,7 @@ pub fn render_file_list(
                                           this.context_menus.clear();
                                           this.context_menus.push(ContextMenuInstance {
                                               position: pos,
-                                              content: ContextMenuContent::Items(super::pane_context_menu_items(h.clone(), p_id_cap_cap), None),
+                                              content: ContextMenuContent::Items(super::pane_context_menu_items(cx.i18n(), h.clone(), p_id_cap_cap), None),
                                               scroll_handle: UniformListScrollHandle::new(),
                                               width: px(0.0),
                                     open_left: false,
@@ -573,7 +582,7 @@ pub fn render_file_list(
                                                 this.update_drag_copy_mode(cx);
                                             }
                                         });
-                                        style.bg(rgba(0x0078d420))
+                                        style.bg(theme.selected)
                                     } else {
                                         style
                                     }
@@ -736,6 +745,7 @@ pub fn render_file_list(
         .w(px(58.0))
         .group("file-list-scroll-zone")
         .child(render_scrollbar(
+                theme,
                 handle.clone(),
                 ScrollbarAxis::Vertical,
                 v_v_h,
@@ -806,7 +816,7 @@ pub fn render_file_list(
     // Horizontal scrollbar overlay
     container = container.child(
         div().absolute().left_0().bottom(px(STATUS_BAR_HEIGHT)).right(px(ZED_TRACK_WIDTH)).h(px(ZED_TRACK_WIDTH))
-            .child(render_scrollbar(handle.clone(), ScrollbarAxis::Horizontal, pane_viewport_w, total_w + 28.0, -active_tab.list_scroll_h.offset().x.as_f32(), matches!(view.drag_target, Some(DragTarget::FileListH { ref pane_id, .. }) if pane_id == &p_id_cap), format!("h-{}", pane_suffix), None, {
+            .child(render_scrollbar(theme, handle.clone(), ScrollbarAxis::Horizontal, pane_viewport_w, total_w + 28.0, -active_tab.list_scroll_h.offset().x.as_f32(), matches!(view.drag_target, Some(DragTarget::FileListH { ref pane_id, .. }) if pane_id == &p_id_cap), format!("h-{}", pane_suffix), None, {
                 let p_id = p_id_cap.clone();
                 move |this, track_id, v_w, c_w, _| {
                     this.drag_target = Some(DragTarget::FileListH { pane_id: p_id.clone(), viewport_w: v_w, content_w: c_w, track_id });
@@ -829,14 +839,14 @@ pub fn render_file_list(
         );
     }
 
-    let folders_label = format!(
-        "{displayed_folders} dossier{}",
-        if displayed_folders > 1 { "s" } else { "" }
-    );
-    let files_label = format!(
-        "{displayed_files} fichier{}",
-        if displayed_files > 1 { "s" } else { "" }
-    );
+    let count_label = |count: usize, message| {
+        let mut args = FluentArgs::new();
+        args.set("count", count);
+        args.set("number", format_number(count as u64, language));
+        cx.i18n().text_with_args(message, &args)
+    };
+    let folders_label = count_label(displayed_folders, Message::StatusFolders);
+    let files_label = count_label(displayed_files, Message::StatusFiles);
     container = container.child(
         div()
             .absolute()
@@ -853,7 +863,8 @@ pub fn render_file_list(
             .border_color(theme.border)
             .text_size(px(12.0))
             .text_color(theme.text_muted)
-            .child(format!("{folders_label}, {files_label}"))
+            .child(folders_label)
+            .child(files_label)
             .when_some(selection_summary, |bar, summary| {
                 bar.child("•")
                     .child(div().text_color(theme.accent).child(summary))
@@ -872,6 +883,7 @@ fn render_headers(
     size_w: f32,
     date_w: f32,
     theme: &OxydeTheme,
+    i18n: &crate::ui::i18n::I18n,
 ) -> impl IntoElement {
     let pane = view.state.layout.find_pane(&pane_id).expect("pane exists");
     let tab = pane.active_tab();
@@ -945,7 +957,7 @@ fn render_headers(
         .font_weight(FontWeight::BOLD)
         .child(
             header_cell(
-                "Nom",
+                i18n.text(Message::ColumnName).as_ref(),
                 name_w,
                 current_col == SortColumn::Name,
                 current_dir,
@@ -976,7 +988,7 @@ fn render_headers(
         )
         .child(
             header_cell(
-                "Type",
+                i18n.text(Message::ColumnType).as_ref(),
                 type_w,
                 current_col == SortColumn::Type,
                 current_dir,
@@ -1007,7 +1019,7 @@ fn render_headers(
         )
         .child(
             header_cell(
-                "Taille",
+                i18n.text(Message::ColumnSize).as_ref(),
                 size_w,
                 current_col == SortColumn::Size,
                 current_dir,
@@ -1038,7 +1050,7 @@ fn render_headers(
         )
         .child(
             header_cell(
-                "Modifié le",
+                i18n.text(Message::ColumnModified).as_ref(),
                 date_w,
                 current_col == SortColumn::Modified,
                 current_dir,
@@ -1135,11 +1147,12 @@ fn header_cell(
             .absolute()
             .size_full(),
         )
-        .hover(|s| s.bg(rgba(0xffffff05)))
+        .hover(|s| s.bg(theme.hover))
         .on_mouse_down(MouseButton::Left, on_click)
 }
 
 pub fn get_type_filter_items(
+    i18n: &crate::ui::i18n::I18n,
     h: Entity<OxydeApp>,
     pid: String,
     tab_files: Vec<FileEntry>,
@@ -1164,7 +1177,13 @@ pub fn get_type_filter_items(
         let is_sel = current_filters.contains(&e_cap);
 
         items.push(DropdownItem {
-            label: ext,
+            label: match ext.as_str() {
+                "Dossier" => i18n.text(Message::FileTypeFolder).to_string(),
+                "Fichier" => i18n.text(Message::FileTypeFile).to_string(),
+                "Symlink" => i18n.text(Message::FileTypeSymlink).to_string(),
+                "Junction" => i18n.text(Message::FileTypeJunction).to_string(),
+                _ => ext.clone(),
+            },
             icon: Some(if is_sel {
                 IconName::Check
             } else {
@@ -1189,6 +1208,7 @@ pub fn get_type_filter_items(
 }
 
 pub fn get_date_filter_items(
+    i18n: &crate::ui::i18n::I18n,
     handle: Entity<OxydeApp>,
     pane_id: String,
     files: Vec<oxyde_lib::models::FileEntry>,
@@ -1230,7 +1250,7 @@ pub fn get_date_filter_items(
         let c_cat = cat;
 
         items.push(DropdownItem {
-            label: cat.label().to_string(),
+            label: i18n.text(cat.message()).to_string(),
             icon: Some(if active {
                 IconName::Check
             } else {
@@ -1254,6 +1274,7 @@ pub fn get_date_filter_items(
 }
 
 pub fn get_size_filter_items(
+    i18n: &crate::ui::i18n::I18n,
     handle: Entity<OxydeApp>,
     pane_id: String,
     files: Vec<oxyde_lib::models::FileEntry>,
@@ -1295,7 +1316,7 @@ pub fn get_size_filter_items(
         let c_cat = cat;
 
         items.push(DropdownItem {
-            label: cat.label().to_string(),
+            label: i18n.text(cat.message()).to_string(),
             icon: Some(if active {
                 IconName::Check
             } else {

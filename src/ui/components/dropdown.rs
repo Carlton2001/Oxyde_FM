@@ -93,11 +93,11 @@ impl RenderOnce for GenericDropdown {
         let theme = *OxydeTheme::global(cx);
 
         // Menu-specific colors — richer and more visible than the generic theme values
-        let menu_bg: Hsla = rgb(0x1e1f23).into();
-        let menu_border: Hsla = rgba(0xffffff14).into(); // ~8% white — subtle but visible
-        let item_hover: Hsla = rgb(0x30343b).into(); // Distinct but restrained hover state
-        let icon_color: Hsla = rgba(0xffffff55).into(); // ~33% white for icons
-        let chevron_color: Hsla = rgba(0xffffff33).into(); // ~20% white for chevron arrow
+        let menu_bg: Hsla = theme.menu_surface;
+        let menu_border: Hsla = theme.menu_border; // ~8% white — subtle but visible
+        let item_hover: Hsla = theme.menu_hover; // Distinct but restrained hover state
+        let icon_color: Hsla = theme.icon_muted; // ~33% white for icons
+        let chevron_color: Hsla = theme.icon_disabled; // ~20% white for chevron arrow
 
         let mut calculated_width: f32 = 180.0;
 
@@ -248,7 +248,7 @@ impl RenderOnce for GenericDropdown {
                                                             })
                                                             .size_full()
                                                             .text_color(if item.is_dimmed {
-                                                                rgba(0xffffff44).into()
+                                                                theme.icon_disabled
                                                             } else {
                                                                 icon_color
                                                             }),
@@ -296,6 +296,7 @@ impl RenderOnce for GenericDropdown {
                         .as_f32()
                         .abs();
                     render_scrollbar(
+                        theme,
                         h_app_copy,
                         ScrollbarAxis::Vertical,
                         viewport_h,

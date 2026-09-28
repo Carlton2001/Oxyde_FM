@@ -1,3 +1,4 @@
+use crate::ui::theme::ThemeContext;
 use gpui::prelude::*;
 use gpui::*;
 use unicode_segmentation::*;
@@ -45,6 +46,11 @@ pub struct TextInput {
 }
 
 impl TextInput {
+    pub fn set_placeholder(&mut self, placeholder: SharedString, cx: &mut Context<Self>) {
+        self.placeholder = placeholder;
+        cx.notify();
+    }
+
     pub fn new(
         cx: &mut Context<Self>,
         placeholder: impl Into<SharedString>,
@@ -530,6 +536,7 @@ impl Render for TextInput {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let focus_handle = self.focus_handle.clone();
         let is_focused = focus_handle.is_focused(window);
+        let theme = *cx.theme();
 
         div()
             .flex()
@@ -559,17 +566,17 @@ impl Render for TextInput {
             .bg(if self.compact {
                 hsla(0.0, 0.0, 0.0, 0.0)
             } else if is_focused {
-                hsla(0.0, 0.0, 0.16, 1.0)
+                theme.active_background
             } else {
-                hsla(0.0, 0.0, 0.12, 1.0)
+                theme.background
             })
             .border_1()
             .border_color(if self.compact {
                 hsla(0.0, 0.0, 0.0, 0.0)
             } else if is_focused {
-                hsla(0.6, 1.0, 0.5, 0.6)
+                theme.accent
             } else {
-                hsla(0.0, 0.0, 0.25, 1.0)
+                theme.border
             })
             .rounded_sm()
             .when(self.compact, |s| s.rounded_none())
@@ -592,7 +599,7 @@ impl Render for TextInput {
                         div()
                             .p_1()
                             .rounded_md()
-                            .hover(|s| s.bg(hsla(0.0, 0.0, 0.3, 1.0)))
+                            .hover(|s| s.bg(theme.control_hover))
                             .on_mouse_down(MouseButton::Left, move |_, window, cx| {
                                 h_clear.update(cx, |this, cx| {
                                     this.content.clear();
@@ -605,7 +612,7 @@ impl Render for TextInput {
                                 svg()
                                     .path("icons/x.svg")
                                     .size_3()
-                                    .text_color(hsla(0.0, 0.0, 0.6, 1.0)),
+                                    .text_color(theme.text_muted),
                             ),
                     ),
                 )
@@ -666,7 +673,7 @@ impl Element for TextInputElement {
         let selected_range = input.selected_range.clone();
         let style = window.text_style();
         let color = if input.content.is_empty() {
-            hsla(0.0, 0.0, 0.45, 1.0)
+            cx.theme().text_muted
         } else {
             style.color
         };
@@ -687,7 +694,7 @@ impl Element for TextInputElement {
                 len: selected_range.end - selected_range.start,
                 font: style.font(),
                 color,
-                background_color: Some(hsla(0.60, 0.90, 0.52, 0.95)),
+                background_color: Some(cx.theme().selected),
                 underline: None,
                 strikethrough: None,
             });
@@ -776,7 +783,7 @@ impl Element for TextInputElement {
                         point(bounds.left() + cursor_x, cursor_y),
                         size(px(1.5), cursor_h),
                     ),
-                    hsla(0.6, 1.0, 0.5, 1.0),
+                    cx.theme().accent,
                 ));
             }
 

@@ -7,6 +7,7 @@ pub use oxyde_lib::models::FileEntry;
 pub mod filters;
 pub mod layout;
 pub mod navigation;
+mod preferences;
 pub mod selection;
 
 #[allow(unused_imports)]
@@ -19,6 +20,7 @@ pub use navigation::*;
 pub use selection::*;
 
 use crate::ui::components::input::TextInput;
+use crate::ui::i18n::{FluentArgs, I18n, I18nContext, Message};
 
 actions!(
     oxyde,
@@ -243,7 +245,7 @@ impl Render for FileDragPreview {
             let name = p
                 .file_name()
                 .and_then(|n| n.to_str())
-                .unwrap_or("Fichier")
+                .unwrap_or(cx.i18n().text(Message::FileTypeFile).as_ref())
                 .to_string();
             (
                 if is_dir {
@@ -254,7 +256,12 @@ impl Render for FileDragPreview {
                 name,
             )
         } else {
-            ("icons/file.svg", format!("{} éléments", self.paths.len()))
+            ("icons/file.svg", {
+                let mut args = FluentArgs::new();
+                args.set("count", self.paths.len());
+                args.set("number", crate::ui::format::format_number(self.paths.len() as u64, cx.i18n().language()));
+                cx.i18n().text_with_args(Message::DragItems, &args).to_string()
+            })
         };
 
         // Root is 0×0; the visible ghost is absolutely positioned at cursor + (12, 4).
@@ -299,8 +306,8 @@ impl Render for FileDragPreview {
                     div()
                         .flex()
                         .gap(px(4.0))
-                        .child(drag_op_pill("+Ctrl", "Copier", is_copy, &theme))
-                        .child(drag_op_pill("+Shift", "Déplacer", !is_copy, &theme)),
+                        .child(drag_op_pill("+Ctrl", cx.i18n().text(Message::DragCopy).as_ref(), is_copy, &theme))
+                        .child(drag_op_pill("+Shift", cx.i18n().text(Message::DragMove).as_ref(), !is_copy, &theme)),
                 ),
         )
     }
@@ -374,8 +381,8 @@ pub struct OxydeApp {
     rename_pending: bool,
     rename_generation: u64,
     pending_file_operation: Option<PendingFileOperation>,
-    file_operation_notice: Option<String>,
-    pub(crate) rename_error: Option<String>,
+    file_operation_notice: Option<(Message, String)>,
+    pub(crate) rename_error: Option<Message>,
     pub(crate) rename_shake_id: u64,
 
     // ── Settings ─────────────────────────────────────────────────────────────
@@ -383,6 +390,14 @@ pub struct OxydeApp {
     pub show_system: bool,
     pub show_media_previews: bool,
     pub settings_open: bool,
+    pub(crate) theme_id: crate::ui::theme::ThemeId,
+    pub(crate) language: crate::ui::i18n::Language,
+    pub(crate) settings_error: Option<Message>,
+    config: oxyde_lib::models::AppConfig,
+    config_path: Option<std::path::PathBuf>,
+    preferences_load_failed: bool,
+    preferences_save_generation: u64,
+    preferences_save_task: Option<Task<()>>,
 }
 
 impl OxydeApp {
@@ -426,7 +441,7 @@ impl OxydeApp {
                 is_background,
                 items: vec![oxyde_lib::models::WinMenuItem {
                     id: -1,
-                    label: "Chargement du menu…".to_string(),
+                    label: cx.i18n().text(Message::NativeMenuLoading).to_string(),
                     verb: None,
                     has_submenu: false,
                     children: Vec::new(),
@@ -440,6 +455,7 @@ impl OxydeApp {
         });
         cx.notify();
 
+        let language = cx.i18n().language();
         cx.spawn(move |_, cx: &mut AsyncApp| {
             let mut cx = cx.clone();
             async move {
@@ -449,11 +465,20 @@ impl OxydeApp {
                         .native_context_menu_items(&path_for_worker, is_background)
                 })
                 .await;
+                let i18n = I18n::for_language(language);
                 let result = match result {
                     Ok(Ok(items)) if !items.is_empty() => Ok(items),
-                    Ok(Ok(_)) => Err("Aucune commande disponible".to_string()),
-                    Ok(Err(error)) => Err(error.to_string()),
-                    Err(error) => Err(format!("Chargement du menu natif échoué : {error}")),
+                    Ok(Ok(_)) => Err(i18n.text(Message::NativeMenuEmpty).to_string()),
+                    Ok(Err(error)) => {
+                        let mut args = FluentArgs::new();
+                        args.set("detail", error.to_string());
+                        Err(i18n.text_with_args(Message::NativeMenuFailed, &args).to_string())
+                    }
+                    Err(error) => {
+                        let mut args = FluentArgs::new();
+                        args.set("detail", error.to_string());
+                        Err(i18n.text_with_args(Message::NativeMenuFailed, &args).to_string())
+                    }
                 };
                 handle.update(&mut cx, move |this, cx| {
                     let Some(menu) = this.context_menus.get_mut(parent_menu_idx + 1) else {
@@ -554,10 +579,10 @@ impl OxydeApp {
                     if let Ok(Err(error)) = &result {
                         log::warn!("Undo failed: {error:?}");
                         this.file_operation_notice =
-                            Some(format!("Annulation impossible : {error:?}"));
+                            Some((Message::UndoFailed, format!("{error:?}")));
                     } else if let Err(error) = &result {
                         this.file_operation_notice =
-                            Some(format!("Annulation impossible : {error}"));
+                            Some((Message::UndoFailed, format!("{error}")));
                     }
                     cx.notify();
                 });
@@ -583,10 +608,10 @@ impl OxydeApp {
                     if let Ok(Err(error)) = &result {
                         log::warn!("Redo failed: {error:?}");
                         this.file_operation_notice =
-                            Some(format!("Rétablissement impossible : {error:?}"));
+                            Some((Message::RedoFailed, format!("{error:?}")));
                     } else if let Err(error) = &result {
                         this.file_operation_notice =
-                            Some(format!("Rétablissement impossible : {error}"));
+                            Some((Message::RedoFailed, format!("{error}")));
                     }
                     cx.notify();
                 });
@@ -595,7 +620,12 @@ impl OxydeApp {
         .detach();
     }
 
-    pub fn empty(cx: &mut Context<Self>) -> Self {
+    pub fn new(
+        config: oxyde_lib::models::AppConfig,
+        config_path: Option<std::path::PathBuf>,
+        load_failed: bool,
+        cx: &mut Context<Self>,
+    ) -> Self {
         Self {
             state: WorkspaceState::new(),
             handle: None,
@@ -641,7 +671,14 @@ impl OxydeApp {
             )),
             _path_watchers: std::collections::HashMap::new(),
             _watcher_task: None,
-            _subscriptions: Vec::new(),
+            _subscriptions: vec![cx.on_app_quit(|this, _| {
+                let save = this.preferences_save_task.take();
+                async move {
+                    if let Some(save) = save {
+                        save.await;
+                    }
+                }
+            })],
             drag_copy_mode: false,
             drag_modifier_copy: None,
             drag_target_default_copy: false,
@@ -661,10 +698,18 @@ impl OxydeApp {
             file_operation_notice: None,
             rename_error: None,
             rename_shake_id: 0,
-            show_hidden: false,
-            show_system: false,
-            show_media_previews: true,
+            show_hidden: config.show_hidden,
+            show_system: config.show_system,
+            show_media_previews: config.show_previews,
             settings_open: false,
+            theme_id: crate::ui::theme::ThemeId::from_id(&config.theme),
+            language: crate::ui::i18n::Language::from_id(&config.language),
+            settings_error: load_failed.then_some(Message::SettingsLoadError),
+            config,
+            config_path,
+            preferences_load_failed: load_failed,
+            preferences_save_generation: 0,
+            preferences_save_task: None,
         }
     }
 
@@ -794,7 +839,7 @@ impl OxydeApp {
         let view = cx.new(|cx| {
             TextInput::new(
                 cx,
-                "Nom du fichier",
+                cx.i18n().text(Message::RenameNamePlaceholder),
                 initial_name,
                 {
                     let handle = handle.clone();
@@ -859,7 +904,7 @@ impl OxydeApp {
         self.breadcrumb_pane_id = Some(pane_id);
         let input = cx.new(|cx| TextInput::new(
             cx,
-            "Chemin d’accès",
+            cx.i18n().text(Message::PathPlaceholder).to_string(),
             path.clone(),
             {
                 let handle = handle.clone();
@@ -942,7 +987,7 @@ impl OxydeApp {
             return;
         }
         if self.editing_text.trim().is_empty() {
-            self.rename_error = Some("Le nom ne peut pas être vide.".to_string());
+            self.rename_error = Some(Message::RenameEmptyName);
             self.rename_shake_id = self.rename_shake_id.wrapping_add(1);
             cx.notify();
             return;
@@ -981,14 +1026,14 @@ impl OxydeApp {
 
         let mut items = Vec::new();
         for (label, command, is_dimmed) in [
-            ("Couper", 0u8, !has_selection),
-            ("Copier", 1u8, !has_selection),
-            ("Coller", 2u8, !can_paste),
-            ("Tout sélectionner", 3u8, false),
+            (Message::Cut, 0u8, !has_selection),
+            (Message::Copy, 1u8, !has_selection),
+            (Message::Paste, 2u8, !can_paste),
+            (Message::SelectAll, 3u8, false),
         ] {
             let h = handle.clone();
             let target_input = input.clone();
-            let mut item = DropdownItem::new(label, move |window, app| {
+            let mut item = DropdownItem::new(cx.i18n().text(label).to_string(), move |window, app| {
                 target_input.update(app, |input, cx| match command {
                     0 => input.cut_selected_text(window, cx),
                     1 => input.copy_selected_text(cx),
@@ -1072,8 +1117,7 @@ impl OxydeApp {
                         }
                         Err(error) => {
                             log::warn!("Rename task failed: {error}");
-                            this.rename_error =
-                                Some("Le renommage a échoué. Réessayez.".to_string());
+                            this.rename_error = Some(Message::RenameTaskFailed);
                             this.rename_shake_id = this.rename_shake_id.wrapping_add(1);
                             cx.notify();
                         }
@@ -1263,12 +1307,12 @@ impl OxydeApp {
                     }
                     Ok(Err(error)) => {
                         this.file_operation_notice =
-                            Some(format!("Préparation impossible : {error:?}"));
+                            Some((Message::PrepareFailed, format!("{error:?}")));
                         cx.notify();
                     }
                     Err(error) => {
                         this.file_operation_notice =
-                            Some(format!("Préparation impossible : {error}"));
+                            Some((Message::PrepareFailed, format!("{error}")));
                         cx.notify();
                     }
                 });
@@ -1324,7 +1368,7 @@ impl OxydeApp {
                         OpStatus::Error(error) => {
                             handle.update(&mut cx, |this, cx| {
                                 this.file_operation_notice =
-                                    Some(format!("Échec du transfert : {error}"));
+                                    Some((Message::TransferFailed, format!("{error}")));
                                 cx.notify();
                             });
                             break;
@@ -1345,7 +1389,12 @@ impl OxydeApp {
         .detach();
     }
 
-    fn resolve_pending_file_operation(&mut self, replace: bool, cx: &mut Context<Self>) {
+    pub(crate) fn cancel_pending_file_operation(&mut self, cx: &mut Context<Self>) {
+        self.pending_file_operation = None;
+        cx.notify();
+    }
+
+    pub(crate) fn resolve_pending_file_operation(&mut self, replace: bool, cx: &mut Context<Self>) {
         use oxyde_lib::models::ConflictAction;
         let Some(pending) = self.pending_file_operation.take() else {
             return;
@@ -1375,6 +1424,7 @@ impl OxydeApp {
 
         if let Some(pane) = self.state.layout.find_pane(pane_id) {
             let current_path = pane.active_tab().path.clone();
+            let language = cx.i18n().language();
             let Some(handle) = self.handle.clone() else {
                 return;
             };
@@ -1384,11 +1434,16 @@ impl OxydeApp {
                     let created = tokio::task::spawn_blocking({
                         let current_path = current_path.clone();
                         move || {
+                            let i18n = I18n::for_language(language);
                             for counter in 0.. {
                                 let name = if counter == 0 {
-                                    "Nouveau dossier".to_string()
+                                    i18n.text(Message::NewFolderName).to_string()
                                 } else {
-                                    format!("Nouveau dossier ({counter})")
+                                    let mut args = FluentArgs::new();
+                                    args.set("number", counter);
+                                    i18n
+                                        .text_with_args(Message::NewFolderNumbered, &args)
+                                        .replace(['\u{2068}', '\u{2069}'], "")
                                 };
                                 let path = std::path::Path::new(&current_path).join(name);
                                 match std::fs::create_dir(&path) {
@@ -1542,6 +1597,7 @@ impl OxydeApp {
 
 impl Render for OxydeApp {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let theme = *cx.theme();
         use crate::ui::components::sidebar::render_sidebar;
         use crate::ui::style::TNUM;
 
@@ -1920,10 +1976,10 @@ impl Render for OxydeApp {
                             .id("sidebar-resize-handle")
                             .w(px(4.0))
                             .h_full()
-                            .bg(rgb(0x1a1a1a))
+                            .bg(theme.menu_surface)
                             .cursor_col_resize()
-                            .hover(|s| s.bg(rgb(0x0078d4)))
-                            .active(|s| s.bg(rgb(0x0078d4)))
+                            .hover(|s| s.bg(theme.accent))
+                            .active(|s| s.bg(theme.accent))
                             .on_mouse_down(MouseButton::Left, {
                                 let h = handle.clone();
                                 move |e, _, cx| {
@@ -1988,19 +2044,19 @@ impl Render for OxydeApp {
                                     let is_full = !all_present.is_empty()
                                         && all_present.iter().all(|t| tab.filter_types.contains(t));
                                     if is_full {
-                                        ("Tout décocher", true)
+                                        (Message::DeselectAllChecks, true)
                                     } else {
-                                        ("Tout cocher", false)
+                                        (Message::SelectAllChecks, false)
                                     }
                                 } else {
-                                    ("Tout cocher", false)
+                                    (Message::SelectAllChecks, false)
                                 };
 
                             crate::ui::elements::button::Button::new(SharedString::from(format!(
                                 "select-all-type-{}",
                                 pid_cap
                             )))
-                            .label(label)
+                            .label(cx.i18n().text(label))
                             .label_size(13.0)
                             .variant(crate::ui::elements::button::ButtonVariant::Subtle)
                             .on_click(move |_, cx| {
@@ -2060,19 +2116,19 @@ impl Render for OxydeApp {
                                     let is_full = !present.is_empty()
                                         && present.iter().all(|c| tab.filter_sizes.contains(c));
                                     if is_full {
-                                        ("Tout décocher", true)
+                                        (Message::DeselectAllChecks, true)
                                     } else {
-                                        ("Tout cocher", false)
+                                        (Message::SelectAllChecks, false)
                                     }
                                 } else {
-                                    ("Tout cocher", false)
+                                    (Message::SelectAllChecks, false)
                                 };
 
                             crate::ui::elements::button::Button::new(SharedString::from(format!(
                                 "select-all-size-{}",
                                 pid_cap
                             )))
-                            .label(label)
+                            .label(cx.i18n().text(label))
                             .label_size(13.0)
                             .variant(crate::ui::elements::button::ButtonVariant::Subtle)
                             .on_click(move |_, cx| {
@@ -2126,19 +2182,19 @@ impl Render for OxydeApp {
                                     let is_full = !present.is_empty()
                                         && present.iter().all(|c| tab.filter_dates.contains(c));
                                     if is_full {
-                                        ("Tout décocher", true)
+                                        (Message::DeselectAllChecks, true)
                                     } else {
-                                        ("Tout cocher", false)
+                                        (Message::SelectAllChecks, false)
                                     }
                                 } else {
-                                    ("Tout cocher", false)
+                                    (Message::SelectAllChecks, false)
                                 };
 
                             crate::ui::elements::button::Button::new(SharedString::from(format!(
                                 "select-all-date-{}",
                                 pid_cap
                             )))
-                            .label(label)
+                            .label(cx.i18n().text(label))
                             .label_size(13.0)
                             .variant(crate::ui::elements::button::ButtonVariant::Subtle)
                             .on_click(move |_, cx| {
@@ -2791,154 +2847,44 @@ impl Render for OxydeApp {
             root = root.child(deferred(render_settings_panel(self, handle.clone(), cx)));
         }
 
-        if let Some(pending) = self.pending_file_operation.clone() {
-            let conflict_count = pending.conflict_paths.len();
-            let replace_handle = handle.clone();
-            let skip_handle = handle.clone();
-            let cancel_handle = handle.clone();
-            let theme = *cx.theme();
+        if let Some(pending) = &self.pending_file_operation {
             root = root.child(deferred(
-                div()
-                    .absolute()
-                    .inset_0()
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .bg(rgba(0x00000088u32))
-                    .child(
-                        div()
-                            .w(px(440.0))
-                            .p(px(20.0))
-                            .rounded_lg()
-                            .bg(theme.surface)
-                            .border_1()
-                            .border_color(theme.border)
-                            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                            .child(
-                                div()
-                                    .text_size(px(16.0))
-                                    .font_weight(FontWeight::SEMIBOLD)
-                                    .child("Fichiers déjà présents"),
-                            )
-                            .child(
-                                div()
-                                    .mt(px(12.0))
-                                    .text_color(theme.text_muted)
-                                    .child(format!(
-                                        "{} conflit(s) détecté(s). Que souhaitez-vous faire ?",
-                                        conflict_count
-                                    )),
-                            )
-                            .child(
-                                div()
-                                    .mt(px(20.0))
-                                    .flex()
-                                    .justify_end()
-                                    .gap(px(8.0))
-                                    .child(
-                                        div()
-                                            .id("operation-cancel")
-                                            .px(px(12.0))
-                                            .py(px(8.0))
-                                            .rounded_md()
-                                            .cursor_pointer()
-                                            .hover(|d| d.bg(theme.header))
-                                            .child("Annuler")
-                                            .on_mouse_down(MouseButton::Left, move |_, _, cx| {
-                                                cancel_handle.update(cx, |this, cx| {
-                                                    this.pending_file_operation = None;
-                                                    cx.notify();
-                                                });
-                                            }),
-                                    )
-                                    .child(
-                                        div()
-                                            .id("operation-skip")
-                                            .px(px(12.0))
-                                            .py(px(8.0))
-                                            .rounded_md()
-                                            .cursor_pointer()
-                                            .hover(|d| d.bg(theme.header))
-                                            .child("Ignorer tout")
-                                            .on_mouse_down(MouseButton::Left, move |_, _, cx| {
-                                                skip_handle.update(cx, |this, cx| {
-                                                    this.resolve_pending_file_operation(false, cx)
-                                                });
-                                            }),
-                                    )
-                                    .child(
-                                        div()
-                                            .id("operation-replace")
-                                            .px(px(12.0))
-                                            .py(px(8.0))
-                                            .rounded_md()
-                                            .bg(theme.accent)
-                                            .text_color(theme.background)
-                                            .cursor_pointer()
-                                            .hover(|d| d.opacity(0.85))
-                                            .child("Remplacer tout")
-                                            .on_mouse_down(MouseButton::Left, move |_, _, cx| {
-                                                replace_handle.update(cx, |this, cx| {
-                                                    this.resolve_pending_file_operation(true, cx)
-                                                });
-                                            }),
-                                    ),
-                            ),
-                    ),
+                crate::ui::components::conflict_dialog::render_conflict_dialog(
+                    pending.conflict_paths.len(),
+                    handle.clone(),
+                    cx,
+                ),
             ));
         }
 
-        if let Some(message) = self.file_operation_notice.clone() {
+        if let Some((key, detail)) = self.file_operation_notice.clone() {
+            let mut args = FluentArgs::new();
+            args.set("detail", detail);
+            let message = cx.i18n().text_with_args(key, &args);
             let close_handle = handle.clone();
             let theme = *cx.theme();
             root = root.child(deferred(
-                div()
-                    .absolute()
-                    .inset_0()
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .bg(rgba(0x00000088u32))
-                    .child(
-                        div()
-                            .w(px(440.0))
-                            .p(px(20.0))
-                            .rounded_lg()
-                            .bg(theme.surface)
-                            .border_1()
-                            .border_color(theme.border)
-                            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                            .child(
-                                div()
-                                    .text_size(px(16.0))
-                                    .font_weight(FontWeight::SEMIBOLD)
-                                    .child("Opération impossible"),
-                            )
-                            .child(
-                                div()
-                                    .mt(px(12.0))
-                                    .text_color(theme.text_muted)
-                                    .child(message),
-                            )
-                            .child(
-                                div().mt(px(20.0)).flex().justify_end().child(
-                                    div()
-                                        .id("operation-notice-close")
-                                        .px(px(12.0))
-                                        .py(px(8.0))
-                                        .rounded_md()
-                                        .cursor_pointer()
-                                        .hover(|d| d.bg(theme.header))
-                                        .child("Fermer")
-                                        .on_mouse_down(MouseButton::Left, move |_, _, cx| {
-                                            close_handle.update(cx, |this, cx| {
-                                                this.file_operation_notice = None;
-                                                cx.notify();
-                                            });
-                                        }),
-                                ),
-                            ),
-                    ),
+                crate::ui::components::modal::Modal::new(
+                    "operation-notice",
+                    cx.i18n().text(Message::OperationFailed),
+                    div().text_color(theme.text_muted).child(message),
+                )
+                .action(
+                    div()
+                        .id("operation-notice-close")
+                        .px(px(12.0))
+                        .py(px(8.0))
+                        .rounded_md()
+                        .cursor_pointer()
+                        .hover(|d| d.bg(theme.control_hover))
+                        .child(cx.i18n().text(Message::Close))
+                        .on_mouse_down(MouseButton::Left, move |_, _, cx| {
+                            close_handle.update(cx, |this, cx| {
+                                this.file_operation_notice = None;
+                                cx.notify();
+                            });
+                        }),
+                ),
             ));
         }
 

@@ -1,7 +1,9 @@
+pub mod conflict_dialog;
 pub mod dropdown;
 pub mod file_list;
 pub mod icons;
 pub mod input;
+pub mod modal;
 pub mod rename_dialog;
 pub mod scrollbar;
 pub mod settings;
@@ -12,8 +14,10 @@ pub mod tooltip;
 pub mod top_bar;
 
 use gpui::*;
+use crate::ui::i18n::{I18n, Message};
 
 pub fn oxyde_context_menu_items(
+    i18n: &I18n,
     h_app: Entity<crate::ui::app::OxydeApp>,
     is_dir: bool,
     path: String,
@@ -23,7 +27,7 @@ pub fn oxyde_context_menu_items(
     let mut items = vec![];
 
     items.push(crate::ui::components::dropdown::DropdownItem {
-        label: "Ouvrir".to_string(),
+        label: i18n.text(Message::Open).to_string(),
         icon: Some(IconName::FolderOpen),
         stay_open: false,
         has_submenu: false,
@@ -42,7 +46,7 @@ pub fn oxyde_context_menu_items(
 
     if is_dir {
         items.push(crate::ui::components::dropdown::DropdownItem {
-            label: "Ouvrir dans un nouvel onglet".to_string(),
+            label: i18n.text(Message::OpenNewTab).to_string(),
             icon: Some(IconName::Copy),
             stay_open: false,
             has_submenu: false,
@@ -62,7 +66,7 @@ pub fn oxyde_context_menu_items(
         });
 
         items.push(crate::ui::components::dropdown::DropdownItem {
-            label: "Epingler à l'accès rapide".to_string(),
+            label: i18n.text(Message::PinQuickAccess).to_string(),
             icon: None,
             stay_open: false,
             has_submenu: false,
@@ -84,7 +88,7 @@ pub fn oxyde_context_menu_items(
     }
 
     items.push(crate::ui::components::dropdown::DropdownItem {
-        label: "Couper".to_string(),
+        label: i18n.text(Message::Cut).to_string(),
         icon: Some(IconName::Minimize),
         stay_open: false,
         has_submenu: false,
@@ -102,7 +106,7 @@ pub fn oxyde_context_menu_items(
     });
 
     items.push(crate::ui::components::dropdown::DropdownItem {
-        label: "Copier".to_string(),
+        label: i18n.text(Message::Copy).to_string(),
         icon: Some(IconName::Copy),
         stay_open: false,
         has_submenu: false,
@@ -120,7 +124,7 @@ pub fn oxyde_context_menu_items(
     });
 
     items.push(crate::ui::components::dropdown::DropdownItem {
-        label: "Coller".to_string(),
+        label: i18n.text(Message::Paste).to_string(),
         icon: Some(IconName::Plus),
         stay_open: false,
         has_submenu: false,
@@ -138,7 +142,7 @@ pub fn oxyde_context_menu_items(
     });
 
     items.push(crate::ui::components::dropdown::DropdownItem {
-        label: "Renommer".to_string(),
+        label: i18n.text(Message::Rename).to_string(),
         icon: Some(IconName::ALargeSmall),
         stay_open: false,
         has_submenu: false,
@@ -156,7 +160,7 @@ pub fn oxyde_context_menu_items(
     });
 
     items.push(crate::ui::components::dropdown::DropdownItem {
-        label: "Supprimer".to_string(),
+        label: i18n.text(Message::Delete).to_string(),
         icon: Some(IconName::Delete),
         stay_open: false,
         has_submenu: false,
@@ -174,7 +178,7 @@ pub fn oxyde_context_menu_items(
     });
 
     items.push(crate::ui::components::dropdown::DropdownItem {
-        label: "Propriétés".to_string(),
+        label: i18n.text(Message::Properties).to_string(),
         icon: None,
         stay_open: false,
         has_submenu: false,
@@ -193,7 +197,7 @@ pub fn oxyde_context_menu_items(
     });
 
     items.push(crate::ui::components::dropdown::DropdownItem {
-        label: "Plus d'options".to_string(),
+        label: i18n.text(Message::MoreOptions).to_string(),
         icon: None,
         stay_open: true,
         has_submenu: true,
@@ -221,6 +225,7 @@ pub fn oxyde_context_menu_items(
 }
 
 pub fn pane_context_menu_items(
+    i18n: &I18n,
     h_app: Entity<crate::ui::app::OxydeApp>,
     pane_id: String,
 ) -> Vec<crate::ui::components::dropdown::DropdownItem> {
@@ -228,7 +233,7 @@ pub fn pane_context_menu_items(
 
     vec![
         crate::ui::components::dropdown::DropdownItem {
-            label: "Nouveau dossier".to_string(),
+            label: i18n.text(Message::NewFolder).to_string(),
             icon: Some(IconName::Plus),
             stay_open: false,
             has_submenu: false,
@@ -246,7 +251,7 @@ pub fn pane_context_menu_items(
             on_hover: None,
         },
         crate::ui::components::dropdown::DropdownItem {
-            label: "Coller".to_string(),
+            label: i18n.text(Message::Paste).to_string(),
             icon: Some(IconName::Plus),
             stay_open: false,
             has_submenu: false,
@@ -263,7 +268,7 @@ pub fn pane_context_menu_items(
             on_hover: None,
         },
         crate::ui::components::dropdown::DropdownItem {
-            label: "Propriétés".to_string(),
+            label: i18n.text(Message::Properties).to_string(),
             icon: None,
             stay_open: false,
             has_submenu: false,
@@ -285,7 +290,7 @@ pub fn pane_context_menu_items(
             on_hover: None,
         },
         crate::ui::components::dropdown::DropdownItem {
-            label: "Plus d'options".to_string(),
+            label: i18n.text(Message::MoreOptions).to_string(),
             icon: None,
             stay_open: true,
             has_submenu: true,
@@ -308,6 +313,7 @@ pub fn pane_context_menu_items(
 }
 
 pub fn tab_context_menu_items(
+    i18n: &I18n,
     h_app: Entity<crate::ui::app::OxydeApp>,
     pane_id: String,
     tab_idx: usize,
@@ -318,7 +324,7 @@ pub fn tab_context_menu_items(
 
     vec![
         crate::ui::components::dropdown::DropdownItem {
-            label: "Dupliquer l'onglet".to_string(),
+            label: i18n.text(Message::DuplicateTab).to_string(),
             icon: Some(IconName::Plus),
             stay_open: false,
             has_submenu: false,
@@ -336,7 +342,7 @@ pub fn tab_context_menu_items(
             on_hover: None,
         },
         crate::ui::components::dropdown::DropdownItem {
-            label: "Fermer les autres onglets".to_string(),
+            label: i18n.text(Message::CloseOtherTabs).to_string(),
             icon: Some(IconName::X),
             stay_open: false,
             has_submenu: false,
@@ -354,7 +360,7 @@ pub fn tab_context_menu_items(
             on_hover: None,
         },
         crate::ui::components::dropdown::DropdownItem {
-            label: "Fermer l'onglet".to_string(),
+            label: i18n.text(Message::CloseTab).to_string(),
             icon: Some(IconName::Delete),
             stay_open: false,
             has_submenu: false,
