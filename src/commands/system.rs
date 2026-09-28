@@ -32,6 +32,35 @@ pub async fn open_item(path: String) -> Result<(), CommandError> {
 // set_webview_background removed
 
 // show_native_context_menu removed or needs refactoring for GPUI
+#[cfg(target_os = "windows")]
+struct ComApartmentGuard;
+
+#[cfg(target_os = "windows")]
+impl ComApartmentGuard {
+    fn initialize_sta() -> Result<Self, CommandError> {
+        let result = unsafe {
+            windows::Win32::System::Com::CoInitializeEx(
+                None,
+                windows::Win32::System::Com::COINIT_APARTMENTTHREADED,
+            )
+        };
+        if result.is_err() {
+            return Err(CommandError::SystemError(format!(
+                "COM initialization failed: 0x{:08x}",
+                result.0
+            )));
+        }
+        Ok(Self)
+    }
+}
+
+#[cfg(target_os = "windows")]
+impl Drop for ComApartmentGuard {
+    fn drop(&mut self) {
+        unsafe { windows::Win32::System::Com::CoUninitialize() };
+    }
+}
+
 pub fn get_native_context_menu_items(
     path: String,
     is_background: bool,
@@ -40,9 +69,6 @@ pub fn get_native_context_menu_items(
     {
         use windows::core::{Interface, PCWSTR, PSTR};
         use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
-        use windows::Win32::System::Com::{
-            CoInitializeEx, CoUninitialize, COINIT_APARTMENTTHREADED,
-        };
         use windows::Win32::UI::Shell::{
             IContextMenu, IContextMenu2, IContextMenu3, IShellFolder, SHBindToParent,
             SHParseDisplayName, CMF_CANRENAME, CMF_EXPLORE, CMF_NORMAL, GCS_VERBA,
@@ -57,7 +83,7 @@ pub fn get_native_context_menu_items(
         let path_u16: Vec<u16> = path_norm.encode_utf16().chain(std::iter::once(0)).collect();
 
         unsafe {
-            let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+            let _com = ComApartmentGuard::initialize_sta()?;
 
             let mut pidl_full = std::ptr::null_mut();
             SHParseDisplayName(PCWSTR(path_u16.as_ptr()), None, &mut pidl_full, 0, None).map_err(
@@ -97,7 +123,10 @@ pub fn get_native_context_menu_items(
                     })?
             };
 
-            let hmenu = CreatePopupMenu().map_err(|e| CommandError::SystemError(e.to_string()))?;
+            let hmenu = CreatePopupMenu().map_err(|e| {
+                windows::Win32::UI::Shell::ILFree(Some(pidl_full as *const _));
+                CommandError::SystemError(e.to_string())
+            })?;
             let _ = context_menu.QueryContextMenu(
                 hmenu,
                 0,
@@ -235,8 +264,6 @@ pub fn get_native_context_menu_items(
 
             let _ = DestroyMenu(hmenu);
             windows::Win32::UI::Shell::ILFree(Some(pidl_full as *const _));
-            CoUninitialize();
-
             Ok(items)
         }
     }
@@ -255,9 +282,6 @@ pub fn execute_native_menu_item(
     {
         use windows::core::{Interface, PCSTR, PCWSTR};
         use windows::Win32::Foundation::HWND;
-        use windows::Win32::System::Com::{
-            CoInitializeEx, CoUninitialize, COINIT_APARTMENTTHREADED,
-        };
         use windows::Win32::UI::Shell::{
             IContextMenu, IContextMenu2, IContextMenu3, IShellFolder, SHBindToParent,
             SHParseDisplayName, CMF_CANRENAME, CMF_EXPLORE, CMF_NORMAL, CMINVOKECOMMANDINFO,
@@ -271,7 +295,7 @@ pub fn execute_native_menu_item(
         let path_u16: Vec<u16> = path_norm.encode_utf16().chain(std::iter::once(0)).collect();
 
         unsafe {
-            let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+            let _com = ComApartmentGuard::initialize_sta()?;
 
             let main_hwnd = HWND::default(); // needs proper HWND for full functionality
 
@@ -310,7 +334,10 @@ pub fn execute_native_menu_item(
             };
 
             // We MUST call QueryContextMenu before InvokeCommand so the extension knows what IDs we are talking about
-            let hmenu = CreatePopupMenu().map_err(|e| CommandError::SystemError(e.to_string()))?;
+            let hmenu = CreatePopupMenu().map_err(|e| {
+                windows::Win32::UI::Shell::ILFree(Some(pidl_full as *const _));
+                CommandError::SystemError(e.to_string())
+            })?;
             let _ = context_menu.QueryContextMenu(
                 hmenu,
                 0,
@@ -368,7 +395,6 @@ pub fn execute_native_menu_item(
 
             let _ = DestroyMenu(hmenu);
             windows::Win32::UI::Shell::ILFree(Some(pidl_full as *const _));
-            CoUninitialize();
         }
     }
     Ok(())

@@ -162,7 +162,11 @@ fn list_dir_blocking(
     let mut entries = Vec::new();
 
     {
-        let dir = std::fs::read_dir(&path_buf).map_err(|e| CommandError::IoError(e.to_string()))?;
+        let dir = std::fs::read_dir(&path_buf).map_err(|error| match error.kind() {
+            std::io::ErrorKind::NotFound => CommandError::PathNotFound(path.clone()),
+            std::io::ErrorKind::PermissionDenied => CommandError::AccessDenied(path.clone()),
+            _ => CommandError::IoError(error.to_string()),
+        })?;
         for entry in dir {
             let entry = entry.map_err(|e| CommandError::IoError(e.to_string()))?;
             let metadata = entry
@@ -292,6 +296,12 @@ pub async fn create_dir(path: String) -> Result<(), CommandError> {
         old_path: None,
         new_path: None,
         created_files: None,
+        created_dirs: None,
+        replaced_files: None,
+        moved_files: None,
+        moved_dirs: None,
+        copied_files: None,
+        copied_file_hashes: None,
     };
     // History push logic removed for now
 
@@ -301,6 +311,7 @@ pub async fn create_dir(path: String) -> Result<(), CommandError> {
 pub async fn rename_item(old_path: String, new_path: String) -> Result<(), CommandError> {
     let old_pb = validate_path(&old_path)?;
     let new_pb = validate_path(&new_path)?;
+    validate_rename_target(&old_pb, &new_pb)?;
     let old_abs = old_pb.to_string_lossy().to_string();
     let new_abs = new_pb.to_string_lossy().to_string();
 
@@ -313,9 +324,43 @@ pub async fn rename_item(old_path: String, new_path: String) -> Result<(), Comma
         old_path: Some(old_abs),
         new_path: Some(new_abs),
         created_files: None,
+        created_dirs: None,
+        replaced_files: None,
+        moved_files: None,
+        moved_dirs: None,
+        copied_files: None,
+        copied_file_hashes: None,
     };
     // History push logic removed
 
+    Ok(())
+}
+
+fn validate_rename_target(
+    old_path: &std::path::Path,
+    new_path: &std::path::Path,
+) -> Result<(), CommandError> {
+    if old_path.parent() != new_path.parent() {
+        return Err(CommandError::PathError(
+            "Rename target must stay in the source directory".to_string(),
+        ));
+    }
+    if old_path == new_path {
+        return Err(CommandError::PathError(
+            "Source and rename target are identical".to_string(),
+        ));
+    }
+    if new_path.exists() {
+        return Err(CommandError::IoError(format!(
+            "Rename target already exists: {}",
+            new_path.display()
+        )));
+    }
+    if new_path.file_name().is_none() {
+        return Err(CommandError::PathError(
+            "Rename target must have a file name".to_string(),
+        ));
+    }
     Ok(())
 }
 
@@ -898,5 +943,21 @@ mod directory_tests {
         assert!(runtime
             .block_on(list_dir(missing, None, None, None, None))
             .is_err());
+    }
+
+    #[test]
+    fn rename_target_cannot_escape_or_overwrite() {
+        let root = tempfile::tempdir().unwrap();
+        let source = root.path().join("source.txt");
+        let existing = root.path().join("existing.txt");
+        let outside = root.path().parent().unwrap().join("outside.txt");
+        std::fs::write(&source, b"source").unwrap();
+        std::fs::write(&existing, b"existing").unwrap();
+
+        assert!(validate_rename_target(&source, &root.path().join("nested/target.txt")).is_err());
+        assert!(validate_rename_target(&source, &existing).is_err());
+        assert!(validate_rename_target(&source, &outside).is_err());
+        assert_eq!(std::fs::read(&source).unwrap(), b"source");
+        assert_eq!(std::fs::read(&existing).unwrap(), b"existing");
     }
 }

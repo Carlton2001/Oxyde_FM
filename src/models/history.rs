@@ -2,6 +2,14 @@ use crate::models::transaction::Transaction;
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
 
+fn cleanup_replacement_backups(transaction: &Transaction) {
+    if let Some(backups) = &transaction.details.replaced_files {
+        for (_, backup) in backups {
+            let _ = std::fs::remove_file(backup);
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct HistoryState {
     pub undo_stack: Vec<Transaction>,
@@ -24,11 +32,14 @@ impl HistoryManager {
     pub fn push(&self, transaction: Transaction) {
         if let Ok(mut state) = self.0.lock() {
             state.undo_stack.push(transaction);
-            state.redo_stack.clear(); // New action clears redo history
+            for expired in state.redo_stack.drain(..) {
+                cleanup_replacement_backups(&expired);
+            }
 
             // Cap history to prevent memory leaks
             if state.undo_stack.len() > 100 {
-                state.undo_stack.remove(0);
+                let expired = state.undo_stack.remove(0);
+                cleanup_replacement_backups(&expired);
             }
         }
     }
@@ -47,6 +58,42 @@ impl HistoryManager {
         } else {
             None
         }
+    }
+
+    pub fn last_undo(&self) -> Option<Transaction> {
+        self.0.lock().ok()?.undo_stack.last().cloned()
+    }
+
+    pub fn last_redo(&self) -> Option<Transaction> {
+        self.0.lock().ok()?.redo_stack.last().cloned()
+    }
+
+    pub fn complete_undo(&self, transaction: &Transaction) -> bool {
+        let Ok(mut state) = self.0.lock() else {
+            return false;
+        };
+        if state.undo_stack.last().map(|top| top.id.as_str()) != Some(transaction.id.as_str()) {
+            return false;
+        }
+        state.undo_stack.pop();
+        state.redo_stack.push(transaction.clone());
+        true
+    }
+
+    pub fn complete_redo(&self, transaction: &Transaction) -> bool {
+        let Ok(mut state) = self.0.lock() else {
+            return false;
+        };
+        if state.redo_stack.last().map(|top| top.id.as_str()) != Some(transaction.id.as_str()) {
+            return false;
+        }
+        state.redo_stack.pop();
+        state.undo_stack.push(transaction.clone());
+        if state.undo_stack.len() > 100 {
+            let expired = state.undo_stack.remove(0);
+            cleanup_replacement_backups(&expired);
+        }
+        true
     }
 
     pub fn push_redo(&self, transaction: Transaction) {
@@ -68,8 +115,51 @@ impl HistoryManager {
 
     pub fn clear(&self) {
         if let Ok(mut state) = self.0.lock() {
+            for transaction in state.undo_stack.iter().chain(state.redo_stack.iter()) {
+                cleanup_replacement_backups(transaction);
+            }
             state.undo_stack.clear();
             state.redo_stack.clear();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::transaction::{TransactionDetails, TransactionType};
+
+    fn transaction() -> Transaction {
+        Transaction::new(
+            TransactionType::Copy,
+            TransactionDetails {
+                paths: Vec::new(),
+                target_dir: None,
+                old_path: None,
+                new_path: None,
+                created_files: None,
+                created_dirs: None,
+                replaced_files: None,
+                moved_files: None,
+                moved_dirs: None,
+                copied_files: None,
+                copied_file_hashes: None,
+            },
+        )
+    }
+
+    #[test]
+    fn undo_history_moves_only_after_success_is_reported() {
+        let history = HistoryManager::new();
+        let tx = transaction();
+        history.push(tx.clone());
+
+        assert!(!history.complete_undo(&transaction()));
+        assert_eq!(history.get_state().undo_stack.len(), 1);
+        assert!(history.get_state().redo_stack.is_empty());
+
+        assert!(history.complete_undo(&tx));
+        assert!(history.get_state().undo_stack.is_empty());
+        assert_eq!(history.get_state().redo_stack[0].id, tx.id);
     }
 }

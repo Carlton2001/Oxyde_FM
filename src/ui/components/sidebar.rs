@@ -430,6 +430,8 @@ pub fn render_sidebar(
                                                                     scroll_handle: UniformListScrollHandle::new(),
                                                                     width: px(0.0),
                                                                     open_left: false,
+                                                                    hovered_item: None,
+                                                                    native_request_id: None,
                                                                 });
                                                                 cx.notify();
                                                             });
@@ -537,6 +539,8 @@ pub fn render_sidebar(
                                                                     scroll_handle: UniformListScrollHandle::new(),
                                                                     width: px(0.0),
                                                                     open_left: false,
+                                                                    hovered_item: None,
+                                                                    native_request_id: None,
                                                                 });
                                                                 cx.notify();
                                                             });
@@ -665,6 +669,8 @@ pub fn render_sidebar(
                                                                     scroll_handle: UniformListScrollHandle::new(),
                                                                     width: px(0.0),
                                                                     open_left: false,
+                                                                    hovered_item: None,
+                                                                    native_request_id: None,
                                                                 });
                                                                 cx.notify();
                                                             });

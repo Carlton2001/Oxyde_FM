@@ -72,10 +72,13 @@ impl DropdownItem {
 pub struct GenericDropdown {
     pub id: ElementId,
     pub items: Vec<DropdownItem>,
+    /// App-tracked row hover for context menus whose rows are virtualized.
+    pub hovered_item: Option<usize>,
     pub scroll_handle: UniformListScrollHandle,
     pub h_app: Entity<OxydeApp>,
     pub on_drag: Rc<dyn Fn(&mut OxydeApp, String, f32, f32, &mut App)>,
     pub on_close: Rc<dyn Fn(&mut Window, &mut App)>,
+    pub on_outside: Option<Rc<dyn Fn(Point<Pixels>, &mut Window, &mut App)>>,
     pub is_dragging: bool,
     pub width: Option<f32>,
     pub max_height: f32,
@@ -146,6 +149,7 @@ impl RenderOnce for GenericDropdown {
         };
 
         let on_item_hover = self.on_item_hover.clone();
+        let hovered_item = self.hovered_item;
 
         div()
             .occlude()
@@ -191,6 +195,7 @@ impl RenderOnce for GenericDropdown {
                                         .items_center()
                                         .rounded(px(5.0))
                                         .when(item.is_dimmed, |d| d.opacity(0.5))
+                                        .when(hovered_item == Some(ix), |d| d.bg(item_hover))
                                         .hover(|s| s.bg(item_hover))
                                         .cursor_default()
                                         .on_mouse_move(move |event, _window, cx| {
@@ -296,8 +301,13 @@ impl RenderOnce for GenericDropdown {
             })
             .on_mouse_down_out({
                 let on_close = self.on_close.clone();
-                move |_, window, cx| {
-                    (on_close)(window, cx);
+                let on_outside = self.on_outside.clone();
+                move |event, window, cx| {
+                    if let Some(on_outside) = &on_outside {
+                        (on_outside)(event.position, window, cx);
+                    } else {
+                        (on_close)(window, cx);
+                    }
                 }
             })
             .when_some(self.on_hover_change.clone(), |d, cb| {

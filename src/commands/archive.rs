@@ -5,7 +5,6 @@ use bzip2::read::BzDecoder;
 use flate2::read::GzDecoder;
 use iso9660_core::iso9660entry::{ISO9660Record, IsISO9660Record};
 use log::info;
-use sevenz_rust;
 use std::collections::HashSet;
 use std::fs::{self, File};
 use std::io;
@@ -296,11 +295,7 @@ fn list_zip(path: &Path, internal_prefix: &str) -> Result<Vec<FileEntry>, Comman
 
 fn list_seven_zip(path: &Path, internal_prefix: &str) -> Result<Vec<FileEntry>, CommandError> {
     let file = File::open(path).map_err(|e| CommandError::IoError(e.to_string()))?;
-    let len = file
-        .metadata()
-        .map_err(|e| CommandError::IoError(e.to_string()))?
-        .len();
-    let mut reader = sevenz_rust::SevenZReader::new(file, len, "".into())
+    let mut reader = sevenz_rust2::ArchiveReader::new(file, sevenz_rust2::Password::empty())
         .map_err(|e| CommandError::ArchiveError(e.to_string()))?;
     let mut entries = Vec::new();
     let prefix = if internal_prefix.is_empty() {
@@ -461,8 +456,7 @@ pub async fn extract_archive(
                 .map_err(|e| CommandError::ArchiveError(e.to_string()))?;
         }
         ArchiveFormat::SevenZip => {
-            sevenz_rust::decompress_file(path, target)
-                .map_err(|e| CommandError::ArchiveError(e.to_string()))?;
+            decompress_seven_zip_safely(path, target)?;
         }
         ArchiveFormat::Tar
         | ArchiveFormat::TarGz
@@ -494,6 +488,121 @@ pub async fn extract_archive(
         }
     }
     Ok(())
+}
+
+fn decompress_seven_zip_safely(path: &Path, target: &Path) -> Result<(), CommandError> {
+    let root = fs::canonicalize(target).map_err(|e| CommandError::IoError(e.to_string()))?;
+    sevenz_rust2::decompress_file_with_extract_fn(path, target, |entry, reader, _| {
+        let destination = safe_seven_zip_destination(&root, entry.name())?;
+        sevenz_rust2::default_entry_extract_fn(entry, reader, &destination)
+    })
+    .map_err(|e| CommandError::ArchiveError(e.to_string()))
+}
+
+fn safe_seven_zip_destination(
+    extraction_root: &Path,
+    entry_name: &str,
+) -> std::io::Result<PathBuf> {
+    let normalized = entry_name.replace('\\', "/");
+    let first_component = normalized.split('/').next().unwrap_or_default();
+    let has_drive_prefix = first_component.as_bytes().get(1) == Some(&b':');
+    let components: Vec<_> = normalized.split('/').collect();
+    if normalized.starts_with('/')
+        || has_drive_prefix
+        || components
+            .iter()
+            .any(|part| *part == ".." || part.contains(':'))
+    {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("Unsafe 7z archive entry path: {entry_name}"),
+        ));
+    }
+
+    let relative_path: PathBuf = components
+        .into_iter()
+        .filter(|part| !part.is_empty() && *part != ".")
+        .collect();
+    if relative_path.as_os_str().is_empty() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "7z archive entry resolves to the extraction root",
+        ));
+    }
+
+    let mut canonical_parent = extraction_root.to_path_buf();
+    if let Some(relative_parent) = relative_path.parent() {
+        for component in relative_parent.components() {
+            canonical_parent.push(component.as_os_str());
+            match std::fs::symlink_metadata(&canonical_parent) {
+                Ok(metadata) => {
+                    if !metadata.is_dir() {
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            format!(
+                                "7z archive parent is not a directory: {}",
+                                canonical_parent.display()
+                            ),
+                        ));
+                    }
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                    match std::fs::create_dir(&canonical_parent) {
+                        Ok(()) => {}
+                        Err(error)
+                            if error.kind() == std::io::ErrorKind::AlreadyExists
+                                && canonical_parent.is_dir() => {}
+                        Err(error) => return Err(error),
+                    }
+                }
+                Err(error) => return Err(error),
+            }
+            canonical_parent = std::fs::canonicalize(&canonical_parent)?;
+            if !canonical_parent.starts_with(extraction_root) {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!("7z archive entry escapes the extraction directory: {entry_name}"),
+                ));
+            }
+        }
+    }
+
+    let file_name = relative_path.file_name().ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "7z archive entry has no file name",
+        )
+    })?;
+    let safe_destination = canonical_parent.join(file_name);
+    match std::fs::symlink_metadata(&safe_destination) {
+        Ok(_) => {
+            let existing = std::fs::canonicalize(&safe_destination)?;
+            if !existing.starts_with(extraction_root) {
+                return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, format!(
+                    "7z archive entry would overwrite a path outside the extraction directory: {entry_name}"
+                )));
+            }
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error),
+    }
+    Ok(safe_destination)
+}
+
+fn safe_iso_component(name: &str) -> Result<&str, CommandError> {
+    if name.is_empty()
+        || name == "."
+        || name == ".."
+        || name.contains('/')
+        || name.contains('\\')
+        || name.contains(':')
+        || name.contains('\0')
+    {
+        return Err(CommandError::ArchiveError(format!(
+            "Unsafe ISO archive entry name: {name}"
+        )));
+    }
+    Ok(name)
 }
 
 fn extract_iso(archive_path: &str, target_dir: &str) -> Result<(), CommandError> {
@@ -528,15 +637,18 @@ fn extract_iso_recursive<T: iso9660_core::block_device::ISORead>(
             continue;
         }
 
-        let display_name = name.split(';').next().unwrap_or(name);
+        let display_name = safe_iso_component(name.split(';').next().unwrap_or(name))?;
         let new_internal = if internal_path == "/" {
             format!("/{}", display_name)
         } else {
             format!("{}/{}", internal_path.trim_end_matches('/'), display_name)
         };
 
-        let relative_path = new_internal.trim_start_matches('/').replace('/', "\\");
-        let target_path = Path::new(target_base).join(&relative_path);
+        let extraction_root =
+            fs::canonicalize(target_base).map_err(|e| CommandError::IoError(e.to_string()))?;
+        let relative_path = new_internal.trim_start_matches('/');
+        let target_path = safe_seven_zip_destination(&extraction_root, relative_path)
+            .map_err(|e| CommandError::ArchiveError(e.to_string()))?;
 
         match rec {
             ISO9660Record::Directory(_) => {
@@ -793,7 +905,7 @@ fn compress_seven_zip(
     }
 
     let file = File::create(target).map_err(|e| CommandError::IoError(e.to_string()))?;
-    let mut writer = sevenz_rust::SevenZWriter::new(file)
+    let mut writer = sevenz_rust2::ArchiveWriter::new(file)
         .map_err(|e| CommandError::ArchiveError(e.to_string()))?;
 
     for p in paths {
@@ -814,7 +926,7 @@ fn compress_seven_zip(
 }
 
 fn add_file_to_sevenz<W: io::Write + io::Seek>(
-    writer: &mut sevenz_rust::SevenZWriter<W>,
+    writer: &mut sevenz_rust2::ArchiveWriter<W>,
     path: &Path,
     base: &Path,
 ) -> Result<(), CommandError> {
@@ -825,7 +937,7 @@ fn add_file_to_sevenz<W: io::Write + io::Seek>(
         .to_string_lossy();
     writer
         .push_archive_entry(
-            sevenz_rust::SevenZArchiveEntry::from_path(path, name.into()),
+            sevenz_rust2::ArchiveEntry::from_path(path, name.into()),
             Some(&mut io::BufReader::with_capacity(128 * 1024, f)),
         )
         .map_err(|e| CommandError::ArchiveError(e.to_string()))?;
@@ -833,7 +945,7 @@ fn add_file_to_sevenz<W: io::Write + io::Seek>(
 }
 
 fn add_dir_to_sevenz<W: io::Write + io::Seek>(
-    writer: &mut sevenz_rust::SevenZWriter<W>,
+    writer: &mut sevenz_rust2::ArchiveWriter<W>,
     path: &Path,
     base: &Path,
     state: &ArchiveState,
@@ -844,7 +956,7 @@ fn add_dir_to_sevenz<W: io::Write + io::Seek>(
         .to_string_lossy();
     writer
         .push_archive_entry(
-            sevenz_rust::SevenZArchiveEntry::from_path(path, name.into()),
+            sevenz_rust2::ArchiveEntry::from_path(path, name.into()),
             None::<&mut File>,
         )
         .map_err(|e| CommandError::ArchiveError(e.to_string()))?;
@@ -958,6 +1070,99 @@ fn compress_tar_zst(
 mod archive_tests {
     use super::*;
     use std::io::Write;
+
+    #[test]
+    fn seven_zip_extraction_rejects_absolute_and_parent_paths() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = fs::canonicalize(dir.path()).unwrap();
+
+        for name in [
+            "../outside.txt",
+            "nested/../../outside.txt",
+            "..\\outside.txt",
+            "C:/outside.txt",
+            "\\\\server\\share\\outside.txt",
+            "/outside.txt",
+        ] {
+            assert!(
+                safe_seven_zip_destination(&root, name).is_err(),
+                "unsafe archive path was accepted: {name}"
+            );
+        }
+        assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 0);
+    }
+
+    #[test]
+    fn seven_zip_extraction_resolves_nested_paths_under_the_root() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = fs::canonicalize(dir.path()).unwrap();
+        let destination = safe_seven_zip_destination(&root, "nested\\folder\\file.txt").unwrap();
+
+        assert_eq!(
+            destination,
+            root.join("nested").join("folder").join("file.txt")
+        );
+        assert!(destination.parent().unwrap().is_dir());
+    }
+
+    #[test]
+    fn seven_zip_extraction_rejects_malicious_archive_entries() {
+        let dir = tempfile::tempdir().unwrap();
+        let archive_path = dir.path().join("malicious.7z");
+        let target = dir.path().join("extract");
+        fs::create_dir(&target).unwrap();
+
+        let mut writer = sevenz_rust2::ArchiveWriter::create(&archive_path).unwrap();
+        writer
+            .push_archive_entry(
+                sevenz_rust2::ArchiveEntry::new_file("../escaped.txt"),
+                Some(&b"must not be written outside the target"[..]),
+            )
+            .unwrap();
+        writer.finish().unwrap();
+
+        assert!(decompress_seven_zip_safely(&archive_path, &target).is_err());
+        assert!(!dir.path().join("escaped.txt").exists());
+    }
+
+    #[test]
+    fn seven_zip_compression_and_extraction_round_trip() {
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("source.txt");
+        let archive_path = dir.path().join("roundtrip.7z");
+        let target = dir.path().join("extract");
+        fs::write(&source, b"round-trip payload").unwrap();
+        fs::create_dir(&target).unwrap();
+        let state = ArchiveState(AtomicBool::new(false));
+
+        compress_seven_zip(
+            vec![source.to_string_lossy().into_owned()],
+            &archive_path,
+            "fast",
+            &state,
+        )
+        .unwrap();
+        decompress_seven_zip_safely(&archive_path, &target).unwrap();
+
+        assert_eq!(
+            fs::read(target.join("source.txt")).unwrap(),
+            b"round-trip payload"
+        );
+    }
+
+    #[test]
+    fn iso_extraction_rejects_path_components() {
+        for name in ["", ".", "..", "../outside", "C:", "\\outside"] {
+            assert!(
+                safe_iso_component(name).is_err(),
+                "accepted ISO name: {name}"
+            );
+        }
+        assert_eq!(
+            safe_iso_component("document.txt;1").unwrap(),
+            "document.txt;1"
+        );
+    }
 
     #[test]
     fn removing_zip_item_keeps_other_entries_and_cleans_temporary_files() {

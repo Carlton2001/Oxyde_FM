@@ -4,6 +4,8 @@ use std::fmt;
 #[derive(Debug, Serialize)]
 pub enum CommandError {
     IoError(String),
+    PathNotFound(String),
+    AccessDenied(String),
     PathError(String),
     SystemError(String),
     ArchiveError(String),
@@ -18,6 +20,8 @@ impl fmt::Display for CommandError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             CommandError::IoError(msg) => write!(f, "IO Error: {}", msg),
+            CommandError::PathNotFound(path) => write!(f, "Path not found: {}", path),
+            CommandError::AccessDenied(path) => write!(f, "Access denied: {}", path),
             CommandError::PathError(msg) => write!(f, "Path Error: {}", msg),
             CommandError::SystemError(msg) => write!(f, "System Error: {}", msg),
             CommandError::ArchiveError(msg) => write!(f, "Archive Error: {}", msg),

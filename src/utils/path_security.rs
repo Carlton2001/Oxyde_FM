@@ -31,19 +31,20 @@ pub fn validate_path(path_str: &str) -> Result<PathBuf, CommandError> {
     Ok(path)
 }
 
-/// Safe join that prevents directory traversal attacks when joining a user input to a base directory.
-/// Useful if we ever restrict operations to a specific sandbox (not currently the case for full FM).
-pub fn safe_join(base: &Path, input: &str) -> Result<PathBuf, CommandError> {
-    let path = base.join(input);
-    // In a sandboxed environment, we would check if 'path' starts with 'base'.
-    // For this app, we just ensure it's a valid path construction.
-    Ok(path)
+/// Joins a user-supplied path fragment to a base path without claiming confinement.
+///
+/// This is intentionally not a security boundary: absolute paths and `..` components
+/// retain the platform's normal `Path::join` semantics. Use canonicalized containment
+/// checks separately if an operation is ever restricted to a sandbox.
+pub fn join_path(base: &Path, input: &str) -> PathBuf {
+    base.join(input)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    #[cfg(target_os = "windows")]
     #[test]
     fn test_validate_path_valid_absolute() {
         // Windows style
@@ -62,22 +63,37 @@ mod tests {
         }
     }
 
+    #[cfg(target_os = "windows")]
     #[test]
-    fn test_safe_join() {
+    fn test_join_path_windows() {
         let base = PathBuf::from("C:\\Base");
 
-        // Normal join
-        let joined = safe_join(&base, "sub/file.txt").unwrap();
+        let joined = join_path(&base, "sub/file.txt");
         assert_eq!(joined, PathBuf::from("C:\\Base\\sub/file.txt"));
     }
 
+    #[test]
+    fn test_join_path_keeps_parent_components() {
+        let base = PathBuf::from("/base");
+        let joined = join_path(&base, "../outside/file.txt");
+        assert_eq!(joined, PathBuf::from("/base/../outside/file.txt"));
+    }
+
+    #[cfg(target_os = "windows")]
     #[test]
     fn test_validate_path_traversal() {
         assert!(validate_path("C:\\foo\\..\\bar").is_ok());
     }
 
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn test_validate_path_drive_absolute() {
+        assert!(validate_path("C:/Users").is_ok());
+    }
+
+    #[cfg(unix)]
     #[test]
     fn test_validate_path_unix_absolute() {
-        assert!(validate_path("C:/Users").is_ok());
+        assert!(validate_path("/Users").is_ok());
     }
 }

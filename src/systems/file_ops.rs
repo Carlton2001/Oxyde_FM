@@ -1,6 +1,5 @@
 use crate::models::ConflictAction;
 use crate::models::{HistoryManager, Transaction, TransactionDetails, TransactionType};
-use log::info;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io::{Read, Write};
@@ -10,6 +9,22 @@ use std::sync::{Arc, Mutex};
 use uuid::Uuid;
 
 use crate::platform::{platform, ThreadPriority};
+
+struct PendingFile(PathBuf);
+
+impl Drop for PendingFile {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.0);
+    }
+}
+
+struct RestoreNormalPriority;
+
+impl Drop for RestoreNormalPriority {
+    fn drop(&mut self) {
+        platform().set_thread_priority(ThreadPriority::Normal);
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum OpStatus {
@@ -47,6 +62,20 @@ pub struct FileOperation {
     pub turbo: bool,
     pub is_cross_volume: bool,
     pub resolutions: Option<HashMap<String, ConflictAction>>,
+    #[serde(skip)]
+    pub created_files: Vec<PathBuf>,
+    #[serde(skip)]
+    pub created_dirs: Vec<PathBuf>,
+    #[serde(skip)]
+    pub replaced_files: Vec<(PathBuf, PathBuf)>,
+    #[serde(skip)]
+    pub moved_files: Vec<(PathBuf, PathBuf)>,
+    #[serde(skip)]
+    pub moved_dirs: Vec<(PathBuf, PathBuf)>,
+    #[serde(skip)]
+    pub copied_files: Vec<(PathBuf, PathBuf)>,
+    #[serde(skip)]
+    pub copied_file_hashes: Vec<(PathBuf, String)>,
     // Private/Internal state, not serialized by default unless needed
     #[serde(skip)]
     pub cancel_flag: Arc<AtomicBool>,
@@ -78,6 +107,13 @@ impl FileOperation {
             turbo: false,
             is_cross_volume: false,
             resolutions,
+            created_files: Vec::new(),
+            created_dirs: Vec::new(),
+            replaced_files: Vec::new(),
+            moved_files: Vec::new(),
+            moved_dirs: Vec::new(),
+            copied_files: Vec::new(),
+            copied_file_hashes: Vec::new(),
             cancel_flag: Arc::new(AtomicBool::new(false)),
             pause_flag: Arc::new(AtomicBool::new(false)),
             turbo_flag: Arc::new(AtomicBool::new(false)),
@@ -104,6 +140,15 @@ impl FileOperationManager {
 
     pub fn queue_operation(
         &self,
+        history_manager: Arc<HistoryManager>,
+        op: FileOperation,
+    ) -> String {
+        self.queue_operation_on(&tokio::runtime::Handle::current(), history_manager, op)
+    }
+
+    pub fn queue_operation_on(
+        &self,
+        runtime: &tokio::runtime::Handle,
         history_manager: Arc<HistoryManager>,
         op: FileOperation,
     ) -> String {
@@ -139,7 +184,7 @@ impl FileOperationManager {
         // Spawn background task
         let op_clone = op_arc.clone();
 
-        tokio::spawn(async move {
+        runtime.spawn(async move {
             Self::execute_operation(history_manager, op_clone).await;
         });
 
@@ -154,6 +199,7 @@ impl FileOperationManager {
 
         // Run blocking IO in a separate thread
         let result = tokio::task::spawn_blocking(move || {
+            let _priority_guard = RestoreNormalPriority;
             let (op_type, sources, destination, initial_turbo, resolutions) = {
                 let mut locked = op_clone.lock().unwrap();
                 locked.status = OpStatus::Calculating;
@@ -200,38 +246,113 @@ impl FileOperationManager {
             // keep it
         } else {
             locked.status = final_status.clone();
+        }
 
-            // Record History if completed
-            if final_status == OpStatus::Completed {
-                let tx_type = match locked.op_type {
-                    FileOpType::Copy => Some(TransactionType::Copy),
-                    FileOpType::Move => Some(TransactionType::Move),
-                    FileOpType::Trash => Some(TransactionType::Delete),
-                    FileOpType::Delete => None,
+        // Record exact filesystem effects, including partial or cancelled work,
+        // so Undo never guesses from the original top-level paths.
+        let has_effects = !locked.created_files.is_empty()
+            || !locked.created_dirs.is_empty()
+            || !locked.replaced_files.is_empty()
+            || !locked.moved_files.is_empty()
+            || !locked.moved_dirs.is_empty()
+            || !locked.copied_files.is_empty();
+        if final_status == OpStatus::Completed || has_effects {
+            let tx_type = match locked.op_type {
+                FileOpType::Copy => Some(TransactionType::Copy),
+                FileOpType::Move => Some(TransactionType::Move),
+                FileOpType::Trash => Some(TransactionType::Delete),
+                FileOpType::Delete => None,
+            };
+
+            if let Some(t_type) = tx_type {
+                let sources_str: Vec<String> = locked
+                    .sources
+                    .iter()
+                    .map(|p| p.to_string_lossy().to_string())
+                    .collect();
+                let target_str = locked
+                    .destination
+                    .as_ref()
+                    .map(|p| p.to_string_lossy().to_string());
+
+                let details = TransactionDetails {
+                    paths: sources_str,
+                    target_dir: target_str,
+                    old_path: None,
+                    new_path: None,
+                    created_files: Some(
+                        locked
+                            .created_files
+                            .iter()
+                            .map(|p| p.to_string_lossy().into_owned())
+                            .collect(),
+                    ),
+                    created_dirs: Some(
+                        locked
+                            .created_dirs
+                            .iter()
+                            .map(|p| p.to_string_lossy().into_owned())
+                            .collect(),
+                    ),
+                    replaced_files: Some(
+                        locked
+                            .replaced_files
+                            .iter()
+                            .map(|(p, b)| {
+                                (
+                                    p.to_string_lossy().into_owned(),
+                                    b.to_string_lossy().into_owned(),
+                                )
+                            })
+                            .collect(),
+                    ),
+                    moved_files: Some(
+                        locked
+                            .moved_files
+                            .iter()
+                            .map(|(s, d)| {
+                                (
+                                    s.to_string_lossy().into_owned(),
+                                    d.to_string_lossy().into_owned(),
+                                )
+                            })
+                            .collect(),
+                    ),
+                    moved_dirs: Some(
+                        locked
+                            .moved_dirs
+                            .iter()
+                            .map(|(s, d)| {
+                                (
+                                    s.to_string_lossy().into_owned(),
+                                    d.to_string_lossy().into_owned(),
+                                )
+                            })
+                            .collect(),
+                    ),
+                    copied_files: Some(
+                        locked
+                            .copied_files
+                            .iter()
+                            .map(|(s, d)| {
+                                (
+                                    s.to_string_lossy().into_owned(),
+                                    d.to_string_lossy().into_owned(),
+                                )
+                            })
+                            .collect(),
+                    ),
+                    copied_file_hashes: Some(
+                        locked
+                            .copied_file_hashes
+                            .iter()
+                            .map(|(path, hash)| (path.to_string_lossy().into_owned(), hash.clone()))
+                            .collect(),
+                    ),
                 };
 
-                if let Some(t_type) = tx_type {
-                    let sources_str: Vec<String> = locked
-                        .sources
-                        .iter()
-                        .map(|p| p.to_string_lossy().to_string())
-                        .collect();
-                    let target_str = locked
-                        .destination
-                        .as_ref()
-                        .map(|p| p.to_string_lossy().to_string());
-
-                    let details = TransactionDetails {
-                        paths: sources_str,
-                        target_dir: target_str,
-                        old_path: None,
-                        new_path: None,
-                        created_files: None,
-                    };
-
-                    let tx = Transaction::new(t_type, details);
-                    history_manager.push(tx);
-                }
+                let tx = Transaction::new(t_type, details);
+                history_manager.push(tx);
             }
         }
     }
@@ -266,112 +387,127 @@ impl FileOperationManager {
     ) -> Result<(), String> {
         let target_dir = destination.ok_or("No destination provided for copy/move".to_string())?;
 
-        let mut sources_to_copy = Vec::new();
+        let target_dir = std::fs::canonicalize(&target_dir)
+            .map_err(|e| format!("Cannot resolve destination {:?}: {e}", target_dir))?;
+        if !target_dir.is_dir() {
+            return Err(format!("Destination is not a directory: {:?}", target_dir));
+        }
+        let mut canonical_sources = Vec::with_capacity(sources.len());
+        for source in &sources {
+            let source_metadata = std::fs::symlink_metadata(source)
+                .map_err(|e| format!("Cannot inspect source {:?}: {e}", source))?;
+            if source_metadata.file_type().is_symlink() {
+                return Err(format!(
+                    "Symbolic-link sources are not supported: {:?}",
+                    source
+                ));
+            }
+            let canonical = std::fs::canonicalize(source)
+                .map_err(|e| format!("Cannot resolve source {:?}: {e}", source))?;
+            if canonical == target_dir || target_dir.starts_with(&canonical) {
+                return Err(format!(
+                    "Destination {:?} is inside source {:?}",
+                    target_dir, canonical
+                ));
+            }
+            if canonical_sources.iter().any(|existing: &PathBuf| {
+                canonical.starts_with(existing) || existing.starts_with(&canonical)
+            }) {
+                return Err(format!(
+                    "Overlapping source paths are not supported: {:?}",
+                    source
+                ));
+            }
+            canonical_sources.push(canonical);
+        }
+
+        let sources_to_copy = sources.clone();
         let mut total_bytes = 0;
         let mut total_files = 0;
 
-        // 1. Try Fast Move (Rename) for each source if is_move is true
-        // Note: For move with conflicts, we usually prefer the slow path if resolutions are present
-        // but if no resolutions exist for a top-level item, we can try fast-move.
-        if is_move {
-            for src in &sources {
-                if !src.exists() {
-                    continue;
-                }
-                let file_name = src.file_name().ok_or("Invalid source name")?;
-                let dest = target_dir.join(file_name);
-
-                // If dest exists, check for resolution before trying fast rename
-                if dest.exists() {
-                    if let Some(ref res_map) = resolutions {
-                        let res = Self::get_resolution(src, res_map);
-                        if res.is_some() {
-                            // If we have a resolution, we MUST use the slow path to apply it precisely
-                            sources_to_copy.push(src.clone());
-                            continue;
-                        }
-                    }
-                    // If no resolutions but dest exists, std::fs::rename will usually fail or overwrite depending on OS.
-                    // We'll fall back to slow path for safety.
-                    sources_to_copy.push(src.clone());
-                    continue;
-                }
-
-                // Try atomic rename for non-conflicting items
-                match std::fs::rename(src, &dest) {
-                    Ok(_) => {
-                        info!("Fast-moved: {} to {}", src.display(), dest.display());
-                        continue;
-                    }
-                    Err(_) => {
-                        sources_to_copy.push(src.clone());
-                    }
-                }
-            }
-        } else {
-            sources_to_copy = sources.clone();
-        }
-
-        if sources_to_copy.is_empty() && is_move {
+        // Stage moves like copies and remove sources only after all destinations publish.
+        if sources_to_copy.is_empty() {
             return Ok(());
         }
 
         // 2. Calculate size and build file list with resolution checks
         let mut files_to_process = Vec::new();
+        let mut directories_to_create = Vec::new();
+        let cancel_flag = op.lock().unwrap().cancel_flag.clone();
 
-        for src in &sources_to_copy {
+        for (src, canonical_src) in sources_to_copy.iter().zip(&canonical_sources) {
+            if cancel_flag.load(Ordering::Relaxed) {
+                return Ok(());
+            }
             if !src.exists() {
                 continue;
             }
             let file_name = src.file_name().ok_or("Invalid source name")?;
             let dest_root = target_dir.join(file_name);
+            if dest_root == *src {
+                return Err(format!("Source and destination are identical: {:?}", src));
+            }
+            if dest_root.exists()
+                && std::fs::canonicalize(&dest_root)
+                    .is_ok_and(|canonical_destination| canonical_destination == *canonical_src)
+            {
+                return Err(format!("Source and destination are identical: {:?}", src));
+            }
 
             if src.is_dir() {
                 let mut walker = walkdir::WalkDir::new(src).into_iter();
                 while let Some(entry) = walker.next() {
+                    if cancel_flag.load(Ordering::Relaxed) {
+                        return Ok(());
+                    }
                     let entry = match entry {
                         Ok(e) => e,
                         Err(e) => return Err(e.to_string()),
                     };
 
+                    if entry.file_type().is_symlink() {
+                        return Err(format!(
+                            "Symbolic links are not supported in copy operations: {:?}",
+                            entry.path()
+                        ));
+                    }
+
                     let relative = entry.path().strip_prefix(src).map_err(|e| e.to_string())?;
                     let dest_path = dest_root.join(relative);
+
+                    if entry.file_type().is_dir() {
+                        if dest_path.exists() && !dest_path.is_dir() {
+                            let replace = resolutions
+                                .as_ref()
+                                .and_then(|map| Self::get_resolution(entry.path(), map))
+                                == Some(ConflictAction::Replace);
+                            if !replace {
+                                walker.skip_current_dir();
+                                continue;
+                            }
+                        }
+                        directories_to_create.push(dest_path);
+                        continue;
+                    }
 
                     // Conflict Handling
                     if dest_path.exists() {
                         if let Some(ref res_map) = resolutions {
                             match Self::get_resolution(entry.path(), res_map) {
                                 Some(ConflictAction::Skip) => {
-                                    if entry.path().is_dir() {
+                                    if entry.file_type().is_dir() {
                                         walker.skip_current_dir();
                                     }
                                     continue;
                                 }
-                                Some(ConflictAction::Replace) => {
-                                    // Proceed to copy (overwrite)
-                                }
+                                Some(ConflictAction::Replace) => {}
                                 None => {
-                                    if entry.path().is_dir() {
-                                        // Merge directory: just continue walk
-                                    } else {
-                                        // Unresolved file conflict: skip by default for safety
-                                        continue;
-                                    }
+                                    continue;
                                 }
                             }
-                        } else if entry.path().is_file() {
-                            // No resolutions provided but file exists: default to skip if we want to be safe,
-                            // but old behavior was overwrite.
-                            // To fix the user bug, we MUST HONOR resolutions.
-                            // If resolutions is None (e.g. standard drag-drop without dialog),
-                            // we should either skip or overwrite.
-                            // Let's stick to overwrite for standard ops, but skip if we were in a conflict session.
-                            // Actually, if a session was started, resolutions will be Some.
+                        } else {
+                            continue;
                         }
-                    }
-
-                    if entry.path().is_dir() {
-                        continue;
                     }
 
                     let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
@@ -383,11 +519,12 @@ impl FileOperationManager {
                 let dest_path = dest_root.clone();
                 if dest_path.exists() {
                     if let Some(ref res_map) = resolutions {
-                        if let Some(ConflictAction::Skip) = Self::get_resolution(src, res_map) {
+                        if Self::get_resolution(src, res_map) != Some(ConflictAction::Replace) {
                             continue;
                         }
+                    } else {
+                        continue;
                     }
-                    // If resolutions is None (no conflict dialog was shown), overwrite by default
                 }
                 let size = std::fs::metadata(src).map(|m| m.len()).unwrap_or(0);
                 total_bytes += size;
@@ -431,6 +568,17 @@ impl FileOperationManager {
         }
 
         let num_tasks = files_to_process.len();
+        for directory in &directories_to_create {
+            if cancel_flag.load(Ordering::Relaxed) {
+                break;
+            }
+            let is_new = !directory.exists();
+            std::fs::create_dir_all(directory)
+                .map_err(|e| format!("Cannot create directory {:?}: {e}", directory))?;
+            if is_new {
+                op.lock().unwrap().created_dirs.push(directory.clone());
+            }
+        }
         let files_to_process_arc = Arc::new(files_to_process);
         let current_index = Arc::new(AtomicUsize::new(0));
 
@@ -454,8 +602,10 @@ impl FileOperationManager {
             let turbo = turbo_flag.clone();
             let idx = current_index.clone();
             let error_share = error_captured.clone();
+            let operation = op.clone();
 
             let handle = std::thread::spawn(move || {
+                let _priority_guard = RestoreNormalPriority;
                 let mut is_in_background_mode = false;
 
                 loop {
@@ -477,6 +627,9 @@ impl FileOperationManager {
                     // In Discret mode, we allow 2 workers instead of just one.
                     // This helps with small files while still being very light on modern CPUs.
                     if !is_turbo && thread_idx > 1 {
+                        if idx.load(Ordering::Relaxed) >= num_tasks {
+                            break;
+                        }
                         std::thread::sleep(std::time::Duration::from_millis(200));
                         continue;
                     }
@@ -496,7 +649,8 @@ impl FileOperationManager {
                     let (src, dest): &(PathBuf, PathBuf) = &files[i];
 
                     if let Some(parent) = dest.parent() {
-                        let _ = std::fs::create_dir_all(parent);
+                        std::fs::create_dir_all(parent)
+                            .map_err(|e| format!("Failed to create {:?}: {e}", parent))?;
                     }
 
                     let mut file_in = std::fs::File::open(src).map_err(|e| {
@@ -513,29 +667,28 @@ impl FileOperationManager {
                         key
                     })?;
 
-                    let mut file_out = std::fs::File::create(dest).map_err(|e| {
-                        let key = match e.kind() {
-                            std::io::ErrorKind::PermissionDenied => "error_access_denied",
-                            std::io::ErrorKind::StorageFull => "error_disk_full",
-                            _ => return format!("Failed to create {:?}: {}", dest, e),
-                        }
-                        .to_string();
-                        let mut share = error_share.lock().unwrap();
-                        if share.is_none() {
-                            *share = Some(key.clone());
-                        }
-                        key
-                    })?;
+                    let temp_path = dest
+                        .parent()
+                        .unwrap_or_else(|| std::path::Path::new("."))
+                        .join(format!(".oxyde-{}.tmp", Uuid::new_v4()));
+                    let _temp_guard = PendingFile(temp_path.clone());
+                    let mut file_out = std::fs::OpenOptions::new()
+                        .write(true)
+                        .create_new(true)
+                        .open(&temp_path)
+                        .map_err(|e| format!("Failed to create {:?}: {e}", temp_path))?;
+                    let _ = platform().set_hidden_attribute(&temp_path, true);
 
-                    let buffer_size = if is_turbo { 1024 * 1024 } else { 512 * 1024 };
+                    let buffer_size = 1024 * 1024;
                     let mut buffer = vec![0u8; buffer_size];
+                    let mut content_hasher = blake3::Hasher::new();
 
                     loop {
                         if cancel.load(Ordering::Relaxed) {
-                            break;
+                            return Ok(());
                         }
                         if error_share.lock().unwrap().is_some() {
-                            break;
+                            return Ok(());
                         }
 
                         while pause.load(Ordering::Relaxed) {
@@ -566,17 +719,61 @@ impl FileOperationManager {
                             }
                             return Err(msg);
                         }
+                        content_hasher.update(&buffer[..n]);
                         processed_bytes.fetch_add(n as u64, Ordering::Relaxed);
-
-                        if !turbo.load(Ordering::Relaxed) {
-                            std::thread::sleep(std::time::Duration::from_millis(1));
-                        }
                     }
+
+                    file_out
+                        .sync_all()
+                        .map_err(|e| format!("Failed to flush {:?}: {e}", temp_path))?;
+                    drop(file_out);
+                    platform()
+                        .set_hidden_attribute(&temp_path, false)
+                        .map_err(|error| {
+                            format!("Cannot unhide staging file {:?}: {error}", temp_path)
+                        })?;
+
+                    let backup_path = dest
+                        .parent()
+                        .unwrap_or_else(|| std::path::Path::new("."))
+                        .join(format!(".oxyde-{}.bak", Uuid::new_v4()));
+                    let had_destination = dest.exists();
+                    if had_destination {
+                        std::fs::rename(dest, &backup_path)
+                            .map_err(|e| format!("Failed to preserve {:?}: {e}", dest))?;
+                    }
+                    if let Err(error) = std::fs::rename(&temp_path, dest) {
+                        if had_destination {
+                            if let Err(restore_error) = std::fs::rename(&backup_path, dest) {
+                                return Err(format!(
+                                    "Cannot publish {:?} ({error}); previous destination preserved at {:?} ({restore_error})",
+                                    dest, backup_path
+                                ));
+                            }
+                        }
+                        return Err(format!("Cannot publish {:?}: {error}", dest));
+                    }
+                    if had_destination {
+                        operation
+                            .lock()
+                            .unwrap()
+                            .replaced_files
+                            .push((dest.clone(), backup_path));
+                    } else {
+                        operation.lock().unwrap().created_files.push(dest.clone());
+                    }
+                    operation
+                        .lock()
+                        .unwrap()
+                        .copied_files
+                        .push((src.clone(), dest.clone()));
+                    operation
+                        .lock()
+                        .unwrap()
+                        .copied_file_hashes
+                        .push((dest.clone(), content_hasher.finalize().to_hex().to_string()));
 
                     processed_files.fetch_add(1, Ordering::Relaxed);
-                    if is_move {
-                        let _ = std::fs::remove_file(src);
-                    }
                 }
 
                 // Cleanup: Ensure priority is restored before thread dies
@@ -610,13 +807,28 @@ impl FileOperationManager {
         }
 
         // Wait for all threads
+        let mut worker_error = None;
         for handle in handles {
-            let _ = handle.join();
+            match handle.join() {
+                Ok(Ok(())) => {}
+                Ok(Err(error)) => {
+                    worker_error.get_or_insert(error);
+                }
+                Err(_) => {
+                    worker_error.get_or_insert("Copy worker panicked".to_string());
+                }
+            }
         }
 
         // Check if any error was captured
         if let Some(e) = error_captured.lock().unwrap().clone() {
             return Err(e);
+        }
+        if let Some(error) = worker_error {
+            return Err(error);
+        }
+        if cancel_flag.load(Ordering::Relaxed) {
+            return Err("Operation cancelled".to_string());
         }
 
         // Final update to ensure 100% progress is shown before completion
@@ -628,19 +840,48 @@ impl FileOperationManager {
         }
 
         if is_move {
-            // Only remove source directories that had no skipped files.
-            // If any file within a source dir was explicitly skipped, we must NOT delete the source
-            // to avoid losing those skipped files permanently.
-            for src in &sources {
-                if src.is_dir() {
-                    let has_skipped_files = resolutions.as_ref().is_some_and(|res_map| {
-                        res_map.iter().any(|(path, action)| {
-                            *action == ConflictAction::Skip && PathBuf::from(path).starts_with(src)
-                        })
-                    });
-
-                    if !has_skipped_files {
-                        let _ = std::fs::remove_dir_all(src);
+            for (source, destination) in files_to_process_arc.iter() {
+                std::fs::remove_file(source).map_err(|e| {
+                    format!("Copied destination, but cannot remove {:?}: {e}", source)
+                })?;
+                op.lock()
+                    .unwrap()
+                    .moved_files
+                    .push((source.clone(), destination.clone()));
+            }
+            let mut source_dirs = Vec::new();
+            for source in sources.iter().filter(|source| source.is_dir()) {
+                let Some(name) = source.file_name() else {
+                    continue;
+                };
+                let dest_root = target_dir.join(name);
+                for entry in walkdir::WalkDir::new(source)
+                    .into_iter()
+                    .filter_map(Result::ok)
+                {
+                    if entry.file_type().is_dir() {
+                        if let Ok(relative) = entry.path().strip_prefix(source) {
+                            let relative = relative.to_path_buf();
+                            source_dirs.push((entry.into_path(), dest_root.join(relative)));
+                        }
+                    }
+                }
+            }
+            source_dirs.sort_by_key(|(path, _)| std::cmp::Reverse(path.components().count()));
+            for (directory, dest_directory) in source_dirs {
+                match std::fs::remove_dir(&directory) {
+                    Ok(()) => op
+                        .lock()
+                        .unwrap()
+                        .moved_dirs
+                        .push((directory, dest_directory)),
+                    Err(error) if error.kind() == std::io::ErrorKind::DirectoryNotEmpty => {}
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(error) => {
+                        return Err(format!(
+                            "Moved contents, but cannot remove {:?}: {error}",
+                            directory
+                        ));
                     }
                 }
             }
@@ -765,6 +1006,7 @@ impl FileOperationManager {
             let error_share = error_captured.clone();
 
             let handle = std::thread::spawn(move || {
+                let _priority_guard = RestoreNormalPriority;
                 let mut is_in_background_mode = false;
 
                 loop {
@@ -784,6 +1026,9 @@ impl FileOperationManager {
                     }
 
                     if !is_turbo && thread_idx > 1 {
+                        if idx.load(Ordering::Relaxed) >= total_items {
+                            break;
+                        }
                         std::thread::sleep(std::time::Duration::from_millis(100));
                         continue;
                     }
@@ -850,7 +1095,18 @@ impl FileOperationManager {
         }
 
         for handle in handles {
-            let _ = handle.join();
+            match handle.join() {
+                Ok(Ok(())) => {}
+                Ok(Err(error)) => {
+                    error_captured.lock().unwrap().get_or_insert(error);
+                }
+                Err(_) => {
+                    error_captured
+                        .lock()
+                        .unwrap()
+                        .get_or_insert("Delete worker panicked".to_string());
+                }
+            }
         }
 
         // Check if any error was captured
@@ -939,5 +1195,307 @@ impl FileOperationManager {
             return true;
         }
         false
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn operation() -> Arc<Mutex<FileOperation>> {
+        Arc::new(Mutex::new(FileOperation::new(
+            FileOpType::Move,
+            Vec::new(),
+            None,
+            None,
+        )))
+    }
+
+    #[test]
+    fn move_publishes_complete_file_then_removes_source() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_dir = temp.path().join("source");
+        let target_dir = temp.path().join("target");
+        std::fs::create_dir(&source_dir).unwrap();
+        std::fs::create_dir(&target_dir).unwrap();
+        let source = source_dir.join("file.bin");
+        let contents = vec![0x5a; 2 * 1024 * 1024];
+        std::fs::write(&source, &contents).unwrap();
+
+        FileOperationManager::perform_copy(
+            &operation(),
+            vec![source.clone()],
+            Some(target_dir.clone()),
+            true,
+            None,
+        )
+        .unwrap();
+
+        assert!(!source.exists());
+        assert_eq!(
+            std::fs::read(target_dir.join("file.bin")).unwrap(),
+            contents
+        );
+    }
+
+    #[test]
+    fn copy_skips_existing_destination_without_resolution() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_dir = temp.path().join("source");
+        let target_dir = temp.path().join("target");
+        std::fs::create_dir(&source_dir).unwrap();
+        std::fs::create_dir(&target_dir).unwrap();
+        let source = source_dir.join("file.txt");
+        let destination = target_dir.join("file.txt");
+        std::fs::write(&source, b"source").unwrap();
+        std::fs::write(&destination, b"existing").unwrap();
+
+        FileOperationManager::perform_copy(
+            &operation(),
+            vec![source.clone()],
+            Some(target_dir),
+            false,
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(std::fs::read(&source).unwrap(), b"source");
+        assert_eq!(std::fs::read(destination).unwrap(), b"existing");
+    }
+
+    #[test]
+    fn copy_processes_every_selected_source() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_dir = temp.path().join("source");
+        let target_dir = temp.path().join("target");
+        std::fs::create_dir(&source_dir).unwrap();
+        std::fs::create_dir(&target_dir).unwrap();
+        let first = source_dir.join("first.txt");
+        let second = source_dir.join("second.txt");
+        std::fs::write(&first, b"first").unwrap();
+        std::fs::write(&second, b"second").unwrap();
+
+        FileOperationManager::perform_copy(
+            &operation(),
+            vec![first, second],
+            Some(target_dir.clone()),
+            false,
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(
+            std::fs::read(target_dir.join("first.txt")).unwrap(),
+            b"first"
+        );
+        assert_eq!(
+            std::fs::read(target_dir.join("second.txt")).unwrap(),
+            b"second"
+        );
+    }
+
+    #[test]
+    fn explicit_replace_keeps_a_backup_and_records_the_effect() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_dir = temp.path().join("source");
+        let target_dir = temp.path().join("target");
+        std::fs::create_dir(&source_dir).unwrap();
+        std::fs::create_dir(&target_dir).unwrap();
+        let source = source_dir.join("file.txt");
+        let destination = target_dir.join("file.txt");
+        std::fs::write(&source, b"new contents").unwrap();
+        std::fs::write(&destination, b"old contents").unwrap();
+        let resolutions = HashMap::from([(
+            source.to_string_lossy().into_owned(),
+            ConflictAction::Replace,
+        )]);
+        let op = operation();
+
+        FileOperationManager::perform_copy(
+            &op,
+            vec![source.clone()],
+            Some(target_dir.clone()),
+            false,
+            Some(resolutions),
+        )
+        .unwrap();
+
+        assert_eq!(std::fs::read(&destination).unwrap(), b"new contents");
+        let operation = op.lock().unwrap();
+        assert_eq!(operation.replaced_files.len(), 1);
+        assert!(operation.replaced_files[0]
+            .1
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .starts_with(".oxyde-"));
+        assert_eq!(
+            std::fs::read(&operation.replaced_files[0].1).unwrap(),
+            b"old contents"
+        );
+        assert!(std::fs::read_dir(&target_dir).unwrap().all(|entry| {
+            !entry
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .ends_with(".tmp")
+        }));
+        assert_eq!(operation.copied_file_hashes.len(), 1);
+        assert_eq!(
+            operation.copied_file_hashes[0].1,
+            blake3::hash(b"new contents").to_hex().to_string()
+        );
+    }
+
+    #[test]
+    fn move_merge_keeps_skipped_source_files() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_root = temp.path().join("source");
+        let target_root = temp.path().join("target");
+        let source = source_root.join("folder");
+        let destination = target_root.join("folder");
+        std::fs::create_dir_all(&source).unwrap();
+        std::fs::create_dir_all(&destination).unwrap();
+        std::fs::write(source.join("conflict.txt"), b"source version").unwrap();
+        std::fs::write(destination.join("conflict.txt"), b"existing version").unwrap();
+        std::fs::write(source.join("new.txt"), b"new file").unwrap();
+
+        FileOperationManager::perform_copy(
+            &operation(),
+            vec![source.clone()],
+            Some(target_root),
+            true,
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(
+            std::fs::read(source.join("conflict.txt")).unwrap(),
+            b"source version"
+        );
+        assert!(!source.join("new.txt").exists());
+        assert_eq!(
+            std::fs::read(destination.join("new.txt")).unwrap(),
+            b"new file"
+        );
+    }
+
+    #[test]
+    fn move_rejects_destination_inside_source() {
+        let temp = tempfile::tempdir().unwrap();
+        let source = temp.path().join("source");
+        let target = source.join("nested");
+        std::fs::create_dir_all(&target).unwrap();
+        std::fs::write(source.join("file.txt"), b"keep").unwrap();
+
+        let result = FileOperationManager::perform_copy(
+            &operation(),
+            vec![source.clone()],
+            Some(target),
+            true,
+            None,
+        );
+
+        assert!(result.is_err());
+        assert_eq!(std::fs::read(source.join("file.txt")).unwrap(), b"keep");
+    }
+
+    #[test]
+    fn copy_rejects_same_file_even_when_the_source_uses_parent_components() {
+        let temp = tempfile::tempdir().unwrap();
+        let folder = temp.path().join("folder");
+        let detour = folder.join("detour");
+        std::fs::create_dir_all(&detour).unwrap();
+        let destination = folder.join("file.txt");
+        std::fs::write(&destination, b"preserve").unwrap();
+        let source_alias = detour.join("..").join("file.txt");
+        let resolutions = HashMap::from([(
+            source_alias.to_string_lossy().into_owned(),
+            ConflictAction::Replace,
+        )]);
+
+        assert!(FileOperationManager::perform_copy(
+            &operation(),
+            vec![source_alias],
+            Some(folder),
+            true,
+            Some(resolutions),
+        )
+        .is_err());
+        assert_eq!(std::fs::read(destination).unwrap(), b"preserve");
+    }
+
+    #[test]
+    fn move_preserves_source_when_cancelled_before_copy() {
+        let temp = tempfile::tempdir().unwrap();
+        let source_dir = temp.path().join("source");
+        let target_dir = temp.path().join("target");
+        std::fs::create_dir(&source_dir).unwrap();
+        std::fs::create_dir(&target_dir).unwrap();
+        let source = source_dir.join("file.txt");
+        std::fs::write(&source, b"preserve me").unwrap();
+        let op = operation();
+        op.lock()
+            .unwrap()
+            .cancel_flag
+            .store(true, Ordering::Relaxed);
+
+        assert!(FileOperationManager::perform_copy(
+            &op,
+            vec![source.clone()],
+            Some(target_dir.clone()),
+            true,
+            None,
+        )
+        .is_ok());
+        assert_eq!(std::fs::read(source).unwrap(), b"preserve me");
+        assert!(!target_dir.join("file.txt").exists());
+    }
+
+    #[test]
+    fn move_preserves_empty_directories() {
+        let temp = tempfile::tempdir().unwrap();
+        let source = temp.path().join("source");
+        let target = temp.path().join("target");
+        std::fs::create_dir_all(source.join("empty/nested")).unwrap();
+        std::fs::create_dir(&target).unwrap();
+
+        FileOperationManager::perform_copy(
+            &operation(),
+            vec![source.clone()],
+            Some(target.clone()),
+            true,
+            None,
+        )
+        .unwrap();
+
+        assert!(target.join("source/empty/nested").is_dir());
+        assert!(!source.exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn copy_rejects_symbolic_links_instead_of_following_them() {
+        use std::os::unix::fs::symlink;
+
+        let temp = tempfile::tempdir().unwrap();
+        let source = temp.path().join("source");
+        let target = temp.path().join("target");
+        let outside = temp.path().join("outside.txt");
+        std::fs::create_dir(&source).unwrap();
+        std::fs::create_dir(&target).unwrap();
+        std::fs::write(&outside, b"outside source tree").unwrap();
+        symlink(&outside, source.join("link.txt")).unwrap();
+
+        assert!(FileOperationManager::perform_copy(
+            &operation(),
+            vec![source.clone()],
+            Some(target.clone()),
+            false,
+            None,
+        )
+        .is_err());
+        assert!(target.join("source/link.txt").exists() == false);
+        assert_eq!(std::fs::read(outside).unwrap(), b"outside source tree");
     }
 }

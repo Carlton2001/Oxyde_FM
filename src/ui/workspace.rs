@@ -128,6 +128,14 @@ pub struct TabState {
     pub type_col_width: f32,
     pub size_col_width: f32,
     pub date_col_width: f32,
+    pub load_status: TabLoadStatus,
+}
+
+#[derive(Clone)]
+pub enum TabLoadStatus {
+    Loading,
+    Ready,
+    Error(String),
 }
 
 impl TabState {
@@ -152,77 +160,11 @@ impl TabState {
             type_col_width: 100.0,
             size_col_width: 100.0,
             date_col_width: 180.0,
+            load_status: TabLoadStatus::Loading,
         }
     }
 
     pub fn update_cache(&mut self) {
-        // 1. Check if "full" filters should be cleared to simplify logic and UI
-
-        // Type filter
-        if !self.filter_types.is_empty() {
-            let mut all_present = std::collections::HashSet::new();
-            for f in &self.files {
-                if f.is_dir {
-                    all_present.insert("Dossier".to_string());
-                } else if let Some(ext) = std::path::Path::new(&f.name)
-                    .extension()
-                    .and_then(|e| e.to_str())
-                {
-                    all_present.insert(ext.to_uppercase());
-                }
-            }
-            if !all_present.is_empty() && all_present.iter().all(|t| self.filter_types.contains(t))
-            {
-                self.filter_types.clear();
-            }
-        }
-
-        // Size filter
-        if !self.filter_sizes.is_empty() {
-            let categories = [
-                SizeCategory::Minuscule,
-                SizeCategory::Petit,
-                SizeCategory::Moyen,
-                SizeCategory::Grand,
-                SizeCategory::Huge,
-            ];
-            let mut present = std::collections::HashSet::new();
-            for f in &self.files {
-                for cat in &categories {
-                    if cat.matches(f.size) {
-                        present.insert(*cat);
-                        break;
-                    }
-                }
-            }
-            if !present.is_empty() && present.iter().all(|c| self.filter_sizes.contains(c)) {
-                self.filter_sizes.clear();
-            }
-        }
-
-        // Date filter
-        if !self.filter_dates.is_empty() {
-            let categories = [
-                DateCategory::Aujourdhui,
-                DateCategory::Hier,
-                DateCategory::CetteSemaine,
-                DateCategory::LaSemaineDerniere,
-                DateCategory::PlusAncien,
-            ];
-            let mut present = std::collections::HashSet::new();
-            for f in &self.files {
-                for cat in &categories {
-                    if cat.matches(f.modified) {
-                        present.insert(*cat);
-                        break;
-                    }
-                }
-            }
-            if !present.is_empty() && present.iter().all(|c| self.filter_dates.contains(c)) {
-                self.filter_dates.clear();
-            }
-        }
-
         if !self.filter_types.is_empty()
             || !self.filter_name.is_empty()
             || !self.filter_sizes.is_empty()
@@ -612,6 +554,7 @@ pub struct WorkspaceState {
     pub expanded_paths: std::collections::HashSet<String>,
     pub sidebar_items: Vec<SidebarItem>,
     pub sidebar_nodes: std::collections::HashMap<String, Vec<SidebarNode>>,
+    next_tab_id: u64,
 }
 
 impl WorkspaceState {
@@ -641,6 +584,7 @@ impl WorkspaceState {
             expanded_paths: std::collections::HashSet::new(),
             sidebar_items: Vec::new(),
             sidebar_nodes: std::collections::HashMap::new(),
+            next_tab_id: 1,
         };
 
         state.refresh_sidebar();
@@ -658,6 +602,17 @@ impl WorkspaceState {
 
     pub fn find_pane(&self, id: &str) -> Option<&PaneState> {
         self.layout.find_pane(id)
+    }
+
+    pub fn find_tab_mut(&mut self, tab_id: &str) -> Option<&mut TabState> {
+        let mut pane_id = None;
+        self.layout.visit_panes(&mut |pane| {
+            if pane_id.is_none() && pane.tabs.iter().any(|tab| tab.id == tab_id) {
+                pane_id = Some(pane.id.clone());
+            }
+        });
+        let pane = self.find_pane_mut(&pane_id?)?;
+        pane.tabs.iter_mut().find(|tab| tab.id == tab_id)
     }
 
     #[allow(dead_code)]
@@ -712,20 +667,8 @@ impl WorkspaceState {
     }
 
     pub fn add_tab(&mut self, pane_id: &str, path: String, activate: bool) {
-        // Calculate new tab ID
-        let mut max_id = 0;
-        self.layout.visit_panes(&mut |p| {
-            for t in &p.tabs {
-                if let Some(i) =
-                    t.id.split('-')
-                        .next_back()
-                        .and_then(|i| i.parse::<usize>().ok())
-                {
-                    max_id = max_id.max(i);
-                }
-            }
-        });
-        let id = format!("tab-{}", max_id + 1);
+        let id = format!("tab-{}", self.next_tab_id);
+        self.next_tab_id = self.next_tab_id.wrapping_add(1);
 
         let new_tab = TabState::new(id, path);
 
@@ -740,13 +683,40 @@ impl WorkspaceState {
     }
 
     pub fn close_tab_id(&mut self, pane_id: &str, tab_idx: usize) {
+        let mut pane_count = 0;
+        self.layout.visit_panes(&mut |_| pane_count += 1);
+        if pane_count == 1 {
+            let Some(pane) = self.find_pane(pane_id) else {
+                return;
+            };
+            if tab_idx >= pane.tabs.len() {
+                return;
+            }
+            if pane.tabs.len() == 1 {
+                let path = pane.tabs[0].path.clone();
+                let id = format!("tab-{}", self.next_tab_id);
+                self.next_tab_id = self.next_tab_id.wrapping_add(1);
+                if let Some(pane) = self.find_pane_mut(pane_id) {
+                    pane.tabs[0] = TabState::new(id, path);
+                    pane.active_tab_index = 0;
+                }
+                return;
+            }
+        }
+
         let mut should_remove_pane = false;
         if let Some(pane) = self.find_pane_mut(pane_id) {
+            if tab_idx >= pane.tabs.len() {
+                return;
+            }
+            let active_id = pane.active_tab().id.clone();
             if pane.tabs.len() > 1 {
                 pane.tabs.remove(tab_idx);
-                if pane.active_tab_index >= pane.tabs.len() {
-                    pane.active_tab_index = pane.tabs.len().saturating_sub(1);
-                }
+                pane.active_tab_index = pane
+                    .tabs
+                    .iter()
+                    .position(|tab| tab.id == active_id)
+                    .unwrap_or_else(|| tab_idx.min(pane.tabs.len() - 1));
             } else {
                 should_remove_pane = true;
             }
@@ -757,7 +727,7 @@ impl WorkspaceState {
         }
     }
 
-    pub fn duplicate_tab(&mut self, pane_id: &str, tab_idx: usize) {
+    pub fn duplicate_tab(&mut self, pane_id: &str, tab_idx: usize) -> Option<usize> {
         let path = if let Some(pane) = self.find_pane(pane_id) {
             pane.tabs.get(tab_idx).map(|t| t.path.clone())
         } else {
@@ -766,13 +736,16 @@ impl WorkspaceState {
 
         if let Some(path) = path {
             self.add_tab(pane_id, path, true);
+            self.find_pane(pane_id).map(|pane| pane.active_tab_index)
+        } else {
+            None
         }
     }
 
     pub fn close_other_tabs(&mut self, pane_id: &str, tab_idx: usize) {
         if let Some(pane) = self.find_pane_mut(pane_id) {
             if tab_idx < pane.tabs.len() {
-                let tab = pane.tabs.remove(tab_idx);
+                let tab = pane.tabs[tab_idx].clone();
                 pane.tabs = vec![tab];
                 pane.active_tab_index = 0;
             }
@@ -787,11 +760,19 @@ impl WorkspaceState {
         axis: LayoutAxis,
         after: bool,
     ) {
+        if self.find_pane(to_pane_id).is_none() {
+            return;
+        }
         let tab = if let Some(pane) = self.find_pane_mut(from_pane_id) {
             if from_tab_idx < pane.tabs.len() {
+                let active_id = pane.active_tab().id.clone();
                 let t = pane.tabs.remove(from_tab_idx);
-                if pane.active_tab_index >= pane.tabs.len() && !pane.tabs.is_empty() {
-                    pane.active_tab_index = pane.tabs.len() - 1;
+                if !pane.tabs.is_empty() {
+                    pane.active_tab_index = pane
+                        .tabs
+                        .iter()
+                        .position(|tab| tab.id == active_id)
+                        .unwrap_or_else(|| from_tab_idx.min(pane.tabs.len() - 1));
                 }
                 Some(t)
             } else {
@@ -855,6 +836,10 @@ impl WorkspaceState {
                 if from == to {
                     return;
                 }
+                let active_tab_id = pane
+                    .tabs
+                    .get(pane.active_tab_index)
+                    .map(|tab| tab.id.clone());
                 let tab = pane.tabs.remove(from);
                 let mut target_idx = to;
                 if from < to {
@@ -862,7 +847,9 @@ impl WorkspaceState {
                 }
 
                 pane.tabs.insert(target_idx.min(pane.tabs.len()), tab);
-                pane.active_tab_index = target_idx.min(pane.tabs.len().saturating_sub(1));
+                pane.active_tab_index = active_tab_id
+                    .and_then(|id| pane.tabs.iter().position(|tab| tab.id == id))
+                    .unwrap_or_else(|| target_idx.min(pane.tabs.len().saturating_sub(1)));
             }
         }
     }
@@ -871,11 +858,19 @@ impl WorkspaceState {
         if from_pane_id == to_pane_id {
             return;
         }
+        if self.find_pane(to_pane_id).is_none() {
+            return;
+        }
         let tab = if let Some(pane) = self.find_pane_mut(from_pane_id) {
             if from_tab < pane.tabs.len() {
+                let active_id = pane.active_tab().id.clone();
                 let t = pane.tabs.remove(from_tab);
-                if pane.active_tab_index >= pane.tabs.len() && !pane.tabs.is_empty() {
-                    pane.active_tab_index = pane.tabs.len() - 1;
+                if !pane.tabs.is_empty() {
+                    pane.active_tab_index = pane
+                        .tabs
+                        .iter()
+                        .position(|tab| tab.id == active_id)
+                        .unwrap_or_else(|| from_tab.min(pane.tabs.len() - 1));
                 }
                 Some(t)
             } else {
@@ -990,5 +985,125 @@ impl WorkspaceState {
             norm_p != norm_path && !norm_p.starts_with(&target_prefix)
         });
         self.refresh_sidebar();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn closing_tab_before_active_preserves_active_tab_identity() {
+        let mut state = WorkspaceState::new();
+        let pane_id = state.active_pane_id.clone();
+        state.add_tab(&pane_id, "B".to_string(), true);
+        state.add_tab(&pane_id, "C".to_string(), false);
+        let active_id = state.find_pane(&pane_id).unwrap().active_tab().id.clone();
+
+        state.close_tab_id(&pane_id, 0);
+
+        let pane = state.find_pane(&pane_id).unwrap();
+        assert_eq!(pane.active_tab().id, active_id);
+    }
+
+    #[test]
+    fn invalid_tab_close_is_ignored() {
+        let mut state = WorkspaceState::new();
+        let pane_id = state.active_pane_id.clone();
+        let initial_len = state.find_pane(&pane_id).unwrap().tabs.len();
+
+        state.close_tab_id(&pane_id, usize::MAX);
+
+        assert_eq!(state.find_pane(&pane_id).unwrap().tabs.len(), initial_len);
+    }
+
+    #[test]
+    fn tab_ids_are_not_reused_after_close() {
+        let mut state = WorkspaceState::new();
+        let pane_id = state.active_pane_id.clone();
+        state.add_tab(&pane_id, "B".to_string(), true);
+        let removed_id = state.find_pane(&pane_id).unwrap().active_tab().id.clone();
+        state.close_tab_id(&pane_id, 1);
+        state.add_tab(&pane_id, "C".to_string(), true);
+        let new_id = state.find_pane(&pane_id).unwrap().active_tab().id.clone();
+
+        assert_ne!(removed_id, new_id);
+    }
+
+    #[test]
+    fn reordering_an_inactive_tab_preserves_the_active_tab() {
+        let mut state = WorkspaceState::new();
+        let pane_id = state.active_pane_id.clone();
+        state.add_tab(&pane_id, "B".to_string(), true);
+        state.add_tab(&pane_id, "C".to_string(), false);
+        let active_id = state.find_pane(&pane_id).unwrap().active_tab().id.clone();
+
+        state.reorder_tabs_id(&pane_id, 2, 0);
+
+        assert_eq!(
+            state.find_pane(&pane_id).unwrap().active_tab().id,
+            active_id
+        );
+    }
+
+    #[test]
+    fn moving_to_an_unknown_pane_keeps_the_tab_and_active_selection() {
+        let mut state = WorkspaceState::new();
+        let pane_id = state.active_pane_id.clone();
+        state.add_tab(&pane_id, "B".to_string(), true);
+        let tabs_before = state.find_pane(&pane_id).unwrap().tabs.clone();
+        let active_id = state.find_pane(&pane_id).unwrap().active_tab().id.clone();
+
+        state.move_tab_to_pane_id(&pane_id, 0, "missing-pane");
+
+        let pane = state.find_pane(&pane_id).unwrap();
+        assert_eq!(pane.tabs.len(), tabs_before.len());
+        assert_eq!(pane.active_tab().id, active_id);
+    }
+
+    #[test]
+    fn splitting_a_tab_preserves_both_tab_identities_and_source_selection() {
+        let mut state = WorkspaceState::new();
+        let source_pane_id = state.active_pane_id.clone();
+        state.add_tab(&source_pane_id, "second".to_string(), true);
+        let moved_id = state.find_pane(&source_pane_id).unwrap().tabs[0].id.clone();
+        let active_id = state
+            .find_pane(&source_pane_id)
+            .unwrap()
+            .active_tab()
+            .id
+            .clone();
+
+        state.split_tab_to_axis(
+            &source_pane_id,
+            0,
+            &source_pane_id,
+            LayoutAxis::Horizontal,
+            true,
+        );
+
+        assert_eq!(
+            state.find_pane(&source_pane_id).unwrap().active_tab().id,
+            active_id
+        );
+        assert!(state.find_tab_mut(&moved_id).is_some());
+        let mut pane_count = 0;
+        state.layout.visit_panes(&mut |_| pane_count += 1);
+        assert_eq!(pane_count, 2);
+    }
+
+    #[test]
+    fn selecting_every_present_type_remains_an_explicit_filter_state() {
+        let mut tab = TabState::new("tab".to_string(), String::new());
+        tab.files = vec![FileEntry {
+            name: "notes.txt".to_string(),
+            ..FileEntry::default()
+        }];
+        tab.filter_types.insert("TXT".to_string());
+
+        tab.update_cache();
+
+        assert!(tab.filter_types.contains("TXT"));
+        assert_eq!(tab.cached_filtered_files.len(), 1);
     }
 }

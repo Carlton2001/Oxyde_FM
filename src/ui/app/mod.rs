@@ -117,6 +117,35 @@ pub struct ContextMenuInstance {
     pub width: Pixels,
     /// If true, the menu opens to the LEFT of its anchor (use Anchor::TopRight).
     pub open_left: bool,
+    pub hovered_item: Option<usize>,
+    /// Request token for an in-flight native submenu; stale replies are discarded.
+    pub native_request_id: Option<u64>,
+}
+
+#[derive(Clone)]
+struct PendingFileOperation {
+    paths: Vec<String>,
+    target_dir: String,
+    is_move: bool,
+    conflict_paths: Vec<String>,
+    runtime: tokio::runtime::Handle,
+}
+
+fn context_menu_contains_point(menu: &ContextMenuInstance, position: Point<Pixels>) -> bool {
+    let (item_count, header_height) = match &menu.content {
+        ContextMenuContent::Items(items, header) => {
+            (items.len(), if header.is_some() { 36.0 } else { 0.0 })
+        }
+        ContextMenuContent::NativeItems { items, .. } => (items.len(), 0.0),
+        ContextMenuContent::NameFilter { .. } => (1, 20.0),
+    };
+    let height = px((item_count as f32 * 26.0).min(480.0) + header_height + 10.0);
+    let left = if menu.open_left {
+        menu.position.x - menu.width
+    } else {
+        menu.position.x
+    };
+    Bounds::new(point(left, menu.position.y), size(menu.width, height)).contains(&position)
 }
 
 /// Returns true if `src` and `dst` are on different drives/volumes.
@@ -271,6 +300,7 @@ pub struct OxydeApp {
     pub state: WorkspaceState,
     pub handle: Option<Entity<Self>>,
     pub(crate) next_file_request: u64,
+    pub(crate) next_native_menu_request: u64,
     pub(crate) pending_file_requests: std::collections::HashMap<String, u64>,
     pub(crate) pending_sidebar_requests: std::collections::HashMap<String, u64>,
     pub history: std::sync::Arc<oxyde_lib::models::HistoryManager>,
@@ -322,6 +352,8 @@ pub struct OxydeApp {
     pub editing_path: Option<String>,
     pub editing_text: String,
     pub editing_view: Option<Entity<TextInput>>,
+    pending_file_operation: Option<PendingFileOperation>,
+    file_operation_notice: Option<String>,
 
     // ── Settings ─────────────────────────────────────────────────────────────
     pub show_hidden: bool,
@@ -331,6 +363,145 @@ pub struct OxydeApp {
 }
 
 impl OxydeApp {
+    pub(crate) fn request_native_context_menu(
+        &mut self,
+        parent_menu_idx: usize,
+        path: String,
+        is_background: bool,
+        position: Point<Pixels>,
+        open_left: bool,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(handle) = self.handle.clone() else {
+            return;
+        };
+        if parent_menu_idx >= self.context_menus.len() {
+            return;
+        }
+        if let Some(child) = self.context_menus.get(parent_menu_idx + 1) {
+            if matches!(
+                &child.content,
+                ContextMenuContent::NativeItems {
+                    path: child_path,
+                    is_background: child_background,
+                    ..
+                } if child_path == &path && *child_background == is_background
+            ) && (child.native_request_id.is_some()
+                || matches!(&child.content, ContextMenuContent::NativeItems { items, .. } if !items.is_empty()))
+            {
+                return;
+            }
+        }
+
+        self.next_native_menu_request = self.next_native_menu_request.wrapping_add(1);
+        let request_id = self.next_native_menu_request;
+        self.context_menus.truncate(parent_menu_idx + 1);
+        self.context_menus.push(ContextMenuInstance {
+            position,
+            content: ContextMenuContent::NativeItems {
+                path: path.clone(),
+                is_background,
+                items: vec![oxyde_lib::models::WinMenuItem {
+                    id: -1,
+                    label: "Chargement du menu…".to_string(),
+                    verb: None,
+                    has_submenu: false,
+                    children: Vec::new(),
+                }],
+            },
+            scroll_handle: UniformListScrollHandle::new(),
+            width: px(0.0),
+            open_left,
+            hovered_item: None,
+            native_request_id: Some(request_id),
+        });
+        cx.notify();
+
+        cx.spawn(move |_, cx: &mut AsyncApp| {
+            let mut cx = cx.clone();
+            async move {
+                let path_for_worker = path.clone();
+                let result = tokio::task::spawn_blocking(move || {
+                    oxyde_lib::platform::platform()
+                        .native_context_menu_items(&path_for_worker, is_background)
+                })
+                .await;
+                let result = match result {
+                    Ok(Ok(items)) if !items.is_empty() => Ok(items),
+                    Ok(Ok(_)) => Err("Aucune commande disponible".to_string()),
+                    Ok(Err(error)) => Err(error.to_string()),
+                    Err(error) => Err(format!("Chargement du menu natif échoué : {error}")),
+                };
+                handle.update(&mut cx, move |this, cx| {
+                    let Some(menu) = this.context_menus.get_mut(parent_menu_idx + 1) else {
+                        return;
+                    };
+                    if menu.native_request_id != Some(request_id) {
+                        return;
+                    }
+                    let ContextMenuContent::NativeItems {
+                        path: current_path,
+                        is_background: current_background,
+                        items,
+                    } = &mut menu.content
+                    else {
+                        return;
+                    };
+                    if current_path != &path || *current_background != is_background {
+                        return;
+                    }
+                    match result {
+                        Ok(native_items) => *items = native_items,
+                        Err(message) => {
+                            *items = vec![oxyde_lib::models::WinMenuItem {
+                                id: -1,
+                                label: message,
+                                verb: None,
+                                has_submenu: false,
+                                children: Vec::new(),
+                            }];
+                        }
+                    }
+                    menu.native_request_id = None;
+                    cx.notify();
+                });
+            }
+        })
+        .detach();
+    }
+
+    pub(crate) fn execute_native_context_menu_item(
+        &mut self,
+        path: String,
+        id: i32,
+        is_background: bool,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(handle) = self.handle.clone() else {
+            return;
+        };
+        cx.spawn(move |_, cx: &mut AsyncApp| {
+            let mut cx = cx.clone();
+            async move {
+                let result = tokio::task::spawn_blocking(move || {
+                    oxyde_lib::platform::platform().execute_native_context_menu_item(
+                        &path,
+                        id,
+                        is_background,
+                    )
+                })
+                .await;
+                match result {
+                    Ok(Ok(())) => {}
+                    Ok(Err(error)) => log::warn!("Native context-menu action failed: {error:?}"),
+                    Err(error) => log::warn!("Native context-menu worker failed: {error}"),
+                }
+                handle.update(&mut cx, |_, cx| cx.notify());
+            }
+        })
+        .detach();
+    }
+
     pub fn bind_keys(cx: &mut App) {
         cx.bind_keys([
             KeyBinding::new("ctrl-a", ToutSelectionner, None),
@@ -356,10 +527,17 @@ impl OxydeApp {
                     runtime.block_on(oxyde_lib::commands::ops::undo_last_action(&history))
                 })
                 .await;
-                if let Ok(Err(error)) = &result {
-                    log::warn!("Undo failed: {error:?}");
-                }
-                handle.update(&mut cx, |_, cx| cx.notify());
+                handle.update(&mut cx, |this, cx| {
+                    if let Ok(Err(error)) = &result {
+                        log::warn!("Undo failed: {error:?}");
+                        this.file_operation_notice =
+                            Some(format!("Annulation impossible : {error:?}"));
+                    } else if let Err(error) = &result {
+                        this.file_operation_notice =
+                            Some(format!("Annulation impossible : {error}"));
+                    }
+                    cx.notify();
+                });
             }
         })
         .detach();
@@ -378,10 +556,17 @@ impl OxydeApp {
                     runtime.block_on(oxyde_lib::commands::ops::redo_last_action(&history))
                 })
                 .await;
-                if let Ok(Err(error)) = &result {
-                    log::warn!("Redo failed: {error:?}");
-                }
-                handle.update(&mut cx, |_, cx| cx.notify());
+                handle.update(&mut cx, |this, cx| {
+                    if let Ok(Err(error)) = &result {
+                        log::warn!("Redo failed: {error:?}");
+                        this.file_operation_notice =
+                            Some(format!("Rétablissement impossible : {error:?}"));
+                    } else if let Err(error) = &result {
+                        this.file_operation_notice =
+                            Some(format!("Rétablissement impossible : {error}"));
+                    }
+                    cx.notify();
+                });
             }
         })
         .detach();
@@ -392,6 +577,7 @@ impl OxydeApp {
             state: WorkspaceState::new(),
             handle: None,
             next_file_request: 0,
+            next_native_menu_request: 0,
             pending_file_requests: std::collections::HashMap::new(),
             pending_sidebar_requests: std::collections::HashMap::new(),
             history: std::sync::Arc::new(oxyde_lib::models::HistoryManager::new()),
@@ -437,6 +623,8 @@ impl OxydeApp {
             editing_path: None,
             editing_text: String::new(),
             editing_view: None,
+            pending_file_operation: None,
+            file_operation_notice: None,
             show_hidden: false,
             show_system: false,
             show_media_previews: true,
@@ -705,101 +893,7 @@ impl OxydeApp {
         target_dir: String,
         cx: &mut Context<Self>,
     ) {
-        use oxyde_lib::models::transaction::{Transaction, TransactionDetails, TransactionType};
-
-        // Skip if source and destination are the same directory
-        let all_same = paths.iter().all(|p| {
-            std::path::Path::new(p)
-                .parent()
-                .and_then(|par| par.to_str())
-                .map(|par| {
-                    let norm_par = par.replace('\\', "/").trim_end_matches('/').to_string();
-                    let norm_dst = target_dir
-                        .replace('\\', "/")
-                        .trim_end_matches('/')
-                        .to_string();
-                    norm_par == norm_dst
-                })
-                .unwrap_or(false)
-        });
-        if all_same {
-            return;
-        }
-
-        // Prevent moving a folder into itself or one of its own descendants.
-        // Path::starts_with does component-level matching so "C:\foo" won't
-        // accidentally match "C:\foobar".
-        let dst = std::path::Path::new(&target_dir);
-        if paths
-            .iter()
-            .any(|p| dst.starts_with(std::path::Path::new(p)))
-        {
-            return;
-        }
-
-        let Some(handle) = self.handle.clone() else {
-            return;
-        };
-        cx.spawn(move |_, cx: &mut AsyncApp| {
-            let mut cx = cx.clone();
-            async move {
-                let moved = tokio::task::spawn_blocking({
-                    let paths = paths.clone();
-                    let target_dir = target_dir.clone();
-                    move || {
-                        let mut moved = Vec::new();
-                        for path in &paths {
-                            let src = std::path::Path::new(path);
-                            if let Some(file_name) = src.file_name() {
-                                let dst = std::path::Path::new(&target_dir).join(file_name);
-                                let ok = if std::fs::rename(src, &dst).is_ok() {
-                                    true
-                                } else if src.is_dir() {
-                                    fs_extra::dir::move_dir(
-                                        src,
-                                        std::path::Path::new(&target_dir),
-                                        &fs_extra::dir::CopyOptions::new(),
-                                    )
-                                    .is_ok()
-                                } else {
-                                    fs_extra::file::move_file(
-                                        src,
-                                        &dst,
-                                        &fs_extra::file::CopyOptions::new(),
-                                    )
-                                    .is_ok()
-                                };
-                                if ok {
-                                    moved.push(path.clone());
-                                }
-                            }
-                        }
-                        moved
-                    }
-                })
-                .await;
-                handle.update(&mut cx, |this, cx| {
-                    if let Ok(moved) = moved {
-                        if !moved.is_empty() {
-                            this.history.push(Transaction::new(
-                                TransactionType::Move,
-                                TransactionDetails {
-                                    paths: moved,
-                                    target_dir: Some(target_dir),
-                                    old_path: None,
-                                    new_path: None,
-                                    created_files: None,
-                                },
-                            ));
-                            this.state.refresh_sidebar();
-                            this.reconcile_watchers();
-                            cx.notify();
-                        }
-                    }
-                });
-            }
-        })
-        .detach();
+        self.prepare_file_operation(paths, target_dir, true, cx);
     }
 
     pub fn execute_file_copy(
@@ -808,96 +902,161 @@ impl OxydeApp {
         target_dir: String,
         cx: &mut Context<Self>,
     ) {
-        use oxyde_lib::models::transaction::{Transaction, TransactionDetails, TransactionType};
+        self.prepare_file_operation(paths, target_dir, false, cx);
+    }
 
-        let all_same = paths.iter().all(|p| {
-            std::path::Path::new(p)
-                .parent()
-                .and_then(|par| par.to_str())
-                .map(|par| {
-                    let norm_par = par.replace('\\', "/").trim_end_matches('/').to_string();
-                    let norm_dst = target_dir
-                        .replace('\\', "/")
-                        .trim_end_matches('/')
-                        .to_string();
-                    norm_par == norm_dst
-                })
-                .unwrap_or(false)
-        });
-        if all_same {
+    fn prepare_file_operation(
+        &mut self,
+        paths: Vec<String>,
+        target_dir: String,
+        is_move: bool,
+        cx: &mut Context<Self>,
+    ) {
+        if paths.is_empty() {
             return;
         }
-
-        // Prevent copying a folder into itself or one of its own descendants.
-        let dst = std::path::Path::new(&target_dir);
-        if paths
-            .iter()
-            .any(|p| dst.starts_with(std::path::Path::new(p)))
-        {
-            return;
-        }
-
         let Some(handle) = self.handle.clone() else {
             return;
         };
         cx.spawn(move |_, cx: &mut AsyncApp| {
             let mut cx = cx.clone();
             async move {
-                let copied = tokio::task::spawn_blocking({
-                    let paths = paths.clone();
-                    let target_dir = target_dir.clone();
-                    move || {
-                        let mut copied = Vec::new();
-                        for path in &paths {
-                            let src = std::path::Path::new(path);
-                            if let Some(file_name) = src.file_name() {
-                                let dst = std::path::Path::new(&target_dir).join(file_name);
-                                let ok = if src.is_dir() {
-                                    fs_extra::dir::copy(
-                                        src,
-                                        std::path::Path::new(&target_dir),
-                                        &fs_extra::dir::CopyOptions::new(),
-                                    )
-                                    .is_ok()
-                                } else {
-                                    fs_extra::file::copy(
-                                        src,
-                                        &dst,
-                                        &fs_extra::file::CopyOptions::new(),
-                                    )
-                                    .is_ok()
-                                };
-                                if ok {
-                                    copied.push(path.clone());
-                                }
-                            }
-                        }
-                        copied
-                    }
+                let check_paths = paths.clone();
+                let check_destination = target_dir.clone();
+                let runtime = tokio::runtime::Handle::current();
+                let runtime_for_check = runtime.clone();
+                let checked = tokio::task::spawn_blocking(move || {
+                    runtime_for_check.block_on(oxyde_lib::commands::ops::check_conflicts(
+                        check_paths,
+                        check_destination,
+                    ))
                 })
                 .await;
-                handle.update(&mut cx, |this, cx| {
-                    if let Ok(copied) = copied {
-                        if !copied.is_empty() {
-                            this.history.push(Transaction::new(
-                                TransactionType::Copy,
-                                TransactionDetails {
-                                    paths: copied,
-                                    target_dir: Some(target_dir),
-                                    old_path: None,
-                                    new_path: None,
-                                    created_files: None,
-                                },
-                            ));
-                            this.state.refresh_sidebar();
-                            this.reconcile_watchers();
-                            cx.notify();
-                        }
+                handle.update(&mut cx, |this, cx| match checked {
+                    Ok(Ok(response)) if !response.conflicts.is_empty() => {
+                        this.pending_file_operation = Some(PendingFileOperation {
+                            paths,
+                            target_dir,
+                            is_move,
+                            conflict_paths: response
+                                .conflicts
+                                .into_iter()
+                                .map(|conflict| conflict.source.path)
+                                .collect(),
+                            runtime,
+                        });
+                        cx.notify();
+                    }
+                    Ok(Ok(_)) => {
+                        this.queue_file_operation(paths, target_dir, is_move, None, runtime, cx)
+                    }
+                    Ok(Err(error)) => {
+                        this.file_operation_notice =
+                            Some(format!("Préparation impossible : {error:?}"));
+                        cx.notify();
+                    }
+                    Err(error) => {
+                        this.file_operation_notice =
+                            Some(format!("Préparation impossible : {error}"));
+                        cx.notify();
                     }
                 });
             }
         })
         .detach();
+    }
+
+    fn queue_file_operation(
+        &mut self,
+        paths: Vec<String>,
+        target_dir: String,
+        is_move: bool,
+        resolutions: Option<std::collections::HashMap<String, oxyde_lib::models::ConflictAction>>,
+        runtime: tokio::runtime::Handle,
+        cx: &mut Context<Self>,
+    ) {
+        use oxyde_lib::systems::file_ops::{FileOpType, FileOperation, OpStatus};
+        let op = FileOperation::new(
+            if is_move {
+                FileOpType::Move
+            } else {
+                FileOpType::Copy
+            },
+            paths.into_iter().map(std::path::PathBuf::from).collect(),
+            Some(std::path::PathBuf::from(target_dir)),
+            resolutions,
+        );
+        let op_id = self
+            .file_ops
+            .queue_operation_on(&runtime, self.history.clone(), op);
+        let operations = self.file_ops.clone();
+        let Some(handle) = self.handle.clone() else {
+            return;
+        };
+        cx.spawn(move |_, cx: &mut AsyncApp| {
+            let mut cx = cx.clone();
+            async move {
+                loop {
+                    cx.background_executor()
+                        .timer(std::time::Duration::from_millis(200))
+                        .await;
+                    let Some(operation) = operations.get_operation(&op_id) else {
+                        break;
+                    };
+                    match operation.status {
+                        OpStatus::Queued
+                        | OpStatus::Calculating
+                        | OpStatus::Running
+                        | OpStatus::Paused => {
+                            handle.update(&mut cx, |_, cx| cx.notify());
+                        }
+                        OpStatus::Error(error) => {
+                            handle.update(&mut cx, |this, cx| {
+                                this.file_operation_notice =
+                                    Some(format!("Échec du transfert : {error}"));
+                                cx.notify();
+                            });
+                            break;
+                        }
+                        OpStatus::Completed => {
+                            handle.update(&mut cx, |this, cx| {
+                                this.state.refresh_sidebar();
+                                this.reconcile_watchers();
+                                cx.notify();
+                            });
+                            break;
+                        }
+                        OpStatus::Cancelled => break,
+                    }
+                }
+            }
+        })
+        .detach();
+    }
+
+    fn resolve_pending_file_operation(&mut self, replace: bool, cx: &mut Context<Self>) {
+        use oxyde_lib::models::ConflictAction;
+        let Some(pending) = self.pending_file_operation.take() else {
+            return;
+        };
+        let action = if replace {
+            ConflictAction::Replace
+        } else {
+            ConflictAction::Skip
+        };
+        let resolutions = pending
+            .conflict_paths
+            .into_iter()
+            .map(|path| (path, action))
+            .collect();
+        self.queue_file_operation(
+            pending.paths,
+            pending.target_dir,
+            pending.is_move,
+            Some(resolutions),
+            pending.runtime,
+            cx,
+        );
     }
 
     pub fn create_new_folder(&mut self, pane_id: &str, cx: &mut Context<Self>) {
@@ -945,6 +1104,12 @@ impl OxydeApp {
                                     old_path: None,
                                     new_path: None,
                                     created_files: None,
+                                    created_dirs: None,
+                                    replaced_files: None,
+                                    moved_files: None,
+                                    moved_dirs: None,
+                                    copied_files: None,
+                                    copied_file_hashes: None,
                                 },
                             ));
                             this.state.refresh_sidebar();
@@ -1499,10 +1664,10 @@ impl Render for OxydeApp {
                                     }
                                     let is_full = !all_present.is_empty()
                                         && all_present.iter().all(|t| tab.filter_types.contains(t));
-                                    if is_full || tab.filter_types.is_empty() {
-                                        ("Tout cocher", false)
-                                    } else {
+                                    if is_full {
                                         ("Tout décocher", true)
+                                    } else {
+                                        ("Tout cocher", false)
                                     }
                                 } else {
                                     ("Tout cocher", false)
@@ -1568,10 +1733,10 @@ impl Render for OxydeApp {
                                     }
                                     let is_full = !present.is_empty()
                                         && present.iter().all(|c| tab.filter_sizes.contains(c));
-                                    if is_full || tab.filter_sizes.is_empty() {
-                                        ("Tout cocher", false)
-                                    } else {
+                                    if is_full {
                                         ("Tout décocher", true)
+                                    } else {
+                                        ("Tout cocher", false)
                                     }
                                 } else {
                                     ("Tout cocher", false)
@@ -1631,10 +1796,10 @@ impl Render for OxydeApp {
                                     }
                                     let is_full = !present.is_empty()
                                         && present.iter().all(|c| tab.filter_dates.contains(c));
-                                    if is_full || tab.filter_dates.is_empty() {
-                                        ("Tout cocher", false)
-                                    } else {
+                                    if is_full {
                                         ("Tout décocher", true)
+                                    } else {
+                                        ("Tout cocher", false)
                                     }
                                 } else {
                                     ("Tout cocher", false)
@@ -1694,17 +1859,40 @@ impl Render for OxydeApp {
                         id: ("context-menu", m_idx).into(),
                         h_app: h.clone(),
                         items: dropdown_items,
+                        hovered_item: instance.hovered_item,
                         scroll_handle,
                         width: None,
                         max_height: 480.0,
                         on_close: {
                             let h = h.clone();
                             std::rc::Rc::new(move |_, cx| {
-                                h.update(cx, |this, _| {
+                                h.update(cx, |this, cx| {
                                     this.context_menus.clear();
+                                    this.submenu_timer = None;
+                                    this.submenu_close_timer = None;
+                                    cx.notify();
                                 });
                             })
                         },
+                        on_outside: Some({
+                            let h = h.clone();
+                            std::rc::Rc::new(move |position, _, cx| {
+                                h.update(cx, |this, cx| {
+                                    let inside_sibling = this.context_menus.iter().enumerate().any(
+                                        |(index, menu)| {
+                                            index != m_idx
+                                                && context_menu_contains_point(menu, position)
+                                        },
+                                    );
+                                    if !inside_sibling {
+                                        this.context_menus.clear();
+                                        this.submenu_timer = None;
+                                        this.submenu_close_timer = None;
+                                        cx.notify();
+                                    }
+                                });
+                            })
+                        }),
                         on_drag: {
                             std::rc::Rc::new(move |this, tid, vh, ch, _| {
                                 this.drag_target = Some(DragTarget::ContextMenuV {
@@ -1721,6 +1909,20 @@ impl Render for OxydeApp {
                             let h_app = h.clone();
                             let items_val = items_cap.clone();
                             move |ix, item_pos, cx| {
+                                let should_handle = h_app.update(cx, |this, cx| {
+                                    let Some(menu) = this.context_menus.get_mut(m_idx) else {
+                                        return false;
+                                    };
+                                    if menu.hovered_item == Some(ix) {
+                                        return false;
+                                    }
+                                    menu.hovered_item = Some(ix);
+                                    cx.notify();
+                                    true
+                                });
+                                if !should_handle {
+                                    return;
+                                }
                                 if let Some(it) = items_val.get(ix) {
                                     let has_submenu = it.on_hover.is_some();
                                     let h_inner = h_app.clone();
@@ -1850,6 +2052,11 @@ impl Render for OxydeApp {
                                         this.submenu_close_timer = None;
                                     });
                                 } else {
+                                    h.update(cx, |this, _| {
+                                        if let Some(menu) = this.context_menus.get_mut(m_idx) {
+                                            menu.hovered_item = None;
+                                        }
+                                    });
                                     let h_close = h.clone();
                                     let wh = window_handle;
                                     h.update(cx, |this, cx| {
@@ -1895,52 +2102,83 @@ impl Render for OxydeApp {
                     let h_app = h.clone();
                     let items_cap = items.clone();
 
-                    let dropdown_items = items.iter().map(|it| {
-                        let h = h_app.clone();
-                        let p = path_cap.clone();
-                        let id = it.id;
-                        let has_sub = it.has_submenu;
+                    let dropdown_items = items
+                        .iter()
+                        .map(|it| {
+                            let h = h_app.clone();
+                            let p = path_cap.clone();
+                            let id = it.id;
+                            let has_sub = it.has_submenu;
 
-                        crate::ui::components::dropdown::DropdownItem {
-                            label: it.label.clone(),
-                            icon: None,
-                            stay_open: has_sub,
-                            has_submenu: has_sub,
-                            is_dimmed: false,
-                            on_click: std::rc::Rc::new({
-                                move |_, app| {
-                                    let h_inner = h.clone();
-                                    let p_inner = p.clone();
-                                    let id_inner = id;
+                            crate::ui::components::dropdown::DropdownItem {
+                                label: it.label.clone(),
+                                icon: None,
+                                stay_open: has_sub,
+                                has_submenu: has_sub,
+                                // Windows returns -1 for popup entries that own a submenu.
+                                // That is not a disabled command; only dim actual leaf entries
+                                // whose IDs are invalid.
+                                is_dimmed: id < 0 && !has_sub,
+                                on_click: std::rc::Rc::new({
+                                    move |_, app| {
+                                        let h_inner = h.clone();
+                                        let p_inner = p.clone();
+                                        let id_inner = id;
 
-                                    h_inner.update(app, |this, cx| {
-                                        if !has_sub {
-                                            this.context_menus.clear();
-                                            let _ = oxyde_lib::commands::system::execute_native_menu_item(p_inner, id_inner, is_bg_cap);
-                                        }
-                                        cx.notify();
-                                    });
-                                }
-                            }),
-                            on_hover: None,
-                        }
-                    }).collect();
+                                        h_inner.update(app, |this, cx| {
+                                            if !has_sub && id_inner >= 0 {
+                                                this.context_menus.clear();
+                                                this.execute_native_context_menu_item(
+                                                    p_inner, id_inner, is_bg_cap, cx,
+                                                );
+                                            }
+                                            cx.notify();
+                                        });
+                                    }
+                                }),
+                                on_hover: None,
+                            }
+                        })
+                        .collect();
 
                     GenericDropdown {
                         id: ("context-menu", m_idx).into(),
                         h_app: h.clone(),
                         items: dropdown_items,
+                        hovered_item: instance.hovered_item,
                         scroll_handle,
                         width: None,
                         max_height: 480.0,
                         on_close: {
                             let h = h.clone();
                             std::rc::Rc::new(move |_, cx| {
-                                h.update(cx, |this, _| {
+                                h.update(cx, |this, cx| {
                                     this.context_menus.clear();
+                                    this.submenu_timer = None;
+                                    this.submenu_close_timer = None;
+                                    cx.notify();
                                 });
                             })
                         },
+                        on_outside: Some({
+                            let h = h.clone();
+                            std::rc::Rc::new(move |position, _, cx| {
+                                h.update(cx, |this, cx| {
+                                    let inside_sibling = this.context_menus.iter().enumerate().any(
+                                        |(index, menu)| {
+                                            index != m_idx
+                                                && context_menu_contains_point(menu, position)
+                                        },
+                                    );
+                                    if !inside_sibling {
+                                        this.context_menus.clear();
+                                        this.submenu_timer = None;
+                                        this.submenu_close_timer = None;
+                                        cx.notify();
+                                    }
+                                });
+                            })
+                        }),
                         on_drag: {
                             std::rc::Rc::new(move |this, tid, vh, ch, _| {
                                 this.drag_target = Some(DragTarget::ContextMenuV {
@@ -1957,6 +2195,20 @@ impl Render for OxydeApp {
                             let h_app = h.clone();
                             let items_val = items_cap.clone();
                             move |ix, item_pos, cx| {
+                                let should_handle = h_app.update(cx, |this, cx| {
+                                    let Some(menu) = this.context_menus.get_mut(m_idx) else {
+                                        return false;
+                                    };
+                                    if menu.hovered_item == Some(ix) {
+                                        return false;
+                                    }
+                                    menu.hovered_item = Some(ix);
+                                    cx.notify();
+                                    true
+                                });
+                                if !should_handle {
+                                    return;
+                                }
                                 if let Some(it) = items_val.get(ix) {
                                     let h_inner = h_app.clone();
                                     let path_inner = path_cap.clone();
@@ -2013,6 +2265,8 @@ impl Render for OxydeApp {
                                                                         this.context_menus.push(ContextMenuInstance {
                                                                             position: new_pos,
                                                                             open_left,
+                                                                            hovered_item: None,
+                                                                            native_request_id: None,
                                                                             content: ContextMenuContent::NativeItems {
                                                                                 path: path_cap,
                                                                                 is_background: is_bg_cap,
@@ -2059,6 +2313,11 @@ impl Render for OxydeApp {
                                         this.submenu_close_timer = None;
                                     });
                                 } else {
+                                    h.update(cx, |this, _| {
+                                        if let Some(menu) = this.context_menus.get_mut(m_idx) {
+                                            menu.hovered_item = None;
+                                        }
+                                    });
                                     let h_close = h.clone();
                                     let wh = window_handle;
                                     h.update(cx, |this, cx| {
@@ -2098,17 +2357,39 @@ impl Render for OxydeApp {
                     id: ("context-menu", m_idx).into(),
                     h_app: h.clone(),
                     items: vec![],
+                    hovered_item: instance.hovered_item,
                     scroll_handle,
                     width: None,
                     max_height: 480.0,
                     on_close: {
                         let h = h.clone();
                         std::rc::Rc::new(move |_, cx| {
-                            h.update(cx, |this, _| {
+                            h.update(cx, |this, cx| {
                                 this.context_menus.clear();
+                                this.submenu_timer = None;
+                                this.submenu_close_timer = None;
+                                cx.notify();
                             });
                         })
                     },
+                    on_outside: Some({
+                        let h = h.clone();
+                        std::rc::Rc::new(move |position, _, cx| {
+                            h.update(cx, |this, cx| {
+                                let inside_sibling =
+                                    this.context_menus.iter().enumerate().any(|(index, menu)| {
+                                        index != m_idx
+                                            && context_menu_contains_point(menu, position)
+                                    });
+                                if !inside_sibling {
+                                    this.context_menus.clear();
+                                    this.submenu_timer = None;
+                                    this.submenu_close_timer = None;
+                                    cx.notify();
+                                }
+                            });
+                        })
+                    }),
                     on_drag: {
                         std::rc::Rc::new(move |this, tid, vh, ch, _| {
                             this.drag_target = Some(DragTarget::ContextMenuV {
@@ -2161,6 +2442,157 @@ impl Render for OxydeApp {
         if self.settings_open {
             use crate::ui::components::settings::render_settings_panel;
             root = root.child(deferred(render_settings_panel(self, handle.clone(), cx)));
+        }
+
+        if let Some(pending) = self.pending_file_operation.clone() {
+            let conflict_count = pending.conflict_paths.len();
+            let replace_handle = handle.clone();
+            let skip_handle = handle.clone();
+            let cancel_handle = handle.clone();
+            let theme = *cx.theme();
+            root = root.child(deferred(
+                div()
+                    .absolute()
+                    .inset_0()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .bg(rgba(0x00000088u32))
+                    .child(
+                        div()
+                            .w(px(440.0))
+                            .p(px(20.0))
+                            .rounded_lg()
+                            .bg(theme.surface)
+                            .border_1()
+                            .border_color(theme.border)
+                            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                            .child(
+                                div()
+                                    .text_size(px(16.0))
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .child("Fichiers déjà présents"),
+                            )
+                            .child(
+                                div()
+                                    .mt(px(12.0))
+                                    .text_color(theme.text_muted)
+                                    .child(format!(
+                                        "{} conflit(s) détecté(s). Que souhaitez-vous faire ?",
+                                        conflict_count
+                                    )),
+                            )
+                            .child(
+                                div()
+                                    .mt(px(20.0))
+                                    .flex()
+                                    .justify_end()
+                                    .gap(px(8.0))
+                                    .child(
+                                        div()
+                                            .id("operation-cancel")
+                                            .px(px(12.0))
+                                            .py(px(8.0))
+                                            .rounded_md()
+                                            .cursor_pointer()
+                                            .hover(|d| d.bg(theme.header))
+                                            .child("Annuler")
+                                            .on_mouse_down(MouseButton::Left, move |_, _, cx| {
+                                                cancel_handle.update(cx, |this, cx| {
+                                                    this.pending_file_operation = None;
+                                                    cx.notify();
+                                                });
+                                            }),
+                                    )
+                                    .child(
+                                        div()
+                                            .id("operation-skip")
+                                            .px(px(12.0))
+                                            .py(px(8.0))
+                                            .rounded_md()
+                                            .cursor_pointer()
+                                            .hover(|d| d.bg(theme.header))
+                                            .child("Ignorer tout")
+                                            .on_mouse_down(MouseButton::Left, move |_, _, cx| {
+                                                skip_handle.update(cx, |this, cx| {
+                                                    this.resolve_pending_file_operation(false, cx)
+                                                });
+                                            }),
+                                    )
+                                    .child(
+                                        div()
+                                            .id("operation-replace")
+                                            .px(px(12.0))
+                                            .py(px(8.0))
+                                            .rounded_md()
+                                            .bg(theme.accent)
+                                            .text_color(theme.background)
+                                            .cursor_pointer()
+                                            .hover(|d| d.opacity(0.85))
+                                            .child("Remplacer tout")
+                                            .on_mouse_down(MouseButton::Left, move |_, _, cx| {
+                                                replace_handle.update(cx, |this, cx| {
+                                                    this.resolve_pending_file_operation(true, cx)
+                                                });
+                                            }),
+                                    ),
+                            ),
+                    ),
+            ));
+        }
+
+        if let Some(message) = self.file_operation_notice.clone() {
+            let close_handle = handle.clone();
+            let theme = *cx.theme();
+            root = root.child(deferred(
+                div()
+                    .absolute()
+                    .inset_0()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .bg(rgba(0x00000088u32))
+                    .child(
+                        div()
+                            .w(px(440.0))
+                            .p(px(20.0))
+                            .rounded_lg()
+                            .bg(theme.surface)
+                            .border_1()
+                            .border_color(theme.border)
+                            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                            .child(
+                                div()
+                                    .text_size(px(16.0))
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .child("Opération impossible"),
+                            )
+                            .child(
+                                div()
+                                    .mt(px(12.0))
+                                    .text_color(theme.text_muted)
+                                    .child(message),
+                            )
+                            .child(
+                                div().mt(px(20.0)).flex().justify_end().child(
+                                    div()
+                                        .id("operation-notice-close")
+                                        .px(px(12.0))
+                                        .py(px(8.0))
+                                        .rounded_md()
+                                        .cursor_pointer()
+                                        .hover(|d| d.bg(theme.header))
+                                        .child("Fermer")
+                                        .on_mouse_down(MouseButton::Left, move |_, _, cx| {
+                                            close_handle.update(cx, |this, cx| {
+                                                this.file_operation_notice = None;
+                                                cx.notify();
+                                            });
+                                        }),
+                                ),
+                            ),
+                    ),
+            ));
         }
 
         root

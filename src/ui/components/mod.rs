@@ -195,39 +195,22 @@ pub fn oxyde_context_menu_items(
         label: "Plus d'options".to_string(),
         icon: None,
         stay_open: true,
-        has_submenu: true, is_dimmed: false,
+        has_submenu: true,
+        is_dimmed: false,
         on_click: std::rc::Rc::new(|_, _| {}),
         on_hover: Some(std::rc::Rc::new({
             let h = h_app.clone();
+            let selected_path = path.clone();
             move |sub_pos, open_left, app| {
                 h.update(app, |this, cx| {
-                    let pane_id = this.state.active_pane_id.clone();
-                    if let Some(pane) = this.state.layout.find_pane(&pane_id) {
-                        let tab = pane.active_tab();
-                        if let Some(path_sel) = tab.selected_paths.iter().next() {
-                            use crate::ui::app::ContextMenuContent;
-                            let already_open = this.context_menus.get(1)
-                                .map(|m| matches!(&m.content, ContextMenuContent::NativeItems { path, is_background: false, .. } if path == path_sel))
-                                .unwrap_or(false);
-                            if already_open { return; }
-                            if let Ok(native_items) = oxyde_lib::commands::system::get_native_context_menu_items(path_sel.clone(), false) {
-                                use crate::ui::app::ContextMenuInstance;
-                                this.context_menus.truncate(1);
-                                this.context_menus.push(ContextMenuInstance {
-                                    position: sub_pos,
-                                    content: ContextMenuContent::NativeItems {
-                                        path: path_sel.clone(),
-                                        is_background: false,
-                                        items: native_items
-                                    },
-                                    scroll_handle: gpui::UniformListScrollHandle::new(),
-                                    width: px(0.0),
-                                    open_left,
-                                });
-                                cx.notify();
-                            }
-                        }
-                    }
+                    this.request_native_context_menu(
+                        0,
+                        selected_path.clone(),
+                        false,
+                        sub_pos,
+                        open_left,
+                        cx,
+                    );
                 });
             }
         })),
@@ -314,27 +297,7 @@ pub fn pane_context_menu_items(
                     h.update(app, |this, cx| {
                         if let Some(pane) = this.state.layout.find_pane(&p_id) {
                             let path = pane.active_tab().path.clone();
-                            use crate::ui::app::ContextMenuContent;
-                            let already_open = this.context_menus.get(1)
-                                .map(|m| matches!(&m.content, ContextMenuContent::NativeItems { path: p, is_background: true, .. } if *p == path))
-                                .unwrap_or(false);
-                            if already_open { return; }
-                            if let Ok(items) = oxyde_lib::commands::system::get_native_context_menu_items(path.clone(), true) {
-                                use crate::ui::app::ContextMenuInstance;
-                                this.context_menus.truncate(1);
-                                this.context_menus.push(ContextMenuInstance {
-                                    position: sub_pos,
-                                    content: ContextMenuContent::NativeItems {
-                                        path,
-                                        is_background: true,
-                                        items
-                                    },
-                                    scroll_handle: UniformListScrollHandle::new(),
-                                    width: px(0.0),
-                                    open_left,
-                                });
-                                cx.notify();
-                            }
+                            this.request_native_context_menu(0, path, true, sub_pos, open_left, cx);
                         }
                     });
                 }
@@ -381,8 +344,7 @@ pub fn tab_context_menu_items(
                 move |_, app| {
                     h.update(app, |this, cx| {
                         this.context_menus.clear();
-                        this.state.close_other_tabs(&p_id, tab_idx);
-                        cx.notify();
+                        this.close_other_tabs(&p_id, tab_idx, cx);
                     });
                 }
             }),
@@ -400,8 +362,7 @@ pub fn tab_context_menu_items(
                 move |_, app| {
                     h.update(app, |this, cx| {
                         this.context_menus.clear();
-                        this.state.close_tab_id(&p_id, tab_idx);
-                        cx.notify();
+                        this.close_tab(&p_id, tab_idx, cx);
                     });
                 }
             }),

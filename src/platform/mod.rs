@@ -16,6 +16,9 @@ pub trait Platform: Send + Sync {
     /// Returns hidden, system, and reparse point flags for a directory entry.
     fn file_attributes(&self, metadata: &std::fs::Metadata, name: &str) -> (bool, bool, bool);
 
+    /// Mark an application-owned staging or undo-backup file as hidden.
+    fn set_hidden_attribute(&self, path: &std::path::Path, hidden: bool) -> Result<(), String>;
+
     /// Adjusts the current worker thread's scheduling priority.
     fn set_thread_priority(&self, priority: ThreadPriority);
 
@@ -83,6 +86,27 @@ pub trait Platform: Send + Sync {
 
     /// Reads file paths and their copy/move intent from the native clipboard.
     fn get_clipboard_files(&self) -> Result<(Vec<String>, bool), String>;
+
+    /// Builds a plain-data snapshot of an OS context menu for a file or folder.
+    fn native_context_menu_items(
+        &self,
+        path: &str,
+        is_background: bool,
+    ) -> Result<Vec<crate::models::WinMenuItem>, String> {
+        let _ = (path, is_background);
+        Err("Native context menus are unavailable on this platform".to_string())
+    }
+
+    /// Executes a command ID from a previously built native context-menu snapshot.
+    fn execute_native_context_menu_item(
+        &self,
+        path: &str,
+        id: i32,
+        is_background: bool,
+    ) -> Result<(), String> {
+        let _ = (path, id, is_background);
+        Err("Native context menus are unavailable on this platform".to_string())
+    }
 }
 
 #[cfg(target_os = "windows")]

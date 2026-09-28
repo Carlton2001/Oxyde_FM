@@ -109,12 +109,14 @@ impl OxydeApp {
     /// `WorkspaceState::duplicate_tab` only updates the synchronous UI state;
     /// directory contents are loaded through `request_tab_files`.
     pub fn duplicate_tab(&mut self, pane_id: &str, tab_idx: usize, cx: &mut Context<Self>) {
-        self.state.duplicate_tab(pane_id, tab_idx);
-
-        if let Some(pane) = self.state.find_pane(pane_id) {
-            let new_tab_idx = pane.active_tab_index;
-            let path = pane.active_tab().path.clone();
-            self.request_tab_files(pane_id, new_tab_idx, path, false, cx);
+        if let Some(new_tab_idx) = self.state.duplicate_tab(pane_id, tab_idx) {
+            let path = self
+                .state
+                .find_pane(pane_id)
+                .map(|pane| pane.tabs[new_tab_idx].path.clone());
+            if let Some(path) = path {
+                self.request_tab_files(pane_id, new_tab_idx, path, false, cx);
+            }
         }
 
         self.reconcile_watchers();
@@ -122,15 +124,46 @@ impl OxydeApp {
     }
 
     pub fn switch_tab(&mut self, pane_id: &str, tab_idx: usize, cx: &mut Context<Self>) {
+        let mut load_path = None;
         if let Some(pane) = self.state.find_pane_mut(pane_id) {
+            if tab_idx >= pane.tabs.len() {
+                return;
+            }
             pane.active_tab_index = tab_idx;
+            if matches!(
+                pane.active_tab().load_status,
+                crate::ui::workspace::TabLoadStatus::Loading
+            ) && pane.active_tab().files.is_empty()
+            {
+                load_path = Some(pane.active_tab().path.clone());
+            }
             self.state.active_pane_id = pane_id.to_string();
-            cx.notify();
         }
+        if let Some(path) = load_path {
+            self.request_tab_files(pane_id, tab_idx, path, false, cx);
+        }
+        cx.notify();
     }
 
     pub fn close_tab(&mut self, pane_id: &str, tab_idx: usize, cx: &mut Context<Self>) {
         self.state.close_tab_id(pane_id, tab_idx);
+        let reload = self.state.find_pane(pane_id).and_then(|pane| {
+            (pane.active_tab().files.is_empty()
+                && matches!(
+                    pane.active_tab().load_status,
+                    crate::ui::workspace::TabLoadStatus::Loading
+                ))
+            .then(|| (pane.active_tab_index, pane.active_tab().path.clone()))
+        });
+        if let Some((index, path)) = reload {
+            self.request_tab_files(pane_id, index, path, false, cx);
+        }
+        self.reconcile_watchers();
+        cx.notify();
+    }
+
+    pub fn close_other_tabs(&mut self, pane_id: &str, tab_idx: usize, cx: &mut Context<Self>) {
+        self.state.close_other_tabs(pane_id, tab_idx);
         self.reconcile_watchers();
         cx.notify();
     }
@@ -141,10 +174,16 @@ impl OxydeApp {
             let active_tab = pane.active_tab_mut();
             active_tab.path = path.clone();
             active_tab.files.clear();
+            active_tab.cached_filtered_files.clear();
             active_tab.filter_types.clear();
             active_tab.filter_name.clear();
+            active_tab.filter_sizes.clear();
+            active_tab.filter_dates.clear();
             active_tab.selected_paths.clear();
+            active_tab.selection_anchor = None;
+            active_tab.load_status = crate::ui::workspace::TabLoadStatus::Loading;
             active_tab.list_scroll = UniformListScrollHandle::new();
+            active_tab.list_scroll_h.set_offset(point(px(0.0), px(0.0)));
             self.request_tab_files(pane_id, tab_idx, path, true, cx);
             self.reconcile_watchers();
             cx.notify();
@@ -175,7 +214,6 @@ impl OxydeApp {
         let request_id = self.next_file_request;
         self.pending_file_requests
             .insert(tab_id.clone(), request_id);
-        let pane_id = pane_id.to_string();
         let show_hidden = self.show_hidden;
         let show_system = self.show_system;
         cx.spawn(move |_, cx: &mut AsyncApp| {
@@ -194,22 +232,32 @@ impl OxydeApp {
                         return;
                     }
                     this.pending_file_requests.remove(&tab_id);
-                    if let Ok(response) = result {
-                        if let Some(tab) = this.state.find_pane_mut(&pane_id).and_then(|pane| {
-                            pane.tabs
-                                .iter_mut()
-                                .find(|tab| tab.id == tab_id && tab.path == path)
-                        }) {
-                            tab.files = response.entries;
-                            tab.sort_files();
-                            tab.update_cache();
-                            if reset_scroll {
-                                tab.list_scroll = UniformListScrollHandle::new();
-                            }
-                            cx.notify();
+                    // A tab can be moved to another pane while its listing is in flight.
+                    // Its stable id, not the pane captured at request time, owns the result.
+                    if let Some(tab) = this.state.find_tab_mut(&tab_id) {
+                        if tab.path != path {
+                            return;
                         }
-                    } else if let Err(error) = result {
-                        log::warn!("Cannot list {}: {error:?}", path);
+                        match result {
+                            Ok(response) => {
+                                tab.files = response.entries;
+                                tab.sort_files();
+                                tab.update_cache();
+                                tab.load_status = crate::ui::workspace::TabLoadStatus::Ready;
+                                if reset_scroll {
+                                    tab.list_scroll = UniformListScrollHandle::new();
+                                }
+                            }
+                            Err(error) => {
+                                tab.files.clear();
+                                tab.cached_filtered_files.clear();
+                                tab.load_status = crate::ui::workspace::TabLoadStatus::Error(
+                                    crate::ui::errors::path_load_message(&error),
+                                );
+                                log::warn!("Cannot list {}: {error:?}", path);
+                            }
+                        }
+                        cx.notify();
                     }
                 });
             }
@@ -217,19 +265,22 @@ impl OxydeApp {
         .detach();
     }
     pub fn refresh_all(&mut self, cx: &mut Context<Self>) {
-        // Refresh Sidebar (Drives, Pinned, etc)
-        self.state.refresh_sidebar();
+        // Refreshing should update filesystem contents without resetting the users'
+        // filters, selection, scroll position, or loading state on each tab.
+        self.refresh_all_tabs(cx);
+    }
 
-        // Refresh all open panes (their active tabs)
-        let mut reloads = Vec::new();
-        self.state.layout.visit_panes(&mut |p| {
-            reloads.push((p.id.clone(), p.active_tab().path.clone()));
+    pub fn refresh_all_tabs(&mut self, cx: &mut Context<Self>) {
+        let mut requests = Vec::new();
+        self.state.layout.visit_panes(&mut |pane| {
+            for (index, tab) in pane.tabs.iter().enumerate() {
+                requests.push((pane.id.clone(), index, tab.path.clone()));
+            }
         });
-
-        for (pane_id, path) in reloads {
-            self.load_path(&pane_id, path, cx);
+        for (pane_id, index, path) in requests {
+            self.request_tab_files(&pane_id, index, path, false, cx);
         }
-
+        self.state.refresh_sidebar();
         cx.notify();
     }
 }

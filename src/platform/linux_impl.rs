@@ -10,6 +10,11 @@ impl LinuxPlatform {
 }
 
 impl Platform for LinuxPlatform {
+    fn set_hidden_attribute(&self, _path: &std::path::Path, _hidden: bool) -> Result<(), String> {
+        // Linux uses dot-prefixed names for app-owned staging files.
+        Ok(())
+    }
+
     fn is_network_path(&self, path: &std::path::Path) -> bool {
         super::hardware::is_network_path(path)
     }

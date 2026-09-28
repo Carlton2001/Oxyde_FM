@@ -169,54 +169,54 @@ fn search_in_archive(
         }
         ArchiveFormat::SevenZip => {
             if let Ok(file) = File::open(archive_path) {
-                if let Ok(len) = file.metadata().map(|m| m.len()) {
-                    if let Ok(mut reader) = sevenz_rust::SevenZReader::new(file, len, "".into()) {
-                        let _ = reader.for_each_entries(|entry, _| {
-                            if cancellation.load(Ordering::Relaxed) {
-                                return Ok(false);
-                            }
-                            let name_with_path = entry.name().replace('\\', "/");
-                            let last_part = name_with_path.split('/').next_back().unwrap_or("");
-                            if last_part.is_empty() {
-                                return Ok(true);
-                            }
+                if let Ok(mut reader) =
+                    sevenz_rust2::ArchiveReader::new(file, sevenz_rust2::Password::empty())
+                {
+                    let _ = reader.for_each_entries(|entry, _| {
+                        if cancellation.load(Ordering::Relaxed) {
+                            return Ok(false);
+                        }
+                        let name_with_path = entry.name().replace('\\', "/");
+                        let last_part = name_with_path.split('/').next_back().unwrap_or("");
+                        if last_part.is_empty() {
+                            return Ok(true);
+                        }
 
-                            if params.pattern.matches(last_part) {
-                                let is_dir = entry.is_directory();
-                                let size = entry.size();
+                        if params.pattern.matches(last_part) {
+                            let is_dir = entry.is_directory();
+                            let size = entry.size();
 
-                                if !is_dir {
-                                    if let Some(min) = params.min_size {
-                                        if size < min {
-                                            return Ok(true);
-                                        }
-                                    }
-                                    if let Some(max) = params.max_size {
-                                        if size > max {
-                                            return Ok(true);
-                                        }
+                            if !is_dir {
+                                if let Some(min) = params.min_size {
+                                    if size < min {
+                                        return Ok(true);
                                     }
                                 }
-
-                                results.push(FileEntry {
-                                    name: last_part.to_string(),
-                                    path: format!(
-                                        "{}\\{}",
-                                        archive_path.to_string_lossy(),
-                                        name_with_path.replace('/', "\\")
-                                    ),
-                                    is_dir,
-                                    is_hidden: false,
-                                    size,
-                                    modified: 0,
-                                    folders_count: None,
-                                    files_count: None,
-                                    ..FileEntry::default()
-                                });
+                                if let Some(max) = params.max_size {
+                                    if size > max {
+                                        return Ok(true);
+                                    }
+                                }
                             }
-                            Ok(true)
-                        });
-                    }
+
+                            results.push(FileEntry {
+                                name: last_part.to_string(),
+                                path: format!(
+                                    "{}\\{}",
+                                    archive_path.to_string_lossy(),
+                                    name_with_path.replace('/', "\\")
+                                ),
+                                is_dir,
+                                is_hidden: false,
+                                size,
+                                modified: 0,
+                                folders_count: None,
+                                files_count: None,
+                                ..FileEntry::default()
+                            });
+                        }
+                        Ok(true)
+                    });
                 }
             }
         }

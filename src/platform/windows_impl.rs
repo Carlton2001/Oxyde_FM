@@ -10,6 +10,52 @@ impl WindowsPlatform {
 }
 
 impl Platform for WindowsPlatform {
+    fn set_hidden_attribute(&self, path: &std::path::Path, hidden: bool) -> Result<(), String> {
+        use std::os::windows::ffi::OsStrExt;
+        use windows::core::PCWSTR;
+        use windows::Win32::Storage::FileSystem::{
+            GetFileAttributesW, SetFileAttributesW, FILE_ATTRIBUTE_HIDDEN,
+            FILE_FLAGS_AND_ATTRIBUTES,
+        };
+
+        let wide_path: Vec<u16> = path.as_os_str().encode_wide().chain(Some(0)).collect();
+        unsafe {
+            let attributes = GetFileAttributesW(PCWSTR(wide_path.as_ptr()));
+            if attributes == u32::MAX {
+                return Err(std::io::Error::last_os_error().to_string());
+            }
+            let attributes = if hidden {
+                attributes | FILE_ATTRIBUTE_HIDDEN.0
+            } else {
+                attributes & !FILE_ATTRIBUTE_HIDDEN.0
+            };
+            SetFileAttributesW(
+                PCWSTR(wide_path.as_ptr()),
+                FILE_FLAGS_AND_ATTRIBUTES(attributes),
+            )
+            .map_err(|error| error.to_string())
+        }
+    }
+
+    fn native_context_menu_items(
+        &self,
+        path: &str,
+        is_background: bool,
+    ) -> Result<Vec<crate::models::WinMenuItem>, String> {
+        crate::commands::system::get_native_context_menu_items(path.to_string(), is_background)
+            .map_err(|error| error.to_string())
+    }
+
+    fn execute_native_context_menu_item(
+        &self,
+        path: &str,
+        id: i32,
+        is_background: bool,
+    ) -> Result<(), String> {
+        crate::commands::system::execute_native_menu_item(path.to_string(), id, is_background)
+            .map_err(|error| error.to_string())
+    }
+
     fn is_network_path(&self, path: &std::path::Path) -> bool {
         super::hardware::is_network_path(path)
     }

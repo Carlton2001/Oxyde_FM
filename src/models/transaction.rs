@@ -17,6 +17,18 @@ pub struct TransactionDetails {
     pub old_path: Option<String>,
     pub new_path: Option<String>,
     pub created_files: Option<Vec<String>>,
+    #[serde(default)]
+    pub created_dirs: Option<Vec<String>>,
+    #[serde(default)]
+    pub replaced_files: Option<Vec<(String, String)>>,
+    #[serde(default)]
+    pub moved_files: Option<Vec<(String, String)>>,
+    #[serde(default)]
+    pub moved_dirs: Option<Vec<(String, String)>>,
+    #[serde(default)]
+    pub copied_files: Option<Vec<(String, String)>>,
+    #[serde(default)]
+    pub copied_file_hashes: Option<Vec<(String, String)>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -116,17 +116,7 @@ pub fn render_settings_panel(
                             theme,
                             |this, cx| {
                                 this.show_hidden = !this.show_hidden;
-                                let pane_paths: Vec<(String, String)> = {
-                                    let mut v = Vec::new();
-                                    this.state.layout.visit_panes(&mut |p| {
-                                        v.push((p.id.clone(), p.active_tab().path.clone()));
-                                    });
-                                    v
-                                };
-                                for (pid, path) in pane_paths {
-                                    this.load_path(&pid, path, cx);
-                                }
-                                this.state.refresh_sidebar();
+                                this.refresh_all_tabs(cx);
                             },
                         ))
                         // ── Fichiers système ───────────────────────────────────
@@ -139,17 +129,7 @@ pub fn render_settings_panel(
                             theme,
                             |this, cx| {
                                 this.show_system = !this.show_system;
-                                let pane_paths: Vec<(String, String)> = {
-                                    let mut v = Vec::new();
-                                    this.state.layout.visit_panes(&mut |p| {
-                                        v.push((p.id.clone(), p.active_tab().path.clone()));
-                                    });
-                                    v
-                                };
-                                for (pid, path) in pane_paths {
-                                    this.load_path(&pid, path, cx);
-                                }
-                                this.state.refresh_sidebar();
+                                this.refresh_all_tabs(cx);
                             },
                         ))
                         // ── Aperçus médias ─────────────────────────────────────

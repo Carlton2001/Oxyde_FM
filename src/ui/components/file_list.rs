@@ -5,7 +5,7 @@ use crate::ui::components::scrollbar::{render_scrollbar, ScrollbarAxis, ZED_TRAC
 use crate::ui::components::tooltip::Tooltip;
 use crate::ui::style::{format_date, format_size, ROW_HEIGHT};
 use crate::ui::theme::{OxydeTheme, ThemeContext};
-use crate::ui::workspace::{SortColumn, SortDirection};
+use crate::ui::workspace::{SortColumn, SortDirection, TabLoadStatus};
 use gpui::prelude::*;
 use gpui::*;
 use oxyde_lib::models::FileEntry;
@@ -41,6 +41,17 @@ pub fn render_file_list(
     let active_tab = pane.active_tab();
     let files = active_tab.filtered_files().to_vec();
     let count = files.len() as f32;
+    let empty_message = if !files.is_empty() {
+        None
+    } else if !active_tab.files.is_empty() {
+        Some("Aucun élément ne correspond aux filtres.".to_string())
+    } else {
+        match &active_tab.load_status {
+            TabLoadStatus::Loading => Some("Chargement du dossier…".to_string()),
+            TabLoadStatus::Ready => Some("Ce dossier est vide.".to_string()),
+            TabLoadStatus::Error(message) => Some(message.clone()),
+        }
+    };
 
     let pane_size = view.pane_sizes.get(&pane_id).cloned().unwrap_or(Size {
         width: view.list_width,
@@ -241,6 +252,8 @@ pub fn render_file_list(
                                                                   scroll_handle: UniformListScrollHandle::new(),
                                                                   width: px(0.0),
                                     open_left: false,
+                                    hovered_item: None,
+                                    native_request_id: None,
                                                               });
                                                               cx.notify();
                                                           });
@@ -396,6 +409,8 @@ pub fn render_file_list(
                                               scroll_handle: UniformListScrollHandle::new(),
                                               width: px(0.0),
                                     open_left: false,
+                                    hovered_item: None,
+                                    native_request_id: None,
                                           });
                                           cx.notify();
                                       });
@@ -604,6 +619,21 @@ pub fn render_file_list(
                 }
             }))
     );
+
+    if let Some(message) = empty_message {
+        container = container.child(
+            div()
+                .absolute()
+                .top(px(ROW_HEIGHT + 18.0))
+                .left_0()
+                .right_0()
+                .flex()
+                .justify_center()
+                .text_color(theme.text_muted)
+                .text_size(px(13.0))
+                .child(message),
+        );
+    }
 
     container
 }

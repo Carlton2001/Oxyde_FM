@@ -107,6 +107,38 @@ impl TextInput {
         self.blink_cursors(epoch, cx);
     }
 
+    fn byte_offset_for_utf16(&self, utf16_offset: usize) -> usize {
+        let mut units = 0;
+        for (byte_offset, character) in self.content.char_indices() {
+            if units >= utf16_offset {
+                return byte_offset;
+            }
+            let next_units = units + character.len_utf16();
+            if utf16_offset < next_units {
+                return byte_offset;
+            }
+            units = next_units;
+        }
+        self.content.len()
+    }
+
+    fn range_from_utf16(&self, range: std::ops::Range<usize>) -> std::ops::Range<usize> {
+        self.byte_offset_for_utf16(range.start)..self.byte_offset_for_utf16(range.end)
+    }
+
+    fn utf16_offset_for_byte(&self, byte_offset: usize) -> usize {
+        let byte_offset = byte_offset.min(self.content.len());
+        let boundary = (0..=byte_offset)
+            .rev()
+            .find(|offset| self.content.is_char_boundary(*offset))
+            .unwrap_or(0);
+        self.content[..boundary].encode_utf16().count()
+    }
+
+    fn range_to_utf16(&self, range: std::ops::Range<usize>) -> std::ops::Range<usize> {
+        self.utf16_offset_for_byte(range.start)..self.utf16_offset_for_byte(range.end)
+    }
+
     fn backspace(&mut self, _: &Backspace, window: &mut Window, cx: &mut Context<Self>) {
         if self.selected_range.is_empty() && self.selected_range.start > 0 {
             let prev = self
@@ -190,11 +222,13 @@ impl TextInput {
 impl EntityInputHandler for TextInput {
     fn text_for_range(
         &mut self,
-        range: std::ops::Range<usize>,
-        _: &mut Option<std::ops::Range<usize>>,
+        range_utf16: std::ops::Range<usize>,
+        actual_range: &mut Option<std::ops::Range<usize>>,
         _: &mut Window,
         _: &mut Context<Self>,
     ) -> Option<String> {
+        let range = self.range_from_utf16(range_utf16);
+        actual_range.replace(self.range_to_utf16(range.clone()));
         self.content.get(range).map(|s| s.to_string())
     }
     fn selected_text_range(
@@ -204,7 +238,7 @@ impl EntityInputHandler for TextInput {
         _: &mut Context<Self>,
     ) -> Option<UTF16Selection> {
         Some(UTF16Selection {
-            range: self.selected_range.clone(),
+            range: self.range_to_utf16(self.selected_range.clone()),
             reversed: false,
         })
     }
@@ -218,12 +252,14 @@ impl EntityInputHandler for TextInput {
     fn unmark_text(&mut self, _: &mut Window, _: &mut Context<Self>) {}
     fn replace_text_in_range(
         &mut self,
-        range: Option<std::ops::Range<usize>>,
+        range_utf16: Option<std::ops::Range<usize>>,
         new_text: &str,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let range = range.unwrap_or(self.selected_range.clone());
+        let range = range_utf16
+            .map(|range| self.range_from_utf16(range))
+            .unwrap_or(self.selected_range.clone());
         self.content.replace_range(range.clone(), new_text);
         let new_pos = range.start + new_text.len();
         self.selected_range = new_pos..new_pos;
@@ -242,12 +278,19 @@ impl EntityInputHandler for TextInput {
     }
     fn bounds_for_range(
         &mut self,
-        _: std::ops::Range<usize>,
+        range_utf16: std::ops::Range<usize>,
         bounds: Bounds<Pixels>,
         _: &mut Window,
         _: &mut Context<Self>,
     ) -> Option<Bounds<Pixels>> {
-        Some(bounds)
+        let Some(line) = self.last_layout.as_ref() else {
+            return Some(bounds);
+        };
+        let range = self.range_from_utf16(range_utf16);
+        Some(Bounds::from_corners(
+            point(bounds.left() + line.x_for_index(range.start), bounds.top()),
+            point(bounds.left() + line.x_for_index(range.end), bounds.bottom()),
+        ))
     }
     fn character_index_for_point(
         &mut self,
@@ -257,7 +300,8 @@ impl EntityInputHandler for TextInput {
     ) -> Option<usize> {
         let line = self.last_layout.as_ref()?;
         let bounds = self.last_bounds.as_ref()?;
-        Some(line.closest_index_for_x(point.x - bounds.left()))
+        let byte_index = line.closest_index_for_x(point.x - bounds.left());
+        Some(self.utf16_offset_for_byte(byte_index))
     }
 }
 

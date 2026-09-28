@@ -364,6 +364,7 @@ pub fn render_top_bar(
                                                                         id: "breadcrumb-dropdown".into(),
                                                                         h_app: handle.clone(),
                                                                         items,
+                                                                        hovered_item: None,
                                                                         scroll_handle: view.breadcrumb_scroll.clone(),
                                                                         width: None,
                                                                         max_height: 360.0,
@@ -371,11 +372,13 @@ pub fn render_top_bar(
                                                                         on_close: {
                                                                             let h = handle.clone();
                                                                             std::rc::Rc::new(move |_, app| {
-                                                                                h.update(app, |this, _| {
+                                                                                h.update(app, |this, cx| {
                                                                                     this.breadcrumb_menu = None;
+                                                                                    cx.notify();
                                                                                 });
                                                                             })
                                                                         },
+                                                                        on_outside: None,
                                                                         on_drag: std::rc::Rc::new(|this, tid, vh, ch, _| {
                                                                            this.drag_target = Some(crate::ui::app::DragTarget::BreadcrumbV {
                                                                                viewport_h: vh,

@@ -393,6 +393,8 @@ impl OxydeApp {
                                     scroll_handle: gpui::UniformListScrollHandle::new(),
                                     width: px(0.0),
                                     open_left: false,
+                                    hovered_item: None,
+                                    native_request_id: None,
                                 });
                                 cx.notify();
                             });
@@ -528,6 +530,7 @@ impl OxydeApp {
                                                 this.drop_target_idx = None;
                                                 this.drop_target_pane = None;
                                                 this.dragging_tab = None;
+                                                this.reconcile_watchers();
                                                 cx.notify();
                                             });
                                         }
@@ -591,6 +594,7 @@ impl OxydeApp {
                                                 this.drop_target_idx = None;
                                                 this.drop_target_pane = None;
                                                 this.dragging_tab = None;
+                                                this.reconcile_watchers();
                                                 cx.notify();
                                             });
                                         }
@@ -681,6 +685,7 @@ impl OxydeApp {
                                     this.drop_target_idx = None;
                                     this.drop_target_pane = None;
                                     this.dragging_tab = None;
+                                    this.reconcile_watchers();
                                     cx.notify();
                                 });
                             }
@@ -733,6 +738,7 @@ impl OxydeApp {
                                 this.drop_target_idx = None;
                                 this.drop_target_pane = None;
                                 this.dragging_tab = None;
+                                this.reconcile_watchers();
                                 cx.notify();
                             });
                         }
@@ -846,6 +852,7 @@ impl OxydeApp {
                                         this.dragging_tab = None;
                                         this.drop_target_idx = None;
                                         this.drop_target_pane = None;
+                                        this.reconcile_watchers();
                                         cx.notify();
                                     });
                                 }
@@ -892,6 +899,7 @@ impl OxydeApp {
                                         this.dragging_tab = None;
                                         this.drop_target_idx = None;
                                         this.drop_target_pane = None;
+                                        this.reconcile_watchers();
                                         cx.notify();
                                     });
                                 }
@@ -938,6 +946,7 @@ impl OxydeApp {
                                         this.dragging_tab = None;
                                         this.drop_target_idx = None;
                                         this.drop_target_pane = None;
+                                        this.reconcile_watchers();
                                         cx.notify();
                                     });
                                 }
@@ -984,6 +993,7 @@ impl OxydeApp {
                                         this.dragging_tab = None;
                                         this.drop_target_idx = None;
                                         this.drop_target_pane = None;
+                                        this.reconcile_watchers();
                                         cx.notify();
                                     });
                                 }
