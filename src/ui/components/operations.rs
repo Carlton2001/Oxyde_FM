@@ -59,6 +59,11 @@ pub fn render_operations_panel(
     let theme = *cx.theme();
     let operations = app.file_ops.list_operations();
     let title = cx.i18n().text(Message::OpsTitle);
+    let has_finished_operations = operations
+        .iter()
+        .any(|operation| is_final(&operation.status));
+    let operations_manager = app.file_ops.clone();
+    let panel_handle = handle.clone();
     let mut panel = div()
         .id("operations-panel")
         .absolute()
@@ -103,27 +108,59 @@ pub fn render_operations_panel(
                 )
                 .child(
                     div()
-                        .id("operations-panel-close")
-                        .w(px(24.0))
-                        .h(px(24.0))
                         .flex()
                         .items_center()
-                        .justify_center()
-                        .rounded_sm()
-                        .hover(|style| style.bg(theme.control_hover))
-                        .tooltip(Tooltip::text(cx.i18n().text(Message::OpsHidePanel)))
+                        .gap(px(4.0))
+                        .when(has_finished_operations, |actions| {
+                            let manager = operations_manager.clone();
+                            let handle = panel_handle.clone();
+                            actions.child(
+                                div()
+                                    .id("operations-panel-clear")
+                                    .w(px(24.0))
+                                    .h(px(24.0))
+                                    .flex()
+                                    .items_center()
+                                    .justify_center()
+                                    .rounded_sm()
+                                    .hover(|style| style.bg(theme.control_hover))
+                                    .tooltip(Tooltip::text(cx.i18n().text(Message::OpsDismissAll)))
+                                    .child(
+                                        svg()
+                                            .path("icons/broom.svg")
+                                            .text_color(theme.icon_muted)
+                                            .size_4(),
+                                    )
+                                    .on_mouse_down(MouseButton::Left, move |_, _, cx| {
+                                        manager.dismiss_finished_operations();
+                                        handle.update(cx, |_, cx| cx.notify());
+                                    }),
+                            )
+                        })
                         .child(
-                            svg()
-                                .path("icons/chevron-down.svg")
-                                .text_color(theme.icon_muted)
-                                .size_4(),
-                        )
-                        .on_mouse_down(MouseButton::Left, move |_, _, cx| {
-                            handle.update(cx, |this, cx| {
-                                this.operations_panel_open = false;
-                                cx.notify();
-                            });
-                        }),
+                            div()
+                                .id("operations-panel-close")
+                                .w(px(24.0))
+                                .h(px(24.0))
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .rounded_sm()
+                                .hover(|style| style.bg(theme.control_hover))
+                                .tooltip(Tooltip::text(cx.i18n().text(Message::OpsHidePanel)))
+                                .child(
+                                    svg()
+                                        .path("icons/chevron-down.svg")
+                                        .text_color(theme.icon_muted)
+                                        .size_4(),
+                                )
+                                .on_mouse_down(MouseButton::Left, move |_, _, cx| {
+                                    handle.update(cx, |this, cx| {
+                                        this.operations_panel_open = false;
+                                        cx.notify();
+                                    });
+                                }),
+                        ),
                 ),
         );
     if operations.is_empty() {
@@ -137,8 +174,15 @@ pub fn render_operations_panel(
         let cards = operations
             .into_iter()
             .rev()
-            .map(|operation| {
-                render_operation_card(app, operation, app.handle.clone().expect("handle set"), cx)
+            .enumerate()
+            .map(|(index, operation)| {
+                render_operation_card(
+                    app,
+                    operation,
+                    index % 2 == 1,
+                    app.handle.clone().expect("handle set"),
+                    cx,
+                )
             })
             .collect::<Vec<_>>();
         panel = panel.child(
@@ -206,11 +250,15 @@ fn speed_graph(samples: Vec<u64>, accent: Hsla) -> impl IntoElement {
                 let y = bottom - (samples[0] as f64 / max_speed) as f32 * (bottom - top);
                 vec![point(px(left), px(y)), point(px(right), px(y))]
             } else {
-                samples.iter().enumerate().map(|(index, speed)| {
-                    let x = left + (right - left) * index as f32 / (samples.len() - 1) as f32;
-                    let y = bottom - (*speed as f64 / max_speed) as f32 * (bottom - top);
-                    point(px(x), px(y))
-                }).collect()
+                samples
+                    .iter()
+                    .enumerate()
+                    .map(|(index, speed)| {
+                        let x = left + (right - left) * index as f32 / (samples.len() - 1) as f32;
+                        let y = bottom - (*speed as f64 / max_speed) as f32 * (bottom - top);
+                        point(px(x), px(y))
+                    })
+                    .collect()
             };
             let mut area = PathBuilder::fill();
             area.move_to(point(px(left), px(bottom)));
@@ -239,6 +287,7 @@ fn speed_graph(samples: Vec<u64>, accent: Hsla) -> impl IntoElement {
 fn render_operation_card(
     app: &OxydeApp,
     operation: FileOperation,
+    alternate_background: bool,
     handle: Entity<OxydeApp>,
     cx: &mut Context<OxydeApp>,
 ) -> AnyElement {
@@ -264,8 +313,11 @@ fn render_operation_card(
     };
     let final_state = is_final(&operation.status);
     let unmanaged_extraction = matches!(operation.op_type, FileOpType::Extract)
-        && operation.sources.first().is_some_and(|path| !path.extension()
-            .is_some_and(|extension| extension.eq_ignore_ascii_case("zip")))
+        && operation.sources.first().is_some_and(|path| {
+            !path
+                .extension()
+                .is_some_and(|extension| extension.eq_ignore_ascii_case("zip"))
+        })
         && matches!(operation.status, OpStatus::Running | OpStatus::Paused);
     let source = operation
         .current_file
@@ -317,10 +369,7 @@ fn render_operation_card(
         (operation.bytes_per_second > 0).then_some(operation.bytes_per_second)
     };
     let speed = displayed_speed.map(|bytes_per_second| {
-        let value = format!(
-            "{}/s",
-            format_size(bytes_per_second, false, true, language)
-        );
+        let value = format!("{}/s", format_size(bytes_per_second, false, true, language));
         if final_state {
             let mut args = FluentArgs::new();
             args.set("speed", value);
@@ -375,7 +424,12 @@ fn render_operation_card(
                 .rounded_sm()
                 .hover(|style| style.bg(theme.control_hover))
                 .tooltip(Tooltip::text(i18n.text(Message::OpsDismiss)))
-                .child(svg().path("icons/x.svg").text_color(theme.icon_muted).size_3())
+                .child(
+                    svg()
+                        .path("icons/x.svg")
+                        .text_color(theme.icon_muted)
+                        .size_3(),
+                )
                 .on_mouse_down(MouseButton::Left, move |_, _, cx| {
                     dismiss_manager.dismiss_operation(&dismiss_id);
                     dismiss_handle.update(cx, |_, cx| cx.notify());
@@ -384,8 +438,16 @@ fn render_operation_card(
     } else if !unmanaged_extraction {
         let pause_handle = handle.clone();
         let turbo_handle = handle.clone();
-        let pause_icon = if paused { "icons/play.svg" } else { "icons/pause.svg" };
-        let turbo_icon = if turbo { "icons/zap.svg" } else { "icons/zap-off.svg" };
+        let pause_icon = if paused {
+            "icons/play.svg"
+        } else {
+            "icons/pause.svg"
+        };
+        let turbo_icon = if turbo {
+            "icons/zap.svg"
+        } else {
+            "icons/zap-off.svg"
+        };
         status_row = status_row
             .child(
                 div()
@@ -423,7 +485,16 @@ fn render_operation_card(
                     } else {
                         Message::OpsNormal
                     })))
-                    .child(svg().path(turbo_icon).text_color(if turbo { theme.accent } else { theme.text_muted }).size_4())
+                    .child(
+                        svg()
+                            .path(turbo_icon)
+                            .text_color(if turbo {
+                                theme.accent
+                            } else {
+                                theme.text_muted
+                            })
+                            .size_4(),
+                    )
                     .on_mouse_down(MouseButton::Left, move |_, _, cx| {
                         turbo_manager.set_turbo(&turbo_id, !turbo);
                         turbo_handle.update(cx, |_, cx| cx.notify());
@@ -440,7 +511,12 @@ fn render_operation_card(
                     .rounded_sm()
                     .hover(|style| style.bg(theme.control_hover))
                     .tooltip(Tooltip::text(i18n.text(Message::OpsStop)))
-                    .child(svg().path("icons/x.svg").text_color(theme.text_muted).size_4())
+                    .child(
+                        svg()
+                            .path("icons/x.svg")
+                            .text_color(theme.text_muted)
+                            .size_4(),
+                    )
                     .on_mouse_down(MouseButton::Left, move |_, _, cx| {
                         cancel_manager.cancel_operation(&cancel_id);
                         handle.update(cx, |_, cx| cx.notify());
@@ -453,6 +529,11 @@ fn render_operation_card(
         .p(px(12.0))
         .border_b_1()
         .border_color(theme.border)
+        .bg(if alternate_background {
+            theme.background
+        } else {
+            theme.menu_surface
+        })
         .flex()
         .flex_col()
         .gap(px(5.0))
@@ -469,7 +550,12 @@ fn render_operation_card(
                         .gap(px(6.0))
                         .child(svg().path(icon).text_color(theme.text).size_4().flex_none())
                         .child(i18n.text(kind))
-                        .child(div().text_color(theme.text_muted).overflow_hidden().child(items)),
+                        .child(
+                            div()
+                                .text_color(theme.text_muted)
+                                .overflow_hidden()
+                                .child(items),
+                        ),
                 )
                 .child(status_row),
         );
@@ -503,10 +589,19 @@ fn render_operation_card(
                 .items_center()
                 .justify_between()
                 .gap(px(8.0))
-                .child(div().min_w_0().overflow_hidden().child(progress_text.unwrap_or_default()))
-                .child(div().flex_none().child(
-                    percentage.map(|value| format!("{value}%")).unwrap_or_default(),
-                )),
+                .child(
+                    div()
+                        .min_w_0()
+                        .overflow_hidden()
+                        .child(progress_text.unwrap_or_default()),
+                )
+                .child(
+                    div().flex_none().child(
+                        percentage
+                            .map(|value| format!("{value}%"))
+                            .unwrap_or_default(),
+                    ),
+                ),
         );
     }
     let temporal = if final_state {
@@ -530,7 +625,11 @@ fn render_operation_card(
                         i18n.text(Message::OpsSpeedWaiting).to_string()
                     }
                 }))
-                .child(div().text_color(theme.text_muted).child(temporal.unwrap_or_default())),
+                .child(
+                    div()
+                        .text_color(theme.text_muted)
+                        .child(temporal.unwrap_or_default()),
+                ),
         );
     }
     if let OpStatus::Error(error) = &operation.status {
@@ -538,12 +637,17 @@ fn render_operation_card(
     }
     if let Some(percentage) = percentage {
         body = body.child(
-            div().w_full().h(px(4.0)).overflow_hidden().bg(theme.control_hover).child(
-                div()
-                    .w(relative(percentage as f32 / 100.0))
-                    .h_full()
-                    .bg(theme.accent),
-            ),
+            div()
+                .w_full()
+                .h(px(4.0))
+                .overflow_hidden()
+                .bg(theme.control_hover)
+                .child(
+                    div()
+                        .w(relative(percentage as f32 / 100.0))
+                        .h_full()
+                        .bg(theme.accent.opacity(0.48)),
+                ),
         );
     }
     card.child(body).into_any_element()

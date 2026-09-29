@@ -208,8 +208,8 @@ impl RenderOnce for GenericDropdown {
             };
             let chevron_width = if item.has_submenu { 14.0 } else { 0.0 };
             // Row padding (16) + optional icon slot + optional submenu arrow.
-            calculated_width = calculated_width
-                .max(line.width.as_f32() + 16.0 + icon_width + chevron_width);
+            calculated_width =
+                calculated_width.max(line.width.as_f32() + 16.0 + icon_width + chevron_width);
         }
 
         let width = self.width.unwrap_or(calculated_width);

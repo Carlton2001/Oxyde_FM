@@ -107,7 +107,9 @@ impl RenderOnce for Button {
                 if filled {
                     style.bg(theme.accent).border_color(theme.accent)
                 } else {
-                    style.bg(theme.hover).border_color(theme.accent.opacity(0.5))
+                    style
+                        .bg(theme.hover)
+                        .border_color(theme.accent.opacity(0.5))
                 }
             })
             .active(|style| {

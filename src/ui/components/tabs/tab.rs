@@ -1,7 +1,7 @@
+use crate::ui::theme::ThemeContext;
 use gpui::prelude::*;
 use gpui::*;
 use std::cmp::Ordering;
-use crate::ui::theme::ThemeContext;
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum TabPosition {
@@ -109,10 +109,7 @@ impl Tab {
         self
     }
 
-    pub fn on_bounds(
-        mut self,
-        f: impl Fn(Bounds<Pixels>, &mut App) + 'static,
-    ) -> Self {
+    pub fn on_bounds(mut self, f: impl Fn(Bounds<Pixels>, &mut App) + 'static) -> Self {
         self.on_bounds = Some(Box::new(f));
         self
     }
@@ -282,9 +279,12 @@ impl RenderOnce for Tab {
 
         if let Some(on_bounds) = self.on_bounds {
             container = container.child(
-                canvas(|bounds, _, _| bounds, move |_, bounds, _, cx| {
-                    on_bounds(bounds, cx);
-                })
+                canvas(
+                    |bounds, _, _| bounds,
+                    move |_, bounds, _, cx| {
+                        on_bounds(bounds, cx);
+                    },
+                )
                 .absolute()
                 .size_full(),
             );

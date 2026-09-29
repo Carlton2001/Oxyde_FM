@@ -1313,26 +1313,48 @@ impl OxydeApp {
     }
 
     pub fn execute_compress_selected(&mut self, cx: &mut Context<Self>) {
-        let Some(pane) = self.state.layout.find_pane(&self.state.active_pane_id) else { return; };
-        let paths: Vec<std::path::PathBuf> = pane.active_tab().selected_paths.iter()
+        let Some(pane) = self.state.layout.find_pane(&self.state.active_pane_id) else {
+            return;
+        };
+        let paths: Vec<std::path::PathBuf> = pane
+            .active_tab()
+            .selected_paths
+            .iter()
             .map(std::path::PathBuf::from)
-            .filter(|path| oxyde_lib::utils::archive::split_virtual_path(&path.to_string_lossy()).is_none())
+            .filter(|path| {
+                oxyde_lib::utils::archive::split_virtual_path(&path.to_string_lossy()).is_none()
+            })
             .collect();
-        let Some(first) = paths.first() else { return; };
+        let Some(first) = paths.first() else {
+            return;
+        };
         let destination = first.with_extension("zip");
-        self.queue_archive_operation(oxyde_lib::systems::file_ops::FileOpType::Compress, paths, destination, cx);
+        self.queue_archive_operation(
+            oxyde_lib::systems::file_ops::FileOpType::Compress,
+            paths,
+            destination,
+            cx,
+        );
     }
 
     pub fn execute_extract_archive(&mut self, path: String, cx: &mut Context<Self>) {
         let source = std::path::PathBuf::from(path);
-        let Some(parent) = source.parent() else { return; };
+        let Some(parent) = source.parent() else {
+            return;
+        };
         let name = source.file_name().unwrap_or_default().to_string_lossy();
         let stem = [".tar.gz", ".tar.xz", ".tar.zst", ".tar.bz2"]
-            .iter().find_map(|suffix| name.strip_suffix(suffix))
+            .iter()
+            .find_map(|suffix| name.strip_suffix(suffix))
             .or_else(|| source.file_stem().and_then(|stem| stem.to_str()))
             .unwrap_or("archive");
         let destination = parent.join(stem);
-        self.queue_archive_operation(oxyde_lib::systems::file_ops::FileOpType::Extract, vec![source], destination, cx);
+        self.queue_archive_operation(
+            oxyde_lib::systems::file_ops::FileOpType::Extract,
+            vec![source],
+            destination,
+            cx,
+        );
     }
 
     fn queue_archive_operation(
@@ -1342,18 +1364,28 @@ impl OxydeApp {
         destination: std::path::PathBuf,
         cx: &mut Context<Self>,
     ) {
-        let Some(handle) = self.handle.clone() else { return; };
+        let Some(handle) = self.handle.clone() else {
+            return;
+        };
         cx.spawn(move |_, cx: &mut AsyncApp| {
             let mut cx = cx.clone();
             async move {
                 let runtime = tokio::runtime::Handle::current();
                 handle.update(&mut cx, |this, cx| {
-                    let operation = oxyde_lib::systems::file_ops::FileOperation::new(kind, sources, Some(destination), None);
-                    let id = this.file_ops.queue_operation_on(&runtime, this.history.clone(), operation);
+                    let operation = oxyde_lib::systems::file_ops::FileOperation::new(
+                        kind,
+                        sources,
+                        Some(destination),
+                        None,
+                    );
+                    let id =
+                        this.file_ops
+                            .queue_operation_on(&runtime, this.history.clone(), operation);
                     this.watch_file_operation(id, cx);
                 });
             }
-        }).detach();
+        })
+        .detach();
     }
 
     /// Recompute `drag_copy_mode` from modifier override and drive-based default.
@@ -1526,6 +1558,14 @@ impl OxydeApp {
                             handle.update(&mut cx, |this, cx| {
                                 this.state.refresh_sidebar();
                                 this.reconcile_watchers();
+                                let operations = this.file_ops.list_operations();
+                                if !operations.is_empty()
+                                    && operations.iter().all(|operation| {
+                                        matches!(operation.status, OpStatus::Completed)
+                                    })
+                                {
+                                    this.operations_panel_open = false;
+                                }
                                 cx.notify();
                             });
                             break;

@@ -490,6 +490,9 @@ impl FileOperationManager {
                     !locked.created_files.is_empty()
                         || !locked.created_dirs.is_empty()
                         || !locked.replaced_files.is_empty()
+                        // Keep an overwrite-only copy as an undo-history
+                        // barrier so Undo cannot accidentally target an older action.
+                        || !locked.overwritten_files.is_empty()
                 }
                 FileOpType::Move => {
                     !locked.created_files.is_empty()
@@ -757,7 +760,11 @@ impl FileOperationManager {
                     total_bytes += size;
                     total_files += 1;
                     let replace_existing = dest_path.exists();
-                    files_to_process.push((entry.path().to_path_buf(), dest_path, replace_existing));
+                    files_to_process.push((
+                        entry.path().to_path_buf(),
+                        dest_path,
+                        replace_existing,
+                    ));
                 }
             } else {
                 let dest_path = dest_root.clone();
@@ -942,7 +949,11 @@ impl FileOperationManager {
                     }
                     .map_err(|e| format!("Failed to open {:?}: {e}", dest))?;
                     if *replace_existing {
-                        operation.lock().unwrap().overwritten_files.push(dest.clone());
+                        operation
+                            .lock()
+                            .unwrap()
+                            .overwritten_files
+                            .push(dest.clone());
                     } else {
                         partial_guard = Some(PendingFile(dest.clone()));
                     }
@@ -1461,7 +1472,11 @@ impl FileOperationManager {
     fn archive_checkpoint(op: &Arc<Mutex<FileOperation>>) -> Result<(), String> {
         let (cancel, pause, turbo) = {
             let locked = op.lock().unwrap();
-            (locked.cancel_flag.clone(), locked.pause_flag.clone(), locked.turbo_flag.clone())
+            (
+                locked.cancel_flag.clone(),
+                locked.pause_flag.clone(),
+                locked.turbo_flag.clone(),
+            )
         };
         while pause.load(Ordering::Relaxed) {
             if cancel.load(Ordering::Relaxed) {
@@ -1484,10 +1499,14 @@ impl FileOperationManager {
         let mut locked = op.lock().unwrap();
         locked.processed_bytes += bytes;
         let now = std::time::Instant::now();
-        let previous = locked.speed_sample_at.unwrap_or_else(|| locked.started_at.unwrap_or(now));
+        let previous = locked
+            .speed_sample_at
+            .unwrap_or_else(|| locked.started_at.unwrap_or(now));
         let elapsed = now.duration_since(previous);
         if elapsed >= std::time::Duration::from_millis(500) {
-            let bytes = locked.processed_bytes.saturating_sub(locked.speed_sample_bytes);
+            let bytes = locked
+                .processed_bytes
+                .saturating_sub(locked.speed_sample_bytes);
             let current_speed = (bytes as f64 / elapsed.as_secs_f64()) as u64;
             locked.bytes_per_second = current_speed;
             locked.record_speed(current_speed);
@@ -1538,9 +1557,15 @@ impl FileOperationManager {
                 let item = item.map_err(|error| error.to_string())?;
                 let metadata = item.metadata().map_err(|error| error.to_string())?;
                 if item.file_type().is_symlink() {
-                    return Err(format!("Symbolic links cannot be compressed: {}", item.path().display()));
+                    return Err(format!(
+                        "Symbolic links cannot be compressed: {}",
+                        item.path().display()
+                    ));
                 }
-                let relative = item.path().strip_prefix(source).map_err(|error| error.to_string())?;
+                let relative = item
+                    .path()
+                    .strip_prefix(source)
+                    .map_err(|error| error.to_string())?;
                 // Joining an empty relative path to a file name can leave a trailing
                 // separator on Windows. ZIP readers then interpret the file as a directory.
                 let archive_path = if relative.as_os_str().is_empty() {
@@ -1564,26 +1589,42 @@ impl FileOperationManager {
         }
         let temp = parent.join(format!(".oxyde-{}.zip.tmp", Uuid::new_v4()));
         let guard = PendingFile(temp.clone());
-        let file = std::fs::OpenOptions::new().write(true).create_new(true).open(&temp).map_err(|error| error.to_string())?;
+        let file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temp)
+            .map_err(|error| error.to_string())?;
         let mut writer = zip::ZipWriter::new(std::io::BufWriter::new(file));
         let mut buffer = [0u8; 256 * 1024];
         for (path, name, is_dir) in entries {
             Self::archive_checkpoint(op)?;
             op.lock().unwrap().current_file = Some(path.to_string_lossy().into_owned());
-            let level = if op.lock().unwrap().turbo_flag.load(Ordering::Relaxed) { 1 } else { 6 };
+            let level = if op.lock().unwrap().turbo_flag.load(Ordering::Relaxed) {
+                1
+            } else {
+                6
+            };
             let options = zip::write::SimpleFileOptions::default()
                 .compression_method(zip::CompressionMethod::Deflated)
                 .compression_level(Some(level));
             if is_dir {
-                writer.add_directory(format!("{name}/"), options).map_err(|error| error.to_string())?;
+                writer
+                    .add_directory(format!("{name}/"), options)
+                    .map_err(|error| error.to_string())?;
             } else {
-                writer.start_file(name, options).map_err(|error| error.to_string())?;
+                writer
+                    .start_file(name, options)
+                    .map_err(|error| error.to_string())?;
                 let mut input = std::fs::File::open(&path).map_err(|error| error.to_string())?;
                 loop {
                     Self::archive_checkpoint(op)?;
                     let count = input.read(&mut buffer).map_err(|error| error.to_string())?;
-                    if count == 0 { break; }
-                    writer.write_all(&buffer[..count]).map_err(|error| error.to_string())?;
+                    if count == 0 {
+                        break;
+                    }
+                    writer
+                        .write_all(&buffer[..count])
+                        .map_err(|error| error.to_string())?;
                     Self::archive_progress(op, count as u64);
                 }
             }
@@ -1600,17 +1641,26 @@ impl FileOperationManager {
                 }
                 Err(_) => {
                     // Filesystems without hard links still get an exclusive publish.
-                    let output = std::fs::OpenOptions::new().write(true).create_new(true).open(&final_target);
+                    let output = std::fs::OpenOptions::new()
+                        .write(true)
+                        .create_new(true)
+                        .open(&final_target);
                     match output {
                         Ok(mut output) => {
                             let mut partial = PendingFile(final_target.clone());
-                            let mut input = std::fs::File::open(&temp).map_err(|error| error.to_string())?;
+                            let mut input =
+                                std::fs::File::open(&temp).map_err(|error| error.to_string())?;
                             let mut buffer = [0u8; 256 * 1024];
                             loop {
                                 Self::archive_checkpoint(op)?;
-                                let count = input.read(&mut buffer).map_err(|error| error.to_string())?;
-                                if count == 0 { break; }
-                                output.write_all(&buffer[..count]).map_err(|error| error.to_string())?;
+                                let count =
+                                    input.read(&mut buffer).map_err(|error| error.to_string())?;
+                                if count == 0 {
+                                    break;
+                                }
+                                output
+                                    .write_all(&buffer[..count])
+                                    .map_err(|error| error.to_string())?;
                             }
                             output.sync_all().map_err(|error| error.to_string())?;
                             partial.0 = PathBuf::new();
@@ -1648,7 +1698,11 @@ impl FileOperationManager {
         }
         struct PendingDirectory(PathBuf);
         impl Drop for PendingDirectory {
-            fn drop(&mut self) { if !self.0.as_os_str().is_empty() { let _ = std::fs::remove_dir_all(&self.0); } }
+            fn drop(&mut self) {
+                if !self.0.as_os_str().is_empty() {
+                    let _ = std::fs::remove_dir_all(&self.0);
+                }
+            }
         }
         let mut guard = PendingDirectory(target.clone());
         {
@@ -1656,7 +1710,10 @@ impl FileOperationManager {
             locked.destination = Some(target.clone());
             locked.status = OpStatus::Running;
         }
-        if source.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("zip")) {
+        if source
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("zip"))
+        {
             let file = std::fs::File::open(source).map_err(|error| error.to_string())?;
             let mut archive = zip::ZipArchive::new(file).map_err(|error| error.to_string())?;
             let mut total_bytes = 0;
@@ -1674,7 +1731,10 @@ impl FileOperationManager {
                 Self::archive_checkpoint(op)?;
                 let mut entry = archive.by_index(index).map_err(|error| error.to_string())?;
                 let relative = entry.enclosed_name().ok_or("Unsafe archive path")?;
-                if entry.unix_mode().is_some_and(|mode| mode & 0o170000 == 0o120000) {
+                if entry
+                    .unix_mode()
+                    .is_some_and(|mode| mode & 0o170000 == 0o120000)
+                {
                     return Err("Archive contains a symbolic link".into());
                 }
                 let output = target.join(relative);
@@ -1682,13 +1742,22 @@ impl FileOperationManager {
                 if entry.is_dir() {
                     std::fs::create_dir_all(&output).map_err(|error| error.to_string())?;
                 } else {
-                    if let Some(parent) = output.parent() { std::fs::create_dir_all(parent).map_err(|error| error.to_string())?; }
-                    let mut file = std::fs::OpenOptions::new().write(true).create_new(true).open(&output).map_err(|error| error.to_string())?;
+                    if let Some(parent) = output.parent() {
+                        std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+                    }
+                    let mut file = std::fs::OpenOptions::new()
+                        .write(true)
+                        .create_new(true)
+                        .open(&output)
+                        .map_err(|error| error.to_string())?;
                     loop {
                         Self::archive_checkpoint(op)?;
                         let count = entry.read(&mut buffer).map_err(|error| error.to_string())?;
-                        if count == 0 { break; }
-                        file.write_all(&buffer[..count]).map_err(|error| error.to_string())?;
+                        if count == 0 {
+                            break;
+                        }
+                        file.write_all(&buffer[..count])
+                            .map_err(|error| error.to_string())?;
                         Self::archive_progress(op, count as u64);
                     }
                 }
@@ -1701,7 +1770,8 @@ impl FileOperationManager {
                 source.to_string_lossy().into_owned(),
                 target.to_string_lossy().into_owned(),
                 &state,
-            )).map_err(|error| error.to_string())?;
+            ))
+            .map_err(|error| error.to_string())?;
             let mut locked = op.lock().unwrap();
             locked.total_files = 1;
             locked.processed_files = 1;
@@ -1748,6 +1818,14 @@ impl FileOperationManager {
             return true;
         }
         false
+    }
+
+    /// Removes all finished operations while preserving active ones.
+    pub fn dismiss_finished_operations(&self) -> usize {
+        let mut ops = self.operations.lock().unwrap();
+        let before = ops.len();
+        ops.retain(|_, op| !Self::is_final(&op.lock().unwrap().status));
+        before - ops.len()
     }
 
     pub fn set_paused(&self, id: &str, paused: bool) -> bool {
@@ -1809,17 +1887,35 @@ mod tests {
 
     #[test]
     fn copy_and_archive_progress_feed_speed_graph() {
-        let copy = Arc::new(Mutex::new(FileOperation::new(FileOpType::Copy, Vec::new(), None, None)));
+        let copy = Arc::new(Mutex::new(FileOperation::new(
+            FileOpType::Copy,
+            Vec::new(),
+            None,
+            None,
+        )));
         let bytes = Arc::new(AtomicU64::new(2048));
         let files = Arc::new(AtomicUsize::new(1));
         let mut last_bytes = 0;
         let mut last_emit = std::time::Instant::now() - std::time::Duration::from_millis(600);
         let mut samples = std::collections::VecDeque::new();
-        FileOperationManager::emit_progress(&copy, &bytes, &files, &mut last_bytes, &mut last_emit, &mut samples);
+        FileOperationManager::emit_progress(
+            &copy,
+            &bytes,
+            &files,
+            &mut last_bytes,
+            &mut last_emit,
+            &mut samples,
+        );
         assert!(copy.lock().unwrap().speed_history[0] > 0);
 
-        let archive = Arc::new(Mutex::new(FileOperation::new(FileOpType::Compress, Vec::new(), None, None)));
-        archive.lock().unwrap().speed_sample_at = Some(std::time::Instant::now() - std::time::Duration::from_millis(600));
+        let archive = Arc::new(Mutex::new(FileOperation::new(
+            FileOpType::Compress,
+            Vec::new(),
+            None,
+            None,
+        )));
+        archive.lock().unwrap().speed_sample_at =
+            Some(std::time::Instant::now() - std::time::Duration::from_millis(600));
         FileOperationManager::archive_progress(&archive, 2048);
         assert!(archive.lock().unwrap().speed_history[0] > 0);
     }
@@ -1827,9 +1923,18 @@ mod tests {
     #[test]
     fn copy_uses_parallel_workers_only_for_many_small_files() {
         assert_eq!(FileOperationManager::copy_worker_count(0, 0, 8), 1);
-        assert_eq!(FileOperationManager::copy_worker_count(3, 3 * 1024 * 1024, 8), 1);
-        assert_eq!(FileOperationManager::copy_worker_count(8, 8 * 1024 * 1024, 8), 4);
-        assert_eq!(FileOperationManager::copy_worker_count(8, 8 * 64 * 1024 * 1024, 8), 1);
+        assert_eq!(
+            FileOperationManager::copy_worker_count(3, 3 * 1024 * 1024, 8),
+            1
+        );
+        assert_eq!(
+            FileOperationManager::copy_worker_count(8, 8 * 1024 * 1024, 8),
+            4
+        );
+        assert_eq!(
+            FileOperationManager::copy_worker_count(8, 8 * 64 * 1024 * 1024, 8),
+            1
+        );
     }
 
     #[test]
@@ -1841,9 +1946,13 @@ mod tests {
         let archive_path = temp.path().join("folder.zip");
         std::fs::write(&archive_path, b"existing archive").unwrap();
         let compress = Arc::new(Mutex::new(FileOperation::new(
-            FileOpType::Compress, vec![source.clone()], Some(archive_path.clone()), None,
+            FileOpType::Compress,
+            vec![source.clone()],
+            Some(archive_path.clone()),
+            None,
         )));
-        FileOperationManager::perform_compress(&compress, vec![source], Some(archive_path.clone())).unwrap();
+        FileOperationManager::perform_compress(&compress, vec![source], Some(archive_path.clone()))
+            .unwrap();
         let compressed = compress.lock().unwrap().snapshot();
         let produced = compressed.destination.unwrap();
         assert_ne!(produced, archive_path);
@@ -1852,11 +1961,22 @@ mod tests {
         assert_eq!(compressed.processed_bytes, compressed.total_bytes);
 
         let extraction = Arc::new(Mutex::new(FileOperation::new(
-            FileOpType::Extract, vec![produced.clone()], Some(temp.path().join("folder")), None,
+            FileOpType::Extract,
+            vec![produced.clone()],
+            Some(temp.path().join("folder")),
+            None,
         )));
-        FileOperationManager::perform_extract(&extraction, vec![produced], Some(temp.path().join("folder"))).unwrap();
+        FileOperationManager::perform_extract(
+            &extraction,
+            vec![produced],
+            Some(temp.path().join("folder")),
+        )
+        .unwrap();
         let extracted = extraction.lock().unwrap().snapshot();
-        assert_eq!(std::fs::read(extracted.destination.unwrap().join("folder/hello.txt")).unwrap(), b"archive roundtrip");
+        assert_eq!(
+            std::fs::read(extracted.destination.unwrap().join("folder/hello.txt")).unwrap(),
+            b"archive roundtrip"
+        );
         assert_eq!(extracted.processed_bytes, extracted.total_bytes);
     }
 
@@ -1865,14 +1985,24 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let archive_path = temp.path().join("unsafe.zip");
         let mut writer = zip::ZipWriter::new(std::fs::File::create(&archive_path).unwrap());
-        writer.start_file("../escape.txt", zip::write::SimpleFileOptions::default()).unwrap();
+        writer
+            .start_file("../escape.txt", zip::write::SimpleFileOptions::default())
+            .unwrap();
         writer.write_all(b"escape").unwrap();
         writer.finish().unwrap();
         let output = temp.path().join("unpacked");
         let extraction = Arc::new(Mutex::new(FileOperation::new(
-            FileOpType::Extract, vec![archive_path.clone()], Some(output.clone()), None,
+            FileOpType::Extract,
+            vec![archive_path.clone()],
+            Some(output.clone()),
+            None,
         )));
-        assert!(FileOperationManager::perform_extract(&extraction, vec![archive_path], Some(output.clone())).is_err());
+        assert!(FileOperationManager::perform_extract(
+            &extraction,
+            vec![archive_path],
+            Some(output.clone())
+        )
+        .is_err());
         assert!(!output.exists());
         assert!(!temp.path().join("escape.txt").exists());
     }
@@ -1943,6 +2073,29 @@ mod tests {
         assert!(manager.dismiss_operation(&second_id));
         assert_eq!(manager.list_operations().len(), 1);
         assert!(!manager.dismiss_operation(&first_id));
+    }
+
+    #[test]
+    fn dismiss_finished_operations_preserves_running_operations() {
+        let manager = FileOperationManager::new();
+        let mut completed = FileOperation::new(FileOpType::Copy, Vec::new(), None, None);
+        let mut running = FileOperation::new(FileOpType::Move, Vec::new(), None, None);
+        completed.status = OpStatus::Completed;
+        running.status = OpStatus::Running;
+        let completed_id = completed.id.clone();
+        let running_id = running.id.clone();
+        {
+            let mut operations = manager.operations.lock().unwrap();
+            operations.insert(completed_id.clone(), Arc::new(Mutex::new(completed)));
+            operations.insert(running_id.clone(), Arc::new(Mutex::new(running)));
+        }
+
+        assert_eq!(manager.dismiss_finished_operations(), 1);
+        assert!(manager.get_operation(&completed_id).is_none());
+        assert_eq!(
+            manager.get_operation(&running_id).unwrap().status,
+            OpStatus::Running
+        );
     }
 
     #[test]
@@ -2174,7 +2327,62 @@ mod tests {
     }
 
     #[test]
-    fn undo_mixed_copy_keeps_the_overwritten_file() {
+    fn overwrite_only_copy_is_recorded_as_non_undoable_history_entry() {
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        runtime.block_on(async {
+            let temp = tempfile::tempdir().unwrap();
+            let source_dir = temp.path().join("source");
+            let target_dir = temp.path().join("target");
+            std::fs::create_dir(&source_dir).unwrap();
+            std::fs::create_dir(&target_dir).unwrap();
+            let source = source_dir.join("item.txt");
+            let destination = target_dir.join("item.txt");
+            std::fs::write(&source, b"new version").unwrap();
+            std::fs::write(&destination, b"old version").unwrap();
+            let resolutions = HashMap::from([(
+                source.to_string_lossy().into_owned(),
+                ConflictAction::Replace,
+            )]);
+            let history = Arc::new(HistoryManager::new());
+            let manager = FileOperationManager::new();
+            let id = manager.queue_operation(
+                history.clone(),
+                FileOperation::new(
+                    FileOpType::Copy,
+                    vec![source],
+                    Some(target_dir),
+                    Some(resolutions),
+                ),
+            );
+            tokio::time::timeout(std::time::Duration::from_secs(5), async {
+                loop {
+                    let status = manager.get_operation(&id).unwrap().status;
+                    if FileOperationManager::is_final(&status) {
+                        assert_eq!(status, OpStatus::Completed);
+                        break;
+                    }
+                    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+                }
+            })
+            .await
+            .unwrap();
+
+            let undo_stack = history.get_state().undo_stack;
+            assert_eq!(undo_stack.len(), 1);
+            assert!(undo_stack[0].undo_blocked_by_overwrite());
+            assert_eq!(std::fs::read(&destination).unwrap(), b"new version");
+            assert!(crate::commands::ops::undo_last_action(&history)
+                .await
+                .is_err());
+            assert_eq!(history.get_state().undo_stack.len(), 1);
+        });
+    }
+
+    #[test]
+    fn undo_mixed_copy_with_overwrite_is_blocked_as_a_whole() {
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .build()
@@ -2220,10 +2428,13 @@ mod tests {
             .await
             .unwrap();
             assert_eq!(history.get_state().undo_stack.len(), 1);
-            crate::commands::ops::undo_last_action(&history).await.unwrap();
+            assert!(crate::commands::ops::undo_last_action(&history)
+                .await
+                .is_err());
             assert_eq!(std::fs::read(&existing_target).unwrap(), b"new version");
-            assert!(!new_target.exists());
-            assert_eq!(std::fs::read_dir(&target_dir).unwrap().count(), 1);
+            assert_eq!(std::fs::read(&new_target).unwrap(), b"new file");
+            assert_eq!(std::fs::read_dir(&target_dir).unwrap().count(), 2);
+            assert_eq!(history.get_state().undo_stack.len(), 1);
         });
     }
 
@@ -2272,7 +2483,9 @@ mod tests {
             .unwrap();
             assert!(!source.exists());
             assert_eq!(std::fs::read(&target).unwrap(), b"moving file");
-            crate::commands::ops::undo_last_action(&history).await.unwrap();
+            crate::commands::ops::undo_last_action(&history)
+                .await
+                .unwrap();
             assert_eq!(std::fs::read(&source).unwrap(), b"moving file");
             assert!(!target.exists());
             assert_eq!(std::fs::read_dir(&target_dir).unwrap().count(), 0);

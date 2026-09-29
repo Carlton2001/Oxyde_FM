@@ -134,6 +134,7 @@ operations-stop = Cancel operation
 operations-fast = Fast mode active — click to switch to normal mode
 operations-normal = Normal mode active — click to switch to fast mode
 operations-dismiss = Dismiss
+operations-dismiss-all = Remove all completed operations
 operations-empty = No operations
 name-filter-placeholder = Filter by name…
 undo-operation = Undo: { $operation }
@@ -163,6 +164,7 @@ path-error-failed = Could not open this folder. Check the path and try again.
 
 ## File operations
 undo-failed = Could not undo: { $detail }
+undo-overwrite-unavailable = This copy cannot be undone because it replaced existing files.
 redo-failed = Could not redo: { $detail }
 prepare-failed = Could not prepare operation: { $detail }
 transfer-failed = Transfer failed: { $detail }

@@ -1,9 +1,9 @@
 use crate::ui::app::{FileDragData, OxydeApp};
 use crate::ui::components::dropdown::IconName;
 use crate::ui::components::tooltip::Tooltip;
+use crate::ui::i18n::{FluentArgs, I18nContext, Message};
 use crate::ui::style::ROW_HEIGHT;
 use crate::ui::theme::ThemeContext;
-use crate::ui::i18n::{FluentArgs, I18nContext, Message};
 use gpui::prelude::*;
 use gpui::*;
 use oxyde_lib::models::TransactionType;
@@ -60,26 +60,35 @@ pub fn render_top_bar(
     let show_system_setting = view.show_system;
 
     let history_state = view.history.get_state();
-    let can_undo = !history_state.undo_stack.is_empty();
-    let can_redo = !history_state.redo_stack.is_empty();
-    let has_history_actions = can_undo || can_redo;
-
-    let undo_tooltip = history_state
+    let has_undo_entry = !history_state.undo_stack.is_empty();
+    let undo_blocked_by_overwrite = history_state
         .undo_stack
         .last()
-        .map(|t| {
-            let mut args = FluentArgs::new();
-            args.set("operation", _cx.i18n().text(op_label(&t.op_type)).to_string());
-            _cx.i18n().text_with_args(Message::UndoOperation, &args).to_string()
-        });
-    let redo_tooltip = history_state
-        .redo_stack
-        .last()
-        .map(|t| {
-            let mut args = FluentArgs::new();
-            args.set("operation", _cx.i18n().text(op_label(&t.op_type)).to_string());
-            _cx.i18n().text_with_args(Message::RedoOperation, &args).to_string()
-        });
+        .is_some_and(|transaction| transaction.undo_blocked_by_overwrite());
+    let can_undo = has_undo_entry && !undo_blocked_by_overwrite;
+    let can_redo = !history_state.redo_stack.is_empty();
+    let has_history_actions = has_undo_entry || can_redo;
+
+    let undo_tooltip = history_state.undo_stack.last().map(|t| {
+        let mut args = FluentArgs::new();
+        args.set(
+            "operation",
+            _cx.i18n().text(op_label(&t.op_type)).to_string(),
+        );
+        _cx.i18n()
+            .text_with_args(Message::UndoOperation, &args)
+            .to_string()
+    });
+    let redo_tooltip = history_state.redo_stack.last().map(|t| {
+        let mut args = FluentArgs::new();
+        args.set(
+            "operation",
+            _cx.i18n().text(op_label(&t.op_type)).to_string(),
+        );
+        _cx.i18n()
+            .text_with_args(Message::RedoOperation, &args)
+            .to_string()
+    });
 
     // Shared constants for consistent look
     let icon_active = theme.text_muted;
@@ -198,31 +207,36 @@ pub fn render_top_bar(
                         .flex()
                         .items_center()
                         .gap_1()
-                        .when(can_undo, |d| {
-                            let h = handle.clone();
-                            let tip = undo_tooltip.clone().unwrap_or_default();
-                            d.child(
-                                div()
-                                    .id("undo-btn")
-                                    .w_6()
-                                    .h_6()
-                                    .flex()
-                                    .items_center()
-                                    .justify_center()
-                                    .rounded_md()
-                                    .hover(move |s| s.bg(hover_bg))
-                                    .when(show_tooltips, |d| d.tooltip(Tooltip::with_meta(_cx.i18n().text(Message::Undo), tip)))
-                                    .on_mouse_down(MouseButton::Left, move |_, _, cx| {
-                                        h.update(cx, |this, cx| this.execute_undo(cx));
-                                    })
-                                    .child(
-                                        svg()
-                                            .path("icons/undo.svg")
-                                            .size_4()
-                                            .text_color(icon_active)
-                                    )
-                            )
-                        })
+        .when(has_undo_entry, |d| {
+            let h = handle.clone();
+            let tip = if undo_blocked_by_overwrite {
+                _cx.i18n().text(Message::UndoOverwriteUnavailable).to_string()
+            } else {
+                undo_tooltip.clone().unwrap_or_default()
+            };
+            let mut button = div()
+                .id("undo-btn")
+                .w_6()
+                .h_6()
+                .flex()
+                .items_center()
+                .justify_center()
+                .rounded_md();
+            if can_undo {
+                button = button
+                    .hover(move |s| s.bg(hover_bg))
+                    .on_mouse_down(MouseButton::Left, move |_, _, cx| {
+                        h.update(cx, |this, cx| this.execute_undo(cx));
+                    });
+            }
+            d.child(
+                button
+                    .when(show_tooltips, |d| d.tooltip(Tooltip::with_meta(_cx.i18n().text(Message::Undo), tip)))
+                    .child(svg().path("icons/undo.svg").size_4().text_color(
+                        if can_undo { icon_active } else { icon_disabled }
+                    ))
+            )
+        })
                         .when(can_redo, |d| {
                             let h = handle.clone();
                             let tip = redo_tooltip.clone().unwrap_or_default();

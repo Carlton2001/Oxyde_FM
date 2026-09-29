@@ -14,8 +14,8 @@ pub mod title_bar;
 pub mod tooltip;
 pub mod top_bar;
 
-use gpui::*;
 use crate::ui::i18n::{I18n, Message};
+use gpui::*;
 
 pub fn oxyde_context_menu_items(
     i18n: &I18n,
@@ -145,31 +145,42 @@ pub fn oxyde_context_menu_items(
     items.push(crate::ui::components::dropdown::DropdownItem {
         label: i18n.text(Message::OpCompressZip).to_string(),
         icon: Some(IconName::Archive),
-        stay_open: false, has_submenu: false, is_dimmed: false,
+        stay_open: false,
+        has_submenu: false,
+        is_dimmed: false,
         on_click: std::rc::Rc::new({
             let h = h_app.clone();
-            move |_, app| { h.update(app, |this, cx| {
-                this.context_menus.clear();
-                this.execute_compress_selected(cx);
-            }); }
+            move |_, app| {
+                h.update(app, |this, cx| {
+                    this.context_menus.clear();
+                    this.execute_compress_selected(cx);
+                });
+            }
         }),
         on_hover: None,
     });
 
-    if !is_dir && matches!(
-        oxyde_lib::utils::archive::ArchiveFormat::from_path(std::path::Path::new(&path)),
-        Some(format) if format != oxyde_lib::utils::archive::ArchiveFormat::Rar
-    ) {
+    if !is_dir
+        && matches!(
+            oxyde_lib::utils::archive::ArchiveFormat::from_path(std::path::Path::new(&path)),
+            Some(format) if format != oxyde_lib::utils::archive::ArchiveFormat::Rar
+        )
+    {
         items.push(crate::ui::components::dropdown::DropdownItem {
             label: i18n.text(Message::OpExtractHere).to_string(),
             icon: Some(IconName::ArchiveRestore),
-            stay_open: false, has_submenu: false, is_dimmed: false,
+            stay_open: false,
+            has_submenu: false,
+            is_dimmed: false,
             on_click: std::rc::Rc::new({
-                let h = h_app.clone(); let p = path.clone();
-                move |_, app| { h.update(app, |this, cx| {
-                    this.context_menus.clear();
-                    this.execute_extract_archive(p.clone(), cx);
-                }); }
+                let h = h_app.clone();
+                let p = path.clone();
+                move |_, app| {
+                    h.update(app, |this, cx| {
+                        this.context_menus.clear();
+                        this.execute_extract_archive(p.clone(), cx);
+                    });
+                }
             }),
             on_hover: None,
         });

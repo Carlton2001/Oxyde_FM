@@ -51,4 +51,15 @@ impl Transaction {
             details,
         }
     }
+
+    /// Copies that overwrote existing files cannot be undone because the old
+    /// contents are deliberately not kept as backups.
+    pub fn undo_blocked_by_overwrite(&self) -> bool {
+        matches!(&self.op_type, TransactionType::Copy)
+            && self
+                .details
+                .overwritten_files
+                .as_ref()
+                .is_some_and(|files| !files.is_empty())
+    }
 }

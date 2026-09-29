@@ -1,7 +1,7 @@
 use crate::ui::components::icons::{get_preview_type, PreviewType};
-use crate::ui::style::TNUM;
-use crate::ui::i18n::{FluentArgs, I18nContext, Message};
 use crate::ui::format::{format_date, format_size};
+use crate::ui::i18n::{FluentArgs, I18nContext, Message};
+use crate::ui::style::TNUM;
 use crate::ui::theme::OxydeTheme;
 use gpui::prelude::FluentBuilder;
 use gpui::*;
@@ -184,7 +184,10 @@ impl Render for Tooltip {
                 };
                 args.set("value", type_label);
                 let file_type = i18n.text_with_args(Message::TooltipType, &args);
-                args.set("value", format_size(info.size.0, info.size.1, info.size.2, i18n.language()));
+                args.set(
+                    "value",
+                    format_size(info.size.0, info.size.1, info.size.2, i18n.language()),
+                );
                 let file_size = i18n.text_with_args(Message::TooltipSize, &args);
                 args.set("value", format_date(info.date, i18n.language()));
                 let modified = i18n.text_with_args(Message::TooltipModified, &args);

@@ -141,6 +141,7 @@ operations-stop = Annuler l’opération
 operations-fast = Mode rapide activé — cliquer pour passer en mode normal
 operations-normal = Mode normal activé — cliquer pour passer en mode rapide
 operations-dismiss = Retirer
+operations-dismiss-all = Retirer toutes les opérations terminées
 operations-empty = Aucune opération
 name-filter-placeholder = Filtrer par nom…
 undo-operation = Annuler : { $operation }
@@ -170,6 +171,7 @@ path-error-failed = Impossible d’ouvrir ce dossier. Vérifiez le chemin et ré
 
 ## File operations
 undo-failed = Annulation impossible : { $detail }
+undo-overwrite-unavailable = Impossible d’annuler cette copie : elle a remplacé des fichiers existants.
 redo-failed = Rétablissement impossible : { $detail }
 prepare-failed = Préparation impossible : { $detail }
 transfer-failed = Échec du transfert : { $detail }

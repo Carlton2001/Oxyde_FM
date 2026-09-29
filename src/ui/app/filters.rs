@@ -1,5 +1,5 @@
-use crate::ui::i18n::{I18nContext, Message};
 use crate::ui::app::{ContextMenuContent, ContextMenuHeader, ContextMenuInstance, OxydeApp};
+use crate::ui::i18n::{I18nContext, Message};
 use gpui::*;
 
 impl OxydeApp {

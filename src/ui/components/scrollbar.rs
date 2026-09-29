@@ -1,7 +1,7 @@
 use crate::ui::app::OxydeApp;
+use crate::ui::theme::OxydeTheme;
 use gpui::prelude::*;
 use gpui::*;
-use crate::ui::theme::OxydeTheme;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum ScrollbarAxis {

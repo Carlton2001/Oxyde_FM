@@ -24,7 +24,10 @@ pub struct HistoryManager(pub Mutex<HistoryState>);
 
 impl Drop for HistoryManager {
     fn drop(&mut self) {
-        let state = self.0.get_mut().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let state = self
+            .0
+            .get_mut()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         for transaction in state.undo_stack.iter().chain(state.redo_stack.iter()) {
             cleanup_replacement_backups(transaction);
         }
@@ -127,7 +130,10 @@ impl HistoryManager {
     }
 
     pub fn clear(&self) {
-        let mut state = self.0.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut state = self
+            .0
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         for transaction in state.undo_stack.iter().chain(state.redo_stack.iter()) {
             cleanup_replacement_backups(transaction);
         }

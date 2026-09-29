@@ -1666,6 +1666,11 @@ pub async fn undo_last_action(
 
     if let Some(ref tx) = transaction {
         info!("Undoing transaction: {:?}", tx.op_type);
+        if tx.undo_blocked_by_overwrite() {
+            return Err(CommandError::Other(
+                "This copy overwrote existing files and cannot be undone".to_string(),
+            ));
+        }
         match tx.op_type {
             TransactionType::Copy => {
                 if tx.details.created_files.is_none()
@@ -1726,11 +1731,13 @@ pub async fn undo_last_action(
                     }
                 }
                 if let Some(created) = &tx.details.created_files {
-                    let files_to_delete: Vec<PathBuf> = created
-                        .iter()
-                        .map(PathBuf::from)
-                        .filter(|path| path.exists())
-                        .collect();
+                    if let Some(missing) = created.iter().find(|path| !PathBuf::from(path).exists())
+                    {
+                        return Err(CommandError::Other(format!(
+                            "Cannot undo copy because the copied file is missing: {missing}"
+                        )));
+                    }
+                    let files_to_delete: Vec<PathBuf> = created.iter().map(PathBuf::from).collect();
                     if !files_to_delete.is_empty() {
                         remove_undo_copy_files(files_to_delete)?;
                     }
