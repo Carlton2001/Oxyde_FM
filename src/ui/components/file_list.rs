@@ -329,13 +329,16 @@ pub fn render_file_list(
                                                                   return;
                                                               }
                                                               this.activate_pane(&p_id_cap_cap, cx);
+                                                              let is_pinned = this.state.pinned_items.iter().any(|item| {
+                                                                  super::paths_match(&item.path, &p_for_right_cap)
+                                                              });
                                                               if !this.state.find_pane(&p_id_cap_cap).map(|p| p.active_tab().selected_paths.contains(&p_for_right_cap)).unwrap_or(false) {
                                                                   this.toggle_selection(&p_id_cap_cap, p_for_right_cap.clone(), false, false, cx);
                                                               }
                                                               this.context_menus.clear();
                                                               this.context_menus.push(ContextMenuInstance {
                                                                   position: pos,
-                                                                  content: ContextMenuContent::Items(super::oxyde_context_menu_items(cx.i18n(), h_inner_inner.clone(), is_dir, p_for_right_cap.clone()), None),
+                                                                  content: ContextMenuContent::Items(super::oxyde_context_menu_items(cx.i18n(), h_inner_inner.clone(), is_dir, is_pinned, p_for_right_cap.clone()), None),
                                                                   scroll_handle: UniformListScrollHandle::new(),
                                                                   width: px(0.0),
                                                                   bottom_padding: 0.0,

@@ -17,10 +17,30 @@ pub mod top_bar;
 use crate::ui::i18n::{I18n, Message};
 use gpui::*;
 
+/// Compare filesystem paths as Windows treats them, ignoring separator, extended
+/// path prefix, trailing separator, and case differences.
+pub(crate) fn paths_match(left: &str, right: &str) -> bool {
+    fn normalize(path: &str) -> String {
+        let mut path = path.replace('/', "\\");
+        if let Some(rest) = path.strip_prefix("\\\\?\\UNC\\") {
+            path = format!("\\\\{rest}");
+        } else if let Some(rest) = path.strip_prefix("\\\\?\\") {
+            path = rest.to_string();
+        }
+        while path.len() > 3 && path.ends_with('\\') {
+            path.pop();
+        }
+        path.to_lowercase()
+    }
+
+    normalize(left) == normalize(right)
+}
+
 pub fn oxyde_context_menu_items(
     i18n: &I18n,
     h_app: Entity<crate::ui::app::OxydeApp>,
     is_dir: bool,
+    is_pinned: bool,
     path: String,
 ) -> Vec<crate::ui::components::dropdown::DropdownItem> {
     use crate::ui::components::dropdown::IconName;
@@ -29,7 +49,7 @@ pub fn oxyde_context_menu_items(
 
     items.push(crate::ui::components::dropdown::DropdownItem {
         label: i18n.text(Message::Open).to_string(),
-        icon: Some(IconName::FolderOpen),
+        icon: Some(IconName::ExternalLink),
         stay_open: false,
         has_submenu: false,
         is_dimmed: false,
@@ -48,7 +68,7 @@ pub fn oxyde_context_menu_items(
     if is_dir {
         items.push(crate::ui::components::dropdown::DropdownItem {
             label: i18n.text(Message::OpenNewTab).to_string(),
-            icon: Some(IconName::Copy),
+            icon: Some(IconName::ExternalLink),
             stay_open: false,
             has_submenu: false,
             is_dimmed: false,
@@ -67,8 +87,18 @@ pub fn oxyde_context_menu_items(
         });
 
         items.push(crate::ui::components::dropdown::DropdownItem {
-            label: i18n.text(Message::PinQuickAccess).to_string(),
-            icon: None,
+            label: i18n
+                .text(if is_pinned {
+                    Message::UnpinQuickAccess
+                } else {
+                    Message::PinQuickAccess
+                })
+                .to_string(),
+            icon: Some(if is_pinned {
+                IconName::PinOff
+            } else {
+                IconName::Pin
+            }),
             stay_open: false,
             has_submenu: false,
             is_dimmed: false,
@@ -78,7 +108,12 @@ pub fn oxyde_context_menu_items(
                 move |_, app| {
                     h.update(app, |this, cx| {
                         this.context_menus.clear();
-                        let _ = oxyde_lib::commands::system::add_to_quick_access(p.clone());
+                        if is_pinned {
+                            let _ =
+                                oxyde_lib::commands::system::remove_from_quick_access(p.clone());
+                        } else {
+                            let _ = oxyde_lib::commands::system::add_to_quick_access(p.clone());
+                        }
                         this.state.reload_quick_access_and_refresh();
                         cx.notify();
                     });
@@ -90,7 +125,7 @@ pub fn oxyde_context_menu_items(
 
     items.push(crate::ui::components::dropdown::DropdownItem {
         label: i18n.text(Message::Cut).to_string(),
-        icon: Some(IconName::Minimize),
+        icon: Some(IconName::Scissors),
         stay_open: false,
         has_submenu: false,
         is_dimmed: false,
@@ -126,7 +161,7 @@ pub fn oxyde_context_menu_items(
 
     items.push(crate::ui::components::dropdown::DropdownItem {
         label: i18n.text(Message::Paste).to_string(),
-        icon: Some(IconName::Plus),
+        icon: Some(IconName::ClipboardPaste),
         stay_open: false,
         has_submenu: false,
         is_dimmed: false,
@@ -188,7 +223,7 @@ pub fn oxyde_context_menu_items(
 
     items.push(crate::ui::components::dropdown::DropdownItem {
         label: i18n.text(Message::Rename).to_string(),
-        icon: Some(IconName::ALargeSmall),
+        icon: Some(IconName::Pencil),
         stay_open: false,
         has_submenu: false,
         is_dimmed: false,
@@ -206,7 +241,7 @@ pub fn oxyde_context_menu_items(
 
     items.push(crate::ui::components::dropdown::DropdownItem {
         label: i18n.text(Message::Delete).to_string(),
-        icon: Some(IconName::Delete),
+        icon: Some(IconName::Trash),
         stay_open: false,
         has_submenu: false,
         is_dimmed: false,
@@ -224,7 +259,7 @@ pub fn oxyde_context_menu_items(
 
     items.push(crate::ui::components::dropdown::DropdownItem {
         label: i18n.text(Message::Properties).to_string(),
-        icon: None,
+        icon: Some(IconName::Settings),
         stay_open: false,
         has_submenu: false,
         is_dimmed: false,
@@ -243,7 +278,7 @@ pub fn oxyde_context_menu_items(
 
     items.push(crate::ui::components::dropdown::DropdownItem {
         label: i18n.text(Message::MoreOptions).to_string(),
-        icon: None,
+        icon: Some(IconName::Ellipsis),
         stay_open: true,
         has_submenu: true,
         is_dimmed: false,
@@ -279,7 +314,7 @@ pub fn pane_context_menu_items(
     vec![
         crate::ui::components::dropdown::DropdownItem {
             label: i18n.text(Message::NewFolder).to_string(),
-            icon: Some(IconName::Plus),
+            icon: Some(IconName::FolderPlus),
             stay_open: false,
             has_submenu: false,
             is_dimmed: false,
@@ -296,8 +331,21 @@ pub fn pane_context_menu_items(
             on_hover: None,
         },
         crate::ui::components::dropdown::DropdownItem {
+            label: i18n.text(Message::SelectAll).to_string(),
+            icon: Some(IconName::Square),
+            stay_open: false,
+            has_submenu: false,
+            is_dimmed: false,
+            on_click: std::rc::Rc::new({
+                let h = h_app.clone();
+                let p_id = pane_id.clone();
+                move |_, app| h.update(app, |this, cx| this.select_all(&p_id, cx))
+            }),
+            on_hover: None,
+        },
+        crate::ui::components::dropdown::DropdownItem {
             label: i18n.text(Message::Paste).to_string(),
-            icon: Some(IconName::Plus),
+            icon: Some(IconName::ClipboardPaste),
             stay_open: false,
             has_submenu: false,
             is_dimmed: false,
@@ -314,7 +362,7 @@ pub fn pane_context_menu_items(
         },
         crate::ui::components::dropdown::DropdownItem {
             label: i18n.text(Message::Properties).to_string(),
-            icon: None,
+            icon: Some(IconName::Settings),
             stay_open: false,
             has_submenu: false,
             is_dimmed: false,
@@ -336,7 +384,7 @@ pub fn pane_context_menu_items(
         },
         crate::ui::components::dropdown::DropdownItem {
             label: i18n.text(Message::MoreOptions).to_string(),
-            icon: None,
+            icon: Some(IconName::Ellipsis),
             stay_open: true,
             has_submenu: true,
             is_dimmed: false,
@@ -370,7 +418,7 @@ pub fn tab_context_menu_items(
     vec![
         crate::ui::components::dropdown::DropdownItem {
             label: i18n.text(Message::DuplicateTab).to_string(),
-            icon: Some(IconName::Plus),
+            icon: Some(IconName::CopyPlus),
             stay_open: false,
             has_submenu: false,
             is_dimmed: false,
@@ -388,7 +436,7 @@ pub fn tab_context_menu_items(
         },
         crate::ui::components::dropdown::DropdownItem {
             label: i18n.text(Message::CloseOtherTabs).to_string(),
-            icon: Some(IconName::X),
+            icon: Some(IconName::CopyX),
             stay_open: false,
             has_submenu: false,
             is_dimmed: !can_close_other_tabs,
@@ -406,7 +454,7 @@ pub fn tab_context_menu_items(
         },
         crate::ui::components::dropdown::DropdownItem {
             label: i18n.text(Message::CloseTab).to_string(),
-            icon: Some(IconName::Delete),
+            icon: Some(IconName::CircleX),
             stay_open: false,
             has_submenu: false,
             is_dimmed: !can_close_tab,

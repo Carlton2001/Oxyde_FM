@@ -3,6 +3,40 @@ use gpui::*;
 use oxyde_lib::commands::io::list_dir;
 
 impl OxydeApp {
+    pub(crate) fn expand_all_sidebar_path(&mut self, path: String, cx: &mut Context<Self>) {
+        let Some(handle) = self.handle.clone() else {
+            return;
+        };
+        let show_hidden = self.show_hidden;
+        let show_system = self.show_system;
+        cx.spawn(move |_, cx: &mut AsyncApp| {
+            let mut cx = cx.clone();
+            async move {
+                if let Ok(tree) = oxyde_lib::commands::sidebar::get_subtree_nodes(
+                    path.clone(),
+                    show_hidden,
+                    show_system,
+                )
+                .await
+                {
+                    handle.update(&mut cx, move |this, cx| {
+                        this.state.expanded_paths.insert(path);
+                        for (parent, nodes) in &tree {
+                            if nodes.iter().any(|node| node.has_subdirs) {
+                                this.state.expanded_paths.insert(parent.clone());
+                            }
+                        }
+                        this.state.sidebar_nodes.extend(tree);
+                        this.state.refresh_sidebar();
+                        this.reconcile_watchers();
+                        cx.notify();
+                    });
+                }
+            }
+        })
+        .detach();
+    }
+
     pub(crate) fn activate_pane(&mut self, pane_id: &str, cx: &mut Context<Self>) {
         if self.state.find_pane(pane_id).is_some() && self.state.active_pane_id != pane_id {
             self.state.active_pane_id = pane_id.to_string();

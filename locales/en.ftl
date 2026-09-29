@@ -182,3 +182,6 @@ drag-items = { $count ->
 native-menu-loading = Loading menu…
 local-drive = Local Disk ({ $drive })
 unknown-item = Unknown
+menu-expand-all = Expand all
+menu-collapse-all = Collapse all
+menu-copy-path = Copy path

@@ -232,7 +232,7 @@ pub fn render_top_bar(
             d.child(
                 button
                     .when(show_tooltips, |d| d.tooltip(Tooltip::with_meta(_cx.i18n().text(Message::Undo), tip)))
-                    .child(svg().path("icons/undo.svg").size_4().text_color(
+                    .child(svg().path("icons/undo-2.svg").size_4().text_color(
                         if can_undo { icon_active } else { icon_disabled }
                     ))
             )
@@ -256,7 +256,7 @@ pub fn render_top_bar(
                                     })
                                     .child(
                                         svg()
-                                            .path("icons/redo.svg")
+                                            .path("icons/redo-2.svg")
                                             .size_4()
                                             .text_color(icon_active)
                                     )
@@ -523,6 +523,39 @@ pub fn render_top_bar(
                                         } else {
                                             this.execute_file_move(paths, target, cx);
                                         }
+                                    });
+                                }
+                            })
+                            .on_mouse_down(MouseButton::Right, {
+                                let h = handle.clone();
+                                let path = target_path.clone();
+                                move |event, _, cx| {
+                                    let item = crate::ui::components::dropdown::DropdownItem {
+                                        label: cx.i18n().text(crate::ui::i18n::Message::CopyPath).to_string(),
+                                        icon: Some(IconName::Copy),
+                                        stay_open: false,
+                                        has_submenu: false,
+                                        is_dimmed: false,
+                                        on_click: std::rc::Rc::new({
+                                            let h = h.clone();
+                                            let path = path.clone();
+                                            move |_, app| {
+                                                let _ = oxyde_lib::platform::clipboard::set_clipboard_text(path.clone());
+                                                h.update(app, |this, cx| { this.context_menus.clear(); cx.notify(); });
+                                            }
+                                        }),
+                                        on_hover: None,
+                                    };
+                                    h.update(cx, |this, cx| {
+                                        this.context_menus.clear();
+                                        this.context_menus.push(crate::ui::app::ContextMenuInstance {
+                                            position: event.position,
+                                            content: crate::ui::app::ContextMenuContent::Items(vec![item], None),
+                                            scroll_handle: UniformListScrollHandle::new(),
+                                            width: px(0.0), bottom_padding: 3.0, open_left: false,
+                                            hovered_item: None, native_request_id: None,
+                                        });
+                                        cx.notify();
                                     });
                                 }
                             })

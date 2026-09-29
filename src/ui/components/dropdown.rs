@@ -6,17 +6,13 @@ use std::rc::Rc;
 
 #[derive(Clone)]
 pub enum IconName {
-    Plus,
     ALargeSmall,
-    Delete,
     Check,
     Square,
-    X,
     FolderOpen,
     #[allow(dead_code)]
     HardDrive,
     Copy,
-    Minimize,
     Shield,
     Printer,
     Settings,
@@ -28,6 +24,7 @@ pub enum IconName {
     Share,
     Cast,
     Pin,
+    PinOff,
     ArchiveRestore,
     Refresh,
     CloudOff,
@@ -36,6 +33,16 @@ pub enum IconName {
     ExternalLink,
     ShieldCheck,
     Archive,
+    Scissors,
+    ClipboardPaste,
+    FolderPlus,
+    Ellipsis,
+    ChevronDown,
+    ChevronUp,
+    CircleX,
+    Trash,
+    CopyPlus,
+    CopyX,
 }
 
 /// Match the semantic Lucide icon used by the former Tauri context menu.
@@ -273,6 +280,8 @@ impl RenderOnce for GenericDropdown {
                                     let on_close_inner = on_close.clone();
                                     let stay_open = item.stay_open;
                                     let is_dimmed = item.is_dimmed;
+                                    let is_destructive =
+                                        matches!(item.icon.as_ref(), Some(IconName::Trash));
                                     let on_h = on_hover_list.clone();
 
                                     div()
@@ -312,14 +321,8 @@ impl RenderOnce for GenericDropdown {
                                                         d.child(
                                                             svg()
                                                                 .path(match icon {
-                                                                    IconName::Plus => {
-                                                                        "icons/plus.svg"
-                                                                    }
                                                                     IconName::ALargeSmall => {
                                                                         "icons/a-large-small.svg"
-                                                                    }
-                                                                    IconName::Delete => {
-                                                                        "icons/delete.svg"
                                                                     }
                                                                     IconName::Check => {
                                                                         "icons/check.svg"
@@ -327,7 +330,6 @@ impl RenderOnce for GenericDropdown {
                                                                     IconName::Square => {
                                                                         "icons/square.svg"
                                                                     }
-                                                                    IconName::X => "icons/x.svg",
                                                                     IconName::FolderOpen => {
                                                                         "icons/folder-open.svg"
                                                                     }
@@ -336,9 +338,6 @@ impl RenderOnce for GenericDropdown {
                                                                     }
                                                                     IconName::Copy => {
                                                                         "icons/copy.svg"
-                                                                    }
-                                                                    IconName::Minimize => {
-                                                                        "icons/minimize.svg"
                                                                     }
                                                                     IconName::Shield => {
                                                                         "icons/shield.svg"
@@ -373,6 +372,9 @@ impl RenderOnce for GenericDropdown {
                                                                     IconName::Pin => {
                                                                         "icons/pin.svg"
                                                                     }
+                                                                    IconName::PinOff => {
+                                                                        "icons/pin-off.svg"
+                                                                    }
                                                                     IconName::ArchiveRestore => {
                                                                         "icons/archive-restore.svg"
                                                                     }
@@ -397,10 +399,42 @@ impl RenderOnce for GenericDropdown {
                                                                     IconName::Archive => {
                                                                         "icons/archive.svg"
                                                                     }
+                                                                    IconName::Scissors => {
+                                                                        "icons/scissors.svg"
+                                                                    }
+                                                                    IconName::ClipboardPaste => {
+                                                                        "icons/clipboard-paste.svg"
+                                                                    }
+                                                                    IconName::FolderPlus => {
+                                                                        "icons/folder-plus.svg"
+                                                                    }
+                                                                    IconName::Ellipsis => {
+                                                                        "icons/ellipsis.svg"
+                                                                    }
+                                                                    IconName::ChevronDown => {
+                                                                        "icons/chevron-down.svg"
+                                                                    }
+                                                                    IconName::ChevronUp => {
+                                                                        "icons/chevron-up.svg"
+                                                                    }
+                                                                    IconName::CircleX => {
+                                                                        "icons/circle-x.svg"
+                                                                    }
+                                                                    IconName::Trash => {
+                                                                        "icons/trash.svg"
+                                                                    }
+                                                                    IconName::CopyPlus => {
+                                                                        "icons/copy-plus.svg"
+                                                                    }
+                                                                    IconName::CopyX => {
+                                                                        "icons/copy-x.svg"
+                                                                    }
                                                                 })
                                                                 .size_full()
                                                                 .text_color(if item.is_dimmed {
                                                                     theme.icon_disabled
+                                                                } else if is_destructive {
+                                                                    theme.error
                                                                 } else {
                                                                     icon_color
                                                                 }),
@@ -415,6 +449,8 @@ impl RenderOnce for GenericDropdown {
                                                 .text_size(px(13.0))
                                                 .text_color(if item.is_dimmed {
                                                     theme.text_muted
+                                                } else if is_destructive {
+                                                    theme.error
                                                 } else {
                                                     theme.text
                                                 })

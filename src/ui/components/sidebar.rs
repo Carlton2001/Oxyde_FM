@@ -27,7 +27,7 @@ fn pinned_context_menu(i18n: &I18n, h: Entity<OxydeApp>, path: String) -> Vec<Dr
     vec![
         DropdownItem {
             label: i18n.text(Message::Open).to_string(),
-            icon: Some(IconName::FolderOpen),
+            icon: Some(IconName::ExternalLink),
             stay_open: false,
             has_submenu: false,
             is_dimmed: false,
@@ -46,7 +46,7 @@ fn pinned_context_menu(i18n: &I18n, h: Entity<OxydeApp>, path: String) -> Vec<Dr
         },
         DropdownItem {
             label: i18n.text(Message::OpenNewTab).to_string(),
-            icon: Some(IconName::Copy),
+            icon: Some(IconName::ExternalLink),
             stay_open: false,
             has_submenu: false,
             is_dimmed: false,
@@ -65,7 +65,7 @@ fn pinned_context_menu(i18n: &I18n, h: Entity<OxydeApp>, path: String) -> Vec<Dr
         },
         DropdownItem {
             label: i18n.text(Message::UnpinQuickAccess).to_string(),
-            icon: Some(IconName::X),
+            icon: Some(IconName::PinOff),
             stay_open: false,
             has_submenu: false,
             is_dimmed: false,
@@ -108,7 +108,7 @@ fn location_context_menu(i18n: &I18n, h: Entity<OxydeApp>, path: String) -> Vec<
     vec![
         DropdownItem {
             label: i18n.text(Message::Open).to_string(),
-            icon: Some(IconName::FolderOpen),
+            icon: Some(IconName::ExternalLink),
             stay_open: false,
             has_submenu: false,
             is_dimmed: false,
@@ -147,10 +147,10 @@ fn location_context_menu(i18n: &I18n, h: Entity<OxydeApp>, path: String) -> Vec<
 }
 
 fn drive_context_menu(i18n: &I18n, h: Entity<OxydeApp>, path: String) -> Vec<DropdownItem> {
-    vec![
+    let mut items = vec![
         DropdownItem {
             label: i18n.text(Message::Open).to_string(),
-            icon: Some(IconName::FolderOpen),
+            icon: Some(IconName::ExternalLink),
             stay_open: false,
             has_submenu: false,
             is_dimmed: false,
@@ -169,7 +169,7 @@ fn drive_context_menu(i18n: &I18n, h: Entity<OxydeApp>, path: String) -> Vec<Dro
         },
         DropdownItem {
             label: i18n.text(Message::OpenNewTab).to_string(),
-            icon: Some(IconName::Copy),
+            icon: Some(IconName::ExternalLink),
             stay_open: false,
             has_submenu: false,
             is_dimmed: false,
@@ -188,7 +188,7 @@ fn drive_context_menu(i18n: &I18n, h: Entity<OxydeApp>, path: String) -> Vec<Dro
         },
         DropdownItem {
             label: i18n.text(Message::Properties).to_string(),
-            icon: None,
+            icon: Some(IconName::Settings),
             stay_open: false,
             has_submenu: false,
             is_dimmed: false,
@@ -204,14 +204,16 @@ fn drive_context_menu(i18n: &I18n, h: Entity<OxydeApp>, path: String) -> Vec<Dro
             }),
             on_hover: None,
         },
-    ]
+    ];
+    items.extend(sidebar_tree_actions(i18n, h, path, false));
+    items
 }
 
 fn directory_context_menu(i18n: &I18n, h: Entity<OxydeApp>, path: String) -> Vec<DropdownItem> {
-    vec![
+    let mut items = vec![
         DropdownItem {
             label: i18n.text(Message::Open).to_string(),
-            icon: Some(IconName::FolderOpen),
+            icon: Some(IconName::ExternalLink),
             stay_open: false,
             has_submenu: false,
             is_dimmed: false,
@@ -230,7 +232,7 @@ fn directory_context_menu(i18n: &I18n, h: Entity<OxydeApp>, path: String) -> Vec
         },
         DropdownItem {
             label: i18n.text(Message::OpenNewTab).to_string(),
-            icon: Some(IconName::Copy),
+            icon: Some(IconName::ExternalLink),
             stay_open: false,
             has_submenu: false,
             is_dimmed: false,
@@ -247,7 +249,96 @@ fn directory_context_menu(i18n: &I18n, h: Entity<OxydeApp>, path: String) -> Vec
             }),
             on_hover: None,
         },
-    ]
+    ];
+    items.extend(sidebar_tree_actions(i18n, h, path, true));
+    items
+}
+
+fn sidebar_tree_actions(
+    i18n: &I18n,
+    h: Entity<OxydeApp>,
+    path: String,
+    pin: bool,
+) -> Vec<DropdownItem> {
+    let mut items = Vec::new();
+    for (message, icon, expand) in [
+        (Message::ExpandAll, IconName::ChevronDown, true),
+        (Message::CollapseAll, IconName::ChevronUp, false),
+    ] {
+        let h_action = h.clone();
+        let path_action = path.clone();
+        items.push(DropdownItem {
+            label: i18n.text(message).to_string(),
+            icon: Some(icon),
+            stay_open: false,
+            has_submenu: false,
+            is_dimmed: false,
+            on_click: std::rc::Rc::new(move |_, app| {
+                h_action.update(app, |this, cx| {
+                    this.context_menus.clear();
+                    if expand {
+                        this.expand_all_sidebar_path(path_action.clone(), cx);
+                    } else {
+                        this.state._collapse_all_sidebar_path(path_action.clone());
+                        this.reconcile_watchers();
+                        cx.notify();
+                    }
+                })
+            }),
+            on_hover: None,
+        });
+    }
+    if pin {
+        let path_pin = path.clone();
+        let h_pin = h.clone();
+        items.push(DropdownItem {
+            label: i18n.text(Message::PinQuickAccess).to_string(),
+            icon: Some(IconName::Pin),
+            stay_open: false,
+            has_submenu: false,
+            is_dimmed: false,
+            on_click: std::rc::Rc::new(move |_, app| {
+                h_pin.update(app, |this, cx| {
+                    this.context_menus.clear();
+                    let _ = oxyde_lib::commands::system::add_to_quick_access(path_pin.clone());
+                    this.state.reload_quick_access_and_refresh();
+                    cx.notify();
+                })
+            }),
+            on_hover: None,
+        });
+    }
+    let p = path.clone();
+    let h_prop = h.clone();
+    items.push(DropdownItem {
+        label: i18n.text(Message::Properties).to_string(),
+        icon: Some(IconName::Settings),
+        stay_open: false,
+        has_submenu: false,
+        is_dimmed: false,
+        on_click: std::rc::Rc::new(move |_, app| {
+            h_prop.update(app, |this, _| {
+                this.context_menus.clear();
+                oxyde_lib::platform::platform().show_properties_dialog(&p);
+            })
+        }),
+        on_hover: None,
+    });
+    let p = path;
+    items.push(DropdownItem {
+        label: i18n.text(Message::MoreOptions).to_string(),
+        icon: Some(IconName::Ellipsis),
+        stay_open: true,
+        has_submenu: true,
+        is_dimmed: false,
+        on_click: std::rc::Rc::new(|_, _| {}),
+        on_hover: Some(std::rc::Rc::new(move |pos, left, app| {
+            h.update(app, |this, cx| {
+                this.request_native_context_menu(0, p.clone(), false, pos, left, cx);
+            })
+        })),
+    });
+    items
 }
 
 // ── Main render ──────────────────────────────────────────────────────────────
@@ -425,7 +516,7 @@ pub fn render_sidebar(
                                                     // Right click → select + context menu
                                                     .on_mouse_down(MouseButton::Right, {
                                                         let h = h.clone(); let p = path.clone();
-                                                        let is_qa = pinned_paths_for_list.contains(&path);
+                                                        let is_qa = pinned_paths_for_list.iter().any(|pinned| super::paths_match(pinned, &path));
                                                         move |e, _, cx| {
                                                             let pos   = e.position;
                                                             let items = if is_qa {
@@ -453,8 +544,12 @@ pub fn render_sidebar(
                                                     .child(
                                                         div().w_4().h_4().mr_2().flex().items_center().justify_center().flex_shrink_0()
                                                             .child({
-                                                                let icon = crate::ui::components::icons::get_icon_type(&item.name, false, Some(&path), false, false);
-                                                                svg().path(icon.path()).size_4().text_color(theme.accent)
+                                                                let icon_path = match path.as_str() {
+                                                                    "__network_vincinity__" => "icons/globe.svg",
+                                                                    "trash://" => "icons/trash-sidebar.svg",
+                                                                    _ => "icons/pin.svg",
+                                                                };
+                                                                svg().path(icon_path).size_4().text_color(theme.accent)
                                                             })
                                                     )
                                                     .child(

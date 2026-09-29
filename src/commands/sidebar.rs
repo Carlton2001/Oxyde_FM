@@ -75,6 +75,8 @@ fn get_sidebar_nodes_blocking(path: String) -> Result<Vec<SidebarNode>, CommandE
 
 pub async fn get_subtree_nodes(
     path: String,
+    show_hidden: bool,
+    show_system: bool,
 ) -> Result<std::collections::HashMap<String, Vec<SidebarNode>>, CommandError> {
     let pb = validate_path(&path)?;
     if !pb.is_dir() {
@@ -84,6 +86,16 @@ pub async fn get_subtree_nodes(
         )));
     }
 
+    tokio::task::spawn_blocking(move || get_subtree_nodes_blocking(pb, show_hidden, show_system))
+        .await
+        .map_err(|error| CommandError::IoError(error.to_string()))?
+}
+
+fn get_subtree_nodes_blocking(
+    pb: std::path::PathBuf,
+    show_hidden: bool,
+    show_system: bool,
+) -> Result<std::collections::HashMap<String, Vec<SidebarNode>>, CommandError> {
     let mut result = std::collections::HashMap::new();
     let mut stack = vec![pb];
 
@@ -107,24 +119,27 @@ pub async fn get_subtree_nodes(
             }
 
             let name = entry.file_name().to_string_lossy().to_string();
-            let (is_hidden, is_system, _) = crate::utils::get_file_attributes(&metadata, &name);
+            let (is_hidden, is_system, is_reparse_point) =
+                crate::utils::get_file_attributes(&metadata, &name);
 
             let node_path = entry.path();
             let mut node_has_subdirs = false;
             let mut is_protected = false;
 
-            match fs::read_dir(&node_path) {
-                Ok(sub_entries) => {
-                    node_has_subdirs = sub_entries
-                        .filter_map(|e| e.ok())
-                        .any(|se| se.file_type().map(|ft| ft.is_dir()).unwrap_or(false));
-                }
-                Err(e) => {
-                    let kind = e.kind();
-                    if kind == std::io::ErrorKind::PermissionDenied
-                        || kind == std::io::ErrorKind::NotFound
-                    {
-                        is_protected = true;
+            if !is_reparse_point {
+                match fs::read_dir(&node_path) {
+                    Ok(sub_entries) => {
+                        node_has_subdirs = sub_entries
+                            .filter_map(|e| e.ok())
+                            .any(|se| se.file_type().map(|ft| ft.is_dir()).unwrap_or(false));
+                    }
+                    Err(e) => {
+                        let kind = e.kind();
+                        if kind == std::io::ErrorKind::PermissionDenied
+                            || kind == std::io::ErrorKind::NotFound
+                        {
+                            is_protected = true;
+                        }
                     }
                 }
             }
@@ -144,7 +159,11 @@ pub async fn get_subtree_nodes(
 
         // Push subdirs to stack before moving nodes into result
         for node in &nodes {
-            if node.has_subdirs {
+            if node.has_subdirs
+                && (show_hidden || !node.is_hidden)
+                && (show_system || !node.is_system)
+                && !is_bulk_expand_excluded(&node.path, &node.name)
+            {
                 stack.push(std::path::PathBuf::from(&node.path));
             }
         }
@@ -153,4 +172,33 @@ pub async fn get_subtree_nodes(
     }
 
     Ok(result)
+}
+
+fn is_bulk_expand_excluded(path: &str, name: &str) -> bool {
+    let name = name.to_ascii_lowercase();
+    if matches!(name.as_str(), "$recycle.bin" | "system volume information") {
+        return true;
+    }
+
+    // Avoid recursively opening OS-managed branches on the Windows system drive.
+    let system_root = std::env::var_os("SystemRoot").map(std::path::PathBuf::from);
+    let Some(system_drive_root) =
+        system_root.and_then(|root| root.parent().map(|parent| parent.to_path_buf()))
+    else {
+        return false;
+    };
+    let Some(parent) = std::path::Path::new(path).parent() else {
+        return false;
+    };
+    if !parent
+        .as_os_str()
+        .to_string_lossy()
+        .eq_ignore_ascii_case(&system_drive_root.as_os_str().to_string_lossy())
+    {
+        return false;
+    }
+    matches!(
+        name.as_str(),
+        "windows" | "program files" | "program files (x86)" | "programdata"
+    )
 }
