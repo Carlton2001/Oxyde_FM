@@ -22,6 +22,8 @@ pub struct TransactionDetails {
     #[serde(default)]
     pub replaced_files: Option<Vec<(String, String)>>,
     #[serde(default)]
+    pub overwritten_files: Option<Vec<String>>,
+    #[serde(default)]
     pub moved_files: Option<Vec<(String, String)>>,
     #[serde(default)]
     pub moved_dirs: Option<Vec<(String, String)>>,

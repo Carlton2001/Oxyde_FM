@@ -4,8 +4,8 @@ use crate::ui::app::{
 use crate::ui::components::dropdown::{DropdownItem, IconName};
 use crate::ui::components::scrollbar::{render_scrollbar, ScrollbarAxis};
 use crate::ui::components::tooltip::Tooltip;
-use crate::ui::theme::{OxydeTheme, ThemeContext};
 use crate::ui::i18n::{I18n, I18nContext, Message};
+use crate::ui::theme::{OxydeTheme, ThemeContext};
 use crate::ui::workspace::SidebarItem;
 use gpui::prelude::*;
 use gpui::*;
@@ -297,7 +297,9 @@ pub fn render_sidebar(
         .iter()
         .map(|item| match item {
             SidebarItem::Header(h) => _cx.i18n().text(*h).len() as f32 * 8.0 + 20.0,
-            SidebarItem::Pinned { item } => pinned_display_name(item, _cx.i18n()).len() as f32 * 7.0 + 60.0,
+            SidebarItem::Pinned { item } => {
+                pinned_display_name(item, _cx.i18n()).len() as f32 * 7.0 + 60.0
+            }
             SidebarItem::Drive { drive, .. } => {
                 (drive.label.len() + drive.path.len() + 3) as f32 * 7.0 + 60.0
             }
@@ -318,7 +320,7 @@ pub fn render_sidebar(
 
     let viewport_w = view.sidebar_width;
     let content_w = calculated_content_w.max(viewport_w);
-    let viewport_h = view.list_height;
+    let viewport_h = (view.list_height - 36.0).max(1.0);
     let content_h = (sidebar_items.len() as f32 * SIDEBAR_ROW_H).max(1.0);
 
     // Highlight only the folder currently open in the active pane's active tab.
@@ -346,7 +348,7 @@ pub fn render_sidebar(
                     div()
                         .absolute()
                         .top(px(12.0))
-                        .bottom_0()
+                        .bottom(px(36.0))
                         .left(view.sidebar_scroll_h.offset().x)
                         .w(px(content_w))
                         .child({
@@ -813,7 +815,7 @@ pub fn render_sidebar(
 
     // Horizontal scrollbar
     container = container.child(render_scrollbar(
-            theme,
+        theme,
         handle.clone(),
         ScrollbarAxis::Horizontal,
         viewport_w,
@@ -829,6 +831,12 @@ pub fn render_sidebar(
                 track_id,
             });
         },
+    ));
+
+    container = container.child(crate::ui::components::operations::render_operations_footer(
+        view,
+        handle.clone(),
+        _cx,
     ));
 
     // Resize handle

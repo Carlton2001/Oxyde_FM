@@ -113,12 +113,7 @@ pub fn pause_file_operation(
     manager: &FileOperationManager,
     id: String,
 ) -> Result<(), CommandError> {
-    if let Some(op) = manager.get_operation(&id) {
-        // We need a way to pause. The lock inside FileOperation needs to be toggled.
-        // But FileOperationManager::get_operation returns a CLONE of FileOperation struct (snapshot).
-        // Wait, the struct holds Arc<AtomicBool>, so cloning the struct CLONES THE ARC.
-        // So modifying the atomic bool in the clone affects the running task.
-        op.pause_flag.store(true, Ordering::Relaxed);
+    if manager.set_paused(&id, true) {
         Ok(())
     } else {
         Err(CommandError::Other("Operation not found".to_string()))
@@ -129,8 +124,7 @@ pub fn resume_file_operation(
     manager: &FileOperationManager,
     id: String,
 ) -> Result<(), CommandError> {
-    if let Some(op) = manager.get_operation(&id) {
-        op.pause_flag.store(false, Ordering::Relaxed);
+    if manager.set_paused(&id, false) {
         Ok(())
     } else {
         Err(CommandError::Other("Operation not found".to_string()))
@@ -158,7 +152,44 @@ struct RestorationPaths {
     corrected_path: PathBuf,
 }
 
+/// Windows stores the original path in the `$I…` sidecar of each `$R…` item.
+/// The Shell item name can be the opaque recycle-bin identifier, so the `trash`
+/// crate may otherwise use that identifier as the restored filename.
+#[cfg(target_os = "windows")]
+fn windows_original_path(item: &trash::TrashItem) -> Option<PathBuf> {
+    use std::os::windows::ffi::OsStringExt;
+
+    let id_path = PathBuf::from(&item.id);
+    let file_name = id_path.file_name()?.to_string_lossy();
+    if file_name.len() < 3 || !file_name[..2].eq_ignore_ascii_case("$R") {
+        return None;
+    }
+    let suffix = file_name.get(2..)?;
+
+    let metadata_path = id_path.with_file_name(format!("$I{suffix}"));
+    let bytes = std::fs::read(metadata_path).ok()?;
+    if bytes.len() < 28 {
+        return None;
+    }
+
+    let version = u64::from_le_bytes(bytes.get(..8)?.try_into().ok()?);
+    if version != 1 && version != 2 {
+        return None;
+    }
+    let char_count = u32::from_le_bytes(bytes.get(24..28)?.try_into().ok()?) as usize;
+    let path_bytes = bytes.get(28..28usize.checked_add(char_count.checked_mul(2)?)?)?;
+    let wide_path: Vec<u16> = path_bytes
+        .chunks_exact(2)
+        .map(|pair| u16::from_le_bytes([pair[0], pair[1]]))
+        .collect();
+    let path = PathBuf::from(std::ffi::OsString::from_wide(&wide_path));
+    path.is_absolute().then_some(path)
+}
+
 fn get_restoration_paths(item: &trash::TrashItem) -> RestorationPaths {
+    #[cfg(target_os = "windows")]
+    let crate_path = windows_original_path(item).unwrap_or_else(|| item.original_path());
+    #[cfg(not(target_os = "windows"))]
     let crate_path = item.original_path();
     let mut corrected_path = crate_path.clone();
 
@@ -188,6 +219,18 @@ fn get_restoration_paths(item: &trash::TrashItem) -> RestorationPaths {
     }
 }
 
+fn item_with_correct_restore_name(item: &trash::TrashItem) -> trash::TrashItem {
+    let mut item = item.clone();
+    let original_path = get_restoration_paths(&item).corrected_path;
+    if let Some(name) = original_path.file_name() {
+        item.name = name.to_os_string();
+        if let Some(parent) = original_path.parent() {
+            item.original_parent = parent.to_path_buf();
+        }
+    }
+    item
+}
+
 /// List all items in the Windows Recycle Bin
 pub fn list_trash() -> Result<Vec<TrashEntry>, CommandError> {
     let trash_items =
@@ -196,7 +239,7 @@ pub fn list_trash() -> Result<Vec<TrashEntry>, CommandError> {
     let mut entries: Vec<TrashEntry> = trash_items
         .into_iter()
         .map(|item| {
-            let original_path = item.original_path();
+            let original_path = get_restoration_paths(&item).corrected_path;
             let mut name = original_path
                 .file_name()
                 .map(|n| n.to_string_lossy().to_string())
@@ -1304,7 +1347,8 @@ pub async fn restore_items(paths: Vec<String>) -> Result<Vec<String>, CommandErr
     }
 
     for (item, intended_path) in restoration_tasks {
-        let original_path = item.original_path(); // Capture original_path before restore
+        let item = item_with_correct_restore_name(&item);
+        let original_path = get_restoration_paths(&item).corrected_path;
         let original_path_str = original_path.to_string_lossy().to_string();
 
         trash::os_limited::restore_all(vec![item.clone()])
@@ -1422,7 +1466,7 @@ pub async fn move_from_trash(
             }
 
             // Restore the item from trash (goes to original location)
-            trash::os_limited::restore_all(vec![item.clone()])
+            trash::os_limited::restore_all(vec![item_with_correct_restore_name(item)])
                 .map_err(|e| CommandError::TrashError(e.to_string()))?;
 
             // Determine where it actually landed and ensure extension is correct
@@ -1495,6 +1539,7 @@ pub async fn move_from_trash(
             created_files: Some(abs_restored),
             created_dirs: None,
             replaced_files: None,
+            overwritten_files: None,
             moved_files: None,
             moved_dirs: None,
             copied_files: None,
@@ -1641,7 +1686,26 @@ pub async fn undo_last_action(
                     .iter()
                     .map(|(path, hash)| (path.as_str(), hash.as_str()))
                     .collect();
+                let undoable_files: std::collections::HashSet<_> = tx
+                    .details
+                    .created_files
+                    .as_deref()
+                    .unwrap_or_default()
+                    .iter()
+                    .map(String::as_str)
+                    .chain(
+                        tx.details
+                            .replaced_files
+                            .as_deref()
+                            .unwrap_or_default()
+                            .iter()
+                            .map(|(path, _)| path.as_str()),
+                    )
+                    .collect();
                 for (path, expected) in &expected_hashes {
+                    if !undoable_files.contains(path) {
+                        continue;
+                    }
                     let path = PathBuf::from(path);
                     if path.exists() && hash_file(&path)? != *expected {
                         return Err(CommandError::Other(format!(
@@ -1946,6 +2010,11 @@ pub async fn redo_last_action(
                     .replaced_files
                     .as_ref()
                     .is_some_and(|files| !files.is_empty())
+                    || tx
+                        .details
+                        .overwritten_files
+                        .as_ref()
+                        .is_some_and(|files| !files.is_empty())
                 {
                     return Err(CommandError::Other(
                         "Redo for replacement operations requires a new conflict resolution"
@@ -2050,6 +2119,11 @@ pub async fn redo_last_action(
                     .replaced_files
                     .as_ref()
                     .is_some_and(|files| !files.is_empty())
+                    || tx
+                        .details
+                        .overwritten_files
+                        .as_ref()
+                        .is_some_and(|files| !files.is_empty())
                 {
                     return Err(CommandError::Other(
                         "Redo for replacement operations requires a new conflict resolution"
@@ -2408,6 +2482,7 @@ mod copy_redo_tests {
                 created_files: Some(vec![destination.to_string_lossy().into_owned()]),
                 created_dirs: Some(Vec::new()),
                 replaced_files: Some(Vec::new()),
+                overwritten_files: Some(Vec::new()),
                 moved_files: None,
                 moved_dirs: None,
                 copied_files: Some(vec![(
@@ -2452,6 +2527,7 @@ mod copy_redo_tests {
                     destination.to_string_lossy().into_owned(),
                     backup.to_string_lossy().into_owned(),
                 )]),
+                overwritten_files: Some(Vec::new()),
                 moved_files: None,
                 moved_dirs: None,
                 copied_files: Some(vec![(

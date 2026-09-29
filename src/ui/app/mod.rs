@@ -386,7 +386,6 @@ pub struct OxydeApp {
     pub submenu_close_timer: Option<Task<()>>,
     pub dragging_tab: Option<(String, usize)>,
     pub mouse_pos: Point<Pixels>,
-    #[allow(dead_code)]
     pub file_ops: std::sync::Arc<oxyde_lib::systems::file_ops::FileOperationManager>,
     pub watcher_changes: std::sync::Arc<std::sync::Mutex<std::collections::VecDeque<String>>>,
     pub _path_watchers: std::collections::HashMap<String, Box<dyn std::any::Any>>,
@@ -414,8 +413,9 @@ pub struct OxydeApp {
     rename_click_candidate: Option<(String, std::time::Instant)>,
     rename_pending: bool,
     rename_generation: u64,
-    pending_file_operation: Option<PendingFileOperation>,
+    pending_file_operations: std::collections::VecDeque<PendingFileOperation>,
     file_operation_notice: Option<(Message, String)>,
+    pub(crate) operations_panel_open: bool,
     pub(crate) rename_error: Option<Message>,
     pub(crate) rename_shake_id: u64,
 
@@ -729,6 +729,9 @@ impl OxydeApp {
             _path_watchers: std::collections::HashMap::new(),
             _watcher_task: None,
             _subscriptions: vec![cx.on_app_quit(|this, _| {
+                // Undo history is session-only, so its replacement backups must
+                // not outlive a normal application shutdown.
+                this.history.clear();
                 let save = this.preferences_save_task.take();
                 async move {
                     if let Some(save) = save {
@@ -751,8 +754,9 @@ impl OxydeApp {
             rename_click_candidate: None,
             rename_pending: false,
             rename_generation: 0,
-            pending_file_operation: None,
+            pending_file_operations: std::collections::VecDeque::new(),
             file_operation_notice: None,
+            operations_panel_open: false,
             rename_error: None,
             rename_shake_id: 0,
             show_hidden: config.show_hidden,
@@ -1289,21 +1293,67 @@ impl OxydeApp {
             cx.spawn(move |_, cx: &mut AsyncApp| {
                 let mut cx = cx.clone();
                 async move {
-                    let result =
-                        tokio::task::spawn_blocking(move || trash::delete_all(&paths)).await;
-                    handle.update(&mut cx, |this, cx| match result {
-                        Ok(Ok(())) => {
-                            this.state.refresh_sidebar();
-                            this.reconcile_watchers();
-                            cx.notify();
-                        }
-                        Ok(Err(error)) => log::warn!("Delete failed: {error}"),
-                        Err(error) => log::warn!("Delete task failed: {error}"),
+                    let runtime = tokio::runtime::Handle::current();
+                    handle.update(&mut cx, |this, cx| {
+                        let op = oxyde_lib::systems::file_ops::FileOperation::new(
+                            oxyde_lib::systems::file_ops::FileOpType::Trash,
+                            paths.into_iter().map(std::path::PathBuf::from).collect(),
+                            None,
+                            None,
+                        );
+                        let id =
+                            this.file_ops
+                                .queue_operation_on(&runtime, this.history.clone(), op);
+                        this.watch_file_operation(id, cx);
                     });
                 }
             })
             .detach();
         }
+    }
+
+    pub fn execute_compress_selected(&mut self, cx: &mut Context<Self>) {
+        let Some(pane) = self.state.layout.find_pane(&self.state.active_pane_id) else { return; };
+        let paths: Vec<std::path::PathBuf> = pane.active_tab().selected_paths.iter()
+            .map(std::path::PathBuf::from)
+            .filter(|path| oxyde_lib::utils::archive::split_virtual_path(&path.to_string_lossy()).is_none())
+            .collect();
+        let Some(first) = paths.first() else { return; };
+        let destination = first.with_extension("zip");
+        self.queue_archive_operation(oxyde_lib::systems::file_ops::FileOpType::Compress, paths, destination, cx);
+    }
+
+    pub fn execute_extract_archive(&mut self, path: String, cx: &mut Context<Self>) {
+        let source = std::path::PathBuf::from(path);
+        let Some(parent) = source.parent() else { return; };
+        let name = source.file_name().unwrap_or_default().to_string_lossy();
+        let stem = [".tar.gz", ".tar.xz", ".tar.zst", ".tar.bz2"]
+            .iter().find_map(|suffix| name.strip_suffix(suffix))
+            .or_else(|| source.file_stem().and_then(|stem| stem.to_str()))
+            .unwrap_or("archive");
+        let destination = parent.join(stem);
+        self.queue_archive_operation(oxyde_lib::systems::file_ops::FileOpType::Extract, vec![source], destination, cx);
+    }
+
+    fn queue_archive_operation(
+        &mut self,
+        kind: oxyde_lib::systems::file_ops::FileOpType,
+        sources: Vec<std::path::PathBuf>,
+        destination: std::path::PathBuf,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(handle) = self.handle.clone() else { return; };
+        cx.spawn(move |_, cx: &mut AsyncApp| {
+            let mut cx = cx.clone();
+            async move {
+                let runtime = tokio::runtime::Handle::current();
+                handle.update(&mut cx, |this, cx| {
+                    let operation = oxyde_lib::systems::file_ops::FileOperation::new(kind, sources, Some(destination), None);
+                    let id = this.file_ops.queue_operation_on(&runtime, this.history.clone(), operation);
+                    this.watch_file_operation(id, cx);
+                });
+            }
+        }).detach();
     }
 
     /// Recompute `drag_copy_mode` from modifier override and drive-based default.
@@ -1365,17 +1415,18 @@ impl OxydeApp {
                 .await;
                 handle.update(&mut cx, |this, cx| match checked {
                     Ok(Ok(response)) if !response.conflicts.is_empty() => {
-                        this.pending_file_operation = Some(PendingFileOperation {
-                            paths,
-                            target_dir,
-                            is_move,
-                            conflict_paths: response
-                                .conflicts
-                                .into_iter()
-                                .map(|conflict| conflict.source.path)
-                                .collect(),
-                            runtime,
-                        });
+                        this.pending_file_operations
+                            .push_back(PendingFileOperation {
+                                paths,
+                                target_dir,
+                                is_move,
+                                conflict_paths: response
+                                    .conflicts
+                                    .into_iter()
+                                    .map(|conflict| conflict.source.path)
+                                    .collect(),
+                                runtime,
+                            });
                         cx.notify();
                     }
                     Ok(Ok(_)) => {
@@ -1406,7 +1457,7 @@ impl OxydeApp {
         runtime: tokio::runtime::Handle,
         cx: &mut Context<Self>,
     ) {
-        use oxyde_lib::systems::file_ops::{FileOpType, FileOperation, OpStatus};
+        use oxyde_lib::systems::file_ops::{FileOpType, FileOperation};
         let op = FileOperation::new(
             if is_move {
                 FileOpType::Move
@@ -1420,6 +1471,11 @@ impl OxydeApp {
         let op_id = self
             .file_ops
             .queue_operation_on(&runtime, self.history.clone(), op);
+        self.watch_file_operation(op_id, cx);
+    }
+
+    fn watch_file_operation(&mut self, op_id: String, cx: &mut Context<Self>) {
+        use oxyde_lib::systems::file_ops::OpStatus;
         let operations = self.file_ops.clone();
         let Some(handle) = self.handle.clone() else {
             return;
@@ -1427,6 +1483,8 @@ impl OxydeApp {
         cx.spawn(move |_, cx: &mut AsyncApp| {
             let mut cx = cx.clone();
             async move {
+                let opened_at = std::time::Instant::now();
+                let mut automatic_open_checked = false;
                 loop {
                     cx.background_executor()
                         .timer(std::time::Duration::from_millis(200))
@@ -1434,6 +1492,20 @@ impl OxydeApp {
                     let Some(operation) = operations.get_operation(&op_id) else {
                         break;
                     };
+                    if !automatic_open_checked
+                        && opened_at.elapsed() >= std::time::Duration::from_millis(700)
+                    {
+                        automatic_open_checked = true;
+                        if !matches!(
+                            operation.status,
+                            OpStatus::Completed | OpStatus::Cancelled | OpStatus::Error(_)
+                        ) {
+                            handle.update(&mut cx, |this, cx| {
+                                this.operations_panel_open = true;
+                                cx.notify();
+                            });
+                        }
+                    }
                     match operation.status {
                         OpStatus::Queued
                         | OpStatus::Calculating
@@ -1443,8 +1515,9 @@ impl OxydeApp {
                         }
                         OpStatus::Error(error) => {
                             handle.update(&mut cx, |this, cx| {
-                                this.file_operation_notice =
-                                    Some((Message::TransferFailed, format!("{error}")));
+                                log::warn!("File operation failed: {error}");
+                                this.operations_panel_open = true;
+                                this.file_operation_notice = Some((Message::TransferFailed, error));
                                 cx.notify();
                             });
                             break;
@@ -1457,7 +1530,10 @@ impl OxydeApp {
                             });
                             break;
                         }
-                        OpStatus::Cancelled => break,
+                        OpStatus::Cancelled => {
+                            handle.update(&mut cx, |_, cx| cx.notify());
+                            break;
+                        }
                     }
                 }
             }
@@ -1466,13 +1542,13 @@ impl OxydeApp {
     }
 
     pub(crate) fn cancel_pending_file_operation(&mut self, cx: &mut Context<Self>) {
-        self.pending_file_operation = None;
+        self.pending_file_operations.pop_front();
         cx.notify();
     }
 
     pub(crate) fn resolve_pending_file_operation(&mut self, replace: bool, cx: &mut Context<Self>) {
         use oxyde_lib::models::ConflictAction;
-        let Some(pending) = self.pending_file_operation.take() else {
+        let Some(pending) = self.pending_file_operations.pop_front() else {
             return;
         };
         let action = if replace {
@@ -1493,6 +1569,7 @@ impl OxydeApp {
             pending.runtime,
             cx,
         );
+        cx.notify();
     }
 
     pub fn create_new_folder(&mut self, pane_id: &str, cx: &mut Context<Self>) {
@@ -1547,6 +1624,7 @@ impl OxydeApp {
                                     created_files: None,
                                     created_dirs: None,
                                     replaced_files: None,
+                                    overwritten_files: None,
                                     moved_files: None,
                                     moved_dirs: None,
                                     copied_files: None,
@@ -2958,12 +3036,22 @@ impl Render for OxydeApp {
         }
 
         // SETTINGS OVERLAY
+        if self.operations_panel_open {
+            root = root.child(deferred(
+                crate::ui::components::operations::render_operations_panel(
+                    self,
+                    handle.clone(),
+                    cx,
+                ),
+            ));
+        }
+
         if self.settings_open {
             use crate::ui::components::settings::render_settings_panel;
             root = root.child(deferred(render_settings_panel(self, handle.clone(), cx)));
         }
 
-        if let Some(pending) = &self.pending_file_operation {
+        if let Some(pending) = self.pending_file_operations.front() {
             root = root.child(deferred(
                 crate::ui::components::conflict_dialog::render_conflict_dialog(
                     pending.conflict_paths.len(),

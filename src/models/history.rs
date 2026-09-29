@@ -5,7 +5,11 @@ use std::sync::Mutex;
 fn cleanup_replacement_backups(transaction: &Transaction) {
     if let Some(backups) = &transaction.details.replaced_files {
         for (_, backup) in backups {
-            let _ = std::fs::remove_file(backup);
+            if let Err(error) = std::fs::remove_file(backup) {
+                if error.kind() != std::io::ErrorKind::NotFound {
+                    log::warn!("Cannot remove replacement backup {backup}: {error}");
+                }
+            }
         }
     }
 }
@@ -17,6 +21,15 @@ pub struct HistoryState {
 }
 
 pub struct HistoryManager(pub Mutex<HistoryState>);
+
+impl Drop for HistoryManager {
+    fn drop(&mut self) {
+        let state = self.0.get_mut().unwrap_or_else(|poisoned| poisoned.into_inner());
+        for transaction in state.undo_stack.iter().chain(state.redo_stack.iter()) {
+            cleanup_replacement_backups(transaction);
+        }
+    }
+}
 
 impl Default for HistoryManager {
     fn default() -> Self {
@@ -114,13 +127,12 @@ impl HistoryManager {
     }
 
     pub fn clear(&self) {
-        if let Ok(mut state) = self.0.lock() {
-            for transaction in state.undo_stack.iter().chain(state.redo_stack.iter()) {
-                cleanup_replacement_backups(transaction);
-            }
-            state.undo_stack.clear();
-            state.redo_stack.clear();
+        let mut state = self.0.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        for transaction in state.undo_stack.iter().chain(state.redo_stack.iter()) {
+            cleanup_replacement_backups(transaction);
         }
+        state.undo_stack.clear();
+        state.redo_stack.clear();
     }
 }
 
@@ -140,6 +152,7 @@ mod tests {
                 created_files: None,
                 created_dirs: None,
                 replaced_files: None,
+                overwritten_files: None,
                 moved_files: None,
                 moved_dirs: None,
                 copied_files: None,
@@ -161,5 +174,27 @@ mod tests {
         assert!(history.complete_undo(&tx));
         assert!(history.get_state().undo_stack.is_empty());
         assert_eq!(history.get_state().redo_stack[0].id, tx.id);
+    }
+
+    #[test]
+    fn replacement_backup_is_removed_when_history_is_dropped() {
+        let temp = tempfile::tempdir().unwrap();
+        let destination = temp.path().join("destination.txt");
+        let backup = temp.path().join(".oxyde-replacement.bak");
+        std::fs::write(&destination, b"new content").unwrap();
+        std::fs::write(&backup, b"old content").unwrap();
+
+        let history = HistoryManager::new();
+        let mut tx = transaction();
+        tx.details.replaced_files = Some(vec![(
+            destination.to_string_lossy().into_owned(),
+            backup.to_string_lossy().into_owned(),
+        )]);
+        history.push(tx);
+        assert!(backup.exists());
+
+        drop(history);
+        assert!(!backup.exists());
+        assert_eq!(std::fs::read(destination).unwrap(), b"new content");
     }
 }
