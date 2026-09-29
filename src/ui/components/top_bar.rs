@@ -45,6 +45,8 @@ pub fn render_top_bar(
     let pane = view.state.layout.find_pane(&pane_id).expect("pane exists");
     let active_tab = pane.active_tab();
     let current_path = active_tab.path.clone();
+    let breadcrumb_scroll = active_tab.breadcrumb_scroll.clone();
+    let breadcrumb_viewport_width = active_tab.breadcrumb_viewport_width.clone();
     let theme = *_cx.theme();
 
     let path_parts: Vec<&str> = current_path
@@ -52,6 +54,20 @@ pub fn render_top_bar(
         .filter(|s: &&str| !s.is_empty())
         .collect();
     let total_parts = path_parts.len();
+    if *active_tab.breadcrumb_scroll_path.borrow() != current_path {
+        *active_tab.breadcrumb_scroll_path.borrow_mut() = current_path.clone();
+        if total_parts > 0 {
+            breadcrumb_scroll.scroll_to_item(total_parts * 2 - 2);
+        } else {
+            breadcrumb_scroll.set_offset(point(px(0.0), px(0.0)));
+        }
+        // The scroll handle's dimensions are updated during prepaint.
+        _cx.notify();
+    }
+    let scroll_left = -breadcrumb_scroll.offset().x.as_f32();
+    let scroll_max = breadcrumb_scroll.max_offset().x.as_f32();
+    let fade_left = scroll_left > 2.0;
+    let fade_right = scroll_max - scroll_left > 2.0;
 
     let can_go_back = !active_tab.back_stack.is_empty();
     let can_go_forward = !active_tab.forward_stack.is_empty();
@@ -276,6 +292,7 @@ pub fn render_top_bar(
                 .flex()
                 .items_center()
                 .flex_1()
+                .min_w_0()
                 .overflow_hidden()
                 .when(view.breadcrumb_editing && view.breadcrumb_pane_id.as_deref() == Some(pane_id.as_str()), |bar| {
                     if let Some(input) = view.editing_view.clone() {
@@ -312,7 +329,7 @@ pub fn render_top_bar(
                         }
                     } else { bar }
                 })
-                .when(!(view.breadcrumb_editing && view.breadcrumb_pane_id.as_deref() == Some(pane_id.as_str())), |bar| bar.children({
+                .when(!(view.breadcrumb_editing && view.breadcrumb_pane_id.as_deref() == Some(pane_id.as_str())), |bar| bar.child({
                     let mut accumulated_path = String::new();
                     let mut elements: Vec<AnyElement> = Vec::new();
 
@@ -342,6 +359,7 @@ pub fn render_top_bar(
                             elements.push(
                                div()
                                    .relative()
+                                   .flex_none()
                                    .child(
                                        div()
                                            .id(SharedString::from(format!("chevron-btn-{}-{}", p_id, index)))
@@ -474,6 +492,7 @@ pub fn render_top_bar(
 
                         let seg = div()
                             .id(SharedString::from(format!("breadcrumb-{}-{}", p_id, index)))
+                            .flex_none()
                             .h(px(24.0))
                             .px(px(6.0))
                             .flex()
@@ -578,7 +597,88 @@ pub fn render_top_bar(
                             })
                             .into_any_element(),
                     );
-                    elements
+                    let wheel_scroll = breadcrumb_scroll.clone();
+                    let wheel_handle = handle.clone();
+                    let measure_handle = handle.clone();
+                    let measure_pane = pane_id.clone();
+                    let measured_width = breadcrumb_viewport_width.get();
+                    let viewport_width = breadcrumb_viewport_width.clone();
+                    let resize_scroll = breadcrumb_scroll.clone();
+                    div()
+                        .relative()
+                        .flex()
+                        .flex_1()
+                        .when(measured_width > 0.0, |bar| bar.w(px(measured_width)).flex_none())
+                        .min_w_0()
+                        .h_full()
+                        .child(canvas(|bounds, _, _| bounds, move |_, bounds: Bounds<Pixels>, window, cx| {
+                            measure_handle.update(cx, |this, cx| {
+                                if let (Some(origin), Some(size)) = (this.pane_origins.get(&measure_pane), this.pane_sizes.get(&measure_pane)) {
+                                    let right = (origin.x + size.width).min(window.bounds().size.width.as_f32());
+                                    let available = (right - bounds.origin.x.as_f32() - 16.0).max(0.0);
+                                    if (viewport_width.get() - available).abs() > 1.0 {
+                                        viewport_width.set(available);
+                                        if total_parts > 0 {
+                                            if let Some(last) = resize_scroll.bounds_for_item(total_parts * 2 - 1) {
+                                                let overflow = (last.right().as_f32() - bounds.origin.x.as_f32() - available).max(0.0);
+                                                resize_scroll.set_offset(point(px(-overflow), px(0.0)));
+                                            }
+                                        }
+                                        cx.notify();
+                                    }
+                                }
+                            });
+                        }).absolute().size_full())
+                        .child(
+                            div()
+                                .id(SharedString::from(format!("breadcrumb-scroll-{}", pane_id)))
+                                .flex()
+                                .flex_1()
+                                .min_w_0()
+                                .items_center()
+                                .h_full()
+                                .overflow_x_scroll()
+                                .track_scroll(&breadcrumb_scroll)
+                                .on_scroll_wheel(move |event, window, cx| {
+                                    let delta = event.delta.pixel_delta(window.line_height());
+                                    let amount = if delta.y.as_f32().abs() > delta.x.as_f32().abs() {
+                                        delta.y
+                                    } else {
+                                        delta.x
+                                    };
+                                    let max = wheel_scroll.max_offset().x;
+                                    if max > px(0.0) && amount != px(0.0) {
+                                        let offset = wheel_scroll.offset();
+                                        let x = (offset.x + amount * 1.5).clamp(-max, px(0.0));
+                                        wheel_scroll.set_offset(point(x, offset.y));
+                                        wheel_handle.update(cx, |_, cx| cx.notify());
+                                        cx.stop_propagation();
+                                    }
+                                })
+                                .children(elements),
+                        )
+                        .when(fade_left, |bar| {
+                            bar.child(
+                                div()
+                                    .absolute()
+                                    .left_0()
+                                    .top_0()
+                                    .h_full()
+                                    .w(px(24.0))
+                                    .bg(linear_gradient(90.0, linear_color_stop(theme.background, 0.0), linear_color_stop(theme.background.alpha(0.0), 1.0))),
+                            )
+                        })
+                        .when(fade_right, |bar| {
+                            bar.child(
+                                div()
+                                    .absolute()
+                                    .right_0()
+                                    .top_0()
+                                    .h_full()
+                                    .w(px(24.0))
+                                    .bg(linear_gradient(270.0, linear_color_stop(theme.background, 0.0), linear_color_stop(theme.background.alpha(0.0), 1.0))),
+                            )
+                        })
                 }))
         )
 }

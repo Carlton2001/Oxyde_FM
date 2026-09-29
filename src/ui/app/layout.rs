@@ -146,9 +146,29 @@ impl OxydeApp {
                                     x: bounds.origin.x.as_f32(),
                                     y: bounds.origin.y.as_f32(),
                                 };
-                                h.update(cx, |this, _| {
+                                h.update(cx, |this, cx| {
+                                    let width_changed = this
+                                        .pane_sizes
+                                        .get(&p_id)
+                                        .is_some_and(|old| (old.width - size.width).abs() > 1.0);
                                     this.pane_sizes.insert(p_id.clone(), size);
                                     this.pane_origins.insert(p_id.clone(), origin);
+                                    if width_changed {
+                                        if let Some(pane) = this.state.layout.find_pane(&p_id) {
+                                            let parts = pane
+                                                .active_tab()
+                                                .path
+                                                .split(['/', '\\'])
+                                                .filter(|part| !part.is_empty())
+                                                .count();
+                                            if parts > 0 {
+                                                pane.active_tab()
+                                                    .breadcrumb_scroll
+                                                    .scroll_to_item(parts * 2 - 2);
+                                            }
+                                        }
+                                        cx.notify();
+                                    }
                                 });
                             }
                         })
