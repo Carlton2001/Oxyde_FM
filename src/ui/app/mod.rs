@@ -73,6 +73,11 @@ pub enum DragTarget {
         content_h: f32,
         track_id: String,
     },
+    OperationsPanelV {
+        viewport_h: f32,
+        content_h: f32,
+        track_id: String,
+    },
     PaneResize {
         split_id: String,
         child_idx: usize,
@@ -416,6 +421,10 @@ pub struct OxydeApp {
     pending_file_operations: std::collections::VecDeque<PendingFileOperation>,
     file_operation_notice: Option<(Message, String)>,
     pub(crate) operations_panel_open: bool,
+    pub(crate) operations_panel_position: Option<Point<Pixels>>,
+    pub(crate) operations_panel_view:
+        Option<Entity<crate::ui::components::operations::OperationsPanelView>>,
+    pub(crate) operations_panel_scroll: ScrollHandle,
     pub(crate) rename_error: Option<Message>,
     pub(crate) rename_shake_id: u64,
 
@@ -630,6 +639,16 @@ impl OxydeApp {
         .detach();
     }
 
+    pub(crate) fn persist_operations_panel_position(
+        &mut self,
+        position: Point<Pixels>,
+        cx: &mut Context<Self>,
+    ) {
+        self.operations_panel_position = Some(position);
+        self.config.operations_panel_position = Some([position.x.as_f32(), position.y.as_f32()]);
+        self.save_preferences(cx);
+    }
+
     pub fn execute_redo(&mut self, cx: &mut Context<Self>) {
         let history = self.history.clone();
         let Some(handle) = self.handle.clone() else {
@@ -682,6 +701,10 @@ impl OxydeApp {
             });
         let (state, sidebar_width) =
             restored_workspace.unwrap_or_else(|| (WorkspaceState::new(), 260.0));
+        let operations_panel_position = config
+            .operations_panel_position
+            .filter(|position| position[0].is_finite() && position[1].is_finite())
+            .map(|position| point(px(position[0]), px(position[1])));
 
         Self {
             state,
@@ -757,6 +780,9 @@ impl OxydeApp {
             pending_file_operations: std::collections::VecDeque::new(),
             file_operation_notice: None,
             operations_panel_open: false,
+            operations_panel_position,
+            operations_panel_view: None,
+            operations_panel_scroll: ScrollHandle::new(),
             rename_error: None,
             rename_shake_id: 0,
             show_hidden: config.show_hidden,
@@ -1860,7 +1886,7 @@ impl Render for OxydeApp {
         root = root
             .on_mouse_move({
                 let h = handle.clone();
-                move |e, _window, cx| {
+                move |e, window, cx| {
                     h.update(cx, |this, cx| {
                         this.mouse_pos = e.position;
                         if let Some(target) = this.drag_target.clone() {
@@ -2033,6 +2059,28 @@ impl Render for OxydeApp {
                                         }
                                     }
                                 }
+                                DragTarget::OperationsPanelV {
+                                    viewport_h,
+                                    content_h,
+                                    track_id,
+                                } => {
+                                    if let Some(origin) = this.scrollbar_origins.get(&track_id) {
+                                        let mouse_pos_in_track = pos.y.as_f32() - origin.y;
+                                        let thumb_size = (viewport_h
+                                            * (viewport_h / content_h.max(1.0)).min(1.0))
+                                        .max(40.0);
+                                        let travel_distance = (viewport_h - thumb_size).max(1.0);
+                                        let content_range = content_h - viewport_h;
+                                        let target_thumb_pos = (mouse_pos_in_track
+                                            - this.grab_offset)
+                                            .clamp(0.0, travel_distance);
+                                        let target_px =
+                                            (target_thumb_pos / travel_distance) * content_range;
+                                        this.operations_panel_scroll
+                                            .set_offset(point(px(0.0), px(-target_px)));
+                                        cx.notify();
+                                    }
+                                }
                                 DragTarget::PaneResize {
                                     split_id,
                                     child_idx,
@@ -2094,6 +2142,13 @@ impl Render for OxydeApp {
                                     cx.notify();
                                 }
                             }
+                        }
+                        if let Some(panel) = this.operations_panel_view.clone() {
+                            let pointer = e.position;
+                            let viewport = window.viewport_size();
+                            panel.update(cx, |panel, cx| {
+                                panel.update_drag(pointer, viewport, cx);
+                            });
                         }
                     });
                 }
@@ -3077,13 +3132,9 @@ impl Render for OxydeApp {
 
         // SETTINGS OVERLAY
         if self.operations_panel_open {
-            root = root.child(deferred(
-                crate::ui::components::operations::render_operations_panel(
-                    self,
-                    handle.clone(),
-                    cx,
-                ),
-            ));
+            if let Some(panel) = self.operations_panel_view.clone() {
+                root = root.child(deferred(panel));
+            }
         }
 
         if self.settings_open {

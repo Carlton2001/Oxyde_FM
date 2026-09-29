@@ -43,8 +43,12 @@ fn main() {
             crate::ui::components::input::bind_keys(cx);
             OxydeApp::bind_keys(cx);
             let app = cx.new(|cx| OxydeApp::new(config, config_path, load_failed, cx));
+            let operations_panel = cx.new(|cx| {
+                crate::ui::components::operations::OperationsPanelView::new(app.clone(), cx)
+            });
             app.update(cx, |this, cx| {
                 this.handle = Some(app.clone());
+                this.operations_panel_view = Some(operations_panel);
                 this.start_watcher_task(cx);
                 this.reconcile_watchers();
                 this.refresh_all_tabs(cx);

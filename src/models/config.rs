@@ -45,6 +45,9 @@ pub struct AppConfig {
     pub show_checkboxes: bool,
     #[serde(default)]
     pub show_network: bool,
+    /// Window-local top-left coordinates for the operations panel.
+    #[serde(default)]
+    pub operations_panel_position: Option<[f32; 2]>,
     #[serde(default)]
     pub group_by_date: bool,
     #[serde(default)]
@@ -89,6 +92,7 @@ impl Default for AppConfig {
             show_grid_thumbnails: false,
             show_checkboxes: false,
             show_network: true,
+            operations_panel_position: None,
             group_by_date: false,
             trash_drive_settings: Vec::new(),
             confirm_delete: true,
@@ -196,6 +200,7 @@ mod tests {
         let path = dir.path().join("config.json");
         fs::write(&path, r#"{"theme":"oxyde-dark","language":"fr","search_limit":123,"future_option":{"enabled":true}}"#).unwrap();
         let mut config = ConfigManager::read_from_path(&path).unwrap();
+        config.operations_panel_position = Some([42.5, 87.25]);
         for (theme, language) in [
             (ThemeId::Light, Language::English),
             (ThemeId::Dark, Language::French),
@@ -207,6 +212,7 @@ mod tests {
             assert_eq!(ThemeId::from_id(&config.theme), theme);
             assert_eq!(Language::from_id(&config.language), language);
             assert_eq!(config.search_limit, 123);
+            assert_eq!(config.operations_panel_position, Some([42.5, 87.25]));
             assert_eq!(config.extra["future_option"]["enabled"], true);
         }
     }
