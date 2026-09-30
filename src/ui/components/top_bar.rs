@@ -54,11 +54,10 @@ pub fn render_top_bar(
         .filter(|s: &&str| !s.is_empty())
         .collect();
     let total_parts = path_parts.len();
-    if *active_tab.breadcrumb_scroll_path.borrow() != current_path {
+    let breadcrumb_path_changed = *active_tab.breadcrumb_scroll_path.borrow() != current_path;
+    if breadcrumb_path_changed {
         *active_tab.breadcrumb_scroll_path.borrow_mut() = current_path.clone();
-        if total_parts > 0 {
-            breadcrumb_scroll.scroll_to_item(total_parts * 2 - 2);
-        } else {
+        if total_parts == 0 {
             breadcrumb_scroll.set_offset(point(px(0.0), px(0.0)));
         }
         // The scroll handle's dimensions are updated during prepaint.
@@ -604,6 +603,7 @@ pub fn render_top_bar(
                     let measured_width = breadcrumb_viewport_width.get();
                     let viewport_width = breadcrumb_viewport_width.clone();
                     let resize_scroll = breadcrumb_scroll.clone();
+                    let auto_scroll_to_end = breadcrumb_path_changed;
                     div()
                         .relative()
                         .flex()
@@ -616,6 +616,9 @@ pub fn render_top_bar(
                                 if let (Some(origin), Some(size)) = (this.pane_origins.get(&measure_pane), this.pane_sizes.get(&measure_pane)) {
                                     let right = (origin.x + size.width).min(window.bounds().size.width.as_f32());
                                     let available = (right - bounds.origin.x.as_f32() - 16.0).max(0.0);
+                                    if auto_scroll_to_end {
+                                        resize_scroll.set_offset(point(-resize_scroll.max_offset().x, px(0.0)));
+                                    }
                                     if (viewport_width.get() - available).abs() > 1.0 {
                                         viewport_width.set(available);
                                         if total_parts > 0 {
