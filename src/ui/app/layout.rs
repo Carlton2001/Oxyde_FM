@@ -31,13 +31,13 @@ impl OxydeApp {
                 height: l_h,
             });
 
-            // Constants matching file_list.rs
-            let type_w = 100.0;
-            let size_w = 100.0;
-            let date_w = 180.0;
-            let fixed_w = type_w + size_w + date_w;
-            let name_w = (pane_size.width - fixed_w).max(80.0);
-            let total_w = name_w + fixed_w;
+            let columns = crate::ui::style::DetailsColumnWidths::for_viewport(
+                pane_size.width,
+                active_tab.type_col_width,
+                active_tab.size_col_width,
+                active_tab.date_col_width,
+            );
+            let total_w = columns.total() + crate::ui::style::DETAILS_HORIZONTAL_PADDING;
 
             let max_h_offset = (total_w - pane_size.width).max(0.0);
             let current_h_offset = active_tab.list_scroll_h.offset().x.as_f32().abs();
@@ -130,6 +130,7 @@ impl OxydeApp {
                 let p_id = pane.id.clone();
                 div()
                     .flex_1()
+                    .min_w_0()
                     .size_full()
                     .flex()
                     .relative()
@@ -150,7 +151,7 @@ impl OxydeApp {
                                     let width_changed = this
                                         .pane_sizes
                                         .get(&p_id)
-                                        .is_some_and(|old| (old.width - size.width).abs() > 1.0);
+                                        .is_none_or(|old| (old.width - size.width).abs() > 1.0);
                                     this.pane_sizes.insert(p_id.clone(), size);
                                     this.pane_origins.insert(p_id.clone(), origin);
                                     if width_changed {
@@ -185,7 +186,7 @@ impl OxydeApp {
                 weights,
             } => {
                 let total_weight: f32 = weights.iter().sum();
-                let mut container = div().flex_1().size_full().flex().child(
+                let mut container = div().flex_1().min_w_0().size_full().flex().child(
                     canvas(|bounds, _window, _cx| bounds, {
                         let h = handle.clone();
                         let s_id = id.clone();
@@ -222,13 +223,19 @@ impl OxydeApp {
                         let separator = match axis {
                             crate::ui::workspace::LayoutAxis::Horizontal => {
                                 div()
-                                    .w(px(4.0)) // Wider grab area
+                                    .group("pane-resize-handle")
+                                    .w(px(3.0))
+                                    .flex_none()
+                                    .cursor(CursorStyle::ResizeLeftRight)
                                     .h_full()
+                                    .flex()
+                                    .justify_center()
                                     .child(
                                         div()
-                                            .size_full()
+                                            .w(px(3.0))
+                                            .h_full()
                                             .bg(cx.theme().border)
-                                            .hover(|s| s.bg(cx.theme().accent)),
+                                            .group_hover("pane-resize-handle", |s| s.bg(cx.theme().accent.opacity(0.6))),
                                     )
                                     .on_mouse_down(MouseButton::Left, {
                                         let h = handle.clone();
@@ -248,13 +255,19 @@ impl OxydeApp {
                                     })
                             }
                             crate::ui::workspace::LayoutAxis::Vertical => div()
-                                .h(px(4.0))
+                                .group("pane-resize-handle")
+                                .h(px(3.0))
+                                .flex_none()
+                                .cursor(CursorStyle::ResizeUpDown)
                                 .w_full()
+                                .flex()
+                                .items_center()
                                 .child(
                                     div()
-                                        .size_full()
+                                        .h(px(3.0))
+                                        .w_full()
                                         .bg(cx.theme().border)
-                                        .hover(|s| s.bg(cx.theme().accent)),
+                                        .group_hover("pane-resize-handle", |s| s.bg(cx.theme().accent.opacity(0.6))),
                                 )
                                 .on_mouse_down(MouseButton::Left, {
                                     let h = handle.clone();
@@ -280,6 +293,7 @@ impl OxydeApp {
                             .flex_basis(relative(weights[i] / total_weight.max(0.1)))
                             .flex_grow(1.0)
                             .flex_shrink(1.0)
+                            .min_w_0()
                             .size_full()
                             .overflow_hidden()
                             .child(self.render_layout_node(child, handle.clone(), cx)),
@@ -311,6 +325,7 @@ impl OxydeApp {
             )))
             .relative()
             .flex_1()
+            .min_w_0()
             .h_full()
             .flex()
             .flex_col()

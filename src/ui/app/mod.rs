@@ -1830,7 +1830,7 @@ impl Render for OxydeApp {
         let win_h = size.height.as_f32();
 
         use crate::ui::components::title_bar::TITLEBAR_H;
-        self.list_width = (win_w - self.sidebar_width - 4.0).max(1.0);
+        self.list_width = (win_w - self.sidebar_width - 3.0).max(1.0);
         self.list_height = (win_h - TITLEBAR_H).max(1.0);
 
         if let Some(DragTarget::SelectionRectangle {
@@ -1846,6 +1846,7 @@ impl Render for OxydeApp {
         self.clamp_scrolls();
 
         let mut root = div()
+            .track_focus(&self.focus_handle)
             .size_full()
             .bg(cx.theme().background)
             .text_color(cx.theme().text)
@@ -2231,11 +2232,20 @@ impl Render for OxydeApp {
                     .child(
                         div()
                             .id("sidebar-resize-handle")
-                            .w(px(4.0))
+                            .group("sidebar-resize-handle")
+                            .w(px(3.0))
+                            .cursor(CursorStyle::ResizeLeftRight)
                             .h_full()
-                            .bg(theme.menu_surface)
-                            .hover(|s| s.bg(theme.accent))
-                            .active(|s| s.bg(theme.accent))
+                            .flex_none()
+                            .flex()
+                            .justify_center()
+                            .child(
+                                div()
+                                    .w(px(3.0))
+                                    .h_full()
+                                    .bg(theme.menu_surface)
+                                    .group_hover("sidebar-resize-handle", |s| s.bg(theme.accent.opacity(0.6))),
+                            )
                             .on_mouse_down(MouseButton::Left, {
                                 let h = handle.clone();
                                 move |e, _, cx| {
@@ -2247,7 +2257,7 @@ impl Render for OxydeApp {
                                 }
                             }),
                     )
-                    .child(div().flex_1().h_full().child(self.render_layout_node(
+                    .child(div().flex_1().min_w_0().h_full().overflow_hidden().child(self.render_layout_node(
                         &layout_tree,
                         handle.clone(),
                         cx,

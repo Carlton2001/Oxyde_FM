@@ -5,7 +5,7 @@ use crate::ui::components::scrollbar::{render_scrollbar, ScrollbarAxis, ZED_TRAC
 use crate::ui::components::tooltip::Tooltip;
 use crate::ui::format::{format_date, format_number, format_size};
 use crate::ui::i18n::{FluentArgs, I18nContext, Message};
-use crate::ui::style::{GRID_CARD_MIN_WIDTH, GRID_CARD_ROW_HEIGHT, ROW_HEIGHT};
+use crate::ui::style::{DetailsColumnWidths, GRID_CARD_MIN_WIDTH, GRID_CARD_ROW_HEIGHT, ROW_HEIGHT};
 use crate::ui::theme::{OxydeTheme, ThemeContext};
 use crate::ui::workspace::{SortColumn, SortDirection, TabLoadStatus, ViewMode};
 use gpui::prelude::*;
@@ -74,6 +74,17 @@ fn file_type_display(f: &FileEntry, i18n: &crate::ui::i18n::I18n) -> String {
         .unwrap_or_else(|| file_type_label(f))
 }
 
+/// Uppercases only the extension for presentation in grid cards.
+fn grid_display_name(name: &str) -> String {
+    let Some((stem, extension)) = name.rsplit_once('.') else {
+        return name.to_string();
+    };
+    if stem.is_empty() || extension.is_empty() {
+        return name.to_string();
+    }
+    format!("{stem}.{}", extension.to_uppercase())
+}
+
 pub fn render_file_list(
     view: &OxydeApp,
     pane_id: String,
@@ -112,13 +123,17 @@ pub fn render_file_list(
         (pane_size.height - 32.0 - ROW_HEIGHT - STATUS_BAR_HEIGHT - ZED_TRACK_WIDTH).max(1.0);
     let content_h = (count * ROW_HEIGHT).max(1.0);
 
-    let type_w = active_tab.type_col_width;
-    let size_w = active_tab.size_col_width;
-    let date_w = active_tab.date_col_width;
-
-    let fixed_w = type_w + size_w + date_w;
-    let name_w = (pane_viewport_w - fixed_w - 28.0).max(80.0);
-    let total_w = name_w + fixed_w;
+    let columns = DetailsColumnWidths::for_viewport(
+        pane_viewport_w,
+        active_tab.type_col_width,
+        active_tab.size_col_width,
+        active_tab.date_col_width,
+    );
+    let name_w = columns.name;
+    let type_w = columns.file_type;
+    let size_w = columns.size;
+    let date_w = columns.date;
+    let total_w = columns.total();
 
     let is_active_pane = view.state.active_pane_id == pane_id;
     let is_dragging_v = matches!(view.drag_target, Some(DragTarget::FileListV { ref pane_id, .. }) if pane_id == &p_id_cap);
@@ -262,7 +277,6 @@ pub fn render_file_list(
                                                 .h(px(ROW_HEIGHT))
                                                 .w(px(total_w))
                                                 .bg(if is_selected { theme.selected } else if is_active_pane { theme.active_background } else { theme.background })
-                                                .when(is_dimmed, |d| d.opacity(0.5))
                                                 .when(!is_selected, |s| s.hover(|s| s.bg(theme.hover)))
                                                 .when(show_tooltips && show_media_previews, |d| d.tooltip(Tooltip::for_file_full(file_name_tt.clone(), path_tt, ext_tt.clone(), size_tt.clone(), date_tt.clone())))
                                                 .when(show_tooltips && !show_media_previews, |d| d.tooltip(Tooltip::for_file_no_preview(file_name_tt, ext_tt, size_tt, date_tt)))
@@ -443,10 +457,12 @@ pub fn render_file_list(
 
                                                     div()
                                                         .w(px(name_w))
+                                                        .flex_none()
                                                         .h_full()
                                                         .flex()
                                                         .items_center()
                                                         .overflow_hidden()
+                                                        .when(is_dimmed, |d| d.opacity(0.5))
                                                         .child(
                                                             div()
                                                                 .id(SharedString::from(format!("file-content-{}", path_str)))
@@ -548,9 +564,9 @@ pub fn render_file_list(
                                                                 })
                                                         )
                                                 })
-                                                .child(div().w(px(type_w)).px(px(8.0)).text_color(theme.text_muted).text_ellipsis().text_size(px(12.0)).child(file_type_display(file, cx.i18n())))
-                                                .child(div().w(px(size_w)).px(px(8.0)).flex().justify_end().text_color(theme.text_muted).text_ellipsis().text_size(px(12.0)).child(format_size(file.size, is_dir, file.is_calculated, language)))
-                                                .child(div().w(px(date_w)).px(px(8.0)).text_color(theme.text_muted).text_ellipsis().text_size(px(12.0)).child(format_date(file.modified, language)))
+                                                .child(div().w(px(type_w)).flex_none().px(px(8.0)).text_color(theme.text_muted).text_ellipsis().text_size(px(12.0)).when(is_dimmed, |d| d.opacity(0.5)).child(file_type_display(file, cx.i18n())))
+                                                .child(div().w(px(size_w)).flex_none().px(px(8.0)).flex().justify_end().text_color(theme.text_muted).text_ellipsis().text_size(px(12.0)).when(is_dimmed, |d| d.opacity(0.5)).child(format_size(file.size, is_dir, file.is_calculated, language)))
+                                                .child(div().w(px(date_w)).flex_none().px(px(8.0)).text_color(theme.text_muted).text_ellipsis().text_size(px(12.0)).when(is_dimmed, |d| d.opacity(0.5)).child(format_date(file.modified, language)))
                                             }}).collect::<Vec<_>>()
                                     }
                                 }
@@ -903,7 +919,16 @@ pub fn render_file_list(
             .child(files_label)
             .when_some(selection_summary, |bar, summary| {
                 bar.child("•")
-                    .child(div().text_color(theme.accent).child(summary))
+                    .child(
+                        div()
+                            .id(SharedString::from(format!("file-selection-summary-{pane_id}")))
+                            .min_w_0()
+                            .text_ellipsis()
+                            .overflow_hidden()
+                            .text_color(theme.accent)
+                            .tooltip(Tooltip::text(summary.clone()))
+                            .child(summary),
+                    )
             })
             .child(div().flex_1())
             .child(view_mode_button(
@@ -1054,13 +1079,13 @@ fn render_grid_file_list(
                                         .id(SharedString::from(format!("file-card-{path}")))
                                         .w(px(card_width - 4.0))
                                         .h(px(GRID_CARD_ROW_HEIGHT - 4.0))
-                                        .m_1()
+                                        .m_0p5()
                                         .p_1()
                                         .flex()
                                         .flex_col()
                                         .items_center()
                                         .justify_center()
-                                        .gap_1()
+                                        .gap_0p5()
                                         .rounded_md()
                                         .border_1()
                                         .border_color(if has_rename_error {
@@ -1078,7 +1103,6 @@ fn render_grid_file_list(
                                             theme.background
                                         })
                                         .when(!is_selected, |d| d.hover(|d| d.bg(theme.hover)))
-                                        .when(file.is_hidden || file.is_system, |d| d.opacity(0.5))
                                         .when(show_tooltips && show_media_previews, |d| {
                                             d.tooltip(Tooltip::for_file_full(
                                                 file_name_tt.clone(),
@@ -1226,7 +1250,8 @@ fn render_grid_file_list(
                                             div()
                                                 .relative()
                                                 .w_full()
-                                                .h(px(76.0))
+                                                .h(px(68.0))
+                                                .when(file.is_hidden || file.is_system, |d| d.opacity(0.5))
                                                 .child(
                                                     div()
                                                         .absolute()
@@ -1268,12 +1293,20 @@ fn render_grid_file_list(
                                                 .h(px(18.0))
                                                 .text_ellipsis()
                                                 .overflow_hidden()
+                                                .when(file.is_hidden || file.is_system, |d| d.opacity(0.5))
                                                 .child(match editing_view {
                                                     Some(editing_view) => {
                                                         editing_view.into_any_element()
                                                     }
                                                     None => {
-                                                        div().child(name.clone()).into_any_element()
+                                                        div()
+                                                            .font_weight(FontWeight::MEDIUM)
+                                                            .child(if file.is_dir {
+                                                                name.clone()
+                                                            } else {
+                                                                grid_display_name(&name)
+                                                            })
+                                                            .into_any_element()
                                                     }
                                                 }),
                                         )
@@ -1282,7 +1315,12 @@ fn render_grid_file_list(
                                                 .text_size(px(10.0))
                                                 .text_color(theme.text_muted)
                                                 .text_ellipsis()
-                                                .child(file_type_display(file, cx.i18n())),
+                                                .when(file.is_hidden || file.is_system, |d| d.opacity(0.5))
+                                                .child(if file.is_dir {
+                                                    cx.i18n().text(Message::FileTypeFolder).to_uppercase()
+                                                } else {
+                                                    file_type_display(file, cx.i18n())
+                                                }),
                                         );
                                     if is_dir {
                                         card = card
@@ -1479,9 +1517,11 @@ fn render_grid_file_list(
 
     div()
         .flex_1()
+        .min_w_0()
         .flex()
         .flex_col()
         .relative()
+        .pb(px(STATUS_BAR_HEIGHT))
         .overflow_hidden()
         .bg(if active {
             theme.active_background
@@ -1517,7 +1557,14 @@ fn render_grid_file_list(
         )
         .child(
             div()
+                .absolute()
+                .left_0()
+                .right_0()
+                .bottom_0()
                 .h(px(STATUS_BAR_HEIGHT))
+                .min_w_0()
+                .flex_none()
+                .overflow_hidden()
                 .flex()
                 .items_center()
                 .gap_3()
@@ -1558,10 +1605,16 @@ fn render_grid_file_list(
                         (_, 0) => Message::SelectedFolders,
                         _ => Message::SelectedMixed,
                     };
+                    let summary = cx.i18n().text_with_args(message, &args);
                     bar.child("•").child(
                         div()
+                            .id(SharedString::from(format!("file-selection-summary-{pane_id}")))
+                            .min_w_0()
+                            .text_ellipsis()
+                            .overflow_hidden()
                             .text_color(theme.accent)
-                            .child(cx.i18n().text_with_args(message, &args)),
+                            .tooltip(Tooltip::text(summary.clone()))
+                            .child(summary),
                     )
                 })
                 .child(view_mode_button(
@@ -1899,6 +1952,7 @@ fn header_cell(
     div()
         .relative()
         .w(px(width))
+        .flex_none()
         .px(px(8.0))
         .h_full()
         .flex()

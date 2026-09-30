@@ -941,7 +941,8 @@ pub fn render_sidebar(
             .top_0()
             .right_0()
             .bottom_0()
-            .w(px(4.0))
+            .w(px(3.0))
+            .cursor(CursorStyle::ResizeLeftRight)
             .on_mouse_down(MouseButton::Left, {
                 let h = handle.clone();
                 move |e, _, cx| {
