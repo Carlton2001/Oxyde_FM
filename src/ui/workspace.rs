@@ -35,6 +35,14 @@ pub enum SavedLayoutNode {
     },
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ViewMode {
+    Details,
+    #[default]
+    Grid,
+}
+
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SavedLayoutAxis {
@@ -46,6 +54,8 @@ pub enum SavedLayoutAxis {
 pub struct SavedTab {
     pub id: String,
     pub path: String,
+    #[serde(default)]
+    pub view_mode: ViewMode,
     #[serde(default)]
     pub back_stack: Vec<String>,
     #[serde(default)]
@@ -176,6 +186,7 @@ pub struct TabState {
     pub filter_dates: std::collections::HashSet<DateCategory>,
     pub selected_paths: std::collections::HashSet<String>,
     pub selection_anchor: Option<String>,
+    pub view_mode: ViewMode,
     pub cached_filtered_files: Vec<FileEntry>,
     pub type_col_width: f32,
     pub size_col_width: f32,
@@ -211,6 +222,7 @@ impl TabState {
             filter_dates: std::collections::HashSet::new(),
             selected_paths: std::collections::HashSet::new(),
             selection_anchor: None,
+            view_mode: ViewMode::Grid,
             cached_filtered_files: Vec::new(),
             type_col_width: 100.0,
             size_col_width: 100.0,
@@ -412,6 +424,7 @@ impl SavedLayoutNode {
                     .map(|tab| SavedTab {
                         id: tab.id.clone(),
                         path: tab.path.clone(),
+                        view_mode: tab.view_mode,
                         back_stack: tab.back_stack.clone(),
                         forward_stack: tab.forward_stack.clone(),
                     })
@@ -447,6 +460,7 @@ impl SavedLayoutNode {
                     .filter(|tab| !tab.path.is_empty())
                     .map(|tab| {
                         let mut state = TabState::new(tab.id, tab.path);
+                        state.view_mode = tab.view_mode;
                         state.back_stack = tab.back_stack;
                         state.forward_stack = tab.forward_stack;
                         state
@@ -878,6 +892,8 @@ impl WorkspaceState {
         let new_tab = TabState::new(id, path);
 
         if let Some(pane) = self.find_pane_mut(pane_id) {
+            let mut new_tab = new_tab;
+            new_tab.view_mode = pane.active_tab().view_mode;
             pane.tabs.push(new_tab);
 
             if activate {
@@ -899,10 +915,13 @@ impl WorkspaceState {
             }
             if pane.tabs.len() == 1 {
                 let path = pane.tabs[0].path.clone();
+                let view_mode = pane.tabs[0].view_mode;
                 let id = format!("tab-{}", self.next_tab_id);
                 self.next_tab_id = self.next_tab_id.wrapping_add(1);
                 if let Some(pane) = self.find_pane_mut(pane_id) {
-                    pane.tabs[0] = TabState::new(id, path);
+                    let mut replacement = TabState::new(id, path);
+                    replacement.view_mode = view_mode;
+                    pane.tabs[0] = replacement;
                     pane.active_tab_index = 0;
                 }
                 return;
@@ -933,14 +952,19 @@ impl WorkspaceState {
     }
 
     pub fn duplicate_tab(&mut self, pane_id: &str, tab_idx: usize) -> Option<usize> {
-        let path = if let Some(pane) = self.find_pane(pane_id) {
-            pane.tabs.get(tab_idx).map(|t| t.path.clone())
+        let duplicate = if let Some(pane) = self.find_pane(pane_id) {
+            pane.tabs
+                .get(tab_idx)
+                .map(|tab| (tab.path.clone(), tab.view_mode))
         } else {
             None
         };
 
-        if let Some(path) = path {
+        if let Some((path, view_mode)) = duplicate {
             self.add_tab(pane_id, path, true);
+            if let Some(pane) = self.find_pane_mut(pane_id) {
+                pane.active_tab_mut().view_mode = view_mode;
+            }
             self.find_pane(pane_id).map(|pane| pane.active_tab_index)
         } else {
             None

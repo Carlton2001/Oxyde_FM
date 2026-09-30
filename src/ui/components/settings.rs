@@ -124,10 +124,22 @@ pub fn render_settings_panel(
             i18n.text(Message::SettingsPreviewsDescription),
             view.show_media_previews,
             "toggle-media",
-            handle,
+            handle.clone(),
             theme,
             |view, cx| {
                 view.show_media_previews = !view.show_media_previews;
+                view.save_preferences(cx);
+            },
+        ))
+        .child(settings_row(
+            i18n.text(Message::SettingsGridThumbnails),
+            i18n.text(Message::SettingsGridThumbnailsDescription),
+            view.show_grid_thumbnails,
+            "toggle-grid-thumbnails",
+            handle.clone(),
+            theme,
+            |view, cx| {
+                view.show_grid_thumbnails = !view.show_grid_thumbnails;
                 view.save_preferences(cx);
             },
         ))

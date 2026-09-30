@@ -2,26 +2,116 @@ use crate::models::CommandError;
 use image::RgbaImage;
 use std::fs;
 use std::path::Path;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 /// Target thumbnail size in pixels (longest side).
 const THUMB_SIZE: u32 = 256;
-const VIDEO_THUMB_SIZE: u32 = 320;
+const VIDEO_THUMB_SIZE: u32 = 640;
+static CACHE_TEMP_ID: AtomicU64 = AtomicU64::new(0);
+
+fn cached_thumbnail(
+    path: String,
+    kind: &str,
+    generate: impl FnOnce(String) -> Result<RgbaImage, CommandError>,
+) -> Result<RgbaImage, CommandError> {
+    let source = Path::new(&path);
+    let metadata =
+        fs::metadata(source).map_err(|error| CommandError::IoError(error.to_string()))?;
+    let modified_ns = metadata
+        .modified()
+        .ok()
+        .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+        .map_or(0, |duration| duration.as_nanos());
+    let Some(cache_root) = dirs::cache_dir() else {
+        log::warn!("Cannot resolve the user cache directory; thumbnail will not be cached");
+        return generate(path);
+    };
+    let cache_dir = cache_root.join("oxyde").join("thumbnails");
+    let key =
+        blake3::hash(format!("v1|{kind}|{}|{}|{modified_ns}", path, metadata.len()).as_bytes())
+            .to_hex();
+    let cache_file = cache_dir.join(format!("{key}.jpg"));
+
+    if let Ok(image) = image::open(&cache_file) {
+        return Ok(image.to_rgba8());
+    }
+    if cache_file.exists() {
+        let _ = fs::remove_file(&cache_file);
+    }
+    fs::create_dir_all(&cache_dir).map_err(|error| CommandError::IoError(error.to_string()))?;
+
+    let image = generate(path.clone()).map_err(|error| {
+        log::warn!("Could not generate {kind} thumbnail for {path}: {error}");
+        error
+    })?;
+    let temp_id = CACHE_TEMP_ID.fetch_add(1, Ordering::Relaxed);
+    let temp_file = cache_dir.join(format!("{key}.{}.{}.tmp", std::process::id(), temp_id));
+    let rgb = image::DynamicImage::ImageRgba8(image.clone()).to_rgb8();
+    let write_result = (|| -> Result<(), CommandError> {
+        let mut file = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temp_file)
+            .map_err(|error| CommandError::IoError(error.to_string()))?;
+        image::codecs::jpeg::JpegEncoder::new_with_quality(&mut file, 75)
+            .encode_image(&image::DynamicImage::ImageRgb8(rgb))
+            .map_err(|error| CommandError::Other(error.to_string()))?;
+        file.sync_all()
+            .map_err(|error| CommandError::IoError(error.to_string()))?;
+        match fs::rename(&temp_file, &cache_file) {
+            Ok(()) => Ok(()),
+            Err(_) if cache_file.exists() => {
+                let _ = fs::remove_file(&temp_file);
+                Ok(())
+            }
+            Err(error) => Err(CommandError::IoError(error.to_string())),
+        }
+    })();
+    if write_result.is_err() {
+        let _ = fs::remove_file(&temp_file);
+    }
+    write_result?;
+    Ok(image)
+}
+
+pub fn get_thumbnail_raw(path: String) -> Result<RgbaImage, CommandError> {
+    cached_thumbnail(path, "image", get_thumbnail_uncached)
+}
+
+pub fn get_office_thumbnail_raw(path: String) -> Result<RgbaImage, CommandError> {
+    cached_thumbnail(path, "office", get_office_thumbnail_uncached)
+}
 
 #[cfg(target_os = "windows")]
-pub fn get_thumbnail_raw(path: String) -> Result<RgbaImage, CommandError> {
-    shell_thumbnail_raw(&path)
+fn get_thumbnail_uncached(path: String) -> Result<RgbaImage, CommandError> {
+    match shell_thumbnail_raw(&path) {
+        Ok(image) => Ok(image),
+        Err(shell_error) => match image::open(&path) {
+            Ok(image) => {
+                let mut image = image.thumbnail(THUMB_SIZE, THUMB_SIZE).to_rgba8();
+                // RenderImage consumes BGRA buffers; image::open returns RGBA.
+                for pixel in image.pixels_mut() {
+                    pixel.0.swap(0, 2);
+                }
+                Ok(image)
+            }
+            Err(decode_error) => Err(CommandError::Other(format!(
+                "Shell thumbnail failed ({shell_error}); image decoding failed ({decode_error})"
+            ))),
+        },
+    }
 }
 
 #[cfg(not(target_os = "windows"))]
-pub fn get_thumbnail_raw(path: String) -> Result<RgbaImage, CommandError> {
+fn get_thumbnail_uncached(path: String) -> Result<RgbaImage, CommandError> {
     image::open(path)
         .map(|image| image.thumbnail(THUMB_SIZE, THUMB_SIZE).to_rgba8())
         .map_err(|error| CommandError::Other(error.to_string()))
 }
 
 #[cfg(not(target_os = "windows"))]
-pub fn get_office_thumbnail_raw(path: String) -> Result<RgbaImage, CommandError> {
+fn get_office_thumbnail_uncached(path: String) -> Result<RgbaImage, CommandError> {
     let file = fs::File::open(path).map_err(|error| CommandError::IoError(error.to_string()))?;
     let mut archive =
         zip::ZipArchive::new(file).map_err(|error| CommandError::Other(error.to_string()))?;
@@ -253,7 +343,7 @@ fn subsample_frame(
 }
 
 #[cfg(target_os = "windows")]
-pub fn get_office_thumbnail_raw(path: String) -> Result<RgbaImage, CommandError> {
+fn get_office_thumbnail_uncached(path: String) -> Result<RgbaImage, CommandError> {
     if let Ok(img) = shell_thumbnail_raw(&path) {
         return Ok(img);
     }

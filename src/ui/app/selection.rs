@@ -1,5 +1,6 @@
 use crate::ui::app::{DragTarget, OxydeApp};
-use crate::ui::style::ROW_HEIGHT;
+use crate::ui::style::{GRID_CARD_MIN_WIDTH, GRID_CARD_ROW_HEIGHT, ROW_HEIGHT};
+use crate::ui::workspace::ViewMode;
 use gpui::*;
 
 impl OxydeApp {
@@ -19,6 +20,12 @@ impl OxydeApp {
                 },
             });
             let scroll_y = tab.list_scroll.0.borrow().base_handle.offset().y.as_f32();
+            let grid_mode = tab.view_mode == ViewMode::Grid;
+            let grid_width = (bounds.size.width - 20.0 - crate::ui::components::scrollbar::ZED_TRACK_WIDTH)
+                .max(GRID_CARD_MIN_WIDTH + 4.0);
+            let grid_columns = ((bounds.size.width - 20.0) / GRID_CARD_MIN_WIDTH)
+                .floor()
+                .max(1.0) as usize;
 
             // --- Auto-Scroll (Intuitive & Proportional) ---
             let list_top = bounds.origin.y;
@@ -38,8 +45,16 @@ impl OxydeApp {
 
             if new_scroll_y != scroll_y {
                 let count = tab.filtered_files().len() as f32;
-                let visible_list_h = (bounds.size.height - ROW_HEIGHT).max(1.0);
-                let content_h = (count * ROW_HEIGHT).max(1.0);
+                let visible_list_h = if grid_mode {
+                    bounds.size.height.max(1.0)
+                } else {
+                    (bounds.size.height - ROW_HEIGHT).max(1.0)
+                };
+                let content_h = if grid_mode {
+                    ((count / grid_columns as f32).ceil() * GRID_CARD_ROW_HEIGHT).max(1.0)
+                } else {
+                    (count * ROW_HEIGHT).max(1.0)
+                };
                 let max_scroll = (content_h - visible_list_h).max(0.0);
 
                 new_scroll_y = new_scroll_y.clamp(-max_scroll, 0.0);
@@ -66,29 +81,49 @@ impl OxydeApp {
                 let modifiers = *modifiers;
                 let initial_selection_cap = initial_selection.clone();
 
-                let rect_y_start = start_pos.y.as_f32().min(current_pos.y.as_f32());
-                let rect_y_end = start_pos.y.as_f32().max(current_pos.y.as_f32());
-
                 let files = tab.filtered_files();
-                let list_origin_y = bounds.origin.y + ROW_HEIGHT;
-
-                let start_idx_f = (rect_y_start - list_origin_y - scroll_y) / ROW_HEIGHT;
-                let end_idx_f = (rect_y_end - list_origin_y - scroll_y) / ROW_HEIGHT;
-
-                let start_idx = (start_idx_f.floor() as i32).max(0) as usize;
-                let end_idx = (end_idx_f.ceil() as i32).max(0) as usize;
-
-                let files_len = files.len();
-                let start_idx = start_idx.min(files_len);
-                let end_idx = end_idx.min(files_len);
-
-                let current_rect_paths: std::collections::HashSet<String> = if start_idx < end_idx {
-                    files[start_idx..end_idx]
+                let current_rect_paths: std::collections::HashSet<String> = if grid_mode {
+                    let rect_left = start_pos.x.as_f32().min(current_pos.x.as_f32());
+                    let rect_right = start_pos.x.as_f32().max(current_pos.x.as_f32());
+                    let rect_top = start_pos.y.as_f32().min(current_pos.y.as_f32());
+                    let rect_bottom = start_pos.y.as_f32().max(current_pos.y.as_f32());
+                    let card_width = grid_width / grid_columns as f32;
+                    files
                         .iter()
-                        .map(|f| f.path.clone())
+                        .enumerate()
+                        .filter_map(|(index, file)| {
+                            let column = index % grid_columns;
+                            let row = index / grid_columns;
+                            let left = bounds.origin.x + 8.0 + column as f32 * card_width;
+                            let top =
+                                bounds.origin.y + row as f32 * GRID_CARD_ROW_HEIGHT + scroll_y;
+                            let right = left + card_width - 8.0;
+                            let bottom = top + GRID_CARD_ROW_HEIGHT - 8.0;
+                            (left < rect_right
+                                && right > rect_left
+                                && top < rect_bottom
+                                && bottom > rect_top)
+                                .then(|| file.path.clone())
+                        })
                         .collect()
                 } else {
-                    std::collections::HashSet::new()
+                    let rect_y_start = start_pos.y.as_f32().min(current_pos.y.as_f32());
+                    let rect_y_end = start_pos.y.as_f32().max(current_pos.y.as_f32());
+                    let list_origin_y = bounds.origin.y + ROW_HEIGHT;
+                    let start_idx_f = (rect_y_start - list_origin_y - scroll_y) / ROW_HEIGHT;
+                    let end_idx_f = (rect_y_end - list_origin_y - scroll_y) / ROW_HEIGHT;
+                    let start_idx = (start_idx_f.floor() as i32).max(0) as usize;
+                    let end_idx = (end_idx_f.ceil() as i32).max(0) as usize;
+                    let start_idx = start_idx.min(files.len());
+                    let end_idx = end_idx.min(files.len());
+                    if start_idx < end_idx {
+                        files[start_idx..end_idx]
+                            .iter()
+                            .map(|file| file.path.clone())
+                            .collect()
+                    } else {
+                        std::collections::HashSet::new()
+                    }
                 };
 
                 if modifiers.control {

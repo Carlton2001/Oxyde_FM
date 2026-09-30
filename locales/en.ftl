@@ -31,6 +31,8 @@ settings-system = System files
 settings-system-description = Show files and folders marked as system items by the OS
 settings-previews = Media previews
 settings-previews-description = Show file previews in the list’s tooltips
+settings-grid-thumbnails = Grid image thumbnails
+settings-grid-thumbnails-description = Show image thumbnails directly on grid cards
 settings-about = ABOUT
 settings-version = Version { $version }
 settings-description = Modern file manager
@@ -44,6 +46,8 @@ status-files = { $count ->
     [one] { $number } file
    *[other] { $number } files
     }
+view-details = Details view
+view-grid = Grid view
 selected-files = { $count ->
     [one] { $number } file selected ({ $size })
    *[other] { $number } files selected ({ $size })

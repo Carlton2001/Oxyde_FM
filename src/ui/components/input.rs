@@ -672,6 +672,8 @@ impl Element for TextInputElement {
         };
         let selected_range = input.selected_range.clone();
         let style = window.text_style();
+        let selection_background = cx.theme().accent;
+        let selection_foreground = cx.theme().text_on_accent;
         let color = if input.content.is_empty() {
             cx.theme().text_muted
         } else {
@@ -693,8 +695,8 @@ impl Element for TextInputElement {
             runs.push(TextRun {
                 len: selected_range.end - selected_range.start,
                 font: style.font(),
-                color,
-                background_color: Some(cx.theme().selected),
+                color: selection_foreground,
+                background_color: Some(selection_background),
                 underline: None,
                 strikethrough: None,
             });

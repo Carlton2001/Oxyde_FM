@@ -5,12 +5,36 @@ use crate::ui::components::scrollbar::{render_scrollbar, ScrollbarAxis, ZED_TRAC
 use crate::ui::components::tooltip::Tooltip;
 use crate::ui::format::{format_date, format_number, format_size};
 use crate::ui::i18n::{FluentArgs, I18nContext, Message};
-use crate::ui::style::ROW_HEIGHT;
+use crate::ui::style::{GRID_CARD_MIN_WIDTH, GRID_CARD_ROW_HEIGHT, ROW_HEIGHT};
 use crate::ui::theme::{OxydeTheme, ThemeContext};
-use crate::ui::workspace::{SortColumn, SortDirection, TabLoadStatus};
+use crate::ui::workspace::{SortColumn, SortDirection, TabLoadStatus, ViewMode};
 use gpui::prelude::*;
 use gpui::*;
 use oxyde_lib::models::FileEntry;
+
+struct GridThumbnailAsset;
+
+impl Asset for GridThumbnailAsset {
+    type Source = SharedString;
+    type Output = Result<std::sync::Arc<RenderImage>, ImageCacheError>;
+
+    fn load(
+        source: Self::Source,
+        cx: &mut App,
+    ) -> impl std::future::Future<Output = Self::Output> + Send + 'static {
+        let task = cx.background_executor().spawn(async move {
+            oxyde_lib::platform::platform()
+                .thumbnail(source.to_string())
+                .map_err(|error| ImageCacheError::Asset(error.to_string().into()))
+        });
+        async move {
+            let rgba = task.await?;
+            Ok(std::sync::Arc::new(RenderImage::new(vec![
+                image::Frame::new(rgba),
+            ])))
+        }
+    }
+}
 
 const STATUS_BAR_HEIGHT: f32 = 28.0;
 
@@ -60,6 +84,9 @@ pub fn render_file_list(
     let theme = *cx.theme();
     let language = cx.i18n().language();
     let pane = view.state.layout.find_pane(&pane_id).expect("pane exists");
+    if pane.active_tab().view_mode == ViewMode::Grid {
+        return render_grid_file_list(view, pane_id, handle, cx).into_any_element();
+    }
     let active_tab = pane.active_tab();
     let files = active_tab.filtered_files().to_vec();
     let count = files.len() as f32;
@@ -877,10 +904,759 @@ pub fn render_file_list(
             .when_some(selection_summary, |bar, summary| {
                 bar.child("•")
                     .child(div().text_color(theme.accent).child(summary))
-            }),
+            })
+            .child(div().flex_1())
+            .child(view_mode_button(
+                &pane_id,
+                ViewMode::Details,
+                ViewMode::Details,
+                "icons/list.svg",
+                Message::ViewDetails,
+                handle.clone(),
+                theme,
+                cx,
+            ))
+            .child(view_mode_button(
+                &pane_id,
+                ViewMode::Grid,
+                ViewMode::Details,
+                "icons/layout-grid.svg",
+                Message::ViewGrid,
+                handle.clone(),
+                theme,
+                cx,
+            )),
     );
 
-    container
+    container.into_any_element()
+}
+
+fn render_grid_file_list(
+    view: &OxydeApp,
+    pane_id: String,
+    handle: Entity<OxydeApp>,
+    cx: &mut Context<OxydeApp>,
+) -> impl IntoElement {
+    let pane = view.state.layout.find_pane(&pane_id).expect("pane exists");
+    let tab = pane.active_tab();
+    let files = tab.filtered_files().to_vec();
+    let selected = tab.selected_paths.clone();
+    let inline_rename = view.inline_rename;
+    let editing_path = view.editing_path.clone();
+    let editing_view = view.editing_view.clone();
+    let rename_error = view.rename_error.map(|message| cx.i18n().text(message));
+    let show_tooltips = view.context_menus.is_empty();
+    let show_media_previews = view.show_media_previews;
+    let show_grid_thumbnails = view.show_grid_thumbnails;
+    let folder_subdirectory_flags = view.folder_has_subdirs.clone();
+    let active = view.state.active_pane_id == pane_id;
+    let theme = *cx.theme();
+    let lang = cx.i18n().language();
+    let pane_width = view
+        .pane_sizes
+        .get(&pane_id)
+        .map(|s| s.width)
+        .unwrap_or(view.list_width)
+        .max(1.0);
+    // Keep the grid inside the panel's padded viewport and leave a clear lane
+    // for the overlay scrollbar, especially in the rightmost split pane.
+    let grid_width = (pane_width - 20.0 - ZED_TRACK_WIDTH).max(GRID_CARD_MIN_WIDTH + 4.0);
+    let columns = ((pane_width - 20.0) / GRID_CARD_MIN_WIDTH).floor().max(1.0) as usize;
+    let card_width = grid_width / columns as f32 - 4.0;
+    let row_count = files.len().div_ceil(columns);
+    let empty_message = if !files.is_empty() {
+        None
+    } else if !tab.files.is_empty() {
+        Some(cx.i18n().text(Message::EmptyFiltered).to_string())
+    } else {
+        match &tab.load_status {
+            TabLoadStatus::Loading => Some(cx.i18n().text(Message::FolderLoading).to_string()),
+            TabLoadStatus::Ready => Some(cx.i18n().text(Message::FolderEmpty).to_string()),
+            TabLoadStatus::Error(message) => Some(cx.i18n().text(*message).to_string()),
+        }
+    };
+    let folders = files.iter().filter(|file| file.is_dir).count();
+    let file_count = files.len().saturating_sub(folders);
+    let mut folder_args = FluentArgs::new();
+    folder_args.set("count", folders);
+    folder_args.set("number", format_number(folders as u64, lang));
+    let mut file_args = FluentArgs::new();
+    file_args.set("count", file_count);
+    file_args.set("number", format_number(file_count as u64, lang));
+    let contents = if let Some(message) = empty_message {
+        div()
+            .flex_1()
+            .flex()
+            .items_center()
+            .justify_center()
+            .text_color(theme.text_muted)
+            .child(message)
+            .into_any_element()
+    } else {
+        let list = uniform_list(
+            SharedString::from(format!("file-grid-{pane_id}")),
+            row_count,
+            {
+                let files = files.clone();
+                let selected = selected.clone();
+                let pane_id = pane_id.clone();
+                let handle = handle.clone();
+                let editing_path = editing_path.clone();
+                let editing_view = editing_view.clone();
+                let rename_error = rename_error.clone();
+                let show_grid_thumbnails = show_grid_thumbnails;
+                let folder_subdirectory_flags = folder_subdirectory_flags.clone();
+                move |range, _, cx| {
+                    range
+                        .map(|row_index| {
+                            let theme = *OxydeTheme::global(cx);
+                            let start = row_index * columns;
+                            let end = (start + columns).min(files.len());
+                            let cells = files[start..end]
+                                .iter()
+                                .map(|file| {
+                                    let path = file.path.clone();
+                                    let name = file.name.clone();
+                                    let is_dir = file.is_dir;
+                                    let has_subdirectories = is_dir
+                                        && folder_subdirectory_flags
+                                            .get(&path)
+                                            .copied()
+                                            .unwrap_or(false);
+                                    let is_selected = selected.contains(&path);
+                                    let h = handle.clone();
+                                    let pid = pane_id.clone();
+                                    let paths = if is_selected && selected.len() > 1 {
+                                        selected.iter().cloned().collect::<Vec<_>>()
+                                    } else {
+                                        vec![path.clone()]
+                                    };
+                                    let icon = crate::ui::components::icons::get_icon_type(
+                                        &name,
+                                        is_dir,
+                                        Some(&path),
+                                        file.is_symlink,
+                                        file.is_junction,
+                                    );
+                                    let inline_editing = inline_rename
+                                        && editing_path.as_deref() == Some(path.as_str());
+                                    let editing_view =
+                                        inline_editing.then(|| editing_view.clone()).flatten();
+                                    let rename_error =
+                                        inline_editing.then(|| rename_error.clone()).flatten();
+                                    let has_rename_error = rename_error.is_some();
+                                    let file_name_tt = name.clone();
+                                    let path_tt = path.clone();
+                                    let ext_tt = file_type_label(file);
+                                    let size_tt = (file.size, is_dir, file.is_calculated);
+                                    let date_tt = file.modified;
+                                    let mut card = div()
+                                        .id(SharedString::from(format!("file-card-{path}")))
+                                        .w(px(card_width - 4.0))
+                                        .h(px(GRID_CARD_ROW_HEIGHT - 4.0))
+                                        .m_1()
+                                        .p_1()
+                                        .flex()
+                                        .flex_col()
+                                        .items_center()
+                                        .justify_center()
+                                        .gap_1()
+                                        .rounded_md()
+                                        .border_1()
+                                        .border_color(if has_rename_error {
+                                            theme.error
+                                        } else if is_selected {
+                                            theme.accent
+                                        } else {
+                                            theme.border
+                                        })
+                                        .bg(if is_selected {
+                                            theme.selected
+                                        } else if active {
+                                            theme.active_background
+                                        } else {
+                                            theme.background
+                                        })
+                                        .when(!is_selected, |d| d.hover(|d| d.bg(theme.hover)))
+                                        .when(file.is_hidden || file.is_system, |d| d.opacity(0.5))
+                                        .when(show_tooltips && show_media_previews, |d| {
+                                            d.tooltip(Tooltip::for_file_full(
+                                                file_name_tt.clone(),
+                                                path_tt.clone(),
+                                                ext_tt.clone(),
+                                                size_tt,
+                                                date_tt,
+                                            ))
+                                        })
+                                        .when(show_tooltips && !show_media_previews, |d| {
+                                            d.tooltip(Tooltip::for_file_no_preview(
+                                                file_name_tt,
+                                                ext_tt,
+                                                size_tt,
+                                                date_tt,
+                                            ))
+                                        })
+                                        .on_mouse_down(MouseButton::Left, {
+                                            let path = path.clone();
+                                            let h = h.clone();
+                                            let pid = pid.clone();
+                                            move |e, _, cx| {
+                                                cx.stop_propagation();
+                                                let path = path.clone();
+                                                let is_dir = is_dir;
+                                                h.update(cx, |this, cx| {
+                                                    this.activate_pane(&pid, cx);
+                                                    let preserve_multi_selection = !e.modifiers.control
+                                                        && !e.modifiers.shift
+                                                        && this.state.find_pane(&pid).is_some_and(|pane| {
+                                                            let selection = &pane.active_tab().selected_paths;
+                                                            selection.len() > 1 && selection.contains(&path)
+                                                        });
+                                                    if !preserve_multi_selection {
+                                                        this.toggle_selection(
+                                                            &pid,
+                                                            path.clone(),
+                                                            e.modifiers.control,
+                                                            e.modifiers.shift,
+                                                            cx,
+                                                        );
+                                                    }
+                                                    if e.click_count == 2 {
+                                                        if is_dir {
+                                                            this.navigate_to(&pid, path, cx);
+                                                        } else {
+                                                            let _ = oxyde_lib::platform::platform()
+                                                                .open_item(&path);
+                                                        }
+                                                    }
+                                                });
+                                            }
+                                        })
+                                        .on_mouse_down(MouseButton::Middle, {
+                                            let h = h.clone();
+                                            let pid = pid.clone();
+                                            let path = path.clone();
+                                            move |_, _, cx| {
+                                                cx.stop_propagation();
+                                                if is_dir {
+                                                    h.update(cx, |this, cx| {
+                                                        this.add_tab(&pid, path.clone(), false, cx)
+                                                    });
+                                                }
+                                            }
+                                        })
+                                        .on_mouse_down(MouseButton::Right, {
+                                            let h = h.clone();
+                                            let pid = pid.clone();
+                                            let path = path.clone();
+                                            move |e, _, cx| {
+                                                cx.stop_propagation();
+                                                let pos = e.position;
+                                                h.update(cx, |this, cx| {
+                                                    this.activate_pane(&pid, cx);
+                                                    let pinned = this
+                                                        .state
+                                                        .pinned_items
+                                                        .iter()
+                                                        .any(|item| {
+                                                            super::paths_match(&item.path, &path)
+                                                        });
+                                                    if !this.state.find_pane(&pid).is_some_and(
+                                                        |p| {
+                                                            p.active_tab()
+                                                                .selected_paths
+                                                                .contains(&path)
+                                                        },
+                                                    ) {
+                                                        this.toggle_selection(
+                                                            &pid,
+                                                            path.clone(),
+                                                            false,
+                                                            false,
+                                                            cx,
+                                                        );
+                                                    }
+                                                    this.context_menus.clear();
+                                                    this.context_menus.push(ContextMenuInstance {
+                                                        position: pos,
+                                                        content: ContextMenuContent::Items(
+                                                            super::oxyde_context_menu_items(
+                                                                cx.i18n(),
+                                                                h.clone(),
+                                                                is_dir,
+                                                                pinned,
+                                                                path.clone(),
+                                                            ),
+                                                            None,
+                                                        ),
+                                                        scroll_handle: UniformListScrollHandle::new(
+                                                        ),
+                                                        width: px(0.0),
+                                                        bottom_padding: 0.0,
+                                                        open_left: false,
+                                                        hovered_item: None,
+                                                        native_request_id: None,
+                                                    });
+                                                    cx.notify();
+                                                });
+                                            }
+                                        })
+                                        .on_drag(
+                                            FileDragData {
+                                                paths: paths.clone(),
+                                                source_pane_id: pid.clone(),
+                                            },
+                                            {
+                                                let h = h.clone();
+                                                move |_, cursor_offset, _, cx| {
+                                                    let app = h.clone();
+                                                    let paths = paths.clone();
+                                                    cx.new(|cx| {
+                                                        FileDragPreview::new(
+                                                            paths,
+                                                            cursor_offset,
+                                                            app,
+                                                            cx,
+                                                        )
+                                                    })
+                                                }
+                                            },
+                                        )
+                                        .child(
+                                            div()
+                                                .relative()
+                                                .w_full()
+                                                .h(px(76.0))
+                                                .child(
+                                                    div()
+                                                        .absolute()
+                                                        .inset_0()
+                                                        .flex()
+                                                        .items_center()
+                                                        .justify_center()
+                                                        .child(if show_grid_thumbnails
+                                                            && !is_dir
+                                                            && icon == crate::ui::components::icons::IconType::FileImage
+                                                        {
+                                                            render_grid_thumbnail(path.clone(), icon, theme).into_any_element()
+                                                        } else {
+                                                            svg().path(icon.path()).size(px(64.0)).text_color(
+                                                                if is_dir { theme.accent } else { theme.text_muted },
+                                                            ).into_any_element()
+                                                        }),
+                                                )
+                                                .when(has_subdirectories, |row| {
+                                                    row.child(
+                                                        div()
+                                                            .absolute()
+                                                            .right_0()
+                                                            .top_0()
+                                                            .h_full()
+                                                            .flex()
+                                                            .items_center()
+                                                            .child(svg().path("icons/chevron-right.svg").size_3().text_color(theme.text_muted.opacity(0.75))),
+                                                    )
+                                                }),
+                                        )
+                                        .child(
+                                            div()
+                                                .w_full()
+                                                .px_1()
+                                                .text_center()
+                                                .text_size(px(12.0))
+                                                .text_color(theme.text)
+                                                .h(px(18.0))
+                                                .text_ellipsis()
+                                                .overflow_hidden()
+                                                .child(match editing_view {
+                                                    Some(editing_view) => {
+                                                        editing_view.into_any_element()
+                                                    }
+                                                    None => {
+                                                        div().child(name.clone()).into_any_element()
+                                                    }
+                                                }),
+                                        )
+                                        .child(
+                                            div()
+                                                .text_size(px(10.0))
+                                                .text_color(theme.text_muted)
+                                                .text_ellipsis()
+                                                .child(file_type_display(file, cx.i18n())),
+                                        );
+                                    if is_dir {
+                                        card = card
+                                            .drag_over::<FileDragData>({
+                                                let h = h.clone();
+                                                let target = path.clone();
+                                                move |style, data, _, cx| {
+                                                    let copy = data
+                                                        .paths
+                                                        .first()
+                                                        .map(|p| {
+                                                            crate::ui::app::drives_differ(
+                                                                p, &target,
+                                                            )
+                                                        })
+                                                        .unwrap_or(false);
+                                                    h.update(cx, |this, cx| {
+                                                        if this.drag_target_default_copy != copy {
+                                                            this.drag_target_default_copy = copy;
+                                                            this.update_drag_copy_mode(cx);
+                                                        }
+                                                    });
+                                                    style.bg(theme.drag_hover)
+                                                }
+                                            })
+                                            .on_drop({
+                                                let h = h.clone();
+                                                let target = path.clone();
+                                                move |data: &FileDragData, _, cx| {
+                                                    let paths = data.paths.clone();
+                                                    let target = target.clone();
+                                                    h.update(cx, |this, cx| {
+                                                        if this.drag_copy_mode {
+                                                            this.execute_file_copy(
+                                                                paths, target, cx,
+                                                            )
+                                                        } else {
+                                                            this.execute_file_move(
+                                                                paths, target, cx,
+                                                            )
+                                                        }
+                                                    });
+                                                }
+                                            });
+                                    }
+                                    card
+                                })
+                                .collect::<Vec<_>>();
+                            div()
+                                .w_full()
+                                .h(px(GRID_CARD_ROW_HEIGHT))
+                                .flex()
+                                .items_start()
+                                .children(cells)
+                        })
+                        .collect::<Vec<_>>()
+                }
+            },
+        )
+        .h_full()
+        .track_scroll(&tab.list_scroll);
+        let viewport_height = tab
+            .list_scroll
+            .0
+            .borrow()
+            .base_handle
+            .bounds()
+            .size
+            .height
+            .as_f32();
+        let content_height = row_count as f32 * GRID_CARD_ROW_HEIGHT;
+        let scroll_offset = -tab
+            .list_scroll
+            .0
+            .borrow()
+            .base_handle
+            .offset()
+            .y
+            .as_f32();
+        let is_dragging = matches!(view.drag_target, Some(DragTarget::FileListV { pane_id: ref drag_pane_id, .. }) if drag_pane_id == &pane_id);
+        div()
+            .id(SharedString::from(format!("file-grid-scroll-{pane_id}")))
+            .relative()
+            .flex_1()
+            .overflow_y_scroll()
+            .px_2()
+            .pr(px(ZED_TRACK_WIDTH))
+            .pt_1()
+            .child(
+                canvas(|bounds, _, _| bounds, {
+                    let h = handle.clone();
+                    let pid = pane_id.clone();
+                    move |_, bounds: Bounds<Pixels>, _, cx| {
+                        h.update(cx, |this, _| {
+                            this.list_bounds.insert(
+                                pid.clone(),
+                                Bounds {
+                                    origin: Point {
+                                        x: bounds.origin.x.as_f32(),
+                                        y: bounds.origin.y.as_f32(),
+                                    },
+                                    size: Size {
+                                        width: bounds.size.width.as_f32(),
+                                        height: bounds.size.height.as_f32(),
+                                    },
+                                },
+                            );
+                        });
+                    }
+                })
+                .absolute()
+                .size_full(),
+            )
+            .child(list)
+            .child(render_scrollbar(
+                theme,
+                handle.clone(),
+                ScrollbarAxis::Vertical,
+                viewport_height,
+                content_height,
+                scroll_offset,
+                is_dragging,
+                format!("grid-{pane_id}"),
+                None,
+                {
+                    let pid = pane_id.clone();
+                    move |this, track_id, viewport_h, content_h, _| {
+                        this.drag_target = Some(DragTarget::FileListV {
+                            pane_id: pid.clone(),
+                            viewport_h,
+                            content_h,
+                            track_id,
+                        });
+                    }
+                },
+            ))
+            .on_mouse_down(MouseButton::Left, {
+                let h = handle.clone();
+                let pid = pane_id.clone();
+                move |e, _, cx| {
+                    let position = e.position;
+                    let modifiers = e.modifiers;
+                    h.update(cx, |this, cx| {
+                        this.activate_pane(&pid, cx);
+                        if !modifiers.control && !modifiers.shift {
+                            if let Some(pane) = this.state.find_pane_mut(&pid) {
+                                pane.active_tab_mut().selected_paths.clear();
+                                pane.active_tab_mut().selection_anchor = None;
+                            }
+                        }
+                        let initial_selection = this
+                            .state
+                            .find_pane(&pid)
+                            .map(|pane| pane.active_tab().selected_paths.clone())
+                            .unwrap_or_default();
+                        this.drag_target = Some(DragTarget::SelectionRectangle {
+                            pane_id: pid.clone(),
+                            start_pos: position,
+                            current_pos: position,
+                            modifiers,
+                            initial_selection,
+                        });
+                        cx.notify();
+                    });
+                }
+            })
+            .on_mouse_down(MouseButton::Right, {
+                let h = handle.clone();
+                let pid = pane_id.clone();
+                move |e, _, cx| {
+                    let position = e.position;
+                    h.update(cx, |this, cx| {
+                        this.activate_pane(&pid, cx);
+                        this.context_menus.clear();
+                        this.context_menus.push(ContextMenuInstance {
+                            position,
+                            content: ContextMenuContent::Items(
+                                super::pane_context_menu_items(cx.i18n(), h.clone(), pid.clone()),
+                                None,
+                            ),
+                            scroll_handle: UniformListScrollHandle::new(),
+                            width: px(0.0),
+                            bottom_padding: 0.0,
+                            open_left: false,
+                            hovered_item: None,
+                            native_request_id: None,
+                        });
+                        cx.notify();
+                    });
+                }
+            })
+            .into_any_element()
+    };
+
+    div()
+        .flex_1()
+        .flex()
+        .flex_col()
+        .relative()
+        .overflow_hidden()
+        .bg(if active {
+            theme.active_background
+        } else {
+            theme.background
+        })
+        .child(contents)
+        .when_some(
+            match &view.drag_target {
+                Some(DragTarget::SelectionRectangle {
+                    pane_id: drag_pane_id,
+                    start_pos,
+                    current_pos,
+                    ..
+                }) if drag_pane_id == &pane_id => view.list_bounds.get(&pane_id).map(|bounds| {
+                    let x = start_pos.x.as_f32().min(current_pos.x.as_f32()) - bounds.origin.x;
+                    let y = start_pos.y.as_f32().min(current_pos.y.as_f32()) - bounds.origin.y;
+                    let width = (start_pos.x.as_f32() - current_pos.x.as_f32()).abs();
+                    let height = (start_pos.y.as_f32() - current_pos.y.as_f32()).abs();
+                    div()
+                        .absolute()
+                        .left(px(x))
+                        .top(px(y))
+                        .w(px(width))
+                        .h(px(height))
+                        .bg(theme.selected)
+                        .border_1()
+                        .border_color(theme.accent)
+                }),
+                _ => None,
+            },
+            |root, overlay| root.child(overlay),
+        )
+        .child(
+            div()
+                .h(px(STATUS_BAR_HEIGHT))
+                .flex()
+                .items_center()
+                .gap_3()
+                .px_3()
+                .bg(theme.header)
+                .border_t_1()
+                .border_color(theme.border)
+                .text_size(px(12.0))
+                .text_color(theme.text_muted)
+                .child(
+                    cx.i18n()
+                        .text_with_args(Message::StatusFolders, &folder_args),
+                )
+                .child(cx.i18n().text_with_args(Message::StatusFiles, &file_args))
+                .child(div().flex_1())
+                .when(!selected.is_empty(), |bar| {
+                    let entries: Vec<&FileEntry> = files
+                        .iter()
+                        .filter(|file| selected.contains(&file.path))
+                        .collect();
+                    let folder_count = entries.iter().filter(|file| file.is_dir).count();
+                    let file_count = entries.len().saturating_sub(folder_count);
+                    let size: u64 = entries
+                        .iter()
+                        .filter(|file| !file.is_dir || file.is_calculated)
+                        .map(|file| file.size)
+                        .sum();
+                    let mut args = FluentArgs::new();
+                    args.set("count", entries.len());
+                    args.set("number", format_number(entries.len() as u64, lang));
+                    args.set("folder_count", folder_count);
+                    args.set("file_count", file_count);
+                    args.set("folders", format_number(folder_count as u64, lang));
+                    args.set("files", format_number(file_count as u64, lang));
+                    args.set("size", format_size(size, false, false, lang));
+                    let message = match (folder_count, file_count) {
+                        (0, _) => Message::SelectedFiles,
+                        (_, 0) => Message::SelectedFolders,
+                        _ => Message::SelectedMixed,
+                    };
+                    bar.child("•").child(
+                        div()
+                            .text_color(theme.accent)
+                            .child(cx.i18n().text_with_args(message, &args)),
+                    )
+                })
+                .child(view_mode_button(
+                    &pane_id,
+                    ViewMode::Details,
+                    ViewMode::Grid,
+                    "icons/list.svg",
+                    Message::ViewDetails,
+                    handle.clone(),
+                    theme,
+                    cx,
+                ))
+                .child(view_mode_button(
+                    &pane_id,
+                    ViewMode::Grid,
+                    ViewMode::Grid,
+                    "icons/layout-grid.svg",
+                    Message::ViewGrid,
+                    handle.clone(),
+                    theme,
+                    cx,
+                )),
+        )
+}
+
+fn render_grid_thumbnail(
+    path: String,
+    fallback_icon: crate::ui::components::icons::IconType,
+    theme: OxydeTheme,
+) -> impl IntoElement {
+    let source: SharedString = path.clone().into();
+    img(move |window: &mut Window, cx: &mut App| {
+        window.use_asset::<GridThumbnailAsset>(&source, cx)
+    })
+    .id(SharedString::from(format!("grid-thumbnail-{path}")))
+    .size(px(80.0))
+    .object_fit(ObjectFit::Contain)
+    .with_fallback(move || {
+        svg()
+            .path(fallback_icon.path())
+            .size(px(64.0))
+            .text_color(theme.text_muted)
+            .into_any_element()
+    })
+}
+
+fn view_mode_button(
+    pane_id: &str,
+    mode: ViewMode,
+    active_mode: ViewMode,
+    icon: &'static str,
+    tooltip: Message,
+    handle: Entity<OxydeApp>,
+    theme: OxydeTheme,
+    cx: &mut Context<OxydeApp>,
+) -> impl IntoElement {
+    let selected = mode == active_mode;
+    let pane_id = pane_id.to_string();
+    div()
+        .id(SharedString::from(format!(
+            "view-mode-{}-{}",
+            pane_id,
+            if mode == ViewMode::Grid {
+                "grid"
+            } else {
+                "details"
+            }
+        )))
+        .w_7()
+        .h_7()
+        .flex()
+        .items_center()
+        .justify_center()
+        .rounded_md()
+        .bg(if selected {
+            theme.selected
+        } else {
+            theme.header
+        })
+        .hover(|d| d.bg(theme.control_hover))
+        .tooltip(Tooltip::text(cx.i18n().text(tooltip)))
+        .on_mouse_down(MouseButton::Left, move |_, _, cx| {
+            handle.update(cx, |this, cx| {
+                if let Some(pane) = this.state.find_pane_mut(&pane_id) {
+                    pane.active_tab_mut().view_mode = mode;
+                }
+                this.save_workspace(cx);
+                cx.notify();
+            });
+        })
+        .child(svg().path(icon).size_4().text_color(if selected {
+            theme.accent
+        } else {
+            theme.text_muted
+        }))
 }
 
 fn render_headers(

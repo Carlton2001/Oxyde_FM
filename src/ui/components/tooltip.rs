@@ -22,6 +22,31 @@ struct FileInfo {
     date: u64,
 }
 
+struct TooltipPreviewAsset;
+
+impl Asset for TooltipPreviewAsset {
+    type Source = SharedString;
+    type Output = Result<Arc<RenderImage>, ImageCacheError>;
+
+    fn load(
+        source: Self::Source,
+        cx: &mut App,
+    ) -> impl std::future::Future<Output = Self::Output> + Send + 'static {
+        let path = source.to_string();
+        let task = cx.background_executor().spawn(async move {
+            let result = ::oxyde_lib::platform::platform().pdf_thumbnail(path);
+            result.map_err(|error| {
+                log::warn!("Could not load tooltip media preview: {error}");
+                ImageCacheError::Asset(error.to_string().into())
+            })
+        });
+        async move {
+            let image = task.await?;
+            Ok(Arc::new(RenderImage::new(vec![image::Frame::new(image)])))
+        }
+    }
+}
+
 #[derive(Clone)]
 enum PreviewData {
     Image(Arc<RenderImage>),
@@ -151,6 +176,16 @@ impl Render for Tooltip {
             .flex()
             .flex_col()
             .gap(px(4.0))
+            .when_some(self.preview_view.clone(), |this, view| {
+                this.child(
+                    div()
+                        .mb_2()
+                        .pb_2()
+                        .border_b_1()
+                        .border_color(theme.border)
+                        .child(view),
+                )
+            })
             .child(
                 div()
                     .max_w(px(400.0))
@@ -201,16 +236,6 @@ impl Render for Tooltip {
                         .child(file_size)
                         .child(modified),
                 )
-            })
-            .when_some(self.preview_view.clone(), |this, view| {
-                this.child(
-                    div()
-                        .mt_2()
-                        .border_t_1()
-                        .border_color(theme.border)
-                        .pt_2()
-                        .child(view),
-                )
             });
 
         box_div.text_style().font_features = Some(TNUM.clone());
@@ -222,10 +247,26 @@ impl Render for Tooltip {
 
 pub struct PreviewTask {
     data: Option<PreviewData>,
+    media_asset: Option<SharedString>,
+    original_image: Option<std::path::PathBuf>,
 }
 
 impl PreviewTask {
     fn new(path: String, preview_type: PreviewType, cx: &mut Context<Self>) -> Self {
+        if preview_type == PreviewType::Image {
+            return Self {
+                data: None,
+                media_asset: None,
+                original_image: Some(path.into()),
+            };
+        }
+        if preview_type == PreviewType::Pdf {
+            return Self {
+                data: None,
+                media_asset: Some(path.into()),
+                original_image: None,
+            };
+        }
         cx.spawn(move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
             let mut cx = cx.clone();
             async move {
@@ -283,21 +324,54 @@ impl PreviewTask {
                     PreviewType::Image | PreviewType::Office | PreviewType::Pdf => {
                         let rgba_img = match preview_type {
                             PreviewType::Image => {
-                                ::oxyde_lib::commands::thumbnails::get_image_thumbnail(path.clone())
+                                let path = path.clone();
+                                match cx
+                                    .background_executor()
+                                    .spawn(async move {
+                                        ::oxyde_lib::platform::platform().thumbnail(path)
+                                    })
                                     .await
-                                    .ok()
+                                {
+                                    Ok(image) => Some(image),
+                                    Err(error) => {
+                                        log::warn!("Could not load tooltip image preview: {error}");
+                                        None
+                                    }
+                                }
                             }
                             PreviewType::Office => {
-                                ::oxyde_lib::commands::thumbnails::get_office_thumbnail(
-                                    path.clone(),
-                                )
-                                .await
-                                .ok()
+                                let path = path.clone();
+                                match cx
+                                    .background_executor()
+                                    .spawn(async move {
+                                        ::oxyde_lib::platform::platform().office_thumbnail(path)
+                                    })
+                                    .await
+                                {
+                                    Ok(image) => Some(image),
+                                    Err(error) => {
+                                        log::warn!(
+                                            "Could not load tooltip office preview: {error}"
+                                        );
+                                        None
+                                    }
+                                }
                             }
                             PreviewType::Pdf => {
-                                ::oxyde_lib::commands::thumbnails::get_pdf_thumbnail(path.clone())
+                                let path = path.clone();
+                                match cx
+                                    .background_executor()
+                                    .spawn(async move {
+                                        ::oxyde_lib::platform::platform().pdf_thumbnail(path)
+                                    })
                                     .await
-                                    .ok()
+                                {
+                                    Ok(image) => Some(image),
+                                    Err(error) => {
+                                        log::warn!("Could not load tooltip PDF preview: {error}");
+                                        None
+                                    }
+                                }
                             }
                             _ => None,
                         };
@@ -308,12 +382,24 @@ impl PreviewTask {
                             Some(PreviewData::Image(Arc::new(RenderImage::new(vec![frame]))))
                         } else if preview_type == PreviewType::Office {
                             // Fallback to text for Office if no image
-                            if let Ok(content) =
-                                ::oxyde_lib::commands::thumbnails::get_office_text_preview(
-                                    path.clone(),
-                                )
+                            let path_for_text = path.clone();
+                            let content = match cx
+                                .background_executor()
+                                .spawn(async move {
+                                    ::oxyde_lib::platform::platform()
+                                        .office_text_preview(path_for_text)
+                                })
                                 .await
                             {
+                                Ok(content) => Some(content),
+                                Err(error) => {
+                                    log::warn!(
+                                        "Could not load tooltip office text preview: {error}"
+                                    );
+                                    None
+                                }
+                            };
+                            if let Some(content) = content {
                                 let snippet =
                                     content.lines().take(15).collect::<Vec<_>>().join("\n");
                                 Some(PreviewData::Text(snippet))
@@ -325,7 +411,15 @@ impl PreviewTask {
                         }
                     }
                     PreviewType::Text => {
-                        if let Ok(content) = tokio::fs::read_to_string(path).await {
+                        let content = cx
+                            .background_executor()
+                            .spawn(async move {
+                                std::fs::read_to_string(path).map_err(|error| {
+                                    ::oxyde_lib::models::CommandError::IoError(error.to_string())
+                                })
+                            })
+                            .await;
+                        if let Ok(content) = content {
                             let snippet = content.lines().take(15).collect::<Vec<_>>().join("\n");
                             Some(PreviewData::Text(snippet))
                         } else {
@@ -345,20 +439,43 @@ impl PreviewTask {
         })
         .detach();
 
-        Self { data: None }
+        Self {
+            data: None,
+            media_asset: None,
+            original_image: None,
+        }
     }
 }
 
 impl Render for PreviewTask {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = OxydeTheme::global(cx);
+        if let Some(source) = self.media_asset.clone() {
+            return div().child(
+                img(move |window: &mut Window, cx: &mut App| {
+                    window.use_asset::<TooltipPreviewAsset>(&source, cx)
+                })
+                .w(px(400.0))
+                .max_h(px(380.0))
+                .object_fit(ObjectFit::Contain)
+                .with_fallback(|| div().size_full().into_any_element()),
+            );
+        }
+        if let Some(source) = self.original_image.clone() {
+            return div().child(
+                img(source)
+                    .w(px(400.0))
+                    .max_h(px(380.0))
+                    .object_fit(ObjectFit::Contain),
+            );
+        }
         if let Some(preview) = &self.data {
             div().child(match preview {
-                PreviewData::Image(render_img) => {
-                    div()
-                        .w(px(250.0)) // Largeur fixe raisonnable
-                        .child(img(render_img.clone()).size_full())
-                }
+                PreviewData::Image(render_img) => img(render_img.clone())
+                    .w(px(400.0))
+                    .max_h(px(380.0))
+                    .object_fit(ObjectFit::Contain)
+                    .into_any_element(),
                 PreviewData::Text(t) => div()
                     .max_w(px(350.0))
                     .max_h(px(200.0))
@@ -370,7 +487,8 @@ impl Render for PreviewTask {
                     .text_size(px(10.0))
                     .font_family("JetBrains Mono")
                     .text_color(theme.text)
-                    .child(t.clone()),
+                    .child(t.clone())
+                    .into_any_element(),
             })
         } else {
             div()

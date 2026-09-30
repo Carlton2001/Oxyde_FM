@@ -7,6 +7,8 @@ lazy_static! {
 }
 
 pub const ROW_HEIGHT: f32 = 28.0;
+pub const GRID_CARD_MIN_WIDTH: f32 = 116.0;
+pub const GRID_CARD_ROW_HEIGHT: f32 = 136.0;
 
 pub fn h_flex() -> Div {
     div().flex().flex_row().items_center()

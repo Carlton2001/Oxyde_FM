@@ -68,6 +68,7 @@ impl OxydeApp {
         self.config.show_hidden = self.show_hidden;
         self.config.show_system = self.show_system;
         self.config.show_previews = self.show_media_previews;
+        self.config.show_grid_thumbnails = self.show_grid_thumbnails;
         let snapshot = self.config.clone();
         self.settings_error = None;
         self.preferences_save_generation += 1;

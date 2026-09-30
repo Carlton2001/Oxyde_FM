@@ -37,6 +37,8 @@ settings-system = Fichiers système
 settings-system-description = Afficher les fichiers et dossiers marqués comme système par l’OS
 settings-previews = Aperçus médias
 settings-previews-description = Afficher les aperçus des fichiers dans les info-bulles de la liste
+settings-grid-thumbnails = Miniatures dans la vue grille
+settings-grid-thumbnails-description = Afficher les miniatures des images directement dans les cartes
 settings-about = À PROPOS
 settings-version = Version { $version }
 settings-description = Explorateur de fichiers moderne
@@ -51,6 +53,8 @@ status-files = { $count ->
     [one] { $number } fichier
    *[other] { $number } fichiers
     }
+view-details = Vue détaillée
+view-grid = Vue grille
 selected-files = { $count ->
     [one] { $number } fichier sélectionné ({ $size })
    *[other] { $number } fichiers sélectionnés ({ $size })

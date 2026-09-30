@@ -36,6 +36,36 @@ fn drive_display(part: &str, view: &OxydeApp) -> String {
     part.to_string()
 }
 
+fn breadcrumb_root_icon(path: &str, view: &OxydeApp) -> &'static str {
+    if path == "trash://" || path.starts_with("trash:\\\\") {
+        return "icons/trash-sidebar.svg";
+    }
+    if path == "__network_vincinity__" {
+        return "icons/globe.svg";
+    }
+    if path.starts_with("\\\\") || path.starts_with("::{") || path.starts_with('?') {
+        return "icons/network.svg";
+    }
+    if path.starts_with("search://") {
+        return "icons/search.svg";
+    }
+
+    let normalized_path = path.to_lowercase();
+    for item in &view.state.sidebar_items {
+        if let crate::ui::workspace::SidebarItem::Drive { drive, .. } = item {
+            if normalized_path.starts_with(&drive.path.to_lowercase()) {
+                return match drive.drive_type.as_str() {
+                    "cdrom" => "icons/disc.svg",
+                    "remote" => "icons/network.svg",
+                    _ => "icons/hard-drive.svg",
+                };
+            }
+        }
+    }
+
+    "icons/hard-drive.svg"
+}
+
 pub fn render_top_bar(
     view: &OxydeApp,
     pane_id: String,
@@ -47,12 +77,26 @@ pub fn render_top_bar(
     let current_path = active_tab.path.clone();
     let breadcrumb_scroll = active_tab.breadcrumb_scroll.clone();
     let breadcrumb_viewport_width = active_tab.breadcrumb_viewport_width.clone();
+    let root_icon = breadcrumb_root_icon(&current_path, view);
+    let is_trash_path = current_path == "trash://" || current_path.starts_with("trash:\\\\");
+    let is_network_neighborhood = current_path == "__network_vincinity__";
+    let special_path_label = if is_trash_path {
+        Some(_cx.i18n().text(Message::SidebarTrash).to_string())
+    } else if is_network_neighborhood {
+        Some(_cx.i18n().text(Message::SidebarNetwork).to_string())
+    } else {
+        None
+    };
     let theme = *_cx.theme();
 
-    let path_parts: Vec<&str> = current_path
-        .split(['/', '\\'])
-        .filter(|s: &&str| !s.is_empty())
-        .collect();
+    let path_parts: Vec<&str> = if special_path_label.is_some() {
+        vec![current_path.as_str()]
+    } else {
+        current_path
+            .split(['/', '\\'])
+            .filter(|s: &&str| !s.is_empty())
+            .collect()
+    };
     let total_parts = path_parts.len();
     let breadcrumb_path_changed = *active_tab.breadcrumb_scroll_path.borrow() != current_path;
     if breadcrumb_path_changed {
@@ -328,7 +372,10 @@ pub fn render_top_bar(
                         }
                     } else { bar }
                 })
-                .when(!(view.breadcrumb_editing && view.breadcrumb_pane_id.as_deref() == Some(pane_id.as_str())), |bar| bar.child({
+                .when(
+                    !(view.breadcrumb_editing
+                        && view.breadcrumb_pane_id.as_deref() == Some(pane_id.as_str())),
+                    |bar| {
                     let mut accumulated_path = String::new();
                     let mut elements: Vec<AnyElement> = Vec::new();
 
@@ -336,7 +383,9 @@ pub fn render_top_bar(
                         let p_id = pane_id.clone();
                         let is_last = index == total_parts - 1;
 
-                        if index == 0 && part.ends_with(':') {
+                        if index == 0 && special_path_label.is_some() {
+                            accumulated_path = current_path.clone();
+                        } else if index == 0 && part.ends_with(':') {
                             accumulated_path = format!("{}/", part);
                         } else {
                             if !accumulated_path.is_empty() && !accumulated_path.ends_with('/') {
@@ -483,8 +532,14 @@ pub fn render_top_bar(
                         let target_path = level_path.clone();
                         let seg_color = if is_last { crumb_current } else { crumb_parent };
 
-                        let display_label = if index == 0 && part.ends_with(':') {
-                            drive_display(part, view)
+                        let display_label = if index == 0 {
+                            if let Some(label) = special_path_label.as_ref() {
+                                label.clone()
+                            } else if part.ends_with(':') {
+                                drive_display(part, view)
+                            } else {
+                                part.to_string()
+                            }
                         } else {
                             part.to_string()
                         };
@@ -604,7 +659,18 @@ pub fn render_top_bar(
                     let viewport_width = breadcrumb_viewport_width.clone();
                     let resize_scroll = breadcrumb_scroll.clone();
                     let auto_scroll_to_end = breadcrumb_path_changed;
-                    div()
+                    bar.child(
+                        div()
+                            .w_4()
+                            .h_4()
+                            .mr_2()
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .flex_none()
+                            .child(svg().path(root_icon).size_4().text_color(theme.accent)),
+                    )
+                    .child(div()
                         .relative()
                         .flex()
                         .flex_1()
@@ -681,7 +747,8 @@ pub fn render_top_bar(
                                     .w(px(24.0))
                                     .bg(linear_gradient(270.0, linear_color_stop(theme.background, 0.0), linear_color_stop(theme.background.alpha(0.0), 1.0))),
                             )
-                        })
-                }))
+                        }))
+                    },
+                )
         )
 }
