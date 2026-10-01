@@ -40,7 +40,7 @@ pub fn render_title_bar(
                 .text_size(px(12.0))
                 .font_weight(FontWeight::BOLD)
                 .text_color(theme.text)
-                .child("Oxyde"),
+                .child("Oxyde GPUI"),
         );
 
     // ── Draggable center area ────────────────────────────────────────────────

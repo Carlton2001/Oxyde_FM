@@ -2028,7 +2028,7 @@ impl Render for OxydeApp {
             .flex()
             .flex_col()
             .text_size(px(13.0))
-            .font_weight(FontWeight::LIGHT)
+            .font_weight(crate::ui::style::DEFAULT_FONT_WEIGHT)
             .on_action(cx.listener(Self::on_action_tout_selectionner))
             .on_action(cx.listener(Self::on_action_annuler))
             .on_action(cx.listener(Self::on_action_refaire))

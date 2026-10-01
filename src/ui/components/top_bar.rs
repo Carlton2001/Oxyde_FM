@@ -568,6 +568,15 @@ pub fn render_top_bar(
                                     }
                                 }
                             })
+                            .when(!is_last, |d| d.on_mouse_down(MouseButton::Middle, {
+                                let h = handle.clone();
+                                let p = pane_id.clone();
+                                let path = target_path.clone();
+                                move |_, _, cx| {
+                                    cx.stop_propagation();
+                                    h.update(cx, |this, cx| this.add_tab(&p, path.clone(), false, cx));
+                                }
+                            }))
                             .drag_over::<FileDragData>({
                                 let h_over = handle.clone();
                                 let tgt = target_path.clone();
@@ -602,7 +611,9 @@ pub fn render_top_bar(
                             .on_mouse_down(MouseButton::Right, {
                                 let h = handle.clone();
                                 let path = target_path.clone();
+                                let p = pane_id.clone();
                                 move |event, _, cx| {
+                                    cx.stop_propagation();
                                     let item = crate::ui::components::dropdown::DropdownItem {
                                         label: cx.i18n().text(crate::ui::i18n::Message::CopyPath).to_string(),
                                         icon: Some(IconName::Copy),
@@ -619,11 +630,34 @@ pub fn render_top_bar(
                                         }),
                                         on_hover: None,
                                     };
+                                    let mut items = Vec::new();
+                                    if !is_last {
+                                        items.push(crate::ui::components::dropdown::DropdownItem {
+                                            label: cx.i18n().text(Message::OpenNewTab).to_string(),
+                                            icon: Some(IconName::ExternalLink),
+                                            stay_open: false,
+                                            has_submenu: false,
+                                            is_dimmed: false,
+                                            on_click: std::rc::Rc::new({
+                                                let h = h.clone();
+                                                let path = path.clone();
+                                                let p = p.clone();
+                                                move |_, app| {
+                                                    h.update(app, |this, cx| {
+                                                        this.context_menus.clear();
+                                                        this.add_tab(&p, path.clone(), false, cx);
+                                                    });
+                                                }
+                                            }),
+                                            on_hover: None,
+                                        });
+                                    }
+                                    items.push(item);
                                     h.update(cx, |this, cx| {
                                         this.context_menus.clear();
                                         this.context_menus.push(crate::ui::app::ContextMenuInstance {
                                             position: event.position,
-                                            content: crate::ui::app::ContextMenuContent::Items(vec![item], None),
+                                            content: crate::ui::app::ContextMenuContent::Items(items, None),
                                             scroll_handle: UniformListScrollHandle::new(),
                                             width: px(0.0), bottom_padding: 3.0, open_left: false,
                                             hovered_item: None, native_request_id: None,

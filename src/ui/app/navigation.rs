@@ -154,9 +154,10 @@ impl OxydeApp {
     }
 
     pub fn add_tab(&mut self, pane_id: &str, path: String, activate: bool, cx: &mut Context<Self>) {
+        let tab_idx = self.state.find_pane(pane_id)
+            .map(|pane| (pane.active_tab_index + 1).min(pane.tabs.len()));
         self.state.add_tab(pane_id, path, activate);
-        if let Some(pane) = self.state.find_pane(pane_id) {
-            let tab_idx = pane.tabs.len() - 1;
+        if let (Some(pane), Some(tab_idx)) = (self.state.find_pane(pane_id), tab_idx) {
             let path = pane.tabs[tab_idx].path.clone();
             self.request_tab_files(pane_id, tab_idx, path, false, cx);
         }

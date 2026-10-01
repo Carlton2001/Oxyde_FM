@@ -21,6 +21,11 @@ Le thème actif est accessible avec `cx.theme()`. Les thèmes pris en charge son
 - Garder une valeur locale uniquement si elle exprime un effet propre au composant, comme un fond entièrement transparent. Le rôle doit rester évident dans le code.
 - Vérifier le contraste et les états normal, survol, focus, sélection, désactivé et erreur dans les deux palettes. Le texte sur une action remplie doit utiliser le jeton de texte correspondant à cette action.
 
+## Typographie
+
+- Le poids par défaut est Regular (400), défini par `DEFAULT_FONT_WEIGHT` dans `src/ui/style.rs` et appliqué à la racine de l'application. Les descendants héritent de ce poids sauf lorsqu'un ancêtre ou le composant définit explicitement un autre poids.
+- Ne préciser un poids local (Light, Medium, Semibold, Bold, etc.) que pour une variation intentionnelle. Les surfaces rendues séparément, comme les infobulles, utilisent le même poids par défaut à leur racine.
+
 ## Internationalisation
 
 Le contexte `cx.i18n()` fournit la langue active et résout les clés de `Message` vers des `SharedString`.

@@ -372,10 +372,30 @@ impl TabState {
 }
 
 #[derive(Clone)]
+pub struct TabStripState {
+    pub scroll: ScrollHandle,
+    pub overflow: std::rc::Rc<std::cell::Cell<bool>>,
+    pub active_id: std::rc::Rc<std::cell::RefCell<String>>,
+    pub active_index: std::rc::Rc<std::cell::Cell<usize>>,
+}
+
+impl Default for TabStripState {
+    fn default() -> Self {
+        Self {
+            scroll: ScrollHandle::new(),
+            overflow: Default::default(),
+            active_id: Default::default(),
+            active_index: Default::default(),
+        }
+    }
+}
+
+#[derive(Clone)]
 pub struct PaneState {
     pub id: String,
     pub tabs: Vec<TabState>,
     pub active_tab_index: usize,
+    pub tab_strip: TabStripState,
 }
 
 impl PaneState {
@@ -384,6 +404,7 @@ impl PaneState {
             id: format!("pane-{}", uuid::Uuid::new_v4()), // We need a way to ID panes in the tree
             tabs: vec![tab],
             active_tab_index: 0,
+            tab_strip: TabStripState::default(),
         }
     }
 
@@ -474,6 +495,7 @@ impl SavedLayoutNode {
                 Some(LayoutNode::Pane(Box::new(PaneState {
                     id,
                     active_tab_index: active_tab_index.min(tabs.len() - 1),
+                    tab_strip: TabStripState::default(),
                     tabs,
                 })))
             }
@@ -897,10 +919,11 @@ impl WorkspaceState {
         if let Some(pane) = self.find_pane_mut(pane_id) {
             let mut new_tab = new_tab;
             new_tab.view_mode = pane.active_tab().view_mode;
-            pane.tabs.push(new_tab);
+            let insertion_index = (pane.active_tab_index + 1).min(pane.tabs.len());
+            pane.tabs.insert(insertion_index, new_tab);
 
             if activate {
-                pane.active_tab_index = pane.tabs.len() - 1;
+                pane.active_tab_index = insertion_index;
                 self.active_pane_id = pane_id.to_string();
             }
         }
@@ -1223,6 +1246,27 @@ impl WorkspaceState {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn new_tabs_open_after_current_with_or_without_activation() {
+        for activate in [false, true] {
+            let mut state = WorkspaceState::new();
+            let pane_id = state.active_pane_id.clone();
+            state.add_tab(&pane_id, "B".to_string(), true);
+            state.add_tab(&pane_id, "C".to_string(), true);
+            let pane = state.find_pane_mut(&pane_id).unwrap();
+            pane.active_tab_index = 1;
+            let current_id = pane.active_tab().id.clone();
+
+            state.add_tab(&pane_id, "new".to_string(), activate);
+
+            let pane = state.find_pane(&pane_id).unwrap();
+            assert_eq!(pane.tabs[1].id, current_id);
+            assert_eq!(pane.tabs[2].path, "new");
+            assert_eq!(pane.tabs[3].path, "C");
+            assert_eq!(pane.active_tab_index, if activate { 2 } else { 1 });
+        }
+    }
 
     #[test]
     fn closing_tab_before_active_preserves_active_tab_identity() {

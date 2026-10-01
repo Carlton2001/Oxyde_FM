@@ -157,6 +157,7 @@ impl RenderOnce for Tab {
             .id(self.id.clone())
             .relative()
             .h(px(32.0))
+            .flex_none()
             .bg(bg_color)
             .flex()
             .items_center()

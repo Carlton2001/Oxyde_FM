@@ -346,6 +346,7 @@ impl OxydeApp {
                     && self.drop_target_idx == Some(tabs_count);
 
                 let mut tab_bar = TabBar::new(SharedString::from(format!("tab-bar-{}", p_id)))
+                    .scroll_state(pane.tab_strip.clone(), pane.active_tab().id.clone(), active_idx)
                     .on_new_tab({
                         let h = h.clone();
                         let p_id_cap = p_id.clone();

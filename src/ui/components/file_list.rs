@@ -36,7 +36,7 @@ impl Asset for GridThumbnailAsset {
     }
 }
 
-const STATUS_BAR_HEIGHT: f32 = 28.0;
+const STATUS_BAR_HEIGHT: f32 = 32.0;
 
 /// Returns the display type label for a file entry.
 /// Symlinks and junctions are identified before extension/dir detection.
@@ -910,6 +910,8 @@ pub fn render_file_list(
             .items_center()
             .gap_3()
             .px_3()
+            .pr(px(8.0))
+            .py(px(4.0))
             .bg(theme.header)
             .border_t_1()
             .border_color(theme.border)
@@ -1570,6 +1572,8 @@ fn render_grid_file_list(
                 .items_center()
                 .gap_3()
                 .px_3()
+                .pr(px(8.0))
+                .py(px(4.0))
                 .bg(theme.header)
                 .border_t_1()
                 .border_color(theme.border)
@@ -1685,8 +1689,9 @@ fn view_mode_button(
                 "details"
             }
         )))
-        .w_7()
-        .h_7()
+        .w(px(24.0))
+        .h(px(24.0))
+        .flex_none()
         .flex()
         .items_center()
         .justify_center()

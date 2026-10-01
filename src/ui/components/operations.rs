@@ -926,7 +926,6 @@ fn render_operation_card(
                     row.child(
                         div()
                             .flex_none()
-                            .font_weight(FontWeight::LIGHT)
                             .text_color(theme.text)
                             .child(
                                 percentage
@@ -957,7 +956,6 @@ fn render_operation_card(
                 .child(
                     div()
                         .flex_none()
-                        .font_weight(FontWeight::LIGHT)
                         .text_color(theme.text)
                         .child(
                             percentage

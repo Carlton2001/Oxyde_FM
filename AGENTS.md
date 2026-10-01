@@ -18,6 +18,7 @@ Oxyde est un explorateur de fichiers natif écrit en Rust, avec GPUI pour l'inte
 4. Ne pas utiliser `grep` ; utiliser `rg` pour rechercher dans le dépôt.
 5. Toute API propre à un système d'exploitation passe par le trait `Platform` de `src/platform/mod.rs`. Implémenter le comportement dans `windows_impl.rs` et `linux_impl.rs` selon les cibles, et garder les modules et dépendances spécifiques derrière les conditions de compilation appropriées.
 6. Pour toute icône Lucide, récupérer et utiliser le SVG officiel depuis `lucide-icons/lucide/icons/<nom>.svg`. Ne jamais dessiner, redessiner ou approximer une icône à la main, ni modifier son tracé. Si le SVG officiel n'est pas accessible, signaler le blocage au lieu de créer une variante.
+7. Seul l'utilisateur décide des cas de changement de curseur. Ne pas ajouter ni modifier un changement de curseur sans sa demande explicite, y compris le curseur en main sur les éléments cliquables. Conserver le curseur par défaut pour les nouvelles interactions, sauf instruction explicite de l'utilisateur.
 
 ## Références GPUI
 

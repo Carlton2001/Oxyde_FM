@@ -170,7 +170,7 @@ impl Render for Tooltip {
             .rounded_md()
             .shadow_lg()
             .font_family("Inter")
-            .font_weight(FontWeight::LIGHT)
+            .font_weight(crate::ui::style::DEFAULT_FONT_WEIGHT)
             .py_2()
             .px_3()
             .flex()

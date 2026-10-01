@@ -6,6 +6,8 @@ lazy_static! {
     pub static ref TNUM: FontFeatures = FontFeatures(Arc::new(vec![("tnum".to_string(), 1)]));
 }
 
+pub const DEFAULT_FONT_WEIGHT: FontWeight = FontWeight::NORMAL;
+
 pub const ROW_HEIGHT: f32 = 28.0;
 pub const GRID_CARD_MIN_WIDTH: f32 = 116.0;
 pub const GRID_CARD_ROW_HEIGHT: f32 = 136.0;
