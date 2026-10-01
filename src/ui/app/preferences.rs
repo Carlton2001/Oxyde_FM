@@ -5,6 +5,29 @@ use gpui::Context;
 use oxyde_lib::models::ConfigManager;
 
 impl OxydeApp {
+    pub(crate) fn ui_rem_size(&self) -> u32 {
+        crate::ui::scale::normalized_reference(self.config.ui_rem_size)
+    }
+    pub(crate) fn set_ui_rem_size(
+        &mut self,
+        value: u32,
+        window: &mut gpui::Window,
+        cx: &mut Context<Self>,
+    ) {
+        let value = crate::ui::scale::normalized_reference(value);
+        if self.config.ui_rem_size == value {
+            return;
+        }
+        self.config.ui_rem_size = value;
+        crate::ui::scale::set_reference(value);
+        window.set_rem_size(gpui::px(value as f32));
+        // Pointer drag snapshots belong to the previous layout geometry.
+        self.finish_pointer_drag(cx);
+        self.context_menus.clear();
+        self.breadcrumb_menu = None;
+        self.save_preferences(cx);
+        cx.refresh_windows();
+    }
     pub(crate) fn save_workspace(&mut self, cx: &mut Context<Self>) {
         if self.preferences_load_failed {
             return;

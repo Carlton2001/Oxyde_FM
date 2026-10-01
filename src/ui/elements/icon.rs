@@ -1,3 +1,4 @@
+use crate::ui::scale::{rem_pixels};
 use gpui::*;
 
 #[allow(dead_code)]
@@ -12,9 +13,9 @@ pub enum IconSize {
 impl IconSize {
     pub fn px(&self) -> Pixels {
         match self {
-            Self::XSmall => px(12.0),
-            Self::Small => px(16.0),
-            Self::Medium => px(20.0),
+            Self::XSmall => rem_pixels(rems(0.75)),
+            Self::Small => rem_pixels(rems(1.0)),
+            Self::Medium => rem_pixels(rems(1.25)),
         }
     }
 }

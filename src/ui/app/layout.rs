@@ -1,3 +1,4 @@
+use crate::ui::scale::{logical};
 use crate::ui::app::{DragTarget, FileDragData, OxydeApp};
 use crate::ui::i18n::{FluentArgs, I18nContext, Message};
 pub use crate::ui::theme::ThemeContext;
@@ -7,7 +8,7 @@ use gpui::*;
 impl OxydeApp {
     pub fn clamp_scrolls(&mut self) {
         // Clamp Sidebar horizontal scroll
-        let sidebar_viewport_w = self.sidebar_width;
+        let sidebar_viewport_w = self.sidebar_display_width();
         let sidebar_content_w = self.sidebar_content_width;
         let sidebar_max_offset_x = (sidebar_content_w - sidebar_viewport_w).max(0.0);
         let current_sidebar_h_offset = self.sidebar_scroll_h.offset().x.as_f32().abs();
@@ -37,7 +38,7 @@ impl OxydeApp {
                 active_tab.size_col_width,
                 active_tab.date_col_width,
             );
-            let total_w = columns.total() + crate::ui::style::DETAILS_HORIZONTAL_PADDING;
+            let total_w = columns.total() + crate::ui::style::details_horizontal_padding();
 
             let max_h_offset = (total_w - pane_size.width).max(0.0);
             let current_h_offset = active_tab.list_scroll_h.offset().x.as_f32().abs();
@@ -53,8 +54,8 @@ impl OxydeApp {
         // Clamp Breadcrumb scroll
         if let Some((_, _, _, dirs)) = &self.breadcrumb_menu {
             let item_count = dirs.len();
-            let content_h = item_count as f32 * 28.0;
-            let viewport_h = content_h.min(360.0);
+            let content_h = item_count as f32 * logical(28.0);
+            let viewport_h = content_h.min(logical(360.0));
             let max_v_offset = (content_h - viewport_h).max(0.0);
             let current_v_offset = self
                 .breadcrumb_scroll
@@ -88,8 +89,8 @@ impl OxydeApp {
                 crate::ui::app::ContextMenuContent::NameFilter { .. } => 0,
             };
             if item_count > 0 {
-                let content_h = item_count as f32 * 28.0;
-                let viewport_h = content_h.min(480.0);
+                let content_h = item_count as f32 * logical(28.0);
+                let viewport_h = content_h.min(logical(480.0));
                 let max_v_offset = (content_h - viewport_h).max(0.0);
                 let current_v_offset = instance
                     .scroll_handle
@@ -224,8 +225,8 @@ impl OxydeApp {
                             crate::ui::workspace::LayoutAxis::Horizontal => {
                                 div()
                                     .group("pane-resize-handle")
-                                    .w(px(3.0))
-                                    .mx(px(-1.0))
+                                    .w(rems(0.1875))
+                                    .mx(rems(-0.0625))
                                     .bg(cx.theme().background)
                                     .flex_none()
                                     .cursor(CursorStyle::ResizeLeftRight)
@@ -234,7 +235,7 @@ impl OxydeApp {
                                     .justify_center()
                                     .child(
                                         div()
-                                            .w(px(1.0))
+                                            .w(rems(0.0625))
                                             .h_full()
                                             .bg(cx.theme().border)
                                             .group_hover("pane-resize-handle", |s| s.bg(cx.theme().accent.opacity(0.6))),
@@ -259,8 +260,8 @@ impl OxydeApp {
                             }
                             crate::ui::workspace::LayoutAxis::Vertical => div()
                                 .group("pane-resize-handle")
-                                .h(px(3.0))
-                                .my(px(-1.0))
+                                .h(rems(0.1875))
+                                .my(rems(-0.0625))
                                 .bg(cx.theme().header)
                                 .flex_none()
                                 .cursor(CursorStyle::ResizeUpDown)
@@ -269,7 +270,7 @@ impl OxydeApp {
                                 .items_center()
                                 .child(
                                     div()
-                                        .h(px(1.0))
+                                        .h(rems(0.0625))
                                         .w_full()
                                         .bg(cx.theme().border)
                                         .group_hover("pane-resize-handle", |s| s.bg(cx.theme().accent.opacity(0.6))),
@@ -684,7 +685,7 @@ impl OxydeApp {
                                     .absolute()
                                     .top_0()
                                     .left_0()
-                                    .w(px(2.0))
+                                    .w(rems(0.125))
                                     .h_full()
                                     .bg(theme.accent)
                                     .when(
@@ -705,7 +706,7 @@ impl OxydeApp {
                                         .absolute()
                                         .top_0()
                                         .right_0()
-                                        .w(px(2.0))
+                                        .w(rems(0.125))
                                         .h_full()
                                         .bg(theme.accent)
                                         .when(
@@ -726,7 +727,7 @@ impl OxydeApp {
                 // Drop zone at the end of tabs (Transparent behavior-only div)
                 tab_bar = tab_bar.child(
                     div()
-                        .w(px(8.0)) // Close to tabs
+                        .w(rems(0.5)) // Close to tabs
                         .h_full()
                         .drag_over::<(String, usize)>({
                             let h = h.clone();
@@ -772,7 +773,7 @@ impl OxydeApp {
                 );
 
                 div()
-                    .h(px(32.0))
+                    .h(rems(2.0))
                     .w_full()
                     .relative()
                     .drag_over::<(String, usize)>({
@@ -848,7 +849,7 @@ impl OxydeApp {
                                             .h_full()
                                             .w_1_2()
                                             .bg(theme.selected)
-                                            .border_r_1()
+                                            .border_r(rems(0.0625))
                                             .border_color(theme.accent),
                                     )
                                 })
@@ -860,7 +861,7 @@ impl OxydeApp {
                                             .h_full()
                                             .w_1_2()
                                             .bg(theme.selected)
-                                            .border_l_1()
+                                            .border_l(rems(0.0625))
                                             .border_color(theme.accent),
                                     )
                                 })
@@ -872,7 +873,7 @@ impl OxydeApp {
                                             .w_full()
                                             .h_1_2()
                                             .bg(theme.selected)
-                                            .border_b_1()
+                                            .border_b(rems(0.0625))
                                             .border_color(theme.accent),
                                     )
                                 })
@@ -884,7 +885,7 @@ impl OxydeApp {
                                             .w_full()
                                             .h_1_2()
                                             .bg(theme.selected)
-                                            .border_t_1()
+                                            .border_t(rems(0.0625))
                                             .border_color(theme.accent),
                                     )
                                 }),

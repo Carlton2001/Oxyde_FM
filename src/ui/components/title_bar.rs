@@ -1,8 +1,12 @@
 use crate::ui::app::OxydeApp;
+use crate::ui::scale::rem_pixels;
 use crate::ui::theme::ThemeContext;
 use gpui::*;
 
-pub const TITLEBAR_H: f32 = 36.0;
+pub const TITLEBAR_H: Rems = rems(2.25);
+pub fn titlebar_h() -> f32 {
+    rem_pixels(TITLEBAR_H).as_f32()
+}
 
 pub fn render_title_bar(
     _view: &OxydeApp,
@@ -34,10 +38,10 @@ pub fn render_title_bar(
                 cx.notify();
             });
         })
-        .child(img("icons/logo.png").w(px(16.0)).h(px(16.0)).flex_none())
+        .child(img("icons/logo.png").w(rems(1.0)).h(rems(1.0)).flex_none())
         .child(
             div()
-                .text_size(px(12.0))
+                .text_size(rems(0.75))
                 .font_weight(FontWeight::BOLD)
                 .text_color(theme.text)
                 .child("Oxyde GPUI"),
@@ -57,7 +61,7 @@ pub fn render_title_bar(
     let minimize_btn = {
         div()
             .id("wc-minimize")
-            .w(px(46.0))
+            .w(rems(2.875))
             .h_full()
             .flex()
             .items_center()
@@ -83,7 +87,7 @@ pub fn render_title_bar(
     };
     let maximize_btn = div()
         .id("wc-maximize")
-        .w(px(46.0))
+        .w(rems(2.875))
         .h_full()
         .flex()
         .items_center()
@@ -99,7 +103,7 @@ pub fn render_title_bar(
     let close_btn = div()
         .id("wc-close")
         .group("window-close")
-        .w(px(46.0))
+        .w(rems(2.875))
         .h_full()
         .flex()
         .items_center()
@@ -122,12 +126,12 @@ pub fn render_title_bar(
     div()
         .id("title-bar")
         .w_full()
-        .h(px(TITLEBAR_H))
+        .h(px(titlebar_h()))
         .flex()
         .flex_none()
         .items_center()
         .bg(theme.surface)
-        .border_b_1()
+        .border_b(rems(0.0625))
         .border_color(theme.border)
         .child(app_button)
         .child(drag_area)

@@ -1,8 +1,9 @@
+use crate::ui::scale::{logical};
 use crate::ui::app::{FileDragData, OxydeApp};
 use crate::ui::components::dropdown::IconName;
 use crate::ui::components::tooltip::Tooltip;
 use crate::ui::i18n::{FluentArgs, I18nContext, Message};
-use crate::ui::style::ROW_HEIGHT;
+
 use crate::ui::theme::ThemeContext;
 use gpui::prelude::*;
 use gpui::*;
@@ -109,8 +110,8 @@ pub fn render_top_bar(
     }
     let scroll_left = -breadcrumb_scroll.offset().x.as_f32();
     let scroll_max = breadcrumb_scroll.max_offset().x.as_f32();
-    let fade_left = scroll_left > 2.0;
-    let fade_right = scroll_max - scroll_left > 2.0;
+    let fade_left = scroll_left > logical(2.0);
+    let fade_right = scroll_max - scroll_left > logical(2.0);
 
     let can_go_back = !active_tab.back_stack.is_empty();
     let can_go_forward = !active_tab.forward_stack.is_empty();
@@ -158,13 +159,13 @@ pub fn render_top_bar(
     let crumb_current = theme.text; // current segment — full brightness
 
     div()
-        .h(px(32.0))
+        .h(rems(2.0))
         .w_full()
         .flex()
         .items_center()
         .px_4()
         .bg(theme.background)
-        .border_b_1()
+        .border_b(rems(0.0625))
         .border_color(theme.border)
         .child(
             div()
@@ -253,8 +254,8 @@ pub fn render_top_bar(
         // Separator
         .child(
             div()
-                .w(px(1.0))
-                .h(px(16.0))
+                .w(rems(0.0625))
+                .h(rems(1.0))
                 .mx_3()
                 .bg(theme.border)
         )
@@ -324,8 +325,8 @@ pub fn render_top_bar(
                 )
                 .child(
                     div()
-                        .w(px(1.0))
-                        .h(px(16.0))
+                        .w(rems(0.0625))
+                        .h(rems(1.0))
                         .mx_3()
                         .bg(theme.border)
                 )
@@ -343,16 +344,16 @@ pub fn render_top_bar(
                             .w_full()
                             .h_full()
                             .when(view.breadcrumb_invalid, |field| {
-                                field.border_1().border_color(theme.error).rounded_sm()
+                                field.border(rems(0.0625)).border_color(theme.error).rounded_sm()
                             })
                             .child(input.clone());
                         let field_shell = div()
                             .flex_1()
                             .min_w_0()
-                            .h(px(ROW_HEIGHT))
+                            .h(px(crate::ui::style::row_height()))
                             // Reserve room for the shake so the input border stays inside
                             // the breadcrumb's clipped viewport at both horizontal extremes.
-                            .px(px(8.0))
+                            .px(rems(0.5))
                             .flex()
                             .items_center()
                             .child(field);
@@ -362,7 +363,7 @@ pub fn render_top_bar(
                                 animation_id,
                                 Animation::new(std::time::Duration::from_millis(480)),
                                 |field_shell, delta| {
-                                    let amplitude = (1.0 - delta) * 8.0;
+                                    let amplitude = (1.0 - delta) * logical(8.0);
                                     let offset = (delta * std::f32::consts::PI * 8.0).sin() * amplitude;
                                     field_shell.relative().left(px(offset))
                                 },
@@ -411,8 +412,8 @@ pub fn render_top_bar(
                                    .child(
                                        div()
                                            .id(SharedString::from(format!("chevron-btn-{}-{}", p_id, index)))
-                                           .h(px(24.0))
-                                           .w(px(18.0))
+                                           .h(rems(1.5))
+                                           .w(rems(1.125))
                                            .flex()
                                            .items_center()
                                            .justify_center()
@@ -492,7 +493,7 @@ pub fn render_top_bar(
                                                                         bottom_padding: 0.0,
                                                                         scroll_handle: view.breadcrumb_scroll.clone(),
                                                                         width: None,
-                                                                        max_height: 360.0,
+                                                                        max_height: logical(360.0),
                                                                         header: None,
                                                                         on_close: {
                                                                             let h = handle.clone();
@@ -547,8 +548,8 @@ pub fn render_top_bar(
                         let seg = div()
                             .id(SharedString::from(format!("breadcrumb-{}-{}", p_id, index)))
                             .flex_none()
-                            .h(px(24.0))
-                            .px(px(6.0))
+                            .h(rems(1.5))
+                            .px(rems(0.375))
                             .flex()
                             .items_center()
                             .rounded_md()
@@ -676,7 +677,7 @@ pub fn render_top_bar(
                         div()
                             .id("breadcrumb-edit-blank")
                             .flex_1()
-                            .min_w(px(24.0))
+                            .min_w(rems(1.5))
                             .h_full()
                             .on_mouse_down(MouseButton::Left, move |_, window, cx| {
                                 blank_handle.update(cx, |this, cx| {
@@ -715,7 +716,7 @@ pub fn render_top_bar(
                             measure_handle.update(cx, |this, cx| {
                                 if let (Some(origin), Some(size)) = (this.pane_origins.get(&measure_pane), this.pane_sizes.get(&measure_pane)) {
                                     let right = (origin.x + size.width).min(window.bounds().size.width.as_f32());
-                                    let available = (right - bounds.origin.x.as_f32() - 16.0).max(0.0);
+                                    let available = (right - bounds.origin.x.as_f32() - logical(16.0)).max(0.0);
                                     if auto_scroll_to_end {
                                         resize_scroll.set_offset(point(-resize_scroll.max_offset().x, px(0.0)));
                                     }
@@ -767,8 +768,8 @@ pub fn render_top_bar(
                                     .left_0()
                                     .top_0()
                                     .h_full()
-                                    .w(px(24.0))
-                                    .bg(linear_gradient(90.0, linear_color_stop(theme.background, 0.0), linear_color_stop(theme.background.alpha(0.0), 1.0))),
+                                    .w(rems(1.5))
+                                    .bg(linear_gradient(logical(90.0), linear_color_stop(theme.background, 0.0), linear_color_stop(theme.background.alpha(0.0), 1.0))),
                             )
                         })
                         .when(fade_right, |bar| {
@@ -778,8 +779,8 @@ pub fn render_top_bar(
                                     .right_0()
                                     .top_0()
                                     .h_full()
-                                    .w(px(24.0))
-                                    .bg(linear_gradient(270.0, linear_color_stop(theme.background, 0.0), linear_color_stop(theme.background.alpha(0.0), 1.0))),
+                                    .w(rems(1.5))
+                                    .bg(linear_gradient(logical(270.0), linear_color_stop(theme.background, 0.0), linear_color_stop(theme.background.alpha(0.0), 1.0))),
                             )
                         }))
                     },

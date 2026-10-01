@@ -1,6 +1,6 @@
+use crate::ui::scale::{logical, rem_pixels};
 use crate::ui::app::{
-    ContextMenuContent, ContextMenuInstance, DragTarget, FileDragData, FileDragPreview, OxydeApp,
-};
+    ContextMenuContent, ContextMenuInstance, DragTarget, FileDragData, FileDragPreview, OxydeApp};
 use crate::ui::components::dropdown::{DropdownItem, IconName};
 use crate::ui::components::scrollbar::{render_scrollbar, ScrollbarAxis};
 use crate::ui::components::tooltip::Tooltip;
@@ -10,7 +10,8 @@ use crate::ui::workspace::SidebarItem;
 use gpui::prelude::*;
 use gpui::*;
 
-const SIDEBAR_ROW_H: f32 = 28.0;
+const SIDEBAR_ROW_H: Rems = rems(1.75);
+fn sidebar_row_h() -> f32 { rem_pixels(SIDEBAR_ROW_H).as_f32() }
 
 fn pinned_display_name(item: &oxyde_lib::models::QuickAccessItem, i18n: &I18n) -> String {
     match item.path.as_str() {
@@ -354,7 +355,7 @@ fn sidebar_button(
 ) -> Stateful<Div> {
     div()
         .id(id)
-        .size(px(32.0))
+        .size(rems(2.0))
         .flex_none()
         .flex()
         .items_center()
@@ -369,7 +370,7 @@ fn sidebar_button(
         .tooltip(Tooltip::text(label))
         .when(enabled, |d| d.on_mouse_down(MouseButton::Left, action))
         .when_some(icon, |d, path| {
-            d.child(svg().path(path).size(px(18.0)).text_color(if enabled {
+            d.child(svg().path(path).size(rems(1.125)).text_color(if enabled {
                 theme.text_muted
             } else {
                 theme.icon_disabled
@@ -381,7 +382,7 @@ fn sidebar_button(
 fn sidebar_toolbar(view: &OxydeApp, handle: Entity<OxydeApp>, cx: &mut Context<OxydeApp>) -> Div {
     let theme = *cx.theme();
     let mut toolbar = div()
-        .h(px(40.0))
+        .h(rems(2.5))
         .flex_none()
         .flex()
         .items_center()
@@ -506,7 +507,7 @@ fn render_sidebar_rail(
                     this.context_menus.clear();
                 } else {
                     this.context_menus.push(ContextMenuInstance {
-                        position: point(px(48.0), e.position.y),
+                        position: point(rem_pixels(rems(3.0)), e.position.y),
                         content: ContextMenuContent::Items(items, None),
                         scroll_handle: UniformListScrollHandle::new(),
                         width: px(0.0),
@@ -585,7 +586,7 @@ fn render_sidebar_rail(
                     });
                 },
             )
-            .when(is_drive, |d| d.font_weight(FontWeight::BOLD).text_size(px(12.0)))
+            .when(is_drive, |d| d.font_weight(FontWeight::BOLD).text_size(rems(0.75)))
             .when(selected, |d| {
                 d.bg(theme.accent.opacity(0.1)).text_color(theme.accent)
             }),
@@ -643,16 +644,16 @@ pub fn render_sidebar(
         .map(|item| match item {
             SidebarItem::Header(_) => 0.0,
             SidebarItem::Pinned { item } => {
-                pinned_display_name(item, _cx.i18n()).len() as f32 * 7.0 + 60.0
+                pinned_display_name(item, _cx.i18n()).len() as f32 * logical(7.0) + logical(60.0)
             }
             SidebarItem::Drive { drive, .. } => {
-                (drive.label.len() + drive.path.len() + 3) as f32 * 7.0 + 60.0
+                (drive.label.len() + drive.path.len() + 3) as f32 * logical(7.0) + logical(60.0)
             }
             SidebarItem::Directory { node, depth, .. } => {
-                (*depth as f32 * 12.0) + node.name.len() as f32 * 7.0 + 60.0
+                (*depth as f32 * logical(12.0)) + node.name.len() as f32 * logical(7.0) + logical(60.0)
             }
         })
-        .fold(view.sidebar_width, |a, b| a.max(b));
+        .fold(view.sidebar_display_width(), |a, b| a.max(b));
 
     if (calculated_content_w - view.sidebar_content_width).abs() > 1.0 {
         let h = handle.clone();
@@ -663,10 +664,10 @@ pub fn render_sidebar(
         });
     }
 
-    let viewport_w = view.sidebar_width;
+    let viewport_w = view.sidebar_display_width();
     let content_w = calculated_content_w.max(viewport_w);
-    let viewport_h = (view.list_height - 76.0).max(1.0);
-    let content_h = (sidebar_items.len() as f32 * SIDEBAR_ROW_H).max(1.0);
+    let viewport_h = (view.list_height - logical(76.0)).max(1.0);
+    let content_h = (sidebar_items.len() as f32 * sidebar_row_h()).max(1.0);
 
     // Highlight only the folder currently open in the active pane's active tab.
     let selected_path = view
@@ -691,16 +692,16 @@ pub fn render_sidebar(
                 .child(
                     div()
                         .absolute()
-                        .top(px(40.0))
-                        .bottom(px(36.0))
-                        .left(px(8.0))
-                        .right(px(18.0)) // 12 px scrollbar track + 6 px clear margin.
+                        .top(rems(2.5))
+                        .bottom(rems(2.25))
+                        .left(rems(0.5))
+                        .right(rems(1.125)) // 12 px scrollbar track + 6 px clear margin.
                         .overflow_hidden()
                         .child(div()
                         .relative()
                         .h_full()
                         .left(view.sidebar_scroll_h.offset().x)
-                        .w(px((content_w - 26.0).max(1.0)))
+                        .w(px((content_w - logical(26.0)).max(1.0)))
                         .child({
                             let items_for_list = sidebar_items.clone();
                             let h = handle.clone();
@@ -721,12 +722,12 @@ pub fn render_sidebar(
                                             // ── Section header ─────────────────────────────
                                             SidebarItem::Header(_) => {
                                                 div()
-                                                    .w(px((content_w - 26.0).max(1.0)))
-                                                    .h(px(SIDEBAR_ROW_H))
+                                                    .w(px((content_w - logical(26.0)).max(1.0)))
+                                                    .h(px(sidebar_row_h()))
                                                     .px_3()
                                                     .flex()
                                                     .items_center()
-                                                    .child(div().flex_1().h(px(1.0)).flex_shrink_0().bg(theme.border))
+                                                    .child(div().flex_1().h(rems(0.0625)).flex_shrink_0().bg(theme.border))
                                                     .into_any_element()
                                             }
 
@@ -740,13 +741,13 @@ pub fn render_sidebar(
 
                                                 div()
                                                     .id(SharedString::from(format!("sb-pin-{}", path)))
-                                                    .w(px((content_w - 26.0).max(1.0)))
-                                                    .h(px(SIDEBAR_ROW_H))
+                                                    .w(px((content_w - logical(26.0)).max(1.0)))
+                                                    .h(px(sidebar_row_h()))
                                                     .px_3()
                                                     .flex()
                                                     .items_center()
                                                     .when(is_dimmed, |d| d.opacity(0.5))
-                                                    .relative().when(is_sel, |d| d.bg(sel_bg).child(div().absolute().left_0().top_0().bottom_0().w(px(3.0)).bg(theme.accent)))
+                                                    .relative().when(is_sel, |d| d.bg(sel_bg).child(div().absolute().left_0().top_0().bottom_0().w(rems(0.1875)).bg(theme.accent)))
                                                     .hover(move |s| s.bg(hov_bg))
                                                     .when(show_tooltips, |d| d.tooltip(Tooltip::with_meta(pinned_display_name(item, cx.i18n()), path.clone())))
                                                     // Left click → select + navigate
@@ -857,12 +858,12 @@ pub fn render_sidebar(
 
                                                 div()
                                                     .id(SharedString::from(format!("sb-drv-{}", path)))
-                                                    .w(px((content_w - 26.0).max(1.0)))
-                                                    .h(px(SIDEBAR_ROW_H))
+                                                    .w(px((content_w - logical(26.0)).max(1.0)))
+                                                    .h(px(sidebar_row_h()))
                                                     .px_3()
                                                     .flex()
                                                     .items_center()
-                                                    .relative().when(is_sel, |d| d.bg(sel_bg).child(div().absolute().left_0().top_0().bottom_0().w(px(3.0)).bg(theme.accent)))
+                                                    .relative().when(is_sel, |d| d.bg(sel_bg).child(div().absolute().left_0().top_0().bottom_0().w(rems(0.1875)).bg(theme.accent)))
                                                     .hover(move |s| s.bg(hov_bg))
                                                     .tooltip(Tooltip::with_meta(label.clone(), path.clone()))
                                                     // Left click → select + navigate (single) / toggle (double)
@@ -981,21 +982,21 @@ pub fn render_sidebar(
                                                 let is_sel     = sel.as_deref() == Some(&path);
                                                 let is_exp     = *is_expanded;
                                                 let has_subs   = node.has_subdirs;
-                                                let depth_px   = 8.0 + (*depth as f32 * 12.0);
+                                                let depth_px   = logical(8.0) + (*depth as f32 * logical(12.0));
                                                 let sel_bg:    Hsla = theme.selected;
                                                 let hov_bg:    Hsla = if is_sel { theme.selection_hover } else { theme.hover };
                                                 let is_dimmed  = node.is_hidden || node.is_system;
 
                                                 div()
                                                     .id(SharedString::from(format!("sb-dir-{}", path)))
-                                                    .w(px((content_w - 26.0).max(1.0)))
-                                                    .h(px(SIDEBAR_ROW_H))
+                                                    .w(px((content_w - logical(26.0)).max(1.0)))
+                                                    .h(px(sidebar_row_h()))
                                                     .pl(px(depth_px))
                                                     .pr_3()
                                                     .flex()
                                                     .items_center()
                                                     .when(is_dimmed, |d| d.opacity(0.5))
-                                                    .relative().when(is_sel, |d| d.bg(sel_bg).child(div().absolute().left_0().top_0().bottom_0().w(px(3.0)).bg(theme.accent)))
+                                                    .relative().when(is_sel, |d| d.bg(sel_bg).child(div().absolute().left_0().top_0().bottom_0().w(rems(0.1875)).bg(theme.accent)))
                                                     .hover(move |s| s.bg(hov_bg))
                                                     .tooltip(Tooltip::with_meta(node.name.clone(), path.clone()))
                                                     // Left click → select + navigate / toggle on double
@@ -1149,10 +1150,10 @@ pub fn render_sidebar(
             .as_f32();
         div()
             .absolute()
-            .top(px(40.0))
-            .bottom(px(36.0))
+            .top(rems(2.5))
+            .bottom(rems(2.25))
             .right_0()
-            .w(px(12.0))
+            .w(rems(0.75))
             .child(render_scrollbar(
                 theme,
                 handle.clone(),

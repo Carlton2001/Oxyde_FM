@@ -1,11 +1,11 @@
+use crate::ui::scale::{logical, rem_pixels};
 use crate::ui::app::{
-    ContextMenuContent, ContextMenuInstance, DragTarget, FileDragData, FileDragPreview, OxydeApp,
-};
-use crate::ui::components::scrollbar::{render_scrollbar, ScrollbarAxis, ZED_TRACK_WIDTH};
+    ContextMenuContent, ContextMenuInstance, DragTarget, FileDragData, FileDragPreview, OxydeApp};
+use crate::ui::components::scrollbar::{render_scrollbar, ScrollbarAxis};
 use crate::ui::components::tooltip::Tooltip;
 use crate::ui::format::{format_date, format_number, format_size};
 use crate::ui::i18n::{FluentArgs, I18nContext, Message};
-use crate::ui::style::{DetailsColumnWidths, GRID_CARD_MIN_WIDTH, GRID_CARD_ROW_HEIGHT, ROW_HEIGHT};
+use crate::ui::style::{DetailsColumnWidths};
 use crate::ui::theme::{OxydeTheme, ThemeContext};
 use crate::ui::workspace::{SortColumn, SortDirection, TabLoadStatus, ViewMode};
 use gpui::prelude::*;
@@ -36,7 +36,8 @@ impl Asset for GridThumbnailAsset {
     }
 }
 
-const STATUS_BAR_HEIGHT: f32 = 32.0;
+const STATUS_BAR_HEIGHT: Rems = rems(2.0);
+fn status_bar_height() -> f32 { rem_pixels(STATUS_BAR_HEIGHT).as_f32() }
 
 /// Returns the display type label for a file entry.
 /// Symlinks and junctions are identified before extension/dir detection.
@@ -120,8 +121,8 @@ pub fn render_file_list(
     let pane_viewport_w = pane_size.width.max(1.0);
 
     let v_v_h =
-        (pane_size.height - 32.0 - ROW_HEIGHT - STATUS_BAR_HEIGHT - ZED_TRACK_WIDTH).max(1.0);
-    let content_h = (count * ROW_HEIGHT).max(1.0);
+        (pane_size.height - logical(32.0) - crate::ui::style::row_height() - status_bar_height() - crate::ui::components::scrollbar::zed_track_width()).max(1.0);
+    let content_h = (count * crate::ui::style::row_height()).max(1.0);
 
     let columns = DetailsColumnWidths::for_viewport(
         pane_viewport_w,
@@ -214,9 +215,9 @@ pub fn render_file_list(
                 .top_0()
                 .left_0()
                 .right_0()
-                .h(px(ROW_HEIGHT))
+                .h(px(crate::ui::style::row_height()))
                 .bg(theme.header)
-                .border_b_1()
+                .border_b(rems(0.0625))
                 .border_color(theme.border)
         )
         // 2. Contenu défilant (Headers + List)
@@ -226,7 +227,7 @@ pub fn render_file_list(
                 .child(
                     div()
                         .absolute()
-                        .left(active_tab.list_scroll_h.offset().x + px(8.0))
+                        .left(active_tab.list_scroll_h.offset().x + rem_pixels(rems(0.5)))
                         .w(px(total_w))
                         .h_full()
                         .flex()
@@ -271,10 +272,10 @@ pub fn render_file_list(
                                             let date_tt = file.modified;
                                             let is_dimmed = file.is_hidden || file.is_system;
                                             div()
-                                                .id(SharedString::from(format!("file-row-{}", path))).relative().when(is_selected, |d| d.child(div().absolute().left_0().top_0().bottom_0().w(px(3.0)).bg(theme.accent)))
+                                                .id(SharedString::from(format!("file-row-{}", path))).relative().when(is_selected, |d| d.child(div().absolute().left_0().top_0().bottom_0().w(rems(0.1875)).bg(theme.accent)))
                                                 .flex()
                                                 .items_center()
-                                                .h(px(ROW_HEIGHT))
+                                                .h(px(crate::ui::style::row_height()))
                                                 .w(px(total_w))
                                                 .bg(if is_selected { theme.selected } else if is_active_pane { theme.active_background } else { theme.background })
                                                 .when(!is_selected, |s| s.hover(|s| s.bg(theme.hover)))
@@ -467,7 +468,7 @@ pub fn render_file_list(
                                                             div()
                                                                 .id(SharedString::from(format!("file-content-{}", path_str)))
                                                                 .h_full()
-                                                                .px(px(8.0))
+                                                                .px(rems(0.5))
                                                                 .flex()
                                                                 .items_center()
                                                                 .child({
@@ -488,14 +489,14 @@ pub fn render_file_list(
                                                                             .min_w_0()
                                                                             // The name cell has 8 px horizontal padding on each side,
                                                                             // then a 16 px icon and its 8 px right margin.
-                                                                            .w(px((name_w - 40.0).max(1.0)))
+                                                                            .w(px((name_w - logical(40.0)).max(1.0)))
                                                                             .h_full()
                                                                             .flex()
                                                                             .items_center()
                                                                             .when_some(rename_error, |field, error| {
                                                                                 field
                                                                                     .tooltip(Tooltip::text(error))
-                                                                                    .border_1()
+                                                                                    .border(rems(0.0625))
                                                                                     .border_color(theme.error)
                                                                                     .rounded_sm()
                                                                             })
@@ -506,7 +507,7 @@ pub fn render_file_list(
                                                                                 SharedString::from(format!("rename-shake-{rename_shake_id}")),
                                                                                 Animation::new(std::time::Duration::from_millis(480)),
                                                                                 |field, delta| {
-                                                                                    let amplitude = (1.0 - delta) * 8.0;
+                                                                                    let amplitude = (1.0 - delta) * logical(8.0);
                                                                                     let offset = (delta * std::f32::consts::PI * 8.0).sin() * amplitude;
                                                                                     field.relative().left(px(offset))
                                                                                 },
@@ -564,9 +565,9 @@ pub fn render_file_list(
                                                                 })
                                                         )
                                                 })
-                                                .child(div().w(px(type_w)).flex_none().px(px(8.0)).text_color(theme.text_muted).text_ellipsis().text_size(px(12.0)).when(is_dimmed, |d| d.opacity(0.5)).child(file_type_display(file, cx.i18n())))
-                                                .child(div().w(px(size_w)).flex_none().px(px(8.0)).flex().justify_end().text_color(theme.text_muted).text_ellipsis().text_size(px(12.0)).when(is_dimmed, |d| d.opacity(0.5)).child(format_size(file.size, is_dir, file.is_calculated, language)))
-                                                .child(div().w(px(date_w)).flex_none().px(px(8.0)).text_color(theme.text_muted).text_ellipsis().text_size(px(12.0)).when(is_dimmed, |d| d.opacity(0.5)).child(format_date(file.modified, language)))
+                                                .child(div().w(px(type_w)).flex_none().px(rems(0.5)).text_color(theme.text_muted).text_ellipsis().text_size(rems(0.75)).when(is_dimmed, |d| d.opacity(0.5)).child(file_type_display(file, cx.i18n())))
+                                                .child(div().w(px(size_w)).flex_none().px(rems(0.5)).flex().justify_end().text_color(theme.text_muted).text_ellipsis().text_size(rems(0.75)).when(is_dimmed, |d| d.opacity(0.5)).child(format_size(file.size, is_dir, file.is_calculated, language)))
+                                                .child(div().w(px(date_w)).flex_none().px(rems(0.5)).text_color(theme.text_muted).text_ellipsis().text_size(rems(0.75)).when(is_dimmed, |d| d.opacity(0.5)).child(format_date(file.modified, language)))
                                             }}).collect::<Vec<_>>()
                                     }
                                 }
@@ -669,10 +670,10 @@ pub fn render_file_list(
         .child(
             div()
                 .absolute()
-                .top(px(ROW_HEIGHT))
+                .top(px(crate::ui::style::row_height()))
                 .left_0()
                 .bottom_0()
-                .w(px(8.0))
+                .w(rems(0.5))
                 .on_mouse_down(MouseButton::Left, {
                     let h = handle.clone();
                     let p_id_cap = pane_id.clone();
@@ -704,10 +705,10 @@ pub fn render_file_list(
         .child(
             div()
                 .absolute()
-                .top(px(ROW_HEIGHT))
-                .right(px(ZED_TRACK_WIDTH))
+                .top(px(crate::ui::style::row_height()))
+                .right(px(crate::ui::components::scrollbar::zed_track_width()))
                 .bottom_0()
-                .w(px(8.0))
+                .w(rems(0.5))
                 .on_mouse_down(MouseButton::Left, {
                     let h = handle.clone();
                     let p_id_cap = pane_id.clone();
@@ -766,7 +767,7 @@ pub fn render_file_list(
                     .w(px(rect_w))
                     .h(px(rect_h))
                     .bg(theme.selected)
-                    .border_1()
+                    .border(rems(0.0625))
                     .border_color(theme.accent),
             );
         }
@@ -784,18 +785,18 @@ pub fn render_file_list(
 
     // Vertical scrollbar and its scroll-to-top affordance.
     let v_ratio = (v_v_h / content_h.max(1.0)).min(1.0);
-    let v_thumb_size = (v_v_h * v_ratio).max(40.0).min(v_v_h);
+    let v_thumb_size = (v_v_h * v_ratio).max(logical(40.0)).min(v_v_h);
     let v_max_offset = (content_h - v_v_h).max(1.0);
     let v_thumb_pos = (v_offset / v_max_offset).clamp(0.0, 1.0) * (v_v_h - v_thumb_size);
     let scroll_button_top =
-        (v_thumb_pos + v_thumb_size / 2.0 - 16.0).clamp(4.0, (v_v_h - 36.0).max(4.0));
+        (v_thumb_pos + v_thumb_size / 2.0 - logical(16.0)).clamp(logical(4.0), (v_v_h - logical(36.0)).max(logical(4.0)));
 
     let mut vertical_scroll_zone = div()
         .absolute()
-        .top(px(ROW_HEIGHT))
+        .top(px(crate::ui::style::row_height()))
         .right_0()
-        .bottom(px(STATUS_BAR_HEIGHT))
-        .w(px(58.0))
+        .bottom(px(status_bar_height()))
+        .w(rems(3.625))
         .group("file-list-scroll-zone")
         .child(render_scrollbar(
             theme,
@@ -820,7 +821,7 @@ pub fn render_file_list(
             },
         ));
 
-    if v_offset > ROW_HEIGHT * 2.0 && content_h > v_v_h {
+    if v_offset > crate::ui::style::row_height() * 2.0 && content_h > v_v_h {
         let h_scroll_top = handle.clone();
         let pane_id_scroll_top = pane_id.clone();
         vertical_scroll_zone = vertical_scroll_zone.child(
@@ -828,15 +829,15 @@ pub fn render_file_list(
                 .id(format!("scroll-to-top-{pane_id_scroll_top}"))
                 .absolute()
                 .top(px(scroll_button_top))
-                .right(px(16.0))
-                .w(px(32.0))
-                .h(px(32.0))
+                .right(rems(1.0))
+                .w(rems(2.0))
+                .h(rems(2.0))
                 .flex()
                 .items_center()
                 .justify_center()
-                .rounded(px(8.0))
+                .rounded(rems(0.5))
                 .bg(theme.accent)
-                .shadow_md()
+                .shadow(crate::ui::style::rem_shadow(false))
                 .opacity(0.0)
                 .group_hover("file-list-scroll-zone", |style| style.opacity(1.0))
                 .hover(|style| style.opacity(0.9))
@@ -857,8 +858,8 @@ pub fn render_file_list(
                 .child(
                     svg()
                         .path("icons/arrow-up.svg")
-                        .w(px(16.0))
-                        .h(px(16.0))
+                        .w(rems(1.0))
+                        .h(rems(1.0))
                         .text_color(theme.text),
                 ),
         );
@@ -867,8 +868,8 @@ pub fn render_file_list(
 
     // Horizontal scrollbar overlay
     container = container.child(
-        div().absolute().left_0().bottom(px(STATUS_BAR_HEIGHT)).right(px(ZED_TRACK_WIDTH)).h(px(ZED_TRACK_WIDTH))
-            .child(render_scrollbar(theme, handle.clone(), ScrollbarAxis::Horizontal, pane_viewport_w, total_w + 28.0, -active_tab.list_scroll_h.offset().x.as_f32(), matches!(view.drag_target, Some(DragTarget::FileListH { ref pane_id, .. }) if pane_id == &p_id_cap), format!("h-{}", pane_suffix), None, {
+        div().absolute().left_0().bottom(px(status_bar_height())).right(px(crate::ui::components::scrollbar::zed_track_width())).h(px(crate::ui::components::scrollbar::zed_track_width()))
+            .child(render_scrollbar(theme, handle.clone(), ScrollbarAxis::Horizontal, pane_viewport_w, total_w + logical(28.0), -active_tab.list_scroll_h.offset().x.as_f32(), matches!(view.drag_target, Some(DragTarget::FileListH { ref pane_id, .. }) if pane_id == &p_id_cap), format!("h-{}", pane_suffix), None, {
                 let p_id = p_id_cap.clone();
                 move |this, track_id, v_w, c_w, _| {
                     this.drag_target = Some(DragTarget::FileListH { pane_id: p_id.clone(), viewport_w: v_w, content_w: c_w, track_id });
@@ -880,13 +881,13 @@ pub fn render_file_list(
         container = container.child(
             div()
                 .absolute()
-                .top(px(ROW_HEIGHT + 18.0))
+                .top(px(crate::ui::style::row_height() + logical(18.0)))
                 .left_0()
                 .right_0()
                 .flex()
                 .justify_center()
                 .text_color(theme.text_muted)
-                .text_size(px(13.0))
+                .text_size(rems(0.8125))
                 .child(message),
         );
     }
@@ -905,17 +906,17 @@ pub fn render_file_list(
             .left_0()
             .right_0()
             .bottom_0()
-            .h(px(STATUS_BAR_HEIGHT))
+            .h(px(status_bar_height()))
             .flex()
             .items_center()
             .gap_3()
             .px_3()
-            .pr(px(8.0))
-            .py(px(4.0))
+            .pr(rems(0.5))
+            .py(rems(0.25))
             .bg(theme.header)
-            .border_t_1()
+            .border_t(rems(0.0625))
             .border_color(theme.border)
-            .text_size(px(12.0))
+            .text_size(rems(0.75))
             .text_color(theme.text)
             .font_weight(FontWeight::MEDIUM)
             .child(folders_label)
@@ -988,9 +989,9 @@ fn render_grid_file_list(
         .max(1.0);
     // Keep the grid inside the panel's padded viewport and leave a clear lane
     // for the overlay scrollbar, especially in the rightmost split pane.
-    let grid_width = (pane_width - 20.0 - ZED_TRACK_WIDTH).max(GRID_CARD_MIN_WIDTH + 4.0);
-    let columns = ((pane_width - 20.0) / GRID_CARD_MIN_WIDTH).floor().max(1.0) as usize;
-    let card_width = grid_width / columns as f32 - 4.0;
+    let grid = crate::ui::style::GridGeometry::for_viewport(pane_width, crate::ui::components::scrollbar::zed_track_width());
+    let columns = grid.columns;
+    let card_width = grid.cell_width - logical(4.0);
     let row_count = files.len().div_ceil(columns);
     let empty_message = if !files.is_empty() {
         None
@@ -1080,8 +1081,8 @@ fn render_grid_file_list(
                                     let date_tt = file.modified;
                                     let mut card = div()
                                         .id(SharedString::from(format!("file-card-{path}")))
-                                        .w(px(card_width - 4.0))
-                                        .h(px(GRID_CARD_ROW_HEIGHT - 4.0))
+                                        .w(px(card_width - logical(4.0)))
+                                        .h(px(crate::ui::style::grid_card_row_height() - logical(4.0)))
                                         .m_0p5()
                                         .p_1()
                                         .flex()
@@ -1090,7 +1091,7 @@ fn render_grid_file_list(
                                         .justify_center()
                                         .gap_0p5()
                                         .rounded_md()
-                                        .border_1()
+                                        .border(rems(0.0625))
                                         .border_color(if has_rename_error {
                                             theme.error
                                         } else if is_selected {
@@ -1105,7 +1106,7 @@ fn render_grid_file_list(
                                         } else {
                                             theme.background
                                         })
-                                        .relative().when(is_selected, |d| d.child(div().absolute().left_0().top_0().bottom_0().w(px(3.0)).bg(theme.accent))).when(!is_selected, |d| d.hover(|d| d.bg(theme.hover)))
+                                        .relative().when(is_selected, |d| d.child(div().absolute().left_0().top_0().bottom_0().w(rems(0.1875)).bg(theme.accent))).when(!is_selected, |d| d.hover(|d| d.bg(theme.hover)))
                                         .when(show_tooltips && show_media_previews, |d| {
                                             d.tooltip(Tooltip::for_file_full(
                                                 file_name_tt.clone(),
@@ -1253,7 +1254,7 @@ fn render_grid_file_list(
                                             div()
                                                 .relative()
                                                 .w_full()
-                                                .h(px(68.0))
+                                                .h(rems(4.25))
                                                 .when(file.is_hidden || file.is_system, |d| d.opacity(0.5))
                                                 .child(
                                                     div()
@@ -1268,7 +1269,7 @@ fn render_grid_file_list(
                                                         {
                                                             render_grid_thumbnail(path.clone(), icon, theme).into_any_element()
                                                         } else {
-                                                            svg().path(icon.path()).size(px(64.0)).text_color(
+                                                            svg().path(icon.path()).size(rems(4.0)).text_color(
                                                                 if is_dir { theme.accent } else { theme.text_muted },
                                                             ).into_any_element()
                                                         }),
@@ -1291,9 +1292,9 @@ fn render_grid_file_list(
                                                 .w_full()
                                                 .px_1()
                                                 .text_center()
-                                                .text_size(px(12.0))
+                                                .text_size(rems(0.75))
                                                 .text_color(theme.text)
-                                                .h(px(18.0))
+                                                .h(rems(1.125))
                                                 .text_ellipsis()
                                                 .overflow_hidden()
                                                 .when(file.is_hidden || file.is_system, |d| d.opacity(0.5))
@@ -1315,7 +1316,7 @@ fn render_grid_file_list(
                                         )
                                         .child(
                                             div()
-                                                .text_size(px(10.0))
+                                                .text_size(rems(0.625))
                                                 .text_color(theme.text_muted)
                                                 .text_ellipsis()
                                                 .when(file.is_hidden || file.is_system, |d| d.opacity(0.5))
@@ -1374,7 +1375,7 @@ fn render_grid_file_list(
                                 .collect::<Vec<_>>();
                             div()
                                 .w_full()
-                                .h(px(GRID_CARD_ROW_HEIGHT))
+                                .h(px(crate::ui::style::grid_card_row_height()))
                                 .flex()
                                 .items_start()
                                 .children(cells)
@@ -1394,7 +1395,7 @@ fn render_grid_file_list(
             .size
             .height
             .as_f32();
-        let content_height = row_count as f32 * GRID_CARD_ROW_HEIGHT;
+        let content_height = row_count as f32 * crate::ui::style::grid_card_row_height();
         let scroll_offset = -tab
             .list_scroll
             .0
@@ -1410,7 +1411,7 @@ fn render_grid_file_list(
             .flex_1()
             .overflow_y_scroll()
             .px_2()
-            .pr(px(ZED_TRACK_WIDTH))
+            .pr(px(crate::ui::components::scrollbar::zed_track_width()))
             .pt_1()
             .child(
                 canvas(|bounds, _, _| bounds, {
@@ -1524,7 +1525,7 @@ fn render_grid_file_list(
         .flex()
         .flex_col()
         .relative()
-        .pb(px(STATUS_BAR_HEIGHT))
+        .pb(px(status_bar_height()))
         .overflow_hidden()
         .bg(if active {
             theme.active_background
@@ -1551,7 +1552,7 @@ fn render_grid_file_list(
                         .w(px(width))
                         .h(px(height))
                         .bg(theme.selected)
-                        .border_1()
+                        .border(rems(0.0625))
                         .border_color(theme.accent)
                 }),
                 _ => None,
@@ -1564,7 +1565,7 @@ fn render_grid_file_list(
                 .left_0()
                 .right_0()
                 .bottom_0()
-                .h(px(STATUS_BAR_HEIGHT))
+                .h(px(status_bar_height()))
                 .min_w_0()
                 .flex_none()
                 .overflow_hidden()
@@ -1572,12 +1573,12 @@ fn render_grid_file_list(
                 .items_center()
                 .gap_3()
                 .px_3()
-                .pr(px(8.0))
-                .py(px(4.0))
+                .pr(rems(0.5))
+                .py(rems(0.25))
                 .bg(theme.header)
-                .border_t_1()
+                .border_t(rems(0.0625))
                 .border_color(theme.border)
-                .text_size(px(12.0))
+                .text_size(rems(0.75))
                 .text_color(theme.text)
                 .font_weight(FontWeight::MEDIUM)
                 .child(
@@ -1656,12 +1657,12 @@ fn render_grid_thumbnail(
         window.use_asset::<GridThumbnailAsset>(&source, cx)
     })
     .id(SharedString::from(format!("grid-thumbnail-{path}")))
-    .size(px(80.0))
+    .size(rems(5.0))
     .object_fit(ObjectFit::Contain)
     .with_fallback(move || {
         svg()
             .path(fallback_icon.path())
-            .size(px(64.0))
+            .size(rems(4.0))
             .text_color(theme.text_muted)
             .into_any_element()
     })
@@ -1689,8 +1690,8 @@ fn view_mode_button(
                 "details"
             }
         )))
-        .w(px(24.0))
-        .h(px(24.0))
+        .w(rems(1.5))
+        .h(rems(1.5))
         .flex_none()
         .flex()
         .items_center()
@@ -1797,7 +1798,7 @@ fn render_headers(
     div()
         .flex()
         .items_center()
-        .h(px(ROW_HEIGHT))
+        .h(px(crate::ui::style::row_height()))
         .text_color(theme.text_muted)
         .font_weight(FontWeight::BOLD)
         .child(
@@ -1960,7 +1961,7 @@ fn header_cell(
         .relative()
         .w(px(width))
         .flex_none()
-        .px(px(8.0))
+        .px(rems(0.5))
         .h_full()
         .flex()
         .items_center()
@@ -1981,7 +1982,7 @@ fn header_cell(
         }))
         .child(
             div()
-                .w(px(16.0))
+                .w(rems(1.0))
                 .flex()
                 .justify_center()
                 .when(is_active, |s| {
@@ -2003,7 +2004,7 @@ fn header_cell(
                 move |_, bounds, _, cx| {
                     // The dropdown has a small internal left inset; shift the filter
                     // menu back slightly so its visible edge aligns with the header.
-                    let anchor = point(bounds.left() - px(4.0), bounds.bottom());
+                    let anchor = point(bounds.left() - rem_pixels(rems(0.25)), bounds.bottom());
                     anchor_handle.update(cx, |this, _| {
                         this.context_anchor_points
                             .insert(anchor_key.clone(), anchor);

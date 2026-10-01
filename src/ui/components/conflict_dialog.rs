@@ -34,8 +34,8 @@ pub fn render_conflict_dialog(
     .action(
         div()
             .id("operation-cancel")
-            .px(px(12.0))
-            .py(px(8.0))
+            .px(rems(0.75))
+            .py(rems(0.5))
             .rounded_md()
             .hover(|d| d.bg(theme.control_hover))
             .child(cx.i18n().text(Message::Cancel))
@@ -46,8 +46,8 @@ pub fn render_conflict_dialog(
     .action(
         div()
             .id("operation-skip")
-            .px(px(12.0))
-            .py(px(8.0))
+            .px(rems(0.75))
+            .py(rems(0.5))
             .rounded_md()
             .hover(|d| d.bg(theme.control_hover))
             .child(cx.i18n().text(Message::ConflictSkipAll))
@@ -60,8 +60,8 @@ pub fn render_conflict_dialog(
     .action(
         div()
             .id("operation-replace")
-            .px(px(12.0))
-            .py(px(8.0))
+            .px(rems(0.75))
+            .py(rems(0.5))
             .rounded_md()
             .bg(theme.accent)
             .text_color(theme.text_on_accent)

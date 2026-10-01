@@ -35,6 +35,9 @@ pub struct AppConfig {
     pub zstd_quality: String,
     #[serde(default)]
     pub font_size: u32,
+    /// GPUI reference in logical pixels per rem, independent of legacy font_size.
+    #[serde(default = "default_ui_rem_size")]
+    pub ui_rem_size: u32,
     #[serde(default)]
     pub search_limit: u32,
     #[serde(default)]
@@ -72,6 +75,8 @@ fn default_true() -> bool {
     true
 }
 
+fn default_ui_rem_size() -> u32 { 16 }
+
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
@@ -87,6 +92,7 @@ impl Default for AppConfig {
             seven_zip_quality: "fast".to_string(),
             zstd_quality: "fast".to_string(),
             font_size: 16,
+            ui_rem_size: default_ui_rem_size(),
             search_limit: 3000,
             default_turbo_mode: true,
             show_grid_thumbnails: false,
@@ -185,6 +191,7 @@ mod tests {
         let missing: AppConfig = serde_json::from_str("{}").unwrap();
         assert_eq!(missing.theme, "dark");
         assert_eq!(missing.language, "fr");
+        assert_eq!(missing.ui_rem_size, 16);
         let legacy: AppConfig =
             serde_json::from_str(r#"{"theme":"oxyde-light","language":"en-US"}"#).unwrap();
         assert_eq!(ThemeId::from_id(&legacy.theme), ThemeId::Light);
@@ -201,6 +208,7 @@ mod tests {
         fs::write(&path, r#"{"theme":"oxyde-dark","language":"fr","search_limit":123,"future_option":{"enabled":true}}"#).unwrap();
         let mut config = ConfigManager::read_from_path(&path).unwrap();
         config.operations_panel_position = Some([42.5, 87.25]);
+        config.ui_rem_size = 20;
         for (theme, language) in [
             (ThemeId::Light, Language::English),
             (ThemeId::Dark, Language::French),
@@ -212,6 +220,7 @@ mod tests {
             assert_eq!(ThemeId::from_id(&config.theme), theme);
             assert_eq!(Language::from_id(&config.language), language);
             assert_eq!(config.search_limit, 123);
+            assert_eq!(config.ui_rem_size, 20);
             assert_eq!(config.operations_panel_position, Some([42.5, 87.25]));
             assert_eq!(config.extra["future_option"]["enabled"], true);
         }

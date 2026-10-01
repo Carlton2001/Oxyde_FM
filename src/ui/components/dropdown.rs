@@ -1,5 +1,6 @@
+use crate::ui::scale::{logical, rem_pixels};
 use crate::ui::app::OxydeApp;
-use crate::ui::components::scrollbar::{render_scrollbar, ScrollbarAxis, ZED_TRACK_WIDTH};
+use crate::ui::components::scrollbar::{render_scrollbar, ScrollbarAxis};
 use gpui::prelude::*;
 use gpui::*;
 use std::rc::Rc;
@@ -189,7 +190,7 @@ impl RenderOnce for GenericDropdown {
         let icon_color: Hsla = theme.icon_muted; // ~33% white for icons
         let chevron_color: Hsla = theme.icon_disabled; // ~20% white for chevron arrow
 
-        let mut calculated_width: f32 = 180.0;
+        let mut calculated_width: f32 = logical(180.0);
 
         let text_system = window.text_system();
         let font = window.text_style().font();
@@ -197,7 +198,7 @@ impl RenderOnce for GenericDropdown {
         for item in &self.items {
             let line = text_system.shape_line(
                 item.label.clone().into(),
-                px(13.0),
+                rem_pixels(rems(0.8125)),
                 &[TextRun {
                     len: item.label.len(),
                     font: font.clone(),
@@ -209,19 +210,21 @@ impl RenderOnce for GenericDropdown {
                 None,
             );
             let icon_width = if item.icon.is_some() || self.reserve_icon_space {
-                24.0
+                logical(24.0)
             } else {
                 0.0
             };
-            let chevron_width = if item.has_submenu { 14.0 } else { 0.0 };
+            let chevron_width = if item.has_submenu { logical(14.0) } else { 0.0 };
             // Row padding (16) + optional icon slot + optional submenu arrow.
             calculated_width =
-                calculated_width.max(line.width.as_f32() + 16.0 + icon_width + chevron_width);
+                calculated_width.max(line.width.as_f32() + logical(16.0) + icon_width + chevron_width);
         }
 
-        let width = self.width.unwrap_or(calculated_width);
-        let right_padding = if self.is_context_menu { 5.0 } else { 4.0 };
-        let outer_width = width + 4.0 + right_padding;
+        let requested_width = self.width.unwrap_or(calculated_width);
+        let right_padding = if self.is_context_menu { logical(5.0) } else { logical(4.0) };
+        let outer_width = (requested_width + logical(4.0) + right_padding)
+            .min((window.viewport_size().width.as_f32() - logical(16.0)).max(1.0));
+        let width = (outer_width - logical(4.0) - right_padding).max(1.0);
 
         // Report computed width including the menu's horizontal padding.
         if let Some(on_width) = self.on_width_calculated.take() {
@@ -233,14 +236,15 @@ impl RenderOnce for GenericDropdown {
         let is_dragging = self.is_dragging;
         let on_drag = self.on_drag.clone();
 
-        let item_h: f32 = 26.0;
+        let item_h: f32 = logical(26.0);
         let item_count = self.items.len();
-        let viewport_h = (item_count as f32 * item_h).min(self.max_height);
+        let maximum = crate::ui::style::menu_list_max_height(window.viewport_size().height.as_f32(), self.header.is_some(), self.bottom_padding, self.max_height);
+        let viewport_h = (item_count as f32 * item_h).min(maximum);
         let content_h = item_count as f32 * item_h;
         let has_scrollbar = content_h > viewport_h;
 
         let list_w = if has_scrollbar {
-            width - ZED_TRACK_WIDTH
+            width - crate::ui::components::scrollbar::zed_track_width()
         } else {
             width
         };
@@ -252,18 +256,18 @@ impl RenderOnce for GenericDropdown {
             .occlude()
             .id(self.id)
             .flex_col()
-            .pt(px(4.0))
-            .pb(px(self.bottom_padding))
-            .pl(px(4.0))
+            .pt(rems(0.25))
+            .pb(rems(self.bottom_padding / 16.0))
+            .pl(rems(0.25))
             .pr(px(right_padding))
             .w(px(outer_width))
             .bg(menu_bg)
-            .border_1()
+            .border(rems(0.0625))
             .border_color(menu_border)
-            .rounded(px(8.0))
-            .shadow_lg()
+            .rounded(rems(0.5))
+            .shadow(crate::ui::style::rem_shadow(true))
             .when_some(self.header.take(), |s, h| {
-                s.child(div().mb(px(2.0)).child(h))
+                s.child(div().mb(rems(0.125)).child(h))
             })
             .child(
                 div().w(px(list_w)).h(px(viewport_h)).child(
@@ -290,10 +294,10 @@ impl RenderOnce for GenericDropdown {
                                         .id(("dropdown-item", ix))
                                         .w(px(list_w_inner))
                                         .h(px(item_h))
-                                        .px(px(8.0))
+                                        .px(rems(0.5))
                                         .flex()
                                         .items_center()
-                                        .rounded(px(5.0))
+                                        .rounded(rems(0.3125))
                                         .when(item.is_dimmed, |d| d.opacity(0.42))
                                         .when(!item.is_dimmed, |d| d.hover(|s| s.bg(item_hover)))
                                         .on_mouse_move(move |event, _window, cx| {
@@ -314,9 +318,9 @@ impl RenderOnce for GenericDropdown {
                                             row.child(
                                                 div()
                                                     .flex_none()
-                                                    .w(px(16.0))
-                                                    .h(px(16.0))
-                                                    .mr(px(8.0))
+                                                    .w(rems(1.0))
+                                                    .h(rems(1.0))
+                                                    .mr(rems(0.5))
                                                     .when_some(item.icon.as_ref(), |d, icon| {
                                                         d.child(
                                                             svg()
@@ -446,7 +450,7 @@ impl RenderOnce for GenericDropdown {
                                         .child(
                                             div()
                                                 .flex_1()
-                                                .text_size(px(13.0))
+                                                .text_size(rems(0.8125))
                                                 .text_color(if item.is_dimmed {
                                                     theme.text_muted
                                                 } else if is_destructive {
@@ -461,8 +465,8 @@ impl RenderOnce for GenericDropdown {
                                             s.child(
                                                 svg()
                                                     .path("icons/chevron-right.svg")
-                                                    .w(px(14.0))
-                                                    .h(px(14.0))
+                                                    .w(rems(0.875))
+                                                    .h(rems(0.875))
                                                     .text_color(chevron_color),
                                             )
                                         })

@@ -1,3 +1,4 @@
+use crate::ui::scale::{logical, rem_pixels};
 pub use crate::ui::theme::{OxydeTheme, ThemeContext};
 pub use crate::ui::workspace::WorkspaceState;
 pub use gpui::prelude::*;
@@ -141,7 +142,7 @@ struct PendingFileOperation {
 
 fn native_menu_max_height(viewport_height: Pixels) -> f32 {
     // Leave 8 px on each side, in addition to the menu's 6 px of chrome.
-    (viewport_height.as_f32() - 22.0).max(26.0)
+    (viewport_height.as_f32() - logical(22.0)).max(logical(26.0))
 }
 
 fn context_menu_contains_point(
@@ -163,15 +164,17 @@ fn context_menu_height(menu: &ContextMenuInstance, viewport_height: Pixels) -> P
     let (item_count, header_height, max_height) = match &menu.content {
         ContextMenuContent::Items(items, header) => (
             items.len(),
-            if header.is_some() { 42.0 } else { 6.0 },
-            480.0,
+            if header.is_some() { logical(42.0) } else { logical(6.0) },
+            logical(480.0),
         ),
         ContextMenuContent::NativeItems { items, .. } => {
-            (items.len(), 6.0, native_menu_max_height(viewport_height))
+            (items.len(), logical(6.0), native_menu_max_height(viewport_height))
         }
-        ContextMenuContent::NameFilter { .. } => (0, crate::ui::style::ROW_HEIGHT + 8.0, 480.0),
+        ContextMenuContent::NameFilter { .. } => (0, crate::ui::style::row_height() + logical(8.0), logical(480.0)),
     };
-    px((item_count as f32 * 26.0).min(max_height) + header_height + menu.bottom_padding)
+    let header = matches!(&menu.content, ContextMenuContent::Items(_, Some(_)));
+    let max_height = crate::ui::style::menu_list_max_height(viewport_height.as_f32(), header, menu.bottom_padding, max_height);
+    px((item_count as f32 * logical(26.0)).min(max_height) + header_height + logical(menu.bottom_padding))
 }
 
 fn context_menu_visible_top(
@@ -227,15 +230,15 @@ fn drag_op_pill(key_hint: &str, label: &str, active: bool, theme: &OxydeTheme) -
     div()
         .flex()
         .items_center()
-        .gap(px(4.0))
-        .px(px(6.0))
-        .py(px(3.0))
+        .gap(rems(0.25))
+        .px(rems(0.375))
+        .py(rems(0.1875))
         .rounded_md()
         .bg(if active { theme.accent } else { theme.header })
         .when(!key_hint.is_empty(), |d| {
             d.child(
                 div()
-                    .text_size(px(9.0))
+                    .text_size(rems(0.5625))
                     .font_weight(FontWeight::BOLD)
                     .text_color(if active {
                         theme.background
@@ -247,7 +250,7 @@ fn drag_op_pill(key_hint: &str, label: &str, active: bool, theme: &OxydeTheme) -
         })
         .child(
             div()
-                .text_size(px(11.0))
+                .text_size(rems(0.6875))
                 .font_weight(FontWeight::MEDIUM)
                 .text_color(if active {
                     theme.background
@@ -297,35 +300,35 @@ impl Render for FileDragPreview {
         div().relative().child(
             div()
                 .absolute()
-                .left(self.cursor_offset.x + px(12.0))
-                .top(self.cursor_offset.y + px(4.0))
-                .px(px(10.0))
-                .py(px(8.0))
+                .left(self.cursor_offset.x + rem_pixels(rems(0.75)))
+                .top(self.cursor_offset.y + rem_pixels(rems(0.25)))
+                .px(rems(0.625))
+                .py(rems(0.5))
                 .rounded_md()
                 .bg(theme.surface)
-                .border_1()
+                .border(rems(0.0625))
                 .border_color(theme.accent)
                 .flex()
                 .flex_col()
-                .gap(px(6.0))
+                .gap(rems(0.375))
                 .whitespace_nowrap()
                 .child(
                     // File icon + name row
                     div()
                         .flex()
                         .items_center()
-                        .gap(px(6.0))
+                        .gap(rems(0.375))
                         .child(
                             svg()
                                 .path(icon_path)
-                                .size(px(14.0))
+                                .size(rems(0.875))
                                 .flex_none()
                                 .text_color(theme.accent),
                         )
                         .child(
                             div()
                                 .text_color(theme.text)
-                                .text_size(px(12.0))
+                                .text_size(rems(0.75))
                                 .font_weight(FontWeight::MEDIUM)
                                 .child(name_label),
                         ),
@@ -334,7 +337,7 @@ impl Render for FileDragPreview {
                     // Operation pills row
                     div()
                         .flex()
-                        .gap(px(4.0))
+                        .gap(rems(0.25))
                         .child(drag_op_pill(
                             "+Ctrl",
                             cx.i18n().text(Message::DragCopy).as_ref(),
@@ -788,8 +791,8 @@ impl OxydeApp {
                 .unwrap_or(false),
             sidebar_content_width: 260.0,
             sidebar_selected_path: None,
-            list_height: 800.0,
-            list_width: 1000.0,
+            list_height: logical(800.0),
+            list_width: logical(1000.0),
             split_sizes: std::collections::HashMap::new(),
             pane_sizes: std::collections::HashMap::new(),
             pane_origins: std::collections::HashMap::new(),
@@ -1947,6 +1950,10 @@ impl OxydeApp {
 
 impl Render for OxydeApp {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let reference = crate::ui::scale::normalized_reference(self.config.ui_rem_size);
+        crate::ui::scale::set_reference(reference);
+        _window.set_rem_size(px(reference as f32));
+        let zoom_handle = cx.entity();
         let theme = *cx.theme();
         use crate::ui::components::sidebar::render_sidebar;
         use crate::ui::style::TNUM;
@@ -1981,9 +1988,7 @@ impl Render for OxydeApp {
                         .position(|file| file.path == path)
                     {
                         let row = if matches!(tab.view_mode, crate::ui::workspace::ViewMode::Grid) {
-                            let columns = ((width - 20.0) / crate::ui::style::GRID_CARD_MIN_WIDTH)
-                                .floor()
-                                .max(1.0) as usize;
+                            let columns = crate::ui::style::GridGeometry::for_viewport(width, crate::ui::components::scrollbar::zed_track_width()).columns;
                             index / columns
                         } else {
                             index
@@ -2003,9 +2008,8 @@ impl Render for OxydeApp {
         let win_w = size.width.as_f32();
         let win_h = size.height.as_f32();
 
-        use crate::ui::components::title_bar::TITLEBAR_H;
-        self.list_width = (win_w - self.sidebar_display_width() - 3.0).max(1.0);
-        self.list_height = (win_h - TITLEBAR_H).max(1.0);
+        self.list_width = (win_w - self.sidebar_display_width() - logical(3.0)).max(1.0);
+        self.list_height = (win_h - crate::ui::components::title_bar::titlebar_h()).max(1.0);
 
         if let Some(DragTarget::SelectionRectangle {
             ref pane_id,
@@ -2027,8 +2031,25 @@ impl Render for OxydeApp {
             .font_family("Inter")
             .flex()
             .flex_col()
-            .text_size(px(13.0))
+            .text_size(rems(0.8125))
             .font_weight(crate::ui::style::DEFAULT_FONT_WEIGHT)
+            .child(canvas(|_, _, _| (), move |_, _, window, _| {
+                // Low-level capture listeners must be installed during paint.
+                let zoom_handle = zoom_handle.clone();
+                window.on_mouse_event(move |event: &ScrollWheelEvent, phase, window, cx| {
+                    if phase == DispatchPhase::Capture && event.modifiers.control {
+                        let delta = event.delta.pixel_delta(window.line_height());
+                        if delta.y != px(0.0) {
+                            zoom_handle.update(cx, |this, cx| {
+                                let current = this.ui_rem_size();
+                                let next = if delta.y > px(0.0) { current + 1 } else { current.saturating_sub(1) };
+                                this.set_ui_rem_size(next, window, cx);
+                            });
+                            cx.stop_propagation();
+                        }
+                    }
+                });
+            }).absolute().size_full())
             .on_action(cx.listener(Self::on_action_tout_selectionner))
             .on_action(cx.listener(Self::on_action_annuler))
             .on_action(cx.listener(Self::on_action_refaire))
@@ -2096,7 +2117,7 @@ impl Render for OxydeApp {
                                         let mouse_pos_in_track = pos.y.as_f32() - origin.y;
                                         let thumb_size = (viewport_h
                                             * (viewport_h / content_h.max(1.0)).min(1.0))
-                                        .max(40.0);
+                                        .max(logical(40.0));
                                         let travel_distance = (viewport_h - thumb_size).max(1.0);
                                         let content_range = content_h - viewport_h;
                                         let target_thumb_pos = (mouse_pos_in_track
@@ -2121,7 +2142,7 @@ impl Render for OxydeApp {
                                         let mouse_pos_in_track = pos.x.as_f32() - origin.x;
                                         let thumb_size = (viewport_w
                                             * (viewport_w / content_w.max(1.0)).min(1.0))
-                                        .max(40.0);
+                                        .max(logical(40.0));
                                         let travel_distance = (viewport_w - thumb_size).max(1.0);
                                         let content_range = content_w - viewport_w;
                                         let target_thumb_pos = (mouse_pos_in_track
@@ -2151,7 +2172,7 @@ impl Render for OxydeApp {
                                             let mouse_pos_in_track = pos.y.as_f32() - origin.y;
                                             let thumb_size = (viewport_h
                                                 * (viewport_h / content_h.max(1.0)).min(1.0))
-                                            .max(40.0);
+                                            .max(logical(40.0));
                                             let travel_distance =
                                                 (viewport_h - thumb_size).max(1.0);
                                             let content_range = content_h - viewport_h;
@@ -2183,7 +2204,7 @@ impl Render for OxydeApp {
                                             let mouse_pos_in_track = pos.x.as_f32() - origin.x;
                                             let thumb_size = (viewport_w
                                                 * (viewport_w / content_w.max(1.0)).min(1.0))
-                                            .max(40.0);
+                                            .max(logical(40.0));
                                             let travel_distance =
                                                 (viewport_w - thumb_size).max(1.0);
                                             let content_range = content_w - viewport_w;
@@ -2208,7 +2229,7 @@ impl Render for OxydeApp {
                                         let mouse_pos_in_track = pos.y.as_f32() - origin.y;
                                         let thumb_size = (viewport_h
                                             * (viewport_h / content_h.max(1.0)).min(1.0))
-                                        .max(40.0);
+                                        .max(logical(40.0));
                                         let travel_distance = (viewport_h - thumb_size).max(1.0);
                                         let content_range = content_h - viewport_h;
                                         let target_thumb_pos = (mouse_pos_in_track
@@ -2235,7 +2256,7 @@ impl Render for OxydeApp {
                                             let mouse_pos_in_track = pos.y.as_f32() - origin.y;
                                             let thumb_size = (viewport_h
                                                 * (viewport_h / content_h.max(1.0)).min(1.0))
-                                            .max(40.0);
+                                            .max(logical(40.0));
                                             let travel_distance =
                                                 (viewport_h - thumb_size).max(1.0);
                                             let content_range = content_h - viewport_h;
@@ -2262,7 +2283,7 @@ impl Render for OxydeApp {
                                         let mouse_pos_in_track = pos.y.as_f32() - origin.y;
                                         let thumb_size = (viewport_h
                                             * (viewport_h / content_h.max(1.0)).min(1.0))
-                                        .max(40.0);
+                                        .max(logical(40.0));
                                         let travel_distance = (viewport_h - thumb_size).max(1.0);
                                         let content_range = content_h - viewport_h;
                                         let target_thumb_pos = (mouse_pos_in_track
@@ -2398,7 +2419,7 @@ impl Render for OxydeApp {
                             .id("sidebar-resize-handle")
                             .group("sidebar-resize-handle")
                             .relative()
-                            .w(px(1.0))
+                            .w(rems(0.0625))
                             .bg(theme.border)
                             .cursor(CursorStyle::ResizeLeftRight)
                             .h_full()
@@ -2409,18 +2430,18 @@ impl Render for OxydeApp {
                                 deferred(div()
                                     .group("sidebar-resize-hit-area")
                                     .absolute()
-                                    .left(px(-1.0))
-                                    .w(px(3.0))
+                                    .left(rems(-0.0625))
+                                    .w(rems(0.1875))
                                     .h_full()
                                     .occlude()
                                     .cursor(CursorStyle::ResizeLeftRight)
                                     .child(
                                         div()
                                             .absolute()
-                                            .left(px(1.0))
+                                            .left(rems(0.0625))
                                             .top_0()
                                             .bottom_0()
-                                            .w(px(1.0))
+                                            .w(rems(0.0625))
                                             .group_hover("sidebar-resize-hit-area", |s| {
                                                 s.bg(theme.accent.opacity(0.6))
                                             }),
@@ -2439,7 +2460,7 @@ impl Render for OxydeApp {
                             )
                             .child(
                                 div()
-                                    .w(px(1.0))
+                                    .w(rems(0.0625))
                                     .h_full()
                                     .bg(theme.border)
                                     .group_hover("sidebar-resize-handle", |s| {
@@ -2721,7 +2742,7 @@ impl Render for OxydeApp {
                         bottom_padding: instance.bottom_padding,
                         scroll_handle,
                         width: None,
-                        max_height: 480.0,
+                        max_height: logical(480.0),
                         on_close: {
                             let h = h.clone();
                             std::rc::Rc::new(move |_, cx| {
@@ -2846,7 +2867,7 @@ impl Render for OxydeApp {
                                                                                 .height,
                                                                         );
                                                                     let open_left = parent_right
-                                                                        + px(220.0)
+                                                                        + rem_pixels(rems(13.75))
                                                                         > viewport_w;
                                                                     if let Some(it) =
                                                                         items_inner.get(ix_inner)
@@ -2859,11 +2880,11 @@ impl Render for OxydeApp {
                                                                             sub_pos.x = if open_left
                                                                             {
                                                                                 parent_left
-                                                                                    + px(2.0)
+                                                                                    + rem_pixels(rems(0.125))
                                                                             // TopRight anchor: right edge at parent left
                                                                             } else {
                                                                                 parent_right
-                                                                                    - px(2.0)
+                                                                                    - rem_pixels(rems(0.125))
                                                                                 // TopLeft anchor: left edge at parent right
                                                                             };
                                                                             // Y: parent menu top + border(1) + padding(4) + ix * item_h
@@ -2872,7 +2893,7 @@ impl Render for OxydeApp {
                                                                                 parent_visible_y
                                                                                     + px(ix_inner
                                                                                         as f32
-                                                                                        * 26.0);
+                                                                                        * logical(26.0));
                                                                             (on_h)(
                                                                                 sub_pos, open_left,
                                                                                 app,
@@ -3174,7 +3195,7 @@ impl Render for OxydeApp {
                                                                 parent_menu_height,
                                                                 _window.viewport_size().height,
                                                             );
-                                                            let open_left = parent_right + px(220.0) > viewport_w;
+                                                            let open_left = parent_right + rem_pixels(rems(13.75)) > viewport_w;
                                                             let app_handle = h_inner_spawn.clone();
                                                             let path_cap = path_cap.clone();
                                                             let sub_items_cap = sub_items_cap.clone();
@@ -3189,11 +3210,11 @@ impl Render for OxydeApp {
                                                                         this.context_menus.truncate(m_idx + 1);
                                                                         let mut new_pos = pos_inner;
                                                                         new_pos.x = if open_left {
-                                                                            parent_left + px(2.0) // TopRight: right edge at parent left
+                                                                            parent_left + rem_pixels(rems(0.125)) // TopRight: right edge at parent left
                                                                         } else {
-                                                                            parent_right - px(2.0) // TopLeft: left edge at parent right
+                                                                            parent_right - rem_pixels(rems(0.125)) // TopLeft: left edge at parent right
                                                                         };
-                                                                        new_pos.y = parent_visible_y + px(ix_cap as f32 * 26.0);
+                                                                        new_pos.y = parent_visible_y + px(ix_cap as f32 * logical(26.0));
 
                                                                         this.context_menus.push(ContextMenuInstance {
                                                                             position: new_pos,
@@ -3295,8 +3316,8 @@ impl Render for OxydeApp {
                     is_context_menu: true,
                     bottom_padding: instance.bottom_padding,
                     scroll_handle,
-                    width: Some(200.0),
-                    max_height: 480.0,
+                    width: Some(logical(200.0)),
+                    max_height: logical(480.0),
                     on_close: {
                         let h = h.clone();
                         std::rc::Rc::new(move |_, cx| {
@@ -3343,8 +3364,8 @@ impl Render for OxydeApp {
                     is_dragging: false,
                     header: Some(
                         div()
-                            .w(px(200.0))
-                            .h(px(crate::ui::style::ROW_HEIGHT))
+                            .w(rems(12.5))
+                            .h(px(crate::ui::style::row_height()))
                             .child(input.clone())
                             .into_any_element(),
                     ),
@@ -3415,8 +3436,8 @@ impl Render for OxydeApp {
                 .action(
                     div()
                         .id("operation-notice-close")
-                        .px(px(12.0))
-                        .py(px(8.0))
+                        .px(rems(0.75))
+                        .py(rems(0.5))
                         .rounded_md()
                         .hover(|d| d.bg(theme.control_hover))
                         .child(cx.i18n().text(Message::Close))

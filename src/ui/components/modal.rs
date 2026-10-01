@@ -1,3 +1,4 @@
+use crate::ui::scale::rem_pixels;
 use crate::ui::theme::ThemeContext;
 use gpui::prelude::*;
 use gpui::*;
@@ -15,8 +16,8 @@ pub struct Modal {
     header_action: Option<AnyElement>,
     body: AnyElement,
     actions: Vec<AnyElement>,
-    width: Pixels,
-    body_gap: Pixels,
+    width: AbsoluteLength,
+    body_gap: AbsoluteLength,
     on_backdrop_dismiss: Option<Box<dyn Fn(&mut Window, &mut App)>>,
 }
 
@@ -32,14 +33,14 @@ impl Modal {
             header_action: None,
             body: body.into_any_element(),
             actions: Vec::new(),
-            width: px(440.0),
-            body_gap: px(12.0),
+            width: rems(27.5).into(),
+            body_gap: rems(0.75).into(),
             on_backdrop_dismiss: None,
         }
     }
 
-    pub fn width(mut self, width: Pixels) -> Self {
-        self.width = width;
+    pub fn width(mut self, width: impl Into<AbsoluteLength>) -> Self {
+        self.width = width.into();
         self
     }
 
@@ -48,8 +49,8 @@ impl Modal {
         self
     }
 
-    pub fn body_gap(mut self, gap: Pixels) -> Self {
-        self.body_gap = gap;
+    pub fn body_gap(mut self, gap: impl Into<AbsoluteLength>) -> Self {
+        self.body_gap = gap.into();
         self
     }
 
@@ -91,15 +92,15 @@ impl RenderOnce for Modal {
                 div()
                     .id(self.id)
                     .w(self.width)
-                    .max_w(window.viewport_size().width - px(32.0))
-                    .max_h(window.viewport_size().height - px(32.0))
+                    .max_w(window.viewport_size().width - rem_pixels(rems(2.0)))
+                    .max_h(window.viewport_size().height - rem_pixels(rems(2.0)))
                     .flex()
                     .flex_col()
-                    .p(px(20.0))
+                    .p(rems(1.25))
                     .rounded_lg()
                     .bg(theme.surface)
                     .text_color(theme.text)
-                    .border_1()
+                    .border(rems(0.0625))
                     .border_color(theme.border)
                     .on_any_mouse_down(|_, _, cx| cx.stop_propagation())
                     .child(
@@ -107,11 +108,11 @@ impl RenderOnce for Modal {
                             .flex()
                             .flex_none()
                             .items_center()
-                            .gap(px(8.0))
+                            .gap(rems(0.5))
                             .child(
                                 div()
                                     .flex_1()
-                                    .text_size(px(16.0))
+                                    .text_size(rems(1.0))
                                     .font_weight(FontWeight::SEMIBOLD)
                                     .child(self.title),
                             )
@@ -129,10 +130,10 @@ impl RenderOnce for Modal {
                         panel.child(
                             div()
                                 .flex_none()
-                                .mt(px(20.0))
+                                .mt(rems(1.25))
                                 .flex()
                                 .justify_end()
-                                .gap(px(8.0))
+                                .gap(rems(0.5))
                                 .children(self.actions),
                         )
                     }),

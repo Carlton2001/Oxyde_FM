@@ -7,6 +7,7 @@ pub mod elements;
 pub mod errors;
 pub mod format;
 pub mod i18n;
+pub mod scale;
 pub mod style;
 pub mod theme;
 pub mod workspace;

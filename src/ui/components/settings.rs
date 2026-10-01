@@ -19,11 +19,12 @@ pub fn render_settings_panel(
     let body = div()
         .flex()
         .flex_col()
-        .gap(px(4.0))
+        .gap(rems(0.25))
         .child(section(i18n.text(Message::SettingsAppearance), theme))
+        .child(scale_row(view, handle.clone(), cx))
         .child(
             div()
-                .py(px(8.0))
+                .py(rems(0.5))
                 .flex()
                 .items_center()
                 .child(div().flex_1().child(i18n.text(Message::SettingsTheme)))
@@ -48,7 +49,7 @@ pub fn render_settings_panel(
         )
         .child(
             div()
-                .py(px(8.0))
+                .py(rems(0.5))
                 .flex()
                 .items_center()
                 .child(div().flex_1().child(i18n.text(Message::SettingsLanguage)))
@@ -75,8 +76,8 @@ pub fn render_settings_panel(
             let handle = handle.clone();
             body.child(
                 div()
-                    .py(px(8.0))
-                    .text_size(px(12.0))
+                    .py(rems(0.5))
+                    .text_size(rems(0.75))
                     .text_color(theme.error)
                     .child(i18n.text(error))
                     .when(error == Message::SettingsSaveError, |row| {
@@ -148,43 +149,43 @@ pub fn render_settings_panel(
             div()
                 .flex()
                 .items_center()
-                .gap(px(14.0))
-                .py(px(8.0))
-                .child(img("icons/logo.png").size(px(40.0)).flex_none())
+                .gap(rems(0.875))
+                .py(rems(0.5))
+                .child(img("icons/logo.png").size(rems(2.5)).flex_none())
                 .child(
                     div()
                         .flex()
                         .flex_col()
-                        .gap(px(3.0))
+                        .gap(rems(0.1875))
                         .child(
                             div()
-                                .text_size(px(15.0))
+                                .text_size(rems(0.9375))
                                 .font_weight(FontWeight::SEMIBOLD)
                                 .child("Oxyde"),
                         )
                         .child(
                             div()
-                                .text_size(px(12.0))
+                                .text_size(rems(0.75))
                                 .text_color(theme.text_muted)
                                 .child(i18n.text_with_args(Message::SettingsVersion, &version)),
                         )
                         .child(
                             div()
-                                .text_size(px(11.0))
+                                .text_size(rems(0.6875))
                                 .text_color(theme.text_muted)
                                 .child(i18n.text(Message::SettingsDescription)),
                         ),
                 ),
         );
     Modal::new("settings-panel", i18n.text(Message::SettingsTitle), body)
-        .width(px(480.0))
+        .width(rems(30.0))
         .header_action(
             div()
                 .id("settings-close-btn")
-                .px(px(8.0))
-                .py(px(4.0))
+                .px(rems(0.5))
+                .py(rems(0.25))
                 .rounded_md()
-                .text_size(px(12.0))
+                .text_size(rems(0.75))
                 .text_color(theme.text_muted)
                 .hover(|style| style.bg(theme.control_hover))
                 .child(i18n.text(Message::Close))
@@ -203,11 +204,85 @@ pub fn render_settings_panel(
         })
 }
 
+fn scale_row(view: &OxydeApp, handle: Entity<OxydeApp>, cx: &App) -> impl IntoElement {
+    use crate::ui::components::tooltip::Tooltip;
+    use crate::ui::scale::{BASE_REM_SIZE, MAX_REM_SIZE, MIN_REM_SIZE};
+    let theme = *cx.theme();
+    let reference = view.ui_rem_size();
+    let mut args = FluentArgs::new();
+    args.set("reference", reference);
+    let reset = handle.clone();
+    let step = |id: &'static str, label: &'static str, increase: bool| {
+        let handle = handle.clone();
+        let enabled = if increase {
+            reference < MAX_REM_SIZE
+        } else {
+            reference > MIN_REM_SIZE
+        };
+        div()
+            .id(id)
+            .size(rems(1.75))
+            .flex_none()
+            .flex()
+            .items_center()
+            .justify_center()
+            .rounded_md()
+            .when(!enabled, |d| d.opacity(0.4))
+            .when(enabled, |d| d.hover(|s| s.bg(theme.control_hover)))
+            .child(label)
+            .on_mouse_down(MouseButton::Left, move |_, window, cx| {
+                cx.stop_propagation();
+                if enabled {
+                    handle.update(cx, |view, cx| {
+                        let reference = view.ui_rem_size();
+                        let next = if increase {
+                            reference + 1
+                        } else {
+                            reference.saturating_sub(1)
+                        };
+                        view.set_ui_rem_size(next, window, cx);
+                    });
+                }
+            })
+    };
+    div()
+        .py(rems(0.5))
+        .flex()
+        .items_center()
+        .child(div().flex_1().child(cx.i18n().text(Message::SettingsScale)))
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .rounded_md()
+                .bg(theme.surface)
+                .child(step("scale-decrease", "−", false))
+                .child(
+                    div()
+                        .id("scale-reset")
+                        .min_w(rems(3.75))
+                        .h(rems(1.75))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .text_color(theme.accent)
+                        .tooltip(Tooltip::text(cx.i18n().text(Message::SettingsScaleReset)))
+                        .child(cx.i18n().text_with_args(Message::SettingsScaleValue, &args))
+                        .on_mouse_down(MouseButton::Left, move |_, window, cx| {
+                            reset.update(cx, |view, cx| {
+                                view.set_ui_rem_size(BASE_REM_SIZE, window, cx)
+                            });
+                        }),
+                )
+                .child(step("scale-increase", "+", true)),
+        )
+}
+
 fn section(label: SharedString, theme: OxydeTheme) -> impl IntoElement {
     div()
-        .mt(px(12.0))
-        .py(px(8.0))
-        .text_size(px(11.0))
+        .mt(rems(0.75))
+        .py(rems(0.5))
+        .text_size(rems(0.6875))
         .font_weight(FontWeight::SEMIBOLD)
         .text_color(theme.text_muted)
         .child(label)
@@ -222,17 +297,17 @@ fn choice(
 ) -> impl IntoElement {
     div()
         .id(id)
-        .px(px(10.0))
-        .py(px(6.0))
-        .ml(px(4.0))
+        .px(rems(0.625))
+        .py(rems(0.375))
+        .ml(rems(0.25))
         .rounded_md()
-        .text_size(px(12.0))
+        .text_size(rems(0.75))
         .bg(if selected {
             theme.selected
         } else {
             theme.surface
         })
-        .border_1()
+        .border(rems(0.0625))
         .border_color(if selected { theme.accent } else { theme.border })
         .text_color(theme.text)
         .hover(|style| style.bg(theme.control_hover))
@@ -250,28 +325,28 @@ fn settings_row(
     on_toggle: impl Fn(&mut OxydeApp, &mut Context<OxydeApp>) + 'static,
 ) -> impl IntoElement {
     div()
-        .py(px(10.0))
+        .py(rems(0.625))
         .flex()
         .items_center()
-        .border_b_1()
+        .border_b(rems(0.0625))
         .border_color(theme.border)
         .child(
             div()
                 .flex()
                 .flex_col()
-                .gap(px(2.0))
+                .gap(rems(0.125))
                 .flex_1()
                 .min_w_0()
-                .mr(px(16.0))
+                .mr(rems(1.0))
                 .child(
                     div()
-                        .text_size(px(13.0))
+                        .text_size(rems(0.8125))
                         .text_color(theme.text)
                         .child(label),
                 )
                 .child(
                     div()
-                        .text_size(px(11.0))
+                        .text_size(rems(0.6875))
                         .text_color(theme.text_muted)
                         .child(description),
                 ),
@@ -279,8 +354,8 @@ fn settings_row(
         .child(
             div()
                 .id(id)
-                .w(px(42.0))
-                .h(px(22.0))
+                .w(rems(2.625))
+                .h(rems(1.375))
                 .rounded_full()
                 .bg(if value {
                     theme.accent
@@ -296,7 +371,7 @@ fn settings_row(
                 })
                 .child(
                     div()
-                        .size(px(18.0))
+                        .size(rems(1.125))
                         .rounded_full()
                         .bg(theme.surface)
                         .flex_none(),

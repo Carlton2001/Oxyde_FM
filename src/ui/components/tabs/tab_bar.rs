@@ -1,3 +1,4 @@
+use crate::ui::scale::rem_pixels;
 use crate::ui::style::h_flex;
 use gpui::prelude::*;
 use gpui::*;
@@ -7,8 +8,8 @@ fn tab_bar_button(id: impl Into<ElementId>, theme: &crate::ui::theme::OxydeTheme
     div()
         .id(id)
         .flex_none()
-        .size(px(24.0))
-        .mx(px(4.0))
+        .size(rems(1.5))
+        .mx(rems(0.25))
         .my_auto()
         .flex()
         .items_center()
@@ -105,14 +106,14 @@ impl RenderOnce for TabBar {
         let scroll_button = |id: &'static str, icon: &'static str, direction: f32| {
             let scroll = scroll.clone();
             let at_edge = if direction > 0.0 {
-                scroll.offset().x >= px(-1.0)
+                scroll.offset().x >= rem_pixels(rems(-0.0625))
             } else {
-                scroll.offset().x <= -scroll.max_offset().x + px(1.0)
+                scroll.offset().x <= -scroll.max_offset().x + rem_pixels(rems(0.0625))
             };
             tab_bar_button(id, theme)
                 .on_mouse_down(MouseButton::Left, move |_, window, cx| {
                     cx.stop_propagation();
-                    let step = (scroll.bounds().size.width * 0.75).max(px(80.0));
+                    let step = (scroll.bounds().size.width * 0.75).max(rem_pixels(rems(5.0)));
                     let x = (scroll.offset().x + step * direction)
                         .clamp(-scroll.max_offset().x, px(0.0));
                     scroll.set_offset(point(x, px(0.0)));
@@ -135,7 +136,7 @@ impl RenderOnce for TabBar {
             .w_full()
             .min_w_0()
             .overflow_hidden()
-            .h(px(32.0))
+            .h(rems(2.0))
             .bg(theme.header)
             // Paint behind the tabs so the active surface covers the separator.
             .child(
@@ -143,7 +144,7 @@ impl RenderOnce for TabBar {
                     .absolute()
                     .bottom_0()
                     .w_full()
-                    .h(px(1.0))
+                    .h(rems(0.0625))
                     .bg(theme.border),
             )
             .child(h_flex().flex_none().children(self.start_children))
@@ -185,7 +186,7 @@ impl RenderOnce for TabBar {
                             // Small gap for drop target at the end of tabs list
                             .child(
                                 div()
-                                    .w(px(4.0)) // Reduced from 8px
+                                    .w(rems(0.25)) // Reduced from 8px
                                     .flex_none()
                                     .h_full()
                                     .relative()
@@ -194,7 +195,7 @@ impl RenderOnce for TabBar {
                                             .absolute()
                                             .top_0()
                                             .left_0()
-                                            .w(px(2.0))
+                                            .w(rems(0.125))
                                             .h_full()
                                             .bg(theme.accent)
                                             .when(!self.drop_target_indicator, |s| s.opacity(0.0)),
@@ -207,7 +208,12 @@ impl RenderOnce for TabBar {
                             move |_, _: Bounds<Pixels>, window, _| {
                                 // Account for the arrows when deciding whether the unadorned strip fits.
                                 let max = measure_scroll.max_offset().x;
-                                let needs_arrows = max > px(if overflow { 65.0 } else { 1.0 });
+                                let needs_arrows = max
+                                    > rem_pixels(rems(if overflow {
+                                        65.0 / 16.0
+                                    } else {
+                                        1.0 / 16.0
+                                    }));
                                 if overflow_state.replace(needs_arrows) != needs_arrows {
                                     measure_scroll.scroll_to_item(active_index);
                                     window.refresh();

@@ -26,6 +26,13 @@ Le thème actif est accessible avec `cx.theme()`. Les thèmes pris en charge son
 - Le poids par défaut est Regular (400), défini par `DEFAULT_FONT_WEIGHT` dans `src/ui/style.rs` et appliqué à la racine de l'application. Les descendants héritent de ce poids sauf lorsqu'un ancêtre ou le composant définit explicitement un autre poids.
 - Ne préciser un poids local (Light, Medium, Semibold, Bold, etc.) que pour une variation intentionnelle. Les surfaces rendues séparément, comme les infobulles, utilisent le même poids par défaut à leur racine.
 
+## Dimensions et zoom
+
+- Exprimer les dimensions de conception, tailles de texte, espacements, icônes et bordures en `rems()`. La référence initiale est de 16 pixels logiques par rem ; `ui_rem_size` la conserve dans la configuration (10 à 32, par pas de 1). Le réglage « Échelle de l'interface » et Ctrl + molette appliquent le changement immédiatement. Cliquer sur la valeur du réglage rétablit 16.
+- `Window::set_rem_size` et les conversions de `src/ui/scale.rs` partagent la même référence, synchronisée sur le thread UI avant le rendu et lors du zoom. Utiliser `rem_pixels` lorsqu'une API impose des `Pixels` (canvas, texte mesuré, listes virtuelles, défilement) ; utiliser `logical` pour convertir les anciennes réservations numériques définies à l'échelle 16. Ces conversions appartiennent au thread UI, jamais aux tâches de fond.
+- Les positions de souris, bounds et offsets fournis par GPUI sont déjà en pixels : ne pas les convertir à nouveau. Les ratios, compteurs et durées ne sont pas des dimensions. Les bounds de la fenêtre native restent également en pixels pour que le zoom change le contenu, pas la taille de la fenêtre.
+- Les réservations de colonnes et la largeur sauvegardée de la sidebar restent à l'échelle de référence 16 pour préserver les espaces de travail existants. Les convertir au rendu et reconvertir les déplacements de redimensionnement avant sauvegarde. Rendu et sélection de la grille partagent `GridGeometry` pour garder leurs zones alignées.
+
 ## Internationalisation
 
 Le contexte `cx.i18n()` fournit la langue active et résout les clés de `Message` vers des `SharedString`.

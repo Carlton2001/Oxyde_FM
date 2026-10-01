@@ -1,3 +1,4 @@
+use crate::ui::scale::{logical};
 use crate::ui::app::OxydeApp;
 use gpui::*;
 use oxyde_lib::commands::io::list_dir;
@@ -5,9 +6,9 @@ use oxyde_lib::commands::io::list_dir;
 impl OxydeApp {
     pub(crate) fn sidebar_display_width(&self) -> f32 {
         if self.sidebar_collapsed {
-            48.0
+            logical(48.0)
         } else {
-            self.sidebar_width
+            logical(self.sidebar_width)
         }
     }
 
@@ -19,7 +20,8 @@ impl OxydeApp {
     }
 
     pub(crate) fn resize_sidebar(&mut self, width: f32) {
-        resize_sidebar_state(&mut self.sidebar_width, &mut self.sidebar_collapsed, width);
+        let baseline_width = width / logical(1.0);
+        resize_sidebar_state(&mut self.sidebar_width, &mut self.sidebar_collapsed, baseline_width);
     }
 
     pub(crate) fn expand_all_sidebar_path(&mut self, path: String, cx: &mut Context<Self>) {

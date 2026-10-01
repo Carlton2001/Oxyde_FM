@@ -34,6 +34,9 @@ pub enum Message {
     SettingsTitle,
     SettingsAppearance,
     SettingsTheme,
+    SettingsScale,
+    SettingsScaleValue,
+    SettingsScaleReset,
     SettingsLanguage,
     ThemeDark,
     ThemeLight,
@@ -202,6 +205,9 @@ impl Message {
             Self::SettingsTitle => "settings-title",
             Self::SettingsAppearance => "settings-appearance",
             Self::SettingsTheme => "settings-theme",
+            Self::SettingsScale => "settings-scale",
+            Self::SettingsScaleValue => "settings-scale-value",
+            Self::SettingsScaleReset => "settings-scale-reset",
             Self::SettingsLanguage => "settings-language",
             Self::ThemeDark => "theme-dark",
             Self::ThemeLight => "theme-light",
@@ -469,6 +475,9 @@ mod tests {
                 Message::SettingsTitle,
                 Message::SettingsAppearance,
                 Message::SettingsTheme,
+                Message::SettingsScale,
+                Message::SettingsScaleReset,
+                Message::SettingsScaleValue,
                 Message::SettingsLanguage,
                 Message::ThemeDark,
                 Message::ThemeLight,
@@ -620,6 +629,7 @@ mod tests {
             args.set("file_count", 1);
             args.set("number", "2");
             args.set("version", "1.0");
+            args.set("reference", 16);
             args.set("size", "1,5 Ko");
             args.set("folders", "1");
             args.set("files", "1");

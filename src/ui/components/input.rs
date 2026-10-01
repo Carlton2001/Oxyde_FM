@@ -1,3 +1,4 @@
+use crate::ui::scale::{rem_pixels};
 use crate::ui::theme::ThemeContext;
 use gpui::prelude::*;
 use gpui::*;
@@ -575,7 +576,7 @@ impl Render for TextInput {
             } else {
                 theme.background
             })
-            .border_1()
+            .border(rems(0.0625))
             .border_color(if self.compact {
                 hsla(0.0, 0.0, 0.0, 0.0)
             } else if is_focused {
@@ -586,7 +587,7 @@ impl Render for TextInput {
             .rounded_sm()
             .when(self.compact, |s| s.rounded_none())
             .when(self.minimal && !self.compact, |s| s.h_full().px_3())
-            .when(self.minimal && self.compact, |s| s.h_full().px(px(0.0)))
+            .when(self.minimal && self.compact, |s| s.h_full().px(rems(0.0)))
             .when(!self.minimal, |s| s.h_full().px_3())
             .w_full()
             .child(
@@ -787,7 +788,7 @@ impl Element for TextInputElement {
                 window.paint_quad(fill(
                     Bounds::new(
                         point(bounds.left() + cursor_x, cursor_y),
-                        size(px(1.5), cursor_h),
+                        size(rem_pixels(rems(0.09375)), cursor_h),
                     ),
                     cx.theme().accent,
                 ));

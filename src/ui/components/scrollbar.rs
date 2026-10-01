@@ -1,4 +1,5 @@
 use crate::ui::app::OxydeApp;
+use crate::ui::scale::rem_pixels;
 use crate::ui::theme::OxydeTheme;
 use gpui::prelude::*;
 use gpui::*;
@@ -9,10 +10,22 @@ pub enum ScrollbarAxis {
     Horizontal,
 }
 
-const ZED_THUMB_MIN_SIZE: f32 = 40.0;
-pub const ZED_TRACK_WIDTH: f32 = 12.0;
-const ZED_THUMB_WIDTH_NORMAL: f32 = 5.0;
-const ZED_THUMB_WIDTH_HOVER: f32 = 10.0;
+const ZED_THUMB_MIN_SIZE: Rems = rems(2.5);
+fn zed_thumb_min_size() -> f32 {
+    rem_pixels(ZED_THUMB_MIN_SIZE).as_f32()
+}
+pub const ZED_TRACK_WIDTH: Rems = rems(0.75);
+pub fn zed_track_width() -> f32 {
+    rem_pixels(ZED_TRACK_WIDTH).as_f32()
+}
+const ZED_THUMB_WIDTH_NORMAL: Rems = rems(0.3125);
+fn zed_thumb_width_normal() -> f32 {
+    rem_pixels(ZED_THUMB_WIDTH_NORMAL).as_f32()
+}
+const ZED_THUMB_WIDTH_HOVER: Rems = rems(0.625);
+fn zed_thumb_width_hover() -> f32 {
+    rem_pixels(ZED_THUMB_WIDTH_HOVER).as_f32()
+}
 
 /// Composant Scrollbar Visuel Réutilisable "Zed-like"
 pub fn render_scrollbar(
@@ -37,7 +50,7 @@ pub fn render_scrollbar(
         return div().into_any_element();
     }
 
-    let m_thumb_size = min_thumb_size.unwrap_or(ZED_THUMB_MIN_SIZE);
+    let m_thumb_size = min_thumb_size.unwrap_or(zed_thumb_min_size());
     let thumb_size = (viewport_size * ratio).max(m_thumb_size);
     let max_offset = (content_size - viewport_size).max(1.0);
     let scroll_ratio = (current_scroll.max(0.0) / max_offset).clamp(0.0, 1.0);
@@ -50,36 +63,36 @@ pub fn render_scrollbar(
 
     if is_v {
         thumb = thumb
-            .right(px(3.0))
+            .right(rems(0.1875))
             .top(px(thumb_pos))
             .h(px(thumb_size))
-            .w(px(ZED_THUMB_WIDTH_NORMAL))
+            .w(px(zed_thumb_width_normal()))
             .group_hover("scroll-track", |s| {
-                s.w(px(ZED_THUMB_WIDTH_HOVER))
-                    .right(px(1.0))
+                s.w(px(zed_thumb_width_hover()))
+                    .right(rems(0.0625))
                     .bg(theme.scrollbar_thumb_hover)
             });
         if is_dragging {
             thumb = thumb
-                .w(px(ZED_THUMB_WIDTH_HOVER))
-                .right(px(1.0))
+                .w(px(zed_thumb_width_hover()))
+                .right(rems(0.0625))
                 .bg(theme.scrollbar_thumb_drag);
         }
     } else {
         thumb = thumb
-            .bottom(px(3.0))
+            .bottom(rems(0.1875))
             .left(px(thumb_pos))
             .w(px(thumb_size))
-            .h(px(ZED_THUMB_WIDTH_NORMAL))
+            .h(px(zed_thumb_width_normal()))
             .group_hover("scroll-track", |s| {
-                s.h(px(ZED_THUMB_WIDTH_HOVER))
-                    .bottom(px(1.0))
+                s.h(px(zed_thumb_width_hover()))
+                    .bottom(rems(0.0625))
                     .bg(theme.scrollbar_thumb_hover)
             });
         if is_dragging {
             thumb = thumb
-                .h(px(ZED_THUMB_WIDTH_HOVER))
-                .bottom(px(1.0))
+                .h(px(zed_thumb_width_hover()))
+                .bottom(rems(0.0625))
                 .bg(theme.scrollbar_thumb_drag);
         }
     }
@@ -98,10 +111,10 @@ pub fn render_scrollbar(
         .group("scroll-track")
         .absolute()
         .when(is_v, |s: Stateful<Div>| {
-            s.top_0().right_0().bottom_0().w(px(ZED_TRACK_WIDTH))
+            s.top_0().right_0().bottom_0().w(px(zed_track_width()))
         })
         .when(!is_v, |s: Stateful<Div>| {
-            s.left_0().bottom_0().right_0().h(px(ZED_TRACK_WIDTH))
+            s.left_0().bottom_0().right_0().h(px(zed_track_width()))
         })
         .hover(|s| s.bg(theme.scrollbar_track_hover))
         .child(
@@ -138,7 +151,7 @@ pub fn render_scrollbar(
 
                         let max_offset = (content_size - viewport_size).max(1.0);
                         let ratio = (viewport_size / content_size.max(1.0)).min(1.0);
-                        let m_thumb_size = min_thumb_size.unwrap_or(ZED_THUMB_MIN_SIZE);
+                        let m_thumb_size = min_thumb_size.unwrap_or(zed_thumb_min_size());
                         let t_size = (viewport_size * ratio).max(m_thumb_size);
                         let scroll_ratio = (current_scroll.max(0.0) / max_offset).clamp(0.0, 1.0);
                         let t_pos = scroll_ratio * (viewport_size - t_size);

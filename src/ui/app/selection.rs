@@ -1,5 +1,6 @@
 use crate::ui::app::{DragTarget, OxydeApp};
-use crate::ui::style::{GRID_CARD_MIN_WIDTH, GRID_CARD_ROW_HEIGHT, ROW_HEIGHT};
+use crate::ui::scale::logical;
+
 use crate::ui::workspace::ViewMode;
 use gpui::*;
 
@@ -15,17 +16,18 @@ impl OxydeApp {
             let bounds = self.list_bounds.get(&pane_id).cloned().unwrap_or(Bounds {
                 origin: Point { x: 0.0, y: 0.0 },
                 size: Size {
-                    width: 1000.0,
-                    height: 800.0,
+                    width: logical(1000.0),
+                    height: logical(800.0),
                 },
             });
             let scroll_y = tab.list_scroll.0.borrow().base_handle.offset().y.as_f32();
             let grid_mode = tab.view_mode == ViewMode::Grid;
-            let grid_width = (bounds.size.width - 20.0 - crate::ui::components::scrollbar::ZED_TRACK_WIDTH)
-                .max(GRID_CARD_MIN_WIDTH + 4.0);
-            let grid_columns = ((bounds.size.width - 20.0) / GRID_CARD_MIN_WIDTH)
-                .floor()
-                .max(1.0) as usize;
+            let grid = crate::ui::style::GridGeometry::for_viewport(
+                bounds.size.width,
+                crate::ui::components::scrollbar::zed_track_width(),
+            );
+            let grid_width = grid.content_width;
+            let grid_columns = grid.columns;
 
             // --- Auto-Scroll (Intuitive & Proportional) ---
             let list_top = bounds.origin.y;
@@ -35,11 +37,11 @@ impl OxydeApp {
 
             if current_pos.y.as_f32() < list_top {
                 let dist = (list_top - current_pos.y.as_f32()).max(1.0);
-                let speed = (dist / 10.0).powf(1.2).min(40.0);
+                let speed = (dist / logical(10.0)).powf(1.2).min(logical(40.0));
                 new_scroll_y += speed;
             } else if current_pos.y.as_f32() > list_bottom {
                 let dist = (current_pos.y.as_f32() - list_bottom).max(1.0);
-                let speed = (dist / 10.0).powf(1.2).min(40.0);
+                let speed = (dist / logical(10.0)).powf(1.2).min(logical(40.0));
                 new_scroll_y -= speed;
             }
 
@@ -48,12 +50,14 @@ impl OxydeApp {
                 let visible_list_h = if grid_mode {
                     bounds.size.height.max(1.0)
                 } else {
-                    (bounds.size.height - ROW_HEIGHT).max(1.0)
+                    (bounds.size.height - crate::ui::style::row_height()).max(1.0)
                 };
                 let content_h = if grid_mode {
-                    ((count / grid_columns as f32).ceil() * GRID_CARD_ROW_HEIGHT).max(1.0)
+                    ((count / grid_columns as f32).ceil()
+                        * crate::ui::style::grid_card_row_height())
+                    .max(1.0)
                 } else {
-                    (count * ROW_HEIGHT).max(1.0)
+                    (count * crate::ui::style::row_height()).max(1.0)
                 };
                 let max_scroll = (content_h - visible_list_h).max(0.0);
 
@@ -94,11 +98,13 @@ impl OxydeApp {
                         .filter_map(|(index, file)| {
                             let column = index % grid_columns;
                             let row = index / grid_columns;
-                            let left = bounds.origin.x + 8.0 + column as f32 * card_width;
-                            let top =
-                                bounds.origin.y + row as f32 * GRID_CARD_ROW_HEIGHT + scroll_y;
-                            let right = left + card_width - 8.0;
-                            let bottom = top + GRID_CARD_ROW_HEIGHT - 8.0;
+                            let left = bounds.origin.x + logical(8.0) + column as f32 * card_width;
+                            let top = bounds.origin.y
+                                + row as f32 * crate::ui::style::grid_card_row_height()
+                                + scroll_y;
+                            let right = left + card_width - logical(8.0);
+                            let bottom =
+                                top + crate::ui::style::grid_card_row_height() - logical(8.0);
                             (left < rect_right
                                 && right > rect_left
                                 && top < rect_bottom
@@ -109,9 +115,11 @@ impl OxydeApp {
                 } else {
                     let rect_y_start = start_pos.y.as_f32().min(current_pos.y.as_f32());
                     let rect_y_end = start_pos.y.as_f32().max(current_pos.y.as_f32());
-                    let list_origin_y = bounds.origin.y + ROW_HEIGHT;
-                    let start_idx_f = (rect_y_start - list_origin_y - scroll_y) / ROW_HEIGHT;
-                    let end_idx_f = (rect_y_end - list_origin_y - scroll_y) / ROW_HEIGHT;
+                    let list_origin_y = bounds.origin.y + crate::ui::style::row_height();
+                    let start_idx_f =
+                        (rect_y_start - list_origin_y - scroll_y) / crate::ui::style::row_height();
+                    let end_idx_f =
+                        (rect_y_end - list_origin_y - scroll_y) / crate::ui::style::row_height();
                     let start_idx = (start_idx_f.floor() as i32).max(0) as usize;
                     let end_idx = (end_idx_f.ceil() as i32).max(0) as usize;
                     let start_idx = start_idx.min(files.len());

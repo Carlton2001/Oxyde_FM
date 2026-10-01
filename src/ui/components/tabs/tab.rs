@@ -1,3 +1,4 @@
+use crate::ui::scale::{rem_pixels};
 use crate::ui::theme::ThemeContext;
 use gpui::prelude::*;
 use gpui::*;
@@ -19,15 +20,15 @@ impl Render for TabDragPreview {
         let theme = *cx.theme();
         div()
             .px_4()
-            .h(px(32.0))
+            .h(rems(2.0))
             .bg(theme.tab_active)
             .rounded_sm()
-            .border_1()
+            .border(rems(0.0625))
             .border_color(theme.menu_border)
             .text_color(theme.text)
             .text_sm()
             .opacity(0.95)
-            .shadow_lg()
+            .shadow(crate::ui::style::rem_shadow(true))
             .flex()
             .items_center()
             .gap_2()
@@ -156,13 +157,13 @@ impl RenderOnce for Tab {
         let mut container = div()
             .id(self.id.clone())
             .relative()
-            .h(px(32.0))
+            .h(rems(2.0))
             .flex_none()
             .bg(bg_color)
             .flex()
             .items_center()
             .text_color(text_color)
-            .text_size(px(13.0))
+            .text_size(rems(0.8125))
             .font_weight(FontWeight::MEDIUM)
             .group("tab");
 
@@ -192,11 +193,11 @@ impl RenderOnce for Tab {
         container = match self.position {
             TabPosition::First => {
                 if self.selected {
-                    container.border_r_1().border_color(theme.border)
+                    container.border_r(rems(0.0625)).border_color(theme.border)
                 } else {
                     container
-                        .border_r_1()
-                        .border_b_1()
+                        .border_r(rems(0.0625))
+                        .border_b(rems(0.0625))
                         .border_color(theme.border)
                 }
             }
@@ -204,14 +205,14 @@ impl RenderOnce for Tab {
                 if self.selected {
                     container
                 } else {
-                    container.border_b_1().border_color(theme.border)
+                    container.border_b(rems(0.0625)).border_color(theme.border)
                 }
             }
             TabPosition::Middle(Ordering::Greater)
             | TabPosition::Middle(Ordering::Less)
             | TabPosition::Middle(Ordering::Equal) => container
-                .border_r_1()
-                .when(!self.selected, |s| s.border_b_1())
+                .border_r(rems(0.0625))
+                .when(!self.selected, |s| s.border_b(rems(0.0625)))
                 .border_color(theme.border),
         };
 
@@ -219,7 +220,7 @@ impl RenderOnce for Tab {
             div()
                 .absolute()
                 .left_0()
-                .w(px(2.0))
+                .w(rems(0.125))
                 .h_full()
                 .when(self.is_drop_target, |s| s.bg(theme.accent)),
         );
@@ -230,9 +231,9 @@ impl RenderOnce for Tab {
                 .items_center()
                 .pl_3()
                 .pr(if self.on_close.is_some() {
-                    px(12.0)
+                    rem_pixels(rems(0.75))
                 } else {
-                    px(20.0)
+                    rem_pixels(rems(1.25))
                 })
                 .gap_2()
                 .when_some(self.icon, |s, icon| {

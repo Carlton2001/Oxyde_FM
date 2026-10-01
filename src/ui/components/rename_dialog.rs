@@ -19,7 +19,7 @@ pub fn render_rename_dialog(
 
     let body = div()
         .child(
-            div().h(px(52.0)).w_full().child(
+            div().h(rems(3.25)).w_full().child(
                 input
                     .map(|input| input.into_any_element())
                     .unwrap_or_else(|| div().into_any_element()),
@@ -28,24 +28,24 @@ pub fn render_rename_dialog(
         .when_some(error, |body, error| {
             body.child(
                 div()
-                    .mt(px(10.0))
-                    .text_size(px(12.0))
+                    .mt(rems(0.625))
+                    .text_size(rems(0.75))
                     .text_color(theme.error)
                     .child(error),
             )
         });
 
     Modal::new("rename-dialog", cx.i18n().text(Message::RenameTitle), body)
-        .width(px(480.0))
-        .body_gap(px(16.0))
+        .width(rems(30.0))
+        .body_gap(rems(1.0))
         .on_backdrop_dismiss(move |_, cx| {
             backdrop_handle.update(cx, |this, cx| this.cancel_rename(cx));
         })
         .action(
             div()
                 .id("rename-cancel")
-                .px(px(12.0))
-                .py(px(8.0))
+                .px(rems(0.75))
+                .py(rems(0.5))
                 .rounded_md()
                 .hover(|d| d.bg(theme.control_hover))
                 .text_color(theme.text_muted)
@@ -57,8 +57,8 @@ pub fn render_rename_dialog(
         .action(
             div()
                 .id("rename-submit")
-                .px(px(12.0))
-                .py(px(8.0))
+                .px(rems(0.75))
+                .py(rems(0.5))
                 .rounded_md()
                 .bg(theme.accent)
                 .text_color(theme.text_on_accent)

@@ -1,5 +1,6 @@
+use crate::ui::scale::{logical, rem_pixels};
 use crate::ui::app::OxydeApp;
-use crate::ui::components::scrollbar::{render_scrollbar, ScrollbarAxis, ZED_TRACK_WIDTH};
+use crate::ui::components::scrollbar::{render_scrollbar, ScrollbarAxis};
 use crate::ui::components::tooltip::Tooltip;
 use crate::ui::format::{format_number, format_size};
 use crate::ui::i18n::{FluentArgs, I18nContext, Message};
@@ -9,8 +10,10 @@ use gpui::Subscription;
 use gpui::*;
 use oxyde_lib::systems::file_ops::{FileOpType, FileOperation, OpStatus};
 
-pub(crate) const PANEL_WIDTH: f32 = 360.0;
-const PANEL_MAX_HEIGHT: f32 = 420.0;
+pub(crate) const PANEL_WIDTH: Rems = rems(22.5);
+pub(crate) fn panel_width() -> f32 { rem_pixels(PANEL_WIDTH).as_f32() }
+const PANEL_MAX_HEIGHT: Rems = rems(26.25);
+fn panel_max_height() -> f32 { rem_pixels(PANEL_MAX_HEIGHT).as_f32() }
 
 pub struct OperationsPanelView {
     app: WeakEntity<OxydeApp>,
@@ -54,10 +57,10 @@ impl OperationsPanelView {
         let panel_size = self
             .bounds
             .map(|bounds| bounds.size)
-            .unwrap_or(size(px(PANEL_WIDTH), px(PANEL_MAX_HEIGHT)));
-        let margin = 12.0;
+            .unwrap_or(size(px(panel_width()), px(panel_max_height())));
+        let margin = logical(12.0);
         let max_left = (viewport.width.as_f32() - panel_size.width.as_f32() - margin).max(margin);
-        let max_top = (viewport.height.as_f32() - panel_size.height.as_f32() - 36.0).max(margin);
+        let max_top = (viewport.height.as_f32() - panel_size.height.as_f32() - logical(36.0)).max(margin);
         self.position = Some(point(
             px((pointer.x.as_f32() - grab_offset.x.as_f32()).clamp(margin, max_left)),
             px((pointer.y.as_f32() - grab_offset.y.as_f32()).clamp(margin, max_top)),
@@ -93,7 +96,7 @@ impl OperationsPanelView {
         };
         let mouse_pos_in_track = pointer.y.as_f32() - origin.y;
         let thumb_size = (viewport_h * (viewport_h / content_h.max(1.0)).min(1.0))
-            .max(40.0)
+            .max(logical(40.0))
             .min(viewport_h);
         let travel_distance = (viewport_h - thumb_size).max(1.0);
         let content_range = (content_h - viewport_h).max(0.0);
@@ -161,13 +164,13 @@ pub fn render_operations_footer(
     div()
         .id("operations-footer")
         .absolute()
-        .left(px(8.0))
-        .bottom(px(5.0))
-        .h(px(28.0))
+        .left(rems(0.5))
+        .bottom(rems(0.3125))
+        .h(rems(1.75))
         .flex()
         .items_center()
-        .gap(px(6.0))
-        .px(px(8.0))
+        .gap(rems(0.375))
+        .px(rems(0.5))
         .rounded_sm()
         .text_color(theme.text_muted)
         .occlude()
@@ -212,13 +215,13 @@ pub fn render_operations_panel(
     let close_handle = handle.clone();
     let panel_size = panel_bounds
         .map(|bounds| bounds.size)
-        .unwrap_or(size(px(PANEL_WIDTH), px(PANEL_MAX_HEIGHT)));
+        .unwrap_or(size(px(panel_width()), px(panel_max_height())));
     let saved_position = panel_position.map(|position| {
-        let margin = 12.0;
+        let margin = logical(12.0);
         let max_left =
             (viewport_size.width.as_f32() - panel_size.width.as_f32() - margin).max(margin);
         let max_top =
-            (viewport_size.height.as_f32() - panel_size.height.as_f32() - 36.0).max(margin);
+            (viewport_size.height.as_f32() - panel_size.height.as_f32() - logical(36.0)).max(margin);
         point(
             px(position.x.as_f32().clamp(margin, max_left)),
             px(position.y.as_f32().clamp(margin, max_top)),
@@ -227,17 +230,17 @@ pub fn render_operations_panel(
     let mut panel = div()
         .id("operations-panel")
         .absolute()
-        .w(px(PANEL_WIDTH))
-        .max_h(px(PANEL_MAX_HEIGHT))
+        .w(px(panel_width()))
+        .max_h(px(panel_max_height()))
         .flex()
         .flex_col()
-        .text_size(px(12.0))
+        .text_size(rems(0.75))
         .overflow_hidden()
         .rounded_md()
-        .border_1()
+        .border(rems(0.0625))
         .border_color(theme.menu_border)
         .bg(theme.menu_surface)
-        .shadow_lg()
+        .shadow(crate::ui::style::rem_shadow(true))
         .occlude()
         .on_any_mouse_down(|_, _, cx| cx.stop_propagation())
         .on_mouse_move({
@@ -318,16 +321,16 @@ pub fn render_operations_panel(
                 .flex()
                 .items_center()
                 .justify_between()
-                .h(px(34.0))
-                .px(px(10.0))
-                .border_b_1()
+                .h(rems(2.125))
+                .px(rems(0.625))
+                .border_b(rems(0.0625))
                 .border_color(theme.border)
-                .text_size(px(12.0))
+                .text_size(rems(0.75))
                 .child(
                     div()
                         .flex()
                         .items_center()
-                        .gap(px(6.0))
+                        .gap(rems(0.375))
                         .cursor(if is_dragging {
                             CursorStyle::ClosedHand
                         } else {
@@ -346,15 +349,15 @@ pub fn render_operations_panel(
                     div()
                         .flex()
                         .items_center()
-                        .gap(px(4.0))
+                        .gap(rems(0.25))
                         .when(has_finished_operations, |actions| {
                             let manager = operations_manager.clone();
                             let handle = panel_handle.clone();
                             actions.child(
                                 div()
                                     .id("operations-panel-clear")
-                                    .w(px(24.0))
-                                    .h(px(24.0))
+                                    .w(rems(1.5))
+                                    .h(rems(1.5))
                                     .flex()
                                     .items_center()
                                     .justify_center()
@@ -377,8 +380,8 @@ pub fn render_operations_panel(
                         .child(
                             div()
                                 .id("operations-panel-close")
-                                .w(px(24.0))
-                                .h(px(24.0))
+                                .w(rems(1.5))
+                                .h(rems(1.5))
                                 .flex()
                                 .items_center()
                                 .justify_center()
@@ -427,12 +430,12 @@ pub fn render_operations_panel(
     if let Some(position) = saved_position {
         panel = panel.left(position.x).top(position.y);
     } else {
-        panel = panel.right(px(12.0)).bottom(px(36.0));
+        panel = panel.right(rems(0.75)).bottom(rems(2.25));
     }
     if operations.is_empty() {
         panel = panel.child(
             div()
-                .p(px(12.0))
+                .p(rems(0.75))
                 .text_color(theme.text_muted)
                 .child(cx.i18n().text(Message::OpsEmpty)),
         );
@@ -459,17 +462,17 @@ pub fn render_operations_panel(
             .id("operations-list")
             .flex_1()
             .min_h_0()
-            .pr(px(ZED_TRACK_WIDTH))
+            .pr(px(crate::ui::components::scrollbar::zed_track_width()))
             .overflow_y_scroll()
             .track_scroll(&scroll_handle)
             .children(cards);
         panel = panel.child(scroll_viewport).child(
             div()
                 .absolute()
-                .top(px(34.0))
+                .top(rems(2.125))
                 .right_0()
                 .bottom_0()
-                .w(px(ZED_TRACK_WIDTH))
+                .w(px(crate::ui::components::scrollbar::zed_track_width()))
                 .child(render_scrollbar(
                     theme,
                     handle,
@@ -537,13 +540,13 @@ fn speed_graph(samples: Vec<u64>, accent: Hsla) -> impl IntoElement {
         move |_, bounds: Bounds<Pixels>, window, _| {
             let width = bounds.size.width.as_f32();
             let height = bounds.size.height.as_f32();
-            if samples.is_empty() || width <= 2.0 || height <= 4.0 {
+            if samples.is_empty() || width <= logical(2.0) || height <= logical(4.0) {
                 return;
             }
-            let left = bounds.origin.x.as_f32() + 1.0;
-            let right = left + width - 2.0;
-            let top = bounds.origin.y.as_f32() + 2.0;
-            let bottom = top + height - 4.0;
+            let left = bounds.origin.x.as_f32() + logical(1.0);
+            let right = left + width - logical(2.0);
+            let top = bounds.origin.y.as_f32() + logical(2.0);
+            let bottom = top + height - logical(4.0);
             let max_speed = samples.iter().copied().max().unwrap_or(0).max(1) as f64;
             let points: Vec<_> = if samples.len() == 1 {
                 let y = bottom - (samples[0] as f64 / max_speed) as f32 * (bottom - top);
@@ -569,7 +572,7 @@ fn speed_graph(samples: Vec<u64>, accent: Hsla) -> impl IntoElement {
             if let Ok(path) = area.build() {
                 window.paint_path(path, accent.opacity(0.08));
             }
-            let mut line = PathBuilder::stroke(px(1.5));
+            let mut line = PathBuilder::stroke(rem_pixels(rems(0.09375)));
             line.move_to(points[0]);
             for point in points.iter().skip(1) {
                 line.line_to(*point);
@@ -707,7 +710,7 @@ fn render_operation_card(
         .flex()
         .flex_none()
         .items_center()
-        .gap(px(4.0))
+        .gap(rems(0.25))
         .text_color(theme.text_muted);
     if unmanaged_extraction || waiting {
         status_row = status_row.child(
@@ -723,12 +726,12 @@ fn render_operation_card(
         status_row = status_row.child(
             div()
                 .id(format!("dismiss-{dismiss_id}"))
-                .px(px(5.0))
-                .h(px(20.0))
+                .px(rems(0.3125))
+                .h(rems(1.25))
                 .flex()
                 .items_center()
                 .justify_center()
-                .gap(px(4.0))
+                .gap(rems(0.25))
                 .rounded_sm()
                 .hover(|style| style.bg(theme.menu_hover).text_color(theme.text))
                 .tooltip(Tooltip::text(i18n.text(Message::OpsDismiss)))
@@ -761,8 +764,8 @@ fn render_operation_card(
             .child(
                 div()
                     .id(format!("pause-{pause_id}"))
-                    .w(px(22.0))
-                    .h(px(22.0))
+                    .w(rems(1.375))
+                    .h(rems(1.375))
                     .flex()
                     .items_center()
                     .justify_center()
@@ -782,8 +785,8 @@ fn render_operation_card(
             .child(
                 div()
                     .id(format!("turbo-{turbo_id}"))
-                    .w(px(22.0))
-                    .h(px(22.0))
+                    .w(rems(1.375))
+                    .h(rems(1.375))
                     .flex()
                     .items_center()
                     .justify_center()
@@ -812,8 +815,8 @@ fn render_operation_card(
             .child(
                 div()
                     .id(format!("cancel-{cancel_id}"))
-                    .w(px(22.0))
-                    .h(px(22.0))
+                    .w(rems(1.375))
+                    .h(rems(1.375))
                     .flex()
                     .items_center()
                     .justify_center()
@@ -836,8 +839,8 @@ fn render_operation_card(
     let card = div()
         .id(format!("operation-{id}"))
         .relative()
-        .p(px(12.0))
-        .border_b_1()
+        .p(rems(0.75))
+        .border_b(rems(0.0625))
         .border_color(theme.border)
         .bg(if alternate_background {
             theme.background
@@ -846,13 +849,13 @@ fn render_operation_card(
         })
         .flex()
         .flex_col()
-        .gap(px(5.0))
+        .gap(rems(0.3125))
         .when(waiting, |card| {
             card.child(
                 div()
                     .absolute()
                     .inset_0()
-                    .border_l_2()
+                    .border_l(rems(0.125))
                     .border_color(theme.accent)
                     .bg(theme.accent.opacity(0.08)),
             )
@@ -867,7 +870,7 @@ fn render_operation_card(
                         .flex()
                         .min_w_0()
                         .items_center()
-                        .gap(px(6.0))
+                        .gap(rems(0.375))
                         .child(svg().path(icon).text_color(theme.text).size_4().flex_none())
                         .child(i18n.text(kind))
                         .child(
@@ -885,7 +888,7 @@ fn render_operation_card(
         .text_color(theme.text_muted)
         .flex()
         .flex_col()
-        .gap(px(5.0))
+        .gap(rems(0.3125))
         .overflow_hidden();
     if !final_state && !operation.speed_history.is_empty() {
         body = body.child(speed_graph(operation.speed_history.clone(), theme.accent));
@@ -910,7 +913,7 @@ fn render_operation_card(
                 .flex()
                 .items_center()
                 .justify_between()
-                .gap(px(8.0))
+                .gap(rems(0.5))
                 .child(
                     div()
                         .min_w_0()
@@ -952,7 +955,7 @@ fn render_operation_card(
                 .flex()
                 .items_center()
                 .justify_between()
-                .gap(px(8.0))
+                .gap(rems(0.5))
                 .child(
                     div()
                         .flex_none()
@@ -1003,7 +1006,7 @@ fn render_operation_card(
         body = body.child(
             div()
                 .w_full()
-                .h(px(4.0))
+                .h(rems(0.25))
                 .overflow_hidden()
                 .bg(theme.control_hover)
                 .child(

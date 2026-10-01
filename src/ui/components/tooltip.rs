@@ -165,45 +165,45 @@ impl Render for Tooltip {
 
         let mut box_div = div()
             .bg(theme.surface)
-            .border_1()
+            .border(rems(0.0625))
             .border_color(theme.border)
             .rounded_md()
-            .shadow_lg()
+            .shadow(crate::ui::style::rem_shadow(true))
             .font_family("Inter")
             .font_weight(crate::ui::style::DEFAULT_FONT_WEIGHT)
             .py_2()
             .px_3()
             .flex()
             .flex_col()
-            .gap(px(4.0))
+            .gap(rems(0.25))
             .when_some(self.preview_view.clone(), |this, view| {
                 this.child(
                     div()
                         .mb_2()
                         .pb_2()
-                        .border_b_1()
+                        .border_b(rems(0.0625))
                         .border_color(theme.border)
                         .child(view),
                 )
             })
             .child(
                 div()
-                    .max_w(px(400.0))
+                    .max_w(rems(25.0))
                     .text_color(if self.file_info.is_some() {
                         theme.accent
                     } else {
                         theme.text
                     })
-                    .text_size(px(12.0))
+                    .text_size(rems(0.75))
                     .font_weight(FontWeight::MEDIUM)
                     .child(self.title.clone()),
             )
             .when_some(self.meta.clone(), |this, meta| {
                 this.child(
                     div()
-                        .max_w(px(350.0))
+                        .max_w(rems(21.875))
                         .text_color(theme.text_muted)
-                        .text_size(px(11.0))
+                        .text_size(rems(0.6875))
                         .child(meta),
                 )
             })
@@ -230,7 +230,7 @@ impl Render for Tooltip {
                     div()
                         .flex()
                         .flex_col()
-                        .text_size(px(11.0))
+                        .text_size(rems(0.6875))
                         .text_color(theme.text_muted)
                         .child(file_type)
                         .child(file_size)
@@ -241,7 +241,7 @@ impl Render for Tooltip {
         box_div.text_style().font_features = Some(TNUM.clone());
 
         // Décalage pour éviter que le tooltip n'apparaisse exactement sous le pointeur de la souris
-        div().pl(px(8.0)).pt(px(10.0)).child(box_div)
+        div().pl(rems(0.5)).pt(rems(0.625)).child(box_div)
     }
 }
 
@@ -455,8 +455,8 @@ impl Render for PreviewTask {
                 img(move |window: &mut Window, cx: &mut App| {
                     window.use_asset::<TooltipPreviewAsset>(&source, cx)
                 })
-                .w(px(400.0))
-                .max_h(px(380.0))
+                .w(rems(25.0))
+                .max_h(rems(23.75))
                 .object_fit(ObjectFit::Contain)
                 .with_fallback(|| div().size_full().into_any_element()),
             );
@@ -464,27 +464,27 @@ impl Render for PreviewTask {
         if let Some(source) = self.original_image.clone() {
             return div().child(
                 img(source)
-                    .w(px(400.0))
-                    .max_h(px(380.0))
+                    .w(rems(25.0))
+                    .max_h(rems(23.75))
                     .object_fit(ObjectFit::Contain),
             );
         }
         if let Some(preview) = &self.data {
             div().child(match preview {
                 PreviewData::Image(render_img) => img(render_img.clone())
-                    .w(px(400.0))
-                    .max_h(px(380.0))
+                    .w(rems(25.0))
+                    .max_h(rems(23.75))
                     .object_fit(ObjectFit::Contain)
                     .into_any_element(),
                 PreviewData::Text(t) => div()
-                    .max_w(px(350.0))
-                    .max_h(px(200.0))
+                    .max_w(rems(21.875))
+                    .max_h(rems(12.5))
                     .overflow_hidden()
                     .rounded_md()
                     .bg(theme.active_background)
-                    .px(px(10.0))
-                    .py(px(8.0))
-                    .text_size(px(10.0))
+                    .px(rems(0.625))
+                    .py(rems(0.5))
+                    .text_size(rems(0.625))
                     .font_family("JetBrains Mono")
                     .text_color(theme.text)
                     .child(t.clone())
@@ -492,7 +492,7 @@ impl Render for PreviewTask {
             })
         } else {
             div()
-                .text_size(px(10.0))
+                .text_size(rems(0.625))
                 .text_color(theme.text_muted)
                 .child(cx.i18n().text(Message::PreviewLoading))
         }

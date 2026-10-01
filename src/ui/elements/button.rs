@@ -98,10 +98,10 @@ impl RenderOnce for Button {
             .justify_center()
             .px_3()
             .py_1()
-            .h(px(24.0))
+            .h(rems(1.5))
             .rounded_md()
             .bg(bg)
-            .border_1()
+            .border(rems(0.0625))
             .border_color(border_color)
             .hover(|style| {
                 if filled {
@@ -136,7 +136,7 @@ impl RenderOnce for Button {
             .children(self.label.map(|label| {
                 div()
                     .ml_2()
-                    .when_some(self.label_size, |label, size| label.text_size(px(size)))
+                    .when_some(self.label_size, |label, size| label.text_size(rems(size / 16.0)))
                     .when(self.label_size.is_none(), |label| label.text_sm())
                     .font_weight(FontWeight::MEDIUM)
                     .text_color(text_color)
