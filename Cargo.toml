@@ -5,6 +5,14 @@ description = "Modern and fast file manager"
 authors = ["Carlton2001"]
 edition = "2021"
 
+# GPUI refreshes the scene while the native window moves. Keep development
+# builds responsive while preserving debug information and assertions.
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 2
+
 [lib]
 name = "oxyde_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
