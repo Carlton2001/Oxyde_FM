@@ -410,6 +410,7 @@ pub struct OxydeApp {
     pub editing_text: String,
     pub editing_view: Option<Entity<TextInput>>,
     pub inline_rename: bool,
+    created_item_rename: Option<(String, String, bool)>,
     pub breadcrumb_editing: bool,
     pub breadcrumb_text: String,
     pub breadcrumb_pane_id: Option<String>,
@@ -421,6 +422,7 @@ pub struct OxydeApp {
     pending_file_operations: std::collections::VecDeque<PendingFileOperation>,
     file_operation_notice: Option<(Message, String)>,
     pub(crate) operations_panel_open: bool,
+    pub(crate) operations_panel_opened_manually: bool,
     pub(crate) operations_panel_position: Option<Point<Pixels>>,
     pub(crate) operations_panel_view:
         Option<Entity<crate::ui::components::operations::OperationsPanelView>>,
@@ -572,24 +574,71 @@ impl OxydeApp {
         path: String,
         id: i32,
         is_background: bool,
+        creates_item: bool,
         cx: &mut Context<Self>,
     ) {
         let Some(handle) = self.handle.clone() else {
             return;
         };
+        let tab_id = self
+            .state
+            .layout
+            .find_pane(&self.state.active_pane_id)
+            .map(|pane| pane.active_tab().id.clone());
         cx.spawn(move |_, cx: &mut AsyncApp| {
             let mut cx = cx.clone();
             async move {
                 let result = tokio::task::spawn_blocking(move || {
+                    let before = if creates_item {
+                        std::fs::read_dir(&path).ok().map(|entries| {
+                            entries
+                                .filter_map(Result::ok)
+                                .map(|entry| entry.path())
+                                .collect::<std::collections::HashSet<_>>()
+                        })
+                    } else {
+                        None
+                    };
                     oxyde_lib::platform::platform().execute_native_context_menu_item(
                         &path,
                         id,
                         is_background,
-                    )
+                    )?;
+                    if let Some(before) = before {
+                        for _ in 0..20 {
+                            let added: Vec<_> = std::fs::read_dir(&path)
+                                .map_err(|error| error.to_string())?
+                                .filter_map(Result::ok)
+                                .filter(|entry| !before.contains(&entry.path()))
+                                .collect();
+                            if added.len() == 1 {
+                                let entry = &added[0];
+                                return Ok(Some((
+                                    entry.path().to_string_lossy().into_owned(),
+                                    entry
+                                        .file_type()
+                                        .map_err(|error| error.to_string())?
+                                        .is_dir(),
+                                )));
+                            }
+                            if added.len() > 1 {
+                                break;
+                            }
+                            std::thread::sleep(std::time::Duration::from_millis(100));
+                        }
+                    }
+                    Ok::<_, String>(None)
                 })
                 .await;
                 match result {
-                    Ok(Ok(())) => {}
+                    Ok(Ok(Some((path, is_dir)))) => {
+                        handle.update(&mut cx, |this, cx| {
+                            if let Some(tab_id) = tab_id {
+                                this.queue_created_item_rename(tab_id, path, is_dir, cx);
+                            }
+                        });
+                    }
+                    Ok(Ok(None)) => {}
                     Ok(Err(error)) => log::warn!("Native context-menu action failed: {error:?}"),
                     Err(error) => log::warn!("Native context-menu worker failed: {error}"),
                 }
@@ -770,6 +819,7 @@ impl OxydeApp {
             editing_text: String::new(),
             editing_view: None,
             inline_rename: false,
+            created_item_rename: None,
             breadcrumb_editing: false,
             breadcrumb_text: String::new(),
             breadcrumb_pane_id: None,
@@ -781,6 +831,7 @@ impl OxydeApp {
             pending_file_operations: std::collections::VecDeque::new(),
             file_operation_notice: None,
             operations_panel_open: false,
+            operations_panel_opened_manually: false,
             operations_panel_position,
             operations_panel_view: None,
             operations_panel_scroll: ScrollHandle::new(),
@@ -1587,7 +1638,8 @@ impl OxydeApp {
                                 this.state.refresh_sidebar();
                                 this.reconcile_watchers();
                                 let operations = this.file_ops.list_operations();
-                                if !operations.is_empty()
+                                if !this.operations_panel_opened_manually
+                                    && !operations.is_empty()
                                     && operations.iter().all(|operation| {
                                         matches!(operation.status, OpStatus::Completed)
                                     })
@@ -1646,6 +1698,7 @@ impl OxydeApp {
         if let Some(pane) = self.state.layout.find_pane(pane_id) {
             let current_path = pane.active_tab().path.clone();
             let language = cx.i18n().language();
+            let tab_id = pane.active_tab().id.clone();
             let Some(handle) = self.handle.clone() else {
                 return;
             };
@@ -1682,6 +1735,12 @@ impl OxydeApp {
                     .await;
                     handle.update(&mut cx, |this, cx| match created {
                         Ok(Ok(folder_path)) => {
+                            this.queue_created_item_rename(
+                                tab_id,
+                                folder_path.to_string_lossy().into_owned(),
+                                true,
+                                cx,
+                            );
                             this.history.push(Transaction::new(
                                 TransactionType::NewFolder,
                                 TransactionDetails {
@@ -1710,6 +1769,37 @@ impl OxydeApp {
             })
             .detach();
         }
+    }
+
+    fn queue_created_item_rename(
+        &mut self,
+        tab_id: String,
+        path: String,
+        is_dir: bool,
+        cx: &mut Context<Self>,
+    ) {
+        let parent = std::path::Path::new(&path)
+            .parent()
+            .map(|path| path.to_string_lossy().into_owned());
+        let mut target = None;
+        self.state.layout.visit_panes(&mut |pane| {
+            if let Some((index, tab)) = pane
+                .tabs
+                .iter()
+                .enumerate()
+                .find(|(_, tab)| tab.id == tab_id)
+            {
+                if Some(&tab.path) == parent.as_ref() && pane.active_tab().id == tab_id {
+                    target = Some((pane.id.clone(), index, tab.path.clone()));
+                }
+            }
+        });
+        let Some((pane_id, index, directory)) = target else {
+            return;
+        };
+        self.state.active_pane_id = pane_id.clone();
+        self.created_item_rename = Some((tab_id, path, is_dir));
+        self.request_tab_files(&pane_id, index, directory, false, cx);
     }
 
     /// Rebuild the set of directory watchers to cover every open tab across all panes,
@@ -1824,6 +1914,51 @@ impl Render for OxydeApp {
 
         let handle = self.handle.clone().expect("handle set");
         let window_handle = _window.window_handle();
+        if let Some((tab_id, path, is_dir)) = self.created_item_rename.clone() {
+            let pane_id = self.state.active_pane_id.clone();
+            let width = self
+                .pane_sizes
+                .get(&pane_id)
+                .map(|size| size.width)
+                .unwrap_or(self.list_width);
+            if let Some(pane) = self.state.find_pane_mut(&pane_id) {
+                let tab = pane.active_tab_mut();
+                if tab.id != tab_id
+                    || std::path::Path::new(&path).parent() != Some(std::path::Path::new(&tab.path))
+                {
+                    self.created_item_rename = None;
+                } else if tab.files.iter().any(|file| file.path == path) {
+                    tab.filter_name.clear();
+                    tab.filter_types.clear();
+                    tab.filter_sizes.clear();
+                    tab.filter_dates.clear();
+                    tab.update_cache();
+                    tab.selected_paths.clear();
+                    tab.selected_paths.insert(path.clone());
+                    tab.selection_anchor = Some(path.clone());
+                    if let Some(index) = tab
+                        .filtered_files()
+                        .iter()
+                        .position(|file| file.path == path)
+                    {
+                        let row = if matches!(tab.view_mode, crate::ui::workspace::ViewMode::Grid) {
+                            let columns = ((width - 20.0) / crate::ui::style::GRID_CARD_MIN_WIDTH)
+                                .floor()
+                                .max(1.0) as usize;
+                            index / columns
+                        } else {
+                            index
+                        };
+                        tab.list_scroll
+                            .scroll_to_item(row, gpui::ScrollStrategy::Top);
+                    }
+                    self.created_item_rename = None;
+                    self.begin_rename(path, is_dir, true, _window, cx);
+                }
+            } else {
+                self.created_item_rename = None;
+            }
+        }
 
         let size = _window.viewport_size();
         let win_w = size.width.as_f32();
@@ -2810,9 +2945,42 @@ impl Render for OxydeApp {
 
                                         h_inner.update(app, |this, cx| {
                                             if !has_sub && id_inner >= 0 {
+                                                fn is_creation(
+                                                    items: &[oxyde_lib::models::WinMenuItem],
+                                                    id: i32,
+                                                    in_new: bool,
+                                                ) -> bool
+                                                {
+                                                    items.iter().any(|item| {
+                                                        let in_new = in_new
+                                                            || item.verb.as_deref() == Some("new");
+                                                        (item.id == id && in_new)
+                                                            || is_creation(
+                                                                &item.children,
+                                                                id,
+                                                                in_new,
+                                                            )
+                                                    })
+                                                }
+                                                let creates_item = is_bg_cap
+                                                    && this.context_menus.iter().any(|menu| {
+                                                        if let ContextMenuContent::NativeItems {
+                                                            items,
+                                                            ..
+                                                        } = &menu.content
+                                                        {
+                                                            is_creation(items, id_inner, false)
+                                                        } else {
+                                                            false
+                                                        }
+                                                    });
                                                 this.context_menus.clear();
                                                 this.execute_native_context_menu_item(
-                                                    p_inner, id_inner, is_bg_cap, cx,
+                                                    p_inner,
+                                                    id_inner,
+                                                    is_bg_cap,
+                                                    creates_item,
+                                                    cx,
                                                 );
                                             }
                                             cx.notify();

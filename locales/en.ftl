@@ -115,7 +115,10 @@ operation-compress-zip = Compress to ZIP
 operation-extract-here = Extract archive
 operation-new-folder = New folder
 operation-restore = Restore
-operations-title = Operations
+operations-title = { $count ->
+    [1] Operation
+   *[other] Operations
+    }
 operations-show-panel = Show operations
 operations-hide-panel = Hide operations
 operations-queued = Queued

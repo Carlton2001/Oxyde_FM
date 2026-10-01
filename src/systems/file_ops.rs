@@ -100,6 +100,10 @@ pub struct FileOperation {
     pub pause_flag: Arc<AtomicBool>,
     #[serde(skip)]
     pub turbo_flag: Arc<AtomicBool>,
+    #[serde(skip)]
+    resume_requested: bool,
+    #[serde(skip)]
+    execution_started: bool,
 }
 
 impl FileOperation {
@@ -136,6 +140,8 @@ impl FileOperation {
             cancel_flag: self.cancel_flag.clone(),
             pause_flag: self.pause_flag.clone(),
             turbo_flag: self.turbo_flag.clone(),
+            resume_requested: self.resume_requested,
+            execution_started: self.execution_started,
         }
     }
 
@@ -177,6 +183,8 @@ impl FileOperation {
             cancel_flag: Arc::new(AtomicBool::new(false)),
             pause_flag: Arc::new(AtomicBool::new(false)),
             turbo_flag: Arc::new(AtomicBool::new(false)),
+            resume_requested: false,
+            execution_started: false,
         }
     }
 
@@ -191,9 +199,100 @@ impl FileOperation {
 pub struct FileOperationManager {
     operations: Mutex<HashMap<String, Arc<Mutex<FileOperation>>>>,
     next_sequence: AtomicU64,
+    scheduler: Arc<OperationScheduler>,
+}
+
+struct ScheduledOperation {
+    operation: Arc<Mutex<FileOperation>>,
+    paths: Vec<String>,
+}
+
+struct OperationScheduler {
     slots: Arc<Semaphore>,
-    running_paths: Arc<Mutex<HashMap<String, Vec<String>>>>,
-    scheduling_changed: Arc<Notify>,
+    running_paths: Mutex<HashMap<String, Vec<String>>>,
+    waiting: Mutex<HashMap<String, ScheduledOperation>>,
+    changed: Notify,
+}
+
+impl OperationScheduler {
+    fn enqueue(&self, operation: Arc<Mutex<FileOperation>>, paths: Vec<String>) {
+        let id = operation.lock().unwrap().id.clone();
+        self.waiting
+            .lock()
+            .unwrap()
+            .insert(id, ScheduledOperation { operation, paths });
+        self.changed.notify_waiters();
+    }
+
+    async fn acquire(&self, id: &str) -> Option<tokio::sync::OwnedSemaphorePermit> {
+        loop {
+            let notified = self.changed.notified();
+            tokio::pin!(notified);
+            notified.as_mut().enable();
+            {
+                let mut waiting = self.waiting.lock().unwrap();
+                let mut running = self.running_paths.lock().unwrap();
+                let entry = waiting.get(id)?;
+                let stopped = {
+                    let operation = entry.operation.lock().unwrap();
+                    operation.cancel_flag.load(Ordering::Relaxed)
+                        || FileOperationManager::is_final(&operation.status)
+                };
+                if stopped {
+                    waiting.remove(id);
+                    return None;
+                }
+                let next = waiting
+                    .iter()
+                    .filter_map(|(candidate_id, entry)| {
+                        let operation = entry.operation.lock().unwrap();
+                        if operation.cancel_flag.load(Ordering::Relaxed)
+                            || FileOperationManager::is_final(&operation.status)
+                            || (operation.pause_flag.load(Ordering::Relaxed)
+                                && !operation.resume_requested)
+                            || running.iter().any(|(active_id, paths)| {
+                                active_id != candidate_id
+                                    && FileOperationManager::paths_overlap(&entry.paths, paths)
+                            })
+                        {
+                            return None;
+                        }
+                        Some((
+                            candidate_id.clone(),
+                            (!operation.resume_requested, operation.sequence),
+                        ))
+                    })
+                    .min_by_key(|(_, priority)| *priority)
+                    .map(|(id, _)| id);
+                if next.as_deref() == Some(id) {
+                    if let Ok(permit) = self.slots.clone().try_acquire_owned() {
+                        let entry = waiting.remove(id).unwrap();
+                        let mut operation = entry.operation.lock().unwrap();
+                        if operation.pause_flag.load(Ordering::Relaxed)
+                            && !operation.resume_requested
+                        {
+                            drop(operation);
+                            waiting.insert(id.to_string(), entry);
+                        } else {
+                            operation.pause_flag.store(false, Ordering::Relaxed);
+                            operation.resume_requested = false;
+                            operation.execution_started = true;
+                            operation.status = if operation.started_at.is_some() {
+                                OpStatus::Running
+                            } else {
+                                OpStatus::Calculating
+                            };
+                            running.insert(id.to_string(), entry.paths);
+                            self.changed.notify_waiters();
+                            return Some(permit);
+                        }
+                    }
+                }
+            }
+            // Also observe permits released outside this scheduler (e.g. shutdown).
+            let _ = tokio::time::timeout(std::time::Duration::from_millis(25), notified).await;
+        }
+    }
 }
 
 impl Default for FileOperationManager {
@@ -201,9 +300,12 @@ impl Default for FileOperationManager {
         Self {
             operations: Mutex::new(HashMap::new()),
             next_sequence: AtomicU64::new(1),
-            slots: Arc::new(Semaphore::new(2)),
-            running_paths: Arc::new(Mutex::new(HashMap::new())),
-            scheduling_changed: Arc::new(Notify::new()),
+            scheduler: Arc::new(OperationScheduler {
+                slots: Arc::new(Semaphore::new(2)),
+                running_paths: Mutex::new(HashMap::new()),
+                waiting: Mutex::new(HashMap::new()),
+                changed: Notify::new(),
+            }),
         }
     }
 }
@@ -228,6 +330,9 @@ impl FileOperationManager {
         mut op: FileOperation,
     ) -> String {
         op.sequence = self.next_sequence.fetch_add(1, Ordering::Relaxed);
+        if op.pause_flag.load(Ordering::Relaxed) {
+            op.status = OpStatus::Paused;
+        }
         let op_id = op.id.clone();
         let paths = Self::reserved_paths(&op);
         let op_arc = Arc::new(Mutex::new(op));
@@ -259,81 +364,116 @@ impl FileOperationManager {
 
         // Spawn background task
         let op_clone = op_arc.clone();
-        let slots = self.slots.clone();
-        let running_paths = self.running_paths.clone();
-        let scheduling_changed = self.scheduling_changed.clone();
+        let scheduler = self.scheduler.clone();
         let scheduled_id = op_id.clone();
+        scheduler.enqueue(op_arc, paths.clone());
 
         runtime.spawn(async move {
-            loop {
-                if op_clone.lock().unwrap().cancel_flag.load(Ordering::Relaxed) {
-                    op_clone.lock().unwrap().status = OpStatus::Cancelled;
-                    return;
+            let Some(initial_permit) = scheduler.acquire(&scheduled_id).await else {
+                op_clone.lock().unwrap().status = OpStatus::Cancelled;
+                return;
+            };
+            let mut permit = Some(initial_permit);
+            let operation = op_clone.clone();
+            let mut execution = Box::pin(async move {
+                match Self::check_queued_conflicts(operation.clone()).await {
+                    Ok(())
+                        if !operation
+                            .lock()
+                            .unwrap()
+                            .cancel_flag
+                            .load(Ordering::Relaxed) =>
+                    {
+                        Self::execute_operation(history_manager, operation.clone()).await;
+                    }
+                    Ok(()) => operation.lock().unwrap().status = OpStatus::Cancelled,
+                    Err(error) => {
+                        let mut locked = operation.lock().unwrap();
+                        locked.status = if locked.cancel_flag.load(Ordering::Relaxed) {
+                            OpStatus::Cancelled
+                        } else {
+                            OpStatus::Error(error)
+                        };
+                    }
                 }
-                let notified = scheduling_changed.notified();
+            });
+            loop {
+                let notified = scheduler.changed.notified();
                 tokio::pin!(notified);
                 notified.as_mut().enable();
-                let acquired = slots.clone().acquire_owned();
-                futures::pin_mut!(acquired);
-                let permit = match futures::future::select(acquired, notified.as_mut()).await {
-                    futures::future::Either::Left((Ok(permit), _)) => permit,
-                    futures::future::Either::Left((Err(_), _)) => return,
-                    futures::future::Either::Right((_, _)) => continue,
-                };
-                let reserved = {
-                    let mut running = running_paths.lock().unwrap();
-                    if running
-                        .values()
-                        .any(|active| Self::paths_overlap(&paths, active))
+                let should_release = {
+                    let mut locked = op_clone.lock().unwrap();
+                    if permit.is_some()
+                        && locked.resume_requested
+                        && !locked.cancel_flag.load(Ordering::Relaxed)
                     {
-                        false
-                    } else {
-                        running.insert(scheduled_id.clone(), paths.clone());
-                        true
+                        locked.pause_flag.store(false, Ordering::Relaxed);
+                        locked.resume_requested = false;
+                        locked.status = if locked.started_at.is_some() {
+                            OpStatus::Running
+                        } else {
+                            OpStatus::Calculating
+                        };
                     }
+                    locked.pause_flag.load(Ordering::Relaxed)
+                        && !locked.cancel_flag.load(Ordering::Relaxed)
                 };
-                if reserved {
-                    if !op_clone.lock().unwrap().cancel_flag.load(Ordering::Relaxed) {
-                        match Self::check_queued_conflicts(op_clone.clone()).await {
-                            Ok(())
-                                if !op_clone
-                                    .lock()
-                                    .unwrap()
-                                    .cancel_flag
-                                    .load(Ordering::Relaxed) =>
-                            {
-                                Self::execute_operation(history_manager, op_clone.clone()).await
-                            }
-                            Ok(()) => op_clone.lock().unwrap().status = OpStatus::Cancelled,
-                            Err(error) => {
-                                let mut locked = op_clone.lock().unwrap();
-                                locked.status = if locked.cancel_flag.load(Ordering::Relaxed) {
-                                    OpStatus::Cancelled
-                                } else {
-                                    OpStatus::Error(error)
-                                };
-                            }
-                        }
-                    } else {
-                        op_clone.lock().unwrap().status = OpStatus::Cancelled;
-                    }
-                    running_paths.lock().unwrap().remove(&scheduled_id);
-                    scheduling_changed.notify_waiters();
-                    drop(permit);
-                    return;
+                if should_release && permit.is_some() {
+                    // Keep path reservations while parked, but free execution capacity.
+                    scheduler.enqueue(op_clone.clone(), paths.clone());
+                    drop(permit.take());
+                    scheduler.changed.notify_waiters();
                 }
-                drop(permit);
-                notified.await;
+                if permit.is_none() {
+                    let acquired = Box::pin(scheduler.acquire(&scheduled_id));
+                    match futures::future::select(execution.as_mut(), acquired).await {
+                        futures::future::Either::Left(_) => break,
+                        futures::future::Either::Right((Some(acquired), _)) => {
+                            permit = Some(acquired);
+                        }
+                        futures::future::Either::Right((None, _)) => {
+                            execution.await;
+                            break;
+                        }
+                    }
+                } else {
+                    let changed = Box::pin(tokio::time::timeout(
+                        std::time::Duration::from_millis(25),
+                        notified,
+                    ));
+                    if matches!(
+                        futures::future::select(execution.as_mut(), changed).await,
+                        futures::future::Either::Left(_)
+                    ) {
+                        break;
+                    }
+                }
             }
+            scheduler.waiting.lock().unwrap().remove(&scheduled_id);
+            scheduler
+                .running_paths
+                .lock()
+                .unwrap()
+                .remove(&scheduled_id);
+            drop(permit);
+            scheduler.changed.notify_waiters();
         });
 
         op_id
     }
 
     fn reserved_paths(op: &FileOperation) -> Vec<String> {
+        let destinations: Vec<PathBuf> = match (&op.op_type, &op.destination) {
+            (FileOpType::Copy | FileOpType::Move, Some(destination)) => op
+                .sources
+                .iter()
+                .filter_map(|source| source.file_name().map(|name| destination.join(name)))
+                .collect(),
+            (_, destination) => destination.iter().cloned().collect(),
+        };
         op.sources
             .iter()
-            .chain(op.destination.iter())
+            .chain(destinations.iter())
             .map(|path| {
                 let absolute = if path.is_absolute() {
                     path.clone()
@@ -411,7 +551,11 @@ impl FileOperationManager {
             let _priority_guard = RestoreNormalPriority;
             let (op_type, sources, destination, initial_turbo, resolutions) = {
                 let mut locked = op_clone.lock().unwrap();
-                locked.status = OpStatus::Calculating;
+                locked.status = if locked.pause_flag.load(Ordering::Relaxed) {
+                    OpStatus::Paused
+                } else {
+                    OpStatus::Calculating
+                };
                 locked.started_at = Some(started_at);
                 let turbo = locked.turbo_flag.load(Ordering::Relaxed);
                 (
@@ -1640,7 +1784,11 @@ impl FileOperationManager {
             locked.destination = Some(target.clone());
             locked.total_files = entries.len();
             locked.total_bytes = total_bytes;
-            locked.status = OpStatus::Running;
+            locked.status = if locked.pause_flag.load(Ordering::Relaxed) {
+                OpStatus::Paused
+            } else {
+                OpStatus::Running
+            };
         }
         let temp = parent.join(format!(".oxyde-{}.zip.tmp", Uuid::new_v4()));
         let guard = PendingFile(temp.clone());
@@ -1763,7 +1911,11 @@ impl FileOperationManager {
         {
             let mut locked = op.lock().unwrap();
             locked.destination = Some(target.clone());
-            locked.status = OpStatus::Running;
+            locked.status = if locked.pause_flag.load(Ordering::Relaxed) {
+                OpStatus::Paused
+            } else {
+                OpStatus::Running
+            };
         }
         if source
             .extension()
@@ -1890,12 +2042,18 @@ impl FileOperationManager {
             if Self::is_final(&locked.status) {
                 return false;
             }
-            locked.pause_flag.store(paused, Ordering::Relaxed);
-            locked.status = if paused {
-                OpStatus::Paused
-            } else {
-                OpStatus::Running
-            };
+            if paused {
+                locked.pause_flag.store(true, Ordering::Relaxed);
+                locked.resume_requested = false;
+                locked.status = OpStatus::Paused;
+            } else if locked.pause_flag.load(Ordering::Relaxed)
+                || matches!(locked.status, OpStatus::Queued)
+            {
+                // A launch request is prioritized; only the scheduler can mark it running.
+                locked.resume_requested = true;
+                locked.status = OpStatus::Queued;
+            }
+            self.scheduler.changed.notify_waiters();
             return true;
         }
         false
@@ -1914,10 +2072,10 @@ impl FileOperationManager {
                 return false;
             }
             locked_op.cancel_flag.store(true, Ordering::Relaxed);
-            if matches!(locked_op.status, OpStatus::Queued) {
+            if !locked_op.execution_started {
                 locked_op.status = OpStatus::Cancelled;
             }
-            self.scheduling_changed.notify_waiters();
+            self.scheduler.changed.notify_waiters();
             return true;
         }
         false
@@ -2075,13 +2233,13 @@ mod tests {
         let same_destination = FileOperation::new(
             FileOpType::Move,
             vec![temp.path().join("source-b")],
-            Some(destination.join("nested")),
+            Some(destination.join("source-a/nested")),
             None,
         );
         let independent = FileOperation::new(
             FileOpType::Copy,
             vec![temp.path().join("source-c")],
-            Some(temp.path().join("other")),
+            Some(destination),
             None,
         );
         assert!(FileOperationManager::paths_overlap(
@@ -2166,7 +2324,13 @@ mod tests {
             std::fs::create_dir(&target).unwrap();
             std::fs::write(&source, b"source").unwrap();
             let manager = FileOperationManager::new();
-            let held_slots = manager.slots.clone().acquire_many_owned(2).await.unwrap();
+            let held_slots = manager
+                .scheduler
+                .slots
+                .clone()
+                .acquire_many_owned(2)
+                .await
+                .unwrap();
             let id = manager.queue_operation(
                 Arc::new(HistoryManager::new()),
                 FileOperation::new(
@@ -2196,7 +2360,7 @@ mod tests {
     }
 
     #[test]
-    fn two_independent_operations_run_while_a_third_waits_for_capacity() {
+    fn paused_operations_do_not_hold_capacity_and_queued_launch_stays_queued_until_started() {
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .build()
@@ -2223,17 +2387,7 @@ mod tests {
                         .iter()
                         .map(|id| manager.get_operation(id).unwrap().status)
                         .collect();
-                    if statuses
-                        .iter()
-                        .filter(|status| **status == OpStatus::Paused)
-                        .count()
-                        == 2
-                        && statuses
-                            .iter()
-                            .filter(|status| **status == OpStatus::Queued)
-                            .count()
-                            == 1
-                    {
+                    if statuses.iter().all(|status| *status == OpStatus::Paused) {
                         break;
                     }
                     tokio::time::sleep(std::time::Duration::from_millis(10)).await;
@@ -2241,9 +2395,181 @@ mod tests {
             })
             .await
             .unwrap();
+            let held_slots = manager
+                .scheduler
+                .slots
+                .clone()
+                .acquire_many_owned(2)
+                .await
+                .unwrap();
+            assert!(manager.set_paused(&ids[2], false));
+            assert_eq!(
+                manager.get_operation(&ids[2]).unwrap().status,
+                OpStatus::Queued
+            );
+            drop(held_slots);
+            tokio::time::timeout(std::time::Duration::from_secs(5), async {
+                loop {
+                    if manager.get_operation(&ids[2]).unwrap().status == OpStatus::Completed {
+                        break;
+                    }
+                    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+                }
+            })
+            .await
+            .unwrap();
+            assert_eq!(
+                manager.get_operation(&ids[0]).unwrap().status,
+                OpStatus::Paused
+            );
+            assert_eq!(
+                manager.get_operation(&ids[1]).unwrap().status,
+                OpStatus::Paused
+            );
             for id in &ids {
                 manager.cancel_operation(id);
             }
+        });
+    }
+
+    async fn wait_for_status(manager: &FileOperationManager, id: &str, expected: OpStatus) {
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            loop {
+                let status = manager.get_operation(id).unwrap().status;
+                if status == expected {
+                    break;
+                }
+                assert!(
+                    !matches!(status, OpStatus::Error(_)),
+                    "Unexpected failure: {status:?}"
+                );
+                tokio::time::sleep(std::time::Duration::from_millis(1)).await;
+            }
+        })
+        .await
+        .unwrap();
+    }
+
+    #[test]
+    fn pausing_an_active_copy_starts_the_next_copy_but_protects_the_paused_paths() {
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        runtime.block_on(async {
+            let temp = tempfile::tempdir().unwrap();
+            let source = temp.path().join("large.bin");
+            let file = std::fs::File::create(&source).unwrap();
+            file.set_len(32 * 1024 * 1024).unwrap();
+            drop(file);
+            let other = temp.path().join("small.txt");
+            std::fs::write(&other, b"next operation").unwrap();
+            let target = temp.path().join("target");
+            std::fs::create_dir(&target).unwrap();
+            let manager = FileOperationManager::new();
+            let history = Arc::new(HistoryManager::new());
+            // Leave only one execution slot, so advancing the queue requires releasing it.
+            let held = manager
+                .scheduler
+                .slots
+                .clone()
+                .acquire_owned()
+                .await
+                .unwrap();
+            let first = manager.queue_operation(
+                history.clone(),
+                FileOperation::new(
+                    FileOpType::Copy,
+                    vec![source.clone()],
+                    Some(target.clone()),
+                    None,
+                ),
+            );
+            wait_for_status(&manager, &first, OpStatus::Running).await;
+            assert!(manager.set_paused(&first, true));
+            let next = manager.queue_operation(
+                history.clone(),
+                FileOperation::new(FileOpType::Copy, vec![other], Some(target.clone()), None),
+            );
+            let overlapping = manager.queue_operation(
+                history.clone(),
+                FileOperation::new(FileOpType::Copy, vec![source], Some(target.clone()), None),
+            );
+            wait_for_status(&manager, &next, OpStatus::Completed).await;
+            assert_eq!(
+                std::fs::read(target.join("small.txt")).unwrap(),
+                b"next operation"
+            );
+            assert_eq!(
+                manager.get_operation(&first).unwrap().status,
+                OpStatus::Paused
+            );
+            assert_eq!(
+                manager.get_operation(&overlapping).unwrap().status,
+                OpStatus::Queued
+            );
+            manager.cancel_operation(&overlapping);
+            assert!(manager.set_paused(&first, false));
+            wait_for_status(&manager, &first, OpStatus::Completed).await;
+            assert_eq!(
+                std::fs::metadata(target.join("large.bin")).unwrap().len(),
+                32 * 1024 * 1024
+            );
+            drop(held);
+        });
+    }
+
+    #[test]
+    fn manual_launch_takes_priority_over_earlier_waiting_operations() {
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        runtime.block_on(async {
+            let manager = FileOperationManager::new();
+            let mut ids = Vec::new();
+            for sequence in 1..=3 {
+                let mut operation = FileOperation::new(FileOpType::Copy, Vec::new(), None, None);
+                operation.sequence = sequence;
+                let id = operation.id.clone();
+                let operation = Arc::new(Mutex::new(operation));
+                manager
+                    .operations
+                    .lock()
+                    .unwrap()
+                    .insert(id.clone(), operation.clone());
+                manager.scheduler.enqueue(operation, Vec::new());
+                ids.push(id);
+            }
+            let held = manager
+                .scheduler
+                .slots
+                .clone()
+                .acquire_owned()
+                .await
+                .unwrap();
+            assert!(manager.set_paused(&ids[2], false));
+            assert_eq!(
+                manager.get_operation(&ids[2]).unwrap().status,
+                OpStatus::Queued
+            );
+            let launched = tokio::time::timeout(
+                std::time::Duration::from_secs(1),
+                manager.scheduler.acquire(&ids[2]),
+            )
+            .await
+            .unwrap()
+            .unwrap();
+            assert_eq!(
+                manager.get_operation(&ids[0]).unwrap().status,
+                OpStatus::Queued
+            );
+            assert_eq!(
+                manager.get_operation(&ids[1]).unwrap().status,
+                OpStatus::Queued
+            );
+            drop(launched);
+            drop(held);
         });
     }
 

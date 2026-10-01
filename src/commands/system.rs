@@ -220,7 +220,7 @@ pub fn get_native_context_menu_items(
                         }
 
                         // Attempt to extract the verb
-                        let mut item_verb: Option<String> = None;
+                        let mut item_verb: Option<String> = is_new_menu.then(|| "new".to_string());
                         if (1..=0x7FFF).contains(&id) {
                             let mut verb_buf = [0u8; 128];
                             if context_menu

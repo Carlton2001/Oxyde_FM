@@ -639,6 +639,24 @@ mod tests {
     }
 
     #[test]
+    fn operations_title_uses_singular_only_for_one_operation() {
+        for (language, singular, plural) in [
+            (Language::French, "Opération", "Opérations"),
+            (Language::English, "Operation", "Operations"),
+        ] {
+            let i18n = I18n::for_language(language);
+            for count in [0, 1, 2, 1000] {
+                let mut args = FluentArgs::new();
+                args.set("count", count);
+                assert_eq!(
+                    i18n.text_with_args(Message::OpsTitle, &args).as_ref(),
+                    if count == 1 { singular } else { plural },
+                );
+            }
+        }
+    }
+
+    #[test]
     fn conflict_count_uses_french_plural_rules() {
         let i18n = I18n::default();
         for (count, expected) in [
