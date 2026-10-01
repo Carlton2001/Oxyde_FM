@@ -161,6 +161,8 @@ impl RenderOnce for Tab {
             .flex()
             .items_center()
             .text_color(text_color)
+            .text_size(px(13.0))
+            .font_weight(FontWeight::MEDIUM)
             .group("tab");
 
         if let Some(on_click) = self.on_click {
@@ -208,21 +210,9 @@ impl RenderOnce for Tab {
             | TabPosition::Middle(Ordering::Less)
             | TabPosition::Middle(Ordering::Equal) => container
                 .border_r_1()
-                .border_b_1()
+                .when(!self.selected, |s| s.border_b_1())
                 .border_color(theme.border),
         };
-
-        // Active tab top indicator (Zed-like)
-        if self.selected {
-            container = container.child(
-                div()
-                    .absolute()
-                    .top_0()
-                    .w_full()
-                    .h(px(2.0))
-                    .bg(theme.accent),
-            );
-        }
 
         container = container.child(
             div()
@@ -245,11 +235,7 @@ impl RenderOnce for Tab {
                 })
                 .gap_2()
                 .when_some(self.icon, |s, icon| {
-                    s.child(svg().path(icon).size_3_5().text_color(if self.selected {
-                        theme.accent
-                    } else {
-                        theme.icon_muted
-                    }))
+                    s.child(svg().path(icon).size_3_5().text_color(text_color))
                 })
                 .child(div().text_ellipsis().child(self.label.clone()))
                 .when_some(self.on_close, |s, on_close| {

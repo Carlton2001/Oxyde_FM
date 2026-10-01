@@ -271,7 +271,7 @@ pub fn render_file_list(
                                             let date_tt = file.modified;
                                             let is_dimmed = file.is_hidden || file.is_system;
                                             div()
-                                                .id(SharedString::from(format!("file-row-{}", path)))
+                                                .id(SharedString::from(format!("file-row-{}", path))).relative().when(is_selected, |d| d.child(div().absolute().left_0().top_0().bottom_0().w(px(3.0)).bg(theme.accent)))
                                                 .flex()
                                                 .items_center()
                                                 .h(px(ROW_HEIGHT))
@@ -914,7 +914,8 @@ pub fn render_file_list(
             .border_t_1()
             .border_color(theme.border)
             .text_size(px(12.0))
-            .text_color(theme.text_muted)
+            .text_color(theme.text)
+            .font_weight(FontWeight::MEDIUM)
             .child(folders_label)
             .child(files_label)
             .when_some(selection_summary, |bar, summary| {
@@ -1093,7 +1094,7 @@ fn render_grid_file_list(
                                         } else if is_selected {
                                             theme.accent
                                         } else {
-                                            theme.border
+                                            theme.border.opacity(0.0)
                                         })
                                         .bg(if is_selected {
                                             theme.selected
@@ -1102,7 +1103,7 @@ fn render_grid_file_list(
                                         } else {
                                             theme.background
                                         })
-                                        .when(!is_selected, |d| d.hover(|d| d.bg(theme.hover)))
+                                        .relative().when(is_selected, |d| d.child(div().absolute().left_0().top_0().bottom_0().w(px(3.0)).bg(theme.accent))).when(!is_selected, |d| d.hover(|d| d.bg(theme.hover)))
                                         .when(show_tooltips && show_media_previews, |d| {
                                             d.tooltip(Tooltip::for_file_full(
                                                 file_name_tt.clone(),
@@ -1573,13 +1574,13 @@ fn render_grid_file_list(
                 .border_t_1()
                 .border_color(theme.border)
                 .text_size(px(12.0))
-                .text_color(theme.text_muted)
+                .text_color(theme.text)
+                .font_weight(FontWeight::MEDIUM)
                 .child(
                     cx.i18n()
                         .text_with_args(Message::StatusFolders, &folder_args),
                 )
                 .child(cx.i18n().text_with_args(Message::StatusFiles, &file_args))
-                .child(div().flex_1())
                 .when(!selected.is_empty(), |bar| {
                     let entries: Vec<&FileEntry> = files
                         .iter()
@@ -1617,6 +1618,7 @@ fn render_grid_file_list(
                             .child(summary),
                     )
                 })
+                .child(div().flex_1())
                 .child(view_mode_button(
                     &pane_id,
                     ViewMode::Details,

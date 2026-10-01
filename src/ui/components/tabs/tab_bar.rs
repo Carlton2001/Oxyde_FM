@@ -69,13 +69,14 @@ impl RenderOnce for TabBar {
 
         div()
             .id(self.id.clone())
+            .relative()
             .flex()
             .flex_none()
             .w_full()
             .h(px(32.0))
             .bg(theme.header)
-            .border_b_1()
-            .border_color(theme.border)
+            // Paint behind the tabs so the active surface covers the separator.
+            .child(div().absolute().bottom_0().w_full().h(px(1.0)).bg(theme.border))
             .child(h_flex().flex_none().children(self.start_children))
             .child(
                 div().relative().flex_1().h_full().child(

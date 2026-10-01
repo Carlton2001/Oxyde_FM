@@ -2397,17 +2397,51 @@ impl Render for OxydeApp {
                         div()
                             .id("sidebar-resize-handle")
                             .group("sidebar-resize-handle")
-                            .w(px(3.0))
+                            .relative()
+                            .w(px(1.0))
+                            .bg(theme.border)
                             .cursor(CursorStyle::ResizeLeftRight)
                             .h_full()
                             .flex_none()
                             .flex()
                             .justify_center()
                             .child(
-                                div()
+                                deferred(div()
+                                    .group("sidebar-resize-hit-area")
+                                    .absolute()
+                                    .left(px(-1.0))
                                     .w(px(3.0))
                                     .h_full()
-                                    .bg(theme.menu_surface)
+                                    .occlude()
+                                    .cursor(CursorStyle::ResizeLeftRight)
+                                    .child(
+                                        div()
+                                            .absolute()
+                                            .left(px(1.0))
+                                            .top_0()
+                                            .bottom_0()
+                                            .w(px(1.0))
+                                            .group_hover("sidebar-resize-hit-area", |s| {
+                                                s.bg(theme.accent.opacity(0.6))
+                                            }),
+                                    )
+                                    .on_mouse_down(MouseButton::Left, {
+                                        let h = handle.clone();
+                                        move |e, _, cx| {
+                                            cx.stop_propagation();
+                                            h.update(cx, |this, cx| {
+                                                this.drag_target = Some(DragTarget::SidebarResize);
+                                                this.grab_offset = e.position.x.as_f32() - this.sidebar_display_width();
+                                                cx.notify();
+                                            });
+                                        }
+                                    })),
+                            )
+                            .child(
+                                div()
+                                    .w(px(1.0))
+                                    .h_full()
+                                    .bg(theme.border)
                                     .group_hover("sidebar-resize-handle", |s| {
                                         s.bg(theme.accent.opacity(0.6))
                                     }),

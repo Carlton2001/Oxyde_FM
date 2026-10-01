@@ -225,6 +225,8 @@ impl OxydeApp {
                                 div()
                                     .group("pane-resize-handle")
                                     .w(px(3.0))
+                                    .mx(px(-1.0))
+                                    .bg(cx.theme().background)
                                     .flex_none()
                                     .cursor(CursorStyle::ResizeLeftRight)
                                     .h_full()
@@ -232,7 +234,7 @@ impl OxydeApp {
                                     .justify_center()
                                     .child(
                                         div()
-                                            .w(px(3.0))
+                                            .w(px(1.0))
                                             .h_full()
                                             .bg(cx.theme().border)
                                             .group_hover("pane-resize-handle", |s| s.bg(cx.theme().accent.opacity(0.6))),
@@ -243,6 +245,7 @@ impl OxydeApp {
                                         let w_copy = weights.clone();
                                         let idx = i - 1;
                                         move |e, _, cx| {
+                                            cx.stop_propagation();
                                             h.update(cx, |this, _| {
                                                 this.drag_target = Some(DragTarget::PaneResize {
                                                     split_id: s_id.clone(),
@@ -257,6 +260,8 @@ impl OxydeApp {
                             crate::ui::workspace::LayoutAxis::Vertical => div()
                                 .group("pane-resize-handle")
                                 .h(px(3.0))
+                                .my(px(-1.0))
+                                .bg(cx.theme().header)
                                 .flex_none()
                                 .cursor(CursorStyle::ResizeUpDown)
                                 .w_full()
@@ -264,7 +269,7 @@ impl OxydeApp {
                                 .items_center()
                                 .child(
                                     div()
-                                        .h(px(3.0))
+                                        .h(px(1.0))
                                         .w_full()
                                         .bg(cx.theme().border)
                                         .group_hover("pane-resize-handle", |s| s.bg(cx.theme().accent.opacity(0.6))),
@@ -275,6 +280,7 @@ impl OxydeApp {
                                     let w_copy = weights.clone();
                                     let idx = i - 1;
                                     move |e, _, cx| {
+                                        cx.stop_propagation();
                                         h.update(cx, |this, _| {
                                             this.drag_target = Some(DragTarget::PaneResize {
                                                 split_id: s_id.clone(),

@@ -38,7 +38,7 @@ pub fn render_title_bar(
         .child(
             div()
                 .text_size(px(12.0))
-                .font_weight(FontWeight::MEDIUM)
+                .font_weight(FontWeight::BOLD)
                 .text_color(theme.text)
                 .child("Oxyde"),
         );

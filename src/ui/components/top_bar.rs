@@ -581,7 +581,7 @@ pub fn render_top_bar(
                                             this.update_drag_copy_mode(cx);
                                         }
                                     });
-                                    style.bg(theme.selection_hover).text_color(theme.text_on_accent)
+                                    style.bg(theme.selection_hover).text_color(theme.text)
                                 }
                             })
                             .on_drop({
