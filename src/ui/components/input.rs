@@ -244,6 +244,10 @@ impl TextInput {
     }
 
     fn on_mouse_move(&mut self, event: &MouseMoveEvent, _: &mut Window, cx: &mut Context<Self>) {
+        if !event.dragging() {
+            self.is_selecting = false;
+            return;
+        }
         if !self.is_selecting {
             return;
         }

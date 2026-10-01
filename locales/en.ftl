@@ -192,3 +192,8 @@ unknown-item = Unknown
 menu-expand-all = Expand all
 menu-collapse-all = Collapse all
 menu-copy-path = Copy path
+
+sidebar-collapse-all = Collapse all
+sidebar-scroll-top = Scroll to top
+sidebar-collapse = Collapse sidebar
+sidebar-expand = Expand sidebar

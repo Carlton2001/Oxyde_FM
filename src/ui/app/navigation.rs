@@ -3,6 +3,25 @@ use gpui::*;
 use oxyde_lib::commands::io::list_dir;
 
 impl OxydeApp {
+    pub(crate) fn sidebar_display_width(&self) -> f32 {
+        if self.sidebar_collapsed {
+            48.0
+        } else {
+            self.sidebar_width
+        }
+    }
+
+    pub(crate) fn toggle_sidebar_panel(&mut self, cx: &mut Context<Self>) {
+        self.sidebar_collapsed = !self.sidebar_collapsed;
+        self.context_menus.clear();
+        self.save_workspace(cx);
+        cx.notify();
+    }
+
+    pub(crate) fn resize_sidebar(&mut self, width: f32) {
+        resize_sidebar_state(&mut self.sidebar_width, &mut self.sidebar_collapsed, width);
+    }
+
     pub(crate) fn expand_all_sidebar_path(&mut self, path: String, cx: &mut Context<Self>) {
         let Some(handle) = self.handle.clone() else {
             return;
@@ -364,5 +383,36 @@ impl OxydeApp {
         }
         self.state.refresh_sidebar();
         cx.notify();
+    }
+}
+
+fn resize_sidebar_state(saved_width: &mut f32, collapsed: &mut bool, requested_width: f32) {
+    if requested_width < 120.0 {
+        *collapsed = true;
+    } else {
+        *collapsed = false;
+        *saved_width = requested_width.clamp(150.0, 600.0);
+    }
+}
+
+#[cfg(test)]
+mod sidebar_tests {
+    use super::resize_sidebar_state;
+
+    #[test]
+    fn dragging_beyond_minimum_collapses_and_preserves_restore_width() {
+        let mut width = 260.0;
+        let mut collapsed = false;
+        resize_sidebar_state(&mut width, &mut collapsed, 140.0);
+        assert_eq!(width, 150.0);
+        assert!(!collapsed);
+        resize_sidebar_state(&mut width, &mut collapsed, 119.0);
+        assert!(collapsed);
+        assert_eq!(width, 150.0);
+        resize_sidebar_state(&mut width, &mut collapsed, 280.0);
+        assert!(!collapsed);
+        assert_eq!(width, 280.0);
+        resize_sidebar_state(&mut width, &mut collapsed, 900.0);
+        assert_eq!(width, 600.0);
     }
 }

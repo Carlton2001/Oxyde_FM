@@ -13,6 +13,8 @@ pub struct SavedWorkspace {
     pub active_pane_id: String,
     #[serde(default = "default_sidebar_width")]
     pub sidebar_width: f32,
+    #[serde(default)]
+    pub sidebar_collapsed: bool,
 }
 
 fn default_sidebar_width() -> f32 {
@@ -763,6 +765,7 @@ impl WorkspaceState {
 
     pub fn saved_snapshot(&self, sidebar_width: f32) -> SavedWorkspace {
         SavedWorkspace {
+            sidebar_collapsed: false,
             layout: SavedLayoutNode::from_layout(&self.layout),
             active_pane_id: self.active_pane_id.clone(),
             sidebar_width: if sidebar_width.is_finite() {
@@ -1344,6 +1347,18 @@ mod tests {
         }
 
         let value = serde_json::to_value(state.saved_snapshot(320.0)).unwrap();
+        let mut legacy_value = value.clone();
+        legacy_value
+            .as_object_mut()
+            .unwrap()
+            .remove("sidebar_collapsed");
+        let legacy: SavedWorkspace = serde_json::from_value(legacy_value).unwrap();
+        assert!(!legacy.sidebar_collapsed);
+        let mut collapsed_value = value.clone();
+        collapsed_value["sidebar_collapsed"] = serde_json::json!(true);
+        let collapsed: SavedWorkspace = serde_json::from_value(collapsed_value).unwrap();
+        assert!(collapsed.sidebar_collapsed);
+        assert_eq!(collapsed.sidebar_width, 320.0);
         let snapshot: SavedWorkspace = serde_json::from_value(value).unwrap();
         let (restored, sidebar_width) = WorkspaceState::from_saved_snapshot(snapshot).unwrap();
 

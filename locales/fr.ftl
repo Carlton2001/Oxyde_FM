@@ -199,3 +199,8 @@ unknown-item = Inconnu
 menu-expand-all = Développer tout
 menu-collapse-all = Réduire tout
 menu-copy-path = Copier le chemin
+
+sidebar-collapse-all = Réduire tout
+sidebar-scroll-top = Retourner en haut
+sidebar-collapse = Réduire le panneau
+sidebar-expand = Agrandir le panneau

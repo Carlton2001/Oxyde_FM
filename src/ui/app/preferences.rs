@@ -9,7 +9,8 @@ impl OxydeApp {
         if self.preferences_load_failed {
             return;
         }
-        let snapshot = self.state.saved_snapshot(self.sidebar_width);
+        let mut snapshot = self.state.saved_snapshot(self.sidebar_width);
+        snapshot.sidebar_collapsed = self.sidebar_collapsed;
         match serde_json::to_value(snapshot) {
             Ok(snapshot) => {
                 self.config.extra.insert(

@@ -103,7 +103,7 @@ impl OperationsPanelView {
         cx.notify();
     }
 
-    fn finish_drag(&mut self, cx: &mut Context<Self>) {
+    pub(crate) fn finish_drag(&mut self, cx: &mut Context<Self>) {
         if self.drag_offset.take().is_none() {
             return;
         }
@@ -243,6 +243,13 @@ pub fn render_operations_panel(
         .on_mouse_move({
             let panel_handle = panel_handle.clone();
             move |event, window, cx| {
+                if !event.dragging() {
+                    panel_handle.update(cx, |panel, cx| panel.finish_drag(cx));
+                    if let Some(app) = panel_handle.read(cx).app.upgrade() {
+                        app.update(cx, |app, cx| app.finish_pointer_drag(cx));
+                    }
+                    return;
+                }
                 let pointer = event.position;
                 let viewport = window.viewport_size();
                 panel_handle.update(cx, |this, cx| {

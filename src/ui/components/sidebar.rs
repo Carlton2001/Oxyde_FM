@@ -343,11 +343,253 @@ fn sidebar_tree_actions(
 
 // ── Main render ──────────────────────────────────────────────────────────────
 
+fn sidebar_button(
+    id: String,
+    label: SharedString,
+    icon: Option<&'static str>,
+    text: Option<String>,
+    theme: OxydeTheme,
+    enabled: bool,
+    action: impl Fn(&MouseDownEvent, &mut Window, &mut App) + 'static,
+) -> Stateful<Div> {
+    div()
+        .id(id)
+        .size(px(32.0))
+        .flex_none()
+        .flex()
+        .items_center()
+        .justify_center()
+        .rounded_md()
+        .text_color(if enabled {
+            theme.text_muted
+        } else {
+            theme.icon_disabled
+        })
+        .when(enabled, |d| d.hover(move |s| s.bg(theme.hover)))
+        .tooltip(Tooltip::text(label))
+        .when(enabled, |d| d.on_mouse_down(MouseButton::Left, action))
+        .when_some(icon, |d, path| {
+            d.child(svg().path(path).size(px(18.0)).text_color(if enabled {
+                theme.text_muted
+            } else {
+                theme.icon_disabled
+            }))
+        })
+        .when_some(text, |d, text| d.child(text))
+}
+
+fn sidebar_toolbar(view: &OxydeApp, handle: Entity<OxydeApp>, cx: &mut Context<OxydeApp>) -> Div {
+    let theme = *cx.theme();
+    let mut toolbar = div()
+        .h(px(40.0))
+        .flex_none()
+        .flex()
+        .items_center()
+        .px_2()
+        .gap_1();
+    if !view.sidebar_collapsed {
+        let h = handle.clone();
+        toolbar = toolbar.child(sidebar_button(
+            "sidebar-collapse-all".into(),
+            cx.i18n().text(Message::SidebarCollapseAll),
+            Some("icons/chevrons-up.svg"),
+            None,
+            theme,
+            view.state
+                .drives
+                .iter()
+                .any(|drive| view.state.expanded_paths.contains(&drive.path)),
+            move |_, _, cx| {
+                h.update(cx, |this, cx| {
+                    this.state.expanded_paths.clear();
+                    this.state.refresh_sidebar();
+                    this.reconcile_watchers();
+                    cx.notify();
+                });
+            },
+        ));
+        let h = handle.clone();
+        toolbar = toolbar
+            .child(sidebar_button(
+                "sidebar-top".into(),
+                cx.i18n().text(Message::SidebarScrollTop),
+                Some("icons/arrow-up-to-line.svg"),
+                None,
+                theme,
+                view.sidebar_scroll.0.borrow().base_handle.offset().y < px(0.0),
+                move |_, _, cx| {
+                    h.update(cx, |this, cx| {
+                        let mut scroll = this.sidebar_scroll.0.borrow_mut();
+                        // Reset the actual offset, even when the first row is already visible.
+                        scroll.deferred_scroll_to_item = None;
+                        let offset = scroll.base_handle.offset();
+                        scroll.base_handle.set_offset(point(offset.x, px(0.0)));
+                        cx.notify();
+                    });
+                },
+            ))
+            .child(div().flex_1());
+    }
+    toolbar.child(sidebar_button(
+        "sidebar-toggle".into(),
+        cx.i18n().text(if view.sidebar_collapsed {
+            Message::SidebarExpand
+        } else {
+            Message::SidebarCollapse
+        }),
+        Some(if view.sidebar_collapsed {
+            "icons/panel-left.svg"
+        } else {
+            "icons/panel-left-close.svg"
+        }),
+        None,
+        theme,
+        true,
+        move |_, _, cx| {
+            handle.update(cx, |this, cx| this.toggle_sidebar_panel(cx));
+        },
+    ))
+}
+
+fn render_sidebar_rail(
+    view: &OxydeApp,
+    handle: Entity<OxydeApp>,
+    cx: &mut Context<OxydeApp>,
+) -> Div {
+    let theme = *cx.theme();
+    let mut rail = div()
+        .size_full()
+        .flex()
+        .flex_col()
+        .bg(theme.sidebar)
+        .border_r_1()
+        .border_color(theme.border)
+        .child(sidebar_toolbar(view, handle.clone(), cx));
+    let h = handle.clone();
+    let pinned: Vec<_> = view
+        .state
+        .pinned_items
+        .iter()
+        .filter(|item| view.show_hidden || !item.name.starts_with('.'))
+        .cloned()
+        .collect();
+    rail = rail.child(div().px_2().py_2().child(sidebar_button(
+        "sidebar-pinned".into(),
+        cx.i18n().text(Message::SidebarQuickAccess),
+        Some("icons/pin.svg"),
+        None,
+        theme,
+        true,
+        move |e, _, cx| {
+            let items = pinned
+                .iter()
+                .map(|item| {
+                    let h = h.clone();
+                    let path = item.path.clone();
+                    DropdownItem {
+                        label: pinned_display_name(item, cx.i18n()),
+                        icon: Some(IconName::Pin),
+                        stay_open: false,
+                        has_submenu: false,
+                        is_dimmed: false,
+                        on_hover: None,
+                        on_click: std::rc::Rc::new(move |_, cx| {
+                            h.update(cx, |this, cx| {
+                                this.context_menus.clear();
+                                let id = this.state.active_pane_id.clone();
+                                this.navigate_to(&id, path.clone(), cx);
+                            });
+                        }),
+                    }
+                })
+                .collect();
+            h.update(cx, |this, cx| {
+                if !this.context_menus.is_empty() {
+                    this.context_menus.clear();
+                } else {
+                    this.context_menus.push(ContextMenuInstance {
+                        position: point(px(48.0), e.position.y),
+                        content: ContextMenuContent::Items(items, None),
+                        scroll_handle: UniformListScrollHandle::new(),
+                        width: px(0.0),
+                        bottom_padding: 3.0,
+                        open_left: false,
+                        hovered_item: None,
+                        native_request_id: None,
+                    });
+                }
+                cx.notify();
+            });
+        },
+    )));
+    let mut entries = div()
+        .id("sidebar-rail-scroll")
+        .flex_1()
+        .min_h_0()
+        .overflow_y_scroll()
+        .flex()
+        .flex_col()
+        .items_center()
+        .gap_2();
+    for item in &view.state.sidebar_items {
+        let (path, label, icon, text) = match item {
+            SidebarItem::Drive { drive, .. } => (
+                drive.path.clone(),
+                format!("{} ({})", drive.label, drive.path),
+                None,
+                Some(drive.path.chars().next().unwrap_or('/').to_string()),
+            ),
+            SidebarItem::Pinned { item }
+                if item.path == "__network_vincinity__" || item.path == "trash://" =>
+            {
+                (
+                    item.path.clone(),
+                    pinned_display_name(item, cx.i18n()),
+                    Some(if item.path == "trash://" {
+                        "icons/trash-sidebar.svg"
+                    } else {
+                        "icons/globe.svg"
+                    }),
+                    None,
+                )
+            }
+            _ => continue,
+        };
+        let h = handle.clone();
+        let selected = view
+            .state
+            .layout
+            .find_pane(&view.state.active_pane_id)
+            .is_some_and(|pane| super::paths_match(&pane.active_tab().path, &path));
+        entries = entries.child(
+            sidebar_button(
+                format!("rail-{path}"),
+                label.into(),
+                icon,
+                text,
+                theme,
+                true,
+                move |_, _, cx| {
+                    h.update(cx, |this, cx| {
+                        this.context_menus.clear();
+                        let id = this.state.active_pane_id.clone();
+                        this.navigate_to(&id, path.clone(), cx);
+                    });
+                },
+            )
+            .when(selected, |d| d.bg(theme.selected)),
+        );
+    }
+    rail.child(entries)
+}
 pub fn render_sidebar(
     view: &OxydeApp,
     handle: Entity<OxydeApp>,
     _cx: &mut Context<OxydeApp>,
 ) -> impl IntoElement {
+    if view.sidebar_collapsed {
+        return render_sidebar_rail(view, handle, _cx);
+    }
     let show_hidden = view.show_hidden;
     let show_system = view.show_system;
     // Paths that are genuinely in Quick Access — only these get "Désépingler"
@@ -411,7 +653,7 @@ pub fn render_sidebar(
 
     let viewport_w = view.sidebar_width;
     let content_w = calculated_content_w.max(viewport_w);
-    let viewport_h = (view.list_height - 36.0).max(1.0);
+    let viewport_h = (view.list_height - 76.0).max(1.0);
     let content_h = (sidebar_items.len() as f32 * SIDEBAR_ROW_H).max(1.0);
 
     // Highlight only the folder currently open in the active pane's active tab.
@@ -426,6 +668,7 @@ pub fn render_sidebar(
         .w_full()
         .h_full()
         .bg(theme.sidebar)
+        .on_scroll_wheel(_cx.listener(|_, _, _, cx| cx.notify()))
         .border_r_1()
         .border_color(theme.border)
         // NO horizontal padding — rows must span full width
@@ -434,11 +677,11 @@ pub fn render_sidebar(
         .child(
             div()
                 .size_full()
-                .child(div().h(px(12.0))) // small top gap
+                .child(sidebar_toolbar(view, handle.clone(), _cx))
                 .child(
                     div()
                         .absolute()
-                        .top(px(12.0))
+                        .top(px(40.0))
                         .bottom(px(36.0))
                         .left(view.sidebar_scroll_h.offset().x)
                         .w(px(content_w))
@@ -888,24 +1131,30 @@ pub fn render_sidebar(
             .offset()
             .y
             .as_f32();
-        render_scrollbar(
-            theme,
-            handle.clone(),
-            ScrollbarAxis::Vertical,
-            viewport_h,
-            content_h,
-            offset,
-            matches!(view.drag_target, Some(DragTarget::SidebarV { .. })),
-            "sidebar-v".to_string(),
-            None,
-            |this, track_id, v_h, c_h, _| {
-                this.drag_target = Some(DragTarget::SidebarV {
-                    viewport_h: v_h,
-                    content_h: c_h,
-                    track_id,
-                });
-            },
-        )
+        div()
+            .absolute()
+            .top(px(40.0))
+            .bottom(px(36.0))
+            .right_0()
+            .w(px(12.0))
+            .child(render_scrollbar(
+                theme,
+                handle.clone(),
+                ScrollbarAxis::Vertical,
+                viewport_h,
+                content_h,
+                offset,
+                matches!(view.drag_target, Some(DragTarget::SidebarV { .. })),
+                "sidebar-v".to_string(),
+                None,
+                |this, track_id, v_h, c_h, _| {
+                    this.drag_target = Some(DragTarget::SidebarV {
+                        viewport_h: v_h,
+                        content_h: c_h,
+                        track_id,
+                    });
+                },
+            ))
     });
 
     // Horizontal scrollbar
@@ -948,7 +1197,7 @@ pub fn render_sidebar(
                 move |e, _, cx| {
                     h.update(cx, |this, _| {
                         this.drag_target = Some(DragTarget::SidebarResize);
-                        this.grab_offset = e.position.x.as_f32() - this.sidebar_width;
+                        this.grab_offset = e.position.x.as_f32() - this.sidebar_display_width();
                     });
                 }
             }),

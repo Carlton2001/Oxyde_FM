@@ -375,6 +375,7 @@ pub struct OxydeApp {
     pub highlight_split_pane: Option<String>,
     pub grab_offset: f32,
     pub sidebar_width: f32,
+    pub(crate) sidebar_collapsed: bool,
     pub sidebar_content_width: f32,
     pub sidebar_selected_path: Option<String>,
     pub list_height: f32,
@@ -779,6 +780,12 @@ impl OxydeApp {
             highlight_split_pane: None,
             grab_offset: 0.0,
             sidebar_width,
+            sidebar_collapsed: config
+                .extra
+                .get(crate::ui::workspace::WORKSPACE_CONFIG_KEY)
+                .and_then(|value| value.get("sidebar_collapsed"))
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(false),
             sidebar_content_width: 260.0,
             sidebar_selected_path: None,
             list_height: 800.0,
@@ -1467,6 +1474,38 @@ impl OxydeApp {
         .detach();
     }
 
+    /// End pointer interactions, including releases missed outside the window.
+    pub(crate) fn finish_pointer_drag(&mut self, cx: &mut Context<Self>) {
+        let mut needs_notify = false;
+        let workspace_layout_changed = matches!(
+            self.drag_target.as_ref(),
+            Some(DragTarget::PaneResize { .. } | DragTarget::SidebarResize)
+        );
+        if self.drag_target.is_some() {
+            self.drag_target = None;
+            needs_notify = true;
+        }
+        if self.dragging_tab.is_some() {
+            self.dragging_tab = None;
+            needs_notify = true;
+        }
+        if self.drop_target_idx.is_some() || self.drop_target_pane.is_some() {
+            self.drop_target_idx = None;
+            self.drop_target_pane = None;
+            needs_notify = true;
+        }
+        if self.highlight_split_pane.is_some() {
+            self.highlight_split_pane = None;
+            needs_notify = true;
+        }
+        if workspace_layout_changed {
+            self.save_workspace(cx);
+        }
+        if needs_notify {
+            cx.notify();
+        }
+    }
+
     /// Recompute `drag_copy_mode` from modifier override and drive-based default.
     /// Notifies if the value changed.
     pub fn update_drag_copy_mode(&mut self, cx: &mut Context<Self>) {
@@ -1965,7 +2004,7 @@ impl Render for OxydeApp {
         let win_h = size.height.as_f32();
 
         use crate::ui::components::title_bar::TITLEBAR_H;
-        self.list_width = (win_w - self.sidebar_width - 3.0).max(1.0);
+        self.list_width = (win_w - self.sidebar_display_width() - 3.0).max(1.0);
         self.list_height = (win_h - TITLEBAR_H).max(1.0);
 
         if let Some(DragTarget::SelectionRectangle {
@@ -2022,11 +2061,29 @@ impl Render for OxydeApp {
         root.text_style().font_features = Some(TNUM.clone());
 
         root = root
+            .on_mouse_exit({
+                let h = handle.clone();
+                move |_, _, cx| {
+                    if let Some(panel) = h.read(cx).operations_panel_view.clone() {
+                        panel.update(cx, |panel, cx| panel.finish_drag(cx));
+                    }
+                    h.update(cx, |this, cx| this.finish_pointer_drag(cx));
+                }
+            })
             .on_mouse_move({
                 let h = handle.clone();
                 move |e, window, cx| {
+                    if !e.dragging() {
+                        if let Some(panel) = h.read(cx).operations_panel_view.clone() {
+                            panel.update(cx, |panel, cx| panel.finish_drag(cx));
+                        }
+                    }
                     h.update(cx, |this, cx| {
                         this.mouse_pos = e.position;
+                        if !e.dragging() {
+                            this.finish_pointer_drag(cx);
+                            return;
+                        }
                         if let Some(target) = this.drag_target.clone() {
                             let pos = e.position;
                             match target {
@@ -2078,8 +2135,7 @@ impl Render for OxydeApp {
                                     }
                                 }
                                 DragTarget::SidebarResize => {
-                                    this.sidebar_width =
-                                        (pos.x.as_f32() - this.grab_offset).clamp(150.0, 600.0);
+                                    this.resize_sidebar(pos.x.as_f32() - this.grab_offset);
                                     cx.notify();
                                 }
                                 DragTarget::FileListV {
@@ -2295,34 +2351,7 @@ impl Render for OxydeApp {
                 let h = handle.clone();
                 move |_, _window, cx| {
                     h.update(cx, |this, cx| {
-                        let mut needs_notify = false;
-                        let workspace_layout_changed = matches!(
-                            this.drag_target.as_ref(),
-                            Some(DragTarget::PaneResize { .. } | DragTarget::SidebarResize)
-                        );
-                        if this.drag_target.is_some() {
-                            this.drag_target = None;
-                            needs_notify = true;
-                        }
-                        if this.dragging_tab.is_some() {
-                            this.dragging_tab = None;
-                            needs_notify = true;
-                        }
-                        if this.drop_target_idx.is_some() || this.drop_target_pane.is_some() {
-                            this.drop_target_idx = None;
-                            this.drop_target_pane = None;
-                            needs_notify = true;
-                        }
-                        if this.highlight_split_pane.is_some() {
-                            this.highlight_split_pane = None;
-                            needs_notify = true;
-                        }
-                        if workspace_layout_changed {
-                            this.save_workspace(cx);
-                        }
-                        if needs_notify {
-                            cx.notify();
-                        }
+                        this.finish_pointer_drag(cx);
                     });
                 }
             })
@@ -2359,7 +2388,7 @@ impl Render for OxydeApp {
                     .overflow_hidden()
                     .child(
                         div()
-                            .w(px(self.sidebar_width))
+                            .w(px(self.sidebar_display_width()))
                             .h_full()
                             .flex_none()
                             .child(render_sidebar(self, handle.clone(), cx)),
@@ -2379,7 +2408,9 @@ impl Render for OxydeApp {
                                     .w(px(3.0))
                                     .h_full()
                                     .bg(theme.menu_surface)
-                                    .group_hover("sidebar-resize-handle", |s| s.bg(theme.accent.opacity(0.6))),
+                                    .group_hover("sidebar-resize-handle", |s| {
+                                        s.bg(theme.accent.opacity(0.6))
+                                    }),
                             )
                             .on_mouse_down(MouseButton::Left, {
                                 let h = handle.clone();
@@ -2387,16 +2418,19 @@ impl Render for OxydeApp {
                                     h.update(cx, |this, _| {
                                         this.drag_target = Some(DragTarget::SidebarResize);
                                         this.grab_offset =
-                                            e.position.x.as_f32() - this.sidebar_width;
+                                            e.position.x.as_f32() - this.sidebar_display_width();
                                     });
                                 }
                             }),
                     )
-                    .child(div().flex_1().min_w_0().h_full().overflow_hidden().child(self.render_layout_node(
-                        &layout_tree,
-                        handle.clone(),
-                        cx,
-                    )))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .h_full()
+                            .overflow_hidden()
+                            .child(self.render_layout_node(&layout_tree, handle.clone(), cx)),
+                    )
             });
 
         // Keep modal content below transient context menus in the render tree:
