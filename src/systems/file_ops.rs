@@ -671,7 +671,7 @@ impl FileOperationManager {
         let mut total_bytes = 0;
         let mut total_files = 0;
 
-        // Stage moves like copies and remove sources only after all destinations publish.
+        // Build the conflict-aware plan before changing any source.
         if sources_to_copy.is_empty() {
             return Ok(());
         }
@@ -823,7 +823,6 @@ impl FileOperationManager {
             platform().set_thread_priority(ThreadPriority::Background);
         }
 
-        let num_tasks = files_to_process.len();
         for directory in &directories_to_create {
             if cancel_flag.load(Ordering::Relaxed) {
                 break;
@@ -835,6 +834,58 @@ impl FileOperationManager {
                 op.lock().unwrap().created_dirs.push(directory.clone());
             }
         }
+        // A rename preserves the file itself and does not read its contents.
+        // Let the filesystem determine volume boundaries (including mount points),
+        // rather than trusting the UI's disk estimate. Only cross-volume moves copy.
+        if is_move {
+            let mut remaining = Vec::new();
+            for (source, destination, replace_existing) in files_to_process {
+                Self::archive_checkpoint(op)?;
+                if replace_existing {
+                    let metadata = std::fs::symlink_metadata(&destination)
+                        .map_err(|error| format!("Cannot inspect {:?}: {error}", destination))?;
+                    if !metadata.file_type().is_file() {
+                        return Err(format!(
+                            "Destination is not a regular file: {:?}",
+                            destination
+                        ));
+                    }
+                } else if destination.exists() {
+                    return Err(format!(
+                        "Destination appeared during move: {:?}",
+                        destination
+                    ));
+                }
+                let size = std::fs::metadata(&source)
+                    .map_err(|error| format!("Cannot inspect {:?}: {error}", source))?
+                    .len();
+                match std::fs::rename(&source, &destination) {
+                    Ok(()) => {
+                        let mut locked = op.lock().unwrap();
+                        locked.current_file = Some(source.to_string_lossy().into_owned());
+                        if replace_existing {
+                            locked.overwritten_files.push(destination.clone());
+                        }
+                        locked.moved_files.push((source, destination));
+                        processed_bytes_atomic.fetch_add(size, Ordering::Relaxed);
+                        processed_files_atomic.fetch_add(1, Ordering::Relaxed);
+                        locked.processed_bytes = processed_bytes_atomic.load(Ordering::Relaxed);
+                        locked.processed_files = processed_files_atomic.load(Ordering::Relaxed);
+                    }
+                    Err(error) if error.kind() == std::io::ErrorKind::CrossesDevices => {
+                        remaining.push((source, destination, replace_existing));
+                    }
+                    Err(error) => {
+                        return Err(format!(
+                            "Cannot move {:?} to {:?}: {error}",
+                            source, destination
+                        ));
+                    }
+                }
+            }
+            files_to_process = remaining;
+        }
+        let num_tasks = files_to_process.len();
         let files_to_process_arc = Arc::new(files_to_process);
         let current_index = Arc::new(AtomicUsize::new(0));
 
@@ -843,7 +894,11 @@ impl FileOperationManager {
         let core_count = std::thread::available_parallelism()
             .map(|n| n.get())
             .unwrap_or(4);
-        let concurrency = Self::copy_worker_count(num_tasks, total_bytes, core_count);
+        let concurrency = if num_tasks == 0 {
+            0
+        } else {
+            Self::copy_worker_count(num_tasks, total_bytes, core_count)
+        };
 
         let mut handles = Vec::with_capacity(concurrency);
 
@@ -2202,7 +2257,7 @@ mod tests {
     }
 
     #[test]
-    fn move_publishes_complete_file_then_removes_source() {
+    fn same_volume_move_preserves_file_identity_without_copying() {
         let temp = tempfile::tempdir().unwrap();
         let source_dir = temp.path().join("source");
         let target_dir = temp.path().join("target");
@@ -2211,9 +2266,12 @@ mod tests {
         let source = source_dir.join("file.bin");
         let contents = vec![0x5a; 2 * 1024 * 1024];
         std::fs::write(&source, &contents).unwrap();
+        let alias = temp.path().join("alias.bin");
+        std::fs::hard_link(&source, &alias).unwrap();
+        let op = operation();
 
         FileOperationManager::perform_copy(
-            &operation(),
+            &op,
             vec![source.clone()],
             Some(target_dir.clone()),
             true,
@@ -2226,6 +2284,12 @@ mod tests {
             std::fs::read(target_dir.join("file.bin")).unwrap(),
             contents
         );
+        std::fs::write(target_dir.join("file.bin"), b"changed").unwrap();
+        assert_eq!(std::fs::read(alias).unwrap(), b"changed");
+        let locked = op.lock().unwrap();
+        assert_eq!(locked.moved_files.len(), 1);
+        assert!(locked.copied_files.is_empty());
+        assert!(locked.copied_file_hashes.is_empty());
     }
 
     #[test]
