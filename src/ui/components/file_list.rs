@@ -12,6 +12,8 @@ use gpui::prelude::*;
 use gpui::*;
 use oxyde_lib::models::FileEntry;
 
+use crate::ui::components::icons::render_file_icon;
+
 struct GridThumbnailAsset;
 
 impl Asset for GridThumbnailAsset {
@@ -139,6 +141,7 @@ pub fn render_file_list(
     let is_active_pane = view.state.active_pane_id == pane_id;
     let is_dragging_v = matches!(view.drag_target, Some(DragTarget::FileListV { ref pane_id, .. }) if pane_id == &p_id_cap);
     let show_tooltips = view.context_menus.is_empty();
+    let use_system_icons = cfg!(target_os = "windows") && view.use_system_icons();
     let show_media_previews = view.show_media_previews;
 
     let selected_paths = active_tab.selected_paths.clone();
@@ -473,12 +476,7 @@ pub fn render_file_list(
                                                                 .items_center()
                                                                 .child({
                                                                     let icon_type = crate::ui::components::icons::get_icon_type(&file_name, is_dir, Some(&path_str), file.is_symlink, file.is_junction);
-                                                                    svg()
-                                                                        .path(icon_type.path())
-                                                                        .size_4()
-                                                                        .flex_none()
-                                                                        .mr_2()
-                                                                        .text_color(if is_dir { theme.accent } else { theme.text_muted })
+                                                                    div().flex_none().mr_2().child(render_file_icon(path_str.clone(), icon_type, rems(1.0), if is_dir { theme.accent } else { theme.text_muted }, use_system_icons, false))
                                                                 })
                                                                 .child(match editing_view {
                                                                     Some(editing_view) => {
@@ -975,6 +973,7 @@ fn render_grid_file_list(
     let editing_view = view.editing_view.clone();
     let rename_error = view.rename_error.map(|message| cx.i18n().text(message));
     let show_tooltips = view.context_menus.is_empty();
+    let use_system_icons = cfg!(target_os = "windows") && view.use_system_icons();
     let show_media_previews = view.show_media_previews;
     let show_grid_thumbnails = view.show_grid_thumbnails;
     let folder_subdirectory_flags = view.folder_has_subdirs.clone();
@@ -1267,11 +1266,9 @@ fn render_grid_file_list(
                                                             && !is_dir
                                                             && icon == crate::ui::components::icons::IconType::FileImage
                                                         {
-                                                            render_grid_thumbnail(path.clone(), icon, theme).into_any_element()
+                                                            render_grid_thumbnail(path.clone(), icon, theme, use_system_icons).into_any_element()
                                                         } else {
-                                                            svg().path(icon.path()).size(rems(4.0)).text_color(
-                                                                if is_dir { theme.accent } else { theme.text_muted },
-                                                            ).into_any_element()
+                                                            render_file_icon(path.clone(), icon, rems(4.0), if is_dir { theme.accent } else { theme.text_muted }, use_system_icons, true)
                                                         }),
                                                 )
                                                 .when(has_subdirectories, |row| {
@@ -1651,7 +1648,9 @@ fn render_grid_thumbnail(
     path: String,
     fallback_icon: crate::ui::components::icons::IconType,
     theme: OxydeTheme,
+    system: bool,
 ) -> impl IntoElement {
+    let fallback_path = path.clone();
     let source: SharedString = path.clone().into();
     img(move |window: &mut Window, cx: &mut App| {
         window.use_asset::<GridThumbnailAsset>(&source, cx)
@@ -1660,11 +1659,7 @@ fn render_grid_thumbnail(
     .size(rems(5.0))
     .object_fit(ObjectFit::Contain)
     .with_fallback(move || {
-        svg()
-            .path(fallback_icon.path())
-            .size(rems(4.0))
-            .text_color(theme.text_muted)
-            .into_any_element()
+        render_file_icon(fallback_path.clone(), fallback_icon, rems(4.0), theme.text_muted, system, true)
     })
 }
 

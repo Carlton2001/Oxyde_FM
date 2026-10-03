@@ -33,7 +33,13 @@ pub fn purge_icon_cache() {
     cache.shrink_to_fit();
 }
 
+fn shell_icon_path(path: &str) -> String {
+    path.replace('/', "\\")
+}
+
 pub fn get_file_icon(path: String, size: String) -> Result<Vec<u8>, CommandError> {
+    // Breadcrumbs use forward slashes; Shell APIs require Windows separators.
+    let path = shell_icon_path(&path);
     let cache_dir = dirs::cache_dir().map(|p| p.join("oxyde").join("icons"));
 
     // Virtual path logic (copying the folder "C:\Windows" spirit)
@@ -46,8 +52,8 @@ pub fn get_file_icon(path: String, size: String) -> Result<Vec<u8>, CommandError
     };
 
     // Cache key is based on the input path to be 100% stable
-    // We sanitize it for the filename
-    let safe_id = path.replace(|c: char| !c.is_alphanumeric(), "_");
+    // Hash the exact path to avoid collisions and overly long cache filenames.
+    let safe_id = blake3::hash(path.as_bytes()).to_hex().to_string();
     let cache_key = format!("{}_{}", safe_id, size);
 
     extract_icon_png(&real_path, &size, use_attributes, cache_dir, cache_key)
@@ -61,6 +67,13 @@ pub fn extract_icon_png(
     cache_dir: Option<PathBuf>,
     cache_key: String,
 ) -> Result<Vec<u8>, String> {
+    // Check caches before calling the shell (including for network paths).
+    if let Some(data) = ICON_CACHE.lock().unwrap().get(&cache_key).cloned() { return Ok(data); }
+    if let Some(dir) = &cache_dir {
+        if let Ok(data) = fs::read(dir.join(format!("{}.png", cache_key))) {
+            if image::load_from_memory(&data).is_ok() { return Ok(data); }
+        }
+    }
     let wide_path: Vec<u16> = std::ffi::OsStr::new(path)
         .encode_wide()
         .chain(std::iter::once(0))
@@ -81,7 +94,7 @@ pub fn extract_icon_png(
     }
 
     unsafe {
-        SHGetFileInfoW(
+        let result = SHGetFileInfoW(
             PCWSTR(wide_path.as_ptr()),
             attributes,
             Some(&mut shfileinfo),
@@ -89,29 +102,8 @@ pub fn extract_icon_png(
             flags,
         );
 
+        if result == 0 { return Err("Shell icon lookup failed".into()); }
         let icon_index = shfileinfo.iIcon;
-
-        // We don't check for 0 here anymore as SHGFI_USEFILEATTRIBUTES can be tricky
-        // but SHGetFileInfoW is robust enough.
-
-        {
-            let cache = ICON_CACHE.lock().unwrap();
-            if let Some(data) = cache.get(&cache_key) {
-                return Ok(data.clone());
-            }
-        }
-
-        // Try to load from disk cache
-        if let Some(ref dir) = cache_dir {
-            let file_path = dir.join(format!("{}.png", cache_key));
-            if file_path.exists() {
-                if let Ok(data) = fs::read(file_path) {
-                    let mut cache = ICON_CACHE.lock().unwrap();
-                    cache.insert(cache_key, data.clone());
-                    return Ok(data);
-                }
-            }
-        }
 
         // Try to get high quality icon (JUMBO = 256, EXTRALARGE = 48)
         let list_id = if size == "small" {
@@ -136,10 +128,10 @@ pub fn extract_icon_png(
                 };
             SHGetFileInfoW(
                 PCWSTR(wide_path.as_ptr()),
-                windows::Win32::Storage::FileSystem::FILE_FLAGS_AND_ATTRIBUTES(0),
+                attributes,
                 Some(&mut shfileinfo_fallback),
                 std::mem::size_of::<SHFILEINFOW>() as u32,
-                fallback_flags,
+                fallback_flags | if use_attributes { windows::Win32::UI::Shell::SHGFI_USEFILEATTRIBUTES } else { windows::Win32::UI::Shell::SHGFI_FLAGS(0) },
             );
             hicon = shfileinfo_fallback.hIcon;
         }
@@ -401,5 +393,17 @@ fn icon_to_bitmap(hicon: HICON, target_size: i32) -> Result<RgbaImage, String> {
             target_size as u32,
             image::imageops::FilterType::Lanczos3,
         ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::shell_icon_path;
+
+    #[test]
+    fn breadcrumb_and_tree_paths_resolve_to_the_same_shell_path() {
+        assert_eq!(shell_icon_path("C:/Users/Documents"), shell_icon_path(r"C:\Users\Documents"));
+        assert_eq!(shell_icon_path("//server/share/folder"), r"\\server\share\folder");
+        assert_eq!(shell_icon_path("C:/"), r"C:\");
     }
 }

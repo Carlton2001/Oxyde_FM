@@ -10,6 +10,21 @@ impl WindowsPlatform {
 }
 
 impl Platform for WindowsPlatform {
+    fn file_icon(&self, path: String, large: bool) -> Result<image::RgbaImage, String> {
+        use windows::Win32::System::Com::{CoInitializeEx, CoUninitialize, COINIT_MULTITHREADED};
+        let initialized = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED).is_ok() };
+        let result = super::icons::get_file_icon(
+            path,
+            if large { "large" } else { "small" }.into(),
+        ).map_err(|error| error.to_string()).and_then(|bytes| {
+            image::load_from_memory(&bytes)
+                .map(|image| image.to_rgba8())
+                .map_err(|error| error.to_string())
+        });
+        if initialized { unsafe { CoUninitialize(); } }
+        result
+    }
+
     fn set_hidden_attribute(&self, path: &std::path::Path, hidden: bool) -> Result<(), String> {
         use std::os::windows::ffi::OsStrExt;
         use windows::core::PCWSTR;

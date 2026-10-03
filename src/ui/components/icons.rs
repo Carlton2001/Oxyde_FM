@@ -386,3 +386,75 @@ pub fn get_preview_type(name: &str) -> PreviewType {
 
     PreviewType::None
 }
+
+use gpui::prelude::*;
+use gpui::*;
+
+struct SystemIconAsset;
+impl Asset for SystemIconAsset {
+    type Source = (SharedString, bool);
+    type Output = Result<std::sync::Arc<RenderImage>, ImageCacheError>;
+    fn load(
+        source: Self::Source,
+        cx: &mut App,
+    ) -> impl std::future::Future<Output = Self::Output> + Send + 'static {
+        let task = cx.background_executor().spawn(async move {
+            oxyde_lib::platform::platform()
+                .file_icon(source.0.to_string(), source.1)
+                .map(|mut image| {
+                    rgba_to_bgra(&mut image);
+                    image
+                })
+                .map_err(|e| ImageCacheError::Asset(e.into()))
+        });
+        async move {
+            Ok(std::sync::Arc::new(RenderImage::new(vec![
+                image::Frame::new(task.await?),
+            ])))
+        }
+    }
+}
+pub(crate) fn render_file_icon(
+    path: String,
+    icon: IconType,
+    size: Rems,
+    color: Hsla,
+    system: bool,
+    large: bool,
+) -> AnyElement {
+    let fallback = move || {
+        svg()
+            .path(icon.path())
+            .size(size)
+            .text_color(color)
+            .into_any_element()
+    };
+    if !system || path.starts_with("trash:") || path == "__network_vincinity__" {
+        return fallback();
+    }
+    let source = (SharedString::from(path), large);
+    img(move |window: &mut Window, cx: &mut App| window.use_asset::<SystemIconAsset>(&source, cx))
+        .size(size)
+        .object_fit(ObjectFit::Contain)
+        .with_fallback(fallback)
+        .into_any_element()
+}
+
+/// GPUI RenderImage consumes BGRA bytes; decoded PNGs contain RGBA bytes.
+fn rgba_to_bgra(image: &mut image::RgbaImage) {
+    for pixel in image.pixels_mut() {
+        pixel.0.swap(0, 2);
+    }
+}
+
+#[cfg(test)]
+mod system_icon_tests {
+    use super::rgba_to_bgra;
+
+    #[test]
+    fn native_icon_colors_are_converted_for_gpui_without_changing_alpha() {
+        let mut image = image::RgbaImage::from_pixel(1, 1, image::Rgba([255, 205, 40, 128]));
+        rgba_to_bgra(&mut image);
+        assert_eq!(image.get_pixel(0, 0).0, [40, 205, 255, 128]);
+    }
+}

@@ -11,6 +11,9 @@ pub enum ThreadPriority {
 /// Toute fonctionnalité native (lecteurs, ouverture, raccourcis, etc.)
 /// doit passer par ce trait plutôt qu'appeler directement les API OS.
 pub trait Platform: Send + Sync {
+    /// Load native icons on a background worker.
+    fn file_icon(&self, path: String, large: bool) -> Result<image::RgbaImage, String>;
+
     fn name(&self) -> &'static str;
 
     /// Returns hidden, system, and reparse point flags for a directory entry.

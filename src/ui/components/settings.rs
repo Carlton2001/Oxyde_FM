@@ -22,6 +22,11 @@ pub fn render_settings_panel(
         .gap(rems(0.25))
         .child(section(i18n.text(Message::SettingsAppearance), theme))
         .child(scale_row(view, handle.clone(), cx))
+        .when(cfg!(target_os = "windows"), |body| body.child(settings_row(
+            i18n.text(Message::SettingsWindowsIcons), i18n.text(Message::SettingsWindowsIconsDescription),
+            view.use_system_icons(), "toggle-windows-icons", handle.clone(), theme,
+            |view, cx| { view.toggle_system_icons(cx); },
+        )))
         .child(
             div()
                 .py(rems(0.5))

@@ -200,3 +200,6 @@ sidebar-collapse-all = Collapse all
 sidebar-scroll-top = Scroll to top
 sidebar-collapse = Collapse sidebar
 sidebar-expand = Expand sidebar
+
+settings-windows-icons = Windows icons
+settings-windows-icons-description = Use Windows file and folder icons in list and grid views.

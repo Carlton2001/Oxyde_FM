@@ -207,3 +207,6 @@ sidebar-collapse-all = Réduire tout
 sidebar-scroll-top = Retourner en haut
 sidebar-collapse = Réduire le panneau
 sidebar-expand = Agrandir le panneau
+
+settings-windows-icons = Icônes Windows
+settings-windows-icons-description = Utiliser les icônes Windows des fichiers et dossiers dans les vues liste et grille.

@@ -637,6 +637,7 @@ pub fn render_sidebar(
         .cloned()
         .collect();
     let theme = *_cx.theme();
+    let use_system_icons = cfg!(target_os = "windows") && view.use_system_icons();
 
     // Dynamic content width (minimum = sidebar width)
     let calculated_content_w = sidebar_items
@@ -1074,7 +1075,10 @@ pub fn render_sidebar(
                                                     // Folder icon
                                                     .child(
                                                         div().w_4().h_4().mr_2().flex().items_center().justify_center().flex_shrink_0()
-                                                            .child(svg().path("icons/folder.svg").size_4().text_color(theme.accent))
+                                                            .child(crate::ui::components::icons::render_file_icon(
+                                                                path.clone(), crate::ui::components::icons::IconType::Folder,
+                                                                rems(1.0), theme.accent, use_system_icons, false,
+                                                            ))
                                                     )
                                                     // Name
                                                     .child(

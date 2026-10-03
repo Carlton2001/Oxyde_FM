@@ -10,6 +10,10 @@ impl LinuxPlatform {
 }
 
 impl Platform for LinuxPlatform {
+    fn file_icon(&self, _path: String, _large: bool) -> Result<image::RgbaImage, String> {
+        Err("Native icons unavailable".into())
+    }
+
     fn set_hidden_attribute(&self, _path: &std::path::Path, _hidden: bool) -> Result<(), String> {
         // Linux uses dot-prefixed names for app-owned staging files.
         Ok(())

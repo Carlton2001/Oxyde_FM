@@ -11,6 +11,7 @@ pub enum IconName {
     Check,
     Square,
     FolderOpen,
+    NativeFolder(String),
     #[allow(dead_code)]
     HardDrive,
     Copy,
@@ -322,6 +323,12 @@ impl RenderOnce for GenericDropdown {
                                                     .h(rems(1.0))
                                                     .mr(rems(0.5))
                                                     .when_some(item.icon.as_ref(), |d, icon| {
+                                                        if let IconName::NativeFolder(path) = icon {
+                                                            return d.child(crate::ui::components::icons::render_file_icon(
+                                                                path.clone(), crate::ui::components::icons::IconType::Folder,
+                                                                rems(1.0), icon_color, true, false,
+                                                            )).when(item.is_dimmed, |d| d.opacity(0.5));
+                                                        }
                                                         d.child(
                                                             svg()
                                                                 .path(match icon {
@@ -334,6 +341,7 @@ impl RenderOnce for GenericDropdown {
                                                                     IconName::Square => {
                                                                         "icons/square.svg"
                                                                     }
+                                                                    IconName::NativeFolder(_) => "icons/folder.svg",
                                                                     IconName::FolderOpen => {
                                                                         "icons/folder-open.svg"
                                                                     }

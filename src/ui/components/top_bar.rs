@@ -465,7 +465,9 @@ pub fn render_top_bar(
                                                         let is_dimmed = entry.is_hidden || entry.is_system;
                                                         crate::ui::components::dropdown::DropdownItem {
                                                             label: entry.name.clone(),
-                                                            icon: Some(IconName::FolderOpen),
+                                                            icon: Some(if cfg!(target_os = "windows") && view.use_system_icons() {
+                                                                IconName::NativeFolder(entry.path.clone())
+                                                            } else { IconName::FolderOpen }),
                                                             stay_open: false,
                                                             has_submenu: false,
                                                             is_dimmed,
