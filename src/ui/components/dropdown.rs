@@ -7,6 +7,8 @@ use std::rc::Rc;
 
 #[derive(Clone)]
 pub enum IconName {
+    Separator,
+    ListOrdered,
     ALargeSmall,
     Check,
     Square,
@@ -120,6 +122,9 @@ pub struct DropdownItem {
 
 #[allow(dead_code)]
 impl DropdownItem {
+    pub fn separator() -> Self {
+        Self::new("", |_, _| {}).icon(IconName::Separator)
+    }
     pub fn new(
         label: impl Into<String>,
         on_click: impl Fn(&mut Window, &mut App) + 'static,
@@ -234,14 +239,33 @@ impl RenderOnce for GenericDropdown {
 
         let h_app_copy = self.h_app.clone();
         let scroll_handle = self.scroll_handle.clone();
+        let base_scroll_handle = scroll_handle.0.borrow().base_handle.clone();
         let is_dragging = self.is_dragging;
         let on_drag = self.on_drag.clone();
 
         let item_h: f32 = logical(26.0);
+        // Draw separators between action rows rather than reserving a full row.
+        let mut separator_before = Vec::new();
+        let mut original_indices = Vec::new();
+        let mut pending_separator = false;
+        let mut visible_items = Vec::new();
+        for (index, item) in self.items.iter().enumerate() {
+            if matches!(item.icon, Some(IconName::Separator)) {
+                pending_separator = true;
+            } else {
+                separator_before.push(pending_separator);
+                original_indices.push(index);
+                visible_items.push(item.clone());
+                pending_separator = false;
+            }
+        }
+        self.items = visible_items;
         let item_count = self.items.len();
         let maximum = crate::ui::style::menu_list_max_height(window.viewport_size().height.as_f32(), self.header.is_some(), self.bottom_padding, self.max_height);
-        let viewport_h = (item_count as f32 * item_h).min(maximum);
-        let content_h = item_count as f32 * item_h;
+        let separator_height = logical(9.0);
+        let separator_count = separator_before.iter().filter(|value| **value).count();
+        let viewport_h = (item_count as f32 * item_h + separator_count as f32 * separator_height).min(maximum);
+        let content_h = item_count as f32 * item_h + separator_count as f32 * separator_height;
         let has_scrollbar = content_h > viewport_h;
 
         let list_w = if has_scrollbar {
@@ -272,15 +296,16 @@ impl RenderOnce for GenericDropdown {
             })
             .child(
                 div().w(px(list_w)).h(px(viewport_h)).child(
-                    uniform_list("dropdown-items", item_count, {
+                    div().id("dropdown-items").flex_col().overflow_y_scroll().children({
                         let items = self.items.clone();
                         let on_close = self.on_close.clone();
                         let list_w_inner = list_w;
                         let on_hover_list = on_item_hover.clone();
-                        move |range, _, _| {
-                            range
+                        (0..item_count)
                                 .map(|ix| {
                                     let item = &items[ix];
+                                    let original_ix = original_indices[ix];
+                                    let has_separator = separator_before[ix];
                                     let on_click = item.on_click.clone();
                                     let on_close_inner = on_close.clone();
                                     let stay_open = item.stay_open;
@@ -289,21 +314,21 @@ impl RenderOnce for GenericDropdown {
                                         matches!(item.icon.as_ref(), Some(IconName::Trash));
                                     let on_h = on_hover_list.clone();
 
-                                    div()
-                                        // Interactive elements need a stable identity for GPUI to
-                                        // retain their hover state while `uniform_list` recycles rows.
+                                    let row = div()
+                                        // Keep action hover state stable across menu renders.
                                         .id(("dropdown-item", ix))
                                         .w(px(list_w_inner))
                                         .h(px(item_h))
                                         .px(rems(0.5))
                                         .flex()
                                         .items_center()
+                                        .relative()
                                         .rounded(rems(0.3125))
                                         .when(item.is_dimmed, |d| d.opacity(0.42))
                                         .when(!item.is_dimmed, |d| d.hover(|s| s.bg(item_hover)))
                                         .on_mouse_move(move |event, _window, cx| {
                                             if let Some(on_h) = &on_h {
-                                                (on_h)(ix, event.position, cx);
+                                                (on_h)(original_ix, event.position, cx);
                                             }
                                         })
                                         .on_mouse_down(MouseButton::Left, move |_, window, cx| {
@@ -438,6 +463,10 @@ impl RenderOnce for GenericDropdown {
                                                                     IconName::CopyPlus => {
                                                                         "icons/copy-plus.svg"
                                                                     }
+                                                                    IconName::Separator => unreachable!("separator rows have no icon"),
+                                                                    IconName::ListOrdered => {
+                                                                        "icons/list-ordered.svg"
+                                                                    }
                                                                     IconName::CopyX => {
                                                                         "icons/copy-x.svg"
                                                                     }
@@ -477,12 +506,17 @@ impl RenderOnce for GenericDropdown {
                                                     .h(rems(0.875))
                                                     .text_color(chevron_color),
                                             )
-                                        })
+                                        });
+                                    div().flex_col().flex_none()
+                                        .when(has_separator, |group| group.child(
+                                            div().h(px(separator_height)).px(rems(0.5)).flex().items_center()
+                                                .child(div().w_full().h(rems(0.0625)).bg(menu_border)),
+                                        ))
+                                        .child(row)
                                 })
                                 .collect::<Vec<_>>()
-                        }
                     })
-                    .track_scroll(&scroll_handle)
+                    .track_scroll(&base_scroll_handle)
                     .size_full(),
                 ),
             )

@@ -265,8 +265,6 @@ pub fn render_file_list(
                 .right_0()
                 .h(px(crate::ui::style::row_height()))
                 .bg(theme.header)
-                .border_b(rems(0.0625))
-                .border_color(theme.border)
         )
         // 2. Contenu défilant (Headers + List)
         .child(
@@ -434,7 +432,7 @@ pub fn render_file_list(
                                                               this.context_menus.clear();
                                                               this.context_menus.push(ContextMenuInstance {
                                                                   position: pos,
-                                                                  content: ContextMenuContent::Items(super::oxyde_context_menu_items(cx.i18n(), h_inner_inner.clone(), is_dir, is_pinned, p_for_right_cap.clone()), None),
+                                                                  content: ContextMenuContent::Items(super::with_grid_sort(super::oxyde_context_menu_items(cx.i18n(), h_inner_inner.clone(), is_dir, is_pinned, p_for_right_cap.clone()), this, h_inner_inner.clone(), &p_id_cap_cap, cx.i18n()), None),
                                                                   scroll_handle: UniformListScrollHandle::new(),
                                                                   width: px(0.0),
                                                                   bottom_padding: 0.0,
@@ -664,7 +662,7 @@ pub fn render_file_list(
                                           this.context_menus.clear();
                                           this.context_menus.push(ContextMenuInstance {
                                               position: pos,
-                                              content: ContextMenuContent::Items(super::pane_context_menu_items(cx.i18n(), h.clone(), p_id_cap_cap), None),
+                                              content: ContextMenuContent::Items(super::with_grid_sort(super::pane_context_menu_items(cx.i18n(), h.clone(), p_id_cap_cap.clone()), this, h.clone(), &p_id_cap_cap, cx.i18n()), None),
                                               scroll_handle: UniformListScrollHandle::new(),
                                               width: px(0.0),
                                               bottom_padding: 0.0,
@@ -717,7 +715,9 @@ pub fn render_file_list(
                                 }
                             })
                             .track_scroll(&active_tab.list_scroll)
-                            .size_full()
+                            .w_full()
+                            .flex_1()
+                            .min_h_0()
                         )
                 )
         )
@@ -1077,12 +1077,41 @@ fn render_grid_file_list(
     file_args.set("number", format_number(file_count as u64, lang));
     let contents = if let Some(message) = empty_message {
         div()
+            .id(SharedString::from(format!("file-grid-empty-{pane_id}")))
             .flex_1()
             .flex()
             .items_center()
             .justify_center()
             .text_color(theme.text_muted)
             .child(message)
+            .on_mouse_down(MouseButton::Right, {
+                let h = handle.clone();
+                let pid = pane_id.clone();
+                move |event, _, cx| {
+                    h.update(cx, |this, cx| {
+                        this.activate_pane(&pid, cx);
+                        let items = super::with_grid_sort(
+                            super::pane_context_menu_items(cx.i18n(), h.clone(), pid.clone()),
+                            this,
+                            h.clone(),
+                            &pid,
+                            cx.i18n(),
+                        );
+                        this.context_menus.clear();
+                        this.context_menus.push(ContextMenuInstance {
+                            position: event.position,
+                            content: ContextMenuContent::Items(items, None),
+                            scroll_handle: UniformListScrollHandle::new(),
+                            width: px(0.0),
+                            bottom_padding: 0.0,
+                            open_left: false,
+                            hovered_item: None,
+                            native_request_id: None,
+                        });
+                        cx.notify();
+                    });
+                }
+            })
             .into_any_element()
     } else {
         let render_rows = {
@@ -1172,7 +1201,7 @@ fn render_grid_file_list(
                                             theme.background
                                         })
                                         .group("file-grid-card")
-                                        .relative().when(is_selected, |d| d.child(div().absolute().left_0().top_0().bottom_0().w(rems(0.1875)).bg(theme.accent))).when(!is_selected, |d| d.hover(|d| d.bg(theme.hover)))
+                                        .relative().when(!is_selected, |d| d.hover(|d| d.bg(theme.hover)))
                                         .when(show_tooltips && show_media_previews, |d| {
                                             d.tooltip(Tooltip::for_file_full(
                                                 file_name_tt.clone(),
@@ -1274,13 +1303,13 @@ fn render_grid_file_list(
                                                     this.context_menus.push(ContextMenuInstance {
                                                         position: pos,
                                                         content: ContextMenuContent::Items(
-                                                            super::oxyde_context_menu_items(
+                                                            super::with_grid_sort(super::oxyde_context_menu_items(
                                                                 cx.i18n(),
                                                                 h.clone(),
                                                                 is_dir,
                                                                 pinned,
                                                                 path.clone(),
-                                                            ),
+                                                            ), this, h.clone(), &pid, cx.i18n()),
                                                             None,
                                                         ),
                                                         scroll_handle: UniformListScrollHandle::new(
@@ -1601,7 +1630,7 @@ fn render_grid_file_list(
                         this.context_menus.push(ContextMenuInstance {
                             position,
                             content: ContextMenuContent::Items(
-                                super::pane_context_menu_items(cx.i18n(), h.clone(), pid.clone()),
+                                super::with_grid_sort(super::pane_context_menu_items(cx.i18n(), h.clone(), pid.clone()), this, h.clone(), &pid, cx.i18n()),
                                 None,
                             ),
                             scroll_handle: UniformListScrollHandle::new(),
@@ -1876,7 +1905,6 @@ fn render_headers(
     let tab = pane.active_tab();
     let current_col = tab.sort_column;
     let current_dir = tab.sort_direction;
-
     // Check filters
     let name_filtered = !tab.filter_name.is_empty();
 
@@ -1942,6 +1970,7 @@ fn render_headers(
         .h(px(crate::ui::style::row_height()))
         .text_color(theme.text_muted)
         .font_weight(FontWeight::BOLD)
+        .flex_none()
         .child(
             header_cell(
                 i18n.text(Message::ColumnName).as_ref(),
@@ -2096,9 +2125,10 @@ fn header_cell(
     handle: Entity<OxydeApp>,
     anchor_key: String,
     on_click: impl Fn(&MouseDownEvent, &mut Window, &mut App) + 'static,
-) -> Div {
+) -> Stateful<Div> {
     let anchor_handle = handle.clone();
     div()
+        .id(SharedString::from(anchor_key.clone()))
         .relative()
         .w(px(width))
         .flex_none()

@@ -164,7 +164,7 @@ fn context_menu_contains_point(
 fn context_menu_height(menu: &ContextMenuInstance, viewport_height: Pixels) -> Pixels {
     let (item_count, header_height, max_height) = match &menu.content {
         ContextMenuContent::Items(items, header) => (
-            items.len(),
+            items.iter().filter(|item| !matches!(item.icon, Some(crate::ui::components::dropdown::IconName::Separator))).count(),
             if header.is_some() { logical(42.0) } else { logical(6.0) },
             logical(480.0),
         ),
@@ -175,7 +175,11 @@ fn context_menu_height(menu: &ContextMenuInstance, viewport_height: Pixels) -> P
     };
     let header = matches!(&menu.content, ContextMenuContent::Items(_, Some(_)));
     let max_height = crate::ui::style::menu_list_max_height(viewport_height.as_f32(), header, menu.bottom_padding, max_height);
-    px((item_count as f32 * logical(26.0)).min(max_height) + header_height + logical(menu.bottom_padding))
+    let separator_height = match &menu.content {
+        ContextMenuContent::Items(items, _) => items.iter().filter(|item| matches!(item.icon, Some(crate::ui::components::dropdown::IconName::Separator))).count() as f32 * logical(9.0),
+        _ => 0.0,
+    };
+    px((item_count as f32 * logical(26.0) + separator_height).min(max_height) + header_height + logical(menu.bottom_padding))
 }
 
 fn context_menu_visible_top(
@@ -1216,6 +1220,9 @@ impl OxydeApp {
             (Message::Paste, 2u8, !can_paste),
             (Message::SelectAll, 3u8, false),
         ] {
+            if command == 3 {
+                items.push(DropdownItem::separator());
+            }
             let h = handle.clone();
             let target_input = input.clone();
             let mut item =
@@ -2939,9 +2946,9 @@ impl Render for OxydeApp {
                                                                             // minus submenu border(1) + padding(4) → nets to ix * item_h
                                                                             sub_pos.y =
                                                                                 parent_visible_y
-                                                                                    + px(ix_inner
+                                                                                    + px(items_inner.iter().take(ix_inner).filter(|item| !matches!(item.icon, Some(crate::ui::components::dropdown::IconName::Separator))).count()
                                                                                         as f32
-                                                                                        * logical(26.0));
+                                                                                        * logical(26.0) + items_inner.iter().take(ix_inner).filter(|item| matches!(item.icon, Some(crate::ui::components::dropdown::IconName::Separator))).count() as f32 * logical(9.0));
                                                                             (on_h)(
                                                                                 sub_pos, open_left,
                                                                                 app,

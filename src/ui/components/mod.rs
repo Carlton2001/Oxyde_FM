@@ -17,6 +17,109 @@ pub mod top_bar;
 use crate::ui::i18n::{I18n, Message};
 use gpui::*;
 
+/// Tauri menu sections: navigation, editing/state, destructive actions,
+/// information, sorting and native Shell actions. Empty sections disappear.
+pub(crate) fn context_menu_sections(items: Vec<dropdown::DropdownItem>, i18n: &I18n) -> Vec<dropdown::DropdownItem> {
+    use dropdown::IconName;
+    let mut result = Vec::new();
+    let mut previous_group = None;
+    let mut pending_separator = false;
+    for item in items {
+        if matches!(item.icon, Some(IconName::Separator)) {
+            pending_separator = true;
+            continue;
+        }
+        let group = if [Message::Open, Message::OpenNewTab, Message::ExpandAll, Message::CollapseAll]
+            .iter().any(|message| item.label == i18n.text(*message).as_ref()) { 0 }
+            else if item.label == i18n.text(Message::Delete).as_ref() { 2 }
+            else if item.label == i18n.text(Message::Properties).as_ref() { 3 }
+            else if item.label == i18n.text(Message::SortBy).as_ref() { 4 }
+            else if item.label == i18n.text(Message::MoreOptions).as_ref() { 5 }
+            else { 1 };
+        if !result.is_empty() && (pending_separator || previous_group != Some(group)) {
+            result.push(dropdown::DropdownItem::separator());
+        }
+        result.push(item);
+        previous_group = Some(group);
+        pending_separator = false;
+    }
+    result
+}
+
+/// Attach sorting controls to context menus in grid view.
+pub fn with_grid_sort(
+    mut items: Vec<dropdown::DropdownItem>,
+    app: &crate::ui::app::OxydeApp,
+    handle: Entity<crate::ui::app::OxydeApp>,
+    pane_id: &str,
+    i18n: &I18n,
+) -> Vec<dropdown::DropdownItem> {
+    use crate::ui::workspace::{SortColumn, SortDirection, ViewMode};
+    let Some(pane) = app.state.find_pane(pane_id) else { return items };
+    let tab = pane.active_tab();
+    if tab.view_mode != ViewMode::Grid { return items; }
+    let column = tab.sort_column;
+    let direction = tab.sort_direction;
+    let mut choices = Vec::new();
+    for (label, selected_column, selected_direction) in [
+        (Message::ColumnName, Some(SortColumn::Name), None),
+        (Message::SortExtension, Some(SortColumn::Type), None),
+        (Message::ColumnSize, Some(SortColumn::Size), None),
+        (Message::ColumnModified, Some(SortColumn::Modified), None),
+        (Message::SortAscending, None, Some(SortDirection::Ascending)),
+        (Message::SortDescending, None, Some(SortDirection::Descending)),
+    ] {
+        if label == Message::SortAscending {
+            choices.push(dropdown::DropdownItem::separator());
+        }
+        let h = handle.clone();
+        let pid = pane_id.to_string();
+        let mut item = dropdown::DropdownItem::new(i18n.text(label).to_string(), move |_, cx| {
+            h.update(cx, |this, cx| {
+                if let Some(pane) = this.state.find_pane_mut(&pid) {
+                    let tab = pane.active_tab_mut();
+                    if let Some(column) = selected_column { tab.sort_column = column; }
+                    if let Some(direction) = selected_direction { tab.sort_direction = direction; }
+                    tab.sort_files();
+                    tab.update_cache();
+                }
+                this.context_menus.clear();
+                cx.notify();
+            });
+        });
+        if selected_column == Some(column) || selected_direction == Some(direction) {
+            item.icon = Some(dropdown::IconName::Check);
+        }
+        choices.push(item);
+    }
+    let sort = dropdown::DropdownItem::new(i18n.text(Message::SortBy).to_string(), |_, _| {})
+        .icon(dropdown::IconName::ListOrdered)
+        .stay_open(true)
+        .has_submenu(true)
+        .on_hover(move |position, open_left, cx| {
+            handle.update(cx, |this, cx| {
+                use crate::ui::app::{ContextMenuContent, ContextMenuInstance};
+                this.context_menus.truncate(1);
+                this.context_menus.push(ContextMenuInstance {
+                    position,
+                    content: ContextMenuContent::Items(choices.clone(), None),
+                    scroll_handle: UniformListScrollHandle::new(),
+                    width: px(0.0),
+                    bottom_padding: 0.0,
+                    open_left,
+                    hovered_item: None,
+                    native_request_id: None,
+                });
+                cx.notify();
+            });
+        });
+    items.insert(items.len().saturating_sub(1), sort);
+    let sort_index = items.len().saturating_sub(2);
+    items.insert(sort_index, dropdown::DropdownItem::separator());
+    items.insert(items.len().saturating_sub(1), dropdown::DropdownItem::separator());
+    context_menu_sections(items, i18n)
+}
+
 /// Compare filesystem paths as Windows treats them, ignoring separator, extended
 /// path prefix, trailing separator, and case differences.
 pub(crate) fn paths_match(left: &str, right: &str) -> bool {
@@ -36,7 +139,7 @@ pub(crate) fn paths_match(left: &str, right: &str) -> bool {
     normalize(left) == normalize(right)
 }
 
-pub fn oxyde_context_menu_items(
+fn oxyde_context_menu_items_raw(
     i18n: &I18n,
     h_app: Entity<crate::ui::app::OxydeApp>,
     is_dir: bool,
@@ -304,7 +407,7 @@ pub fn oxyde_context_menu_items(
     items
 }
 
-pub fn pane_context_menu_items(
+fn pane_context_menu_items_raw(
     i18n: &I18n,
     h_app: Entity<crate::ui::app::OxydeApp>,
     pane_id: String,
@@ -452,6 +555,7 @@ pub fn tab_context_menu_items(
             }),
             on_hover: None,
         },
+        crate::ui::components::dropdown::DropdownItem::separator(),
         crate::ui::components::dropdown::DropdownItem {
             label: i18n.text(Message::CloseTab).to_string(),
             icon: Some(IconName::CircleX),
@@ -471,4 +575,40 @@ pub fn tab_context_menu_items(
             on_hover: None,
         },
     ]
+}
+
+pub fn oxyde_context_menu_items(i18n: &I18n, h: Entity<crate::ui::app::OxydeApp>, is_dir: bool, is_pinned: bool, path: String) -> Vec<dropdown::DropdownItem> {
+    context_menu_sections(oxyde_context_menu_items_raw(i18n, h, is_dir, is_pinned, path), i18n)
+}
+
+pub fn pane_context_menu_items(i18n: &I18n, h: Entity<crate::ui::app::OxydeApp>, pane_id: String) -> Vec<dropdown::DropdownItem> {
+    context_menu_sections(pane_context_menu_items_raw(i18n, h, pane_id), i18n)
+}
+
+#[cfg(test)]
+mod context_menu_tests {
+    use super::{context_menu_sections, dropdown};
+    use crate::ui::i18n::{I18n, Message};
+
+    #[test]
+    fn sections_match_tauri_and_remove_empty_boundaries() {
+        for language in [crate::ui::i18n::Language::French, crate::ui::i18n::Language::English] {
+            let i18n = I18n::for_language(language);
+            let action = |message| dropdown::DropdownItem::new(i18n.text(message).to_string(), |_, _| {});
+            let items = context_menu_sections(vec![
+                dropdown::DropdownItem::separator(),
+                action(Message::Open), action(Message::OpenNewTab),
+                action(Message::PinQuickAccess), action(Message::Cut), action(Message::Rename),
+                action(Message::Delete), action(Message::Properties),
+                dropdown::DropdownItem::separator(), dropdown::DropdownItem::separator(),
+                action(Message::SortBy), action(Message::MoreOptions),
+                dropdown::DropdownItem::separator(),
+            ], &i18n);
+            let boundaries: Vec<_> = items.iter().enumerate()
+                .filter_map(|(index, item)| matches!(item.icon, Some(dropdown::IconName::Separator)).then_some(index))
+                .collect();
+            assert_eq!(boundaries, vec![2, 6, 8, 10, 12]);
+            assert!(!matches!(items.last().unwrap().icon, Some(dropdown::IconName::Separator)));
+        }
+    }
 }

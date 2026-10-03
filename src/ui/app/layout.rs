@@ -84,7 +84,7 @@ impl OxydeApp {
         // Clamp ContextMenu scrolls
         for instance in &self.context_menus {
             let item_count = match &instance.content {
-                crate::ui::app::ContextMenuContent::Items(items, _) => items.len(),
+                crate::ui::app::ContextMenuContent::Items(items, _) => items.iter().filter(|item| !matches!(item.icon, Some(crate::ui::components::dropdown::IconName::Separator))).count(),
                 crate::ui::app::ContextMenuContent::NativeItems { items, .. } => items.len(),
                 crate::ui::app::ContextMenuContent::NameFilter { .. } => 0,
             };
@@ -225,14 +225,14 @@ impl OxydeApp {
                             crate::ui::workspace::LayoutAxis::Horizontal => {
                                 div()
                                     .group("pane-resize-handle")
-                                    .w(rems(0.1875))
-                                    .mx(rems(-0.0625))
-                                    .bg(cx.theme().background)
+                                    .w(rems(0.25))
+                                    .mx(rems(-0.125))
                                     .flex_none()
                                     .cursor(CursorStyle::ResizeLeftRight)
                                     .h_full()
                                     .flex()
                                     .justify_center()
+                                    .occlude()
                                     .child(
                                         div()
                                             .w(rems(0.0625))
@@ -260,9 +260,9 @@ impl OxydeApp {
                             }
                             crate::ui::workspace::LayoutAxis::Vertical => div()
                                 .group("pane-resize-handle")
-                                .h(rems(0.1875))
-                                .my(rems(-0.0625))
-                                .bg(cx.theme().header)
+                                .h(rems(0.25))
+                                .my(rems(-0.125))
+                                .occlude()
                                 .flex_none()
                                 .cursor(CursorStyle::ResizeUpDown)
                                 .w_full()
@@ -293,7 +293,7 @@ impl OxydeApp {
                                     }
                                 }),
                         };
-                        container = container.child(separator);
+                        container = container.child(deferred(separator));
                     }
                     container = container.child(
                         div()

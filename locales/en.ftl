@@ -241,3 +241,8 @@ date-group-count = { $count ->
     [one] { $number } item
    *[other] { $number } items
 }
+
+menu-sort-by = Sort by
+menu-sort-ascending = Ascending
+menu-sort-descending = Descending
+menu-sort-extension = Extension

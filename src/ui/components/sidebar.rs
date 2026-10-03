@@ -52,7 +52,7 @@ fn pinned_display_name(item: &oxyde_lib::models::QuickAccessItem, i18n: &I18n) -
 
 // ── Per-item right-click menus ───────────────────────────────────────────────
 
-fn pinned_context_menu(i18n: &I18n, h: Entity<OxydeApp>, path: String) -> Vec<DropdownItem> {
+fn pinned_context_menu_raw(i18n: &I18n, h: Entity<OxydeApp>, path: String) -> Vec<DropdownItem> {
     vec![
         DropdownItem {
             label: i18n.text(Message::Open).to_string(),
@@ -133,7 +133,7 @@ fn pinned_context_menu(i18n: &I18n, h: Entity<OxydeApp>, path: String) -> Vec<Dr
     ]
 }
 
-fn location_context_menu(i18n: &I18n, h: Entity<OxydeApp>, path: String) -> Vec<DropdownItem> {
+fn location_context_menu_raw(i18n: &I18n, h: Entity<OxydeApp>, path: String) -> Vec<DropdownItem> {
     vec![
         DropdownItem {
             label: i18n.text(Message::Open).to_string(),
@@ -175,7 +175,7 @@ fn location_context_menu(i18n: &I18n, h: Entity<OxydeApp>, path: String) -> Vec<
     ]
 }
 
-fn drive_context_menu(i18n: &I18n, h: Entity<OxydeApp>, path: String) -> Vec<DropdownItem> {
+fn drive_context_menu_raw(i18n: &I18n, h: Entity<OxydeApp>, path: String) -> Vec<DropdownItem> {
     let mut items = vec![
         DropdownItem {
             label: i18n.text(Message::Open).to_string(),
@@ -238,7 +238,7 @@ fn drive_context_menu(i18n: &I18n, h: Entity<OxydeApp>, path: String) -> Vec<Dro
     items
 }
 
-fn directory_context_menu(i18n: &I18n, h: Entity<OxydeApp>, path: String) -> Vec<DropdownItem> {
+fn directory_context_menu_raw(i18n: &I18n, h: Entity<OxydeApp>, path: String) -> Vec<DropdownItem> {
     let mut items = vec![
         DropdownItem {
             label: i18n.text(Message::Open).to_string(),
@@ -1236,4 +1236,20 @@ pub fn render_sidebar(
     ));
 
     container
+}
+
+fn pinned_context_menu(i18n: &I18n, h: Entity<OxydeApp>, path: String) -> Vec<DropdownItem> {
+    super::context_menu_sections(pinned_context_menu_raw(i18n, h, path), i18n)
+}
+
+fn location_context_menu(i18n: &I18n, h: Entity<OxydeApp>, path: String) -> Vec<DropdownItem> {
+    super::context_menu_sections(location_context_menu_raw(i18n, h, path), i18n)
+}
+
+fn drive_context_menu(i18n: &I18n, h: Entity<OxydeApp>, path: String) -> Vec<DropdownItem> {
+    super::context_menu_sections(drive_context_menu_raw(i18n, h, path), i18n)
+}
+
+fn directory_context_menu(i18n: &I18n, h: Entity<OxydeApp>, path: String) -> Vec<DropdownItem> {
+    super::context_menu_sections(directory_context_menu_raw(i18n, h, path), i18n)
 }
