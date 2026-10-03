@@ -10,11 +10,11 @@ fn main() {
         .filter_module("oxyde", log::LevelFilter::Info)
         .filter_module("oxyde_lib", log::LevelFilter::Info)
         .init();
-    let _rt = tokio::runtime::Builder::new_multi_thread()
+    let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
         .expect("Failed to create Tokio runtime");
-    let _guard = _rt.enter();
+    let guard = runtime.enter();
 
     let config_path = oxyde_lib::models::ConfigManager::config_path().ok();
     let (mut config, load_failed) = match config_path.as_deref() {
@@ -93,4 +93,47 @@ fn main() {
             )
             .expect("window opens");
         });
+    drop(guard);
+    shutdown_runtime(runtime);
+}
+
+fn shutdown_runtime(runtime: tokio::runtime::Runtime) {
+    // GPUI has already run the quit hooks (including preference saving).
+    // Blocking filesystem / shell workers cannot be aborted by Tokio and may
+    // be stuck in an OS call. Dropping the runtime would wait for them forever.
+    runtime.shutdown_timeout(std::time::Duration::from_secs(2));
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn shutdown_returns_while_a_blocking_worker_is_still_running() {
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(1)
+            .build()
+            .unwrap();
+        let (started_tx, started_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let (finished_tx, finished_rx) = std::sync::mpsc::channel();
+        runtime.spawn_blocking(move || {
+            started_tx.send(()).unwrap();
+            release_rx.recv().unwrap();
+            finished_tx.send(()).unwrap();
+        });
+        started_rx.recv_timeout(std::time::Duration::from_secs(5)).unwrap();
+
+        let (shutdown_tx, shutdown_rx) = std::sync::mpsc::channel();
+        let shutdown = std::thread::spawn(move || {
+            super::shutdown_runtime(runtime);
+            shutdown_tx.send(()).unwrap();
+        });
+        let result = shutdown_rx.recv_timeout(std::time::Duration::from_secs(5));
+
+        // Keep the worker blocked until the deadline, then release it even on
+        // failure so a regression fails the test instead of hanging the suite.
+        release_tx.send(()).unwrap();
+        finished_rx.recv_timeout(std::time::Duration::from_secs(5)).unwrap();
+        shutdown.join().unwrap();
+        assert!(result.is_ok(), "runtime shutdown waited for a blocked worker");
+    }
 }
