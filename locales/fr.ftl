@@ -213,3 +213,6 @@ settings-windows-icons-description = Utiliser les icônes Windows des fichiers e
 
 settings-checkboxes = Cases à cocher de sélection
 settings-checkboxes-description = Sélectionner plusieurs éléments sans maintenir Ctrl.
+
+settings-path-tracking = Suivi du chemin
+settings-path-tracking-description = Déplier les dossiers parents et révéler le dossier actif dans la barre latérale.

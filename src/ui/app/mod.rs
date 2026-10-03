@@ -381,6 +381,8 @@ pub struct OxydeApp {
     pub(crate) sidebar_collapsed: bool,
     pub sidebar_content_width: f32,
     pub sidebar_selected_path: Option<String>,
+    pub(crate) sidebar_follow_path: Option<String>,
+    pub(crate) sidebar_follow_task: Option<Task<()>>,
     pub list_height: f32,
     pub list_width: f32,
     pub split_sizes: std::collections::HashMap<String, f32>,
@@ -791,6 +793,8 @@ impl OxydeApp {
                 .unwrap_or(false),
             sidebar_content_width: 260.0,
             sidebar_selected_path: None,
+            sidebar_follow_path: None,
+            sidebar_follow_task: None,
             list_height: logical(800.0),
             list_width: logical(1000.0),
             split_sizes: std::collections::HashMap::new(),
@@ -2026,6 +2030,7 @@ impl Render for OxydeApp {
             self.handle_selection_drag(p_id, pos, cx);
         }
         self.clamp_scrolls();
+        self.follow_active_path(cx);
 
         let mut root = div()
             .track_focus(&self.focus_handle)

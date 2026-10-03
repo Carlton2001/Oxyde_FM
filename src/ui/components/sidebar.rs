@@ -10,8 +10,30 @@ use crate::ui::workspace::SidebarItem;
 use gpui::prelude::*;
 use gpui::*;
 
+pub(crate) fn sidebar_paths_equal(left: &str, right: &str) -> bool {
+    #[cfg(target_os = "windows")]
+    {
+        left.replace('/', "\\").trim_end_matches('\\').to_lowercase()
+            == right.replace('/', "\\").trim_end_matches('\\').to_lowercase()
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        std::path::Path::new(left) == std::path::Path::new(right)
+    }
+}
+
 const SIDEBAR_ROW_H: Rems = rems(1.75);
 fn sidebar_row_h() -> f32 { rem_pixels(SIDEBAR_ROW_H).as_f32() }
+
+pub(crate) fn sidebar_item_visible(item: &SidebarItem, show_hidden: bool, show_system: bool) -> bool {
+    match item {
+        SidebarItem::Directory { node, .. } =>
+            (show_hidden || !node.is_hidden) && (show_system || !node.is_system),
+        SidebarItem::Pinned { item } => show_hidden || !item.name.starts_with('.'),
+        SidebarItem::Header(Message::SidebarQuickAccess) => false,
+        _ => true,
+    }
+}
 
 fn pinned_display_name(item: &oxyde_lib::models::QuickAccessItem, i18n: &I18n) -> String {
     match item.path.as_str() {
@@ -402,6 +424,7 @@ fn sidebar_toolbar(view: &OxydeApp, handle: Entity<OxydeApp>, cx: &mut Context<O
                 .any(|drive| view.state.expanded_paths.contains(&drive.path)),
             move |_, _, cx| {
                 h.update(cx, |this, cx| {
+                    this.sidebar_follow_task = None;
                     this.state.expanded_paths.clear();
                     this.state.refresh_sidebar();
                     this.reconcile_watchers();
@@ -615,25 +638,7 @@ pub fn render_sidebar(
         .state
         .sidebar_items
         .iter()
-        .filter(|item| match item {
-            SidebarItem::Directory { node, .. } => {
-                if !show_hidden && node.is_hidden {
-                    return false;
-                }
-                if !show_system && node.is_system {
-                    return false;
-                }
-                true
-            }
-            SidebarItem::Pinned { item } => {
-                if !show_hidden && item.name.starts_with('.') {
-                    return false;
-                }
-                true
-            }
-            SidebarItem::Header(Message::SidebarQuickAccess) => false,
-            _ => true,
-        })
+        .filter(|item| sidebar_item_visible(item, show_hidden, show_system))
         .cloned()
         .collect();
     let theme = *_cx.theme();
@@ -735,7 +740,7 @@ pub fn render_sidebar(
                                             // ── Quick-access (pinned) item ─────────────────
                                             SidebarItem::Pinned { item } => {
                                                 let path      = item.path.clone();
-                                                let is_sel    = sel.as_deref() == Some(&path);
+                                                let is_sel    = sel.as_deref().is_some_and(|selected| sidebar_paths_equal(selected, &path));
                                                 let sel_bg:   Hsla = theme.selected;
                                                 let hov_bg:   Hsla = if is_sel { theme.selection_hover } else { theme.hover };
                                                 let is_dimmed = item.name.starts_with('.');
@@ -851,7 +856,7 @@ pub fn render_sidebar(
                                             // ── Drive item ─────────────────────────────────
                                             SidebarItem::Drive { drive, is_expanded } => {
                                                 let path       = drive.path.clone();
-                                                let is_sel     = sel.as_deref() == Some(&path);
+                                                let is_sel     = sel.as_deref().is_some_and(|selected| sidebar_paths_equal(selected, &path));
                                                 let is_exp     = *is_expanded;
                                                 let sel_bg:    Hsla = theme.selected;
                                                 let hov_bg:    Hsla = if is_sel { theme.selection_hover } else { theme.hover };
@@ -980,7 +985,7 @@ pub fn render_sidebar(
                                             // ── Directory item ─────────────────────────────
                                             SidebarItem::Directory { node, depth, is_expanded } => {
                                                 let path       = node.path.clone();
-                                                let is_sel     = sel.as_deref() == Some(&path);
+                                                let is_sel     = sel.as_deref().is_some_and(|selected| sidebar_paths_equal(selected, &path));
                                                 let is_exp     = *is_expanded;
                                                 let has_subs   = node.has_subdirs;
                                                 let depth_px   = logical(8.0) + (*depth as f32 * logical(12.0));

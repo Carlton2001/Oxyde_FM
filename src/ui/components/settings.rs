@@ -100,6 +100,15 @@ pub fn render_settings_panel(
         })
         .child(section(i18n.text(Message::SettingsFiles), theme))
         .child(settings_row(
+            i18n.text(Message::SettingsPathTracking),
+            i18n.text(Message::SettingsPathTrackingDescription),
+            view.follows_active_path(),
+            "toggle-path-tracking",
+            handle.clone(),
+            theme,
+            |view, cx| view.toggle_path_tracking(cx),
+        ))
+        .child(settings_row(
             i18n.text(Message::SettingsCheckboxes),
             i18n.text(Message::SettingsCheckboxesDescription),
             view.show_checkboxes(),

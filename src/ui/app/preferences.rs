@@ -5,6 +5,13 @@ use gpui::Context;
 use oxyde_lib::models::ConfigManager;
 
 impl OxydeApp {
+    pub(crate) fn follows_active_path(&self) -> bool { self.config.sync_sidebar_with_path }
+    pub(crate) fn toggle_path_tracking(&mut self, cx: &mut Context<Self>) {
+        self.config.sync_sidebar_with_path = !self.config.sync_sidebar_with_path;
+        self.sidebar_follow_path = None;
+        self.sidebar_follow_task = None;
+        self.save_preferences(cx);
+    }
     pub(crate) fn show_checkboxes(&self) -> bool { self.config.show_checkboxes }
     pub(crate) fn toggle_checkboxes(&mut self, cx: &mut Context<Self>) {
         self.config.show_checkboxes = !self.config.show_checkboxes;

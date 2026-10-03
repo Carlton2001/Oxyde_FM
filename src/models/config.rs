@@ -46,6 +46,8 @@ pub struct AppConfig {
     pub show_grid_thumbnails: bool,
     #[serde(default)]
     pub show_checkboxes: bool,
+    #[serde(default = "default_true")]
+    pub sync_sidebar_with_path: bool,
     #[serde(default)]
     pub show_network: bool,
     /// Window-local top-left coordinates for the operations panel.
@@ -97,6 +99,7 @@ impl Default for AppConfig {
             default_turbo_mode: true,
             show_grid_thumbnails: false,
             show_checkboxes: false,
+            sync_sidebar_with_path: true,
             show_network: true,
             operations_panel_position: None,
             group_by_date: false,
@@ -194,6 +197,7 @@ mod tests {
         assert_eq!(missing.ui_rem_size, 16);
         assert!(!missing.use_system_icons);
         assert!(!missing.show_checkboxes);
+        assert!(missing.sync_sidebar_with_path);
         let legacy: AppConfig =
             serde_json::from_str(r#"{"theme":"oxyde-light","language":"en-US"}"#).unwrap();
         assert_eq!(ThemeId::from_id(&legacy.theme), ThemeId::Light);
@@ -219,6 +223,7 @@ mod tests {
             config.language = language.as_str().into();
             config.use_system_icons = theme == ThemeId::Light;
             config.show_checkboxes = theme == ThemeId::Light;
+            config.sync_sidebar_with_path = theme == ThemeId::Light;
             ConfigManager::write_to_path(&path, &config).unwrap();
             config = ConfigManager::read_from_path(&path).unwrap();
             assert_eq!(ThemeId::from_id(&config.theme), theme);
@@ -226,6 +231,7 @@ mod tests {
             assert_eq!(config.search_limit, 123);
             assert_eq!(config.use_system_icons, theme == ThemeId::Light);
             assert_eq!(config.show_checkboxes, theme == ThemeId::Light);
+            assert_eq!(config.sync_sidebar_with_path, theme == ThemeId::Light);
             assert_eq!(config.ui_rem_size, 20);
             assert_eq!(config.operations_panel_position, Some([42.5, 87.25]));
             assert_eq!(config.extra["future_option"]["enabled"], true);

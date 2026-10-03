@@ -1,9 +1,82 @@
+use crate::ui::components::sidebar::sidebar_paths_equal;
 use crate::ui::scale::{logical};
 use crate::ui::app::OxydeApp;
 use gpui::*;
 use oxyde_lib::commands::io::list_dir;
 
 impl OxydeApp {
+    pub(crate) fn follow_active_path(&mut self, cx: &mut Context<Self>) {
+        if !self.follows_active_path() || self.sidebar_collapsed || self.state.drives.is_empty() {
+            self.sidebar_follow_task = None;
+            self.sidebar_follow_path = None;
+            return;
+        }
+        let Some(path) = self.state.find_pane(&self.state.active_pane_id)
+            .map(|pane| pane.active_tab().path.clone()) else { return; };
+        if self.sidebar_follow_path.as_ref() == Some(&path) { return; }
+        self.sidebar_follow_task = None;
+        self.sidebar_follow_path = Some(path.clone());
+        let ancestors: Vec<String> = std::path::Path::new(&path).ancestors()
+            .filter(|p| !p.as_os_str().is_empty())
+            .map(|p| p.to_string_lossy().into_owned()).collect();
+        let Some((root, root_index)) = self.state.drives.iter().find_map(|drive| {
+            ancestors.iter().position(|ancestor| sidebar_paths_equal(ancestor, &drive.path))
+                .map(|index| (drive.path.clone(), index))
+        }) else { return; };
+        let targets: Vec<String> = ancestors[..root_index].iter().rev().cloned().collect();
+        let cached: std::collections::HashMap<_, _> = std::iter::once(&root)
+            .chain(targets.iter()).take(targets.len())
+            .filter_map(|parent| self.state.sidebar_nodes.get(parent)
+                .map(|nodes| (parent.clone(), nodes.clone())))
+            .collect();
+        self.sidebar_follow_task = Some(cx.spawn(async move |this, cx| {
+            let mut current = root;
+            let mut loaded = Vec::new();
+            for (index, target) in targets.iter().enumerate() {
+                // Refresh the immediate parent so newly created folders can be revealed.
+                let nodes = if index + 1 < targets.len() {
+                    cached.get(&current).cloned()
+                } else { None };
+                let nodes = match nodes {
+                    Some(nodes) => nodes,
+                    None => match oxyde_lib::commands::sidebar::get_sidebar_nodes(current.clone()).await {
+                        Ok(nodes) => nodes,
+                        Err(error) => {
+                            log::warn!("Cannot follow sidebar path {current}: {error:?}");
+                            break;
+                        }
+                    },
+                };
+                let next = nodes.iter().find(|node| sidebar_paths_equal(&node.path, target))
+                    .map(|node| node.path.clone());
+                loaded.push((current.clone(), nodes));
+                let Some(next) = next else { break; };
+                current = next;
+            }
+            let _ = this.update(cx, |this, cx| {
+                if !this.follows_active_path() || this.sidebar_collapsed
+                    || this.sidebar_follow_path.as_ref() != Some(&path)
+                    || this.state.find_pane(&this.state.active_pane_id)
+                        .is_none_or(|pane| pane.active_tab().path != path) {
+                    return;
+                }
+                for (parent, nodes) in loaded {
+                    this.state.expanded_paths.insert(parent.clone());
+                    this.state.sidebar_nodes.insert(parent, nodes);
+                }
+                this.state.refresh_sidebar();
+                if let Some(index) = sidebar_reveal_index(
+                    &this.state.sidebar_items, &path, this.show_hidden, this.show_system,
+                ) {
+                    this.sidebar_selected_path = Some(current);
+                    this.sidebar_scroll.scroll_to_item(index, ScrollStrategy::Center);
+                }
+                this.reconcile_watchers();
+                cx.notify();
+            });
+        }));
+    }
+
     pub(crate) fn sidebar_display_width(&self) -> f32 {
         if self.sidebar_collapsed {
             logical(48.0)
@@ -66,6 +139,8 @@ impl OxydeApp {
     }
 
     pub fn toggle_sidebar_path(&mut self, path: String, cx: &mut Context<Self>) {
+        // A manual tree interaction takes precedence over an in-flight reveal.
+        self.sidebar_follow_task = None;
         self.state.toggle_sidebar_path(path.clone());
         self.reconcile_watchers();
         cx.notify();
@@ -395,6 +470,22 @@ impl OxydeApp {
     }
 }
 
+fn sidebar_reveal_index(
+    items: &[crate::ui::workspace::SidebarItem],
+    path: &str,
+    show_hidden: bool,
+    show_system: bool,
+) -> Option<usize> {
+    use crate::ui::workspace::SidebarItem;
+    items.iter()
+        .filter(|item| crate::ui::components::sidebar::sidebar_item_visible(item, show_hidden, show_system))
+        .position(|item| match item {
+            SidebarItem::Drive { drive, .. } => sidebar_paths_equal(&drive.path, path),
+            SidebarItem::Directory { node, .. } => sidebar_paths_equal(&node.path, path),
+            _ => false,
+        })
+}
+
 fn resize_sidebar_state(saved_width: &mut f32, collapsed: &mut bool, requested_width: f32) {
     if requested_width < 120.0 {
         *collapsed = true;
@@ -406,7 +497,43 @@ fn resize_sidebar_state(saved_width: &mut f32, collapsed: &mut bool, requested_w
 
 #[cfg(test)]
 mod sidebar_tests {
-    use super::resize_sidebar_state;
+    use super::{resize_sidebar_state, sidebar_paths_equal};
+
+    #[test]
+    fn reveal_uses_visible_rows_instead_of_unfiltered_tree_indices() {
+        use crate::ui::{i18n::Message, workspace::SidebarItem};
+        let directory = |path: &str, hidden, system| SidebarItem::Directory {
+            node: oxyde_lib::models::SidebarNode {
+                name: path.into(), path: path.into(), is_hidden: hidden, is_system: system,
+                is_readonly: false, is_protected: false, has_subdirs: false,
+            },
+            depth: 1, is_expanded: false,
+        };
+        let items = vec![
+            SidebarItem::Header(Message::SidebarQuickAccess),
+            SidebarItem::Header(Message::SidebarDrives),
+            directory("/hidden", true, false),
+            directory("/system", false, true),
+            directory("/current", false, false),
+        ];
+        assert_eq!(super::sidebar_reveal_index(&items, "/current", false, false), Some(1));
+        assert_eq!(super::sidebar_reveal_index(&items, "/current", true, false), Some(2));
+        assert_eq!(super::sidebar_reveal_index(&items, "/current", true, true), Some(3));
+        assert_eq!(super::sidebar_reveal_index(&items, "/missing", true, true), None);
+    }
+
+    #[test]
+    fn sidebar_path_matching_respects_platform_case_and_separators() {
+        assert!(sidebar_paths_equal("/home/user/", "/home/user"));
+        assert!(!sidebar_paths_equal("/home/user", "/home/username"));
+        #[cfg(target_os = "windows")]
+        {
+            assert!(sidebar_paths_equal("D:/Music/", "d:\\music"));
+            assert!(sidebar_paths_equal("D:/", "d:\\"));
+        }
+        #[cfg(not(target_os = "windows"))]
+        assert!(!sidebar_paths_equal("/home/User", "/home/user"));
+    }
 
     #[test]
     fn dragging_beyond_minimum_collapses_and_preserves_restore_width() {
