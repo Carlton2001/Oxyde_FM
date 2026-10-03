@@ -100,6 +100,15 @@ pub fn render_settings_panel(
         })
         .child(section(i18n.text(Message::SettingsFiles), theme))
         .child(settings_row(
+            i18n.text(Message::SettingsCheckboxes),
+            i18n.text(Message::SettingsCheckboxesDescription),
+            view.show_checkboxes(),
+            "toggle-selection-checkboxes",
+            handle.clone(),
+            theme,
+            |view, cx| view.toggle_checkboxes(cx),
+        ))
+        .child(settings_row(
             i18n.text(Message::SettingsHidden),
             i18n.text(Message::SettingsHiddenDescription),
             view.show_hidden,

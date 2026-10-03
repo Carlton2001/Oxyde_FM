@@ -959,6 +959,10 @@ impl OxydeApp {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        // Rename and breadcrumb editing share the same input entity.
+        if self.breadcrumb_editing {
+            self.cancel_breadcrumb_edit(cx);
+        }
         let initial_name = std::path::Path::new(&path)
             .file_name()
             .and_then(|name| name.to_str())

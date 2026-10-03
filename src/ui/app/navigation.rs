@@ -189,6 +189,9 @@ impl OxydeApp {
     }
 
     pub fn switch_tab(&mut self, pane_id: &str, tab_idx: usize, cx: &mut Context<Self>) {
+        if self.breadcrumb_pane_id.as_deref() == Some(pane_id) {
+            self.cancel_breadcrumb_edit(cx);
+        }
         let mut load_path = None;
         if let Some(pane) = self.state.find_pane_mut(pane_id) {
             if tab_idx >= pane.tabs.len() {
@@ -237,6 +240,9 @@ impl OxydeApp {
     }
 
     pub fn load_path(&mut self, pane_id: &str, path: String, cx: &mut Context<Self>) {
+        if self.breadcrumb_pane_id.as_deref() == Some(pane_id) {
+            self.cancel_breadcrumb_edit(cx);
+        }
         if let Some(pane) = self.state.find_pane_mut(pane_id) {
             let tab_idx = pane.active_tab_index;
             let active_tab = pane.active_tab_mut();

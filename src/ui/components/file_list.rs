@@ -142,6 +142,7 @@ pub fn render_file_list(
     let is_dragging_v = matches!(view.drag_target, Some(DragTarget::FileListV { ref pane_id, .. }) if pane_id == &p_id_cap);
     let show_tooltips = view.context_menus.is_empty();
     let use_system_icons = cfg!(target_os = "windows") && view.use_system_icons();
+    let show_checkboxes = view.show_checkboxes();
     let show_media_previews = view.show_media_previews;
 
     let selected_paths = active_tab.selected_paths.clone();
@@ -467,6 +468,10 @@ pub fn render_file_list(
                                                         .items_center()
                                                         .overflow_hidden()
                                                         .when(is_dimmed, |d| d.opacity(0.5))
+                                                        .when(show_checkboxes, |d| d.child(
+                                                            div().ml(rems(0.5)).flex_none()
+                                                                .child(selection_checkbox(is_selected, path.clone(), p_id.clone(), h.clone(), theme))
+                                                        ))
                                                         .child(
                                                             div()
                                                                 .id(SharedString::from(format!("file-content-{}", path_str)))
@@ -974,6 +979,7 @@ fn render_grid_file_list(
     let rename_error = view.rename_error.map(|message| cx.i18n().text(message));
     let show_tooltips = view.context_menus.is_empty();
     let use_system_icons = cfg!(target_os = "windows") && view.use_system_icons();
+    let show_checkboxes = view.show_checkboxes();
     let show_media_previews = view.show_media_previews;
     let show_grid_thumbnails = view.show_grid_thumbnails;
     let folder_subdirectory_flags = view.folder_has_subdirs.clone();
@@ -1105,6 +1111,7 @@ fn render_grid_file_list(
                                         } else {
                                             theme.background
                                         })
+                                        .group("file-grid-card")
                                         .relative().when(is_selected, |d| d.child(div().absolute().left_0().top_0().bottom_0().w(rems(0.1875)).bg(theme.accent))).when(!is_selected, |d| d.hover(|d| d.bg(theme.hover)))
                                         .when(show_tooltips && show_media_previews, |d| {
                                             d.tooltip(Tooltip::for_file_full(
@@ -1367,7 +1374,11 @@ fn render_grid_file_list(
                                                 }
                                             });
                                     }
-                                    card
+                                    card.when(show_checkboxes, |d| d.child(
+                                        div().absolute().top(rems(0.375)).left(rems(0.375))
+                                            .when(!is_selected, |d| d.opacity(0.0).group_hover("file-grid-card", |s| s.opacity(1.0)))
+                                            .child(selection_checkbox(is_selected, path.clone(), pid.clone(), h.clone(), theme))
+                                    ))
                                 })
                                 .collect::<Vec<_>>();
                             div()
@@ -1644,6 +1655,44 @@ fn render_grid_file_list(
         )
 }
 
+fn selection_checkbox(
+    selected: bool,
+    path: String,
+    pane_id: String,
+    handle: Entity<OxydeApp>,
+    theme: OxydeTheme,
+) -> impl IntoElement {
+    div()
+        .id(SharedString::from(format!("selection-checkbox-{path}")))
+        .size(rems(1.5))
+        .flex_none()
+        .flex()
+        .items_center()
+        .justify_center()
+        .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+        .on_mouse_up(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+        .on_click(move |_, window, cx| {
+            cx.stop_propagation();
+            handle.update(cx, |view, cx| {
+                view.state.active_pane_id = pane_id.clone();
+                view.focus_handle.focus(window, cx);
+                view.toggle_selection(&pane_id, path.clone(), true, false, cx);
+            });
+        })
+        .child(
+            div()
+                .size(rems(1.0))
+                .rounded(rems(0.25))
+                .border(rems(0.0625))
+                .border_color(if selected { theme.accent } else { theme.border })
+                .bg(if selected { theme.accent } else { theme.surface })
+                .flex()
+                .items_center()
+                .justify_center()
+                .when(selected, |d| d.child(svg().path("icons/check.svg").size(rems(0.75)).text_color(theme.text_on_accent))),
+        )
+}
+
 fn render_grid_thumbnail(
     path: String,
     fallback_icon: crate::ui::components::icons::IconType,
@@ -1700,6 +1749,7 @@ fn view_mode_button(
         .hover(|d| d.bg(theme.control_hover))
         .tooltip(Tooltip::text(cx.i18n().text(tooltip)))
         .on_mouse_down(MouseButton::Left, move |_, _, cx| {
+            cx.stop_propagation();
             handle.update(cx, |this, cx| {
                 if let Some(pane) = this.state.find_pane_mut(&pane_id) {
                     pane.active_tab_mut().view_mode = mode;

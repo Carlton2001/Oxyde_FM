@@ -210,3 +210,6 @@ sidebar-expand = Agrandir le panneau
 
 settings-windows-icons = Icônes Windows
 settings-windows-icons-description = Utiliser les icônes Windows des fichiers et dossiers dans les vues liste et grille.
+
+settings-checkboxes = Cases à cocher de sélection
+settings-checkboxes-description = Sélectionner plusieurs éléments sans maintenir Ctrl.

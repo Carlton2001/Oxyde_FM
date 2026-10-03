@@ -203,3 +203,6 @@ sidebar-expand = Expand sidebar
 
 settings-windows-icons = Windows icons
 settings-windows-icons-description = Use Windows file and folder icons in list and grid views.
+
+settings-checkboxes = Selection checkboxes
+settings-checkboxes-description = Select multiple items without holding Ctrl.

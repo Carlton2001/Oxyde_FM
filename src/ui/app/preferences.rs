@@ -5,6 +5,11 @@ use gpui::Context;
 use oxyde_lib::models::ConfigManager;
 
 impl OxydeApp {
+    pub(crate) fn show_checkboxes(&self) -> bool { self.config.show_checkboxes }
+    pub(crate) fn toggle_checkboxes(&mut self, cx: &mut Context<Self>) {
+        self.config.show_checkboxes = !self.config.show_checkboxes;
+        self.save_preferences(cx);
+    }
     pub(crate) fn use_system_icons(&self) -> bool { self.config.use_system_icons }
     pub(crate) fn toggle_system_icons(&mut self, cx: &mut Context<Self>) {
         self.config.use_system_icons = !self.config.use_system_icons;

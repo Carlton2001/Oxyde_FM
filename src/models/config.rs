@@ -193,6 +193,7 @@ mod tests {
         assert_eq!(missing.language, "fr");
         assert_eq!(missing.ui_rem_size, 16);
         assert!(!missing.use_system_icons);
+        assert!(!missing.show_checkboxes);
         let legacy: AppConfig =
             serde_json::from_str(r#"{"theme":"oxyde-light","language":"en-US"}"#).unwrap();
         assert_eq!(ThemeId::from_id(&legacy.theme), ThemeId::Light);
@@ -217,12 +218,14 @@ mod tests {
             config.theme = theme.as_str().into();
             config.language = language.as_str().into();
             config.use_system_icons = theme == ThemeId::Light;
+            config.show_checkboxes = theme == ThemeId::Light;
             ConfigManager::write_to_path(&path, &config).unwrap();
             config = ConfigManager::read_from_path(&path).unwrap();
             assert_eq!(ThemeId::from_id(&config.theme), theme);
             assert_eq!(Language::from_id(&config.language), language);
             assert_eq!(config.search_limit, 123);
             assert_eq!(config.use_system_icons, theme == ThemeId::Light);
+            assert_eq!(config.show_checkboxes, theme == ThemeId::Light);
             assert_eq!(config.ui_rem_size, 20);
             assert_eq!(config.operations_panel_position, Some([42.5, 87.25]));
             assert_eq!(config.extra["future_option"]["enabled"], true);

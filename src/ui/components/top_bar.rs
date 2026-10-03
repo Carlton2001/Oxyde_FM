@@ -338,7 +338,7 @@ pub fn render_top_bar(
                 .flex_1()
                 .min_w_0()
                 .overflow_hidden()
-                .when(view.breadcrumb_editing && view.breadcrumb_pane_id.as_deref() == Some(pane_id.as_str()), |bar| {
+                .when(view.breadcrumb_editing && view.editing_view.is_some() && view.breadcrumb_pane_id.as_deref() == Some(pane_id.as_str()), |bar| {
                     if let Some(input) = view.editing_view.clone() {
                         let field = div()
                             .w_full()
@@ -375,6 +375,7 @@ pub fn render_top_bar(
                 })
                 .when(
                     !(view.breadcrumb_editing
+                        && view.editing_view.is_some()
                         && view.breadcrumb_pane_id.as_deref() == Some(pane_id.as_str())),
                     |bar| {
                     let mut accumulated_path = String::new();

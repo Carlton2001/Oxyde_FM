@@ -40,8 +40,10 @@ fn main() {
             cx.set_global(crate::ui::i18n::I18n::for_language(
                 crate::ui::i18n::Language::from_id(&config.language),
             ));
-            crate::ui::components::input::bind_keys(cx);
             OxydeApp::bind_keys(cx);
+            // GPUI gives later bindings precedence. Text editing shortcuts must
+            // override file actions while the TextInput context is focused.
+            crate::ui::components::input::bind_keys(cx);
             let app = cx.new(|cx| OxydeApp::new(config, config_path, load_failed, cx));
             let operations_panel = cx.new(|cx| {
                 crate::ui::components::operations::OperationsPanelView::new(app.clone(), cx)
