@@ -74,6 +74,18 @@ impl OxydeApp {
         self.save_preferences(cx);
     }
 
+    pub(crate) fn set_date_format(&mut self, format: crate::ui::format::DateFormat, cx: &mut Context<Self>) {
+        self.config.date_format = format.as_str().into();
+        cx.set_global(crate::ui::format::DateFormatPreference(format));
+        self.save_preferences(cx);
+        cx.refresh_windows();
+    }
+    pub(crate) fn toggle_network(&mut self, cx: &mut Context<Self>) {
+        self.config.show_network = !self.config.show_network;
+        self.save_preferences(cx);
+    }
+    pub(crate) fn show_network(&self) -> bool { self.config.show_network }
+
     pub(crate) fn set_language(&mut self, language: Language, cx: &mut Context<Self>) {
         if self.language == language {
             return;

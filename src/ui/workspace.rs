@@ -313,7 +313,7 @@ impl TabState {
             for language in [Language::French, Language::English] {
                 let size_str = format_size(f.size, f.is_dir, f.is_calculated, language);
                 max_size_w = max_size_w.max(measure(&size_str));
-                let date_str = format_date(f.modified, language);
+                let date_str = format_date(f.modified, crate::ui::format::DateFormat::Iso);
                 max_date_w = max_date_w.max(measure(&date_str));
             }
         }

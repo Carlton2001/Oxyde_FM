@@ -224,7 +224,7 @@ impl Render for Tooltip {
                     format_size(info.size.0, info.size.1, info.size.2, i18n.language()),
                 );
                 let file_size = i18n.text_with_args(Message::TooltipSize, &args);
-                args.set("value", format_date(info.date, i18n.language()));
+                args.set("value", format_date(info.date, crate::ui::format::date_format(cx)));
                 let modified = i18n.text_with_args(Message::TooltipModified, &args);
                 this.child(
                     div()

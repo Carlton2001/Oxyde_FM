@@ -1,4 +1,6 @@
 use crate::ui::app::OxydeApp;
+use crate::ui::components::tooltip::Tooltip;
+use crate::ui::i18n::{I18nContext, Message};
 use crate::ui::scale::rem_pixels;
 use crate::ui::theme::ThemeContext;
 use gpui::*;
@@ -21,8 +23,11 @@ pub fn render_title_bar(
 
     // ── Oxyde app button (left) → opens Settings directly ───────────────────
     let h_menu = handle.clone();
+    let measure_handle = handle.clone();
     let app_button = div()
         .id("oxyde-app-btn")
+        .relative()
+        .tooltip(Tooltip::text(cx.i18n().text(Message::SettingsTitle)))
         .h_full()
         .px_3()
         .flex()
@@ -35,9 +40,21 @@ pub fn render_title_bar(
             h_menu.update(cx, |this, cx| {
                 this.context_menus.clear();
                 this.settings_open = !this.settings_open;
+                this.settings_picker = None;
+                this.settings_submenu_bounds = None;
                 cx.notify();
             });
         })
+        .child(
+            canvas(
+                |bounds, _, _| bounds,
+                move |_, bounds, _, cx| {
+                    measure_handle.update(cx, |this, _| this.settings_button_bounds = Some(bounds));
+                },
+            )
+            .absolute()
+            .size_full(),
+        )
         .child(img("icons/logo.png").w(rems(1.0)).h(rems(1.0)).flex_none())
         .child(
             div()

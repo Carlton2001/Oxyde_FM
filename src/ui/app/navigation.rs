@@ -66,7 +66,7 @@ impl OxydeApp {
                 }
                 this.state.refresh_sidebar();
                 if let Some(index) = sidebar_reveal_index(
-                    &this.state.sidebar_items, &path, this.show_hidden, this.show_system,
+                    &this.state.sidebar_items, &path, this.show_hidden, this.show_system, this.show_network(),
                 ) {
                     this.sidebar_selected_path = Some(current);
                     this.sidebar_scroll.scroll_to_item(index, ScrollStrategy::Center);
@@ -475,10 +475,11 @@ fn sidebar_reveal_index(
     path: &str,
     show_hidden: bool,
     show_system: bool,
+    show_network: bool,
 ) -> Option<usize> {
     use crate::ui::workspace::SidebarItem;
     items.iter()
-        .filter(|item| crate::ui::components::sidebar::sidebar_item_visible(item, show_hidden, show_system))
+        .filter(|item| crate::ui::components::sidebar::sidebar_item_visible(item, show_hidden, show_system, show_network))
         .position(|item| match item {
             SidebarItem::Drive { drive, .. } => sidebar_paths_equal(&drive.path, path),
             SidebarItem::Directory { node, .. } => sidebar_paths_equal(&node.path, path),
@@ -516,10 +517,28 @@ mod sidebar_tests {
             directory("/system", false, true),
             directory("/current", false, false),
         ];
-        assert_eq!(super::sidebar_reveal_index(&items, "/current", false, false), Some(1));
-        assert_eq!(super::sidebar_reveal_index(&items, "/current", true, false), Some(2));
-        assert_eq!(super::sidebar_reveal_index(&items, "/current", true, true), Some(3));
-        assert_eq!(super::sidebar_reveal_index(&items, "/missing", true, true), None);
+        assert_eq!(super::sidebar_reveal_index(&items, "/current", false, false, true), Some(1));
+        assert_eq!(super::sidebar_reveal_index(&items, "/current", true, false, true), Some(2));
+        assert_eq!(super::sidebar_reveal_index(&items, "/current", true, true, true), Some(3));
+        assert_eq!(super::sidebar_reveal_index(&items, "/missing", true, true, true), None);
+    }
+
+    #[test]
+    fn network_visibility_keeps_reveal_indices_in_sync() {
+        use crate::ui::workspace::SidebarItem;
+        let items = vec![
+            SidebarItem::Pinned { item: oxyde_lib::models::QuickAccessItem {
+                name: "Network".into(), path: "__network_vincinity__".into(),
+            } },
+            SidebarItem::Directory {
+                node: oxyde_lib::models::SidebarNode {
+                    name: "current".into(), path: "/current".into(), is_hidden: false,
+                    is_system: false, is_readonly: false, is_protected: false, has_subdirs: false,
+                }, depth: 1, is_expanded: false,
+            },
+        ];
+        assert_eq!(super::sidebar_reveal_index(&items, "/current", false, false, true), Some(1));
+        assert_eq!(super::sidebar_reveal_index(&items, "/current", false, false, false), Some(0));
     }
 
     #[test]

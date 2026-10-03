@@ -15,6 +15,8 @@ pub trait Platform: Send + Sync {
     fn file_icon(&self, path: String, large: bool) -> Result<image::RgbaImage, String>;
 
     fn name(&self) -> &'static str;
+    /// Current user's regional formatting locale.
+    fn regional_locale(&self) -> Option<String>;
 
     /// Returns hidden, system, and reparse point flags for a directory entry.
     fn file_attributes(&self, metadata: &std::fs::Metadata, name: &str) -> (bool, bool, bool);

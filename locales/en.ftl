@@ -209,3 +209,19 @@ settings-checkboxes-description = Select multiple items without holding Ctrl.
 
 settings-path-tracking = Follow active path
 settings-path-tracking-description = Expand parent folders and reveal the active folder in the sidebar.
+
+settings-date-format = Date format
+date-format-us = United States (MM/DD/YYYY)
+date-format-european = European (DD/MM/YYYY)
+date-format-iso = ISO 8601 (YYYY-MM-DD)
+settings-network = Network neighborhood
+settings-network-description = Show the network neighborhood in the left panel.
+
+settings-region-language = Region & language
+settings-performance = Performance
+settings-turbo = Turbo file transfers
+settings-search-limit = Search limit
+settings-data = Application data
+settings-clear-cache = Clear cache
+settings-reset-preferences = Reset preferences
+settings-coming-soon = Coming soon

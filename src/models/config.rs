@@ -88,7 +88,7 @@ impl Default for AppConfig {
             show_hidden: false,
             show_system: false,
             use_system_icons: false,
-            date_format: "European".to_string(),
+            date_format: String::new(),
             show_previews: true,
             zip_quality: "fast".to_string(),
             seven_zip_quality: "fast".to_string(),
@@ -215,6 +215,7 @@ mod tests {
         let mut config = ConfigManager::read_from_path(&path).unwrap();
         config.operations_panel_position = Some([42.5, 87.25]);
         config.ui_rem_size = 20;
+        config.date_format = "ISO".into();
         for (theme, language) in [
             (ThemeId::Light, Language::English),
             (ThemeId::Dark, Language::French),
@@ -223,6 +224,7 @@ mod tests {
             config.language = language.as_str().into();
             config.use_system_icons = theme == ThemeId::Light;
             config.show_checkboxes = theme == ThemeId::Light;
+            config.show_network = theme == ThemeId::Light;
             config.sync_sidebar_with_path = theme == ThemeId::Light;
             ConfigManager::write_to_path(&path, &config).unwrap();
             config = ConfigManager::read_from_path(&path).unwrap();
@@ -233,6 +235,8 @@ mod tests {
             assert_eq!(config.show_checkboxes, theme == ThemeId::Light);
             assert_eq!(config.sync_sidebar_with_path, theme == ThemeId::Light);
             assert_eq!(config.ui_rem_size, 20);
+            assert_eq!(config.date_format, "ISO");
+            assert_eq!(config.show_network, theme == ThemeId::Light);
             assert_eq!(config.operations_panel_position, Some([42.5, 87.25]));
             assert_eq!(config.extra["future_option"]["enabled"], true);
         }

@@ -17,7 +17,7 @@ fn main() {
     let _guard = _rt.enter();
 
     let config_path = oxyde_lib::models::ConfigManager::config_path().ok();
-    let (config, load_failed) = match config_path.as_deref() {
+    let (mut config, load_failed) = match config_path.as_deref() {
         Some(path) => match oxyde_lib::models::ConfigManager::read_from_path(path) {
             Ok(config) => (config, false),
             Err(error) => {
@@ -28,6 +28,11 @@ fn main() {
         None => (oxyde_lib::models::AppConfig::default(), true),
     };
 
+    let initialize_date_format = oxyde_lib::models::preferences::DateFormat::from_id(&config.date_format).is_none();
+    let date_format = oxyde_lib::models::preferences::DateFormat::from_id(&config.date_format)
+        .unwrap_or_else(|| oxyde_lib::models::preferences::DateFormat::for_locale(
+            &oxyde_lib::platform::platform().regional_locale().unwrap_or_default()));
+    config.date_format = date_format.as_str().into();
     let asset_source = crate::ui::assets::EmbeddedAssetSource::new();
     gpui_platform::application()
         .with_assets(asset_source)
@@ -40,6 +45,7 @@ fn main() {
             cx.set_global(crate::ui::i18n::I18n::for_language(
                 crate::ui::i18n::Language::from_id(&config.language),
             ));
+            cx.set_global(crate::ui::format::DateFormatPreference(date_format));
             OxydeApp::bind_keys(cx);
             // GPUI gives later bindings precedence. Text editing shortcuts must
             // override file actions while the TextInput context is focused.
@@ -51,6 +57,7 @@ fn main() {
             app.update(cx, |this, cx| {
                 this.handle = Some(app.clone());
                 this.operations_panel_view = Some(operations_panel);
+                if initialize_date_format && !load_failed { this.save_preferences(cx); }
                 this.start_watcher_task(cx);
                 this.reconcile_watchers();
                 this.refresh_all_tabs(cx);

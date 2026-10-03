@@ -66,6 +66,9 @@ impl Platform for LinuxPlatform {
         Err("File clipboard is not available on this platform yet".to_string())
     }
 
+    fn regional_locale(&self) -> Option<String> {
+        ["LC_ALL", "LC_TIME", "LANG"].into_iter().filter_map(|key| std::env::var(key).ok()).find(|value| !value.is_empty())
+    }
     fn name(&self) -> &'static str {
         "linux"
     }

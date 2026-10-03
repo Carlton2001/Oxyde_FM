@@ -442,6 +442,9 @@ pub struct OxydeApp {
     pub show_media_previews: bool,
     pub show_grid_thumbnails: bool,
     pub settings_open: bool,
+    pub(crate) settings_button_bounds: Option<Bounds<Pixels>>,
+    pub(crate) settings_submenu_bounds: Option<Bounds<Pixels>>,
+    pub(crate) settings_picker: Option<crate::ui::components::settings::SettingsPicker>,
     pub(crate) theme_id: crate::ui::theme::ThemeId,
     pub(crate) language: crate::ui::i18n::Language,
     pub(crate) settings_error: Option<Message>,
@@ -856,6 +859,9 @@ impl OxydeApp {
             show_media_previews: config.show_previews,
             show_grid_thumbnails: config.show_grid_thumbnails,
             settings_open: false,
+            settings_button_bounds: None,
+            settings_submenu_bounds: None,
+            settings_picker: None,
             theme_id: crate::ui::theme::ThemeId::from_id(&config.theme),
             language: crate::ui::i18n::Language::from_id(&config.language),
             settings_error: load_failed.then_some(Message::SettingsLoadError),
@@ -2032,7 +2038,24 @@ impl Render for OxydeApp {
         self.clamp_scrolls();
         self.follow_active_path(cx);
 
+        let settings_keyboard = handle.clone();
         let mut root = div()
+            .on_key_down(move |event, _, cx| {
+                if event.keystroke.key == "escape" {
+                    settings_keyboard.update(cx, |this, cx| {
+                        if this.settings_open {
+                            if this.settings_picker.is_some() {
+                                this.settings_picker = None;
+                                this.settings_submenu_bounds = None;
+                            } else {
+                                this.settings_open = false;
+                            }
+                            cx.stop_propagation();
+                            cx.notify();
+                        }
+                    });
+                }
+            })
             .track_focus(&self.focus_handle)
             .size_full()
             .bg(cx.theme().background)
@@ -3417,7 +3440,7 @@ impl Render for OxydeApp {
 
         if self.settings_open {
             use crate::ui::components::settings::render_settings_panel;
-            root = root.child(deferred(render_settings_panel(self, handle.clone(), cx)));
+            root = root.child(deferred(render_settings_panel(self, handle.clone(), _window, cx)));
         }
 
         if let Some(pending) = self.pending_file_operations.front() {

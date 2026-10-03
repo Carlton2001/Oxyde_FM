@@ -570,7 +570,7 @@ pub fn render_file_list(
                                                 })
                                                 .child(div().w(px(type_w)).flex_none().px(rems(0.5)).text_color(theme.text_muted).text_ellipsis().text_size(rems(0.75)).when(is_dimmed, |d| d.opacity(0.5)).child(file_type_display(file, cx.i18n())))
                                                 .child(div().w(px(size_w)).flex_none().px(rems(0.5)).flex().justify_end().text_color(theme.text_muted).text_ellipsis().text_size(rems(0.75)).when(is_dimmed, |d| d.opacity(0.5)).child(format_size(file.size, is_dir, file.is_calculated, language)))
-                                                .child(div().w(px(date_w)).flex_none().px(rems(0.5)).text_color(theme.text_muted).text_ellipsis().text_size(rems(0.75)).when(is_dimmed, |d| d.opacity(0.5)).child(format_date(file.modified, language)))
+                                                .child(div().w(px(date_w)).flex_none().px(rems(0.5)).text_color(theme.text_muted).text_ellipsis().text_size(rems(0.75)).when(is_dimmed, |d| d.opacity(0.5)).child(format_date(file.modified, crate::ui::format::date_format(cx))))
                                             }}).collect::<Vec<_>>()
                                     }
                                 }

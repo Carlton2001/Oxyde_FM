@@ -216,3 +216,19 @@ settings-checkboxes-description = Sélectionner plusieurs éléments sans mainte
 
 settings-path-tracking = Suivi du chemin
 settings-path-tracking-description = Déplier les dossiers parents et révéler le dossier actif dans la barre latérale.
+
+settings-date-format = Format des dates
+date-format-us = États-Unis (MM/JJ/AAAA)
+date-format-european = Européen (JJ/MM/AAAA)
+date-format-iso = ISO 8601 (AAAA-MM-JJ)
+settings-network = Voisinage réseau
+settings-network-description = Afficher le voisinage réseau dans le panneau gauche.
+
+settings-region-language = Région & langue
+settings-performance = Performances
+settings-turbo = Transferts de fichiers Turbo
+settings-search-limit = Limite de recherche
+settings-data = Données de l’application
+settings-clear-cache = Effacer le cache
+settings-reset-preferences = Réinitialiser les préférences
+settings-coming-soon = À venir

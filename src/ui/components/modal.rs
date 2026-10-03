@@ -13,7 +13,6 @@ use gpui::*;
 pub struct Modal {
     id: ElementId,
     title: SharedString,
-    header_action: Option<AnyElement>,
     body: AnyElement,
     actions: Vec<AnyElement>,
     width: AbsoluteLength,
@@ -30,7 +29,6 @@ impl Modal {
         Self {
             id: id.into(),
             title: title.into(),
-            header_action: None,
             body: body.into_any_element(),
             actions: Vec::new(),
             width: rems(27.5).into(),
@@ -41,11 +39,6 @@ impl Modal {
 
     pub fn width(mut self, width: impl Into<AbsoluteLength>) -> Self {
         self.width = width.into();
-        self
-    }
-
-    pub fn header_action(mut self, action: impl IntoElement) -> Self {
-        self.header_action = Some(action.into_any_element());
         self
     }
 
@@ -115,8 +108,7 @@ impl RenderOnce for Modal {
                                     .text_size(rems(1.0))
                                     .font_weight(FontWeight::SEMIBOLD)
                                     .child(self.title),
-                            )
-                            .children(self.header_action),
+                            ),
                     )
                     .child(
                         div()

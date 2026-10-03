@@ -1,6 +1,12 @@
 //! Display conventions for the supported languages. File data remains numeric.
 use chrono::{DateTime, Local, NaiveDateTime};
+pub use oxyde_lib::models::preferences::DateFormat;
 use oxyde_lib::models::preferences::Language;
+pub struct DateFormatPreference(pub DateFormat);
+impl gpui::Global for DateFormatPreference {}
+pub fn date_format(cx: &gpui::App) -> DateFormat {
+    cx.global::<DateFormatPreference>().0
+}
 
 pub fn format_number(number: u64, language: Language) -> String {
     let digits = number.to_string();
@@ -53,21 +59,22 @@ pub fn format_size(bytes: u64, is_dir: bool, is_calculated: bool, language: Lang
     )
 }
 
-pub fn format_date(timestamp_ms: u64, language: Language) -> String {
+pub fn format_date(timestamp_ms: u64, format: DateFormat) -> String {
     if timestamp_ms == 0 {
         return "–".into();
     }
     i64::try_from(timestamp_ms)
         .ok()
         .and_then(DateTime::from_timestamp_millis)
-        .map(|date| format_datetime(date.with_timezone(&Local).naive_local(), language))
+        .map(|date| format_datetime(date.with_timezone(&Local).naive_local(), format))
         .unwrap_or_else(|| "–".into())
 }
 
-fn format_datetime(date: NaiveDateTime, language: Language) -> String {
-    let pattern = match language {
-        Language::French => "%d/%m/%Y %H:%M:%S",
-        Language::English => "%m/%d/%Y %H:%M:%S",
+fn format_datetime(date: NaiveDateTime, format: DateFormat) -> String {
+    let pattern = match format {
+        DateFormat::European => "%d/%m/%Y %H:%M:%S",
+        DateFormat::Us => "%m/%d/%Y %H:%M:%S",
+        DateFormat::Iso => "%Y-%m-%d %H:%M:%S",
     };
     date.format(pattern).to_string()
 }
@@ -110,14 +117,15 @@ mod tests {
             .and_hms_opt(13, 5, 7)
             .unwrap();
         assert_eq!(
-            format_datetime(date, Language::French),
+            format_datetime(date, DateFormat::European),
             "28/09/2026 13:05:07"
         );
+        assert_eq!(format_datetime(date, DateFormat::Us), "09/28/2026 13:05:07");
         assert_eq!(
-            format_datetime(date, Language::English),
-            "09/28/2026 13:05:07"
+            format_datetime(date, DateFormat::Iso),
+            "2026-09-28 13:05:07"
         );
-        assert_eq!(format_date(0, Language::French), "–");
-        assert_eq!(format_date(u64::MAX, Language::English), "–");
+        assert_eq!(format_date(0, DateFormat::European), "–");
+        assert_eq!(format_date(u64::MAX, DateFormat::Us), "–");
     }
 }

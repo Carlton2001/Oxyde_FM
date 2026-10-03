@@ -173,6 +173,11 @@ impl Platform for WindowsPlatform {
         crate::commands::clipboard::get_clipboard_files().map_err(|error| format!("{error:?}"))
     }
 
+    fn regional_locale(&self) -> Option<String> {
+        let mut buffer = [0u16; 85];
+        let length = unsafe { windows::Win32::Globalization::GetUserDefaultLocaleName(&mut buffer) };
+        (length > 0).then(|| String::from_utf16_lossy(&buffer[..length as usize - 1]))
+    }
     fn name(&self) -> &'static str {
         "windows"
     }

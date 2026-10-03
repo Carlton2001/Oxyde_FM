@@ -25,11 +25,12 @@ pub(crate) fn sidebar_paths_equal(left: &str, right: &str) -> bool {
 const SIDEBAR_ROW_H: Rems = rems(1.75);
 fn sidebar_row_h() -> f32 { rem_pixels(SIDEBAR_ROW_H).as_f32() }
 
-pub(crate) fn sidebar_item_visible(item: &SidebarItem, show_hidden: bool, show_system: bool) -> bool {
+pub(crate) fn sidebar_item_visible(item: &SidebarItem, show_hidden: bool, show_system: bool, show_network: bool) -> bool {
     match item {
         SidebarItem::Directory { node, .. } =>
             (show_hidden || !node.is_hidden) && (show_system || !node.is_system),
-        SidebarItem::Pinned { item } => show_hidden || !item.name.starts_with('.'),
+        SidebarItem::Pinned { item } => (show_network || item.path != "__network_vincinity__")
+            && (show_hidden || !item.name.starts_with('.')),
         SidebarItem::Header(Message::SidebarQuickAccess) => false,
         _ => true,
     }
@@ -638,7 +639,7 @@ pub fn render_sidebar(
         .state
         .sidebar_items
         .iter()
-        .filter(|item| sidebar_item_visible(item, show_hidden, show_system))
+        .filter(|item| sidebar_item_visible(item, show_hidden, show_system, view.show_network()))
         .cloned()
         .collect();
     let theme = *_cx.theme();

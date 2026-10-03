@@ -68,7 +68,9 @@ Les préférences UI sont stockées dans `AppConfig` et lues au démarrage. Elle
 - Sauvegarder les changements en arrière-plan dans l'ordre. Préserver les autres options et champs de configuration inconnus lors de l'écriture.
 - Garder les anciennes configurations lisibles avec des valeurs par défaut pour les champs absents ou inconnus.
 - Si la configuration est illisible, ne pas l'écraser automatiquement. Présenter l'état à l'utilisateur et ne pas prétendre que les changements sont persistés.
-- Le format UI des dates, nombres et tailles passe par `src/ui/format.rs` et la langue active.
+- Les formats passent par `src/ui/format.rs`. Les nombres et tailles suivent la langue ; les dates suivent la préférence persistée `date_format` (US, European, ISO). Sans choix enregistré, la locale régionale système en-US sélectionne US, les autres European. `show_network` contrôle la visibilité du voisinage réseau dans la sidebar.
+
+Le panneau des paramètres reprend deux colonnes : Apparence et Fichiers à gauche ; Région & langue, Performances, Données de l’application et À propos à droite. Le panneau compact est ancré sous le bouton Oxyde GPUI, sans fond assombri. Les sélecteurs de thème, langue et format de date ouvrent des sous-menus latéraux défilants, sans agrandir le panneau principal. Les sous-menus s’ouvrent à gauche si nécessaire et restent dans les limites de la fenêtre. Une sélection applique le choix sans fermer le sous-menu ; Échap ou un clic extérieur le ferme. Les options reprennent la taille de texte des menus contextuels (0,8125 rem). Les rubriques Performances et Données de l’application restent désactivées avec un libellé « À venir » tant que leurs actions ne sont pas implémentées.
 
 ## Réactivité et validation
 
