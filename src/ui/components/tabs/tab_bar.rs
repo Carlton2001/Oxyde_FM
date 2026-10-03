@@ -1,5 +1,7 @@
 use crate::ui::scale::rem_pixels;
 use crate::ui::style::h_flex;
+use crate::ui::components::tooltip::Tooltip;
+use crate::ui::i18n::{I18nContext, Message};
 use gpui::prelude::*;
 use gpui::*;
 
@@ -103,6 +105,31 @@ impl RenderOnce for TabBar {
         let measure_scroll = scroll.clone();
         let overflow_state = self.scroll_state.overflow;
         let active_index = self.scroll_state.active_index.get();
+        let new_tab_button = self.on_new_tab.map(|on_new_tab| {
+            div()
+            .id(SharedString::from(format!("new-tab-btn-{:?}", self.id)))
+            .flex_none()
+            .w(rems(2.0))
+            .h_full()
+            .flex()
+            .items_center()
+            .justify_center()
+            .bg(theme.header)
+            .border_b(rems(0.0625))
+            .border_color(theme.border)
+            .hover(|s| s.bg(theme.hover))
+            .tooltip(Tooltip::text(cx.i18n().text(Message::NewTab)))
+            .on_mouse_down(MouseButton::Left, move |_, window, cx| {
+                on_new_tab(window, cx);
+            })
+            .child(svg().path("icons/plus.svg").size_4().text_color(theme.text_muted))
+            .into_any_element()
+        });
+        let (inline_button, fixed_button) = if overflow {
+            (None, new_tab_button)
+        } else {
+            (new_tab_button, None)
+        };
         let scroll_button = |id: &'static str, icon: &'static str, direction: f32| {
             let scroll = scroll.clone();
             let at_edge = if direction > 0.0 {
@@ -183,6 +210,7 @@ impl RenderOnce for TabBar {
                                 }
                             })
                             .children(self.children)
+                            .children(inline_button)
                             // Small gap for drop target at the end of tabs list
                             .child(
                                 div()
@@ -227,24 +255,8 @@ impl RenderOnce for TabBar {
             .when(overflow, |d| {
                 d.child(scroll_button("tabs-right", "icons/arrow-right.svg", -1.0))
             })
-            // Keep the new-tab button outside the clipped, scrolling strip.
-            .when_some(self.on_new_tab, |this, on_new_tab| {
-                this.child(
-                    tab_bar_button(
-                        SharedString::from(format!("new-tab-btn-{:?}", self.id)),
-                        theme,
-                    )
-                    .on_mouse_down(MouseButton::Left, move |_, window, cx| {
-                        on_new_tab(window, cx);
-                    })
-                    .child(
-                        svg()
-                            .path("icons/plus.svg")
-                            .size_4()
-                            .text_color(theme.text_muted),
-                    ),
-                )
-            })
+            // Reserve a fixed button only while the tabs overflow.
+            .children(fixed_button)
             .child(h_flex().flex_none().children(self.end_children))
     }
 }

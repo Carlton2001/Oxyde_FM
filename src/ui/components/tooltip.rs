@@ -12,6 +12,7 @@ use std::time::Duration;
 pub struct Tooltip {
     title: SharedString,
     meta: Option<SharedString>,
+    shortcut: Option<SharedString>,
     file_info: Option<FileInfo>,
     preview_view: Option<Entity<PreviewTask>>,
 }
@@ -54,6 +55,19 @@ enum PreviewData {
 }
 
 impl Tooltip {
+    /// Keep action labels and their optional keyboard shortcut on one line.
+    pub fn with_shortcut(
+        title: impl Into<SharedString>,
+        shortcut: Option<SharedString>,
+    ) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
+        let title = title.into();
+        move |_, cx| {
+            cx.new(|_| Self {
+                title: title.clone(), meta: None, shortcut: shortcut.clone(),
+                file_info: None, preview_view: None,
+            }).into()
+        }
+    }
     /// Crée un constructeur de tooltip simple affichant un texte.
     #[allow(dead_code)]
     pub fn text(
@@ -64,6 +78,7 @@ impl Tooltip {
             cx.new(|_| Self {
                 title: title.clone(),
                 meta: None,
+                shortcut: None,
                 file_info: None,
                 preview_view: None,
             })
@@ -82,6 +97,7 @@ impl Tooltip {
             cx.new(|_| Self {
                 title: title.clone(),
                 meta: Some(meta.clone()),
+                shortcut: None,
                 file_info: None,
                 preview_view: None,
             })
@@ -100,6 +116,7 @@ impl Tooltip {
             cx.new(|_| Self {
                 title: SharedString::from(name.clone()),
                 meta: None,
+                shortcut: None,
                 file_info: Some(FileInfo {
                     ext: ext.clone(),
                     size: size.clone(),
@@ -152,6 +169,7 @@ impl Tooltip {
             Self {
                 title: SharedString::from(name),
                 meta: None,
+                shortcut: None,
                 file_info: Some(FileInfo { ext, size, date }),
                 preview_view,
             }
@@ -196,7 +214,15 @@ impl Render for Tooltip {
                     })
                     .text_size(rems(0.75))
                     .font_weight(FontWeight::MEDIUM)
-                    .child(self.title.clone()),
+                    .flex()
+                    .items_center()
+                    .gap(rems(0.75))
+                    .child(div().when(self.shortcut.is_some(), |title| title.whitespace_nowrap())
+                        .child(self.title.clone()))
+                    .when_some(self.shortcut.clone(), |row, shortcut| {
+                        row.child(div().whitespace_nowrap().text_color(theme.text_muted)
+                            .text_size(rems(0.6875)).child(shortcut))
+                    }),
             )
             .when_some(self.meta.clone(), |this, meta| {
                 this.child(

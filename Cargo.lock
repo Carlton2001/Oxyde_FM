@@ -4376,6 +4376,7 @@ dependencies = [
  "notify",
  "once_cell",
  "percent-encoding",
+ "raw-window-handle",
  "rayon",
  "regex",
  "rust-embed",

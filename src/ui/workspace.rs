@@ -929,6 +929,37 @@ impl WorkspaceState {
         }
     }
 
+    /// Insert a full-height column after the column containing the active pane.
+    pub fn add_panel_right(&mut self) -> Option<String> {
+        let current = self.find_pane(&self.active_pane_id)?.active_tab();
+        let path = if cfg!(target_os = "windows") { "C:\\" } else { "/" }.to_string();
+        let view_mode = current.view_mode;
+        let mut tab = TabState::new(format!("tab-{}", self.next_tab_id), path);
+        self.next_tab_id = self.next_tab_id.wrapping_add(1);
+        tab.view_mode = view_mode;
+        let pane = PaneState::new(tab);
+        let id = pane.id.clone();
+        let node = LayoutNode::Pane(Box::new(pane));
+        if let LayoutNode::Split { axis: LayoutAxis::Horizontal, children, weights, .. } = &mut self.layout {
+            let index = children.iter().position(|child| child.find_pane(&self.active_pane_id).is_some())?;
+            let weight = weights[index] / 2.0;
+            weights[index] = weight;
+            children.insert(index + 1, node);
+            weights.insert(index + 1, weight);
+        } else {
+            let previous = std::mem::replace(&mut self.layout, node);
+            let new_node = self.layout.clone();
+            self.layout = LayoutNode::Split {
+                id: format!("split-{}", uuid::Uuid::new_v4()),
+                axis: LayoutAxis::Horizontal,
+                children: vec![previous, new_node],
+                weights: vec![1.0, 1.0],
+            };
+        }
+        self.active_pane_id = id.clone();
+        Some(id)
+    }
+
     pub fn close_tab_id(&mut self, pane_id: &str, tab_idx: usize) {
         let mut pane_count = 0;
         self.layout.visit_panes(&mut |_| pane_count += 1);
@@ -1245,6 +1276,33 @@ impl WorkspaceState {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn new_panel_is_full_height_after_stacked_panes_and_preserves_tabs() {
+        let mut state = WorkspaceState::new();
+        let original = state.active_pane_id.clone();
+        state.add_tab(&original, "stacked-path".into(), true);
+        state.split_tab_to_axis(&original, 1, &original, LayoutAxis::Vertical, true);
+        let stacked = state.active_pane_id.clone();
+        let existing_tab = state.find_pane(&stacked).unwrap().active_tab().id.clone();
+        let added = state.add_panel_right().unwrap();
+        assert_eq!(state.find_pane(&added).unwrap().active_tab().path,
+            if cfg!(target_os = "windows") { "C:\\" } else { "/" });
+        assert_eq!(state.find_pane(&stacked).unwrap().active_tab().id, existing_tab);
+        let LayoutNode::Split { axis: LayoutAxis::Horizontal, children, .. } = &state.layout else {
+            panic!("Expected full-height columns");
+        };
+        assert!(matches!(&children[0], LayoutNode::Split { axis: LayoutAxis::Vertical, .. }));
+        assert!(matches!(&children[1], LayoutNode::Pane(pane) if pane.id == added));
+        // Adding from the left stack inserts beside it, before the existing right column.
+        state.active_pane_id = original;
+        let middle = state.add_panel_right().unwrap();
+        let LayoutNode::Split { children, weights, .. } = &state.layout else { panic!() };
+        assert_eq!(children.len(), 3);
+        assert_eq!(weights.len(), 3);
+        assert!(matches!(&children[1], LayoutNode::Pane(pane) if pane.id == middle));
+        assert!(matches!(&children[2], LayoutNode::Pane(pane) if pane.id == added));
+    }
+
     use super::*;
 
     #[test]

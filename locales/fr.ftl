@@ -232,3 +232,11 @@ settings-data = Données de l’application
 settings-clear-cache = Effacer le cache
 settings-reset-preferences = Réinitialiser les préférences
 settings-coming-soon = À venir
+
+title-new-panel = Nouveau panneau à droite
+title-tools = Outils
+tool-sizes = Calculer les tailles — À venir
+tool-search = Recherche avancée — À venir
+tool-duplicates = Rechercher les doublons — À venir
+
+tabs-new-tab = Nouvel onglet

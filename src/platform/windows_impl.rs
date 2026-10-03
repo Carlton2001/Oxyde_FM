@@ -329,14 +329,16 @@ impl Platform for WindowsPlatform {
         });
     }
 
-    fn set_application_icon(&self, icon_bytes: &[u8]) {
-        use windows::Win32::Foundation::{LPARAM, WPARAM};
+    fn set_application_icon(&self, window: raw_window_handle::RawWindowHandle, icon_bytes: &[u8]) {
+        use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
         use windows::Win32::UI::WindowsAndMessaging::{
-            CreateIconFromResourceEx, GetForegroundWindow, SendMessageW, ICON_BIG, ICON_SMALL,
+            CreateIconFromResourceEx, SendMessageW, ICON_BIG, ICON_SMALL,
             LR_DEFAULTSIZE, WM_SETICON,
         };
 
         unsafe {
+            let raw_window_handle::RawWindowHandle::Win32(handle) = window else { return; };
+            let hwnd = HWND(handle.hwnd.get() as *mut std::ffi::c_void);
             let hicon = CreateIconFromResourceEx(
                 icon_bytes,
                 true,       // fIcon: true for icon, false for cursor
@@ -346,8 +348,6 @@ impl Platform for WindowsPlatform {
                 LR_DEFAULTSIZE,
             );
             if let Ok(icon) = hicon {
-                // On récupère la fenêtre au premier plan (celle de GPUI qui vient d'ouvrir)
-                let hwnd = GetForegroundWindow();
                 if !hwnd.is_invalid() {
                     let _ = SendMessageW(
                         hwnd,

@@ -452,7 +452,25 @@ impl OxydeApp {
     pub fn refresh_all(&mut self, cx: &mut Context<Self>) {
         // Refreshing should update filesystem contents without resetting the users'
         // filters, selection, scroll position, or loading state on each tab.
-        self.refresh_all_tabs(cx);
+        let mut requests = Vec::new();
+        self.state.layout.visit_panes(&mut |pane| {
+            requests.push((pane.id.clone(), pane.active_tab_index, pane.active_tab().path.clone()));
+        });
+        for (pane_id, index, path) in requests {
+            self.request_tab_files(&pane_id, index, path, false, cx);
+        }
+        self.state.refresh_sidebar();
+        cx.notify();
+    }
+
+    pub fn add_panel_right(&mut self, cx: &mut Context<Self>) {
+        if let Some(id) = self.state.add_panel_right() {
+            let path = self.state.find_pane(&id).unwrap().active_tab().path.clone();
+            self.request_tab_files(&id, 0, path, false, cx);
+            self.reconcile_watchers();
+            self.save_workspace(cx);
+            cx.notify();
+        }
     }
 
     pub fn refresh_all_tabs(&mut self, cx: &mut Context<Self>) {

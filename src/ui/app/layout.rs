@@ -724,54 +724,6 @@ impl OxydeApp {
                     );
                 }
 
-                // Drop zone at the end of tabs (Transparent behavior-only div)
-                tab_bar = tab_bar.child(
-                    div()
-                        .w(rems(0.5)) // Close to tabs
-                        .h_full()
-                        .drag_over::<(String, usize)>({
-                            let h = h.clone();
-                            let p_id_cap = p_id.clone();
-                            move |style, (from_p, from_t), _, app| {
-                                let target = tabs_count;
-                                let is_noop =
-                                    from_p == &p_id_cap && *from_t == target.saturating_sub(1);
-
-                                h.update(app, |v, _| {
-                                    if !is_noop {
-                                        v.drop_target_idx = Some(target);
-                                        v.drop_target_pane = Some(p_id_cap.clone());
-                                    } else {
-                                        v.drop_target_idx = None;
-                                        v.drop_target_pane = None;
-                                    }
-                                    v.highlight_split_pane = None;
-                                });
-                                style
-                            }
-                        })
-                        .on_drop({
-                            let h = h.clone();
-                            let p_id_cap = p_id.clone();
-                            move |(from_p, from_t): &(String, usize), _, app| {
-                                let (f_p, f_t) = (from_p.clone(), *from_t);
-                                h.update(app, |this, cx| {
-                                    if f_p == p_id_cap {
-                                        this.state.reorder_tabs_id(&p_id_cap, f_t, tabs_count);
-                                    } else {
-                                        this.state.move_tab_to_pane_id(&f_p, f_t, &p_id_cap);
-                                    }
-                                    this.drop_target_idx = None;
-                                    this.drop_target_pane = None;
-                                    this.dragging_tab = None;
-                                    this.reconcile_watchers();
-                                    this.save_workspace(cx);
-                                    cx.notify();
-                                });
-                            }
-                        }),
-                );
-
                 div()
                     .h(rems(2.0))
                     .w_full()

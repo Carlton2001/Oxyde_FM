@@ -34,7 +34,8 @@ actions!(
         Supprimer,
         ToutSelectionner,
         Annuler,
-        Refaire
+        Refaire,
+        Actualiser
     ]
 );
 
@@ -443,6 +444,7 @@ pub struct OxydeApp {
     pub show_grid_thumbnails: bool,
     pub settings_open: bool,
     pub(crate) settings_button_bounds: Option<Bounds<Pixels>>,
+    pub(crate) tools_button_bounds: Option<Bounds<Pixels>>,
     pub(crate) settings_submenu_bounds: Option<Bounds<Pixels>>,
     pub(crate) settings_picker: Option<crate::ui::components::settings::SettingsPicker>,
     pub(crate) theme_id: crate::ui::theme::ThemeId,
@@ -659,6 +661,7 @@ impl OxydeApp {
 
     pub fn bind_keys(cx: &mut App) {
         cx.bind_keys([
+            KeyBinding::new("f5", Actualiser, None),
             KeyBinding::new("ctrl-a", ToutSelectionner, None),
             KeyBinding::new("ctrl-c", Copier, None),
             KeyBinding::new("ctrl-x", Couper, None),
@@ -860,6 +863,7 @@ impl OxydeApp {
             show_grid_thumbnails: config.show_grid_thumbnails,
             settings_open: false,
             settings_button_bounds: None,
+            tools_button_bounds: None,
             settings_submenu_bounds: None,
             settings_picker: None,
             theme_id: crate::ui::theme::ThemeId::from_id(&config.theme),
@@ -2043,6 +2047,12 @@ impl Render for OxydeApp {
             .on_key_down(move |event, _, cx| {
                 if event.keystroke.key == "escape" {
                     settings_keyboard.update(cx, |this, cx| {
+                        if !this.context_menus.is_empty() {
+                            this.context_menus.clear();
+                            cx.stop_propagation();
+                            cx.notify();
+                            return;
+                        }
                         if this.settings_open {
                             if this.settings_picker.is_some() {
                                 this.settings_picker = None;
@@ -2085,6 +2095,7 @@ impl Render for OxydeApp {
             .on_action(cx.listener(Self::on_action_tout_selectionner))
             .on_action(cx.listener(Self::on_action_annuler))
             .on_action(cx.listener(Self::on_action_refaire))
+            .on_action(cx.listener(|this, _: &Actualiser, _, cx| this.refresh_all(cx)))
             .on_action(cx.listener(Self::on_action_copier))
             .on_action(cx.listener(Self::on_action_couper))
             .on_action(cx.listener(Self::on_action_coller))

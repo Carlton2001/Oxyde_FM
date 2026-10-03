@@ -84,7 +84,7 @@ pub trait Platform: Send + Sync {
     fn show_properties_dialog(&self, path: &str);
 
     /// Définit l'icône de l'application pour la barre des tâches et la fenêtre.
-    fn set_application_icon(&self, icon_bytes: &[u8]);
+    fn set_application_icon(&self, window: raw_window_handle::RawWindowHandle, icon_bytes: &[u8]);
 
     /// Transfers selected file paths through the native file clipboard.
     fn set_clipboard_files(&self, paths: Vec<String>, cut: bool) -> Result<(), String>;

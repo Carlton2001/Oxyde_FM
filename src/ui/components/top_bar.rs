@@ -201,28 +201,6 @@ pub fn render_top_bar(
                     )
                 })
                 .child({
-                    div()
-                        .id("refresh-btn")
-                        .w_6()
-                        .h_6()
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .rounded_md()
-                        .hover(move |s| s.bg(hover_bg))
-                        .when(show_tooltips, |d| d.tooltip(Tooltip::text(_cx.i18n().text(Message::Refresh))))
-                        .on_mouse_down(MouseButton::Left, {
-                            let h = handle.clone();
-                            move |_, _, cx| { h.update(cx, |this, cx| this.refresh_all(cx)); }
-                        })
-                        .child(
-                            svg()
-                                .path("icons/refresh.svg")
-                                .text_color(icon_active)
-                                .size_4()
-                        )
-                })
-                .child({
                     let mut btn = div()
                         .id("forward-btn")
                         .w_6()

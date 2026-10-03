@@ -225,3 +225,11 @@ settings-data = Application data
 settings-clear-cache = Clear cache
 settings-reset-preferences = Reset preferences
 settings-coming-soon = Coming soon
+
+title-new-panel = New panel on the right
+title-tools = Tools
+tool-sizes = Calculate sizes — Coming soon
+tool-search = Advanced search — Coming soon
+tool-duplicates = Find duplicates — Coming soon
+
+tabs-new-tab = New tab

@@ -287,7 +287,7 @@ impl Platform for LinuxPlatform {
             .spawn();
     }
 
-    fn set_application_icon(&self, _icon_bytes: &[u8]) {
+    fn set_application_icon(&self, _window: raw_window_handle::RawWindowHandle, _icon_bytes: &[u8]) {
         // TODO
     }
 }

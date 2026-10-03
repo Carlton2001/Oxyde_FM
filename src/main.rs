@@ -70,7 +70,7 @@ fn main() {
                     })),
                     titlebar: Some(TitlebarOptions {
                         appears_transparent: true,
-                        title: None,
+                        title: Some("Oxyde GPUI".into()),
                         ..Default::default()
                     }),
                     ..Default::default()
@@ -82,7 +82,10 @@ fn main() {
                         // On charge l'icône PNG (pour Windows)
                         let assets = crate::ui::assets::EmbeddedAssetSource::new();
                         if let Ok(Some(icon_bytes)) = assets.load("icons/logo.png") {
-                            oxyde_lib::platform::platform().set_application_icon(&icon_bytes);
+                            match raw_window_handle::HasWindowHandle::window_handle(window) {
+                                Ok(handle) => oxyde_lib::platform::platform().set_application_icon(handle.as_raw(), &icon_bytes),
+                                Err(error) => log::warn!("Cannot access Oxyde window handle: {error}"),
+                            }
                         }
                     });
                     app

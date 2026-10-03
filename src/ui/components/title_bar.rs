@@ -21,6 +21,57 @@ pub fn render_title_bar(
     let btn_hover_bg: Hsla = theme.control_hover;
     let icon_color: Hsla = theme.text_muted;
 
+    let action_button = |id: &'static str, icon: &'static str, label: Message| {
+        div().id(id).w(rems(2.25)).h_full().flex().items_center()
+            .justify_center().flex_none()
+            .hover(move |s| s.bg(btn_hover_bg))
+            .tooltip(Tooltip::with_shortcut(
+                cx.i18n().text(label),
+                if label == Message::Refresh { Some("F5".into()) } else { None },
+            ))
+            .child(svg().path(icon).size_4().text_color(icon_color))
+    };
+    let refresh_handle = handle.clone();
+    let refresh = action_button("title-refresh", "icons/refresh-cw.svg", Message::Refresh)
+        .on_mouse_down(MouseButton::Left, move |_, _, cx| {
+            refresh_handle.update(cx, |view, cx| view.refresh_all(cx));
+        });
+    let panel_handle = handle.clone();
+    let new_panel = action_button("title-new-panel", "icons/plus.svg", Message::NewPanel)
+        .on_mouse_down(MouseButton::Left, move |_, _, cx| {
+            panel_handle.update(cx, |view, cx| view.add_panel_right(cx));
+        });
+    let tools_handle = handle.clone();
+    let tools_measure_handle = handle.clone();
+    let tools = action_button("title-tools", "icons/wrench.svg", Message::Tools)
+        .relative()
+        .child(canvas(|bounds, _, _| bounds, move |_, bounds, _, cx| {
+            tools_measure_handle.update(cx, |view, _| view.tools_button_bounds = Some(bounds));
+        }).absolute().size_full())
+        .on_mouse_down(MouseButton::Left, move |_, _, cx| {
+            tools_handle.update(cx, |view, cx| {
+                let Some(bounds) = view.tools_button_bounds else { return; };
+                use crate::ui::app::{ContextMenuContent, ContextMenuInstance};
+                use crate::ui::components::dropdown::DropdownItem;
+                let items = [Message::ToolSizes, Message::ToolSearch, Message::ToolDuplicates]
+                    .into_iter().map(|message| {
+                        let mut item = DropdownItem::new(cx.i18n().text(message).to_string(), |_, _| {});
+                        item.is_dimmed = true;
+                        item
+                    }).collect();
+                view.settings_open = false;
+                view.context_menus.clear();
+                view.context_menus.push(ContextMenuInstance {
+                    position: point(bounds.right(), bounds.bottom()),
+                    content: ContextMenuContent::Items(items, None),
+                    scroll_handle: UniformListScrollHandle::new(),
+                    width: px(0.0), bottom_padding: 0.0, open_left: true,
+                    hovered_item: None, native_request_id: None,
+                });
+                cx.notify();
+            });
+        });
+
     // ── Oxyde app button (left) → opens Settings directly ───────────────────
     let h_menu = handle.clone();
     let measure_handle = handle.clone();
@@ -152,6 +203,10 @@ pub fn render_title_bar(
         .border_color(theme.border)
         .child(app_button)
         .child(drag_area)
+        .child(refresh)
+        .child(new_panel)
+        .child(tools)
+        .child(div().w(rems(0.5)).h_full().flex_none())
         .child(minimize_btn)
         .child(maximize_btn)
         .child(close_btn)
