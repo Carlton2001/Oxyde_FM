@@ -5,6 +5,17 @@ use gpui::Context;
 use oxyde_lib::models::ConfigManager;
 
 impl OxydeApp {
+    pub(crate) fn toggle_date_grouping(&mut self, pane_id: &str, cx: &mut Context<Self>) {
+        self.finish_pointer_drag(cx);
+        if let Some(pane) = self.state.find_pane_mut(pane_id) {
+            let tab = pane.active_tab_mut();
+            tab.group_by_date = !tab.group_by_date;
+            tab.list_scroll.0.borrow().base_handle.set_offset(gpui::point(gpui::px(0.0), gpui::px(0.0)));
+            tab.list_scroll.scroll_to_item(0, gpui::ScrollStrategy::Top);
+        }
+        self.save_workspace(cx);
+        cx.notify();
+    }
     pub(crate) fn follows_active_path(&self) -> bool { self.config.sync_sidebar_with_path }
     pub(crate) fn toggle_path_tracking(&mut self, cx: &mut Context<Self>) {
         self.config.sync_sidebar_with_path = !self.config.sync_sidebar_with_path;

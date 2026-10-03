@@ -69,7 +69,12 @@ impl OxydeApp {
                     &this.state.sidebar_items, &path, this.show_hidden, this.show_system, this.show_network(),
                 ) {
                     this.sidebar_selected_path = Some(current);
-                    this.sidebar_scroll.scroll_to_item(index, ScrollStrategy::Center);
+                    let visible: Vec<_> = this.state.sidebar_items.iter().filter(|item| crate::ui::components::sidebar::sidebar_item_visible(item, this.show_hidden, this.show_system, this.show_network())).collect();
+                    let top: f32 = visible.iter().take(index).map(|item| crate::ui::components::sidebar::sidebar_item_height(item)).sum();
+                    let height = visible.get(index).map(|item| crate::ui::components::sidebar::sidebar_item_height(item)).unwrap_or(0.0);
+                    let scroll = this.sidebar_scroll.0.borrow().base_handle.clone();
+                    let viewport = scroll.bounds().size.height.as_f32();
+                    scroll.set_offset(point(scroll.offset().x, px(-(top + height / 2.0 - viewport / 2.0).max(0.0))));
                 }
                 this.reconcile_watchers();
                 cx.notify();

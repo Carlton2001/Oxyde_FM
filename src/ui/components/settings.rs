@@ -110,6 +110,19 @@ pub fn render_settings_panel(
         ))
         .child(scale_row(view, handle.clone(), cx))
         .child(settings_row(
+            i18n.text(Message::SettingsGroupByDate),
+            i18n.text(Message::SettingsGroupByDateDescription),
+            "icons/calendar-days.svg",
+            view.state.find_pane(&view.state.active_pane_id).is_some_and(|pane| pane.active_tab().group_by_date),
+            "toggle-date-grouping",
+            handle.clone(),
+            theme,
+            |view, cx| {
+                let pane_id = view.state.active_pane_id.clone();
+                view.toggle_date_grouping(&pane_id, cx);
+            },
+        ))
+        .child(settings_row(
             i18n.text(Message::SettingsGridThumbnails),
             i18n.text(Message::SettingsGridThumbnailsDescription),
             "icons/layout-grid.svg",

@@ -25,6 +25,11 @@ pub(crate) fn sidebar_paths_equal(left: &str, right: &str) -> bool {
 const SIDEBAR_ROW_H: Rems = rems(1.75);
 fn sidebar_row_h() -> f32 { rem_pixels(SIDEBAR_ROW_H).as_f32() }
 
+pub(crate) fn sidebar_item_height(item: &SidebarItem) -> f32 {
+    if matches!(item, SidebarItem::Drive { .. }) { rem_pixels(rems(2.25)).as_f32() }
+    else { sidebar_row_h() }
+}
+
 pub(crate) fn sidebar_item_visible(item: &SidebarItem, show_hidden: bool, show_system: bool, show_network: bool) -> bool {
     match item {
         SidebarItem::Directory { node, .. } =>
@@ -612,7 +617,7 @@ fn render_sidebar_rail(
             )
             .when(is_drive, |d| d.font_weight(FontWeight::BOLD).text_size(rems(0.75)))
             .when(selected, |d| {
-                d.bg(theme.accent.opacity(0.1)).text_color(theme.accent)
+                d.bg(theme.accent.opacity(0.1)).text_color(theme.text)
             }),
         );
     }
@@ -674,7 +679,7 @@ pub fn render_sidebar(
     let viewport_w = view.sidebar_display_width();
     let content_w = calculated_content_w.max(viewport_w);
     let viewport_h = (view.list_height - logical(76.0)).max(1.0);
-    let content_h = (sidebar_items.len() as f32 * sidebar_row_h()).max(1.0);
+    let content_h = sidebar_items.iter().map(sidebar_item_height).sum::<f32>().max(1.0);
 
     // Highlight only the folder currently open in the active pane's active tab.
     let selected_path = view
@@ -714,10 +719,7 @@ pub fn render_sidebar(
                             let h = handle.clone();
                             let sel = selected_path.clone();
                             let pinned_paths_for_list = pinned_paths.clone();
-                            uniform_list(
-                                "sidebar-list",
-                                sidebar_items.len(),
-                                move |range, _, cx| {
+                            let render_rows = move |range: std::ops::Range<usize>, cx: &mut App| {
                                     let items  = items_for_list.clone();
                                     let sel    = sel.clone();
                                     range.map(|i| {
@@ -814,7 +816,7 @@ pub fn render_sidebar(
                                                                     "trash://" => "icons/trash-sidebar.svg",
                                                                     _ => "icons/pin.svg",
                                                                 };
-                                                                svg().path(icon_path).size_4().text_color(theme.accent)
+                                                                svg().path(icon_path).size_4().text_color(if path == "__network_vincinity__" || path == "trash://" { theme.text } else { theme.accent })
                                                             })
                                                     )
                                                     .child(
@@ -866,7 +868,7 @@ pub fn render_sidebar(
                                                 div()
                                                     .id(SharedString::from(format!("sb-drv-{}", path)))
                                                     .w(px((content_w - logical(26.0)).max(1.0)))
-                                                    .h(px(sidebar_row_h()))
+                                                    .h(px(sidebar_item_height(item)))
                                                     .px_3()
                                                     .flex()
                                                     .items_center()
@@ -944,7 +946,7 @@ pub fn render_sidebar(
                                                     // Drive icon + label
                                                     .child(
                                                         div().w_4().h_4().mr_2().flex().items_center().justify_center().flex_shrink_0()
-                                                            .child(svg().path("icons/hard-drive.svg").size_4().text_color(theme.accent))
+                                                            .child(svg().path("icons/hard-drive.svg").size_4().text_color(theme.text))
                                                     )
                                                     .child(
                                                         div().flex_1().text_ellipsis().overflow_hidden()
@@ -1140,10 +1142,33 @@ pub fn render_sidebar(
                                             }
                                         }
                                     }).collect::<Vec<_>>()
-                                }
-                            )
-                            .track_scroll(&view.sidebar_scroll)
-                            .size_full()
+                                };
+                            let scroll = view.sidebar_scroll.0.borrow().base_handle.clone();
+                            let actual_viewport = scroll.bounds().size.height.as_f32();
+                            let viewport = actual_viewport.max(logical(200.0));
+                            let max_scroll = (content_h - if actual_viewport > 0.0 { actual_viewport } else { viewport }).max(0.0);
+                            let offset = (-scroll.offset().y.as_f32()).clamp(0.0, max_scroll);
+                            if scroll.offset().y.as_f32() != -offset {
+                                scroll.set_offset(point(scroll.offset().x, px(-offset)));
+                            }
+                            let mut start = 0;
+                            let mut top = 0.0;
+                            while start < sidebar_items.len() && top + sidebar_item_height(&sidebar_items[start]) < offset {
+                                top += sidebar_item_height(&sidebar_items[start]);
+                                start += 1;
+                            }
+                            let mut end = start;
+                            let mut bottom = top;
+                            while end < sidebar_items.len() && bottom < offset + viewport + sidebar_row_h() {
+                                bottom += sidebar_item_height(&sidebar_items[end]);
+                                end += 1;
+                            }
+                            let scroll_handle = handle.clone();
+                            div().id("sidebar-list").size_full().flex().flex_col().overflow_y_scroll().track_scroll(&scroll)
+                                .on_scroll_wheel(move |_, _, cx| scroll_handle.update(cx, |_, cx| cx.notify()))
+                                .child(div().flex_none().h(px(top)))
+                                .children(render_rows(start..end, _cx).into_iter().map(|row| div().flex_none().child(row)))
+                                .child(div().flex_none().h(px((content_h - bottom).max(0.0))))
                         }))
                 )
         );

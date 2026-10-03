@@ -59,6 +59,8 @@ pub struct SavedTab {
     #[serde(default)]
     pub view_mode: ViewMode,
     #[serde(default)]
+    pub group_by_date: bool,
+    #[serde(default)]
     pub back_stack: Vec<String>,
     #[serde(default)]
     pub forward_stack: Vec<String>,
@@ -189,6 +191,8 @@ pub struct TabState {
     pub selected_paths: std::collections::HashSet<String>,
     pub selection_anchor: Option<String>,
     pub view_mode: ViewMode,
+    pub group_by_date: bool,
+    pub collapsed_date_groups: std::collections::HashSet<crate::ui::date_groups::DateGroup>,
     pub cached_filtered_files: Vec<FileEntry>,
     pub type_col_width: f32,
     pub size_col_width: f32,
@@ -225,6 +229,8 @@ impl TabState {
             selected_paths: std::collections::HashSet::new(),
             selection_anchor: None,
             view_mode: ViewMode::Grid,
+            group_by_date: false,
+            collapsed_date_groups: Default::default(),
             cached_filtered_files: Vec::new(),
             type_col_width: 100.0,
             size_col_width: 100.0,
@@ -448,6 +454,7 @@ impl SavedLayoutNode {
                         id: tab.id.clone(),
                         path: tab.path.clone(),
                         view_mode: tab.view_mode,
+                        group_by_date: tab.group_by_date,
                         back_stack: tab.back_stack.clone(),
                         forward_stack: tab.forward_stack.clone(),
                     })
@@ -484,6 +491,7 @@ impl SavedLayoutNode {
                     .map(|tab| {
                         let mut state = TabState::new(tab.id, tab.path);
                         state.view_mode = tab.view_mode;
+                        state.group_by_date = tab.group_by_date;
                         state.back_stack = tab.back_stack;
                         state.forward_stack = tab.forward_stack;
                         state
@@ -1012,15 +1020,16 @@ impl WorkspaceState {
         let duplicate = if let Some(pane) = self.find_pane(pane_id) {
             pane.tabs
                 .get(tab_idx)
-                .map(|tab| (tab.path.clone(), tab.view_mode))
+                .map(|tab| (tab.path.clone(), tab.view_mode, tab.group_by_date))
         } else {
             None
         };
 
-        if let Some((path, view_mode)) = duplicate {
+        if let Some((path, view_mode, group_by_date)) = duplicate {
             self.add_tab(pane_id, path, true);
             if let Some(pane) = self.find_pane_mut(pane_id) {
                 pane.active_tab_mut().view_mode = view_mode;
+                pane.active_tab_mut().group_by_date = group_by_date;
             }
             self.find_pane(pane_id).map(|pane| pane.active_tab_index)
         } else {
@@ -1442,6 +1451,7 @@ mod tests {
 
         let active_pane_id = state.active_pane_id.clone();
         state.add_tab(&active_pane_id, "F:/second".to_string(), true);
+        state.find_pane_mut(&active_pane_id).unwrap().active_tab_mut().group_by_date = true;
         if let LayoutNode::Split { weights, .. } = &mut state.layout {
             *weights = vec![1.4, 0.6];
         } else {
@@ -1470,10 +1480,26 @@ mod tests {
         assert_eq!(pane.tabs.len(), 2);
         assert_eq!(pane.tabs[0].path, "E:/active");
         assert_eq!(pane.active_tab().path, "F:/second");
+        assert!(pane.active_tab().group_by_date);
+        assert!(!pane.tabs[0].group_by_date);
         match &restored.layout {
             LayoutNode::Split { weights, .. } => assert_eq!(weights, &[1.4, 0.6]),
             LayoutNode::Pane(_) => panic!("expected split layout after restore"),
         }
+    }
+
+    #[test]
+    fn date_grouping_is_optional_in_legacy_tabs_and_independent_in_duplicates() {
+        let old: SavedTab = serde_json::from_str(r#"{"id":"old","path":"C:/"}"#).unwrap();
+        assert!(!old.group_by_date);
+        let mut state = WorkspaceState::new();
+        let pane_id = state.active_pane_id.clone();
+        state.find_pane_mut(&pane_id).unwrap().active_tab_mut().group_by_date = true;
+        let index = state.duplicate_tab(&pane_id, 0).unwrap();
+        let pane = state.find_pane_mut(&pane_id).unwrap();
+        assert!(pane.tabs[index].group_by_date);
+        pane.tabs[index].group_by_date = false;
+        assert!(pane.tabs[0].group_by_date);
     }
 
     #[test]

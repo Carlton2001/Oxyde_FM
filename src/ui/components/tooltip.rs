@@ -1,12 +1,60 @@
 use crate::ui::components::icons::{get_preview_type, PreviewType};
 use crate::ui::format::{format_date, format_size};
 use crate::ui::i18n::{FluentArgs, I18nContext, Message};
+use crate::ui::scale::rem_pixels;
 use crate::ui::style::TNUM;
 use crate::ui::theme::OxydeTheme;
 use gpui::prelude::FluentBuilder;
 use gpui::*;
 use std::sync::Arc;
 use std::time::Duration;
+use unicode_segmentation::UnicodeSegmentation;
+
+fn filename_line_ranges(name: &str, width: f32, x_for_index: impl Fn(usize) -> f32) -> Vec<std::ops::Range<usize>> {
+    let extension = name.rfind('.').filter(|index| *index > 0 && *index + 1 < name.len());
+    let mut ranges = Vec::new();
+    let mut start = 0;
+    let mut end = 0;
+    for next in name.grapheme_indices(true).map(|(index, grapheme)| index + grapheme.len())
+        .filter(|next| !extension.is_some_and(|extension| *next > extension && *next < name.len())) {
+        if end > start && x_for_index(next) - x_for_index(start) > width {
+            ranges.push(start..end);
+            start = end;
+        }
+        end = next;
+    }
+    ranges.push(start..name.len());
+    ranges
+}
+
+#[cfg(test)]
+mod filename_tests {
+    use super::filename_line_ranges;
+    use unicode_segmentation::UnicodeSegmentation;
+
+    #[test]
+    fn wraps_without_losing_text_or_splitting_the_extension() {
+        for name in ["long_filename_without_spaces.pdf", "archive.tar.gz", "été👩‍💻_document.docx", ".gitignore", ""] {
+            let ranges = filename_line_ranges(name, 8.0, |index| name[..index].graphemes(true).count() as f32);
+            let lines: Vec<_> = ranges.iter().map(|range| &name[range.clone()]).collect();
+            assert_eq!(lines.concat(), name);
+            if let Some(dot) = name.rfind('.').filter(|index| *index > 0) {
+                assert!(lines.last().unwrap().ends_with(&name[dot..]));
+            }
+            for range in ranges {
+                assert!(range.start == 0 || name.grapheme_indices(true).any(|(index, _)| index == range.start));
+            }
+        }
+    }
+
+    #[test]
+    fn wider_bubble_keeps_the_full_name_on_two_lines() {
+        let name = "abcdefghijklmnop.pdf";
+        let measure = |index| index as f32;
+        assert!(filename_line_ranges(name, 8.0, measure).len() > 2);
+        assert_eq!(filename_line_ranges(name, 10.0, measure).len(), 2);
+    }
+}
 
 /// Un composant de bulle d'aide (Tooltip) dans le style Oxyde.
 pub struct Tooltip {
@@ -165,6 +213,9 @@ impl Tooltip {
             } else {
                 None
             };
+            if let Some(preview) = &preview_view {
+                cx.observe(preview, |_, _, cx| cx.notify()).detach();
+            }
 
             Self {
                 title: SharedString::from(name),
@@ -178,10 +229,52 @@ impl Tooltip {
 }
 
 impl Render for Tooltip {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let theme = OxydeTheme::global(cx);
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let theme = *OxydeTheme::global(cx);
+        let maximum_width = rem_pixels(rems(26.5)).min((window.viewport_size().width - rem_pixels(rems(2.0))).max(px(1.0)));
+        let chrome = rem_pixels(rems(1.625));
+        let mut tooltip_width = maximum_width;
+        let title_lines: Vec<SharedString> = if self.file_info.is_some() {
+            let mut font = window.text_style().font();
+            font.family = "Inter".into();
+            font.weight = FontWeight::MEDIUM;
+            font.features = TNUM.clone();
+            let line = window.text_system().shape_line(self.title.clone(), rem_pixels(rems(0.75)), &[TextRun {
+                len: self.title.len(), font: font.clone(), color: theme.accent, background_color: None, underline: None, strikethrough: None,
+            }], None);
+            let preview_width = self.preview_view.as_ref().map(|view| view.read(cx).clone())
+                .map(|preview| {
+                    preview.loaded_image(window, cx)
+                        .map(|image| fitted_preview_size(&image, maximum_width - chrome).width)
+                        .unwrap_or_else(|| if matches!(preview.data, Some(PreviewData::Text(_))) { rem_pixels(rems(21.875)).min(maximum_width - chrome) } else { px(0.0) })
+                })
+                .unwrap_or(px(0.0));
+            // Prefer the preview width, then widen only as needed to show the
+            // complete filename on two lines, keeping the extension together.
+            let preferred_width = if preview_width > px(0.0) { preview_width } else { line.width };
+            tooltip_width = (preferred_width.max(rem_pixels(rems(14.0))) + chrome).min(maximum_width);
+            let wrap = |width: Pixels| filename_line_ranges(&self.title, (width - chrome).as_f32().max(1.0), |index| line.x_for_index(index).as_f32());
+            if wrap(tooltip_width).len() > 2 {
+                if wrap(maximum_width).len() <= 2 {
+                    let mut lower = tooltip_width.as_f32();
+                    let mut upper = maximum_width.as_f32();
+                    for _ in 0..14 {
+                        let middle = (lower + upper) / 2.0;
+                        if wrap(px(middle)).len() <= 2 { upper = middle; } else { lower = middle; }
+                    }
+                    tooltip_width = px(upper.ceil()).min(maximum_width);
+                } else {
+                    tooltip_width = maximum_width;
+                }
+            }
+            wrap(tooltip_width).into_iter().map(|range| self.title[range].to_string().into()).collect()
+        } else {
+            vec![self.title.clone()]
+        };
 
         let mut box_div = div()
+            .max_w(tooltip_width)
+            .when(self.file_info.is_some(), |tooltip| tooltip.w(tooltip_width))
             .bg(theme.surface)
             .border(rems(0.0625))
             .border_color(theme.border)
@@ -206,7 +299,8 @@ impl Render for Tooltip {
             })
             .child(
                 div()
-                    .max_w(rems(25.0))
+                    .w_full()
+                    .min_w_0()
                     .text_color(if self.file_info.is_some() {
                         theme.accent
                     } else {
@@ -217,8 +311,10 @@ impl Render for Tooltip {
                     .flex()
                     .items_center()
                     .gap(rems(0.75))
-                    .child(div().when(self.shortcut.is_some(), |title| title.whitespace_nowrap())
-                        .child(self.title.clone()))
+                    .child(div().flex_1().min_w_0().flex().flex_col()
+                        .children(title_lines.into_iter().map(|line| div()
+                            .when(self.file_info.is_some() || self.shortcut.is_some(), |title| title.whitespace_nowrap())
+                            .child(line))))
                     .when_some(self.shortcut.clone(), |row, shortcut| {
                         row.child(div().whitespace_nowrap().text_color(theme.text_muted)
                             .text_size(rems(0.6875)).child(shortcut))
@@ -271,6 +367,7 @@ impl Render for Tooltip {
     }
 }
 
+#[derive(Clone)]
 pub struct PreviewTask {
     data: Option<PreviewData>,
     media_asset: Option<SharedString>,
@@ -278,6 +375,15 @@ pub struct PreviewTask {
 }
 
 impl PreviewTask {
+    fn loaded_image(&self, window: &mut Window, cx: &mut App) -> Option<Arc<RenderImage>> {
+        if let Some(source) = &self.media_asset {
+            return window.use_asset::<TooltipPreviewAsset>(source, cx).and_then(Result::ok);
+        }
+        if let Some(source) = &self.original_image {
+            return window.use_asset::<ImageAssetLoader>(&source.clone().into(), cx).and_then(Result::ok);
+        }
+        match &self.data { Some(PreviewData::Image(image)) => Some(image.clone()), _ => None }
+    }
     fn new(path: String, preview_type: PreviewType, cx: &mut Context<Self>) -> Self {
         if preview_type == PreviewType::Image {
             return Self {
@@ -473,30 +579,28 @@ impl PreviewTask {
     }
 }
 
+fn fitted_preview_size(image: &RenderImage, maximum_width: Pixels) -> Size<Pixels> {
+    let natural = image.size(0);
+    let ratio = natural.width.0 as f32 / (natural.height.0 as f32).max(1.0);
+    let width = maximum_width.min(rem_pixels(rems(23.75)) * ratio);
+    size(width, width / ratio.max(0.001))
+}
+
 impl Render for PreviewTask {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let theme = OxydeTheme::global(cx);
-        if let Some(source) = self.media_asset.clone() {
-            return div().child(
-                img(move |window: &mut Window, cx: &mut App| {
-                    window.use_asset::<TooltipPreviewAsset>(&source, cx)
-                })
-                .w(rems(25.0))
-                .max_h(rems(23.75))
-                .object_fit(ObjectFit::Contain)
-                .with_fallback(|| div().size_full().into_any_element()),
-            );
-        }
-        if let Some(source) = self.original_image.clone() {
-            return div().child(
-                img(source)
-                    .w(rems(25.0))
-                    .max_h(rems(23.75))
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let theme = *OxydeTheme::global(cx);
+        if let Some(image) = self.loaded_image(window, cx) {
+            let maximum = rem_pixels(rems(24.875)).min((window.viewport_size().width - rem_pixels(rems(3.625))).max(px(1.0)));
+            let size = fitted_preview_size(&image, maximum);
+            return div().w_full().flex().child(
+                img(image)
+                    .w(size.width)
+                    .h(size.height)
                     .object_fit(ObjectFit::Contain),
             );
         }
         if let Some(preview) = &self.data {
-            div().child(match preview {
+            div().w_full().flex().child(match preview {
                 PreviewData::Image(render_img) => img(render_img.clone())
                     .w(rems(25.0))
                     .max_h(rems(23.75))

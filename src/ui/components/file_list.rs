@@ -13,6 +13,49 @@ use gpui::*;
 use oxyde_lib::models::FileEntry;
 
 use crate::ui::components::icons::render_file_icon;
+use crate::ui::date_groups::{display_rows, DateGroup, DisplayRow};
+
+fn date_group_header(group: DateGroup, count: usize, collapsed: bool, pane_id: String, handle: Entity<OxydeApp>, height: f32, cx: &mut App) -> AnyElement {
+    let theme = *OxydeTheme::global(cx);
+    let mut args = FluentArgs::new();
+    args.set("count", count);
+    args.set("number", format_number(count as u64, cx.i18n().language()));
+    div().id(SharedString::from(format!("date-group-{pane_id}-{group:?}"))).flex_none()
+        .h(px(height)).w_full().flex().items_center().gap(rems(0.5))
+        .px(rems(0.5)).text_size(rems(0.8125)).text_color(theme.text)
+        .border_b(rems(0.0625)).border_color(theme.border)
+        .hover(|style| style.bg(theme.control_hover))
+        .on_mouse_down(MouseButton::Left, move |_, _, cx| {
+            cx.stop_propagation();
+            handle.update(cx, |view, cx| {
+                view.finish_pointer_drag(cx);
+                view.activate_pane(&pane_id, cx);
+                if let Some(pane) = view.state.find_pane_mut(&pane_id) {
+                    let groups = &mut pane.active_tab_mut().collapsed_date_groups;
+                    if !groups.remove(&group) { groups.insert(group); }
+                }
+                cx.notify();
+            });
+        })
+        .child(svg().path(if collapsed { "icons/chevron-right.svg" } else { "icons/chevron-down.svg" }).size(rems(1.0)).text_color(theme.accent))
+        .child(cx.i18n().text(group.message()))
+        .child(div().rounded_sm().border(rems(0.0625)).border_color(theme.border).px(rems(0.375)).text_size(rems(0.75)).text_color(theme.text_muted).child(cx.i18n().text_with_args(Message::DateGroupCount, &args)))
+        .into_any_element()
+}
+
+fn date_group_button(pane_id: &str, enabled: bool, handle: Entity<OxydeApp>, theme: OxydeTheme, cx: &mut Context<OxydeApp>) -> impl IntoElement {
+    let pane_id = pane_id.to_string();
+    div().id(SharedString::from(format!("group-by-date-{pane_id}")))
+        .size(rems(1.5)).flex_none().flex().items_center().justify_center().rounded_md()
+        .bg(if enabled { theme.selected } else { theme.header })
+        .hover(|style| style.bg(theme.control_hover))
+        .tooltip(Tooltip::text(cx.i18n().text(Message::SettingsGroupByDate)))
+        .on_mouse_down(MouseButton::Left, move |_, _, cx| {
+            cx.stop_propagation();
+            handle.update(cx, |view, cx| view.toggle_date_grouping(&pane_id, cx));
+        })
+        .child(svg().path("icons/calendar-days.svg").size(rems(1.0)).text_color(if enabled { theme.accent } else { theme.text_muted }))
+}
 
 struct GridThumbnailAsset;
 
@@ -103,7 +146,8 @@ pub fn render_file_list(
     }
     let active_tab = pane.active_tab();
     let files = active_tab.filtered_files().to_vec();
-    let count = files.len() as f32;
+    let rows = display_rows(&files, active_tab.group_by_date, &active_tab.collapsed_date_groups, 1);
+    let count = rows.len() as f32;
     let empty_message = if !files.is_empty() {
         None
     } else if !active_tab.files.is_empty() {
@@ -240,9 +284,11 @@ pub fn render_file_list(
                         .child(
                             uniform_list(
                                 SharedString::from(format!("file-list-{}", pane_id)),
-                                files.len(),
+                                rows.len(),
                                 {
                                     let files = files.clone();
+                                    let rows = rows.clone();
+                                    let collapsed = active_tab.collapsed_date_groups.clone();
                                     let h_inner = handle.clone();
                                     let p_id_for_list = pane_id.clone();
                                     let selected_paths = selected_paths.clone();
@@ -251,7 +297,11 @@ pub fn render_file_list(
                                         let folder_subdirectory_flags = folder_subdirectory_flags.clone();
                                         range.map(|i| {
                                             let theme = *OxydeTheme::global(cx);
-                                            let file = &files[i];
+                                            let index = match &rows[i] {
+                                                DisplayRow::Header(group, count) => return date_group_header(*group, *count, collapsed.contains(group), p_id_for_list.clone(), h_inner.clone(), crate::ui::style::row_height(), cx),
+                                                DisplayRow::Files(indices) => indices[0],
+                                            };
+                                            let file = &files[index];
                                             let is_dir = file.is_dir;
                                             let path = file.path.clone();
                                             let is_selected = selected_paths.contains(&path);
@@ -475,6 +525,8 @@ pub fn render_file_list(
                                                         .child(
                                                             div()
                                                                 .id(SharedString::from(format!("file-content-{}", path_str)))
+                                                                .flex_1()
+                                                                .min_w_0()
                                                                 .h_full()
                                                                 .px(rems(0.5))
                                                                 .flex()
@@ -524,8 +576,8 @@ pub fn render_file_list(
                                                                         let click_path = path.clone();
                                                                         let name = div()
                                                                             .flex_1()
-                                                                            .overflow_hidden()
-                                                                            .text_ellipsis()
+                                                                            .min_w_0()
+                                                                            .truncate()
                                                                             .font_weight(FontWeight::MEDIUM)
                                                                             .text_color(theme.text)
                                                                             .child(file_name.clone())
@@ -568,9 +620,9 @@ pub fn render_file_list(
                                                                 })
                                                         )
                                                 })
-                                                .child(div().w(px(type_w)).flex_none().px(rems(0.5)).text_color(theme.text_muted).text_ellipsis().text_size(rems(0.75)).when(is_dimmed, |d| d.opacity(0.5)).child(file_type_display(file, cx.i18n())))
-                                                .child(div().w(px(size_w)).flex_none().px(rems(0.5)).flex().justify_end().text_color(theme.text_muted).text_ellipsis().text_size(rems(0.75)).when(is_dimmed, |d| d.opacity(0.5)).child(format_size(file.size, is_dir, file.is_calculated, language)))
-                                                .child(div().w(px(date_w)).flex_none().px(rems(0.5)).text_color(theme.text_muted).text_ellipsis().text_size(rems(0.75)).when(is_dimmed, |d| d.opacity(0.5)).child(format_date(file.modified, crate::ui::format::date_format(cx))))
+                                                .child(div().w(px(type_w)).flex_none().px(rems(0.5)).text_color(theme.text_muted).truncate().text_size(rems(0.75)).when(is_dimmed, |d| d.opacity(0.5)).child(file_type_display(file, cx.i18n())))
+                                                .child(div().w(px(size_w)).flex_none().px(rems(0.5)).text_align(TextAlign::Right).text_color(theme.text_muted).truncate().text_size(rems(0.75)).when(is_dimmed, |d| d.opacity(0.5)).child(format_size(file.size, is_dir, file.is_calculated, language)))
+                                                .child(div().w(px(date_w)).flex_none().px(rems(0.5)).text_color(theme.text_muted).truncate().text_size(rems(0.75)).when(is_dimmed, |d| d.opacity(0.5)).child(format_date(file.modified, crate::ui::format::date_format(cx)))).into_any_element()
                                             }}).collect::<Vec<_>>()
                                     }
                                 }
@@ -905,6 +957,9 @@ pub fn render_file_list(
     let files_label = count_label(displayed_files, Message::StatusFiles);
     container = container.child(
         div()
+            .occlude()
+            .on_any_mouse_down(|_, _, cx| cx.stop_propagation())
+            .on_scroll_wheel(|_, _, cx| cx.stop_propagation())
             .absolute()
             .left_0()
             .right_0()
@@ -938,6 +993,8 @@ pub fn render_file_list(
                     )
             })
             .child(div().flex_1())
+            .child(date_group_button(&pane_id, active_tab.group_by_date, handle.clone(), theme, cx))
+            .child(div().flex_none().w(rems(0.0625)).h(rems(1.0)).bg(theme.border))
             .child(view_mode_button(
                 &pane_id,
                 ViewMode::Details,
@@ -997,7 +1054,8 @@ fn render_grid_file_list(
     let grid = crate::ui::style::GridGeometry::for_viewport(pane_width, crate::ui::components::scrollbar::zed_track_width());
     let columns = grid.columns;
     let card_width = grid.cell_width - logical(4.0);
-    let row_count = files.len().div_ceil(columns);
+    let rows = display_rows(&files, tab.group_by_date, &tab.collapsed_date_groups, columns);
+    let row_count = rows.len();
     let empty_message = if !files.is_empty() {
         None
     } else if !tab.files.is_empty() {
@@ -1027,11 +1085,10 @@ fn render_grid_file_list(
             .child(message)
             .into_any_element()
     } else {
-        let list = uniform_list(
-            SharedString::from(format!("file-grid-{pane_id}")),
-            row_count,
-            {
+        let render_rows = {
                 let files = files.clone();
+                let rows = rows.clone();
+                let collapsed = tab.collapsed_date_groups.clone();
                 let selected = selected.clone();
                 let pane_id = pane_id.clone();
                 let handle = handle.clone();
@@ -1040,15 +1097,18 @@ fn render_grid_file_list(
                 let rename_error = rename_error.clone();
                 let show_grid_thumbnails = show_grid_thumbnails;
                 let folder_subdirectory_flags = folder_subdirectory_flags.clone();
-                move |range, _, cx| {
+                move |range: std::ops::Range<usize>, cx: &mut App| {
                     range
                         .map(|row_index| {
                             let theme = *OxydeTheme::global(cx);
-                            let start = row_index * columns;
-                            let end = (start + columns).min(files.len());
-                            let cells = files[start..end]
+                            let indices = match &rows[row_index] {
+                                DisplayRow::Header(group, count) => return div().flex_none().child(date_group_header(*group, *count, collapsed.contains(group), pane_id.clone(), handle.clone(), crate::ui::style::row_height(), cx)),
+                                DisplayRow::Files(indices) => indices,
+                            };
+                            let cells = indices
                                 .iter()
-                                .map(|file| {
+                                .map(|index| {
+                                    let file = &files[*index];
                                     let path = file.path.clone();
                                     let name = file.name.clone();
                                     let is_dir = file.is_dir;
@@ -1383,6 +1443,7 @@ fn render_grid_file_list(
                                 .collect::<Vec<_>>();
                             div()
                                 .w_full()
+                                .flex_none()
                                 .h(px(crate::ui::style::grid_card_row_height()))
                                 .flex()
                                 .items_start()
@@ -1390,10 +1451,40 @@ fn render_grid_file_list(
                         })
                         .collect::<Vec<_>>()
                 }
-            },
-        )
-        .h_full()
-        .track_scroll(&tab.list_scroll);
+            };
+        let list = if tab.group_by_date {
+            let scroll = tab.list_scroll.0.borrow().base_handle.clone();
+            let viewport = view.pane_sizes.get(&pane_id).map(|size| size.height).unwrap_or(view.list_height).max(logical(200.0));
+            let actual_viewport = scroll.bounds().size.height.as_f32();
+            let max_scroll = (crate::ui::date_groups::content_height(&rows, true) - if actual_viewport > 0.0 { actual_viewport } else { viewport }).max(0.0);
+            let offset = (-scroll.offset().y.as_f32()).clamp(0.0, max_scroll);
+            if scroll.offset().y.as_f32() != -offset {
+                scroll.set_offset(point(px(0.0), px(-offset)));
+            }
+            let mut top = 0.0;
+            let mut start = 0;
+            while start < rows.len() && top + crate::ui::date_groups::row_height(&rows[start], true) < offset {
+                top += crate::ui::date_groups::row_height(&rows[start], true);
+                start += 1;
+            }
+            let mut end = start;
+            let mut bottom = top;
+            while end < rows.len() && bottom < offset + viewport + crate::ui::style::grid_card_row_height() {
+                bottom += crate::ui::date_groups::row_height(&rows[end], true);
+                end += 1;
+            }
+            let scroll_handle = handle.clone();
+            div().id(SharedString::from(format!("file-grid-grouped-{pane_id}")))
+                .h_full().flex().flex_col().overflow_y_scroll().track_scroll(&scroll)
+                .on_scroll_wheel(move |_, _, cx| scroll_handle.update(cx, |_, cx| cx.notify()))
+                .child(div().h(px(top)).flex_none())
+                .children(render_rows(start..end, cx))
+                .child(div().h(px((crate::ui::date_groups::content_height(&rows, true) - bottom).max(0.0))).flex_none())
+                .into_any_element()
+        } else {
+            uniform_list(SharedString::from(format!("file-grid-{pane_id}")), row_count, move |range, _, cx| render_rows(range, cx))
+                .h_full().track_scroll(&tab.list_scroll).into_any_element()
+        };
         let viewport_height = tab
             .list_scroll
             .0
@@ -1403,7 +1494,7 @@ fn render_grid_file_list(
             .size
             .height
             .as_f32();
-        let content_height = row_count as f32 * crate::ui::style::grid_card_row_height();
+        let content_height = crate::ui::date_groups::content_height(&rows, true);
         let scroll_offset = -tab
             .list_scroll
             .0
@@ -1574,6 +1665,9 @@ fn render_grid_file_list(
                 .right_0()
                 .bottom_0()
                 .h(px(status_bar_height()))
+                .occlude()
+                .on_any_mouse_down(|_, _, cx| cx.stop_propagation())
+                .on_scroll_wheel(|_, _, cx| cx.stop_propagation())
                 .min_w_0()
                 .flex_none()
                 .overflow_hidden()
@@ -1632,6 +1726,8 @@ fn render_grid_file_list(
                     )
                 })
                 .child(div().flex_1())
+                .child(date_group_button(&pane_id, tab.group_by_date, handle.clone(), theme, cx))
+                .child(div().flex_none().w(rems(0.0625)).h(rems(1.0)).bg(theme.border))
                 .child(view_mode_button(
                     &pane_id,
                     ViewMode::Details,

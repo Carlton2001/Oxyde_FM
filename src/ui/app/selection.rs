@@ -28,6 +28,7 @@ impl OxydeApp {
             );
             let grid_width = grid.content_width;
             let grid_columns = grid.columns;
+            let rows = crate::ui::date_groups::display_rows(tab.filtered_files(), tab.group_by_date, &tab.collapsed_date_groups, if grid_mode { grid_columns } else { 1 });
 
             // --- Auto-Scroll (Intuitive & Proportional) ---
             let list_top = bounds.origin.y;
@@ -46,20 +47,9 @@ impl OxydeApp {
             }
 
             if new_scroll_y != scroll_y {
-                let count = tab.filtered_files().len() as f32;
-                let visible_list_h = if grid_mode {
-                    bounds.size.height.max(1.0)
-                } else {
-                    (bounds.size.height - crate::ui::style::row_height()).max(1.0)
-                };
-                let content_h = if grid_mode {
-                    ((count / grid_columns as f32).ceil()
-                        * crate::ui::style::grid_card_row_height())
-                    .max(1.0)
-                } else {
-                    (count * crate::ui::style::row_height()).max(1.0)
-                };
-                let max_scroll = (content_h - visible_list_h).max(0.0);
+                let visible_list_h = if grid_mode { bounds.size.height.max(1.0) }
+                    else { (bounds.size.height - crate::ui::style::row_height()).max(1.0) };
+                let content_h = crate::ui::date_groups::content_height(&rows, grid_mode).max(1.0);                let max_scroll = (content_h - visible_list_h).max(0.0);
 
                 new_scroll_y = new_scroll_y.clamp(-max_scroll, 0.0);
                 if new_scroll_y != scroll_y {
@@ -86,54 +76,27 @@ impl OxydeApp {
                 let initial_selection_cap = initial_selection.clone();
 
                 let files = tab.filtered_files();
-                let current_rect_paths: std::collections::HashSet<String> = if grid_mode {
-                    let rect_left = start_pos.x.as_f32().min(current_pos.x.as_f32());
-                    let rect_right = start_pos.x.as_f32().max(current_pos.x.as_f32());
-                    let rect_top = start_pos.y.as_f32().min(current_pos.y.as_f32());
-                    let rect_bottom = start_pos.y.as_f32().max(current_pos.y.as_f32());
-                    let card_width = grid_width / grid_columns as f32;
-                    files
-                        .iter()
-                        .enumerate()
-                        .filter_map(|(index, file)| {
-                            let column = index % grid_columns;
-                            let row = index / grid_columns;
+                let rect_left = start_pos.x.as_f32().min(current_pos.x.as_f32());
+                let rect_right = start_pos.x.as_f32().max(current_pos.x.as_f32());
+                let rect_top = start_pos.y.as_f32().min(current_pos.y.as_f32());
+                let rect_bottom = start_pos.y.as_f32().max(current_pos.y.as_f32());
+                let card_width = grid_width / grid_columns as f32;
+                let mut top = bounds.origin.y + scroll_y + if grid_mode { 0.0 } else { crate::ui::style::row_height() };
+                let mut current_rect_paths = std::collections::HashSet::new();
+                for row in &rows {
+                    let height = crate::ui::date_groups::row_height(row, grid_mode);
+                    if let crate::ui::date_groups::DisplayRow::Files(indices) = row {
+                        for (column, index) in indices.iter().enumerate() {
                             let left = bounds.origin.x + logical(8.0) + column as f32 * card_width;
-                            let top = bounds.origin.y
-                                + row as f32 * crate::ui::style::grid_card_row_height()
-                                + scroll_y;
                             let right = left + card_width - logical(8.0);
-                            let bottom =
-                                top + crate::ui::style::grid_card_row_height() - logical(8.0);
-                            (left < rect_right
-                                && right > rect_left
-                                && top < rect_bottom
-                                && bottom > rect_top)
-                                .then(|| file.path.clone())
-                        })
-                        .collect()
-                } else {
-                    let rect_y_start = start_pos.y.as_f32().min(current_pos.y.as_f32());
-                    let rect_y_end = start_pos.y.as_f32().max(current_pos.y.as_f32());
-                    let list_origin_y = bounds.origin.y + crate::ui::style::row_height();
-                    let start_idx_f =
-                        (rect_y_start - list_origin_y - scroll_y) / crate::ui::style::row_height();
-                    let end_idx_f =
-                        (rect_y_end - list_origin_y - scroll_y) / crate::ui::style::row_height();
-                    let start_idx = (start_idx_f.floor() as i32).max(0) as usize;
-                    let end_idx = (end_idx_f.ceil() as i32).max(0) as usize;
-                    let start_idx = start_idx.min(files.len());
-                    let end_idx = end_idx.min(files.len());
-                    if start_idx < end_idx {
-                        files[start_idx..end_idx]
-                            .iter()
-                            .map(|file| file.path.clone())
-                            .collect()
-                    } else {
-                        std::collections::HashSet::new()
+                            let bottom = top + height - if grid_mode { logical(8.0) } else { 0.0 };
+                            if top < rect_bottom && bottom > rect_top && (!grid_mode || (left < rect_right && right > rect_left)) {
+                                current_rect_paths.insert(files[*index].path.clone());
+                            }
+                        }
                     }
-                };
-
+                    top += height;
+                }
                 if modifiers.control {
                     tab.selected_paths.clear();
                     for path in initial_selection_cap.iter() {
@@ -176,7 +139,8 @@ impl OxydeApp {
         if let Some(pane) = self.state.find_pane_mut(pane_id) {
             let tab = pane.active_tab_mut();
             if shift {
-                let filtered = tab.filtered_files();
+                let rows = crate::ui::date_groups::display_rows(tab.filtered_files(), tab.group_by_date, &tab.collapsed_date_groups, 1);
+                let filtered: Vec<_> = crate::ui::date_groups::visible_indices(&rows).into_iter().map(|index| &tab.filtered_files()[index]).collect();
                 let anchor_idx = tab
                     .selection_anchor
                     .as_ref()

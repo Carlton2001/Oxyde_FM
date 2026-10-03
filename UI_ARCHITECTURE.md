@@ -64,6 +64,8 @@ Appliquer le même principe aux futurs composants partagés : API de présentati
 
 Les préférences UI sont stockées dans `AppConfig` et lues au démarrage. Elles incluent le thème, la langue, les options d'affichage des fichiers cachés et système et les aperçus médias.
 
+Le regroupement par date est propre à chaque onglet (`TabState.group_by_date`) et persisté dans `SavedTab`, avec une valeur par défaut désactivée pour les anciens espaces de travail. Le bouton calendrier et le réglage des paramètres modifient l’onglet concerné uniquement. Les sections repliées restent un état temporaire de cet onglet. Les périodes suivent les jours du calendrier local et les semaines commençant le lundi, comme dans Tauri ; le tri courant est conservé dans chaque période. La grille groupée virtualise ses lignes de hauteurs différentes ; la géométrie de sélection utilise les mêmes lignes que le rendu.
+
 - Appliquer les changements de thème et de langue immédiatement via les globals GPUI, sans redémarrer ni recharger le dossier.
 - Sauvegarder les changements en arrière-plan dans l'ordre. Préserver les autres options et champs de configuration inconnus lors de l'écriture.
 - Garder les anciennes configurations lisibles avec des valeurs par défaut pour les champs absents ou inconnus.
