@@ -175,7 +175,7 @@ fn location_context_menu_raw(i18n: &I18n, h: Entity<OxydeApp>, path: String) -> 
     ]
 }
 
-fn drive_context_menu_raw(i18n: &I18n, h: Entity<OxydeApp>, path: String) -> Vec<DropdownItem> {
+fn drive_context_menu_raw(i18n: &I18n, h: Entity<OxydeApp>, path: String, is_usb: bool) -> Vec<DropdownItem> {
     let mut items = vec![
         DropdownItem {
             label: i18n.text(Message::Open).to_string(),
@@ -234,6 +234,21 @@ fn drive_context_menu_raw(i18n: &I18n, h: Entity<OxydeApp>, path: String) -> Vec
             on_hover: None,
         },
     ];
+    if is_usb {
+        let h = h.clone();
+        let path = path.clone();
+        items.push(DropdownItem {
+            label: i18n.text(Message::EjectDrive).to_string(),
+            icon: None,
+            stay_open: false,
+            has_submenu: false,
+            is_dimmed: false,
+            on_click: std::rc::Rc::new(move |_, app| {
+                h.update(app, |this, cx| this.eject_usb_drive(path.clone(), cx));
+            }),
+            on_hover: None,
+        });
+    }
     items.extend(sidebar_tree_actions(i18n, h, path, false));
     items
 }
@@ -309,7 +324,7 @@ fn sidebar_tree_actions(
                         this.expand_all_sidebar_path(path_action.clone(), cx);
                     } else {
                         this.state._collapse_all_sidebar_path(path_action.clone());
-                        this.reconcile_watchers();
+                        this.reconcile_watchers(cx);
                         cx.notify();
                     }
                 })
@@ -433,7 +448,7 @@ fn sidebar_toolbar(view: &OxydeApp, handle: Entity<OxydeApp>, cx: &mut Context<O
                     this.sidebar_follow_task = None;
                     this.state.expanded_paths.clear();
                     this.state.refresh_sidebar();
-                    this.reconcile_watchers();
+                    this.reconcile_watchers(cx);
                     cx.notify();
                 });
             },
@@ -633,6 +648,12 @@ pub fn render_sidebar(
     }
     let show_hidden = view.show_hidden;
     let show_system = view.show_system;
+    let expandable_drives: std::collections::HashSet<String> = view.state.drives.iter()
+        .filter(|drive| view.state.sidebar_nodes.get(&drive.path).is_some_and(|nodes| {
+            nodes.iter().any(|node| (show_hidden || !node.is_hidden)
+                && (show_system || !node.is_system))
+        }))
+        .map(|drive| drive.path.clone()).collect();
     // Paths that are genuinely in Quick Access — only these get "Désépingler"
     let pinned_paths: std::collections::HashSet<String> = view
         .state
@@ -859,6 +880,8 @@ pub fn render_sidebar(
                                             // ── Drive item ─────────────────────────────────
                                             SidebarItem::Drive { drive, is_expanded } => {
                                                 let path       = drive.path.clone();
+                                                let is_usb = drive.is_usb();
+                                                let has_subs = expandable_drives.contains(&path);
                                                 let is_sel     = sel.as_deref().is_some_and(|selected| sidebar_paths_equal(selected, &path));
                                                 let is_exp     = *is_expanded;
                                                 let sel_bg:    Hsla = theme.selected;
@@ -881,7 +904,7 @@ pub fn render_sidebar(
                                                         move |e, _, cx| {
                                                             h.update(cx, |this, cx| {
                                                                 this.sidebar_selected_path = Some(p.clone());
-                                                                if e.click_count == 2 {
+                                                                if e.click_count == 2 && has_subs {
                                                                     this.toggle_sidebar_path(p.clone(), cx);
                                                                 } else {
                                                                     let id = this.state.active_pane_id.clone();
@@ -905,7 +928,7 @@ pub fn render_sidebar(
                                                         let h = h.clone(); let p = path.clone();
                                                         move |e, _, cx| {
                                                             let pos   = e.position;
-                                                            let items = drive_context_menu(cx.i18n(), h.clone(), p.clone());
+                                                            let items = drive_context_menu(cx.i18n(), h.clone(), p.clone(), is_usb);
                                                             h.update(cx, |this, cx| {
                                                                 this.sidebar_selected_path = Some(p.clone());
                                                                 this.context_menus.clear();
@@ -928,6 +951,7 @@ pub fn render_sidebar(
                                                         div()
                                                             .w_4().h_4().mr_1()
                                                             .flex().items_center().justify_center().flex_shrink_0()
+                                                            .when(has_subs, |d| d
                                                             .hover(|s| s.bg(theme.hover).rounded_md())
                                                             .on_mouse_down(MouseButton::Left, {
                                                                 let h = h.clone(); let p = path.clone();
@@ -941,12 +965,12 @@ pub fn render_sidebar(
                                                             .child(svg()
                                                                 .path(if is_exp { "icons/chevron-down.svg" } else { "icons/chevron-right.svg" })
                                                                 .size_full()
-                                                                .text_color(theme.text_muted))
+                                                                .text_color(theme.text_muted)))
                                                     )
                                                     // Drive icon + label
                                                     .child(
                                                         div().w_4().h_4().mr_2().flex().items_center().justify_center().flex_shrink_0()
-                                                            .child(svg().path("icons/hard-drive.svg").size_4().text_color(theme.text))
+                                                            .child(svg().path(crate::ui::components::icons::drive_icon_path(drive)).size_4().text_color(theme.text))
                                                     )
                                                     .child(
                                                         div().flex_1().text_ellipsis().overflow_hidden()
@@ -1246,8 +1270,8 @@ fn location_context_menu(i18n: &I18n, h: Entity<OxydeApp>, path: String) -> Vec<
     super::context_menu_sections(location_context_menu_raw(i18n, h, path), i18n)
 }
 
-fn drive_context_menu(i18n: &I18n, h: Entity<OxydeApp>, path: String) -> Vec<DropdownItem> {
-    super::context_menu_sections(drive_context_menu_raw(i18n, h, path), i18n)
+fn drive_context_menu(i18n: &I18n, h: Entity<OxydeApp>, path: String, is_usb: bool) -> Vec<DropdownItem> {
+    super::context_menu_sections(drive_context_menu_raw(i18n, h, path, is_usb), i18n)
 }
 
 fn directory_context_menu(i18n: &I18n, h: Entity<OxydeApp>, path: String) -> Vec<DropdownItem> {

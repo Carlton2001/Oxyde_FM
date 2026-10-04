@@ -10,6 +10,22 @@ impl LinuxPlatform {
 }
 
 impl Platform for LinuxPlatform {
+    fn eject_drive(&self, path: &str) -> Result<(), String> {
+        let output = std::process::Command::new("findmnt")
+            .args(["--noheadings", "--output", "SOURCE", "--mountpoint", path])
+            .output().map_err(|error| error.to_string())?;
+        let device = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if !output.status.success() || !device.starts_with("/dev/") {
+            return Err("Cannot identify the mounted device".into());
+        }
+        let output = std::process::Command::new("udisksctl")
+            .args(["unmount", "--block-device", &device, "--no-user-interaction"])
+            .output().map_err(|error| error.to_string())?;
+        if output.status.success() { Ok(()) } else {
+            Err(String::from_utf8_lossy(&output.stderr).trim().into())
+        }
+    }
+
     fn file_icon(&self, _path: String, _large: bool) -> Result<image::RgbaImage, String> {
         Err("Native icons unavailable".into())
     }

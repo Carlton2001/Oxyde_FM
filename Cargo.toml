@@ -69,6 +69,7 @@ tempfile = "3.10"
 version = "0.62.2"
 features = [
     "Win32_Foundation",
+    "Win32_Devices_DeviceAndDriverInstallation",
     "Win32_System_Registry",
     "Win32_Storage_FileSystem",
     "Win32_UI_Shell",

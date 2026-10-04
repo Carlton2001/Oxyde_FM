@@ -59,7 +59,7 @@ fn main() {
                 this.operations_panel_view = Some(operations_panel);
                 if initialize_date_format && !load_failed { this.save_preferences(cx); }
                 this.start_watcher_task(cx);
-                this.reconcile_watchers();
+                this.reconcile_watchers(cx);
                 this.refresh_all_tabs(cx);
             });
             cx.open_window(

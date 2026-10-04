@@ -607,7 +607,7 @@ impl OxydeApp {
                                                 this.drop_target_idx = None;
                                                 this.drop_target_pane = None;
                                                 this.dragging_tab = None;
-                                                this.reconcile_watchers();
+                                                this.reconcile_watchers(cx);
                                                 this.save_workspace(cx);
                                                 cx.notify();
                                             });
@@ -672,7 +672,7 @@ impl OxydeApp {
                                                 this.drop_target_idx = None;
                                                 this.drop_target_pane = None;
                                                 this.dragging_tab = None;
-                                                this.reconcile_watchers();
+                                                this.reconcile_watchers(cx);
                                                 this.save_workspace(cx);
                                                 cx.notify();
                                             });
@@ -770,7 +770,7 @@ impl OxydeApp {
                                 this.drop_target_idx = None;
                                 this.drop_target_pane = None;
                                 this.dragging_tab = None;
-                                this.reconcile_watchers();
+                                this.reconcile_watchers(cx);
                                 this.save_workspace(cx);
                                 cx.notify();
                             });
@@ -885,7 +885,7 @@ impl OxydeApp {
                                         this.dragging_tab = None;
                                         this.drop_target_idx = None;
                                         this.drop_target_pane = None;
-                                        this.reconcile_watchers();
+                                        this.reconcile_watchers(cx);
                                         this.save_workspace(cx);
                                         cx.notify();
                                     });
@@ -933,7 +933,7 @@ impl OxydeApp {
                                         this.dragging_tab = None;
                                         this.drop_target_idx = None;
                                         this.drop_target_pane = None;
-                                        this.reconcile_watchers();
+                                        this.reconcile_watchers(cx);
                                         this.save_workspace(cx);
                                         cx.notify();
                                     });
@@ -981,7 +981,7 @@ impl OxydeApp {
                                         this.dragging_tab = None;
                                         this.drop_target_idx = None;
                                         this.drop_target_pane = None;
-                                        this.reconcile_watchers();
+                                        this.reconcile_watchers(cx);
                                         this.save_workspace(cx);
                                         cx.notify();
                                     });
@@ -1029,7 +1029,7 @@ impl OxydeApp {
                                         this.dragging_tab = None;
                                         this.drop_target_idx = None;
                                         this.drop_target_pane = None;
-                                        this.reconcile_watchers();
+                                        this.reconcile_watchers(cx);
                                         this.save_workspace(cx);
                                         cx.notify();
                                     });

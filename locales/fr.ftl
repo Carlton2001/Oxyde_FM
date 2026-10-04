@@ -253,3 +253,5 @@ menu-sort-by = Trier par
 menu-sort-ascending = Croissant
 menu-sort-descending = Décroissant
 menu-sort-extension = Extension
+drive-eject = Éjecter
+drive-eject-failed = Impossible d’éjecter le lecteur. Il est peut-être utilisé par une autre application. { $detail }

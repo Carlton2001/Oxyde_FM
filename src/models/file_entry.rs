@@ -90,7 +90,7 @@ pub struct SidebarNode {
     pub has_subdirs: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DriveInfo {
     pub path: String,
     pub label: String,
@@ -101,6 +101,13 @@ pub struct DriveInfo {
     pub media_type: Option<String>,
     pub physical_id: Option<String>,
     pub remote_path: Option<String>,
+}
+
+impl DriveInfo {
+    pub fn is_usb(&self) -> bool {
+        self.drive_type == "removable"
+            || self.media_type.as_deref().is_some_and(|media| media.starts_with("USB"))
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

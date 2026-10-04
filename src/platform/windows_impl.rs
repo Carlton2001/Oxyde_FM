@@ -10,6 +10,19 @@ impl WindowsPlatform {
 }
 
 impl Platform for WindowsPlatform {
+    fn list_drive_roots(&self) -> Vec<DriveInfo> {
+        super::windows_drives::list_drive_roots()
+    }
+
+    fn watch_drive_changes(&self, revision: std::sync::Arc<std::sync::atomic::AtomicU64>)
+        -> Result<Option<Box<dyn Send>>, String> {
+        super::windows_drives::watch_drive_changes(revision).map(Some)
+    }
+
+    fn eject_drive(&self, path: &str) -> Result<(), String> {
+        super::windows_drives::eject_drive(path)
+    }
+
     fn file_icon(&self, path: String, large: bool) -> Result<image::RgbaImage, String> {
         use windows::Win32::System::Com::{CoInitializeEx, CoUninitialize, COINIT_MULTITHREADED};
         let initialized = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED).is_ok() };

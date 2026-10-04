@@ -66,6 +66,13 @@ pub trait Platform: Send + Sync {
 
     /// Liste les points de montage / lecteurs disponibles.
     fn list_drives(&self, skip_hardware_info: bool) -> Vec<DriveInfo>;
+    /// Fast mount snapshot; detailed hardware/capacity queries run separately.
+    fn list_drive_roots(&self) -> Vec<DriveInfo> { self.list_drives(true) }
+
+    /// The returned guard owns the registration. Callbacks only increment revision.
+    fn watch_drive_changes(&self, _revision: std::sync::Arc<std::sync::atomic::AtomicU64>)
+        -> Result<Option<Box<dyn Send>>, String> { Ok(None) }
+    fn eject_drive(&self, path: &str) -> Result<(), String>;
 
     /// Ouvre un fichier ou dossier avec l'application par défaut de l'OS.
     fn open_item(&self, path: &str) -> Result<(), String>;

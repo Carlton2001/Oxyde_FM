@@ -51,17 +51,14 @@ fn breadcrumb_root_icon(path: &str, view: &OxydeApp) -> &'static str {
         return "icons/search.svg";
     }
 
-    let normalized_path = path.to_lowercase();
-    for item in &view.state.sidebar_items {
-        if let crate::ui::workspace::SidebarItem::Drive { drive, .. } = item {
-            if normalized_path.starts_with(&drive.path.to_lowercase()) {
-                return match drive.drive_type.as_str() {
-                    "cdrom" => "icons/disc.svg",
-                    "remote" => "icons/network.svg",
-                    _ => "icons/hard-drive.svg",
-                };
-            }
-        }
+    if let Some(drive) = view.state.drives.iter().filter(|drive| {
+        std::path::Path::new(path).ancestors().any(|ancestor| {
+            crate::ui::components::sidebar::sidebar_paths_equal(
+                &ancestor.to_string_lossy(), &drive.path,
+            )
+        })
+    }).max_by_key(|drive| drive.path.len()) {
+        return crate::ui::components::icons::drive_icon_path(drive);
     }
 
     "icons/hard-drive.svg"

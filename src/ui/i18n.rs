@@ -15,6 +15,8 @@ const ENGLISH: &str = include_str!("../../locales/en.ftl");
 /// Stable identifiers, independent of the text displayed to users.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Message {
+    EjectDrive,
+    EjectDriveFailed,
     Cancel,
     RenameTitle,
     RenameNamePlaceholder,
@@ -222,6 +224,8 @@ pub enum Message {
 impl Message {
     pub fn key(self) -> &'static str {
         match self {
+            Self::EjectDrive => "drive-eject",
+            Self::EjectDriveFailed => "drive-eject-failed",
             Self::Cancel => "common-cancel",
             Self::RenameTitle => "rename-title",
             Self::RenameNamePlaceholder => "rename-name-placeholder",
@@ -528,6 +532,8 @@ mod tests {
         for language in [Language::French, Language::English] {
             let i18n = I18n::for_language(language);
             let messages = [
+                Message::EjectDrive,
+                Message::EjectDriveFailed,
                 Message::Cancel,
                 Message::RenameTitle,
                 Message::RenameNamePlaceholder,

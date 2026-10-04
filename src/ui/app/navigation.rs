@@ -76,7 +76,7 @@ impl OxydeApp {
                     let viewport = scroll.bounds().size.height.as_f32();
                     scroll.set_offset(point(scroll.offset().x, px(-(top + height / 2.0 - viewport / 2.0).max(0.0))));
                 }
-                this.reconcile_watchers();
+                this.reconcile_watchers(cx);
                 cx.notify();
             });
         }));
@@ -127,7 +127,7 @@ impl OxydeApp {
                         }
                         this.state.sidebar_nodes.extend(tree);
                         this.state.refresh_sidebar();
-                        this.reconcile_watchers();
+                        this.reconcile_watchers(cx);
                         cx.notify();
                     });
                 }
@@ -147,7 +147,7 @@ impl OxydeApp {
         // A manual tree interaction takes precedence over an in-flight reveal.
         self.sidebar_follow_task = None;
         self.state.toggle_sidebar_path(path.clone());
-        self.reconcile_watchers();
+        self.reconcile_watchers(cx);
         cx.notify();
         self.request_sidebar_nodes(path, false, cx);
     }
@@ -158,8 +158,11 @@ impl OxydeApp {
         force: bool,
         cx: &mut Context<Self>,
     ) {
-        if !self.state.expanded_paths.contains(&path)
+        let is_drive = self.state.drives.iter().any(|drive| drive.path == path);
+        if self.ejecting_drive { return; }
+        if (!self.state.expanded_paths.contains(&path) && !is_drive)
             || (!force && self.state.sidebar_nodes.contains_key(&path))
+            || (!force && self.pending_sidebar_requests.contains_key(&path))
         {
             return;
         }
@@ -180,10 +183,11 @@ impl OxydeApp {
                     }
                     this.pending_sidebar_requests.remove(&path);
                     match result {
-                        Ok(nodes) if this.state.expanded_paths.contains(&path) => {
+                        Ok(nodes) if this.state.expanded_paths.contains(&path)
+                            || this.state.drives.iter().any(|drive| drive.path == path) => {
                             this.state.sidebar_nodes.insert(path, nodes);
                             this.state.refresh_sidebar();
-                            this.reconcile_watchers();
+                            this.reconcile_watchers(cx);
                             cx.notify();
                         }
                         Err(error) => {
@@ -243,7 +247,7 @@ impl OxydeApp {
             let path = pane.tabs[tab_idx].path.clone();
             self.request_tab_files(pane_id, tab_idx, path, false, cx);
         }
-        self.reconcile_watchers();
+        self.reconcile_watchers(cx);
         self.save_workspace(cx);
         cx.notify();
     }
@@ -263,7 +267,7 @@ impl OxydeApp {
             }
         }
 
-        self.reconcile_watchers();
+        self.reconcile_watchers(cx);
         self.save_workspace(cx);
         cx.notify();
     }
@@ -307,14 +311,14 @@ impl OxydeApp {
         if let Some((index, path)) = reload {
             self.request_tab_files(pane_id, index, path, false, cx);
         }
-        self.reconcile_watchers();
+        self.reconcile_watchers(cx);
         self.save_workspace(cx);
         cx.notify();
     }
 
     pub fn close_other_tabs(&mut self, pane_id: &str, tab_idx: usize, cx: &mut Context<Self>) {
         self.state.close_other_tabs(pane_id, tab_idx);
-        self.reconcile_watchers();
+        self.reconcile_watchers(cx);
         self.save_workspace(cx);
         cx.notify();
     }
@@ -339,7 +343,7 @@ impl OxydeApp {
             active_tab.list_scroll = UniformListScrollHandle::new();
             active_tab.list_scroll_h.set_offset(point(px(0.0), px(0.0)));
             self.request_tab_files(pane_id, tab_idx, path, true, cx);
-            self.reconcile_watchers();
+            self.reconcile_watchers(cx);
             self.save_workspace(cx);
             cx.notify();
         }
@@ -472,7 +476,7 @@ impl OxydeApp {
         if let Some(id) = self.state.add_panel_right() {
             let path = self.state.find_pane(&id).unwrap().active_tab().path.clone();
             self.request_tab_files(&id, 0, path, false, cx);
-            self.reconcile_watchers();
+            self.reconcile_watchers(cx);
             self.save_workspace(cx);
             cx.notify();
         }

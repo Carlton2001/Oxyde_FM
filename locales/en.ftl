@@ -246,3 +246,5 @@ menu-sort-by = Sort by
 menu-sort-ascending = Ascending
 menu-sort-descending = Descending
 menu-sort-extension = Extension
+drive-eject = Eject
+drive-eject-failed = Unable to eject the drive. Another application may be using it. { $detail }

@@ -1,6 +1,16 @@
 use once_cell::sync::Lazy;
 use std::collections::HashSet;
 
+/// Shared by every surface displaying a mounted drive.
+pub fn drive_icon_path(drive: &oxyde_lib::models::DriveInfo) -> &'static str {
+    if drive.is_usb() { return "icons/usb.svg"; }
+    match drive.drive_type.as_str() {
+        "cdrom" => "icons/disc.svg",
+        "remote" => "icons/network.svg",
+        _ => "icons/hard-drive.svg",
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IconType {
     Folder,
