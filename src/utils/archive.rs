@@ -53,15 +53,36 @@ pub fn split_virtual_path(path: &str) -> Option<(PathBuf, String)> {
     let path_buf = PathBuf::from(path);
     let mut current = path_buf.as_path();
 
+    let mut result = None;
     while let Some(parent) = current.parent() {
         if is_archive(current) {
             let archive_path = current.to_path_buf();
             let internal_path = path[current.to_string_lossy().len()..]
                 .trim_start_matches(['/', '\\'])
                 .replace('\\', "/");
-            return Some((archive_path, internal_path));
+            result = Some((archive_path, internal_path));
         }
         current = parent;
     }
-    None
+    result
+}
+
+/// Archives opened as directories by the native UI (nested archives remain files).
+pub fn is_navigable_archive(path: &Path) -> bool {
+    matches!(ArchiveFormat::from_path(path), Some(format) if format != ArchiveFormat::Rar)
+        && split_virtual_path(&path.to_string_lossy())
+            .is_some_and(|(_, internal)| internal.is_empty())
+}
+
+pub fn is_writable_archive(path: &Path) -> bool {
+    matches!(
+        ArchiveFormat::from_path(path),
+        Some(
+            ArchiveFormat::Zip
+                | ArchiveFormat::SevenZip
+                | ArchiveFormat::Tar
+                | ArchiveFormat::TarZst
+        )
+    ) && split_virtual_path(&path.to_string_lossy())
+        .is_some_and(|(_, internal)| internal.is_empty())
 }

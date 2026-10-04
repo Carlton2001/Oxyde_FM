@@ -392,11 +392,7 @@ pub fn render_file_list(
                                                             }
                                                         });
                                                         if e.click_count == 2 {
-                                                            if is_dir {
-                                                                h_inner_inner.update(cx, |v, cx| v.navigate_to(&p_id_cap, p.clone(), cx));
-                                                            } else {
-                                                                h_inner_inner.update(cx, |this, cx| this.open_external_item(p.clone(), cx));
-                                                            }
+                                                            h_inner_inner.update(cx, |this, cx| this.open_file_item(&p_id_cap, p.clone(), is_dir, cx));
                                                         }
                                                     }
                                                 })
@@ -432,8 +428,8 @@ pub fn render_file_list(
                                                     let p_id_cap = p_id.clone();
                                                     move |_, _, cx| {
                                                         cx.stop_propagation();
-                                                        if is_dir {
-                                                            h_inner_inner.update(cx, |v, cx| v.add_tab(&p_id_cap, p.clone(), false, cx));
+                                                        if is_dir || oxyde_lib::utils::archive::is_navigable_archive(std::path::Path::new(&p)) || oxyde_lib::utils::disk_image::needs_mount_for_browsing(std::path::Path::new(&p)) {
+                                                            h_inner_inner.update(cx, |v, cx| v.open_directory_item(&p_id_cap, p.clone(), true, cx));
                                                         }
                                                     }
                                                 })
@@ -466,7 +462,7 @@ pub fn render_file_list(
                                                               this.context_menus.clear();
                                                               this.context_menus.push(ContextMenuInstance {
                                                                   position: pos,
-                                                                  content: ContextMenuContent::Items(super::with_grid_sort(super::oxyde_context_menu_items(cx.i18n(), h_inner_inner.clone(), is_dir, is_pinned, p_for_right_cap.clone()), this, h_inner_inner.clone(), &p_id_cap_cap, cx.i18n()), None),
+                                                                  content: ContextMenuContent::Items(super::with_grid_sort(super::oxyde_context_menu_items(cx.i18n(), h_inner_inner.clone(), is_dir, is_pinned, p_for_right_cap.clone(), this), this, h_inner_inner.clone(), &p_id_cap_cap, cx.i18n()), None),
                                                                   scroll_handle: UniformListScrollHandle::new(),
                                                                   width: px(0.0),
                                                                   bottom_padding: 0.0,
@@ -506,7 +502,7 @@ pub fn render_file_list(
                                                         cx.new(|cx| FileDragPreview::new(paths, cursor_offset, app, cx))
                                                     }
                                                 })
-                                                .when(is_dir, |row| {
+                                                .when(is_dir || oxyde_lib::utils::archive::is_writable_archive(std::path::Path::new(&path)), |row| {
                                                     let h_drop = h.clone();
                                                     let target_path = path.clone();
                                                     row
@@ -1281,11 +1277,7 @@ fn render_grid_file_list(
                                                         );
                                                     }
                                                     if e.click_count == 2 {
-                                                        if is_dir {
-                                                            this.navigate_to(&pid, path, cx);
-                                                        } else {
-                                                            this.open_external_item(path, cx);
-                                                        }
+                                                        this.open_file_item(&pid, path, is_dir, cx);
                                                     }
                                                 });
                                             }
@@ -1296,9 +1288,9 @@ fn render_grid_file_list(
                                             let path = path.clone();
                                             move |_, _, cx| {
                                                 cx.stop_propagation();
-                                                if is_dir {
+                                                if is_dir || oxyde_lib::utils::archive::is_navigable_archive(std::path::Path::new(&path)) || oxyde_lib::utils::disk_image::needs_mount_for_browsing(std::path::Path::new(&path)) {
                                                     h.update(cx, |this, cx| {
-                                                        this.add_tab(&pid, path.clone(), false, cx)
+                                                        this.open_directory_item(&pid, path.clone(), true, cx)
                                                     });
                                                 }
                                             }
@@ -1344,6 +1336,7 @@ fn render_grid_file_list(
                                                                 is_dir,
                                                                 pinned,
                                                                 path.clone(),
+                                                                this,
                                                             ), this, h.clone(), &pid, cx.i18n()),
                                                             None,
                                                         ),
@@ -1456,7 +1449,7 @@ fn render_grid_file_list(
                                                     file_type_display(file, cx.i18n())
                                                 }),
                                         );
-                                    if is_dir {
+                                    if is_dir || oxyde_lib::utils::archive::is_writable_archive(std::path::Path::new(&path)) {
                                         card = card
                                             .drag_over::<FileDragData>({
                                                 let h = h.clone();

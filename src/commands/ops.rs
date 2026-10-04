@@ -419,6 +419,47 @@ pub async fn check_conflicts(
     paths: Vec<String>,
     target_dir: String,
 ) -> Result<ConflictResponse, CommandError> {
+    use crate::systems::archive_workspace::{
+        virtual_destination, virtual_source, ArchiveWorkspaces,
+    };
+    if paths
+        .iter()
+        .any(|p| virtual_source(std::path::Path::new(p)).is_some())
+        || virtual_destination(std::path::Path::new(&target_dir)).is_some()
+    {
+        let mut workspaces = ArchiveWorkspaces::default();
+        let target = workspaces
+            .resolve(std::path::Path::new(&target_dir), true)
+            .map_err(CommandError::ArchiveError)?;
+        let sources = paths
+            .iter()
+            .map(|p| {
+                workspaces
+                    .resolve(std::path::Path::new(p), false)
+                    .map(|p| p.to_string_lossy().into_owned())
+            })
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(CommandError::ArchiveError)?;
+        let mut response = check_conflicts_real(sources, target.to_string_lossy().into_owned())?;
+        for conflict in &mut response.conflicts {
+            conflict.source.path = workspaces
+                .display(std::path::Path::new(&conflict.source.path))
+                .to_string_lossy()
+                .into_owned();
+            conflict.target.path = workspaces
+                .display(std::path::Path::new(&conflict.target.path))
+                .to_string_lossy()
+                .into_owned();
+        }
+        return Ok(response);
+    }
+    check_conflicts_real(paths, target_dir)
+}
+
+fn check_conflicts_real(
+    paths: Vec<String>,
+    target_dir: String,
+) -> Result<ConflictResponse, CommandError> {
     let mut conflicts = Vec::new();
     let target_base = validate_path(&target_dir)?;
 

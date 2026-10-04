@@ -214,7 +214,9 @@ impl OxydeApp {
                 pane.tabs
                     .iter()
                     .filter(|tab| !tab.path.is_empty())
-                    .map(|tab| tab.path.clone()),
+                    .map(|tab| oxyde_lib::utils::archive::split_virtual_path(&tab.path)
+                        .and_then(|(archive, _)| archive.parent().map(|parent| parent.to_string_lossy().into_owned()))
+                        .unwrap_or_else(|| tab.path.clone())),
             );
         });
         needed.extend(self.state.expanded_paths.iter().cloned());

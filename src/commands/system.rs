@@ -4,8 +4,6 @@ use crate::models::{
 use crate::utils::path_security::validate_path;
 use crate::WindowState;
 use log::info;
-use std::path::PathBuf;
-use std::process::Command;
 
 // app_ready removed
 
@@ -400,369 +398,84 @@ pub fn execute_native_menu_item(
     Ok(())
 }
 pub async fn get_mounted_images() -> Result<Vec<String>, CommandError> {
-    #[cfg(target_os = "windows")]
-    {
-        use windows::core::{BSTR, HSTRING};
-        use windows::Win32::System::Variant::VARIANT;
-        let mut paths = Vec::new();
-
-        unsafe {
-            use windows::Win32::System::Com::{
-                CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_INPROC_SERVER,
-                COINIT_MULTITHREADED,
-            };
-            use windows::Win32::System::Variant::VariantClear;
-            use windows::Win32::System::Wmi::{
-                IWbemLocator, WbemLocator, WBEM_FLAG_FORWARD_ONLY, WBEM_FLAG_RETURN_IMMEDIATELY,
-                WBEM_GENERIC_FLAG_TYPE,
-            };
-
-            // 1. Initialize COM
-            let hr = CoInitializeEx(None, COINIT_MULTITHREADED);
-            if hr.is_err() && hr.0 as u32 != 0x80010106 {
-                // RPC_E_CHANGED_MODE
-                return Err(CommandError::SystemError(format!(
-                    "COM Init failed: 0x{:08x}",
-                    hr.0
-                )));
-            }
-
-            // 2. Create WbemLocator
-            let locator: IWbemLocator =
-                match CoCreateInstance(&WbemLocator, None, CLSCTX_INPROC_SERVER) {
-                    Ok(l) => l,
-                    Err(e) => {
-                        CoUninitialize();
-                        return Err(CommandError::SystemError(format!(
-                            "WbemLocator creation failed: {}",
-                            e
-                        )));
-                    }
-                };
-
-            // 3. Connect to the server
-            let ns = BSTR::from("root\\Microsoft\\Windows\\Storage");
-            let services = match locator.ConnectServer(
-                &ns,
-                &BSTR::default(),
-                &BSTR::default(),
-                &BSTR::default(),
-                0,
-                &BSTR::default(),
-                None,
-            ) {
-                Ok(s) => s,
-                Err(e) => {
-                    CoUninitialize();
-                    return Err(CommandError::SystemError(format!(
-                        "ConnectServer failed: {}",
-                        e
-                    )));
-                }
-            };
-
-            // 4. Exec Query
-            let query_lang = BSTR::from("WQL");
-            let query = BSTR::from("SELECT ImagePath FROM MSFT_DiskImage");
-            let flags =
-                WBEM_GENERIC_FLAG_TYPE(WBEM_FLAG_FORWARD_ONLY.0 | WBEM_FLAG_RETURN_IMMEDIATELY.0);
-            let enumerator = match services.ExecQuery(&query_lang, &query, flags, None) {
-                Ok(e) => e,
-                Err(e) => {
-                    CoUninitialize();
-                    return Err(CommandError::SystemError(format!(
-                        "ExecQuery failed: {}",
-                        e
-                    )));
-                }
-            };
-
-            // 5. Enumerate
-            loop {
-                use windows::Win32::System::Wmi::IWbemClassObject;
-                let mut obj: [Option<IWbemClassObject>; 1] = [None];
-                let mut returned = 0u32;
-
-                let _ = enumerator.Next(-1, &mut obj, &mut returned);
-                if returned == 0 {
-                    break;
-                }
-
-                if let Some(obj) = &obj[0] {
-                    let mut variant = VARIANT::default();
-                    let prop_name = HSTRING::from("ImagePath");
-                    if obj
-                        .Get(
-                            windows::core::PCWSTR(prop_name.as_ptr()),
-                            0,
-                            &mut variant,
-                            None,
-                            None,
-                        )
-                        .is_ok()
-                    {
-                        use windows::Win32::System::Variant::VT_BSTR;
-                        if variant.Anonymous.Anonymous.vt == VT_BSTR {
-                            let bstr_ptr = &variant.Anonymous.Anonymous.Anonymous.bstrVal;
-                            let path_str = bstr_ptr.to_string();
-                            if !path_str.is_empty() {
-                                paths.push(path_str);
-                            }
-                        }
-                        let _ = VariantClear(&mut variant);
-                    }
-                }
-            }
-
-            CoUninitialize();
-        }
-
-        Ok(paths)
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        Ok(Vec::new())
-    }
+    tokio::task::spawn_blocking(|| {
+        crate::platform::platform()
+            .mounted_disk_images()
+            .map(|images| images.into_iter().map(|image| image.image_path).collect())
+            .map_err(CommandError::SystemError)
+    })
+    .await
+    .map_err(|error| CommandError::SystemError(error.to_string()))?
 }
 
 pub async fn mount_disk_image(path: String) -> Result<(), CommandError> {
-    #[cfg(target_os = "windows")]
-    {
-        let pb = validate_path(&path)?;
-        info!("Mounting disk image: {:?}", pb);
-        // Use PowerShell to mount the disk image
-        let output = Command::new("powershell")
-            .arg("-Command")
-            .arg(format!(
-                "$OutputEncoding = [Console]::OutputEncoding = [System.Text.Encoding]::UTF8; \
-                Mount-DiskImage -ImagePath \"{}\"",
-                pb.to_string_lossy()
-            ))
-            .output()
-            .map_err(|e| CommandError::SystemError(e.to_string()))?;
-
-        if !output.status.success() {
-            let err_final = String::from_utf8_lossy(&output.stderr).to_string();
-            return Err(CommandError::SystemError(format!(
-                "Failed to mount image: {}",
-                err_final
-            )));
-        }
-
-        Ok(())
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        Err(CommandError::SystemError(
-            "Disk image mounting is only supported on Windows".to_string(),
-        ))
-    }
+    tokio::task::spawn_blocking(move || {
+        crate::platform::platform()
+            .mount_disk_image(&path)
+            .map(|_| ())
+            .map_err(CommandError::SystemError)
+    })
+    .await
+    .map_err(|error| CommandError::SystemError(error.to_string()))?
 }
 
 pub async fn unmount_disk_image(
     session_manager: &SessionManager,
     path: String,
 ) -> Result<(), CommandError> {
-    #[cfg(target_os = "windows")]
+    let images = tokio::task::spawn_blocking(|| crate::platform::platform().mounted_disk_images())
+        .await
+        .map_err(|error| CommandError::SystemError(error.to_string()))?
+        .map_err(CommandError::SystemError)?;
+    let image = images
+        .into_iter()
+        .find(|image| {
+            image.image_path.eq_ignore_ascii_case(&path)
+                || image.roots.iter().any(|root| {
+                    root.trim_end_matches(['/', '\\'])
+                        .eq_ignore_ascii_case(path.trim_end_matches(['/', '\\']))
+                })
+        })
+        .ok_or_else(|| CommandError::SystemError("Image is not mounted".into()))?;
     {
-        use std::process::Command;
-
-        // 1. Identify all affected drive letters BEFORE locking session
-        let mut affected_drives = Vec::new();
-        {
-            let target_lower = path.to_lowercase();
-            // Check if it's a simple drive letter (length 2 or 3, e.g., "F:" or "F:\")
-            let is_drive_root = target_lower.len() <= 3 && target_lower.contains(':');
-
-            if is_drive_root {
-                let drive_letter = &target_lower[0..1];
-                let check_cmd = format!(
-                    "Get-Partition -DriveLetter {} -ErrorAction SilentlyContinue | Get-Disk | Get-Partition | Where-Object DriveLetter | Select-Object -ExpandProperty DriveLetter",
-                    drive_letter
-                );
-                if let Ok(out) = Command::new("powershell")
-                    .arg("-Command")
-                    .arg(&check_cmd)
-                    .output()
-                {
-                    let stdout = String::from_utf8_lossy(&out.stdout);
-                    for line in stdout.lines() {
-                        let l = line.trim().to_lowercase();
-                        if !l.is_empty() {
-                            affected_drives.push(format!("{}:", l));
-                        }
-                    }
-                }
-                // Ensure the direct target is included
-                let target_root = format!("{}:", drive_letter);
-                if !affected_drives.contains(&target_root) {
-                    affected_drives.push(target_root);
-                }
-            } else {
-                // It's a full path to a disk image file (.iso, .vhd)
-                // We ONLY want to find the drive letter(s) that were mounted FROM this file.
-                // We must NOT include the drive where the file itself is stored.
-                let check_cmd = format!(
-                    "Get-DiskImage -ImagePath \"{}\" -ErrorAction SilentlyContinue | Get-Volume | Select-Object -ExpandProperty DriveLetter",
-                    path
-                );
-                if let Ok(out) = Command::new("powershell")
-                    .arg("-Command")
-                    .arg(&check_cmd)
-                    .output()
-                {
-                    let stdout = String::from_utf8_lossy(&out.stdout);
-                    for line in stdout.lines() {
-                        let l = line.trim().to_lowercase();
-                        if !l.is_empty() {
-                            affected_drives.push(format!("{}:", l));
-                        }
-                    }
-                }
-            }
-        }
-
-        // 2. Handle Session State (Close tabs on these drives)
-        {
-            // Scope the lock so it releases before we run the slow unmount command
-            let mut session = session_manager.0.lock().map_err(|_| {
-                CommandError::SystemError("Failed to lock session state".to_string())
-            })?;
-
-            let clean_panel = |panel: &mut crate::models::session::PanelState| {
-                let mut tabs_to_keep = Vec::new();
-                let mut active_id_invalidated = false;
-
-                for tab in &panel.tabs {
-                    let tab_path_lower = tab.path.to_string_lossy().to_lowercase();
-                    if affected_drives
-                        .iter()
-                        .any(|d| tab_path_lower.starts_with(d))
-                    {
-                        if tab.id == panel.active_tab_id {
-                            active_id_invalidated = true;
-                        }
-                    } else {
-                        tabs_to_keep.push(tab.clone());
-                    }
-                }
-
-                if tabs_to_keep.is_empty() {
-                    // Panel becomes empty, must add fallback
-                    let new_id = uuid::Uuid::new_v4().to_string();
-                    tabs_to_keep.push(crate::models::Tab {
-                        id: new_id.clone(),
-                        path: PathBuf::from("C:\\"),
-                        back_stack: Vec::new(),
-                        forward_stack: Vec::new(),
-                        version: 0,
-                    });
-                    panel.active_tab_id = new_id;
-                } else if active_id_invalidated {
-                    // Active tab closed, switch to another one
-                    if let Some(last) = tabs_to_keep.last() {
-                        panel.active_tab_id = last.id.clone();
-                    }
-                }
-                panel.tabs = tabs_to_keep;
+        let mut session = session_manager
+            .0
+            .lock()
+            .map_err(|error| CommandError::SystemError(error.to_string()))?;
+        let clean_panel = |panel: &mut crate::models::session::PanelState| {
+            let affected = |path: &std::path::Path| {
+                image.roots.iter().any(|root| {
+                    path.to_string_lossy()
+                        .to_lowercase()
+                        .starts_with(&root.to_lowercase())
+                })
             };
-
-            clean_panel(&mut session.left_panel);
-            clean_panel(&mut session.right_panel);
-
-            // CRITICAL: Release file watchers on the drive before unmounting/ejecting
-            session.left_panel.update_watcher();
-            session.right_panel.update_watcher();
-        } // session lock released here
-
-        if path.len() <= 3 && path.contains(':') {
-            let drive_letter = path
-                .chars()
-                .next()
-                .ok_or(CommandError::PathError("Empty drive path".to_string()))?;
-            let cmd = format!(
-                "$OutputEncoding = [Console]::OutputEncoding = [System.Text.Encoding]::UTF8; \
-                $driveLetter = '{}:'; \
-                $sa = New-Object -ComObject Shell.Application; \
-                $ns = $sa.NameSpace(17); \
-                $item = $ns.ParseName($driveLetter); \
-                if ($item) {{ \
-                    $verbs = $item.Verbs() | Where-Object {{ $_.Name.Replace('&','') -match 'Eject|Éjecter|Ejection|Auswerfen|Ejectar' }}; \
-                    if ($verbs) {{ \
-                        foreach ($v in $verbs) {{ $v.DoIt(); break; }} \
-                    }} else {{ \
-                        $item.InvokeVerb('Eject'); \
-                    }} \
-                }} \
-                if (Get-DiskImage -DevicePath \"\\\\.\\$driveLetter\" -ErrorAction SilentlyContinue) {{ \
-                    Dismount-DiskImage -DevicePath \"\\\\.\\$driveLetter\" -ErrorAction SilentlyContinue; \
-                }} \
-                $timeout = 20; \
-                while ($timeout -gt 0) {{ \
-                    if (!(Get-PSDrive $driveLetter.Replace(':','') -ErrorAction SilentlyContinue)) {{ \
-                        exit 0; \
-                    }} \
-                    Start-Sleep -Milliseconds 100; \
-                    $timeout--; \
-                }} \
-                exit 1;",
-                drive_letter
-            );
-
-            let output = Command::new("powershell")
-                .arg("-Command")
-                .arg(cmd)
-                .output()
-                .map_err(|e| CommandError::SystemError(e.to_string()))?;
-
-            if !output.status.success() {
-                return Err(CommandError::SystemError(
-                    "Failed to eject. The drive might be in use by another program.".to_string(),
-                ));
+            panel.tabs.retain(|tab| !affected(&tab.path));
+            if panel.tabs.is_empty() {
+                let id = uuid::Uuid::new_v4().to_string();
+                panel.tabs.push(crate::models::Tab {
+                    id: id.clone(),
+                    path: dirs::home_dir().unwrap_or_default(),
+                    back_stack: Vec::new(),
+                    forward_stack: Vec::new(),
+                    version: 0,
+                });
+                panel.active_tab_id = id;
+            } else if !panel.tabs.iter().any(|tab| tab.id == panel.active_tab_id) {
+                panel.active_tab_id = panel.tabs[0].id.clone();
             }
-        } else {
-            let pb = validate_path(&path)?;
-            info!("Unmounting disk image: {:?}", pb);
-            let cmd = format!(
-                "$OutputEncoding = [Console]::OutputEncoding = [System.Text.Encoding]::UTF8; \
-                Dismount-DiskImage -ImagePath \"{}\"",
-                pb.to_string_lossy()
-            );
-            let output = Command::new("powershell")
-                .arg("-Command")
-                .arg(cmd)
-                .output()
-                .map_err(|e| CommandError::SystemError(e.to_string()))?;
-
-            if !output.status.success() {
-                let err = String::from_utf8_lossy(&output.stderr).to_string();
-                return Err(CommandError::SystemError(format!(
-                    "Failed to unmount image: {}",
-                    err
-                )));
-            }
+            panel.update_watcher();
         };
-
-        // Notify Shell of change (Force Explorer refresh)
-        unsafe {
-            use windows::Win32::UI::Shell::{SHChangeNotify, SHCNE_DRIVEREMOVED, SHCNF_PATHW};
-            let path_u16: Vec<u16> = path.encode_utf16().chain(std::iter::once(0)).collect();
-            SHChangeNotify(
-                SHCNE_DRIVEREMOVED,
-                SHCNF_PATHW,
-                Some(path_u16.as_ptr() as *const _),
-                None,
-            );
-        }
-
-        Ok(())
+        clean_panel(&mut session.left_panel);
+        clean_panel(&mut session.right_panel);
     }
-    #[cfg(not(target_os = "windows"))]
-    {
-        Err(CommandError::SystemError(
-            "Disk image unmounting is only supported on Windows".to_string(),
-        ))
-    }
+    tokio::task::spawn_blocking(move || {
+        crate::platform::platform()
+            .unmount_disk_image(&image.image_path)
+            .map_err(CommandError::SystemError)
+    })
+    .await
+    .map_err(|error| CommandError::SystemError(error.to_string()))?
 }
 
 pub fn oxide_sync_snap_rect(state: &WindowState, rect: SnapRect) {
@@ -944,7 +657,6 @@ fn execute_shell_verb_by_canonical_name(
             if is_unpin {
                 // FALLBACK for missing paths (e.g. disconnected network drives)
                 use std::os::windows::process::CommandExt;
-                use std::process::Command;
                 let p_safe = path_norm.replace("'", "''");
                 let script = format!(
                     "$sh = New-Object -ComObject Shell.Application; \
@@ -959,7 +671,7 @@ fn execute_shell_verb_by_canonical_name(
                          }} \
                      }}", p_safe
                 );
-                let _ = Command::new("powershell")
+                let _ = std::process::Command::new("powershell")
                     .arg("-NoProfile")
                     .arg("-Command")
                     .arg(script)
@@ -1088,7 +800,6 @@ fn execute_shell_verb_by_canonical_name(
         // 3. ULTIMATE RECOURSE: PowerShell Script
         if result.is_err() {
             use std::os::windows::process::CommandExt;
-            use std::process::Command;
 
             let p_safe = path_norm.replace("'", "''");
             let script = if is_unpin {
@@ -1118,7 +829,7 @@ fn execute_shell_verb_by_canonical_name(
                 )
             };
 
-            let output = Command::new("powershell")
+            let output = std::process::Command::new("powershell")
                 .arg("-NoProfile")
                 .arg("-Command")
                 .arg(script)
@@ -1342,7 +1053,6 @@ pub async fn get_peek_status() -> Result<PeekStatus, String> {
 pub async fn open_peek(path: String) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
-        use std::process::Command;
         let local_app_data = std::env::var("LOCALAPPDATA").unwrap_or_default();
         let program_files = std::env::var("ProgramFiles").unwrap_or_default();
 
@@ -1371,7 +1081,7 @@ pub async fn open_peek(path: String) -> Result<(), String> {
         }
 
         if let Some(exe) = exe_path {
-            let mut cmd = Command::new(exe);
+            let mut cmd = std::process::Command::new(exe);
             cmd.arg(&path);
 
             // Try to set the CWD to the parent of the file to help Peek discover siblings

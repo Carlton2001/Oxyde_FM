@@ -617,13 +617,6 @@ fn render_operation_card(
     let compact_summary = matches!(operation.status, OpStatus::Completed | OpStatus::Cancelled);
     let completed = matches!(operation.status, OpStatus::Completed);
     let waiting = matches!(operation.status, OpStatus::Queued | OpStatus::Paused);
-    let unmanaged_extraction = matches!(operation.op_type, FileOpType::Extract)
-        && operation.sources.first().is_some_and(|path| {
-            !path
-                .extension()
-                .is_some_and(|extension| extension.eq_ignore_ascii_case("zip"))
-        })
-        && matches!(operation.status, OpStatus::Running | OpStatus::Paused);
     let source = operation
         .current_file
         .as_ref()
@@ -712,7 +705,7 @@ fn render_operation_card(
         .items_center()
         .gap(rems(0.25))
         .text_color(theme.text_muted);
-    if unmanaged_extraction || waiting {
+    if waiting {
         status_row = status_row.child(
             div()
                 .when(waiting, |label| label.text_color(theme.accent))
@@ -747,7 +740,7 @@ fn render_operation_card(
                     dismiss_handle.update(cx, |_, cx| cx.notify());
                 }),
         );
-    } else if !unmanaged_extraction {
+    } else {
         let pause_handle = handle.clone();
         let turbo_handle = handle.clone();
         let pause_icon = if can_start {

@@ -7,6 +7,12 @@ pub enum ThreadPriority {
     High,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
+pub struct MountedDiskImage {
+    pub image_path: String,
+    pub roots: Vec<String>,
+}
+
 /// Abstraction des opérations spécifiques à l'OS.
 /// Toute fonctionnalité native (lecteurs, ouverture, raccourcis, etc.)
 /// doit passer par ce trait plutôt qu'appeler directement les API OS.
@@ -77,6 +83,12 @@ pub trait Platform: Send + Sync {
     fn watch_drive_changes(&self, _revision: std::sync::Arc<std::sync::atomic::AtomicU64>)
         -> Result<Option<Box<dyn Send>>, String> { Ok(None) }
     fn eject_drive(&self, path: &str) -> Result<(), String>;
+    /// Blocking disk-image operations; run on a background worker.
+    fn mounted_disk_images(&self) -> Result<Vec<MountedDiskImage>, String>;
+    fn mount_disk_image(&self, path: &str) -> Result<Vec<String>, String>;
+    fn unmount_disk_image(&self, path: &str) -> Result<(), String>;
+    /// Install on the native window's UI thread; never changes system preferences.
+    fn install_disk_image_autoplay_handler(&self, window: raw_window_handle::RawWindowHandle) -> Result<(), String>;
 
     /// Ouvre un fichier ou dossier avec l'application par défaut de l'OS.
     fn open_item(&self, path: &str) -> Result<(), String>;
@@ -135,6 +147,8 @@ mod linux_impl;
 #[cfg(target_os = "windows")]
 pub mod network;
 mod thumbnails;
+#[cfg(target_os = "windows")]
+mod windows_disk_images;
 #[cfg(target_os = "windows")]
 mod windows_drives;
 #[cfg(target_os = "windows")]

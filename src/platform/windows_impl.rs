@@ -10,6 +10,19 @@ impl WindowsPlatform {
 }
 
 impl Platform for WindowsPlatform {
+    fn install_disk_image_autoplay_handler(&self, window: raw_window_handle::RawWindowHandle) -> Result<(), String> {
+        let raw_window_handle::RawWindowHandle::Win32(handle) = window else { return Ok(()); };
+        super::windows_disk_images::install_autoplay_handler(windows::Win32::Foundation::HWND(handle.hwnd.get() as *mut std::ffi::c_void))
+    }
+    fn mounted_disk_images(&self) -> Result<Vec<super::MountedDiskImage>, String> {
+        super::windows_disk_images::mounted_images()
+    }
+    fn mount_disk_image(&self, path: &str) -> Result<Vec<String>, String> {
+        super::windows_disk_images::mount(path)
+    }
+    fn unmount_disk_image(&self, path: &str) -> Result<(), String> {
+        super::windows_disk_images::unmount(path)
+    }
     fn list_network_shares(&self, server: &str) -> Result<Vec<crate::models::FileEntry>, String> {
         super::network::list_network_entries(Some(server.to_string())).map_err(|error| error.to_string())
     }

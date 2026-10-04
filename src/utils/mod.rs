@@ -1,6 +1,7 @@
 use std::fs::Metadata;
 
 pub mod archive;
+pub mod disk_image;
 pub mod path_security;
 
 pub mod hardware {

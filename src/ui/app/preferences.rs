@@ -75,6 +75,29 @@ impl OxydeApp {
         }
     }
 
+    pub(crate) fn compression_quality(&self, format: &str) -> &str {
+        match format {
+            "7z" => &self.config.seven_zip_quality,
+            "zst" => &self.config.zstd_quality,
+            _ => &self.config.zip_quality,
+        }
+    }
+    pub(crate) fn set_compression_quality(
+        &mut self,
+        format: &str,
+        quality: &str,
+        cx: &mut Context<Self>,
+    ) {
+        let field = match format {
+            "7z" => &mut self.config.seven_zip_quality,
+            "zst" => &mut self.config.zstd_quality,
+            _ => &mut self.config.zip_quality,
+        };
+        *field = quality.into();
+        self.save_preferences(cx);
+        cx.notify();
+    }
+
     pub(crate) fn set_theme(&mut self, theme: ThemeId, cx: &mut Context<Self>) {
         if self.theme_id == theme {
             return;

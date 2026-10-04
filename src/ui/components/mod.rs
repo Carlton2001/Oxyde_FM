@@ -147,6 +147,7 @@ fn oxyde_context_menu_items_raw(
     is_dir: bool,
     is_pinned: bool,
     path: String,
+    view: &crate::ui::app::OxydeApp,
 ) -> Vec<crate::ui::components::dropdown::DropdownItem> {
     use crate::ui::components::dropdown::IconName;
 
@@ -170,7 +171,10 @@ fn oxyde_context_menu_items_raw(
         on_hover: None,
     });
 
-    if is_dir {
+    if is_dir
+        || oxyde_lib::utils::archive::is_navigable_archive(std::path::Path::new(&path))
+        || oxyde_lib::utils::disk_image::needs_mount_for_browsing(std::path::Path::new(&path))
+    {
         items.push(crate::ui::components::dropdown::DropdownItem {
             label: i18n.text(Message::OpenNewTab).to_string(),
             icon: Some(IconName::ExternalLink),
@@ -184,13 +188,41 @@ fn oxyde_context_menu_items_raw(
                     h.update(app, |this, cx| {
                         this.context_menus.clear();
                         let p_id = this.state.active_pane_id.clone();
-                        this.add_tab(&p_id, p.clone(), false, cx);
+                        this.open_directory_item(&p_id, p.clone(), true, cx);
                     });
                 }
             }),
             on_hover: None,
         });
-
+    }
+    if !is_dir
+        && cfg!(target_os = "windows")
+        && oxyde_lib::utils::disk_image::is_disk_image(std::path::Path::new(&path))
+    {
+        let mounted = view
+            .mounted_disk_images
+            .iter()
+            .any(|image| paths_match(&image.image_path, &path));
+        let handle = h_app.clone();
+        let image_path = path.clone();
+        items.push(
+            dropdown::DropdownItem::new(
+                i18n.text(if mounted {
+                    Message::UnmountDiskImage
+                } else {
+                    Message::MountDiskImage
+                })
+                .to_string(),
+                move |_, cx| {
+                    handle.update(cx, |this, cx| {
+                        this.change_disk_image(image_path.clone(), mounted, None, cx)
+                    });
+                },
+            )
+            .icon(IconName::ExternalLink),
+        );
+    }
+    if is_dir {
         items.push(crate::ui::components::dropdown::DropdownItem {
             label: i18n
                 .text(if is_pinned {
@@ -282,23 +314,52 @@ fn oxyde_context_menu_items_raw(
         on_hover: None,
     });
 
-    items.push(crate::ui::components::dropdown::DropdownItem {
-        label: i18n.text(Message::OpCompressZip).to_string(),
-        icon: Some(IconName::Archive),
-        stay_open: false,
-        has_submenu: false,
-        is_dimmed: false,
-        on_click: std::rc::Rc::new({
+    let choices = ["zip", "7z", "tar", "zst"]
+        .into_iter()
+        .map(|format| {
             let h = h_app.clone();
-            move |_, app| {
-                h.update(app, |this, cx| {
-                    this.context_menus.clear();
-                    this.execute_compress_selected(cx);
+            let mut args = crate::ui::i18n::FluentArgs::new();
+            args.set("format", format);
+            crate::ui::components::dropdown::DropdownItem::new(
+                i18n.text_with_args(Message::ArchiveFormat, &args)
+                    .to_string(),
+                move |window, app| {
+                    h.update(app, |this, cx| {
+                        this.context_menus.clear();
+                        this.execute_compress_selected(format, window, cx);
+                    });
+                },
+            )
+            .icon(IconName::Archive)
+        })
+        .collect::<Vec<_>>();
+    let h = h_app.clone();
+    items.push(
+        crate::ui::components::dropdown::DropdownItem::new(
+            i18n.text(Message::Compress).to_string(),
+            |_, _| {},
+        )
+        .icon(IconName::Archive)
+        .stay_open(true)
+        .has_submenu(true)
+        .on_hover(move |position, open_left, app| {
+            h.update(app, |this, cx| {
+                use crate::ui::app::{ContextMenuContent, ContextMenuInstance};
+                this.context_menus.truncate(1);
+                this.context_menus.push(ContextMenuInstance {
+                    position,
+                    content: ContextMenuContent::Items(choices.clone(), None),
+                    scroll_handle: UniformListScrollHandle::new(),
+                    width: px(0.0),
+                    bottom_padding: 0.0,
+                    open_left,
+                    hovered_item: None,
+                    native_request_id: None,
                 });
-            }
+                cx.notify();
+            });
         }),
-        on_hover: None,
-    });
+    );
 
     if !is_dir
         && matches!(
@@ -579,9 +640,18 @@ pub fn tab_context_menu_items(
     ]
 }
 
-pub fn oxyde_context_menu_items(i18n: &I18n, h: Entity<crate::ui::app::OxydeApp>, is_dir: bool, is_pinned: bool, path: String) -> Vec<dropdown::DropdownItem> {
+pub fn oxyde_context_menu_items(
+    i18n: &I18n,
+    h: Entity<crate::ui::app::OxydeApp>,
+    is_dir: bool,
+    is_pinned: bool,
+    path: String,
+    view: &crate::ui::app::OxydeApp,
+) -> Vec<dropdown::DropdownItem> {
     let mut items = network::network_actions(i18n, h.clone(), &path, false);
-    items.extend(oxyde_context_menu_items_raw(i18n, h, is_dir, is_pinned, path));
+    items.extend(oxyde_context_menu_items_raw(
+        i18n, h, is_dir, is_pinned, path, view,
+    ));
     context_menu_sections(items, i18n)
 }
 

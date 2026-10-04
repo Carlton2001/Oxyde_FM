@@ -10,6 +10,11 @@ pub fn render_rename_dialog(
     handle: Entity<OxydeApp>,
     cx: &mut Context<OxydeApp>,
 ) -> impl IntoElement {
+    let title = if view.archive_creation.is_some() {
+        Message::Compress
+    } else {
+        Message::RenameTitle
+    };
     let theme = *cx.theme();
     let input = view.editing_view.clone();
     let backdrop_handle = handle.clone();
@@ -35,8 +40,12 @@ pub fn render_rename_dialog(
             )
         });
 
-    Modal::new("rename-dialog", cx.i18n().text(Message::RenameTitle), body)
-        .title_icon("icons/pencil.svg")
+    Modal::new("rename-dialog", cx.i18n().text(title), body)
+        .title_icon(if view.archive_creation.is_some() {
+            "icons/archive.svg"
+        } else {
+            "icons/pencil.svg"
+        })
         .width(rems(30.0))
         .body_gap(rems(0.375))
         .on_backdrop_dismiss(move |_, cx| {
@@ -56,7 +65,7 @@ pub fn render_rename_dialog(
                 .bg(theme.accent)
                 .text_color(theme.text_on_accent)
                 .hover(|d| d.opacity(0.85))
-                .child(cx.i18n().text(Message::RenameTitle))
+                .child(cx.i18n().text(title))
                 .on_mouse_down(MouseButton::Left, move |_, _, cx| {
                     submit_handle.update(cx, |this, cx| this.submit_rename(cx));
                 }),

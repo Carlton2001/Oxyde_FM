@@ -169,6 +169,22 @@ fn list_dir_blocking(
     show_system: bool,
 ) -> Result<DirResponse, CommandError> {
     let path_buf = PathBuf::from(&path);
+    if let Some((archive, internal)) = crate::utils::archive::split_virtual_path(&path) {
+        if archive.is_file() {
+            let mut entries = crate::commands::archive::list_archive_contents(
+                archive.to_string_lossy().into_owned(),
+                internal,
+            )?;
+            sort_file_entries(&mut entries, &sort_config);
+            let summary = calculate_summary(&entries, Some(path));
+            return Ok(DirResponse {
+                entries,
+                summary,
+                is_complete: true,
+                is_protected: false,
+            });
+        }
+    }
     let mut entries = Vec::new();
 
     {
@@ -320,8 +336,53 @@ pub async fn create_dir(path: String) -> Result<(), CommandError> {
 }
 
 pub async fn rename_item(old_path: String, new_path: String) -> Result<(), CommandError> {
+    rename_item_with_quality(old_path, new_path, "normal".into()).await
+}
+
+pub async fn rename_item_with_quality(
+    old_path: String,
+    new_path: String,
+    quality: String,
+) -> Result<(), CommandError> {
+    rename_item_controlled(old_path, new_path, quality, std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false))).await
+}
+
+pub async fn rename_item_controlled(
+    old_path: String, new_path: String, quality: String,
+    cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
+) -> Result<(), CommandError> {
+    if cancel.load(std::sync::atomic::Ordering::Relaxed) { return Err(CommandError::IoError("Cancelled".into())); }
     let old_pb = validate_path(&old_path)?;
     let new_pb = validate_path(&new_path)?;
+    if let Some((archive, internal)) = crate::systems::archive_workspace::virtual_source(&old_pb) {
+        use crate::systems::archive_workspace::{
+            mutation_operation, virtual_source, writable, ArchiveWorkspace, mutation_locks,
+        };
+        let Some((target_archive, target_internal)) = virtual_source(&new_pb) else {
+            return Err(CommandError::PathError(
+                "Rename must stay inside the archive".into(),
+            ));
+        };
+        if archive != target_archive || !writable(&archive) {
+            return Err(CommandError::ArchiveError(
+                "This archive format is read-only".into(),
+            ));
+        }
+        let locks = mutation_locks([archive.clone()]).map_err(CommandError::ArchiveError)?;
+        let operation = mutation_operation(&quality);
+        operation.lock().unwrap().cancel_flag = cancel;
+        let _lock = crate::systems::archive_workspace::lock_for_operation(&locks[0], &operation).map_err(CommandError::ArchiveError)?;
+        let workspace = ArchiveWorkspace::open_for_operation(archive, &operation).map_err(CommandError::ArchiveError)?;
+        let source = workspace.path(&internal).map_err(CommandError::PathError)?;
+        let destination = workspace
+            .path(&target_internal)
+            .map_err(CommandError::PathError)?;
+        validate_rename_target(&source, &destination)?;
+        fs::rename(source, destination)?;
+        return workspace
+            .commit(&operation)
+            .map_err(CommandError::ArchiveError);
+    }
     validate_rename_target(&old_pb, &new_pb)?;
     let old_abs = old_pb.to_string_lossy().to_string();
     let new_abs = new_pb.to_string_lossy().to_string();
@@ -965,6 +1026,71 @@ mod directory_tests {
         assert!(runtime
             .block_on(list_dir(missing, None, None, None, None))
             .is_err());
+    }
+
+    #[test]
+    fn archive_directory_listing_keeps_virtual_folder_levels() {
+        let directory = tempfile::tempdir().unwrap();
+        let source = directory.path().join("folder");
+        fs::create_dir_all(source.join("nested")).unwrap();
+        fs::write(source.join("nested/file.txt"), b"data").unwrap();
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        for format in ["zip", "7z", "tar", "tar.zst"] {
+            let archive = directory.path().join(format!("listing.{format}"));
+            runtime
+                .block_on(crate::commands::archive::compress_to_archive(
+                    vec![source.to_string_lossy().into_owned()],
+                    archive.to_string_lossy().into_owned(),
+                    format.into(),
+                    "normal".into(),
+                    &crate::commands::archive::ArchiveState(std::sync::atomic::AtomicBool::new(
+                        false,
+                    )),
+                ))
+                .unwrap();
+            let root = runtime
+                .block_on(list_dir(
+                    archive.to_string_lossy().into_owned(),
+                    None,
+                    None,
+                    None,
+                    None,
+                ))
+                .unwrap();
+            assert_eq!(root.entries.len(), 1);
+            assert_eq!(
+                root.entries[0].path,
+                archive.join("folder").to_string_lossy()
+            );
+            let nested = runtime
+                .block_on(list_dir(
+                    archive.join("folder/nested").to_string_lossy().into_owned(),
+                    None,
+                    None,
+                    None,
+                    None,
+                ))
+                .unwrap();
+            assert_eq!(nested.entries.len(), 1);
+            assert_eq!(
+                std::path::PathBuf::from(&nested.entries[0].path),
+                archive.join("folder").join("nested").join("file.txt")
+            );
+        }
+    }
+
+    #[test]
+    fn cancelled_archive_rename_preserves_original() {
+        let directory = tempfile::tempdir().unwrap();
+        let source = directory.path().join("file.txt");
+        fs::write(&source, b"source").unwrap();
+        let archive = directory.path().join("cancel.7z");
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        runtime.block_on(crate::commands::archive::compress_to_archive(vec![source.to_string_lossy().into_owned()], archive.to_string_lossy().into_owned(), "7z".into(), "normal".into(), &crate::commands::archive::ArchiveState(std::sync::atomic::AtomicBool::new(false)))).unwrap();
+        let original = fs::read(&archive).unwrap();
+        let cancel = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
+        assert!(runtime.block_on(rename_item_controlled(archive.join("file.txt").to_string_lossy().into_owned(), archive.join("renamed.txt").to_string_lossy().into_owned(), "normal".into(), cancel)).is_err());
+        assert_eq!(fs::read(&archive).unwrap(), original);
     }
 
     #[test]

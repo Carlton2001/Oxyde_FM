@@ -918,7 +918,14 @@ pub fn render_sidebar(
                                                         let h = h.clone(); let p = path.clone();
                                                         move |e, _, cx| {
                                                             let pos   = e.position;
-                                                            let items = drive_context_menu(cx.i18n(), h.clone(), p.clone(), is_usb, is_remote);
+                                                            let mut items = drive_context_menu(cx.i18n(), h.clone(), p.clone(), is_usb, is_remote);
+                                                            if let Some(image) = h.read(cx).mounted_image_for_drive(&p) {
+                                                                let image_handle = h.clone();
+                                                                let action = DropdownItem::new(cx.i18n().text(Message::UnmountDiskImage).to_string(), move |_, cx| {
+                                                                    image_handle.update(cx, |this, cx| this.change_disk_image(image.clone(), true, None, cx));
+                                                                }).icon(IconName::ExternalLink);
+                                                                items = super::context_menu_sections(super::network::insert_after_open(items, vec![action], cx.i18n()), cx.i18n());
+                                                            }
                                                             h.update(cx, |this, cx| {
                                                                 this.sidebar_selected_path = Some(p.clone());
                                                                 this.context_menus.clear();

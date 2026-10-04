@@ -114,7 +114,6 @@ operation-rename = Rename
 operation-delete = Delete
 operation-compress = Compression
 operation-extract = Extraction
-operation-compress-zip = Compress to ZIP
 operation-extract-here = Extract archive
 operation-new-folder = New folder
 operation-restore = Restore
@@ -269,3 +268,19 @@ network-disconnected = Network drives disconnected successfully.
 network-working = Working…
 network-loading = Loading drives…
 drive-eject-failed = Unable to eject the drive. Another application may be using it. { $detail }
+
+archive-format = Archive .{ $format }
+compression-fast = Fast
+compression-normal = Balanced
+compression-best = Maximum
+compress = Compress
+compression = Compression
+compression-format = Format
+
+disk-image-mount = Mount
+disk-image-unmount = Unmount
+disk-image-mount-failed = Could not mount the image. { $detail }
+disk-image-unmount-failed = Could not unmount the image. { $detail }
+disk-image-open-failed = Could not open the image. { $detail }
+disk-image-busy = A file operation is still using this image.
+disk-image-no-volume = No accessible volume was assigned to this image.

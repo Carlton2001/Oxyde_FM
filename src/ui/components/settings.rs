@@ -13,6 +13,7 @@ pub(crate) enum SettingsPicker {
     Language,
     Date,
     About,
+    Compression,
 }
 
 pub fn render_settings_panel(
@@ -90,6 +91,7 @@ pub fn render_settings_panel(
     })
     .into_iter()
     .collect();
+    let compression = compression_table(view, handle.clone(), cx);
     let left = div()
         .flex_1()
         .min_w_0()
@@ -274,6 +276,15 @@ pub fn render_settings_panel(
         ))
         .child(separator(theme))
         .child(section(i18n.text(Message::SettingsPerformance), theme))
+        .child(picker(
+            view,
+            handle.clone(),
+            SettingsPicker::Compression,
+            "settings-compression-picker",
+            "icons/archive.svg",
+            i18n.text(Message::Compression),
+            theme,
+        ))
         .child(placeholder(
             i18n.text(Message::SettingsTurbo),
             "icons/zap.svg",
@@ -384,8 +395,14 @@ pub fn render_settings_panel(
             SettingsPicker::Language => (i18n.text(Message::SettingsLanguage), languages),
             SettingsPicker::Date => (i18n.text(Message::SettingsDateFormat), dates),
             SettingsPicker::About => (i18n.text(Message::SettingsAbout), about),
+            SettingsPicker::Compression => (i18n.text(Message::Compression), compression),
         };
-        let submenu_width = crate::ui::scale::rem_pixels(rems(18.0))
+        let submenu_width =
+            crate::ui::scale::rem_pixels(rems(if kind == SettingsPicker::Compression {
+                22.0
+            } else {
+                18.0
+            }))
             .min(window.viewport_size().width - margin * 2.0);
         let submenu = div()
             .id("settings-submenu")
@@ -606,6 +623,86 @@ fn section(label: SharedString, theme: OxydeTheme) -> impl IntoElement {
         .font_weight(FontWeight::SEMIBOLD)
         .text_color(theme.text_muted)
         .child(label.to_uppercase())
+}
+
+fn compression_table(view: &OxydeApp, handle: Entity<OxydeApp>, cx: &App) -> Vec<AnyElement> {
+    let theme = *cx.theme();
+    let i18n = cx.i18n();
+    let header = div()
+        .flex()
+        .gap(rems(0.25))
+        .border_b(rems(0.0625))
+        .border_color(theme.border)
+        .children(
+            [
+                Message::CompressionFormat,
+                Message::CompressionFast,
+                Message::CompressionNormal,
+                Message::CompressionBest,
+            ]
+            .into_iter()
+            .map(|message| {
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .px(rems(0.375))
+                    .py(rems(0.25))
+                    .text_color(theme.text_muted)
+                    .text_center()
+                    .child(i18n.text(message))
+            }),
+        );
+    let mut rows = vec![header.into_any_element()];
+    for (format, label) in [("zip", "ZIP"), ("7z", "7z"), ("zst", "Zst")] {
+        let configured = view.compression_quality(format);
+        let selected = if configured == "fast" || configured == "best" {
+            configured
+        } else {
+            "normal"
+        };
+        let mut row = div().flex().gap(rems(0.25)).mt(rems(0.25)).items_center().child(
+            div()
+                .flex_1()
+                .min_w_0()
+                .px(rems(0.375))
+                .py(rems(0.25))
+                .text_center()
+                .child(label),
+        );
+        for quality in ["fast", "normal", "best"] {
+            let handle = handle.clone();
+            let active = selected == quality;
+            row = row.child(
+                div()
+                    .id(format!("compression-{format}-{quality}"))
+                    .flex_1()
+                    .min_w_0()
+                    .h(rems(1.75))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .rounded_md()
+                    .bg(if active {
+                        theme.selected
+                    } else {
+                        theme.menu_surface
+                    })
+                    .hover(|style| style.bg(theme.menu_hover))
+                    .child(
+                        div()
+                            .size(rems(1.0))
+                            .when(active, |cell| cell.child(icon("icons/check.svg", theme))),
+                    )
+                    .on_mouse_down(MouseButton::Left, move |_, _, cx| {
+                        handle.update(cx, |view, cx| {
+                            view.set_compression_quality(format, quality, cx)
+                        });
+                    }),
+            );
+        }
+        rows.push(row.into_any_element());
+    }
+    rows
 }
 
 fn choice(

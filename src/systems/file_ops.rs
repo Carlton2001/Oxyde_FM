@@ -21,6 +21,19 @@ impl Drop for PendingFile {
     }
 }
 
+struct ArchiveReader {
+    input: std::fs::File,
+    operation: Arc<Mutex<FileOperation>>,
+}
+impl Read for ArchiveReader {
+    fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+        FileOperationManager::archive_checkpoint(&self.operation).map_err(std::io::Error::other)?;
+        let count = self.input.read(buffer)?;
+        FileOperationManager::archive_progress(&self.operation, count as u64);
+        Ok(count)
+    }
+}
+
 struct RestoreNormalPriority;
 
 impl Drop for RestoreNormalPriority {
@@ -74,6 +87,11 @@ pub struct FileOperation {
     speed_sample_at: Option<std::time::Instant>,
     #[serde(skip)]
     speed_sample_bytes: u64,
+    pub compression_quality: String,
+    #[serde(skip)]
+    pub archive_qualities: HashMap<String, String>,
+    #[serde(skip)]
+    archive_path_mappings: Vec<(PathBuf, PathBuf)>,
     pub turbo: bool,
     pub is_cross_volume: bool,
     pub resolutions: Option<HashMap<String, ConflictAction>>,
@@ -119,13 +137,28 @@ impl FileOperation {
             processed_bytes: self.processed_bytes,
             total_files: self.total_files,
             processed_files: self.processed_files,
-            current_file: self.current_file.clone(),
+            current_file: self.current_file.as_ref().map(|path| {
+                let path = Path::new(path);
+                self.archive_path_mappings
+                    .iter()
+                    .find_map(|(root, archive)| {
+                        path.strip_prefix(root)
+                            .ok()
+                            .map(|relative| archive.join(relative))
+                    })
+                    .unwrap_or_else(|| path.to_path_buf())
+                    .to_string_lossy()
+                    .into_owned()
+            }),
             bytes_per_second: self.bytes_per_second,
             speed_history: self.speed_history.clone(),
             duration_ms: self.duration_ms,
             started_at: self.started_at,
             speed_sample_at: None,
             speed_sample_bytes: 0,
+            compression_quality: self.compression_quality.clone(),
+            archive_qualities: self.archive_qualities.clone(),
+            archive_path_mappings: self.archive_path_mappings.clone(),
             turbo: self.turbo,
             is_cross_volume: self.is_cross_volume,
             resolutions: None,
@@ -169,6 +202,9 @@ impl FileOperation {
             started_at: None,
             speed_sample_at: None,
             speed_sample_bytes: 0,
+            compression_quality: "normal".into(),
+            archive_qualities: HashMap::new(),
+            archive_path_mappings: Vec::new(),
             turbo: false,
             is_cross_volume: false,
             resolutions,
@@ -475,6 +511,9 @@ impl FileOperationManager {
             .iter()
             .chain(destinations.iter())
             .map(|path| {
+                let path = crate::utils::archive::split_virtual_path(&path.to_string_lossy())
+                    .map(|(archive, _)| archive)
+                    .unwrap_or_else(|| path.clone());
                 let absolute = if path.is_absolute() {
                     path.clone()
                 } else {
@@ -621,12 +660,23 @@ impl FileOperationManager {
             || !locked.moved_dirs.is_empty()
             || !locked.copied_files.is_empty();
         if final_status == OpStatus::Completed || has_effects {
-            let tx_type = match locked.op_type {
-                FileOpType::Copy => Some(TransactionType::Copy),
-                FileOpType::Move => Some(TransactionType::Move),
-                FileOpType::Trash => Some(TransactionType::Delete),
-                FileOpType::Delete => None,
-                FileOpType::Compress | FileOpType::Extract => None,
+            let virtual_effects = locked
+                .sources
+                .iter()
+                .any(|p| crate::systems::archive_workspace::virtual_source(p).is_some())
+                || locked.destination.as_ref().is_some_and(|p| {
+                    crate::systems::archive_workspace::virtual_destination(p).is_some()
+                });
+            let tx_type = if virtual_effects {
+                None
+            } else {
+                match locked.op_type {
+                    FileOpType::Copy => Some(TransactionType::Copy),
+                    FileOpType::Move => Some(TransactionType::Move),
+                    FileOpType::Trash => Some(TransactionType::Delete),
+                    FileOpType::Delete => None,
+                    FileOpType::Compress | FileOpType::Extract => None,
+                }
             };
 
             let has_undoable_effects = match locked.op_type {
@@ -768,6 +818,230 @@ impl FileOperationManager {
         None
     }
 
+    fn perform_archive_transfer(
+        op: &Arc<Mutex<FileOperation>>,
+        sources: Vec<PathBuf>,
+        destination: Option<PathBuf>,
+        is_move: bool,
+        resolutions: Option<HashMap<String, ConflictAction>>,
+    ) -> Result<(), String> {
+        use crate::systems::archive_workspace::{
+            lock_for_operation, mutation_locks, virtual_destination, virtual_source, writable,
+            ArchiveWorkspaces,
+        };
+
+        Self::archive_checkpoint(op)?;
+        let target = destination.ok_or("Missing destination")?;
+        let target_archive = virtual_destination(&target)
+            .map(|(archive, _)| std::fs::canonicalize(archive).map_err(|e| e.to_string()))
+            .transpose()?;
+        if target_archive.as_ref().is_some_and(|p| !writable(p))
+            || (is_move
+                && sources
+                    .iter()
+                    .filter_map(|p| virtual_source(p))
+                    .any(|(archive, _)| !writable(&archive)))
+        {
+            return Err("This archive format is read-only".into());
+        }
+        if target_archive.as_ref().is_some_and(|archive| {
+            sources
+                .iter()
+                .any(|source| std::fs::canonicalize(source).is_ok_and(|source| source == *archive))
+        }) {
+            return Err("Cannot put an archive inside itself".into());
+        }
+        let locks = mutation_locks(
+            target_archive.iter().cloned().chain(
+                sources
+                    .iter()
+                    .filter_map(|p| virtual_source(p).map(|(archive, _)| archive)),
+            ),
+        )?;
+        let _guards = locks
+            .iter()
+            .map(|lock| lock_for_operation(lock, op))
+            .collect::<Result<Vec<_>, _>>()?;
+        let mut workspaces = ArchiveWorkspaces::default();
+        let real_target = workspaces.resolve_for_operation(&target, true, op)?;
+        let mut real_sources = Vec::new();
+        for source in &sources {
+            real_sources.push(workspaces.resolve_for_operation(source, false, op)?);
+        }
+        op.lock().unwrap().archive_path_mappings = workspaces
+            .0
+            .values()
+            .map(|workspace| (workspace.root().to_path_buf(), workspace.archive.clone()))
+            .collect();
+        Self::archive_checkpoint(op)?;
+        let mapped_resolutions = resolutions
+            .map(|resolutions| {
+                resolutions
+                    .into_iter()
+                    .map(|(path, action)| {
+                        workspaces
+                            .resolve(Path::new(&path), false)
+                            .map(|path| (path.to_string_lossy().into_owned(), action))
+                    })
+                    .collect::<Result<HashMap<_, _>, _>>()
+            })
+            .transpose()?;
+        Self::perform_copy(
+            op,
+            real_sources.clone(),
+            Some(real_target.clone()),
+            false,
+            mapped_resolutions,
+        )?;
+        Self::archive_checkpoint(op)?;
+        let copied = op.lock().unwrap().copied_files.clone();
+        let hashes = op.lock().unwrap().copied_file_hashes.clone();
+        let created_dirs = op.lock().unwrap().created_dirs.clone();
+        let mut changed = std::collections::HashSet::new();
+        if let Some(archive) = &target_archive {
+            changed.insert(archive.clone());
+        }
+        // Stage removals only for files that were actually copied. Skipped conflicts stay put.
+        if is_move {
+            for (source, _) in &copied {
+                let original = workspaces.display(source);
+                if let Some((archive, _)) = virtual_source(&original) {
+                    std::fs::remove_file(source).map_err(|e| e.to_string())?;
+                    changed.insert(std::fs::canonicalize(archive).map_err(|e| e.to_string())?);
+                }
+            }
+            for (original, source) in sources.iter().zip(&real_sources) {
+                if source.is_dir() && virtual_source(original).is_some() {
+                    Self::remove_empty_copied_directories(source, &real_target, &created_dirs)?;
+                    if let Some((archive, _)) = virtual_source(original) {
+                        changed.insert(std::fs::canonicalize(archive).map_err(|e| e.to_string())?);
+                    }
+                }
+            }
+        }
+        // Publish destination first: a failed source rewrite leaves a recoverable copy.
+        if let Some(archive) = &target_archive {
+            workspaces.0[archive].commit(op)?;
+            changed.remove(archive);
+        }
+        for archive in changed {
+            workspaces.0[&archive].commit(op)?;
+        }
+        if is_move {
+            // Reconstruction can be long: do not delete a real file edited since its copy.
+            for (source, destination) in &copied {
+                if workspaces.display(source) != *source {
+                    continue;
+                }
+                let expected = hashes
+                    .iter()
+                    .find(|(path, _)| path == destination)
+                    .map(|(_, hash)| hash)
+                    .ok_or("Missing copied file hash")?;
+                let mut reader = std::fs::File::open(source).map_err(|e| e.to_string())?;
+                let mut hasher = blake3::Hasher::new();
+                let mut buffer = [0u8; 256 * 1024];
+                loop {
+                    Self::archive_checkpoint(op)?;
+                    let count = reader.read(&mut buffer).map_err(|e| e.to_string())?;
+                    if count == 0 {
+                        break;
+                    }
+                    hasher.update(&buffer[..count]);
+                }
+                if hasher.finalize().to_hex().as_str() != expected {
+                    return Err(format!(
+                        "Source changed after copy; preserved: {}",
+                        source.display()
+                    ));
+                }
+            }
+            for (source, _) in &copied {
+                if workspaces.display(source) == *source {
+                    std::fs::remove_file(source).map_err(|e| e.to_string())?;
+                }
+            }
+            for (original, source) in sources.iter().zip(&real_sources) {
+                if virtual_source(original).is_none() && source.is_dir() {
+                    Self::remove_empty_copied_directories(source, &real_target, &created_dirs)?;
+                }
+            }
+        }
+        // These effects are not filesystem Undo entries: their paths may belong to a temporary view.
+        let mut locked = op.lock().unwrap();
+        locked.created_files.clear();
+        locked.created_dirs.clear();
+        locked.replaced_files.clear();
+        locked.overwritten_files.clear();
+        locked.copied_files.clear();
+        locked.copied_file_hashes.clear();
+        Ok(())
+    }
+
+    fn remove_empty_copied_directories(
+        source: &Path,
+        target: &Path,
+        created: &[PathBuf],
+    ) -> Result<(), String> {
+        let base = source.file_name().ok_or("Invalid source name")?;
+        let mut directories = walkdir::WalkDir::new(source)
+            .contents_first(true)
+            .into_iter()
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| e.to_string())?;
+        for entry in directories
+            .drain(..)
+            .filter(|entry| entry.file_type().is_dir())
+        {
+            let destination = target.join(base).join(
+                entry
+                    .path()
+                    .strip_prefix(source)
+                    .map_err(|e| e.to_string())?,
+            );
+            if created.contains(&destination) || destination.is_dir() {
+                // A merged directory is removed only after every child has actually moved.
+                if std::fs::read_dir(entry.path())
+                    .map_err(|e| e.to_string())?
+                    .next()
+                    .is_none()
+                {
+                    std::fs::remove_dir(entry.path()).map_err(|e| e.to_string())?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn remove_archive_entries(
+        op: &Arc<Mutex<FileOperation>>,
+        archive: PathBuf,
+        internal: Vec<String>,
+    ) -> Result<(), String> {
+        use crate::systems::archive_workspace::{
+            lock_for_operation, mutation_locks, writable, ArchiveWorkspace,
+        };
+        let locks = mutation_locks([archive.clone()])?;
+        let _lock = lock_for_operation(&locks[0], op)?;
+        if !writable(&archive) {
+            return Err("This archive format is read-only".into());
+        }
+        Self::archive_checkpoint(op)?;
+        let workspace = ArchiveWorkspace::open_for_operation(archive, op)?;
+        op.lock().unwrap().archive_path_mappings =
+            vec![(workspace.root().to_path_buf(), workspace.archive.clone())];
+        for path in internal {
+            Self::archive_checkpoint(op)?;
+            let path = workspace.path(&path)?;
+            if path.is_dir() {
+                std::fs::remove_dir_all(&path).map_err(|e| e.to_string())?;
+            } else if path.exists() {
+                std::fs::remove_file(&path).map_err(|e| e.to_string())?;
+            }
+        }
+        workspace.commit(op)
+    }
+
     fn perform_copy(
         op: &Arc<Mutex<FileOperation>>,
         sources: Vec<PathBuf>,
@@ -775,6 +1049,15 @@ impl FileOperationManager {
         is_move: bool,
         resolutions: Option<HashMap<String, ConflictAction>>,
     ) -> Result<(), String> {
+        if sources
+            .iter()
+            .any(|p| crate::systems::archive_workspace::virtual_source(p).is_some())
+            || destination.as_ref().is_some_and(|p| {
+                crate::systems::archive_workspace::virtual_destination(p).is_some()
+            })
+        {
+            return Self::perform_archive_transfer(op, sources, destination, is_move, resolutions);
+        }
         let target_dir = destination.ok_or("No destination provided for copy/move".to_string())?;
 
         let target_dir = std::fs::canonicalize(&target_dir)
@@ -1426,8 +1709,7 @@ impl FileOperationManager {
             if cancel_flag.load(Ordering::Relaxed) {
                 return Ok(());
             }
-            crate::commands::archive::remove_items_from_archive(archive_path, internal_paths)
-                .map_err(|e| e.to_string())?;
+            Self::remove_archive_entries(op, archive_path, internal_paths)?;
         }
 
         if real_sources.is_empty() {
@@ -1624,8 +1906,7 @@ impl FileOperationManager {
             if cancel_flag.load(Ordering::Relaxed) {
                 return Ok(());
             }
-            crate::commands::archive::remove_items_from_archive(archive_path, internal_paths)
-                .map_err(|e| e.to_string())?;
+            Self::remove_archive_entries(op, archive_path, internal_paths)?;
         }
 
         if real_sources.is_empty() {
@@ -1668,7 +1949,7 @@ impl FileOperationManager {
         Ok(())
     }
 
-    fn archive_checkpoint(op: &Arc<Mutex<FileOperation>>) -> Result<(), String> {
+    pub(crate) fn archive_checkpoint(op: &Arc<Mutex<FileOperation>>) -> Result<(), String> {
         let (cancel, pause, turbo) = {
             let locked = op.lock().unwrap();
             (
@@ -1722,7 +2003,15 @@ impl FileOperationManager {
         }
         let parent = path.parent().unwrap_or_else(|| Path::new("."));
         let stem = path.file_stem().unwrap_or_default().to_string_lossy();
-        let extension = path.extension().map(|s| s.to_string_lossy().into_owned());
+        let file_name = path.file_name().unwrap_or_default().to_string_lossy();
+        let (stem, extension) = if let Some(name) = file_name.strip_suffix(".tar.zst") {
+            (name.to_string(), Some("tar.zst".to_string()))
+        } else {
+            (
+                stem.into_owned(),
+                path.extension().map(|s| s.to_string_lossy().into_owned()),
+            )
+        };
         for index in 1.. {
             let name = match &extension {
                 Some(ext) => format!("{stem} ({index}).{ext}"),
@@ -1736,15 +2025,13 @@ impl FileOperationManager {
         unreachable!()
     }
 
-    fn perform_compress(
+    pub(crate) fn perform_compress(
         op: &Arc<Mutex<FileOperation>>,
         sources: Vec<PathBuf>,
         destination: Option<PathBuf>,
     ) -> Result<(), String> {
         let requested = destination.ok_or("Missing archive destination")?;
-        if sources.is_empty() {
-            return Err("No files selected".into());
-        }
+        let update_destination = matches!(op.lock().unwrap().op_type, FileOpType::Compress);
         let target = Self::unique_archive_path(&requested);
         let parent = target.parent().ok_or("Invalid archive destination")?;
         let mut entries = Vec::new();
@@ -1781,7 +2068,9 @@ impl FileOperationManager {
         }
         {
             let mut locked = op.lock().unwrap();
-            locked.destination = Some(target.clone());
+            if update_destination {
+                locked.destination = Some(target.clone());
+            }
             locked.total_files = entries.len();
             locked.total_bytes = total_bytes;
             locked.status = if locked.pause_flag.load(Ordering::Relaxed) {
@@ -1790,50 +2079,124 @@ impl FileOperationManager {
                 OpStatus::Running
             };
         }
-        let temp = parent.join(format!(".oxyde-{}.zip.tmp", Uuid::new_v4()));
+        let temp = parent.join(format!(".oxyde-{}.archive.tmp", Uuid::new_v4()));
         let guard = PendingFile(temp.clone());
         let file = std::fs::OpenOptions::new()
             .write(true)
             .create_new(true)
             .open(&temp)
             .map_err(|error| error.to_string())?;
-        let mut writer = zip::ZipWriter::new(std::io::BufWriter::new(file));
-        let mut buffer = [0u8; 256 * 1024];
-        for (path, name, is_dir) in entries {
-            Self::archive_checkpoint(op)?;
-            op.lock().unwrap().current_file = Some(path.to_string_lossy().into_owned());
-            let level = if op.lock().unwrap().turbo_flag.load(Ordering::Relaxed) {
-                1
-            } else {
-                6
-            };
-            let options = zip::write::SimpleFileOptions::default()
-                .compression_method(zip::CompressionMethod::Deflated)
-                .compression_level(Some(level));
-            if is_dir {
-                writer
-                    .add_directory(format!("{name}/"), options)
-                    .map_err(|error| error.to_string())?;
-            } else {
-                writer
-                    .start_file(name, options)
-                    .map_err(|error| error.to_string())?;
-                let mut input = std::fs::File::open(&path).map_err(|error| error.to_string())?;
-                loop {
+        let format = requested
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("")
+            .to_ascii_lowercase();
+        match format.as_str() {
+            "zip" => {
+                let mut writer = zip::ZipWriter::new(std::io::BufWriter::new(file));
+                let mut buffer = [0u8; 256 * 1024];
+                for (path, name, is_dir) in entries {
                     Self::archive_checkpoint(op)?;
-                    let count = input.read(&mut buffer).map_err(|error| error.to_string())?;
-                    if count == 0 {
-                        break;
+                    op.lock().unwrap().current_file = Some(path.to_string_lossy().into_owned());
+                    let level = if op.lock().unwrap().turbo_flag.load(Ordering::Relaxed) {
+                        1
+                    } else {
+                        match op.lock().unwrap().compression_quality.as_str() {
+                            "fast" => 1,
+                            "best" => 9,
+                            _ => 6,
+                        }
+                    };
+                    let options = zip::write::SimpleFileOptions::default()
+                        .compression_method(zip::CompressionMethod::Deflated)
+                        .compression_level(Some(level));
+                    if is_dir {
+                        writer
+                            .add_directory(format!("{name}/"), options)
+                            .map_err(|error| error.to_string())?;
+                    } else {
+                        writer
+                            .start_file(name, options)
+                            .map_err(|error| error.to_string())?;
+                        let mut input =
+                            std::fs::File::open(&path).map_err(|error| error.to_string())?;
+                        loop {
+                            Self::archive_checkpoint(op)?;
+                            let count =
+                                input.read(&mut buffer).map_err(|error| error.to_string())?;
+                            if count == 0 {
+                                break;
+                            }
+                            writer
+                                .write_all(&buffer[..count])
+                                .map_err(|error| error.to_string())?;
+                            Self::archive_progress(op, count as u64);
+                        }
                     }
-                    writer
-                        .write_all(&buffer[..count])
-                        .map_err(|error| error.to_string())?;
-                    Self::archive_progress(op, count as u64);
+                    op.lock().unwrap().processed_files += 1;
+                }
+                writer.finish().map_err(|error| error.to_string())?;
+            }
+            "7z" => {
+                let quality = op.lock().unwrap().compression_quality.clone();
+                let preset = match quality.as_str() {
+                    "fast" => 1,
+                    "best" => 9,
+                    _ => 6,
+                };
+                let mut writer =
+                    sevenz_rust2::ArchiveWriter::new(file).map_err(|e| e.to_string())?;
+                writer.set_content_methods(vec![
+                    sevenz_rust2::encoder_options::Lzma2Options::from_level(preset).into(),
+                ]);
+                for (path, name, is_dir) in entries {
+                    Self::archive_checkpoint(op)?;
+                    op.lock().unwrap().current_file = Some(path.to_string_lossy().into_owned());
+                    let entry = sevenz_rust2::ArchiveEntry::from_path(&path, name);
+                    if is_dir {
+                        writer
+                            .push_archive_entry(entry, None::<ArchiveReader>)
+                            .map_err(|e| e.to_string())?;
+                    } else {
+                        let reader = ArchiveReader {
+                            input: std::fs::File::open(&path).map_err(|e| e.to_string())?,
+                            operation: op.clone(),
+                        };
+                        writer
+                            .push_archive_entry(entry, Some(reader))
+                            .map_err(|e| e.to_string())?;
+                    }
+                    op.lock().unwrap().processed_files += 1;
+                }
+                writer.finish().map_err(|e| e.to_string())?;
+            }
+            "tar" | "zst" => {
+                let quality = op.lock().unwrap().compression_quality.clone();
+                let level = match quality.as_str() {
+                    "fast" => 1,
+                    "best" => 19,
+                    _ => 3,
+                };
+                // Zstandard wraps the TAR stream, preserving directories and multiple selections.
+                if format == "zst" {
+                    Self::write_tar_entries(
+                        op,
+                        entries,
+                        zstd::stream::write::Encoder::new(file, level)
+                            .map_err(|e| e.to_string())?,
+                    )?;
+                } else {
+                    let mut tar_bytes = tar::Builder::new(std::io::BufWriter::new(file));
+                    Self::append_tar_entries(op, entries, &mut tar_bytes)?;
+                    tar_bytes
+                        .into_inner()
+                        .map_err(|e| e.to_string())?
+                        .flush()
+                        .map_err(|e| e.to_string())?;
                 }
             }
-            op.lock().unwrap().processed_files += 1;
+            _ => return Err("Unsupported compression format".into()),
         }
-        writer.finish().map_err(|error| error.to_string())?;
         Self::archive_checkpoint(op)?;
         let mut final_target = target;
         loop {
@@ -1877,8 +2240,56 @@ impl FileOperationManager {
                 }
             }
         }
-        op.lock().unwrap().destination = Some(final_target);
+        if update_destination {
+            op.lock().unwrap().destination = Some(final_target);
+        }
         drop(guard);
+        Ok(())
+    }
+
+    fn append_tar_entries<W: Write>(
+        op: &Arc<Mutex<FileOperation>>,
+        entries: Vec<(PathBuf, String, bool)>,
+        writer: &mut tar::Builder<W>,
+    ) -> Result<(), String> {
+        for (path, name, is_dir) in entries {
+            Self::archive_checkpoint(op)?;
+            op.lock().unwrap().current_file = Some(path.to_string_lossy().into_owned());
+            let mut header = tar::Header::new_gnu();
+            header.set_metadata(&std::fs::metadata(&path).map_err(|e| e.to_string())?);
+            if is_dir {
+                writer
+                    .append_data(&mut header, name, std::io::empty())
+                    .map_err(|e| e.to_string())?;
+            } else {
+                writer
+                    .append_data(
+                        &mut header,
+                        name,
+                        ArchiveReader {
+                            input: std::fs::File::open(&path).map_err(|e| e.to_string())?,
+                            operation: op.clone(),
+                        },
+                    )
+                    .map_err(|e| e.to_string())?;
+            }
+            op.lock().unwrap().processed_files += 1;
+        }
+        writer.finish().map_err(|e| e.to_string())
+    }
+
+    fn write_tar_entries<W: Write>(
+        op: &Arc<Mutex<FileOperation>>,
+        entries: Vec<(PathBuf, String, bool)>,
+        encoder: zstd::stream::write::Encoder<'_, W>,
+    ) -> Result<(), String> {
+        let mut writer = tar::Builder::new(encoder);
+        Self::append_tar_entries(op, entries, &mut writer)?;
+        writer
+            .into_inner()
+            .map_err(|e| e.to_string())?
+            .finish()
+            .map_err(|e| e.to_string())?;
         Ok(())
     }
 
@@ -1972,12 +2383,11 @@ impl FileOperationManager {
             }
         } else {
             Self::archive_checkpoint(op)?;
-            let state = crate::commands::archive::ArchiveState(AtomicBool::new(false));
-            futures::executor::block_on(crate::commands::archive::extract_archive(
+            crate::commands::archive::extract_archive_with_checkpoint(
                 source.to_string_lossy().into_owned(),
                 target.to_string_lossy().into_owned(),
-                &state,
-            ))
+                &|| Self::archive_checkpoint(op).map_err(std::io::Error::other),
+            )
             .map_err(|error| error.to_string())?;
             let mut locked = op.lock().unwrap();
             locked.total_files = 1;
@@ -2151,46 +2561,302 @@ mod tests {
     }
 
     #[test]
-    fn archive_roundtrip_tracks_progress_and_preserves_existing_destinations() {
+    fn copy_from_iso_preserves_image_and_extracts_selected_entry() {
         let temp = tempfile::tempdir().unwrap();
-        let source = temp.path().join("folder");
-        std::fs::create_dir(&source).unwrap();
-        std::fs::write(source.join("hello.txt"), b"archive roundtrip").unwrap();
-        let archive_path = temp.path().join("folder.zip");
-        std::fs::write(&archive_path, b"existing archive").unwrap();
-        let compress = Arc::new(Mutex::new(FileOperation::new(
-            FileOpType::Compress,
+        let image = temp.path().join("disc.iso");
+        crate::commands::archive::test_iso_image(&image);
+        let original = std::fs::read(&image).unwrap();
+        let target = temp.path().join("output");
+        std::fs::create_dir(&target).unwrap();
+        let source = image.join("DOCS/README.TXT");
+        let operation = Arc::new(Mutex::new(FileOperation::new(
+            FileOpType::Copy,
             vec![source.clone()],
-            Some(archive_path.clone()),
+            Some(target.clone()),
             None,
         )));
-        FileOperationManager::perform_compress(&compress, vec![source], Some(archive_path.clone()))
-            .unwrap();
-        let compressed = compress.lock().unwrap().snapshot();
-        let produced = compressed.destination.unwrap();
-        assert_ne!(produced, archive_path);
-        assert_eq!(std::fs::read(&archive_path).unwrap(), b"existing archive");
-        assert_eq!(compressed.processed_files, compressed.total_files);
-        assert_eq!(compressed.processed_bytes, compressed.total_bytes);
-
-        let extraction = Arc::new(Mutex::new(FileOperation::new(
-            FileOpType::Extract,
-            vec![produced.clone()],
-            Some(temp.path().join("folder")),
+        FileOperationManager::perform_copy(
+            &operation,
+            vec![source],
+            Some(target.clone()),
+            false,
             None,
-        )));
-        FileOperationManager::perform_extract(
-            &extraction,
-            vec![produced],
-            Some(temp.path().join("folder")),
         )
         .unwrap();
-        let extracted = extraction.lock().unwrap().snapshot();
         assert_eq!(
-            std::fs::read(extracted.destination.unwrap().join("folder/hello.txt")).unwrap(),
-            b"archive roundtrip"
+            std::fs::read(target.join("README.TXT")).unwrap(),
+            b"ISO content"
         );
-        assert_eq!(extracted.processed_bytes, extracted.total_bytes);
+        assert_eq!(std::fs::read(image).unwrap(), original);
+    }
+
+    #[test]
+    fn archive_roundtrip_tracks_progress_and_preserves_existing_destinations() {
+        for format in ["zip", "7z", "tar", "zst"] {
+            for quality in ["fast", "normal", "best"] {
+                let temp = tempfile::tempdir().unwrap();
+                let source = temp.path().join("folder");
+                std::fs::create_dir(&source).unwrap();
+                std::fs::create_dir(source.join("empty")).unwrap();
+                std::fs::write(source.join("hello.txt"), b"archive roundtrip").unwrap();
+                let archive_path = temp.path().join(format!("folder.{format}"));
+                std::fs::write(&archive_path, b"existing archive").unwrap();
+                let compress = Arc::new(Mutex::new(FileOperation::new(
+                    FileOpType::Compress,
+                    vec![source.clone()],
+                    Some(archive_path.clone()),
+                    None,
+                )));
+                compress.lock().unwrap().compression_quality = quality.into();
+                FileOperationManager::perform_compress(
+                    &compress,
+                    vec![source],
+                    Some(archive_path.clone()),
+                )
+                .unwrap();
+                let compressed = compress.lock().unwrap().snapshot();
+                let produced = compressed.destination.unwrap();
+                assert_ne!(produced, archive_path);
+                assert_eq!(std::fs::read(&archive_path).unwrap(), b"existing archive");
+                assert_eq!(compressed.processed_files, compressed.total_files);
+                assert_eq!(compressed.processed_bytes, compressed.total_bytes);
+
+                let extraction = Arc::new(Mutex::new(FileOperation::new(
+                    FileOpType::Extract,
+                    vec![produced.clone()],
+                    Some(temp.path().join("folder")),
+                    None,
+                )));
+                FileOperationManager::perform_extract(
+                    &extraction,
+                    vec![produced],
+                    Some(temp.path().join("folder")),
+                )
+                .unwrap();
+                let extracted = extraction.lock().unwrap().snapshot();
+                assert_eq!(
+                    std::fs::read(
+                        extracted
+                            .destination
+                            .as_ref()
+                            .unwrap()
+                            .join("folder/hello.txt")
+                    )
+                    .unwrap(),
+                    b"archive roundtrip"
+                );
+                assert!(extracted
+                    .destination
+                    .as_ref()
+                    .unwrap()
+                    .join("folder/empty")
+                    .is_dir());
+                assert_eq!(extracted.processed_bytes, extracted.total_bytes);
+            }
+        }
+    }
+
+    #[test]
+    fn archive_file_operations_work_inside_and_between_all_created_formats() {
+        for extension in ["zip", "7z", "tar", "tar.zst", "7Z"] {
+            let directory = tempfile::tempdir().unwrap();
+            let file = directory.path().join("original.txt");
+            std::fs::write(&file, b"original").unwrap();
+            let archive = directory.path().join(format!("editable.{extension}"));
+            let make_op = || {
+                Arc::new(Mutex::new(FileOperation::new(
+                    FileOpType::Copy,
+                    vec![],
+                    None,
+                    None,
+                )))
+            };
+            FileOperationManager::perform_compress(
+                &make_op(),
+                vec![file.clone()],
+                Some(archive.clone()),
+            )
+            .unwrap();
+            let folder = archive.join("nested");
+            crate::commands::archive::create_archive_directory(&folder).unwrap();
+            let added = directory.path().join("added.txt");
+            std::fs::write(&added, b"added").unwrap();
+            FileOperationManager::perform_copy(
+                &make_op(),
+                vec![added.clone()],
+                Some(folder.clone()),
+                false,
+                None,
+            )
+            .unwrap();
+            assert!(added.exists());
+            let output = directory.path().join("output");
+            std::fs::create_dir(&output).unwrap();
+            FileOperationManager::perform_copy(
+                &make_op(),
+                vec![folder.join("added.txt")],
+                Some(output.clone()),
+                false,
+                None,
+            )
+            .unwrap();
+            assert_eq!(std::fs::read(output.join("added.txt")).unwrap(), b"added");
+            let runtime = tokio::runtime::Runtime::new().unwrap();
+            runtime
+                .block_on(crate::commands::io::rename_item(
+                    folder.join("added.txt").to_string_lossy().into_owned(),
+                    folder.join("renamed.txt").to_string_lossy().into_owned(),
+                ))
+                .unwrap();
+            FileOperationManager::perform_copy(
+                &make_op(),
+                vec![folder.join("renamed.txt")],
+                Some(archive.clone()),
+                true,
+                None,
+            )
+            .unwrap();
+            let nested = crate::commands::archive::list_archive_contents(
+                archive.to_string_lossy().into_owned(),
+                "nested".into(),
+            )
+            .unwrap();
+            assert!(nested.is_empty());
+            FileOperationManager::perform_copy(
+                &make_op(),
+                vec![archive.join("renamed.txt")],
+                Some(output.clone()),
+                true,
+                None,
+            )
+            .unwrap();
+            assert_eq!(std::fs::read(output.join("renamed.txt")).unwrap(), b"added");
+            let second_archive = directory.path().join(format!("second.{extension}"));
+            FileOperationManager::perform_compress(
+                &make_op(),
+                vec![],
+                Some(second_archive.clone()),
+            )
+            .unwrap();
+            FileOperationManager::perform_copy(
+                &make_op(),
+                vec![archive.join("original.txt")],
+                Some(second_archive.clone()),
+                true,
+                None,
+            )
+            .unwrap();
+            assert!(crate::commands::archive::list_archive_contents(
+                second_archive.to_string_lossy().into_owned(),
+                "".into()
+            )
+            .unwrap()
+            .iter()
+            .any(|entry| entry.name == "original.txt"));
+            FileOperationManager::perform_delete(&make_op(), vec![folder]).unwrap();
+            assert!(crate::commands::archive::list_archive_contents(
+                archive.to_string_lossy().into_owned(),
+                "".into()
+            )
+            .unwrap()
+            .is_empty());
+        }
+    }
+
+    #[test]
+    fn archive_move_preserves_skipped_files_and_reports_conflicts() {
+        let directory = tempfile::tempdir().unwrap();
+        let source = directory.path().join("source");
+        std::fs::create_dir(&source).unwrap();
+        std::fs::write(source.join("keep.txt"), b"keep").unwrap();
+        std::fs::write(source.join("move.txt"), b"move").unwrap();
+        let archive = directory.path().join("test.7z");
+        let op = Arc::new(Mutex::new(FileOperation::new(
+            FileOpType::Copy,
+            vec![],
+            None,
+            None,
+        )));
+        FileOperationManager::perform_compress(&op, vec![source.clone()], Some(archive.clone()))
+            .unwrap();
+        let target = directory.path().join("target");
+        std::fs::create_dir_all(target.join("source")).unwrap();
+        std::fs::write(target.join("source/keep.txt"), b"existing").unwrap();
+        let virtual_folder = archive.join("source");
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        let conflicts = runtime
+            .block_on(crate::commands::ops::check_conflicts(
+                vec![virtual_folder.to_string_lossy().into_owned()],
+                target.to_string_lossy().into_owned(),
+            ))
+            .unwrap();
+        assert!(conflicts
+            .conflicts
+            .iter()
+            .any(|conflict| conflict.source.path
+                == virtual_folder.join("keep.txt").to_string_lossy()));
+        let resolutions = HashMap::from([(
+            virtual_folder
+                .join("keep.txt")
+                .to_string_lossy()
+                .into_owned(),
+            ConflictAction::Skip,
+        )]);
+        let op = Arc::new(Mutex::new(FileOperation::new(
+            FileOpType::Move,
+            vec![],
+            None,
+            None,
+        )));
+        FileOperationManager::perform_copy(
+            &op,
+            vec![virtual_folder],
+            Some(target.clone()),
+            true,
+            Some(resolutions),
+        )
+        .unwrap();
+        let remaining = crate::commands::archive::list_archive_contents(
+            archive.to_string_lossy().into_owned(),
+            "source".into(),
+        )
+        .unwrap();
+        assert_eq!(remaining.len(), 1);
+        assert_eq!(remaining[0].name, "keep.txt");
+        assert_eq!(
+            std::fs::read(target.join("source/keep.txt")).unwrap(),
+            b"existing"
+        );
+        assert_eq!(
+            std::fs::read(target.join("source/move.txt")).unwrap(),
+            b"move"
+        );
+        let resolutions = HashMap::from([(
+            target
+                .join("source/keep.txt")
+                .to_string_lossy()
+                .into_owned(),
+            ConflictAction::Replace,
+        )]);
+        FileOperationManager::perform_copy(
+            &Arc::new(Mutex::new(FileOperation::new(
+                FileOpType::Copy,
+                vec![],
+                None,
+                None,
+            ))),
+            vec![target.join("source")],
+            Some(archive.clone()),
+            false,
+            Some(resolutions),
+        )
+        .unwrap();
+        let files = crate::commands::archive::list_archive_contents(
+            archive.to_string_lossy().into_owned(),
+            "source".into(),
+        )
+        .unwrap();
+        assert_eq!(files.len(), 2);
     }
 
     #[test]

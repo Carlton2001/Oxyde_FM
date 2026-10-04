@@ -10,6 +10,18 @@ impl LinuxPlatform {
 }
 
 impl Platform for LinuxPlatform {
+    fn install_disk_image_autoplay_handler(&self, _window: raw_window_handle::RawWindowHandle) -> Result<(), String> {
+        Ok(())
+    }
+    fn mounted_disk_images(&self) -> Result<Vec<super::MountedDiskImage>, String> {
+        Ok(Vec::new())
+    }
+    fn mount_disk_image(&self, _path: &str) -> Result<Vec<String>, String> {
+        Err("Disk image mounting is only supported on Windows".into())
+    }
+    fn unmount_disk_image(&self, _path: &str) -> Result<(), String> {
+        Err("Disk image unmounting is only supported on Windows".into())
+    }
     fn list_network_shares(&self, _server: &str) -> Result<Vec<crate::models::FileEntry>, String> {
         Err("Network discovery is only available on Windows".into())
     }

@@ -79,13 +79,18 @@ fn main() {
                     let focus_handle = app.read(cx).focus_handle.clone();
                     window.on_next_frame(move |window, cx| {
                         window.focus(&focus_handle, cx);
-                        // On charge l'icône PNG (pour Windows)
-                        let assets = crate::ui::assets::EmbeddedAssetSource::new();
-                        if let Ok(Some(icon_bytes)) = assets.load("icons/logo.png") {
-                            match raw_window_handle::HasWindowHandle::window_handle(window) {
-                                Ok(handle) => oxyde_lib::platform::platform().set_application_icon(handle.as_raw(), &icon_bytes),
-                                Err(error) => log::warn!("Cannot access Oxyde window handle: {error}"),
+                        match raw_window_handle::HasWindowHandle::window_handle(window) {
+                            Ok(handle) => {
+                                let platform = oxyde_lib::platform::platform();
+                                if let Err(error) = platform.install_disk_image_autoplay_handler(handle.as_raw()) {
+                                    log::warn!("Cannot install disk-image AutoPlay handler: {error}");
+                                }
+                                let assets = crate::ui::assets::EmbeddedAssetSource::new();
+                                if let Ok(Some(icon_bytes)) = assets.load("icons/logo.png") {
+                                    platform.set_application_icon(handle.as_raw(), &icon_bytes);
+                                }
                             }
+                            Err(error) => log::warn!("Cannot access Oxyde window handle: {error}"),
                         }
                     });
                     app

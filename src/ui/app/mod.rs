@@ -6,6 +6,7 @@ use gpui::*;
 pub use oxyde_lib::models::FileEntry;
 
 pub mod filters;
+pub(crate) mod disk_images;
 mod drive_watchers;
 pub mod layout;
 pub mod navigation;
@@ -415,6 +416,8 @@ pub struct OxydeApp {
     pub _drive_refresh_task: Option<Task<()>>,
     pub(super) drive_details_task: Option<Task<()>>,
     pub(crate) ejecting_drive: bool,
+    pub(crate) mounted_disk_images: Vec<oxyde_lib::platform::MountedDiskImage>,
+    pub(super) disk_image_refresh_task: Option<Task<()>>,
     pub(crate) network_dialog: Option<network::NetworkDialog>,
     pub(crate) network_dialog_revision: u64,
     pub(crate) network_focus_restore: bool,
@@ -442,6 +445,7 @@ pub struct OxydeApp {
     pub breadcrumb_invalid: bool,
     rename_click_candidate: Option<(String, std::time::Instant)>,
     rename_pending: bool,
+    rename_cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
     rename_generation: u64,
     pending_file_operations: std::collections::VecDeque<PendingFileOperation>,
     file_operation_notice: Option<(Message, String)>,
@@ -451,6 +455,7 @@ pub struct OxydeApp {
     pub(crate) operations_panel_view:
         Option<Entity<crate::ui::components::operations::OperationsPanelView>>,
     pub(crate) operations_panel_scroll: ScrollHandle,
+    pub(crate) archive_creation: Option<(Vec<std::path::PathBuf>, String)>,
     pub(crate) rename_error: Option<Message>,
     pub(crate) rename_shake_id: u64,
 
@@ -845,6 +850,8 @@ impl OxydeApp {
             _drive_refresh_task: None,
             drive_details_task: None,
             ejecting_drive: false,
+            mounted_disk_images: Vec::new(),
+            disk_image_refresh_task: None,
             network_dialog: None,
             network_dialog_revision: 0,
             network_focus_restore: false,
@@ -875,6 +882,7 @@ impl OxydeApp {
             breadcrumb_invalid: false,
             rename_click_candidate: None,
             rename_pending: false,
+            rename_cancel: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             rename_generation: 0,
             pending_file_operations: std::collections::VecDeque::new(),
             file_operation_notice: None,
@@ -883,6 +891,7 @@ impl OxydeApp {
             operations_panel_position,
             operations_panel_view: None,
             operations_panel_scroll: ScrollHandle::new(),
+            archive_creation: None,
             rename_error: None,
             rename_shake_id: 0,
             show_hidden: config.show_hidden,
@@ -1024,6 +1033,10 @@ impl OxydeApp {
             return;
         };
 
+        self.archive_creation = None;
+        self.rename_cancel
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+        self.rename_cancel = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
         self.rename_generation = self.rename_generation.wrapping_add(1);
         self.rename_pending = false;
         self.rename_click_candidate = None;
@@ -1193,6 +1206,42 @@ impl OxydeApp {
         let Some(path) = self.editing_path.clone() else {
             return;
         };
+        if let Some((sources, extension)) = self.archive_creation.clone() {
+            let name = self.editing_text.trim();
+            if name.is_empty() {
+                self.rename_error = Some(Message::RenameEmptyName);
+                cx.notify();
+                return;
+            }
+            if name == "."
+                || name == ".."
+                || name.contains(['/', '\\', ':', '*', '?', '"', '<', '>', '|'])
+                || name.chars().any(char::is_control)
+                || name.ends_with(['.', ' '])
+            {
+                self.rename_error = Some(Message::RenameInvalidName);
+                cx.notify();
+                return;
+            }
+            let suffix = format!(".{extension}");
+            let name = if name.to_lowercase().ends_with(&suffix) {
+                name.to_string()
+            } else {
+                format!("{name}{suffix}")
+            };
+            let destination = std::path::Path::new(&path)
+                .parent()
+                .unwrap_or(std::path::Path::new(""))
+                .join(name);
+            self.cancel_rename(cx);
+            self.queue_archive_operation(
+                oxyde_lib::systems::file_ops::FileOpType::Compress,
+                sources,
+                destination,
+                cx,
+            );
+            return;
+        }
         let current_name = std::path::Path::new(&path)
             .file_name()
             .and_then(|name| name.to_str())
@@ -1212,6 +1261,9 @@ impl OxydeApp {
     }
 
     pub(crate) fn cancel_rename(&mut self, cx: &mut Context<Self>) {
+        self.rename_cancel
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+        self.archive_creation = None;
         self.rename_generation = self.rename_generation.wrapping_add(1);
         self.editing_path = None;
         self.editing_view = None;
@@ -1301,6 +1353,8 @@ impl OxydeApp {
             self.rename_pending = false;
             return;
         };
+        let quality = self.archive_quality_for_path(std::path::Path::new(&old_path));
+        let cancel = self.rename_cancel.clone();
         let generation = self.rename_generation;
         let path_for_check = old_path.clone();
         cx.spawn(move |_, cx: &mut AsyncApp| {
@@ -1308,7 +1362,9 @@ impl OxydeApp {
             async move {
                 let runtime = tokio::runtime::Handle::current();
                 let result = tokio::task::spawn_blocking(move || {
-                    runtime.block_on(oxyde_lib::commands::io::rename_item(old_path, new_path))
+                    runtime.block_on(oxyde_lib::commands::io::rename_item_controlled(
+                        old_path, new_path, quality, cancel,
+                    ))
                 })
                 .await;
                 handle.update(&mut cx, |this, cx| {
@@ -1327,6 +1383,7 @@ impl OxydeApp {
                             this.editing_view = None;
                             this.inline_rename = false;
                             this.rename_error = None;
+                            this.refresh_all_tabs(cx);
                             cx.notify();
                         }
                         Ok(Err(error)) => {
@@ -1407,8 +1464,13 @@ impl OxydeApp {
     pub(crate) fn open_external_item(&mut self, path: String, cx: &mut Context<Self>) {
         cx.spawn(async move |this, cx| {
             let result = tokio::task::spawn_blocking(move || {
-                oxyde_lib::platform::platform().open_item(&path)
-            }).await;
+                let path = oxyde_lib::commands::archive::prepare_archive_file_for_open(
+                    std::path::Path::new(&path),
+                )
+                .map_err(|e| e.to_string())?;
+                oxyde_lib::platform::platform().open_item(&path.to_string_lossy())
+            })
+            .await;
             let error = match result {
                 Ok(Ok(())) => return,
                 Ok(Err(error)) => error,
@@ -1421,6 +1483,48 @@ impl OxydeApp {
         }).detach();
     }
 
+    fn archive_qualities(&self) -> std::collections::HashMap<String, String> {
+        std::collections::HashMap::from([
+            ("zip".into(), self.config.zip_quality.clone()),
+            ("7z".into(), self.config.seven_zip_quality.clone()),
+            ("zst".into(), self.config.zstd_quality.clone()),
+        ])
+    }
+
+    fn archive_quality_for_path(&self, path: &std::path::Path) -> String {
+        let archive = oxyde_lib::utils::archive::split_virtual_path(&path.to_string_lossy())
+            .map(|(archive, _)| archive)
+            .unwrap_or_else(|| path.to_path_buf());
+        match archive
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(str::to_ascii_lowercase)
+            .as_deref()
+        {
+            Some("7z") => self.config.seven_zip_quality.clone(),
+            Some("zst") => self.config.zstd_quality.clone(),
+            _ => self.config.zip_quality.clone(),
+        }
+    }
+
+    pub(crate) fn open_file_item(
+        &mut self,
+        pane_id: &str,
+        path: String,
+        is_dir: bool,
+        cx: &mut Context<Self>,
+    ) {
+        let navigable_archive =
+            oxyde_lib::utils::archive::is_navigable_archive(std::path::Path::new(&path));
+        if oxyde_lib::utils::disk_image::needs_mount_for_browsing(std::path::Path::new(&path)) {
+            self.open_disk_image(pane_id.to_string(), path, false, cx);
+        } else if is_dir || navigable_archive {
+            self.open_directory_item(pane_id, path, false, cx);
+        } else {
+            self.open_external_item(path, cx);
+        }
+    }
+
     pub fn execute_ouvrir(&mut self, cx: &mut Context<Self>) {
         let pane_id = self.state.active_pane_id.clone();
         if let Some(pane) = self.state.layout.find_pane(&pane_id) {
@@ -1429,11 +1533,7 @@ impl OxydeApp {
                 .filter(|entry| tab.selected_paths.contains(&entry.path))
                 .map(|entry| (entry.path.clone(), entry.is_dir)).collect();
             for (path, is_dir) in paths {
-                if is_dir {
-                    self.navigate_to(&pane_id, path, cx);
-                } else {
-                    self.open_external_item(path, cx);
-                }
+                self.open_file_item(&pane_id, path, is_dir, cx);
             }
         }
     }
@@ -1457,12 +1557,13 @@ impl OxydeApp {
                 async move {
                     let runtime = tokio::runtime::Handle::current();
                     handle.update(&mut cx, |this, cx| {
-                        let op = oxyde_lib::systems::file_ops::FileOperation::new(
+                        let mut op = oxyde_lib::systems::file_ops::FileOperation::new(
                             oxyde_lib::systems::file_ops::FileOpType::Trash,
                             paths.into_iter().map(std::path::PathBuf::from).collect(),
                             None,
                             None,
                         );
+                        op.archive_qualities = this.archive_qualities();
                         let id =
                             this.file_ops
                                 .queue_operation_on(&runtime, this.history.clone(), op);
@@ -1474,7 +1575,12 @@ impl OxydeApp {
         }
     }
 
-    pub fn execute_compress_selected(&mut self, cx: &mut Context<Self>) {
+    pub fn execute_compress_selected(
+        &mut self,
+        format: &str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let Some(pane) = self.state.layout.find_pane(&self.state.active_pane_id) else {
             return;
         };
@@ -1490,13 +1596,16 @@ impl OxydeApp {
         let Some(first) = paths.first() else {
             return;
         };
-        let destination = first.with_extension("zip");
-        self.queue_archive_operation(
-            oxyde_lib::systems::file_ops::FileOpType::Compress,
-            paths,
-            destination,
+        let extension = if format == "zst" { "tar.zst" } else { format };
+        let destination = first.with_extension(extension);
+        self.begin_rename(
+            destination.to_string_lossy().into_owned(),
+            false,
+            false,
+            window,
             cx,
         );
+        self.archive_creation = Some((paths, extension.to_string()));
     }
 
     pub fn execute_extract_archive(&mut self, path: String, cx: &mut Context<Self>) {
@@ -1534,12 +1643,15 @@ impl OxydeApp {
             async move {
                 let runtime = tokio::runtime::Handle::current();
                 handle.update(&mut cx, |this, cx| {
-                    let operation = oxyde_lib::systems::file_ops::FileOperation::new(
+                    let mut operation = oxyde_lib::systems::file_ops::FileOperation::new(
                         kind,
                         sources,
                         Some(destination),
                         None,
                     );
+                    operation.compression_quality =
+                        this.archive_quality_for_path(operation.destination.as_ref().unwrap());
+                    operation.archive_qualities = this.archive_qualities();
                     let id =
                         this.file_ops
                             .queue_operation_on(&runtime, this.history.clone(), operation);
@@ -1684,7 +1796,7 @@ impl OxydeApp {
         cx: &mut Context<Self>,
     ) {
         use oxyde_lib::systems::file_ops::{FileOpType, FileOperation};
-        let op = FileOperation::new(
+        let mut op = FileOperation::new(
             if is_move {
                 FileOpType::Move
             } else {
@@ -1694,6 +1806,8 @@ impl OxydeApp {
             Some(std::path::PathBuf::from(target_dir)),
             resolutions,
         );
+        op.compression_quality = self.archive_quality_for_path(op.destination.as_ref().unwrap());
+        op.archive_qualities = self.archive_qualities();
         let op_id = self
             .file_ops
             .queue_operation_on(&runtime, self.history.clone(), op);
@@ -1750,6 +1864,7 @@ impl OxydeApp {
                         }
                         OpStatus::Completed => {
                             handle.update(&mut cx, |this, cx| {
+                                this.refresh_all_tabs(cx);
                                 this.state.refresh_sidebar();
                                 this.reconcile_watchers(cx);
                                 let operations = this.file_ops.list_operations();
@@ -1813,6 +1928,7 @@ impl OxydeApp {
         if let Some(pane) = self.state.layout.find_pane(pane_id) {
             let current_path = pane.active_tab().path.clone();
             let language = cx.i18n().language();
+            let quality = self.archive_quality_for_path(std::path::Path::new(&current_path));
             let tab_id = pane.active_tab().id.clone();
             let Some(handle) = self.handle.clone() else {
                 return;
@@ -1834,7 +1950,7 @@ impl OxydeApp {
                                         .replace(['\u{2068}', '\u{2069}'], "")
                                 };
                                 let path = std::path::Path::new(&current_path).join(name);
-                                match std::fs::create_dir(&path) {
+                                match oxyde_lib::commands::archive::create_archive_directory_with_quality(&path, &quality) {
                                     Ok(()) => return Ok(path),
                                     Err(error)
                                         if error.kind() == std::io::ErrorKind::AlreadyExists =>
@@ -1856,6 +1972,7 @@ impl OxydeApp {
                                 true,
                                 cx,
                             );
+                            if oxyde_lib::utils::archive::split_virtual_path(&current_path).is_none() {
                             this.history.push(Transaction::new(
                                 TransactionType::NewFolder,
                                 TransactionDetails {
@@ -1873,6 +1990,8 @@ impl OxydeApp {
                                     copied_file_hashes: None,
                                 },
                             ));
+                            }
+                            this.refresh_all_tabs(cx);
                             this.state.refresh_sidebar();
                             this.reconcile_watchers(cx);
                             cx.notify();
@@ -2009,6 +2128,9 @@ impl OxydeApp {
                                     this.drive_refresh_epoch = this.drive_refresh_epoch.wrapping_add(1);
                                 }
                                 this.apply_drive_roots(roots, cx);
+                                if changed || details_due {
+                                    this.refresh_disk_images(cx);
+                                }
                                 if changed || details_due || this.drive_details_task.is_none() {
                                     this.request_drive_details(cx);
                                 }
@@ -2028,6 +2150,7 @@ impl OxydeApp {
     }
     pub fn start_watcher_task(&mut self, cx: &mut Context<Self>) {
         self.start_drive_refresh_task(cx);
+        self.refresh_disk_images(cx);
         let changes = self.watcher_changes.clone();
         let h = self.handle.clone().expect("handle set");
         self._watcher_task = Some(cx.spawn(move |_, cx: &mut AsyncApp| {
@@ -2057,7 +2180,15 @@ impl OxydeApp {
                             let mut reloads: Vec<(String, usize, String)> = Vec::new();
                             this.state.layout.visit_panes(&mut |p| {
                                 for (idx, tab) in p.tabs.iter().enumerate() {
-                                    if changed.contains(&tab.path) {
+                                    let watched =
+                                        oxyde_lib::utils::archive::split_virtual_path(&tab.path)
+                                            .and_then(|(archive, _)| {
+                                                archive.parent().map(|parent| {
+                                                    parent.to_string_lossy().into_owned()
+                                                })
+                                            })
+                                            .unwrap_or_else(|| tab.path.clone());
+                                    if changed.contains(&watched) {
                                         reloads.push((p.id.clone(), idx, tab.path.clone()));
                                     }
                                 }
