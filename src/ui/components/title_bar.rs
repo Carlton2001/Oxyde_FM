@@ -11,7 +11,7 @@ pub fn titlebar_h() -> f32 {
 }
 
 pub fn render_title_bar(
-    _view: &OxydeApp,
+    view: &OxydeApp,
     handle: Entity<OxydeApp>,
     is_maximized: bool,
     cx: &mut Context<OxydeApp>,
@@ -206,6 +206,7 @@ pub fn render_title_bar(
         .child(refresh)
         .child(new_panel)
         .child(tools)
+        .child(crate::ui::components::operations::render_operations_footer(view, handle.clone(), cx))
         .child(div().w(rems(0.5)).h_full().flex_none())
         .child(minimize_btn)
         .child(maximize_btn)

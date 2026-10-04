@@ -603,7 +603,7 @@ pub fn render_file_list(
                                                                         let h_click = h.clone();
                                                                         let click_path = path.clone();
                                                                         let name = div()
-                                                                            .flex_1()
+                                                                            .flex_shrink(1.0)
                                                                             .min_w_0()
                                                                             .truncate()
                                                                             .font_weight(FontWeight::MEDIUM)

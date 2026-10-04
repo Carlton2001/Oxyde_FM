@@ -6,11 +6,14 @@ use unicode_segmentation::*;
 
 actions!(
     input,
-    [Backspace, Delete, Left, Right, Home, End, SelectAll, Enter, Escape, Copy, Cut, Paste]
+    [Backspace, Delete, Left, Right, Home, End, SelectAll, Enter, Escape, Copy, Cut, Paste, CompletionUp, CompletionDown, CompletePath]
 );
 
 pub fn bind_keys(cx: &mut App) {
     cx.bind_keys([
+        KeyBinding::new("up", CompletionUp, Some("TextInput")),
+        KeyBinding::new("down", CompletionDown, Some("TextInput")),
+        KeyBinding::new("tab", CompletePath, Some("TextInput")),
         KeyBinding::new("backspace", Backspace, Some("TextInput")),
         KeyBinding::new("delete", Delete, Some("TextInput")),
         KeyBinding::new("enter", Enter, Some("TextInput")),
@@ -45,10 +48,39 @@ pub struct TextInput {
     compact: bool,
     submit_on_outside: bool,
     password: bool,
+    path_submit: bool,
+    completions: Vec<String>,
+    completion_index: usize,
+    completion_task: Option<Task<()>>,
+    completion_epoch: u64,
+    completion_bounds: Option<Bounds<Pixels>>,
 }
 
 fn masked_display_index(content: &str, byte: usize) -> usize {
     content[..byte].chars().count()
+}
+
+fn completion_parts(text: &str) -> Option<(String, String, char)> {
+    if text.contains("://") || text.starts_with("::{") { return None; }
+    let index = text.rfind(['/', '\\'])?;
+    let separator = std::path::MAIN_SEPARATOR;
+    Some((native_path_text(&text[..=index]), text[index + 1..].to_string(), separator))
+}
+
+pub(crate) fn native_path_text(path: &str) -> String {
+    if cfg!(target_os = "windows") && !path.contains("://") && !path.starts_with("::{") {
+        path.replace('/', "\\")
+    } else {
+        path.to_string()
+    }
+}
+
+fn completion_matches(name: &str, prefix: &str) -> bool {
+    if cfg!(target_os = "windows") {
+        name.to_lowercase().starts_with(&prefix.to_lowercase())
+    } else {
+        name.starts_with(prefix)
+    }
 }
 fn masked_byte_index(content: &str, index: usize) -> usize {
     content
@@ -58,6 +90,11 @@ fn masked_byte_index(content: &str, index: usize) -> usize {
 }
 
 impl TextInput {
+    pub fn with_path_submit(mut self) -> Self {
+        self.path_submit = true;
+        self
+    }
+
     pub fn password(mut self) -> Self {
         self.password = true;
         self
@@ -111,6 +148,12 @@ impl TextInput {
         .detach();
 
         Self {
+            completions: Vec::new(),
+            completion_index: 0,
+            completion_task: None,
+            completion_epoch: 0,
+            completion_bounds: None,
+            path_submit: false,
             password: false,
             focus_handle,
             content: initial_text,
@@ -392,6 +435,7 @@ impl TextInput {
             self.selection_reversed = false;
         }
         (self.on_change)(&self.content, window, cx);
+        self.refresh_completions(cx);
         self.reset_blinking(cx);
     }
 
@@ -416,6 +460,7 @@ impl TextInput {
             self.selection_reversed = false;
         }
         (self.on_change)(&self.content, window, cx);
+        self.refresh_completions(cx);
         self.reset_blinking(cx);
     }
 
@@ -424,7 +469,74 @@ impl TextInput {
     }
 
     fn escape(&mut self, _: &Escape, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.completions.is_empty() {
+            self.completions.clear();
+            self.completion_epoch += 1;
+            self.completion_task = None;
+            cx.notify();
+            return;
+        }
         (self.on_escape)(window, cx);
+    }
+
+    fn refresh_completions(&mut self, cx: &mut Context<Self>) {
+        if !self.path_submit { return; }
+        self.completion_epoch += 1;
+        self.completion_task = None;
+        self.completions.clear();
+        self.completion_index = 0;
+        let text = self.content.clone();
+        let Some((parent, prefix, separator)) = completion_parts(&text) else { return; };
+        let epoch = self.completion_epoch;
+        let entity = cx.weak_entity();
+        self.completion_task = Some(cx.spawn(move |_, cx: &mut AsyncApp| {
+            let mut cx = cx.clone();
+            async move {
+                cx.background_executor().timer(std::time::Duration::from_millis(150)).await;
+                let result = oxyde_lib::commands::io::list_dir(parent.clone(), None, Some(true), Some(true), None).await;
+                let mut paths = result.map(|listing| listing.entries.into_iter()
+                    .filter(|entry| entry.is_dir && completion_matches(&entry.name, &prefix))
+                    .map(|entry| format!("{}{}{}", parent, entry.name, separator))
+                    .collect::<Vec<_>>()).unwrap_or_default();
+                paths.sort_by_cached_key(|path| path.to_lowercase());
+                paths.truncate(12);
+                let _ = entity.update(&mut cx, |input, cx| {
+                    if input.completion_epoch == epoch && input.content == text {
+                        input.completions = paths;
+                        cx.notify();
+                    }
+                });
+            }
+        }));
+    }
+
+    fn completion_up(&mut self, _: &CompletionUp, _: &mut Window, cx: &mut Context<Self>) {
+        if self.completions.is_empty() { cx.propagate(); return; }
+        self.completion_index = (self.completion_index + self.completions.len() - 1) % self.completions.len();
+        cx.notify();
+    }
+
+    fn completion_down(&mut self, _: &CompletionDown, _: &mut Window, cx: &mut Context<Self>) {
+        if self.completions.is_empty() { cx.propagate(); return; }
+        self.completion_index = (self.completion_index + 1) % self.completions.len();
+        cx.notify();
+    }
+
+    fn complete_path(&mut self, _: &CompletePath, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(path) = self.completions.get(self.completion_index).cloned() else { cx.propagate(); return; };
+        self.accept_completion(path, window, cx);
+    }
+
+    fn accept_completion(&mut self, path: String, window: &mut Window, cx: &mut Context<Self>) {
+        self.content = path;
+        let end = self.content.len();
+        self.selected_range = end..end;
+        self.selection_anchor = end;
+        self.selection_reversed = false;
+        (self.on_change)(&self.content, window, cx);
+        window.focus(&self.focus_handle, cx);
+        self.refresh_completions(cx);
+        self.reset_blinking(cx);
     }
 
     fn submit_on_outside_click(
@@ -434,6 +546,9 @@ impl TextInput {
         cx: &mut Context<Self>,
     ) {
         if event.button == MouseButton::Left {
+            if !self.completions.is_empty() && self.completion_bounds.is_some_and(|bounds| bounds.contains(&event.position)) {
+                return;
+            }
             (self.on_enter)(window, cx);
         }
     }
@@ -528,6 +643,7 @@ impl EntityInputHandler for TextInput {
         self.selection_reversed = false;
         self.is_selecting = false;
         (self.on_change)(&self.content, window, cx);
+        self.refresh_completions(cx);
         self.reset_blinking(cx);
     }
     fn replace_and_mark_text_in_range(
@@ -576,6 +692,7 @@ impl Render for TextInput {
         let theme = *cx.theme();
 
         div()
+            .relative()
             .flex()
             .items_center()
             .key_context("TextInput")
@@ -585,6 +702,9 @@ impl Render for TextInput {
             .on_action(cx.listener(Self::delete))
             .on_action(cx.listener(Self::enter))
             .on_action(cx.listener(Self::escape))
+            .on_action(cx.listener(Self::completion_up))
+            .on_action(cx.listener(Self::completion_down))
+            .on_action(cx.listener(Self::complete_path))
             .on_action(cx.listener(Self::move_left))
             .on_action(cx.listener(Self::move_right))
             .on_action(cx.listener(Self::select_all))
@@ -621,14 +741,51 @@ impl Render for TextInput {
             .when(self.minimal && !self.compact, |s| s.h_full().px_3())
             .when(self.minimal && self.compact, |s| s.h_full().px(rems(0.0)))
             .when(!self.minimal, |s| s.h_full().px_3())
+            .when(self.path_submit, |s| s.pr(rems(0.0625)))
             .w_full()
+            .when(is_focused && !self.completions.is_empty(), |input| {
+                let rows = self.completions.iter().enumerate().map(|(index, path)| {
+                    let path = path.clone();
+                    let selected = index == self.completion_index;
+                    div().id(("path-completion", index)).px_3().h(rems(1.75))
+                        .flex().items_center().text_size(rems(0.8125)).text_color(theme.text)
+                        .when(selected, |row| row.bg(theme.selected))
+                        .hover(|style| style.bg(theme.control_hover))
+                        .child(div().min_w_0().truncate().child(path.clone()))
+                        .on_mouse_down(MouseButton::Left, cx.listener(move |this, _, window, cx| {
+                            cx.stop_propagation();
+                            this.accept_completion(path.clone(), window, cx);
+                        }))
+                }).collect::<Vec<_>>();
+                let measure = cx.entity();
+                input.child(deferred(div().absolute().top(relative(1.0)).left_0().w_full()
+                    .bg(theme.menu_surface).border(rems(0.0625)).border_color(theme.menu_border)
+                    .rounded_sm().shadow(crate::ui::style::rem_shadow(false)).occlude()
+                    .on_any_mouse_down(|_, _, cx| cx.stop_propagation())
+                    .child(canvas(|bounds, _, _| bounds, move |_, bounds, _, cx| {
+                        measure.update(cx, |input, _| input.completion_bounds = Some(bounds));
+                    }).absolute().size_full())
+                    .children(rows)))
+            })
             .child(
                 div()
                     .flex_1()
+                    .min_w_0()
                     .flex()
                     .items_center()
                     .child(TextInputElement { input: cx.entity() }),
             )
+            .when(self.path_submit, |input| {
+                input.child(div().id("path-submit").size_6().ml_2().flex_none().flex()
+                    .occlude().cursor(CursorStyle::Arrow)
+                    .items_center().justify_center().rounded_sm()
+                    .hover(|style| style.bg(theme.control_hover))
+                    .on_mouse_down(MouseButton::Left, cx.listener(|this, _, window, cx| {
+                        cx.stop_propagation();
+                        (this.on_enter)(window, cx);
+                    }))
+                    .child(svg().path("icons/arrow-right.svg").size_4().text_color(theme.text_muted)))
+            })
             .when(!self.minimal && !self.content.is_empty(), |s: Div| {
                 let h_clear = cx.entity().clone();
                 s.child(
@@ -860,6 +1017,40 @@ mod password_tests {
             assert_eq!(masked_display_index(content, content.len()), end);
             assert_eq!(masked_byte_index(content, end), content.len());
             assert_eq!(masked_byte_index(content, end + 1), content.len());
+        }
+    }
+}
+
+#[cfg(test)]
+mod completion_tests {
+    use super::completion_parts;
+
+    #[::core::prelude::v1::test]
+    fn splits_native_roots_and_unicode_prefixes() {
+        for (text, parent, prefix, separator) in [
+            ("C:\\Us", "C:\\", "Us", '\\'),
+            ("C:/Users/été", "C:/Users/", "été", '/'),
+            ("\\\\server\\share\\Do", "\\\\server\\share\\", "Do", '\\'),
+            ("/usr/", "/usr/", "", '/'),
+            ("/é", "/", "é", '/'),
+        ] {
+            let _ = separator;
+            assert_eq!(completion_parts(text), Some((super::native_path_text(parent), prefix.into(), std::path::MAIN_SEPARATOR)));
+        }
+        for text in ["", "C:", "search://query", "trash://", "::{shell}"] {
+            assert!(completion_parts(text).is_none());
+        }
+    }
+
+    #[::core::prelude::v1::test]
+    fn native_display_preserves_virtual_paths_and_unc_roots() {
+        assert_eq!(super::native_path_text("trash://"), "trash://");
+        assert_eq!(super::native_path_text("search://query"), "search://query");
+        if cfg!(target_os = "windows") {
+            assert_eq!(super::native_path_text("C:/Users/été"), "C:\\Users\\été");
+            assert_eq!(super::native_path_text("//server/share/folder"), "\\\\server\\share\\folder");
+        } else {
+            assert_eq!(super::native_path_text("/usr/local"), "/usr/local");
         }
     }
 }

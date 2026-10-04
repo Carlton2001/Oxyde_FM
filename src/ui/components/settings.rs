@@ -375,7 +375,7 @@ pub fn render_settings_panel(
         .child(body);
     let mut overlay = div()
         .absolute()
-        .top(origin.y)
+        .top_0()
         .bottom_0()
         .left_0()
         .right_0()

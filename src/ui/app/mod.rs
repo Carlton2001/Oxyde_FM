@@ -1115,6 +1115,7 @@ impl OxydeApp {
             return;
         };
         self.breadcrumb_editing = true;
+        let path = crate::ui::components::input::native_path_text(&path);
         self.breadcrumb_text = path.clone();
         self.breadcrumb_invalid = false;
         self.breadcrumb_pane_id = Some(pane_id);
@@ -1155,10 +1156,16 @@ impl OxydeApp {
                 Some(0..path.len()),
                 window,
             )
+            .with_path_submit()
         });
         let focus = input.read(cx).focus_handle.clone();
         self.editing_view = Some(input);
         window.focus(&focus, cx);
+        cx.on_next_frame(window, move |this, window, cx| {
+            if this.breadcrumb_editing {
+                window.focus(&focus, cx);
+            }
+        });
         cx.notify();
     }
 

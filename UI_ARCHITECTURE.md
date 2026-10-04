@@ -82,6 +82,8 @@ Le panneau des paramètres reprend deux colonnes : Apparence et Fichiers à gauc
 
 ## Réactivité et validation
 
+L’édition du chemin dans la breadcrumb propose jusqu’à douze dossiers correspondant au préfixe saisi, dans un menu flottant sous le champ. La recherche attend 150 ms après la dernière modification et utilise la lecture de dossiers asynchrone ; les réponses obsolètes sont ignorées. Les flèches haut/bas sélectionnent une suggestion, Tab ou le clic gauche complète le chemin en gardant l’édition active, et Entrée ou le bouton interne valide la navigation. Échap ferme d’abord les suggestions, puis l’édition. Les chemins virtuels ne proposent pas de complétion.
+
 ### Lecteurs réseau
 
 Sous Windows, les actions « Connecter un lecteur réseau » et « Déconnecter un lecteur réseau » sont disponibles dans le menu contextuel de l’item Réseau du panneau gauche. Ces actions ne figurent pas dans la barre de navigation. Un partage UNC propose la connexion avec son chemin prérempli dans son menu contextuel ; un lecteur distant propose sa déconnexion, également depuis les dossiers qu’il contient. Les serveurs seuls et les périphériques Shell ne proposent pas de montage.

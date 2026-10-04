@@ -161,6 +161,7 @@ pub fn render_top_bar(
         .flex()
         .items_center()
         .px_4()
+        .when(view.breadcrumb_editing && view.breadcrumb_pane_id.as_deref() == Some(pane_id.as_str()), |bar| bar.pr(rems(0.5)))
         .bg(theme.background)
         .border_b(rems(0.0625))
         .border_color(theme.border)
@@ -316,7 +317,8 @@ pub fn render_top_bar(
                 .when(view.breadcrumb_editing && view.editing_view.is_some() && view.breadcrumb_pane_id.as_deref() == Some(pane_id.as_str()), |bar| {
                     if let Some(input) = view.editing_view.clone() {
                         let field = div()
-                            .w_full()
+                            .flex_1()
+                            .min_w_0()
                             .h_full()
                             .when(view.breadcrumb_invalid, |field| {
                                 field.border(rems(0.0625)).border_color(theme.error).rounded_sm()
@@ -326,9 +328,7 @@ pub fn render_top_bar(
                             .flex_1()
                             .min_w_0()
                             .h(px(crate::ui::style::row_height()))
-                            // Reserve room for the shake so the input border stays inside
-                            // the breadcrumb's clipped viewport at both horizontal extremes.
-                            .px(rems(0.5))
+                            .when(view.breadcrumb_invalid, |shell| shell.px(rems(0.5)))
                             .flex()
                             .items_center()
                             .child(field);
@@ -353,7 +353,14 @@ pub fn render_top_bar(
                         && view.editing_view.is_some()
                         && view.breadcrumb_pane_id.as_deref() == Some(pane_id.as_str())),
                     |bar| {
-                    let mut accumulated_path = String::new();
+                    let separator = if current_path.contains("://") { '/' } else { std::path::MAIN_SEPARATOR };
+                    let mut accumulated_path = if current_path.starts_with("\\\\") || current_path.starts_with("//") {
+                        format!("{separator}{separator}")
+                    } else if current_path.starts_with('/') {
+                        separator.to_string()
+                    } else {
+                        String::new()
+                    };
                     let mut elements: Vec<AnyElement> = Vec::new();
 
                     for (index, part) in path_parts.iter().enumerate() {
@@ -363,10 +370,10 @@ pub fn render_top_bar(
                         if index == 0 && special_path_label.is_some() {
                             accumulated_path = current_path.clone();
                         } else if index == 0 && part.ends_with(':') {
-                            accumulated_path = format!("{}/", part);
+                            accumulated_path = format!("{}{separator}", part);
                         } else {
-                            if !accumulated_path.is_empty() && !accumulated_path.ends_with('/') {
-                                accumulated_path.push('/');
+                            if !accumulated_path.is_empty() && !accumulated_path.ends_with(separator) {
+                                accumulated_path.push(separator);
                             }
                             accumulated_path.push_str(part);
                         }
@@ -541,6 +548,7 @@ pub fn render_top_bar(
                                 let is_current = is_last;
                                 move |event, window, cx| {
                                     if event.click_count >= 2 {
+                                        cx.stop_propagation();
                                         h.update(cx, |this, cx| this.begin_breadcrumb_edit(p.clone(), window, cx));
                                     } else if !is_current {
                                         h.update(cx, |this, cx| this.navigate_to(&p, nav_path.clone(), cx));
@@ -658,6 +666,7 @@ pub fn render_top_bar(
                             .min_w(rems(1.5))
                             .h_full()
                             .on_mouse_down(MouseButton::Left, move |_, window, cx| {
+                                cx.stop_propagation();
                                 blank_handle.update(cx, |this, cx| {
                                     this.begin_breadcrumb_edit(blank_pane.clone(), window, cx);
                                 });
@@ -681,7 +690,7 @@ pub fn render_top_bar(
                             .items_center()
                             .justify_center()
                             .flex_none()
-                            .child(svg().path(root_icon).size_4().text_color(theme.accent)),
+                            .child(svg().path(root_icon).size_4().text_color(if total_parts == 1 { crumb_current } else { crumb_parent })),
                     )
                     .child(div()
                         .relative()

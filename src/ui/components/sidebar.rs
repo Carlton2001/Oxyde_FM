@@ -1250,12 +1250,6 @@ pub fn render_sidebar(
         },
     ));
 
-    container = container.child(crate::ui::components::operations::render_operations_footer(
-        view,
-        handle.clone(),
-        _cx,
-    ));
-
     container
 }
 
