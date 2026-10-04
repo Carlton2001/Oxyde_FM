@@ -1,4 +1,4 @@
-use crate::ui::scale::{rem_pixels};
+use crate::ui::scale::rem_pixels;
 use crate::ui::theme::ThemeContext;
 use gpui::prelude::*;
 use gpui::*;
@@ -44,9 +44,36 @@ pub struct TextInput {
     pub minimal: bool,
     compact: bool,
     submit_on_outside: bool,
+    password: bool,
+}
+
+fn masked_display_index(content: &str, byte: usize) -> usize {
+    content[..byte].chars().count()
+}
+fn masked_byte_index(content: &str, index: usize) -> usize {
+    content
+        .char_indices()
+        .nth(index)
+        .map_or(content.len(), |(byte, _)| byte)
 }
 
 impl TextInput {
+    pub fn password(mut self) -> Self {
+        self.password = true;
+        self
+    }
+
+    pub fn content(&self) -> &str {
+        &self.content
+    }
+
+    fn display_index(&self, byte: usize) -> usize {
+        if self.password {
+            masked_display_index(&self.content, byte)
+        } else {
+            byte
+        }
+    }
     pub fn set_placeholder(&mut self, placeholder: SharedString, cx: &mut Context<Self>) {
         self.placeholder = placeholder;
         cx.notify();
@@ -84,6 +111,7 @@ impl TextInput {
         .detach();
 
         Self {
+            password: false,
             focus_handle,
             content: initial_text,
             placeholder: placeholder.into(),
@@ -171,8 +199,12 @@ impl TextInput {
         let (Some(bounds), Some(line)) = (&self.last_bounds, &self.last_layout) else {
             return 0;
         };
-        line.closest_index_for_x(position.x - bounds.left())
-            .min(self.content.len())
+        let index = line.closest_index_for_x(position.x - bounds.left());
+        if self.password {
+            masked_byte_index(&self.content, index)
+        } else {
+            index.min(self.content.len())
+        }
     }
 
     fn select_word_at(&mut self, byte_index: usize) {
@@ -673,9 +705,14 @@ impl Element for TextInputElement {
         let content = if input.content.is_empty() {
             input.placeholder.clone()
         } else {
-            input.content.clone().into()
+            if input.password {
+                "*".repeat(input.content.chars().count()).into()
+            } else {
+                input.content.clone().into()
+            }
         };
-        let selected_range = input.selected_range.clone();
+        let selected_range = input.display_index(input.selected_range.start)
+            ..input.display_index(input.selected_range.end);
         let style = window.text_style();
         let selection_background = cx.theme().accent;
         let selection_foreground = cx.theme().text_on_accent;
@@ -705,9 +742,9 @@ impl Element for TextInputElement {
                 underline: None,
                 strikethrough: None,
             });
-            if selected_range.end < input.content.len() {
+            if selected_range.end < content.len() {
                 runs.push(TextRun {
-                    len: input.content.len() - selected_range.end,
+                    len: content.len() - selected_range.end,
                     font: style.font(),
                     color,
                     background_color: None,
@@ -761,6 +798,7 @@ impl Element for TextInputElement {
             let input = input_handle.read(cx);
             let selected_range = input.selected_range.clone();
             let cursor_visible = input.cursor_visible;
+            let cursor_index = input.display_index(selected_range.start);
             if !selected_range.is_empty() {
                 line.paint_background(
                     bounds.origin + point(px(0.0), y_offset),
@@ -782,7 +820,7 @@ impl Element for TextInputElement {
             )
             .unwrap();
             if focus_handle.is_focused(window) && cursor_visible && selected_range.is_empty() {
-                let cursor_x = line.x_for_index(selected_range.start);
+                let cursor_x = line.x_for_index(cursor_index);
                 let cursor_h = line_h * 0.8;
                 let cursor_y = bounds.top() + y_offset + (line_h - cursor_h) / 2.0;
                 window.paint_quad(fill(
@@ -805,5 +843,23 @@ impl Element for TextInputElement {
 impl Focusable for TextInput {
     fn focus_handle(&self, _: &App) -> FocusHandle {
         self.focus_handle.clone()
+    }
+}
+
+#[cfg(test)]
+mod password_tests {
+    use super::{masked_byte_index, masked_display_index};
+    #[::core::prelude::v1::test]
+    fn masked_unicode_selection_and_caret_round_trip_to_original_byte_boundaries() {
+        for content in ["", "secret", "été🔑密碼", "a\u{301}🔒"] {
+            for (index, (byte, _)) in content.char_indices().enumerate() {
+                assert_eq!(masked_display_index(content, byte), index);
+                assert_eq!(masked_byte_index(content, index), byte);
+            }
+            let end = content.chars().count();
+            assert_eq!(masked_display_index(content, content.len()), end);
+            assert_eq!(masked_byte_index(content, end), content.len());
+            assert_eq!(masked_byte_index(content, end + 1), content.len());
+        }
     }
 }

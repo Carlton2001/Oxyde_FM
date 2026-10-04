@@ -4,6 +4,18 @@ pub use oxyde_lib::models::preferences::DateFormat;
 use oxyde_lib::models::preferences::Language;
 pub struct DateFormatPreference(pub DateFormat);
 impl gpui::Global for DateFormatPreference {}
+
+pub fn drive_label(label: &str, path: &str, i18n: &crate::ui::i18n::I18n) -> String {
+    let path = path.trim_end_matches(['/', '\\']);
+    if label.is_empty() || label == "Local Disk" {
+        let mut args = crate::ui::i18n::FluentArgs::new();
+        args.set("drive", path);
+        i18n.text_with_args(crate::ui::i18n::Message::LocalDrive, &args)
+            .to_string()
+    } else {
+        format!("{label} ({path})")
+    }
+}
 pub fn date_format(cx: &gpui::App) -> DateFormat {
     cx.global::<DateFormatPreference>().0
 }
@@ -127,5 +139,26 @@ mod tests {
         );
         assert_eq!(format_date(0, DateFormat::European), "–");
         assert_eq!(format_date(u64::MAX, DateFormat::Us), "–");
+    }
+
+    #[test]
+    fn drive_labels_translate_system_defaults_and_preserve_volume_names() {
+        for (language, expected) in [
+            (Language::French, "Disque local"),
+            (Language::English, "Local Disk"),
+        ] {
+            let i18n = crate::ui::i18n::I18n::for_language(language);
+            for label in ["", "Local Disk"] {
+                let displayed = drive_label(label, "C:\\", &i18n);
+                assert!(displayed.starts_with(expected));
+                assert!(displayed.contains("C:"));
+                assert!(!displayed.contains('\\'));
+                assert!(!displayed.contains("[local-drive]"));
+            }
+            assert_eq!(
+                drive_label("Mes données", "D:\\", &i18n),
+                "Mes données (D:)"
+            );
+        }
     }
 }

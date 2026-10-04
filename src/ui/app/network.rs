@@ -1,6 +1,28 @@
 use super::*;
+use oxyde_lib::models::DriveInfo;
+use std::collections::HashSet;
 
-/// A share (or one of its folders), rather than a server or Shell device.
+pub(crate) struct NetworkDialog {
+    pub revision: u64,
+    pub disconnect: bool,
+    pub inputs: Vec<Entity<TextInput>>,
+    pub values: [String; 3],
+    pub drives: Vec<DriveInfo>,
+    pub selected: HashSet<String>,
+    pub letter: Option<String>,
+    pub reconnect: bool,
+    pub loading: bool,
+    pub busy: bool,
+    pub letter_open: bool,
+    pub error: Option<(Message, String)>,
+    pub position: Point<Pixels>,
+    pub drag: Option<(Point<Pixels>, Point<Pixels>)>,
+    pub focus: FocusHandle,
+    pub controls: Vec<FocusHandle>,
+    pub drive_focus: Vec<FocusHandle>,
+    pub preferred_drive: Option<String>,
+}
+
 pub(crate) fn mappable_network_path(path: &str) -> bool {
     path.strip_prefix("\\\\").is_some_and(|tail| {
         let mut parts = tail.split('\\');
@@ -10,19 +32,298 @@ pub(crate) fn mappable_network_path(path: &str) -> bool {
             && parts.next().is_some_and(|share| !share.is_empty())
     })
 }
+pub(crate) fn network_drive(drive: &DriveInfo) -> bool {
+    matches!(drive.drive_type.as_str(), "remote" | "network") || drive.path.starts_with("\\\\")
+}
+pub(crate) fn drive_letter_used(letter: &str, drives: &[DriveInfo]) -> bool {
+    drives
+        .iter()
+        .any(|drive| drive.path.to_ascii_uppercase().starts_with(letter))
+}
+pub(crate) fn free_letter(drives: &[DriveInfo]) -> Option<String> {
+    ('A'..='Z')
+        .rev()
+        .map(|letter| format!("{letter}:"))
+        .find(|letter| !drive_letter_used(letter, drives))
+}
+pub(crate) fn normalized_share(path: &str) -> Option<String> {
+    let path = path.trim().replace('/', "\\");
+    if path.contains('\0') {
+        return None;
+    }
+    let path = format!(
+        "\\\\{}",
+        path.trim_start_matches('\\').trim_end_matches('\\')
+    );
+    let server = path
+        .trim_start_matches('\\')
+        .split('\\')
+        .next()
+        .unwrap_or_default();
+    (mappable_network_path(&path) && !server.contains([':', '*', '?', '<', '>', '"', '|']))
+        .then_some(path)
+}
+
+fn disconnect_selected(
+    paths: &[String],
+    mut disconnect: impl FnMut(&str) -> Result<(), String>,
+) -> Result<(), String> {
+    for path in paths {
+        disconnect(path).map_err(|error| format!("{path}: {error}"))?;
+    }
+    Ok(())
+}
 
 impl OxydeApp {
     pub(crate) fn network_drive_dialog(
         &mut self,
         disconnect: bool,
         path: Option<String>,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         self.context_menus.clear();
-        if self.ejecting_drive {
+        self.settings_open = false;
+        if self.ejecting_drive || self.network_dialog.is_some() {
             cx.notify();
             return;
         }
+        self.network_dialog_revision = self.network_dialog_revision.wrapping_add(1);
+        let revision = self.network_dialog_revision;
+        let handle = cx.entity();
+        let mut inputs = Vec::new();
+        let values = [
+            if disconnect {
+                String::new()
+            } else {
+                path.clone().unwrap_or_default()
+            },
+            String::new(),
+            String::new(),
+        ];
+        if !disconnect {
+            for (index, initial) in values.iter().cloned().enumerate() {
+                let submit = handle.clone();
+                let change = handle.clone();
+                let cancel = handle.clone();
+                let menu = handle.clone();
+                let dropdown = handle.clone();
+                let input = cx.new(|cx| {
+                    let input = TextInput::new(
+                        cx,
+                        if index == 0 { "\\\\server\\share" } else { "" },
+                        initial,
+                        move |text, _, cx| {
+                            change.update(cx, |view, cx| {
+                                if let Some(dialog) = &mut view.network_dialog {
+                                    if dialog.busy {
+                                        return;
+                                    }
+                                    dialog.values[index] = text.to_string();
+                                    dialog.error = None;
+                                    cx.notify();
+                                }
+                            })
+                        },
+                        move |_, cx| submit.update(cx, |this, cx| this.submit_network_dialog(cx)),
+                        move |window, cx| {
+                            cancel.update(cx, |this, cx| this.cancel_network_dialog(window, cx))
+                        },
+                        move |input, selected, point, window, cx| {
+                            menu.update(cx, |this, cx| {
+                                this.open_text_context_menu(input, selected, point, window, cx)
+                            })
+                        },
+                        false,
+                        false,
+                        false,
+                        None,
+                        window,
+                    );
+                    cx.on_focus(&input.focus_handle, window, move |_, _, cx| {
+                        dropdown.update(cx, |view, cx| {
+                            if let Some(dialog) = &mut view.network_dialog {
+                                dialog.letter_open = false;
+                                cx.notify();
+                            }
+                        });
+                    })
+                    .detach();
+                    if index == 2 {
+                        input.password()
+                    } else {
+                        input
+                    }
+                });
+                inputs.push(input);
+            }
+        }
+        let focus = cx.focus_handle();
+        let drives = self.state.drives.clone();
+        let letter = free_letter(&drives);
+        let drive_focus = drives
+            .iter()
+            .filter(|drive| network_drive(drive))
+            .map(|_| cx.focus_handle())
+            .collect();
+        let selected = if disconnect {
+            path.clone().into_iter().collect()
+        } else {
+            HashSet::new()
+        };
+        self.network_dialog = Some(NetworkDialog {
+            revision,
+            disconnect,
+            inputs,
+            values,
+            drives,
+            selected,
+            letter,
+            reconnect: true,
+            loading: true,
+            busy: false,
+            letter_open: false,
+            error: None,
+            position: point(px(0.0), px(0.0)),
+            drag: None,
+            focus: focus.clone(),
+            controls: (0..4).map(|_| cx.focus_handle()).collect(),
+            drive_focus,
+            preferred_drive: if disconnect { path } else { None },
+        });
+        if let Some(input) = self
+            .network_dialog
+            .as_ref()
+            .and_then(|dialog| dialog.inputs.first())
+        {
+            let input_focus = input.read(cx).focus_handle.clone();
+            window.focus(&input_focus, cx);
+        } else {
+            window.focus(&focus, cx);
+        }
+        cx.notify();
+        cx.spawn(async move |this, cx| {
+            let result =
+                tokio::task::spawn_blocking(|| oxyde_lib::platform::platform().list_drives(false))
+                    .await;
+            let _ = this.update(cx, |this, cx| {
+                let Some(dialog) = this
+                    .network_dialog
+                    .as_mut()
+                    .filter(|dialog| dialog.revision == revision)
+                else {
+                    return;
+                };
+                dialog.loading = false;
+                match result {
+                    Ok(drives) => {
+                        dialog.drive_focus = drives
+                            .iter()
+                            .filter(|drive| network_drive(drive))
+                            .map(|_| cx.focus_handle())
+                            .collect();
+                        dialog.drives = drives;
+                        if dialog
+                            .letter
+                            .as_ref()
+                            .is_none_or(|letter| drive_letter_used(letter, &dialog.drives))
+                        {
+                            dialog.letter = free_letter(&dialog.drives);
+                        }
+                        dialog.selected.retain(|path| {
+                            dialog.drives.iter().any(|drive| {
+                                network_drive(drive)
+                                    && crate::ui::components::sidebar::sidebar_paths_equal(
+                                        path,
+                                        &drive.path,
+                                    )
+                            })
+                        });
+                        if let Some(path) = &dialog.preferred_drive {
+                            if let Some(drive) = dialog.drives.iter().find(|drive| {
+                                network_drive(drive)
+                                    && crate::ui::components::sidebar::sidebar_paths_equal(
+                                        path,
+                                        &drive.path,
+                                    )
+                            }) {
+                                dialog.selected.insert(drive.path.clone());
+                            }
+                        }
+                    }
+                    Err(error) => {
+                        dialog.error = Some((Message::NetworkDriveFailed, error.to_string()))
+                    }
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    pub(crate) fn cancel_network_dialog(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self
+            .network_dialog
+            .as_ref()
+            .is_some_and(|dialog| dialog.busy)
+        {
+            return;
+        }
+        self.network_dialog = None;
+        self.context_menus.clear();
+        window.focus(&self.focus_handle, cx);
+        cx.notify();
+    }
+
+    pub(crate) fn submit_network_dialog(&mut self, cx: &mut Context<Self>) {
+        let Some(dialog) = self.network_dialog.as_mut() else {
+            return;
+        };
+        if dialog.busy || dialog.loading {
+            return;
+        }
+        let revision = dialog.revision;
+        let disconnect = dialog.disconnect;
+        let reconnect = dialog.reconnect;
+        let paths: Vec<_> = dialog
+            .drives
+            .iter()
+            .filter(|drive| network_drive(drive) && dialog.selected.contains(&drive.path))
+            .map(|drive| drive.path.clone())
+            .collect();
+        let request = if disconnect {
+            if paths.is_empty() {
+                return;
+            }
+            None
+        } else {
+            let Some(path) = normalized_share(&dialog.values[0]) else {
+                dialog.error = Some((Message::NetworkInvalidPath, String::new()));
+                cx.notify();
+                return;
+            };
+            let Some(letter) = dialog
+                .letter
+                .clone()
+                .filter(|letter| !drive_letter_used(letter, &dialog.drives))
+            else {
+                dialog.error = Some((Message::NetworkNoLetter, String::new()));
+                cx.notify();
+                return;
+            };
+            let username = dialog.values[1].trim().to_string();
+            let password = dialog.values[2].clone();
+            Some((
+                letter,
+                path,
+                (!username.is_empty()).then_some(username),
+                (!password.is_empty()).then_some(password),
+            ))
+        };
+        dialog.busy = true;
+        dialog.letter_open = false;
+        dialog.error = None;
+        self.context_menus.clear();
         self.ejecting_drive = true;
         self.drive_refresh_epoch = self.drive_refresh_epoch.wrapping_add(1);
         self.drive_details_task = None;
@@ -40,25 +341,91 @@ impl OxydeApp {
                 for (watched_path, watcher) in watchers {
                     watcher.release(&watched_path)?;
                 }
-                oxyde_lib::platform::platform().network_drive_dialog(disconnect, path.as_deref())
+                if let Some((letter, path, user, password)) = request {
+                    oxyde_lib::platform::platform()
+                        .map_network_drive(letter, path, reconnect, user, password)
+                } else {
+                    disconnect_selected(&paths, |path| {
+                        oxyde_lib::platform::platform()
+                            .disconnect_network_drive(path.to_string(), true)
+                    })
+                }
             })
             .await;
-            // Refresh even after cancellation: the native UI may have changed a connection.
-            let drives =
+            let roots =
                 tokio::task::spawn_blocking(|| oxyde_lib::platform::platform().list_drive_roots())
                     .await;
             let _ = this.update(cx, |this, cx| {
                 this.ejecting_drive = false;
                 let error = match result {
-                    Ok(Ok(_)) => None,
+                    Ok(Ok(())) => None,
                     Ok(Err(error)) => Some(error),
                     Err(error) => Some(error.to_string()),
                 };
-                if let Some(error) = error {
-                    this.file_operation_notice = Some((Message::NetworkDriveFailed, error));
+                if let Ok(roots) = roots {
+                    if let Some(dialog) = this.network_dialog.as_mut() {
+                        dialog.drives = roots
+                            .iter()
+                            .map(|root| {
+                                dialog
+                                    .drives
+                                    .iter()
+                                    .find(|drive| {
+                                        crate::ui::components::sidebar::sidebar_paths_equal(
+                                            &drive.path,
+                                            &root.path,
+                                        )
+                                    })
+                                    .cloned()
+                                    .unwrap_or_else(|| root.clone())
+                            })
+                            .collect();
+                        dialog.drive_focus = dialog
+                            .drives
+                            .iter()
+                            .filter(|drive| network_drive(drive))
+                            .map(|_| cx.focus_handle())
+                            .collect();
+                        dialog.selected.retain(|path| {
+                            roots
+                                .iter()
+                                .any(|drive| network_drive(drive) && drive.path == *path)
+                        });
+                    }
+                    this.apply_drive_roots(roots, cx);
                 }
-                if let Ok(drives) = drives {
-                    this.apply_drive_roots(drives, cx);
+                if let Some(dialog) = this
+                    .network_dialog
+                    .as_mut()
+                    .filter(|dialog| dialog.revision == revision)
+                {
+                    dialog.busy = false;
+                    if let Some(error) = error {
+                        dialog.error = Some((Message::NetworkDriveFailed, error));
+                    } else {
+                        this.network_dialog = None;
+                        this.network_focus_restore = true;
+                        this.network_notice = Some((
+                            if disconnect {
+                                Message::NetworkDisconnected
+                            } else {
+                                Message::NetworkConnected
+                            },
+                            revision,
+                        ));
+                        cx.spawn(async move |this, cx| {
+                            cx.background_executor()
+                                .timer(std::time::Duration::from_secs(4))
+                                .await;
+                            let _ = this.update(cx, |this, cx| {
+                                if this.network_notice.is_some_and(|(_, id)| id == revision) {
+                                    this.network_notice = None;
+                                    cx.notify();
+                                }
+                            });
+                        })
+                        .detach();
+                    }
                 }
                 this.request_drive_details(cx);
                 this.reconcile_watchers(cx);
@@ -71,7 +438,10 @@ impl OxydeApp {
 
 #[cfg(test)]
 mod tests {
-    use super::mappable_network_path;
+    use super::{
+        disconnect_selected, free_letter, mappable_network_path, network_drive, normalized_share,
+    };
+    use oxyde_lib::models::DriveInfo;
     #[test]
     fn only_unc_shares_can_be_mapped() {
         for path in [
@@ -91,5 +461,64 @@ mod tests {
         ] {
             assert!(!mappable_network_path(path));
         }
+        assert_eq!(
+            normalized_share(" server/share/ "),
+            Some("\\\\server\\share".into())
+        );
+        assert!(normalized_share("server").is_none());
+        assert!(normalized_share("C:\\folder").is_none());
+        assert!(normalized_share("\\\\server\\share\0hidden").is_none());
+    }
+    fn drive(path: &str, kind: &str) -> DriveInfo {
+        DriveInfo {
+            path: path.into(),
+            drive_type: kind.into(),
+            label: String::new(),
+            total_bytes: 0,
+            free_bytes: 0,
+            is_readonly: false,
+            media_type: None,
+            physical_id: None,
+            remote_path: None,
+        }
+    }
+    #[test]
+    fn letter_selection_excludes_every_occupied_drive_and_handles_exhaustion() {
+        assert_eq!(
+            free_letter(&[drive("z:\\", "remote"), drive("Y:\\", "fixed")]),
+            Some("X:".into())
+        );
+        let drives: Vec<_> = ('A'..='Z')
+            .map(|letter| drive(&format!("{letter}:\\"), "fixed"))
+            .collect();
+        assert!(free_letter(&drives).is_none());
+        assert!(network_drive(&drive("Z:\\", "remote")));
+        assert!(network_drive(&drive("Y:\\", "network")));
+        assert!(!network_drive(&drive("C:\\", "fixed")));
+    }
+    #[test]
+    fn multi_disconnect_stops_on_failure_and_identifies_the_failed_drive() {
+        let paths: Vec<_> = ["Z:\\", "Y:\\", "X:\\"]
+            .into_iter()
+            .map(String::from)
+            .collect();
+        let mut calls = Vec::new();
+        let result = disconnect_selected(&paths, |path| {
+            calls.push(path.to_string());
+            if path == "Y:\\" {
+                Err("offline".into())
+            } else {
+                Ok(())
+            }
+        });
+        assert_eq!(calls, paths[..2]);
+        assert_eq!(result, Err("Y:\\: offline".into()));
+        let mut completed = Vec::new();
+        assert!(disconnect_selected(&paths, |path| {
+            completed.push(path.to_string());
+            Ok(())
+        })
+        .is_ok());
+        assert_eq!(completed, paths);
     }
 }

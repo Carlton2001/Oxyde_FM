@@ -366,7 +366,11 @@ impl OxydeApp {
 
                     let is_root =
                         tab_data.path.len() <= 3 && tab_data.path.chars().nth(1) == Some(':');
-                    let label = if is_root {
+                    let label = if tab_data.path == "__network_vincinity__" {
+                        cx.i18n().text(Message::SidebarNetwork).to_string()
+                    } else if tab_data.path == "trash://" {
+                        cx.i18n().text(Message::SidebarTrash).to_string()
+                    } else if is_root {
                         let mut drive_name = None;
                         for item in &self.state.sidebar_items {
                             if let crate::ui::workspace::SidebarItem::Drive { drive, .. } = item {
@@ -413,13 +417,31 @@ impl OxydeApp {
                     let is_dragging = self.dragging_tab == Some((p_id.clone(), t_ix));
                     let context_anchor_key = format!("tab-{}-{}", p_id, t_ix);
 
+                    use crate::ui::components::tabs::TabIcon;
+                    let tab_icon = match tab_data.path.as_str() {
+                        "__network_vincinity__" => TabIcon::Svg("icons/globe.svg"),
+                        "trash://" => TabIcon::Svg("icons/trash-sidebar.svg"),
+                        _ => {
+                            if let Some(drive) = self.state.drives.iter().find(|drive| {
+                                crate::ui::components::sidebar::sidebar_paths_equal(&drive.path, &tab_data.path)
+                            }) {
+                                TabIcon::Svg(crate::ui::components::icons::drive_icon_path(drive))
+                            } else {
+                                TabIcon::Item {
+                                    path: tab_data.path.clone(),
+                                    icon: crate::ui::components::icons::get_icon_type(&label, true, Some(&tab_data.path), false, false),
+                                    system: cfg!(target_os = "windows") && self.use_system_icons(),
+                                }
+                            }
+                        }
+                    };
                     let tab = Tab::new(
                         SharedString::from(format!("tab-{}-{}", p_id, t_ix)),
                         label.clone(),
                     )
                     .selected(is_tab_active)
                     .position(position)
-                    .icon("icons/folder.svg")
+                    .icon(tab_icon.clone())
                     .on_click({
                         let h = h.clone();
                         let p_id_cap = p_id.clone();
@@ -499,7 +521,7 @@ impl OxydeApp {
                             h.update(cx, |this, _| {
                                 this.dragging_tab = Some((p_id_cap.clone(), t_ix));
                             });
-                            cx.new(|_| TabDragPreview { label: lbl.clone() })
+                            cx.new(|_| TabDragPreview { label: lbl.clone(), icon: tab_icon.clone() })
                         }
                     })
                     .with_dragging(is_dragging);

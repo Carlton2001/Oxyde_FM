@@ -1,8 +1,38 @@
-use crate::ui::scale::{rem_pixels};
+use crate::ui::scale::rem_pixels;
 use crate::ui::theme::ThemeContext;
 use gpui::prelude::*;
 use gpui::*;
 use std::cmp::Ordering;
+
+#[derive(Clone)]
+pub enum TabIcon {
+    Svg(&'static str),
+    Item {
+        path: String,
+        icon: crate::ui::components::icons::IconType,
+        system: bool,
+    },
+}
+
+impl TabIcon {
+    fn render(&self, color: Hsla) -> AnyElement {
+        match self {
+            Self::Svg(path) => svg()
+                .path(*path)
+                .size(rems(0.875))
+                .text_color(color)
+                .into_any_element(),
+            Self::Item { path, icon, system } => crate::ui::components::icons::render_file_icon(
+                path.clone(),
+                *icon,
+                rems(0.875),
+                color,
+                *system,
+                false,
+            ),
+        }
+    }
+}
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum TabPosition {
@@ -13,6 +43,7 @@ pub enum TabPosition {
 
 pub struct TabDragPreview {
     pub label: String,
+    pub icon: TabIcon,
 }
 
 impl Render for TabDragPreview {
@@ -32,12 +63,7 @@ impl Render for TabDragPreview {
             .flex()
             .items_center()
             .gap_2()
-            .child(
-                svg()
-                    .path("icons/folder.svg")
-                    .size_3_5()
-                    .text_color(theme.accent),
-            )
+            .child(self.icon.render(theme.accent))
             .child(self.label.clone())
     }
 }
@@ -47,7 +73,7 @@ pub struct Tab {
     selected: bool,
     position: TabPosition,
     label: SharedString,
-    icon: Option<String>,
+    icon: Option<TabIcon>,
     on_click: Option<Box<dyn Fn(&mut Window, &mut App) + 'static>>,
     on_middle_click: Option<Box<dyn Fn(&mut Window, &mut App) + 'static>>,
     on_right_click: Option<Box<dyn Fn(&mut Window, &mut App, Point<Pixels>) + 'static>>,
@@ -87,8 +113,8 @@ impl Tab {
         self
     }
 
-    pub fn icon(mut self, icon: impl Into<String>) -> Self {
-        self.icon = Some(icon.into());
+    pub fn icon(mut self, icon: TabIcon) -> Self {
+        self.icon = Some(icon);
         self
     }
 
@@ -236,9 +262,7 @@ impl RenderOnce for Tab {
                     rem_pixels(rems(1.25))
                 })
                 .gap_2()
-                .when_some(self.icon, |s, icon| {
-                    s.child(svg().path(icon).size_3_5().text_color(text_color))
-                })
+                .when_some(self.icon, |s, icon| s.child(icon.render(text_color)))
                 .child(div().text_ellipsis().child(self.label.clone()))
                 .when_some(self.on_close, |s, on_close| {
                     s.child(

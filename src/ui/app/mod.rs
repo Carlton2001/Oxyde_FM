@@ -415,6 +415,10 @@ pub struct OxydeApp {
     pub _drive_refresh_task: Option<Task<()>>,
     pub(super) drive_details_task: Option<Task<()>>,
     pub(crate) ejecting_drive: bool,
+    pub(crate) network_dialog: Option<network::NetworkDialog>,
+    pub(crate) network_dialog_revision: u64,
+    pub(crate) network_focus_restore: bool,
+    pub(crate) network_notice: Option<(Message, u64)>,
     pub _subscriptions: Vec<Subscription>,
     /// Effective drag operation: true = copy, false = move.
     /// Derived from `drag_modifier_copy` (if Some) or `drag_target_default_copy` otherwise.
@@ -841,6 +845,10 @@ impl OxydeApp {
             _drive_refresh_task: None,
             drive_details_task: None,
             ejecting_drive: false,
+            network_dialog: None,
+            network_dialog_revision: 0,
+            network_focus_restore: false,
+            network_notice: None,
             _subscriptions: vec![cx.on_app_quit(|this, _| {
                 // Undo history is session-only, so its replacement backups must
                 // not outlive a normal application shutdown.
@@ -1146,7 +1154,9 @@ impl OxydeApp {
             return;
         }
         let path = self.breadcrumb_text.trim().to_string();
-        if !std::path::Path::new(&path).is_dir() {
+        let network_server = cfg!(target_os = "windows")
+            && oxyde_lib::commands::io::is_network_server(&path);
+        if !network_server && !std::path::Path::new(&path).is_dir() {
             self.breadcrumb_shake_id = self.breadcrumb_shake_id.wrapping_add(1);
             self.breadcrumb_invalid = true;
             cx.notify();
@@ -2125,6 +2135,13 @@ impl Render for OxydeApp {
         }
 
         let size = _window.viewport_size();
+        if self.network_focus_restore {
+            self.network_focus_restore = false;
+            _window.focus(&self.focus_handle, cx);
+        }
+        if let Some(dialog) = self.network_dialog.as_ref().filter(|dialog| dialog.busy) {
+            if !dialog.focus.is_focused(_window) { _window.focus(&dialog.focus, cx); }
+        }
         let win_w = size.width.as_f32();
         let win_h = size.height.as_f32();
 
@@ -2635,6 +2652,9 @@ impl Render for OxydeApp {
 
         // Keep modal content below transient context menus in the render tree:
         // a text field inside the rename dialog can open its own context menu.
+        if self.network_dialog.is_some() {
+            root = root.child(deferred(crate::ui::components::network_dialog::render_network_dialog(self, handle.clone(), _window, cx)));
+        }
         if self.editing_path.is_some() && !self.inline_rename {
             root = root.child(deferred(
                 crate::ui::components::rename_dialog::render_rename_dialog(
@@ -3596,6 +3616,18 @@ impl Render for OxydeApp {
             ));
         }
 
+        if let Some((message, _)) = self.network_notice {
+            let close = handle.clone();
+            let theme = *cx.theme();
+            root = root.child(deferred(div().id("network-success-notice").absolute().bottom(rems(1.0)).right(rems(1.0))
+                .max_w(_window.viewport_size().width - rem_pixels(rems(2.0)))
+                .rounded_md().border(rems(0.0625)).border_color(theme.accent).bg(theme.surface)
+                .px_3().py_2().flex().items_center().gap(rems(0.5)).text_size(rems(0.8125)).text_color(theme.text).occlude()
+                .child(svg().path("icons/circle-check.svg").size(rems(1.0)).text_color(theme.accent))
+                .child(cx.i18n().text(message))
+                .child(div().id("network-notice-close").p_1().on_click(move |_, _, cx| close.update(cx, |view, cx| { view.network_notice = None; cx.notify(); }))
+                    .child(svg().path("icons/x.svg").size(rems(0.875)).text_color(theme.text_muted)))));
+        }
         root
     }
 }

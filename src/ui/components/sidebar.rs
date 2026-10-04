@@ -560,7 +560,7 @@ fn render_sidebar_rail(
         let (path, label, icon, text) = match item {
             SidebarItem::Drive { drive, .. } => (
                 drive.path.clone(),
-                format!("{} ({})", drive.label, drive.path),
+                crate::ui::format::drive_label(&drive.label, &drive.path, cx.i18n()),
                 None,
                 Some(drive.path.chars().next().unwrap_or('/').to_string()),
             ),
@@ -662,7 +662,7 @@ pub fn render_sidebar(
                 pinned_display_name(item, _cx.i18n()).len() as f32 * logical(7.0) + logical(60.0)
             }
             SidebarItem::Drive { drive, .. } => {
-                (drive.label.len() + drive.path.len() + 3) as f32 * logical(7.0) + logical(60.0)
+                crate::ui::format::drive_label(&drive.label, &drive.path, _cx.i18n()).chars().count() as f32 * logical(7.0) + logical(60.0)
             }
             SidebarItem::Directory { node, depth, .. } => {
                 (*depth as f32 * logical(12.0)) + node.name.len() as f32 * logical(7.0) + logical(60.0)
@@ -876,7 +876,7 @@ pub fn render_sidebar(
                                                 let is_exp     = *is_expanded;
                                                 let sel_bg:    Hsla = theme.selected;
                                                 let hov_bg:    Hsla = if is_sel { theme.selection_hover } else { theme.hover };
-                                                let label      = format!("{} ({})", drive.label, drive.path);
+                                                let label      = crate::ui::format::drive_label(&drive.label, &drive.path, cx.i18n());
 
                                                 div()
                                                     .id(SharedString::from(format!("sb-drv-{}", path)))

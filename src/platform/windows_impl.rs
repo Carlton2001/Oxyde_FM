@@ -13,52 +13,11 @@ impl Platform for WindowsPlatform {
     fn list_network_shares(&self, server: &str) -> Result<Vec<crate::models::FileEntry>, String> {
         super::network::list_network_entries(Some(server.to_string())).map_err(|error| error.to_string())
     }
-    fn network_drive_dialog(&self, disconnect: bool, path: Option<&str>) -> Result<bool, String> {
-        use windows::core::PWSTR;
-        use windows::Win32::NetworkManagement::WNet::{
-            WNetConnectionDialog1W, WNetDisconnectDialog, WNetDisconnectDialog1W,
-            CONNECTDLGSTRUCTW, DISCDLGSTRUCTW, DISC_UPDATE_PROFILE,
-            NETRESOURCEW, RESOURCETYPE_DISK, CONNDLG_USE_MRU,
-        };
-        use windows::Win32::System::Com::{CoInitializeEx, CoUninitialize, COINIT_APARTMENTTHREADED};
-        let initialized = unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED).is_ok() };
-        let mut wide_path: Vec<u16> = path.unwrap_or_default().trim_end_matches('\\')
-            .encode_utf16().chain(std::iter::once(0)).collect();
-        let result = unsafe {
-            if disconnect {
-                if path.is_some() {
-                    let dialog = DISCDLGSTRUCTW {
-                        cbStructure: std::mem::size_of::<DISCDLGSTRUCTW>() as u32,
-                        lpLocalName: PWSTR(wide_path.as_mut_ptr()),
-                        dwFlags: DISC_UPDATE_PROFILE,
-                        ..Default::default()
-                    };
-                    // Windows asks before forcing removal when files are open.
-                    WNetDisconnectDialog1W(&dialog)
-                } else {
-                    WNetDisconnectDialog(None, RESOURCETYPE_DISK.0)
-                }
-            } else {
-                let mut resource = NETRESOURCEW {
-                    dwType: RESOURCETYPE_DISK,
-                    lpRemoteName: if path.is_some() { PWSTR(wide_path.as_mut_ptr()) } else { PWSTR::null() },
-                    ..Default::default()
-                };
-                let mut dialog = CONNECTDLGSTRUCTW {
-                    cbStructure: std::mem::size_of::<CONNECTDLGSTRUCTW>() as u32,
-                    lpConnRes: &mut resource,
-                    dwFlags: CONNDLG_USE_MRU,
-                    ..Default::default()
-                };
-                WNetConnectionDialog1W(&mut dialog)
-            }
-        };
-        if initialized { unsafe { CoUninitialize() }; }
-        match result.0 {
-            0 => Ok(true),
-            u32::MAX | 1223 => Ok(false),
-            code => Err(std::io::Error::from_raw_os_error(code as i32).to_string()),
-        }
+    fn map_network_drive(&self, letter: String, path: String, reconnect: bool, username: Option<String>, password: Option<String>) -> Result<(), String> {
+        super::network::map_network_drive(letter, path, reconnect, username, password)
+    }
+    fn disconnect_network_drive(&self, path: String, force: bool) -> Result<(), String> {
+        super::network::disconnect_network_drive(path, force)
     }
     fn list_drive_roots(&self) -> Vec<DriveInfo> {
         super::windows_drives::list_drive_roots()

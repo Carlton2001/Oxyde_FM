@@ -154,8 +154,8 @@ pub async fn list_dir(
     .map_err(|e| CommandError::IoError(e.to_string()))?
 }
 
-#[cfg(any(target_os = "windows", test))]
-fn is_network_server(path: &str) -> bool {
+/// A bare UNC server is enumerated through the network provider, not filesystem metadata.
+pub fn is_network_server(path: &str) -> bool {
     path.strip_prefix("\\\\").is_some_and(|tail| {
         let server = tail.trim_end_matches('\\');
         !server.is_empty() && !server.contains(['\\', '/']) && server != "?" && server != "."
@@ -949,10 +949,10 @@ mod directory_tests {
 
     #[test]
     fn network_server_detection_keeps_share_paths_in_the_file_system() {
-        for path in ["\\\\server", "\\\\server\\", "\\\\192.168.1.2"] {
+        for path in ["\\\\server", "\\\\server\\", "\\\\192.168.1.2", "\\\\PCS", "\\\\PCS\\"] {
             assert!(is_network_server(path));
         }
-        for path in ["\\\\server\\share", "\\\\server\\share\\folder", "\\\\", "\\\\?\\C:\\", "\\\\.\\pipe", "C:\\", "::{device}"] {
+        for path in ["\\\\server\\share", "\\\\server\\share\\folder", "\\\\PCS\\so39i Agde", "\\\\", "\\\\?\\C:\\", "\\\\.\\pipe", "C:\\", "::{device}"] {
             assert!(!is_network_server(path));
         }
     }

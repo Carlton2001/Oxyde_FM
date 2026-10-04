@@ -52,6 +52,8 @@ Factoriser lorsqu'au moins deux usages partagent une structure ou un comportemen
 
 `src/ui/components/modal.rs` fournit `Modal`, un composant de présentation sans dépendance à `OxydeApp` :
 
+Les nouvelles fenêtres popup internes adoptent la présentation compacte de Tauri : barre de titre de 2,75 rem (texte de 0,875 rem, poids Medium), séparée du corps par une bordure ; corps avec marges horizontales de 1 rem et verticales de 1,25 rem ; pied avec bordure supérieure et marges de 0,75 rem × 1 rem. `Modal` applique ce cadre par défaut. Les formulaires utilisent `modal::form_row` pour aligner les libellés à gauche (6 rem) et les champs à droite, avec un intervalle de 1 rem ; le texte des formulaires et boutons mesure 0,8125 rem. Les champs compacts mesurent 2 rem de haut, les boutons ont une marge verticale de 0,375 rem. Les titres personnalisés conservent ces dimensions. Garder les séparateurs entre groupes de champs et les couleurs sémantiques dans les deux thèmes.
+
 - l'appelant fournit le contenu, les boutons et les callbacks ;
 - l'état métier et les opérations restent dans la vue appelante ;
 - le clic extérieur ne ferme la modale que si l'appelant configure `on_backdrop_dismiss` ;
@@ -59,6 +61,8 @@ Factoriser lorsqu'au moins deux usages partagent une structure ou un comportemen
 - la modale bloque les interactions et le défilement sur le contenu recouvert.
 
 Appliquer le même principe aux futurs composants partagés : API de présentation claire, callbacks et état appartenant à l'appelant, et aucun couplage au modèle métier sans nécessité.
+
+Les listes déroulantes des formulaires s’ouvrent en menus flottants ancrés au champ, au-dessus du contenu et hors du découpage de la modale, sans changer sa hauteur. Elles restent dans les limites de la fenêtre. L’expansion dans le flux du contenu est réservée aux sections repliables avec chevron.
 
 ## Préférences et persistance
 
@@ -82,7 +86,11 @@ Sous Windows, les actions « Connecter un lecteur réseau » et « Déconnecter 
 
 La navigation vers un serveur UNC utilise `Platform::list_network_shares`, qui énumère ses partages disque en arrière-plan. Les partages continuent ensuite dans le parcours normal du système de fichiers. Les périphériques Shell sont présentés comme des éléments à ouvrir avec Windows. Le double-clic en liste ou grille et l’action « Ouvrir » passent par `open_external_item`, qui appelle `Platform::open_item` sur un worker ; ne jamais appeler le Shell directement dans un callback GPUI, car ses traitements de messages peuvent réentrer dans l’interface. Le worker initialise COM pour les périphériques Shell, comme les box dont l’action par défaut ouvre la page de gestion. Les erreurs d’énumération et d’ouverture sont remontées et les compteurs du voisinage reflètent les éléments reçus.
 
-Les dialogues système Windows gèrent la lettre, le chemin, la reconnexion à l’ouverture de session, les identifiants et la confirmation de déconnexion lorsque des fichiers sont ouverts. Leur langue et leur présentation suivent Windows. Les appels passent par `Platform::network_drive_dialog` sur un worker, avec une seule opération de lecteur à la fois. La déconnexion libère les observateurs de dossiers au préalable ; après fermeture du dialogue, les lecteurs sont actualisés et les onglets des lecteurs retirés sont redirigés. Une annulation ne produit pas de notification d’erreur. Aucun lecteur occupé n’est remplacé silencieusement par le backend.
+Les deux dialogues GPUI reprennent les fonctionnalités de Tauri et utilisent `Modal`, les thèmes et les catalogues de l’application. Le dialogue de connexion propose les lettres de Z à A, désactive les lettres occupées avec leur libellé, préremplit le partage si disponible, et fournit des champs dossier, utilisateur facultatif et mot de passe masqué ainsi que la reconnexion à l’ouverture de session (activée par défaut). Le dialogue de déconnexion charge les lecteurs distants et permet d’en sélectionner plusieurs ; le lecteur d’origine est présélectionné lorsqu’il est ouvert depuis sa propre entrée. Comme dans le dialogue Tauri, la validation effectue une déconnexion forcée des lecteurs sélectionnés.
+
+Le titre permet de déplacer chaque dialogue. Tab/Maj+Tab déplacent le focus, Entrée valide, Échap ferme (ou ferme d’abord le sélecteur de lettre), et Espace/flèches permettent de manipuler les sélections au clavier. Le formulaire bloque les raccourcis de fichiers en arrière-plan. Pendant une opération, la validation et la fermeture sont désactivées. Les erreurs restent dans le dialogue, qui conserve la saisie pour une nouvelle tentative ; le succès ferme le dialogue et affiche une notification temporaire. Les identifiants restent en mémoire pour la durée du dialogue et ne sont pas persistés.
+
+Les appels passent par `Platform::map_network_drive` et `Platform::disconnect_network_drive` sur un worker, avec une seule opération de lecteur à la fois. La déconnexion libère les observateurs de dossiers au préalable ; après l’opération, même partiellement réussie, les lecteurs sont actualisés et les onglets des lecteurs retirés sont redirigés. Une annulation avant validation ne lance aucune opération. Aucun lecteur occupé n’est remplacé silencieusement par le backend. Les callbacks de saisie synchronisent les valeurs dans l’état du dialogue : ne pas relire l’entité `TextInput` depuis son propre callback Entrée, car elle est alors déjà empruntée par GPUI.
 
 - Garder les opérations de fichiers, les calculs de taille et les autres travaux coûteux hors du rendu synchrone. Utiliser les mécanismes asynchrones et de fond déjà présents.
 - Avant de terminer une modification UI, lancer `cargo check --all-targets --offline` et résoudre les avertissements du projet.

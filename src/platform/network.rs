@@ -356,7 +356,7 @@ pub fn get_network_resources(path: Option<String>) -> Result<Vec<NetResource>, S
     }
 }
 
-pub async fn map_network_drive(
+pub fn map_network_drive(
     letter: String,
     path: String,
     reconnect: bool,
@@ -427,7 +427,7 @@ pub async fn map_network_drive(
                 info!("Successfully mapped network drive {}", local_name);
                 Ok(())
             } else {
-                Err(format!("WNetAddConnection2W failed with code {:?}", result))
+                Err(std::io::Error::from_raw_os_error(result.0 as i32).to_string())
             }
         }
     }
@@ -437,11 +437,11 @@ pub async fn map_network_drive(
     }
 }
 
-pub async fn disconnect_network_drive(letter: String, force: bool) -> Result<(), String> {
+pub fn disconnect_network_drive(letter: String, force: bool) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
         unsafe {
-            let local_name = letter.trim_end_matches('\\').to_string();
+            let local_name = letter.trim_end_matches(['\\', '/']).to_string();
             let wide_local: Vec<u16> = local_name
                 .encode_utf16()
                 .chain(std::iter::once(0))
@@ -452,10 +452,7 @@ pub async fn disconnect_network_drive(letter: String, force: bool) -> Result<(),
             if result == WIN32_ERROR(0) {
                 Ok(())
             } else {
-                Err(format!(
-                    "WNetCancelConnection2W failed with code {:?}",
-                    result
-                ))
+                Err(std::io::Error::from_raw_os_error(result.0 as i32).to_string())
             }
         }
     }
