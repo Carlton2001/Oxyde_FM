@@ -5,11 +5,14 @@ use std::sync::Mutex;
 fn cleanup_replacement_backups(transaction: &Transaction) {
     if let Some(backups) = &transaction.details.replaced_files {
         for (_, backup) in backups {
+            let started = std::time::Instant::now();
+            log::info!("history backup removal started: {backup}");
             if let Err(error) = std::fs::remove_file(backup) {
                 if error.kind() != std::io::ErrorKind::NotFound {
                     log::warn!("Cannot remove replacement backup {backup}: {error}");
                 }
             }
+            log::info!("history backup removal finished after {:?}: {backup}", started.elapsed());
         }
     }
 }
@@ -130,10 +133,12 @@ impl HistoryManager {
     }
 
     pub fn clear(&self) {
+        log::info!("history clear: waiting for state lock");
         let mut state = self
             .0
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
+        log::info!("history clear: lock acquired; undo={}; redo={}", state.undo_stack.len(), state.redo_stack.len());
         for transaction in state.undo_stack.iter().chain(state.redo_stack.iter()) {
             cleanup_replacement_backups(transaction);
         }

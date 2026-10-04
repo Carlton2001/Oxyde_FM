@@ -180,6 +180,7 @@ pub fn render_title_bar(
         .window_control_area(WindowControlArea::Close)
         .hover(|s| s.bg(theme.danger_hover))
         .on_mouse_down(MouseButton::Left, |_, window, _| {
+            crate::trace_shutdown_request("title bar close button");
             window.remove_window();
         })
         .child(

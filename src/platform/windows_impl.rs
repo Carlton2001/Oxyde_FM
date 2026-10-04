@@ -10,6 +10,19 @@ impl WindowsPlatform {
 }
 
 impl Platform for WindowsPlatform {
+    fn finish_process_shutdown(&self) -> Result<(), String> {
+        // A captured shutdown dump showed the final thread spinning in Intel's
+        // igd10um64xe through d3d11 / Windows.Data.Pdf during process detach,
+        // after main, GPUI and Tokio had finished. ExitProcess (including
+        // std::process::exit) still invokes those DLL callbacks.
+        // All application cleanup must have completed before reaching this API.
+        unsafe {
+            windows::Win32::System::Threading::TerminateProcess(
+                windows::Win32::System::Threading::GetCurrentProcess(), 0,
+            ).map_err(|error| error.to_string())
+        }
+    }
+
     fn install_disk_image_autoplay_handler(&self, window: raw_window_handle::RawWindowHandle) -> Result<(), String> {
         let raw_window_handle::RawWindowHandle::Win32(handle) = window else { return Ok(()); };
         super::windows_disk_images::install_autoplay_handler(windows::Win32::Foundation::HWND(handle.hwnd.get() as *mut std::ffi::c_void))

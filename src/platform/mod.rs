@@ -17,6 +17,10 @@ pub struct MountedDiskImage {
 /// Toute fonctionnalité native (lecteurs, ouverture, raccourcis, etc.)
 /// doit passer par ce trait plutôt qu'appeler directement les API OS.
 pub trait Platform: Send + Sync {
+    /// Final process exit, called only after application cleanup and runtime shutdown.
+    /// Windows bypasses DLL detach callbacks that can hang in native graphics drivers.
+    fn finish_process_shutdown(&self) -> Result<(), String>;
+
     /// Load native icons on a background worker.
     fn file_icon(&self, path: String, large: bool) -> Result<image::RgbaImage, String>;
 

@@ -857,14 +857,19 @@ impl OxydeApp {
             network_focus_restore: false,
             network_notice: None,
             _subscriptions: vec![cx.on_app_quit(|this, _| {
+                crate::trace_shutdown_request("GPUI quit hook");
+                crate::trace_shutdown_stage("history cleanup started");
                 // Undo history is session-only, so its replacement backups must
                 // not outlive a normal application shutdown.
                 this.history.clear();
+                crate::trace_shutdown_stage("history cleanup completed");
                 let save = this.preferences_save_task.take();
                 async move {
                     if let Some(save) = save {
+                        crate::trace_shutdown_stage("waiting for preference saves");
                         save.await;
                     }
+                    crate::trace_shutdown_stage("GPUI quit hook completed");
                 }
             })],
             drag_copy_mode: false,

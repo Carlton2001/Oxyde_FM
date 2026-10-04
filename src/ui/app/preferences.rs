@@ -161,6 +161,7 @@ impl OxydeApp {
         self.settings_error = None;
         self.preferences_save_generation += 1;
         let generation = self.preferences_save_generation;
+        log::info!("preferences save queued; generation={generation}");
         // Chaining guarantees that an older write can never overwrite a newer
         // choice. on_app_quit also awaits the tail of this chain.
         let previous = self.preferences_save_task.take();
@@ -168,10 +169,12 @@ impl OxydeApp {
             if let Some(previous) = previous {
                 previous.await;
             }
+            log::info!("preferences write started; generation={generation}");
             let result = cx
                 .background_executor()
                 .spawn(async move { ConfigManager::write_to_path(&path, &snapshot) })
                 .await;
+            log::info!("preferences write finished; generation={generation}; success={}", result.is_ok());
             if let Err(error) = &result {
                 log::warn!("Cannot save preferences: {error:?}");
             }

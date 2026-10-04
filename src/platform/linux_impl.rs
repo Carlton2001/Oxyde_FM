@@ -10,6 +10,10 @@ impl LinuxPlatform {
 }
 
 impl Platform for LinuxPlatform {
+    fn finish_process_shutdown(&self) -> Result<(), String> {
+        Ok(())
+    }
+
     fn install_disk_image_autoplay_handler(&self, _window: raw_window_handle::RawWindowHandle) -> Result<(), String> {
         Ok(())
     }
