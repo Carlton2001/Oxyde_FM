@@ -10,6 +10,12 @@ impl LinuxPlatform {
 }
 
 impl Platform for LinuxPlatform {
+    fn list_network_shares(&self, _server: &str) -> Result<Vec<crate::models::FileEntry>, String> {
+        Err("Network discovery is only available on Windows".into())
+    }
+    fn network_drive_dialog(&self, _disconnect: bool, _path: Option<&str>) -> Result<bool, String> {
+        Err("Network drive dialogs are only available on Windows".into())
+    }
     fn eject_drive(&self, path: &str) -> Result<(), String> {
         let output = std::process::Command::new("findmnt")
             .args(["--noheadings", "--output", "SOURCE", "--mountpoint", path])

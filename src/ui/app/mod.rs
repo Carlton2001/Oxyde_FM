@@ -10,6 +10,7 @@ mod drive_watchers;
 pub mod layout;
 pub mod navigation;
 mod preferences;
+pub(crate) mod network;
 pub mod selection;
 
 #[allow(unused_imports)]
@@ -1391,15 +1392,37 @@ impl OxydeApp {
         self.execute_ouvrir(cx);
     }
 
+    /// Shell handlers may pump Windows messages. Never invoke them while GPUI
+    /// holds the App/Entity borrow for a mouse or keyboard callback.
+    pub(crate) fn open_external_item(&mut self, path: String, cx: &mut Context<Self>) {
+        cx.spawn(async move |this, cx| {
+            let result = tokio::task::spawn_blocking(move || {
+                oxyde_lib::platform::platform().open_item(&path)
+            }).await;
+            let error = match result {
+                Ok(Ok(())) => return,
+                Ok(Err(error)) => error,
+                Err(error) => error.to_string(),
+            };
+            let _ = this.update(cx, |this, cx| {
+                this.file_operation_notice = Some((Message::OpenItemFailed, error));
+                cx.notify();
+            });
+        }).detach();
+    }
+
     pub fn execute_ouvrir(&mut self, cx: &mut Context<Self>) {
         let pane_id = self.state.active_pane_id.clone();
         if let Some(pane) = self.state.layout.find_pane(&pane_id) {
-            let paths: Vec<String> = pane.active_tab().selected_paths.iter().cloned().collect();
-            for path in paths {
-                if std::path::Path::new(&path).is_dir() {
+            let tab = pane.active_tab();
+            let paths: Vec<(String, bool)> = tab.files.iter()
+                .filter(|entry| tab.selected_paths.contains(&entry.path))
+                .map(|entry| (entry.path.clone(), entry.is_dir)).collect();
+            for (path, is_dir) in paths {
+                if is_dir {
                     self.navigate_to(&pane_id, path, cx);
                 } else {
-                    let _ = oxyde_lib::platform::platform().open_item(&path);
+                    self.open_external_item(path, cx);
                 }
             }
         }

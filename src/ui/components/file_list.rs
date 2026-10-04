@@ -87,6 +87,7 @@ fn status_bar_height() -> f32 { rem_pixels(STATUS_BAR_HEIGHT).as_f32() }
 /// Returns the display type label for a file entry.
 /// Symlinks and junctions are identified before extension/dir detection.
 fn file_type_label(f: &FileEntry) -> String {
+    if network_entry(f) { return "Réseau".to_string(); }
     if f.is_symlink {
         return "Symlink".to_string();
     }
@@ -104,7 +105,9 @@ fn file_type_label(f: &FileEntry) -> String {
 }
 
 fn file_type_display(f: &FileEntry, i18n: &crate::ui::i18n::I18n) -> String {
-    let message = if f.is_symlink {
+    let message = if network_entry(f) {
+        Some(Message::SidebarNetwork)
+    } else if f.is_symlink {
         Some(Message::FileTypeSymlink)
     } else if f.is_junction {
         Some(Message::FileTypeJunction)
@@ -118,6 +121,36 @@ fn file_type_display(f: &FileEntry, i18n: &crate::ui::i18n::I18n) -> String {
     message
         .map(|message| i18n.text(message).to_string())
         .unwrap_or_else(|| file_type_label(f))
+}
+
+/// Shell devices and UNC server roots belong to the network neighborhood.
+fn network_entry(file: &FileEntry) -> bool {
+    file.path.starts_with("::{") || file.path.starts_with('?')
+        || file.path.strip_prefix("\\\\").is_some_and(|tail| {
+            let server = tail.trim_end_matches('\\');
+            !server.is_empty() && !server.contains('\\')
+        })
+}
+
+#[cfg(test)]
+mod network_type_tests {
+    use super::*;
+
+    #[::core::prelude::v1::test]
+    fn network_devices_and_servers_use_localized_network_type_without_relabeling_shares() {
+        for language in [crate::ui::i18n::Language::French, crate::ui::i18n::Language::English] {
+            let i18n = crate::ui::i18n::I18n::for_language(language);
+            for (path, is_dir) in [("::{device}", false), ("?device", false), ("\\\\server", true)] {
+                let file = FileEntry { name: "Bbox".into(), path: path.into(), is_dir, ..Default::default() };
+                assert_eq!(file_type_display(&file, &i18n), i18n.text(Message::SidebarNetwork).as_ref());
+                assert_eq!(file_type_label(&file), "Réseau");
+            }
+            for path in ["\\\\server\\share", "\\\\server\\share\\folder", "C:\\folder"] {
+                let file = FileEntry { name: "folder".into(), path: path.into(), is_dir: true, ..Default::default() };
+                assert_eq!(file_type_display(&file, &i18n), i18n.text(Message::FileTypeFolder).as_ref());
+            }
+        }
+    }
 }
 
 /// Uppercases only the extension for presentation in grid cards.
@@ -176,7 +209,8 @@ pub fn render_file_list(
         active_tab.size_col_width,
         active_tab.date_col_width,
     );
-    let name_w = columns.name;
+    let network_panel = active_tab.path == "__network_vincinity__";
+    let name_w = columns.name + if network_panel { columns.size + columns.date } else { 0.0 };
     let type_w = columns.file_type;
     let size_w = columns.size;
     let date_w = columns.date;
@@ -361,7 +395,7 @@ pub fn render_file_list(
                                                             if is_dir {
                                                                 h_inner_inner.update(cx, |v, cx| v.navigate_to(&p_id_cap, p.clone(), cx));
                                                             } else {
-                                                                let _ = oxyde_lib::platform::platform().open_item(&p);
+                                                                h_inner_inner.update(cx, |this, cx| this.open_external_item(p.clone(), cx));
                                                             }
                                                         }
                                                     }
@@ -619,8 +653,10 @@ pub fn render_file_list(
                                                         )
                                                 })
                                                 .child(div().w(px(type_w)).flex_none().px(rems(0.5)).text_color(theme.text_muted).truncate().text_size(rems(0.75)).when(is_dimmed, |d| d.opacity(0.5)).child(file_type_display(file, cx.i18n())))
-                                                .child(div().w(px(size_w)).flex_none().px(rems(0.5)).text_align(TextAlign::Right).text_color(theme.text_muted).truncate().text_size(rems(0.75)).when(is_dimmed, |d| d.opacity(0.5)).child(format_size(file.size, is_dir, file.is_calculated, language)))
-                                                .child(div().w(px(date_w)).flex_none().px(rems(0.5)).text_color(theme.text_muted).truncate().text_size(rems(0.75)).when(is_dimmed, |d| d.opacity(0.5)).child(format_date(file.modified, crate::ui::format::date_format(cx)))).into_any_element()
+                                                .when(!network_panel, |row| row
+                                                    .child(div().w(px(size_w)).flex_none().px(rems(0.5)).text_align(TextAlign::Right).text_color(theme.text_muted).truncate().text_size(rems(0.75)).when(is_dimmed, |d| d.opacity(0.5)).child(format_size(file.size, is_dir, file.is_calculated, language)))
+                                                    .child(div().w(px(date_w)).flex_none().px(rems(0.5)).text_color(theme.text_muted).truncate().text_size(rems(0.75)).when(is_dimmed, |d| d.opacity(0.5)).child(format_date(file.modified, crate::ui::format::date_format(cx)))))
+                                                .into_any_element()
                                             }}).collect::<Vec<_>>()
                                     }
                                 }
@@ -662,7 +698,7 @@ pub fn render_file_list(
                                           this.context_menus.clear();
                                           this.context_menus.push(ContextMenuInstance {
                                               position: pos,
-                                              content: ContextMenuContent::Items(super::with_grid_sort(super::pane_context_menu_items(cx.i18n(), h.clone(), p_id_cap_cap.clone()), this, h.clone(), &p_id_cap_cap, cx.i18n()), None),
+                                              content: ContextMenuContent::Items(super::with_grid_sort(super::pane_context_menu_items(cx.i18n(), h.clone(), p_id_cap_cap.clone(), this), this, h.clone(), &p_id_cap_cap, cx.i18n()), None),
                                               scroll_handle: UniformListScrollHandle::new(),
                                               width: px(0.0),
                                               bottom_padding: 0.0,
@@ -1091,7 +1127,7 @@ fn render_grid_file_list(
                     h.update(cx, |this, cx| {
                         this.activate_pane(&pid, cx);
                         let items = super::with_grid_sort(
-                            super::pane_context_menu_items(cx.i18n(), h.clone(), pid.clone()),
+                            super::pane_context_menu_items(cx.i18n(), h.clone(), pid.clone(), this),
                             this,
                             h.clone(),
                             &pid,
@@ -1248,8 +1284,7 @@ fn render_grid_file_list(
                                                         if is_dir {
                                                             this.navigate_to(&pid, path, cx);
                                                         } else {
-                                                            let _ = oxyde_lib::platform::platform()
-                                                                .open_item(&path);
+                                                            this.open_external_item(path, cx);
                                                         }
                                                     }
                                                 });
@@ -1413,7 +1448,9 @@ fn render_grid_file_list(
                                                 .text_color(theme.text_muted)
                                                 .text_ellipsis()
                                                 .when(file.is_hidden || file.is_system, |d| d.opacity(0.5))
-                                                .child(if file.is_dir {
+                                                .child(if network_entry(file) {
+                                                    file_type_display(file, cx.i18n())
+                                                } else if file.is_dir {
                                                     cx.i18n().text(Message::FileTypeFolder).to_uppercase()
                                                 } else {
                                                     file_type_display(file, cx.i18n())
@@ -1630,7 +1667,7 @@ fn render_grid_file_list(
                         this.context_menus.push(ContextMenuInstance {
                             position,
                             content: ContextMenuContent::Items(
-                                super::with_grid_sort(super::pane_context_menu_items(cx.i18n(), h.clone(), pid.clone()), this, h.clone(), &pid, cx.i18n()),
+                                super::with_grid_sort(super::pane_context_menu_items(cx.i18n(), h.clone(), pid.clone(), this), this, h.clone(), &pid, cx.i18n()),
                                 None,
                             ),
                             scroll_handle: UniformListScrollHandle::new(),
@@ -1904,6 +1941,7 @@ fn render_headers(
     let pane = view.state.layout.find_pane(&pane_id).expect("pane exists");
     let tab = pane.active_tab();
     let current_col = tab.sort_column;
+    let network_panel = tab.path == "__network_vincinity__";
     let current_dir = tab.sort_direction;
     // Check filters
     let name_filtered = !tab.filter_name.is_empty();
@@ -2041,7 +2079,7 @@ fn render_headers(
                 }
             }),
         )
-        .child(
+        .when(!network_panel, |row| row.child(
             header_cell(
                 i18n.text(Message::ColumnSize).as_ref(),
                 size_w,
@@ -2075,8 +2113,8 @@ fn render_headers(
                     });
                 }
             }),
-        )
-        .child(
+        ))
+        .when(!network_panel, |row| row.child(
             header_cell(
                 i18n.text(Message::ColumnModified).as_ref(),
                 date_w,
@@ -2112,7 +2150,7 @@ fn render_headers(
                     });
                 }
             }),
-        )
+        ))
 }
 
 fn header_cell(

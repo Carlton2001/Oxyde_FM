@@ -125,21 +125,23 @@ pub async fn list_dir(
     }
 
     #[cfg(target_os = "windows")]
-    if path == "__network_vincinity__" {
+    if path == "__network_vincinity__" || is_network_server(&path) {
+        let network_path = path.clone();
         let entries =
-            tokio::task::spawn_blocking(|| crate::platform::platform().list_network_vicinity())
+            tokio::task::spawn_blocking(move || {
+                if network_path == "__network_vincinity__" {
+                    crate::platform::platform().list_network_vicinity()
+                } else {
+                    crate::platform::platform().list_network_shares(network_path.trim_end_matches('\\'))
+                }
+            })
                 .await
                 .map_err(|error| CommandError::IoError(error.to_string()))?
                 .map_err(CommandError::SystemError)?;
+        let summary = calculate_summary(&entries, Some(path));
         return Ok(DirResponse {
             entries,
-            summary: FileSummary {
-                count: 0,
-                total_size: 0,
-                files_count: 0,
-                folders_count: 0,
-                parent_path: Some(path),
-            },
+            summary,
             is_complete: true,
             is_protected: false,
         });
@@ -150,6 +152,14 @@ pub async fn list_dir(
     })
     .await
     .map_err(|e| CommandError::IoError(e.to_string()))?
+}
+
+#[cfg(any(target_os = "windows", test))]
+fn is_network_server(path: &str) -> bool {
+    path.strip_prefix("\\\\").is_some_and(|tail| {
+        let server = tail.trim_end_matches('\\');
+        !server.is_empty() && !server.contains(['\\', '/']) && server != "?" && server != "."
+    })
 }
 
 fn list_dir_blocking(
@@ -936,6 +946,16 @@ pub async fn set_shortcut_info(
 #[cfg(test)]
 mod directory_tests {
     use super::*;
+
+    #[test]
+    fn network_server_detection_keeps_share_paths_in_the_file_system() {
+        for path in ["\\\\server", "\\\\server\\", "\\\\192.168.1.2"] {
+            assert!(is_network_server(path));
+        }
+        for path in ["\\\\server\\share", "\\\\server\\share\\folder", "\\\\", "\\\\?\\C:\\", "\\\\.\\pipe", "C:\\", "::{device}"] {
+            assert!(!is_network_server(path));
+        }
+    }
 
     #[test]
     fn missing_directory_is_an_error_instead_of_an_empty_listing() {

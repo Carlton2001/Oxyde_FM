@@ -3,7 +3,7 @@
 use crate::models::NetResource;
 use log::info;
 use windows::core::{PCWSTR, PSTR, PWSTR};
-use windows::Win32::Foundation::WIN32_ERROR;
+use windows::Win32::Foundation::{WIN32_ERROR, ERROR_MORE_DATA, ERROR_NO_MORE_ITEMS};
 use windows::Win32::NetworkManagement::WNet::{
     WNetAddConnection2W, WNetCancelConnection2W, WNetCloseEnum, WNetEnumResourceW, WNetOpenEnumW,
     CONNECT_UPDATE_PROFILE, NETRESOURCEW, NET_CONNECT_FLAGS, RESOURCETYPE_ANY, RESOURCETYPE_DISK,
@@ -24,15 +24,21 @@ use windows::Win32::UI::WindowsAndMessaging::{
 use crate::models::FileEntry;
 
 pub fn list_network_vicinity() -> Result<Vec<FileEntry>, crate::models::CommandError> {
-    let resources = get_network_resources(None).map_err(crate::models::CommandError::Other)?;
+    list_network_entries(None)
+}
+
+pub fn list_network_entries(path: Option<String>) -> Result<Vec<FileEntry>, crate::models::CommandError> {
+    let shares_only = path.is_some();
+    let resources = get_network_resources(path).map_err(crate::models::CommandError::Other)?;
 
     Ok(resources
         .into_iter()
+        .filter(|r| !shares_only || r.resource_type == RESOURCETYPE_DISK.0)
         .map(|r| {
             FileEntry {
                 name: r.name,
                 path: r.remote_path,
-                is_dir: true, // Servers act as directories
+                is_dir: !r.is_media_device.unwrap_or(false),
                 is_hidden: false,
                 is_system: false,
                 is_symlink: false,
@@ -326,13 +332,18 @@ pub fn get_network_resources(path: Option<String>) -> Result<Vec<NetResource>, S
                             });
                         }
                     } else {
-                        break;
+                        if enum_res == ERROR_MORE_DATA {
+                            buffer.resize(buffer_size as usize, 0);
+                            continue;
+                        }
+                        if enum_res == ERROR_NO_MORE_ITEMS { break; }
+                        let _ = WNetCloseEnum(handle);
+                        return Err(std::io::Error::from_raw_os_error(enum_res.0 as i32).to_string());
                     }
                 }
                 let _ = WNetCloseEnum(handle);
             } else {
-                // Return empty instead of error, so interface doesn't complain endlessly if unreachable
-                return Ok(resources);
+                return Err(std::io::Error::from_raw_os_error(res.0 as i32).to_string());
             }
         }
 
@@ -390,10 +401,8 @@ pub async fn map_network_drive(
             nr.lpLocalName = PWSTR(wide_local.as_mut_ptr());
             nr.lpRemoteName = PWSTR(wide_remote.as_mut_ptr());
 
-            // If we are re-mapping, try to disconnect first to ensure the new persistence setting takes effect
-            let _ =
-                WNetCancelConnection2W(PCWSTR(wide_local.as_ptr()), CONNECT_UPDATE_PROFILE, true);
-
+            // Do not silently replace an existing connection or close its open files.
+            // WNetAddConnection2W reports an occupied drive letter to the caller.
             let flags = if reconnect {
                 CONNECT_UPDATE_PROFILE
             } else {

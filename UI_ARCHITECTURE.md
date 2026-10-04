@@ -76,6 +76,14 @@ Le panneau des paramètres reprend deux colonnes : Apparence et Fichiers à gauc
 
 ## Réactivité et validation
 
+### Lecteurs réseau
+
+Sous Windows, les actions « Connecter un lecteur réseau » et « Déconnecter un lecteur réseau » sont disponibles dans le menu contextuel de l’item Réseau du panneau gauche. Ces actions ne figurent pas dans la barre de navigation. Un partage UNC propose la connexion avec son chemin prérempli dans son menu contextuel ; un lecteur distant propose sa déconnexion, également depuis les dossiers qu’il contient. Les serveurs seuls et les périphériques Shell ne proposent pas de montage.
+
+La navigation vers un serveur UNC utilise `Platform::list_network_shares`, qui énumère ses partages disque en arrière-plan. Les partages continuent ensuite dans le parcours normal du système de fichiers. Les périphériques Shell sont présentés comme des éléments à ouvrir avec Windows. Le double-clic en liste ou grille et l’action « Ouvrir » passent par `open_external_item`, qui appelle `Platform::open_item` sur un worker ; ne jamais appeler le Shell directement dans un callback GPUI, car ses traitements de messages peuvent réentrer dans l’interface. Le worker initialise COM pour les périphériques Shell, comme les box dont l’action par défaut ouvre la page de gestion. Les erreurs d’énumération et d’ouverture sont remontées et les compteurs du voisinage reflètent les éléments reçus.
+
+Les dialogues système Windows gèrent la lettre, le chemin, la reconnexion à l’ouverture de session, les identifiants et la confirmation de déconnexion lorsque des fichiers sont ouverts. Leur langue et leur présentation suivent Windows. Les appels passent par `Platform::network_drive_dialog` sur un worker, avec une seule opération de lecteur à la fois. La déconnexion libère les observateurs de dossiers au préalable ; après fermeture du dialogue, les lecteurs sont actualisés et les onglets des lecteurs retirés sont redirigés. Une annulation ne produit pas de notification d’erreur. Aucun lecteur occupé n’est remplacé silencieusement par le backend.
+
 - Garder les opérations de fichiers, les calculs de taille et les autres travaux coûteux hors du rendu synchrone. Utiliser les mécanismes asynchrones et de fond déjà présents.
 - Avant de terminer une modification UI, lancer `cargo check --all-targets --offline` et résoudre les avertissements du projet.
 - Exécuter les tests pertinents pour les catalogues, formats, préférences et comportements modifiés.

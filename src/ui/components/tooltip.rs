@@ -333,6 +333,7 @@ impl Render for Tooltip {
                 let i18n = cx.i18n();
                 let mut args = FluentArgs::new();
                 let type_label = match info.ext.as_str() {
+                    "Réseau" => i18n.text(Message::SidebarNetwork).to_string(),
                     "Dossier" => i18n.text(Message::FileTypeFolder).to_string(),
                     "Fichier" => i18n.text(Message::FileTypeFile).to_string(),
                     "Symlink" => i18n.text(Message::FileTypeSymlink).to_string(),
@@ -355,8 +356,9 @@ impl Render for Tooltip {
                         .text_size(rems(0.6875))
                         .text_color(theme.text_muted)
                         .child(file_type)
-                        .child(file_size)
-                        .child(modified),
+                        .when(info.ext != "Réseau", |tooltip| {
+                            tooltip.child(file_size).child(modified)
+                        }),
                 )
             });
 

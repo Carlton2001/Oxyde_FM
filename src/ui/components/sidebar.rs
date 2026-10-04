@@ -114,7 +114,7 @@ fn pinned_context_menu_raw(i18n: &I18n, h: Entity<OxydeApp>, path: String) -> Ve
         },
         DropdownItem {
             label: i18n.text(Message::Properties).to_string(),
-            icon: None,
+            icon: Some(IconName::Settings),
             stay_open: false,
             has_submenu: false,
             is_dimmed: false,
@@ -156,7 +156,7 @@ fn location_context_menu_raw(i18n: &I18n, h: Entity<OxydeApp>, path: String) -> 
         },
         DropdownItem {
             label: i18n.text(Message::Properties).to_string(),
-            icon: None,
+            icon: Some(IconName::Settings),
             stay_open: false,
             has_submenu: false,
             is_dimmed: false,
@@ -210,24 +210,6 @@ fn drive_context_menu_raw(i18n: &I18n, h: Entity<OxydeApp>, path: String, is_usb
                         this.context_menus.clear();
                         let id = this.state.active_pane_id.clone();
                         this.add_tab(&id, p.clone(), false, cx);
-                    });
-                }
-            }),
-            on_hover: None,
-        },
-        DropdownItem {
-            label: i18n.text(Message::Properties).to_string(),
-            icon: Some(IconName::Settings),
-            stay_open: false,
-            has_submenu: false,
-            is_dimmed: false,
-            on_click: std::rc::Rc::new({
-                let h = h.clone();
-                let p = path.clone();
-                move |_, app| {
-                    h.update(app, |this, _| {
-                        this.context_menus.clear();
-                        oxyde_lib::platform::platform().show_properties_dialog(&p);
                     });
                 }
             }),
@@ -779,7 +761,14 @@ pub fn render_sidebar(
                                                     .when(is_dimmed, |d| d.opacity(0.5))
                                                     .relative().when(is_sel, |d| d.bg(sel_bg).child(div().absolute().left_0().top_0().bottom_0().w(rems(0.1875)).bg(theme.accent)))
                                                     .hover(move |s| s.bg(hov_bg))
-                                                    .when(show_tooltips, |d| d.tooltip(Tooltip::with_meta(pinned_display_name(item, cx.i18n()), path.clone())))
+                                                    .when(show_tooltips, |d| {
+                                                        let name = pinned_display_name(item, cx.i18n());
+                                                        if path == "__network_vincinity__" || path == "trash://" {
+                                                            d.tooltip(Tooltip::text(name))
+                                                        } else {
+                                                            d.tooltip(Tooltip::with_meta(name, path.clone()))
+                                                        }
+                                                    })
                                                     // Left click → select + navigate
                                                     .on_mouse_down(MouseButton::Left, {
                                                         let h = h.clone(); let p = path.clone();
@@ -881,6 +870,7 @@ pub fn render_sidebar(
                                             SidebarItem::Drive { drive, is_expanded } => {
                                                 let path       = drive.path.clone();
                                                 let is_usb = drive.is_usb();
+                                                let is_remote = drive.drive_type == "remote";
                                                 let has_subs = expandable_drives.contains(&path);
                                                 let is_sel     = sel.as_deref().is_some_and(|selected| sidebar_paths_equal(selected, &path));
                                                 let is_exp     = *is_expanded;
@@ -928,7 +918,7 @@ pub fn render_sidebar(
                                                         let h = h.clone(); let p = path.clone();
                                                         move |e, _, cx| {
                                                             let pos   = e.position;
-                                                            let items = drive_context_menu(cx.i18n(), h.clone(), p.clone(), is_usb);
+                                                            let items = drive_context_menu(cx.i18n(), h.clone(), p.clone(), is_usb, is_remote);
                                                             h.update(cx, |this, cx| {
                                                                 this.sidebar_selected_path = Some(p.clone());
                                                                 this.context_menus.clear();
@@ -1263,17 +1253,25 @@ pub fn render_sidebar(
 }
 
 fn pinned_context_menu(i18n: &I18n, h: Entity<OxydeApp>, path: String) -> Vec<DropdownItem> {
-    super::context_menu_sections(pinned_context_menu_raw(i18n, h, path), i18n)
+    let actions = super::network::network_actions(i18n, h.clone(), &path, false);
+    let items = super::network::insert_after_open(pinned_context_menu_raw(i18n, h, path), actions, i18n);
+    super::context_menu_sections(items, i18n)
 }
 
 fn location_context_menu(i18n: &I18n, h: Entity<OxydeApp>, path: String) -> Vec<DropdownItem> {
-    super::context_menu_sections(location_context_menu_raw(i18n, h, path), i18n)
+    let actions = super::network::network_actions(i18n, h.clone(), &path, false);
+    let items = super::network::insert_after_open(location_context_menu_raw(i18n, h, path), actions, i18n);
+    super::context_menu_sections(items, i18n)
 }
 
-fn drive_context_menu(i18n: &I18n, h: Entity<OxydeApp>, path: String, is_usb: bool) -> Vec<DropdownItem> {
-    super::context_menu_sections(drive_context_menu_raw(i18n, h, path, is_usb), i18n)
+fn drive_context_menu(i18n: &I18n, h: Entity<OxydeApp>, path: String, is_usb: bool, is_remote: bool) -> Vec<DropdownItem> {
+    let mut items = super::network::network_actions(i18n, h.clone(), &path, is_remote);
+    items.extend(drive_context_menu_raw(i18n, h, path, is_usb));
+    super::context_menu_sections(items, i18n)
 }
 
 fn directory_context_menu(i18n: &I18n, h: Entity<OxydeApp>, path: String) -> Vec<DropdownItem> {
-    super::context_menu_sections(directory_context_menu_raw(i18n, h, path), i18n)
+    let mut items = super::network::network_actions(i18n, h.clone(), &path, false);
+    items.extend(directory_context_menu_raw(i18n, h, path));
+    super::context_menu_sections(items, i18n)
 }

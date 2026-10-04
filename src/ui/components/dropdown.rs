@@ -26,6 +26,8 @@ pub enum IconName {
     Terminal,
     GitBranch,
     Share,
+    Server,
+    ServerOff,
     Cast,
     Pin,
     PinOff,
@@ -403,6 +405,8 @@ impl RenderOnce for GenericDropdown {
                                                                     IconName::Share => {
                                                                         "icons/share-2.svg"
                                                                     }
+                                                                    IconName::Server => "icons/server.svg",
+                                                                    IconName::ServerOff => "icons/server-off.svg",
                                                                     IconName::Cast => {
                                                                         "icons/cast.svg"
                                                                     }

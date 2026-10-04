@@ -32,8 +32,12 @@ pub trait Platform: Send + Sync {
 
     /// Lists entries in the operating system's network neighborhood.
     fn list_network_vicinity(&self) -> Result<Vec<crate::models::FileEntry>, String>;
+    fn list_network_shares(&self, server: &str) -> Result<Vec<crate::models::FileEntry>, String>;
 
     fn is_network_path(&self, path: &std::path::Path) -> bool;
+    /// Native connection UI, including drive letter, persistence and credentials.
+    /// Returns false when the user cancels. Run on a background worker.
+    fn network_drive_dialog(&self, disconnect: bool, path: Option<&str>) -> Result<bool, String>;
     fn physical_disk_id(&self, path: &std::path::Path) -> u64;
     fn is_ssd(&self, path: &std::path::Path) -> bool;
 

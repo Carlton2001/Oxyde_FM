@@ -4,6 +4,7 @@ pub mod file_list;
 pub mod icons;
 pub mod input;
 pub mod modal;
+pub(crate) mod network;
 pub mod operations;
 pub mod rename_dialog;
 pub mod scrollbar;
@@ -578,11 +579,32 @@ pub fn tab_context_menu_items(
 }
 
 pub fn oxyde_context_menu_items(i18n: &I18n, h: Entity<crate::ui::app::OxydeApp>, is_dir: bool, is_pinned: bool, path: String) -> Vec<dropdown::DropdownItem> {
-    context_menu_sections(oxyde_context_menu_items_raw(i18n, h, is_dir, is_pinned, path), i18n)
+    let mut items = network::network_actions(i18n, h.clone(), &path, false);
+    items.extend(oxyde_context_menu_items_raw(i18n, h, is_dir, is_pinned, path));
+    context_menu_sections(items, i18n)
 }
 
-pub fn pane_context_menu_items(i18n: &I18n, h: Entity<crate::ui::app::OxydeApp>, pane_id: String) -> Vec<dropdown::DropdownItem> {
-    context_menu_sections(pane_context_menu_items_raw(i18n, h, pane_id), i18n)
+pub fn pane_context_menu_items(i18n: &I18n, h: Entity<crate::ui::app::OxydeApp>, pane_id: String, view: &crate::ui::app::OxydeApp) -> Vec<dropdown::DropdownItem> {
+    let path = view.state.find_pane(&pane_id).map(|pane| pane.active_tab().path.as_str()).unwrap_or_default();
+    let mut items = network::network_actions(i18n, h.clone(), path, false);
+    if path == "__network_vincinity__" {
+        let h = h.clone();
+        items.push(dropdown::DropdownItem::new(i18n.text(Message::Properties).to_string(), move |_, cx| {
+            h.update(cx, |this, cx| {
+                this.context_menus.clear();
+                oxyde_lib::platform::platform().show_properties_dialog("__network_vincinity__");
+                cx.notify();
+            });
+        }).icon(dropdown::IconName::Settings));
+        return context_menu_sections(items, i18n);
+    }
+    if let Some(drive) = view.state.drives.iter().find(|drive| drive.drive_type == "remote"
+        && std::path::Path::new(path).ancestors().any(|ancestor|
+            sidebar::sidebar_paths_equal(&ancestor.to_string_lossy(), &drive.path))) {
+        items.extend(network::network_actions(i18n, h.clone(), &drive.path, true));
+    }
+    items.extend(pane_context_menu_items_raw(i18n, h, pane_id));
+    context_menu_sections(items, i18n)
 }
 
 #[cfg(test)]
