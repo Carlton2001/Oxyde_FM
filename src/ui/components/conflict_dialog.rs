@@ -1,5 +1,5 @@
 use crate::ui::app::OxydeApp;
-use crate::ui::components::modal::Modal;
+use crate::ui::components::modal::{action_button, Modal};
 use crate::ui::format::format_number;
 use crate::ui::i18n::{FluentArgs, I18nContext, Message};
 use crate::ui::theme::ThemeContext;
@@ -31,12 +31,9 @@ pub fn render_conflict_dialog(
                 .text_with_args(Message::ConflictDescription, &args),
         ),
     )
+    .title_icon("icons/copy-x.svg")
     .action(
-        div()
-            .id("operation-cancel")
-            .px(rems(0.75))
-            .py(rems(0.5))
-            .rounded_md()
+        action_button("operation-cancel")
             .hover(|d| d.bg(theme.control_hover))
             .child(cx.i18n().text(Message::Cancel))
             .on_mouse_down(MouseButton::Left, move |_, _, cx| {
@@ -44,11 +41,7 @@ pub fn render_conflict_dialog(
             }),
     )
     .action(
-        div()
-            .id("operation-skip")
-            .px(rems(0.75))
-            .py(rems(0.5))
-            .rounded_md()
+        action_button("operation-skip")
             .hover(|d| d.bg(theme.control_hover))
             .child(cx.i18n().text(Message::ConflictSkipAll))
             .on_mouse_down(MouseButton::Left, move |_, _, cx| {
@@ -58,11 +51,7 @@ pub fn render_conflict_dialog(
             }),
     )
     .action(
-        div()
-            .id("operation-replace")
-            .px(rems(0.75))
-            .py(rems(0.5))
-            .rounded_md()
+        action_button("operation-replace")
             .bg(theme.accent)
             .text_color(theme.text_on_accent)
             .hover(|d| d.opacity(0.85))

@@ -1,5 +1,5 @@
 use crate::ui::app::OxydeApp;
-use crate::ui::components::modal::Modal;
+use crate::ui::components::modal::{action_button, Modal};
 use crate::ui::i18n::{I18nContext, Message};
 use crate::ui::theme::ThemeContext;
 use gpui::prelude::*;
@@ -19,7 +19,7 @@ pub fn render_rename_dialog(
 
     let body = div()
         .child(
-            div().h(rems(3.25)).w_full().child(
+            div().h(rems(2.0)).w_full().child(
                 input
                     .map(|input| input.into_any_element())
                     .unwrap_or_else(|| div().into_any_element()),
@@ -36,17 +36,14 @@ pub fn render_rename_dialog(
         });
 
     Modal::new("rename-dialog", cx.i18n().text(Message::RenameTitle), body)
+        .title_icon("icons/pencil.svg")
         .width(rems(30.0))
-        .body_gap(rems(1.0))
+        .body_gap(rems(0.375))
         .on_backdrop_dismiss(move |_, cx| {
             backdrop_handle.update(cx, |this, cx| this.cancel_rename(cx));
         })
         .action(
-            div()
-                .id("rename-cancel")
-                .px(rems(0.75))
-                .py(rems(0.5))
-                .rounded_md()
+            action_button("rename-cancel")
                 .hover(|d| d.bg(theme.control_hover))
                 .text_color(theme.text_muted)
                 .child(cx.i18n().text(Message::Cancel))
@@ -55,11 +52,7 @@ pub fn render_rename_dialog(
                 }),
         )
         .action(
-            div()
-                .id("rename-submit")
-                .px(rems(0.75))
-                .py(rems(0.5))
-                .rounded_md()
+            action_button("rename-submit")
                 .bg(theme.accent)
                 .text_color(theme.text_on_accent)
                 .hover(|d| d.opacity(0.85))

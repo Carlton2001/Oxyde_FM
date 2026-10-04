@@ -2,9 +2,12 @@ use crate::ui::app::{
     network::{drive_letter_used, network_drive},
     OxydeApp,
 };
+use crate::ui::components::scrollbar::{
+    render_scrollbar_with_pointer, ScrollbarAxis, ZED_TRACK_WIDTH,
+};
 use crate::ui::components::{
     input::TextInput,
-    modal::{form_row, Modal},
+    modal::{action_button, form_row, Modal},
 };
 use crate::ui::i18n::{FluentArgs, I18nContext, Message};
 use crate::ui::scale::rem_pixels;
@@ -12,6 +15,25 @@ use crate::ui::theme::ThemeContext;
 use gpui::prelude::*;
 use gpui::*;
 
+fn update_letter_scroll(view: &mut OxydeApp, position: Point<Pixels>, cx: &mut App) {
+    let Some(dialog) = &mut view.network_dialog else {
+        return;
+    };
+    let Some((track, viewport, content)) = &dialog.letter_scroll_drag else {
+        return;
+    };
+    let Some(origin) = view.scrollbar_origins.get(track) else {
+        return;
+    };
+    let thumb = (viewport * viewport / content).max(rem_pixels(rems(2.5)).as_f32());
+    let travel = (viewport - thumb).max(1.0);
+    let position = position.y.as_f32() - origin.y - view.grab_offset;
+    let offset = (position / travel).clamp(0.0, 1.0) * (content - viewport);
+    dialog.letter_scroll.set_offset(point(px(0.0), px(-offset)));
+    if let Some(handle) = &view.handle {
+        cx.notify(handle.entity_id());
+    }
+}
 fn field(
     label: SharedString,
     input: Entity<TextInput>,
@@ -74,7 +96,7 @@ pub(crate) fn render_network_dialog(
         })
         .flex()
         .flex_col()
-        .gap(rems(0.5))
+        .gap(rems(0.375))
         .text_size(rems(0.8125));
     if disconnect {
         body = body.child(cx.i18n().text(Message::NetworkDisconnectDescription));
@@ -217,7 +239,7 @@ pub(crate) fn render_network_dialog(
                 })
                 .rounded_md()
                 .px_3()
-                .h(rems(2.25))
+                .h(rems(2.0))
                 .when(!busy && !dialog.loading, |d| {
                     d.hover(|s| s.bg(theme.control_hover))
                 })
@@ -247,23 +269,33 @@ pub(crate) fn render_network_dialog(
                 ),
         );
         if dialog.letter_open {
+            let viewport_h = rem_pixels(rems(8.875)).as_f32();
+            let content_h = rem_pixels(rems(1.5)).as_f32() * 26.0;
             let mut choices = div()
                 .id("network-letter-options")
                 .w((rem_pixels(rems(30.0))
                     .min(window.viewport_size().width - rem_pixels(rems(2.0)))
-                    - rem_pixels(rems(9.125)))
+                    - rem_pixels(rems(8.375)))
                 .max(rem_pixels(rems(4.0))))
                 .bg(theme.menu_surface)
                 .occlude()
                 .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
                 .on_scroll_wheel(|_, _, cx| cx.stop_propagation())
-                .max_h(rems(9.0))
-                .overflow_y_scroll()
+                .h(rems(9.0))
+                .relative()
                 .flex()
                 .flex_col()
                 .border(rems(0.0625))
                 .border_color(theme.border)
                 .rounded_md();
+            let refresh = handle.clone();
+            let mut rows = div()
+                .id("network-letter-scroll")
+                .size_full()
+                .overflow_y_scroll()
+                .track_scroll(&dialog.letter_scroll)
+                .pr(ZED_TRACK_WIDTH)
+                .on_scroll_wheel(move |_, _, cx| refresh.update(cx, |_, cx| cx.notify()));
             for (index, character) in ('A'..='Z').rev().enumerate() {
                 let value = format!("{character}:");
                 let used = drive_letter_used(&value, &dialog.drives);
@@ -286,14 +318,15 @@ pub(crate) fn render_network_dialog(
                     });
                 let selected = dialog.letter.as_ref() == Some(&value);
                 let h = handle.clone();
-                choices = choices.child(
+                rows = rows.child(
                     div()
                         .id(("network-letter-option", index))
+                        .h(rems(1.5))
+                        .flex_none()
                         .flex()
                         .items_center()
                         .gap(rems(0.5))
                         .px_3()
-                        .py_1()
                         .text_color(if used {
                             theme.icon_disabled
                         } else {
@@ -327,11 +360,70 @@ pub(crate) fn render_network_dialog(
                         }),
                 );
             }
+            choices = choices.child(rows).child(render_scrollbar_with_pointer(
+                theme,
+                handle.clone(),
+                ScrollbarAxis::Vertical,
+                viewport_h,
+                content_h,
+                dialog.letter_scroll.offset().y.as_f32().abs(),
+                dialog.letter_scroll_drag.is_some(),
+                "network-letters".into(),
+                None,
+                |view, track, viewport, content, position, cx| {
+                    if let Some(dialog) = &mut view.network_dialog {
+                        dialog.letter_scroll_drag = Some((track, viewport, content));
+                        update_letter_scroll(view, position, cx);
+                    }
+                },
+            ));
+            let mouse = handle.clone();
+            choices = choices.child(
+                canvas(
+                    |_, _, _| (),
+                    move |_, _, window, _| {
+                        let mouse_move = mouse.clone();
+                        window.on_mouse_event(move |event: &MouseMoveEvent, phase, _, cx| {
+                            if phase == DispatchPhase::Capture {
+                                mouse_move.update(cx, |view, cx| {
+                                    if view
+                                        .network_dialog
+                                        .as_ref()
+                                        .is_some_and(|dialog| dialog.letter_scroll_drag.is_some())
+                                    {
+                                        if event.dragging() {
+                                            update_letter_scroll(view, event.position, cx);
+                                        } else if let Some(dialog) = &mut view.network_dialog {
+                                            dialog.letter_scroll_drag = None;
+                                            cx.notify();
+                                        }
+                                    }
+                                });
+                            }
+                        });
+                        let mouse_up = mouse.clone();
+                        window.on_mouse_event(move |event: &MouseUpEvent, phase, _, cx| {
+                            if phase == DispatchPhase::Capture && event.button == MouseButton::Left
+                            {
+                                mouse_up.update(cx, |view, cx| {
+                                    if let Some(dialog) = &mut view.network_dialog {
+                                        if dialog.letter_scroll_drag.take().is_some() {
+                                            cx.notify();
+                                        }
+                                    }
+                                });
+                            }
+                        });
+                    },
+                )
+                .absolute()
+                .size_0(),
+            );
             letter = letter.child(
                 deferred(
                     anchored()
                         .position_mode(AnchoredPositionMode::Local)
-                        .position(point(px(0.0), rem_pixels(rems(2.5))))
+                        .position(point(px(0.0), rem_pixels(rems(2.25))))
                         .snap_to_window_with_margin(rem_pixels(rems(0.5)))
                         .child(choices),
                 )
@@ -443,10 +535,9 @@ pub(crate) fn render_network_dialog(
         .w_full()
         .items_center()
         .gap(rems(0.5))
-        .on_mouse_down(MouseButton::Left, move |event, _, cx| {
+        .on_mouse_down(MouseButton::Left, move |_, _, cx| {
             h.update(cx, |view, cx| {
                 if let Some(dialog) = &mut view.network_dialog {
-                    dialog.drag = Some((event.position, dialog.position));
                     dialog.letter_open = false;
                     cx.notify();
                 }
@@ -486,8 +577,6 @@ pub(crate) fn render_network_dialog(
                         .text_color(theme.text_muted),
                 ),
         );
-    let drag = handle.clone();
-    let release = handle.clone();
     let cancel = handle.clone();
     let submit = handle.clone();
     let backdrop = handle.clone();
@@ -504,42 +593,9 @@ pub(crate) fn render_network_dialog(
         })
         .width(rems(30.0))
         .header(header)
-        .position(dialog.position)
-        .on_pointer_move(move |event, window, cx| {
-            drag.update(cx, |view, cx| {
-                if let Some(dialog) = &mut view.network_dialog {
-                    if let Some((start, origin)) = dialog.drag {
-                        if !event.dragging() {
-                            dialog.drag = None;
-                            return;
-                        }
-                        let viewport = window.viewport_size();
-                        let x_limit =
-                            ((viewport.width - rem_pixels(rems(30.0))) / 2.0).max(px(0.0));
-                        let y_limit = (viewport.height / 2.0 - rem_pixels(rems(3.0))).max(px(0.0));
-                        dialog.position = point(
-                            (origin.x + event.position.x - start.x).clamp(-x_limit, x_limit),
-                            (origin.y + event.position.y - start.y).clamp(-y_limit, y_limit),
-                        );
-                        cx.notify();
-                    }
-                }
-            })
-        })
-        .on_pointer_up(move |_, cx| {
-            release.update(cx, |view, _| {
-                if let Some(dialog) = &mut view.network_dialog {
-                    dialog.drag = None;
-                }
-            })
-        })
         .action(
-            div()
-                .id("network-cancel")
+            action_button("network-cancel")
                 .track_focus(&dialog.controls[2])
-                .px_3()
-                .py(rems(0.375))
-                .text_size(rems(0.8125))
                 .bg(theme.control_hover)
                 .rounded_md()
                 .text_color(theme.text_muted)
@@ -557,12 +613,8 @@ pub(crate) fn render_network_dialog(
                 }),
         )
         .action(
-            div()
-                .id("network-submit")
+            action_button("network-submit")
                 .track_focus(&dialog.controls[3])
-                .px_3()
-                .py(rems(0.375))
-                .text_size(rems(0.8125))
                 .rounded_md()
                 .bg(theme.accent)
                 .text_color(theme.text_on_accent)

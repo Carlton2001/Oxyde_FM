@@ -52,13 +52,15 @@ Factoriser lorsqu'au moins deux usages partagent une structure ou un comportemen
 
 `src/ui/components/modal.rs` fournit `Modal`, un composant de présentation sans dépendance à `OxydeApp` :
 
-Les nouvelles fenêtres popup internes adoptent la présentation compacte de Tauri : barre de titre de 2,75 rem (texte de 0,875 rem, poids Medium), séparée du corps par une bordure ; corps avec marges horizontales de 1 rem et verticales de 1,25 rem ; pied avec bordure supérieure et marges de 0,75 rem × 1 rem. `Modal` applique ce cadre par défaut. Les formulaires utilisent `modal::form_row` pour aligner les libellés à gauche (6 rem) et les champs à droite, avec un intervalle de 1 rem ; le texte des formulaires et boutons mesure 0,8125 rem. Les champs compacts mesurent 2 rem de haut, les boutons ont une marge verticale de 0,375 rem. Les titres personnalisés conservent ces dimensions. Garder les séparateurs entre groupes de champs et les couleurs sémantiques dans les deux thèmes.
+Les nouvelles fenêtres popup internes adoptent la présentation compacte de Tauri : barre de titre de 2,75 rem (texte de 0,875 rem, poids Medium), séparée du corps par une bordure ; corps avec marges horizontales de 1 rem et verticales de 1,25 rem ; pied avec bordure supérieure et marges de 0,625 rem × 1 rem. `Modal` applique ce cadre par défaut. Les formulaires utilisent `modal::form_row` pour aligner les libellés à gauche (5,5 rem) et les champs à droite, avec un intervalle de 0,75 rem ; le texte des formulaires et boutons mesure 0,8125 rem. Les champs compacts mesurent 2 rem de haut, les boutons ont une marge verticale de 0,375 rem. Tous les boutons de modales passent par `modal::action_button` ; le corps utilise un texte de 0,8125 rem et un intervalle de 0,375 rem par défaut. Les modales utilisent un interligne de 1,25 fois la taille du texte ; les formulaires réseau espacent leurs lignes de 0,375 rem. Les titres personnalisés conservent ces dimensions. Garder les séparateurs entre groupes de champs et les couleurs sémantiques dans les deux thèmes.
 
 - l'appelant fournit le contenu, les boutons et les callbacks ;
 - l'état métier et les opérations restent dans la vue appelante ;
 - le clic extérieur ne ferme la modale que si l'appelant configure `on_backdrop_dismiss` ;
 - la gestion du clavier, du focus initial et de l'ordre de rendu reste explicite dans l'appelant ;
-- la modale bloque les interactions et le défilement sur le contenu recouvert.
+- chaque barre de titre comporte une icône Lucide officielle de 1 rem, avec la couleur sémantique du texte secondaire et un intervalle de 0,5 rem avant le titre ; utiliser `Modal::title_icon` ou conserver cette présentation dans un titre personnalisé ;
+- toutes les modales sont déplaçables au clic gauche par leur barre de titre ; le composant partagé garde leur cadre entier dans les limites de la fenêtre, en fonction de leur taille réelle, et recalcule les limites lors d'un redimensionnement ou d'un changement de contenu ;
+- aucun fond assombri n'est affiché derrière les modales ; la couche transparente bloque toujours les interactions et le défilement sur le contenu recouvert.
 
 Appliquer le même principe aux futurs composants partagés : API de présentation claire, callbacks et état appartenant à l'appelant, et aucun couplage au modèle métier sans nécessité.
 

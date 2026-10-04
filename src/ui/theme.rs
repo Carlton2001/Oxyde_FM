@@ -15,7 +15,6 @@ pub struct OxydeTheme {
     pub accent: Hsla,            // Couleur d'action propre au thème
     pub hover: Hsla,             // État Hover
     pub selected: Hsla,          // État sélectionné / Focus
-    pub modal_backdrop: Hsla,    // Fond qui recouvre l'interface sous une modale
     pub error: Hsla,             // Messages d'erreur
     pub text_on_accent: Hsla,    // Texte sur une action remplie avec accent
     pub control_hover: Hsla,     // Survol d'une action secondaire
@@ -62,7 +61,6 @@ impl OxydeTheme {
             accent: rgb(0x3d5af1).into(),
             hover: rgb(0xe6e2d9).into(),
             selected: rgba(0x3d5af133).into(),
-            modal_backdrop: rgba(0x24243366).into(),
             error: rgb(0xb42335).into(),
             text_on_accent: rgb(0xffffff).into(),
             control_hover: rgb(0xe6e2d9).into(),
@@ -97,7 +95,6 @@ impl OxydeTheme {
             accent: rgb(0xd4a54a).into(),
             hover: rgb(0x1c1a2b).into(),
             selected: rgba(0xd4a54a33).into(),
-            modal_backdrop: rgba(0x00000088).into(),
             error: rgb(0xf87171).into(),
             text_on_accent: rgb(0x0e0c15).into(),
             control_hover: rgb(0x1c1a2b).into(),

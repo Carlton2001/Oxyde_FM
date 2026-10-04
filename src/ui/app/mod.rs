@@ -3598,12 +3598,9 @@ impl Render for OxydeApp {
                     cx.i18n().text(Message::OperationFailed),
                     div().text_color(theme.text_muted).child(message),
                 )
+                .title_icon("icons/circle-x.svg")
                 .action(
-                    div()
-                        .id("operation-notice-close")
-                        .px(rems(0.75))
-                        .py(rems(0.5))
-                        .rounded_md()
+                    crate::ui::components::modal::action_button("operation-notice-close")
                         .hover(|d| d.bg(theme.control_hover))
                         .child(cx.i18n().text(Message::Close))
                         .on_mouse_down(MouseButton::Left, move |_, _, cx| {

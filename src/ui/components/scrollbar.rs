@@ -40,6 +40,31 @@ pub fn render_scrollbar(
     min_thumb_size: Option<f32>,
     on_drag: impl Fn(&mut OxydeApp, String, f32, f32, &mut App) + 'static,
 ) -> AnyElement {
+    render_scrollbar_with_pointer(
+        theme,
+        handle,
+        axis,
+        viewport_size,
+        content_size,
+        current_scroll,
+        is_dragging,
+        id_suffix,
+        min_thumb_size,
+        move |view, track, viewport, content, _, cx| on_drag(view, track, viewport, content, cx),
+    )
+}
+pub fn render_scrollbar_with_pointer(
+    theme: OxydeTheme,
+    handle: Entity<OxydeApp>,
+    axis: ScrollbarAxis,
+    viewport_size: f32,
+    content_size: f32,
+    current_scroll: f32,
+    is_dragging: bool,
+    id_suffix: String,
+    min_thumb_size: Option<f32>,
+    on_drag: impl Fn(&mut OxydeApp, String, f32, f32, Point<Pixels>, &mut App) + 'static,
+) -> AnyElement {
     let is_v = axis == ScrollbarAxis::Vertical;
 
     // Proportions
@@ -169,6 +194,7 @@ pub fn render_scrollbar(
                             track_id_for_drag.clone(),
                             viewport_size,
                             content_size,
+                            e.position,
                             app,
                         );
                     }

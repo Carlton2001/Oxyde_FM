@@ -8,10 +8,10 @@ pub fn form_row(label: SharedString, value: impl IntoElement, cx: &App) -> impl 
     div()
         .flex()
         .items_center()
-        .gap(rems(1.0))
+        .gap(rems(0.75))
         .child(
             div()
-                .w(rems(6.0))
+                .w(rems(5.5))
                 .flex_none()
                 .text_size(rems(0.8125))
                 .text_color(cx.theme().text_muted)
@@ -20,6 +20,31 @@ pub fn form_row(label: SharedString, value: impl IntoElement, cx: &App) -> impl 
         .child(div().flex_1().min_w_0().child(value))
 }
 
+/// Compact action dimensions shared by every application modal.
+pub fn action_button(id: impl Into<ElementId>) -> Stateful<Div> {
+    div()
+        .id(id)
+        .px(rems(0.75))
+        .py(rems(0.375))
+        .text_size(rems(0.8125))
+        .rounded_md()
+}
+#[derive(Default)]
+struct ModalPlacement {
+    offset: Point<Pixels>,
+    size: Size<Pixels>,
+    drag: Option<(Point<Pixels>, Point<Pixels>)>,
+}
+
+fn constrain_offset(
+    offset: Point<Pixels>,
+    modal: Size<Pixels>,
+    viewport: Size<Pixels>,
+) -> Point<Pixels> {
+    let x = ((viewport.width - modal.width) / 2.0).max(px(0.0));
+    let y = ((viewport.height - modal.height) / 2.0).max(px(0.0));
+    point(offset.x.clamp(-x, x), offset.y.clamp(-y, y))
+}
 /// Shared presentation for centered dialogs. The caller owns business state,
 /// action callbacks, initial focus, keyboard bindings and placement in the
 /// render tree (including `deferred` and ordering relative to context menus).
@@ -30,15 +55,13 @@ pub fn form_row(label: SharedString, value: impl IntoElement, cx: &App) -> impl 
 pub struct Modal {
     id: ElementId,
     title: SharedString,
+    title_icon: Option<SharedString>,
     body: AnyElement,
     actions: Vec<AnyElement>,
     width: AbsoluteLength,
     body_gap: AbsoluteLength,
     on_backdrop_dismiss: Option<Box<dyn Fn(&mut Window, &mut App)>>,
     header: Option<AnyElement>,
-    position: Point<Pixels>,
-    on_pointer_move: Option<Box<dyn Fn(&MouseMoveEvent, &mut Window, &mut App)>>,
-    on_pointer_up: Option<Box<dyn Fn(&mut Window, &mut App)>>,
 }
 
 impl Modal {
@@ -50,18 +73,20 @@ impl Modal {
         Self {
             id: id.into(),
             title: title.into(),
+            title_icon: None,
             body: body.into_any_element(),
             actions: Vec::new(),
             width: rems(27.5).into(),
-            body_gap: rems(0.75).into(),
+            body_gap: rems(0.375).into(),
             on_backdrop_dismiss: None,
             header: None,
-            position: point(px(0.0), px(0.0)),
-            on_pointer_move: None,
-            on_pointer_up: None,
         }
     }
 
+    pub fn title_icon(mut self, path: impl Into<SharedString>) -> Self {
+        self.title_icon = Some(path.into());
+        self
+    }
     pub fn width(mut self, width: impl Into<AbsoluteLength>) -> Self {
         self.width = width.into();
         self
@@ -71,22 +96,6 @@ impl Modal {
         self.header = Some(header.into_any_element());
         self
     }
-    pub fn position(mut self, position: Point<Pixels>) -> Self {
-        self.position = position;
-        self
-    }
-    pub fn on_pointer_move(
-        mut self,
-        callback: impl Fn(&MouseMoveEvent, &mut Window, &mut App) + 'static,
-    ) -> Self {
-        self.on_pointer_move = Some(Box::new(callback));
-        self
-    }
-    pub fn on_pointer_up(mut self, callback: impl Fn(&mut Window, &mut App) + 'static) -> Self {
-        self.on_pointer_up = Some(Box::new(callback));
-        self
-    }
-
     pub fn body_gap(mut self, gap: impl Into<AbsoluteLength>) -> Self {
         self.body_gap = gap.into();
         self
@@ -109,13 +118,18 @@ impl Modal {
 impl RenderOnce for Modal {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let theme = *cx.theme();
+        let placement =
+            window.use_keyed_state(self.id.clone(), cx, |_, _| ModalPlacement::default());
+        let viewport = window.viewport_size();
+        let offset = constrain_offset(placement.read(cx).offset, placement.read(cx).size, viewport);
+        let title_drag = placement.clone();
+        let measure = placement.clone();
         div()
             .absolute()
             .inset_0()
             .flex()
             .items_center()
             .justify_center()
-            .bg(theme.modal_backdrop)
             .occlude()
             .on_any_mouse_down(move |event, window, cx| {
                 cx.stop_propagation();
@@ -126,35 +140,86 @@ impl RenderOnce for Modal {
                 }
             })
             .on_scroll_wheel(|_, _, cx| cx.stop_propagation())
-            .on_mouse_move(move |event, window, cx| {
-                if let Some(callback) = &self.on_pointer_move {
-                    callback(event, window, cx);
-                }
-            })
-            .on_mouse_up(MouseButton::Left, move |_, window, cx| {
-                if let Some(callback) = &self.on_pointer_up {
-                    callback(window, cx);
-                }
-            })
             .child(
                 div()
                     .id(self.id)
                     .relative()
-                    .left(self.position.x)
-                    .top(self.position.y)
+                    .left(offset.x)
+                    .top(offset.y)
                     .w(self.width)
-                    .max_w(window.viewport_size().width - rem_pixels(rems(2.0)))
-                    .max_h(window.viewport_size().height - rem_pixels(rems(2.0)))
+                    .max_w((viewport.width - rem_pixels(rems(2.0))).max(px(0.0)))
+                    .max_h((viewport.height - rem_pixels(rems(2.0))).max(px(0.0)))
                     .flex()
                     .flex_col()
                     .rounded_lg()
                     .bg(theme.surface)
                     .text_color(theme.text)
+                    .text_size(rems(0.8125))
+                    .line_height(relative(1.25))
                     .border(rems(0.0625))
                     .border_color(theme.border)
                     .on_any_mouse_down(|_, _, cx| cx.stop_propagation())
                     .child(
+                        canvas(
+                            |bounds, _, _| bounds,
+                            move |bounds, _, window, cx| {
+                                measure.update(cx, |state, cx| {
+                                    let border = rem_pixels(rems(0.125));
+                                    state.size = bounds.size + size(border, border);
+                                    let offset = constrain_offset(
+                                        state.offset,
+                                        state.size,
+                                        window.viewport_size(),
+                                    );
+                                    if offset != state.offset {
+                                        state.offset = offset;
+                                        cx.notify();
+                                    }
+                                });
+                                let moving = measure.clone();
+                                window.on_mouse_event(
+                                    move |event: &MouseMoveEvent, phase, window, cx| {
+                                        if phase == DispatchPhase::Capture {
+                                            moving.update(cx, |state, cx| {
+                                                if let Some((start, origin)) = state.drag {
+                                                    if event.dragging() {
+                                                        state.offset = constrain_offset(
+                                                            origin + event.position - start,
+                                                            state.size,
+                                                            window.viewport_size(),
+                                                        );
+                                                    } else {
+                                                        state.drag = None;
+                                                    }
+                                                    cx.notify();
+                                                }
+                                            });
+                                        }
+                                    },
+                                );
+                                let released = measure.clone();
+                                window.on_mouse_event(move |event: &MouseUpEvent, phase, _, cx| {
+                                    if phase == DispatchPhase::Capture
+                                        && event.button == MouseButton::Left
+                                    {
+                                        released.update(cx, |state, _| {
+                                            state.drag = None;
+                                        });
+                                    }
+                                });
+                            },
+                        )
+                        .absolute()
+                        .size_full(),
+                    )
+                    .child(
                         div()
+                            .id("modal-titlebar")
+                            .on_mouse_down(MouseButton::Left, move |event, _, cx| {
+                                title_drag.update(cx, |state, _| {
+                                    state.drag = Some((event.position, state.offset));
+                                });
+                            })
                             .flex_none()
                             .h(rems(2.75))
                             .px(rems(1.0))
@@ -170,6 +235,14 @@ impl RenderOnce for Modal {
                                     .flex_none()
                                     .items_center()
                                     .gap(rems(0.5))
+                                    .when_some(self.title_icon, |header, icon| {
+                                        header.child(
+                                            svg()
+                                                .path(icon)
+                                                .size(rems(1.0))
+                                                .text_color(theme.text_muted),
+                                        )
+                                    })
                                     .child(
                                         div()
                                             .flex_1()
@@ -197,7 +270,7 @@ impl RenderOnce for Modal {
                             div()
                                 .flex_none()
                                 .px(rems(1.0))
-                                .py(rems(0.75))
+                                .py(rems(0.625))
                                 .border_t(rems(0.0625))
                                 .border_color(theme.border)
                                 .flex()
@@ -207,5 +280,49 @@ impl RenderOnce for Modal {
                         )
                     }),
             )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::constrain_offset;
+    use gpui::{point, px, size};
+
+    #[test]
+    fn dragging_keeps_every_edge_inside_the_viewport() {
+        let modal = size(px(480.0), px(360.0));
+        let viewport = size(px(1000.0), px(800.0));
+        assert_eq!(
+            constrain_offset(point(px(900.0), px(-900.0)), modal, viewport),
+            point(px(260.0), px(-220.0))
+        );
+        assert_eq!(
+            constrain_offset(point(px(-900.0), px(900.0)), modal, viewport),
+            point(px(-260.0), px(220.0))
+        );
+        assert_eq!(
+            constrain_offset(point(px(50.0), px(60.0)), modal, viewport),
+            point(px(50.0), px(60.0))
+        );
+    }
+
+    #[test]
+    fn resizing_or_growing_a_modal_reclamps_its_position() {
+        assert_eq!(
+            constrain_offset(
+                point(px(200.0), px(200.0)),
+                size(px(480.0), px(500.0)),
+                size(px(600.0), px(600.0))
+            ),
+            point(px(60.0), px(50.0))
+        );
+        assert_eq!(
+            constrain_offset(
+                point(px(200.0), px(-200.0)),
+                size(px(700.0), px(700.0)),
+                size(px(600.0), px(600.0))
+            ),
+            point(px(0.0), px(0.0))
+        );
     }
 }
