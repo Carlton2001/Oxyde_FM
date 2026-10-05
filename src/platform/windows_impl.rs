@@ -42,7 +42,7 @@ impl Platform for WindowsPlatform {
     fn map_network_drive(&self, letter: String, path: String, reconnect: bool, username: Option<String>, password: Option<String>) -> Result<(), String> {
         super::network::map_network_drive(letter, path, reconnect, username, password)
     }
-    fn disconnect_network_drive(&self, path: String, force: bool) -> Result<(), String> {
+    fn disconnect_network_drive(&self, path: String, force: bool) -> Result<(), super::NetworkDisconnectError> {
         super::network::disconnect_network_drive(path, force)
     }
     fn list_drive_roots(&self) -> Vec<DriveInfo> {

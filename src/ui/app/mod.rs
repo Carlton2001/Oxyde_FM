@@ -420,6 +420,8 @@ pub struct OxydeApp {
     pub(super) disk_image_refresh_task: Option<Task<()>>,
     pub(crate) network_dialog: Option<network::NetworkDialog>,
     pub(crate) network_dialog_revision: u64,
+    pub(crate) network_force_confirmation: Option<network::NetworkForceConfirmation>,
+    pub(crate) network_force_focus_pending: bool,
     pub(crate) network_focus_restore: bool,
     pub(crate) network_notice: Option<(Message, u64)>,
     pub _subscriptions: Vec<Subscription>,
@@ -854,6 +856,8 @@ impl OxydeApp {
             disk_image_refresh_task: None,
             network_dialog: None,
             network_dialog_revision: 0,
+            network_force_confirmation: None,
+            network_force_focus_pending: false,
             network_focus_restore: false,
             network_notice: None,
             _subscriptions: vec![cx.on_app_quit(|this, _| {
@@ -1178,10 +1182,10 @@ impl OxydeApp {
         if !self.breadcrumb_editing || !self.context_menus.is_empty() {
             return;
         }
-        let path = self.breadcrumb_text.trim().to_string();
+        let path = crate::ui::components::input::navigation_path_text(&self.breadcrumb_text);
         let network_server = cfg!(target_os = "windows")
             && oxyde_lib::commands::io::is_network_server(&path);
-        if !network_server && !std::path::Path::new(&path).is_dir() {
+        if path != "__network_vincinity__" && !network_server && !std::path::Path::new(&path).is_dir() {
             self.breadcrumb_shake_id = self.breadcrumb_shake_id.wrapping_add(1);
             self.breadcrumb_invalid = true;
             cx.notify();
@@ -2278,6 +2282,12 @@ impl Render for OxydeApp {
         }
 
         let size = _window.viewport_size();
+        if self.network_force_focus_pending {
+            self.network_force_focus_pending = false;
+            if let Some(confirmation) = &self.network_force_confirmation {
+                _window.focus(&confirmation.focus, cx);
+            }
+        }
         if self.network_focus_restore {
             self.network_focus_restore = false;
             _window.focus(&self.focus_handle, cx);
@@ -2795,7 +2805,9 @@ impl Render for OxydeApp {
 
         // Keep modal content below transient context menus in the render tree:
         // a text field inside the rename dialog can open its own context menu.
-        if self.network_dialog.is_some() {
+        if self.network_force_confirmation.is_some() {
+            root = root.child(deferred(crate::ui::components::network_dialog::render_force_confirmation(self, handle.clone(), _window, cx)));
+        } else if self.network_dialog.is_some() {
             root = root.child(deferred(crate::ui::components::network_dialog::render_network_dialog(self, handle.clone(), _window, cx)));
         }
         if self.editing_path.is_some() && !self.inline_rename {

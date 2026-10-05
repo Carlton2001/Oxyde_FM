@@ -2,6 +2,49 @@ use super::*;
 use oxyde_lib::models::DriveInfo;
 use std::collections::HashSet;
 
+pub(crate) struct NetworkForceConfirmation {
+    pub paths: Vec<String>,
+    pub revision: u64,
+    pub direct: bool,
+    pub focus: FocusHandle,
+    pub confirm_focus: FocusHandle,
+}
+
+enum NetworkOperationError {
+    Busy(Vec<String>),
+    Other(String),
+}
+impl From<String> for NetworkOperationError {
+    fn from(value: String) -> Self {
+        Self::Other(value)
+    }
+}
+
+fn disconnect_safely(
+    paths: &[String],
+    force: bool,
+    mut disconnect: impl FnMut(&str, bool) -> Result<(), oxyde_lib::platform::NetworkDisconnectError>,
+) -> Result<(), NetworkOperationError> {
+    for (index, path) in paths.iter().enumerate() {
+        let force_current = force && index == 0;
+        match disconnect(path, force_current) {
+            Ok(()) => {}
+            Err(oxyde_lib::platform::NetworkDisconnectError::Busy) if !force_current => {
+                return Err(NetworkOperationError::Busy(paths[index..].to_vec()))
+            }
+            Err(oxyde_lib::platform::NetworkDisconnectError::Busy) => {
+                return Err(NetworkOperationError::Other(format!(
+                    "{path}: connection remains in use"
+                )))
+            }
+            Err(oxyde_lib::platform::NetworkDisconnectError::Other(error)) => {
+                return Err(NetworkOperationError::Other(format!("{path}: {error}")))
+            }
+        }
+    }
+    Ok(())
+}
+
 pub(crate) struct NetworkDialog {
     pub revision: u64,
     pub disconnect: bool,
@@ -64,17 +107,40 @@ pub(crate) fn normalized_share(path: &str) -> Option<String> {
         .then_some(path)
 }
 
-fn disconnect_selected(
-    paths: &[String],
-    mut disconnect: impl FnMut(&str) -> Result<(), String>,
-) -> Result<(), String> {
-    for path in paths {
-        disconnect(path).map_err(|error| format!("{path}: {error}"))?;
-    }
-    Ok(())
-}
-
 impl OxydeApp {
+    pub(crate) fn resolve_network_force(
+        &mut self,
+        force: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(confirmation) = self.network_force_confirmation.take() else {
+            return;
+        };
+        if force {
+            if let Some(dialog) = &mut self.network_dialog {
+                dialog.busy = true;
+            }
+            window.focus(&self.focus_handle, cx);
+            self.run_network_operation(
+                confirmation.revision,
+                true,
+                false,
+                confirmation.paths,
+                None,
+                confirmation.direct,
+                true,
+                cx,
+            );
+        } else {
+            if let Some(dialog) = &self.network_dialog {
+                window.focus(&dialog.focus, cx);
+            } else {
+                window.focus(&self.focus_handle, cx);
+            }
+            cx.notify();
+        }
+    }
     pub(crate) fn network_drive_dialog(
         &mut self,
         disconnect: bool,
@@ -323,6 +389,53 @@ impl OxydeApp {
         dialog.busy = true;
         dialog.letter_open = false;
         dialog.error = None;
+        self.run_network_operation(
+            revision, disconnect, reconnect, paths, request, false, false, cx,
+        );
+    }
+
+    pub(crate) fn disconnect_network_drive_direct(&mut self, path: &str, cx: &mut Context<Self>) {
+        self.context_menus.clear();
+        if self.ejecting_drive || self.network_dialog.is_some() {
+            cx.notify();
+            return;
+        }
+        let Some(drive) = self.state.drives.iter().find(|drive| {
+            network_drive(drive)
+                && (crate::ui::components::sidebar::sidebar_paths_equal(&drive.path, path)
+                    || path.replace('/', "\\").to_lowercase().starts_with(&format!(
+                        "{}\\",
+                        drive.path.trim_end_matches(['/', '\\']).to_lowercase()
+                    )))
+        }) else {
+            cx.notify();
+            return;
+        };
+        let paths = vec![drive.path.clone()];
+        self.network_dialog_revision = self.network_dialog_revision.wrapping_add(1);
+        self.run_network_operation(
+            self.network_dialog_revision,
+            true,
+            false,
+            paths,
+            None,
+            true,
+            false,
+            cx,
+        );
+    }
+
+    fn run_network_operation(
+        &mut self,
+        revision: u64,
+        disconnect: bool,
+        reconnect: bool,
+        paths: Vec<String>,
+        request: Option<(String, String, Option<String>, Option<String>)>,
+        direct: bool,
+        force: bool,
+        cx: &mut Context<Self>,
+    ) {
         self.context_menus.clear();
         self.ejecting_drive = true;
         self.drive_refresh_epoch = self.drive_refresh_epoch.wrapping_add(1);
@@ -344,10 +457,11 @@ impl OxydeApp {
                 if let Some((letter, path, user, password)) = request {
                     oxyde_lib::platform::platform()
                         .map_network_drive(letter, path, reconnect, user, password)
+                        .map_err(NetworkOperationError::Other)
                 } else {
-                    disconnect_selected(&paths, |path| {
+                    disconnect_safely(&paths, force, |path, force| {
                         oxyde_lib::platform::platform()
-                            .disconnect_network_drive(path.to_string(), true)
+                            .disconnect_network_drive(path.to_string(), force)
                     })
                 }
             })
@@ -360,7 +474,7 @@ impl OxydeApp {
                 let error = match result {
                     Ok(Ok(())) => None,
                     Ok(Err(error)) => Some(error),
-                    Err(error) => Some(error.to_string()),
+                    Err(error) => Some(NetworkOperationError::Other(error.to_string())),
                 };
                 if let Ok(roots) = roots {
                     if let Some(dialog) = this.network_dialog.as_mut() {
@@ -394,14 +508,37 @@ impl OxydeApp {
                     }
                     this.apply_drive_roots(roots, cx);
                 }
-                if let Some(dialog) = this
-                    .network_dialog
-                    .as_mut()
-                    .filter(|dialog| dialog.revision == revision)
+                if direct
+                    || this
+                        .network_dialog
+                        .as_ref()
+                        .is_some_and(|dialog| dialog.revision == revision)
                 {
-                    dialog.busy = false;
+                    if let Some(dialog) = this.network_dialog.as_mut() {
+                        dialog.busy = false;
+                    }
                     if let Some(error) = error {
-                        dialog.error = Some((Message::NetworkDriveFailed, error));
+                        match error {
+                            NetworkOperationError::Busy(paths) => {
+                                let focus = cx.focus_handle();
+                                this.network_force_confirmation = Some(NetworkForceConfirmation {
+                                    paths,
+                                    revision,
+                                    direct,
+                                    focus,
+                                    confirm_focus: cx.focus_handle(),
+                                });
+                                this.network_force_focus_pending = true;
+                            }
+                            NetworkOperationError::Other(error) => {
+                                if direct {
+                                    this.file_operation_notice =
+                                        Some((Message::NetworkDriveFailed, error));
+                                } else if let Some(dialog) = this.network_dialog.as_mut() {
+                                    dialog.error = Some((Message::NetworkDriveFailed, error));
+                                }
+                            }
+                        }
                     } else {
                         this.network_dialog = None;
                         this.network_focus_restore = true;
@@ -439,7 +576,8 @@ impl OxydeApp {
 #[cfg(test)]
 mod tests {
     use super::{
-        disconnect_selected, free_letter, mappable_network_path, network_drive, normalized_share,
+        disconnect_safely, free_letter, mappable_network_path, network_drive, normalized_share,
+        NetworkOperationError,
     };
     use oxyde_lib::models::DriveInfo;
     #[test]
@@ -503,22 +641,56 @@ mod tests {
             .map(String::from)
             .collect();
         let mut calls = Vec::new();
-        let result = disconnect_selected(&paths, |path| {
+        let result = disconnect_safely(&paths, false, |path, force| {
+            assert!(!force);
             calls.push(path.to_string());
             if path == "Y:\\" {
-                Err("offline".into())
+                Err(oxyde_lib::platform::NetworkDisconnectError::Other(
+                    "offline".into(),
+                ))
             } else {
                 Ok(())
             }
         });
         assert_eq!(calls, paths[..2]);
-        assert_eq!(result, Err("Y:\\: offline".into()));
+        assert!(
+            matches!(result, Err(NetworkOperationError::Other(error)) if error == "Y:\\: offline")
+        );
         let mut completed = Vec::new();
-        assert!(disconnect_selected(&paths, |path| {
+        assert!(disconnect_safely(&paths, false, |path, force| {
+            assert!(!force);
             completed.push(path.to_string());
             Ok(())
         })
         .is_ok());
         assert_eq!(completed, paths);
+    }
+
+    #[test]
+    fn busy_connection_pauses_batch_and_only_confirmed_drive_is_forced() {
+        let paths = vec!["Z:\\".to_string(), "Y:\\".to_string(), "X:\\".to_string()];
+        let result = disconnect_safely(&paths, false, |path, force| {
+            assert!(!force);
+            if path == "Y:\\" {
+                Err(oxyde_lib::platform::NetworkDisconnectError::Busy)
+            } else {
+                Ok(())
+            }
+        });
+        let Err(NetworkOperationError::Busy(remaining)) = result else {
+            panic!("expected confirmation");
+        };
+        assert_eq!(remaining, paths[1..]);
+        let mut calls = Vec::new();
+        let result = disconnect_safely(&remaining, true, |path, force| {
+            calls.push((path.to_string(), force));
+            if path == "X:\\" {
+                Err(oxyde_lib::platform::NetworkDisconnectError::Busy)
+            } else {
+                Ok(())
+            }
+        });
+        assert_eq!(calls, vec![("Y:\\".into(), true), ("X:\\".into(), false)]);
+        assert!(matches!(result, Err(NetworkOperationError::Busy(paths)) if paths == vec!["X:\\"]));
     }
 }

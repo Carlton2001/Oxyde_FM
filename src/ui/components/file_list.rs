@@ -132,6 +132,13 @@ fn network_entry(file: &FileEntry) -> bool {
         })
 }
 
+fn network_category(file: &FileEntry, i18n: &crate::ui::i18n::I18n) -> String {
+    if let Some(category) = file.network_details.as_ref().map(|d| &d.category).filter(|category| !category.is_empty()) {
+        return category.clone();
+    }
+    i18n.text(if oxyde_lib::commands::io::is_network_server(&file.path) { Message::NetworkComputer } else { Message::NetworkOtherDevices }).to_string()
+}
+
 #[cfg(test)]
 mod network_type_tests {
     use super::*;
@@ -210,10 +217,10 @@ pub fn render_file_list(
         active_tab.date_col_width,
     );
     let network_panel = active_tab.path == "__network_vincinity__";
-    let name_w = columns.name + if network_panel { columns.size + columns.date } else { 0.0 };
-    let type_w = columns.file_type;
-    let size_w = columns.size;
-    let date_w = columns.date;
+    let name_w = if network_panel { columns.total() * 0.34 } else { columns.name };
+    let type_w = if network_panel { columns.total() * 0.22 } else { columns.file_type };
+    let size_w = if network_panel { columns.total() * 0.22 } else { columns.size };
+    let date_w = if network_panel { columns.total() * 0.22 } else { columns.date };
     let total_w = columns.total();
 
     let is_active_pane = view.state.active_pane_id == pane_id;
@@ -365,8 +372,9 @@ pub fn render_file_list(
                                                 .w(px(total_w))
                                                 .bg(if is_selected { theme.selected } else if is_active_pane { theme.active_background } else { theme.background })
                                                 .when(!is_selected, |s| s.hover(|s| s.bg(theme.hover)))
-                                                .when(show_tooltips && show_media_previews, |d| d.tooltip(Tooltip::for_file_full(file_name_tt.clone(), path_tt, ext_tt.clone(), size_tt.clone(), date_tt.clone())))
-                                                .when(show_tooltips && !show_media_previews, |d| d.tooltip(Tooltip::for_file_no_preview(file_name_tt, ext_tt, size_tt, date_tt)))
+                                                .when(show_tooltips && network_entry(file), |d| d.tooltip(Tooltip::for_network(file.clone())))
+                                                .when(show_tooltips && !network_entry(file) && show_media_previews, |d| d.tooltip(Tooltip::for_file_full(file_name_tt.clone(), path_tt, ext_tt.clone(), size_tt.clone(), date_tt.clone())))
+                                                .when(show_tooltips && !network_entry(file) && !show_media_previews, |d| d.tooltip(Tooltip::for_file_no_preview(file_name_tt, ext_tt, size_tt, date_tt)))
                                                 .on_mouse_down(MouseButton::Left, {
                                                     let p = path.clone();
                                                     let h_inner_inner = h.clone();
@@ -560,7 +568,7 @@ pub fn render_file_list(
                                                                 .flex()
                                                                 .items_center()
                                                                 .child({
-                                                                    let icon_type = crate::ui::components::icons::get_icon_type(&file_name, is_dir, Some(&path_str), file.is_symlink, file.is_junction);
+                                                                    let icon_type = crate::ui::components::icons::entry_icon(file);
                                                                     div().flex_none().mr_2().child(render_file_icon(path_str.clone(), icon_type, rems(1.0), if is_dir { theme.accent } else { theme.text_muted }, use_system_icons, false))
                                                                 })
                                                                 .child(match editing_view {
@@ -648,7 +656,12 @@ pub fn render_file_list(
                                                                 })
                                                         )
                                                 })
-                                                .child(div().w(px(type_w)).flex_none().px(rems(0.5)).text_color(theme.text_muted).truncate().text_size(rems(0.75)).when(is_dimmed, |d| d.opacity(0.5)).child(file_type_display(file, cx.i18n())))
+                                                .when(network_panel, |row| {
+                                                    let details = file.network_details.as_ref();
+                                                    let category = network_category(file, cx.i18n());
+                                                    row.children([(type_w, category), (size_w, details.map(|d| d.workgroup.clone()).unwrap_or_default()), (date_w, details.map(|d| d.location.clone()).unwrap_or_default())].into_iter().map(|(width, value)| div().w(px(width)).flex_none().px(rems(0.5)).text_color(theme.text_muted).truncate().text_size(rems(0.75)).child(value)))
+                                                })
+                                                .when(!network_panel, |row| row.child(div().w(px(type_w)).flex_none().px(rems(0.5)).text_color(theme.text_muted).truncate().text_size(rems(0.75)).when(is_dimmed, |d| d.opacity(0.5)).child(file_type_display(file, cx.i18n()))))
                                                 .when(!network_panel, |row| row
                                                     .child(div().w(px(size_w)).flex_none().px(rems(0.5)).text_align(TextAlign::Right).text_color(theme.text_muted).truncate().text_size(rems(0.75)).when(is_dimmed, |d| d.opacity(0.5)).child(format_size(file.size, is_dir, file.is_calculated, language)))
                                                     .child(div().w(px(date_w)).flex_none().px(rems(0.5)).text_color(theme.text_muted).truncate().text_size(rems(0.75)).when(is_dimmed, |d| d.opacity(0.5)).child(format_date(file.modified, crate::ui::format::date_format(cx)))))
@@ -1186,13 +1199,7 @@ fn render_grid_file_list(
                                     } else {
                                         vec![path.clone()]
                                     };
-                                    let icon = crate::ui::components::icons::get_icon_type(
-                                        &name,
-                                        is_dir,
-                                        Some(&path),
-                                        file.is_symlink,
-                                        file.is_junction,
-                                    );
+                                    let icon = crate::ui::components::icons::entry_icon(file);
                                     let inline_editing = inline_rename
                                         && editing_path.as_deref() == Some(path.as_str());
                                     let editing_view =
@@ -1234,7 +1241,8 @@ fn render_grid_file_list(
                                         })
                                         .group("file-grid-card")
                                         .relative().when(!is_selected, |d| d.hover(|d| d.bg(theme.hover)))
-                                        .when(show_tooltips && show_media_previews, |d| {
+                                        .when(show_tooltips && network_entry(file), |d| d.tooltip(Tooltip::for_network(file.clone())))
+                                                .when(show_tooltips && !network_entry(file) && show_media_previews, |d| {
                                             d.tooltip(Tooltip::for_file_full(
                                                 file_name_tt.clone(),
                                                 path_tt.clone(),
@@ -1243,7 +1251,7 @@ fn render_grid_file_list(
                                                 date_tt,
                                             ))
                                         })
-                                        .when(show_tooltips && !show_media_previews, |d| {
+                                        .when(show_tooltips && !network_entry(file) && !show_media_previews, |d| {
                                             d.tooltip(Tooltip::for_file_no_preview(
                                                 file_name_tt,
                                                 ext_tt,
@@ -1442,7 +1450,7 @@ fn render_grid_file_list(
                                                 .text_ellipsis()
                                                 .when(file.is_hidden || file.is_system, |d| d.opacity(0.5))
                                                 .child(if network_entry(file) {
-                                                    file_type_display(file, cx.i18n())
+                                                    network_category(file, cx.i18n())
                                                 } else if file.is_dir {
                                                     cx.i18n().text(Message::FileTypeFolder).to_uppercase()
                                                 } else {
@@ -1936,6 +1944,13 @@ fn render_headers(
     let current_col = tab.sort_column;
     let network_panel = tab.path == "__network_vincinity__";
     let current_dir = tab.sort_direction;
+    if network_panel {
+        return div().flex().items_center().h(px(crate::ui::style::row_height())).text_color(theme.text_muted).font_weight(FontWeight::BOLD).flex_none()
+            .child(header_cell(i18n.text(Message::ColumnName).as_ref(), name_w, current_col == SortColumn::Name, current_dir, false, theme, handle.clone(), format!("network-name-{}", pane_id), {
+                let h = handle.clone(); let pid = pane_id.clone(); move |_, _, cx| { h.update(cx, |this, cx| this.toggle_sort(&pid, SortColumn::Name, cx)); }
+            }))
+            .children([(Message::NetworkCategory, type_w), (Message::NetworkWorkgroup, size_w), (Message::NetworkLocation, date_w)].into_iter().map(|(message, width)| div().w(px(width)).flex_none().h_full().flex().items_center().px(rems(0.5)).border_l(rems(0.0625)).border_color(theme.border).text_size(rems(0.75)).child(i18n.text(message))));
+    }
     // Check filters
     let name_filtered = !tab.filter_name.is_empty();
 

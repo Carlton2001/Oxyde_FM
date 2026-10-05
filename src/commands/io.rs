@@ -70,6 +70,7 @@ pub fn get_file_entry_from_metadata(
         folders_count: None,
         files_count: None,
         original_path: None,
+        network_details: None,
         deleted_time: None,
     }
 }
@@ -107,6 +108,7 @@ pub async fn list_dir(
                 folders_count: None,
                 files_count: None,
                 original_path: Some(t.original_path),
+                network_details: None,
                 deleted_time: Some(t.deleted_time as i64),
             })
             .collect();

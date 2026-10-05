@@ -36,6 +36,9 @@ pub enum IconType {
     Network,
     Globe,
     Trash,
+    Monitor,
+    Smartphone,
+    Printer,
 }
 
 impl IconType {
@@ -64,8 +67,23 @@ impl IconType {
             Self::Network => "icons/network.svg",
             Self::Globe => "icons/globe.svg",
             Self::Trash => "icons/trash.svg",
+            Self::Monitor => "icons/monitor.svg",
+            Self::Smartphone => "icons/smartphone.svg",
+            Self::Printer => "icons/printer.svg",
         }
     }
+}
+
+pub(crate) fn entry_icon(file: &oxyde_lib::models::FileEntry) -> IconType {
+    if let Some(details) = &file.network_details {
+        let category = details.category.to_lowercase();
+        if category.contains("phone") || category.contains("téléphone") || category.contains("mobile") { return IconType::Smartphone; }
+        if category.contains("computer") || category.contains("ordinateur") { return IconType::Monitor; }
+        if category.contains("printer") || category.contains("imprimante") { return IconType::Printer; }
+        if !category.is_empty() { return IconType::Box; }
+    }
+    if oxyde_lib::commands::io::is_network_server(&file.path) { return IconType::Monitor; }
+    get_icon_type(&file.name, file.is_dir, Some(&file.path), file.is_symlink, file.is_junction)
 }
 
 // ---------------------------------------------------------------------------
@@ -466,5 +484,20 @@ mod system_icon_tests {
         let mut image = image::RgbaImage::from_pixel(1, 1, image::Rgba([255, 205, 40, 128]));
         rgba_to_bgra(&mut image);
         assert_eq!(image.get_pixel(0, 0).0, [40, 205, 255, 128]);
+    }
+
+    #[test]
+    fn network_categories_choose_device_icons_without_relabeling_normal_folders() {
+        use super::{entry_icon, IconType};
+        for (category, expected) in [("Ordinateur", IconType::Monitor), ("Computer", IconType::Monitor), ("Téléphones", IconType::Smartphone), ("Phones", IconType::Smartphone), ("Imprimantes", IconType::Printer), ("Autres périphériques", IconType::Box)] {
+            let entry = oxyde_lib::models::FileEntry {
+                path: "::{device}".into(),
+                network_details: Some(oxyde_lib::models::file_entry::NetworkDetails { category: category.into(), ..Default::default() }),
+                ..Default::default()
+            };
+            assert_eq!(entry_icon(&entry), expected);
+        }
+        assert_eq!(entry_icon(&oxyde_lib::models::FileEntry { path: "\\\\PCS".into(), ..Default::default() }), IconType::Monitor);
+        assert_eq!(entry_icon(&oxyde_lib::models::FileEntry { path: "\\\\PCS\\so39i Agde".into(), is_dir: true, ..Default::default() }), IconType::Folder);
     }
 }

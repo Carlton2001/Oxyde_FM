@@ -68,11 +68,19 @@ fn completion_parts(text: &str) -> Option<(String, String, char)> {
 }
 
 pub(crate) fn native_path_text(path: &str) -> String {
+    if path == "__network_vincinity__" {
+        return "\\\\".to_string();
+    }
     if cfg!(target_os = "windows") && !path.contains("://") && !path.starts_with("::{") {
         path.replace('/', "\\")
     } else {
         path.to_string()
     }
+}
+
+pub(crate) fn navigation_path_text(text: &str) -> String {
+    let path = native_path_text(text.trim());
+    if path == "\\\\" { "__network_vincinity__".to_string() } else { path }
 }
 
 fn completion_matches(name: &str, prefix: &str) -> bool {
@@ -1044,6 +1052,10 @@ mod completion_tests {
 
     #[::core::prelude::v1::test]
     fn native_display_preserves_virtual_paths_and_unc_roots() {
+        assert_eq!(super::native_path_text("__network_vincinity__"), "\\\\");
+        assert_eq!(super::navigation_path_text(" \\\\ "), "__network_vincinity__");
+        assert_eq!(super::navigation_path_text("\\\\PCS"), "\\\\PCS");
+        assert_eq!(super::navigation_path_text("\\\\PCS\\so39i Agde"), "\\\\PCS\\so39i Agde");
         assert_eq!(super::native_path_text("trash://"), "trash://");
         assert_eq!(super::native_path_text("search://query"), "search://query");
         if cfg!(target_os = "windows") {

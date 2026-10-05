@@ -4,7 +4,27 @@ use std::path::Path;
 use std::time::SystemTime;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct NetworkDetails {
+    pub category: String,
+    pub workgroup: String,
+    pub location: String,
+}
+
+#[cfg(test)]
+mod network_metadata_tests {
+    #[test]
+    fn older_entries_without_network_metadata_still_deserialize() {
+        let mut json = serde_json::to_value(super::FileEntry::default()).unwrap();
+        json.as_object_mut().unwrap().remove("network_details");
+        let file: super::FileEntry = serde_json::from_value(json).unwrap();
+        assert!(file.network_details.is_none());
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct FileEntry {
+    #[serde(default)]
+    pub network_details: Option<NetworkDetails>,
     pub name: String,
     pub path: String,
     pub is_dir: bool,
@@ -169,6 +189,8 @@ pub struct SnapRect {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NetResource {
+    #[serde(default)]
+    pub network_details: Option<NetworkDetails>,
     pub name: String,
     pub remote_path: String,
     pub resource_type: u32, // 1 = Disk, 2 = Print, etc.
@@ -238,6 +260,7 @@ pub fn get_file_entry_from_path(path: &Path) -> Result<FileEntry, CommandError> 
         is_protected: false,
         is_calculated: false,
         original_path: None,
+        network_details: None,
         deleted_time: None,
     })
 }

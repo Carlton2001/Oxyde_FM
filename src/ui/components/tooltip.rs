@@ -33,6 +33,26 @@ mod filename_tests {
     use unicode_segmentation::UnicodeSegmentation;
 
     #[test]
+    fn network_tooltips_show_only_available_network_properties() {
+        let file = oxyde_lib::models::FileEntry {
+            name: "PC".into(), path: "\\\\PC".into(),
+            network_details: Some(oxyde_lib::models::file_entry::NetworkDetails { category: "Computer".into(), workgroup: "WORKGROUP".into(), location: "Bbox-445D52D4".into() }),
+            ..Default::default()
+        };
+        for language in [crate::ui::i18n::Language::French, crate::ui::i18n::Language::English] {
+            let i18n = crate::ui::i18n::I18n::for_language(language);
+            let lines = super::network_tooltip_lines(&file, &i18n);
+            assert_eq!(lines.len(), 3);
+            assert!(lines[0].contains("Computer"));
+            assert!(lines[1].contains("WORKGROUP"));
+            assert!(lines[2].contains("Bbox-445D52D4"));
+            assert!(lines.iter().all(|line| !line.starts_with("Type")));
+            let mut device = file.clone(); device.network_details = None;
+            assert_eq!(super::network_tooltip_lines(&device, &i18n).len(), 1);
+        }
+    }
+
+    #[test]
     fn wraps_without_losing_text_or_splitting_the_extension() {
         for name in ["long_filename_without_spaces.pdf", "archive.tar.gz", "été👩‍💻_document.docx", ".gitignore", ""] {
             let ranges = filename_line_ranges(name, 8.0, |index| name[..index].graphemes(true).count() as f32);
@@ -66,6 +86,7 @@ pub struct Tooltip {
 }
 
 struct FileInfo {
+    network: Option<oxyde_lib::models::FileEntry>,
     ext: String,
     size: (u64, bool, bool),
     date: u64,
@@ -103,6 +124,13 @@ enum PreviewData {
 }
 
 impl Tooltip {
+    pub fn for_network(file: oxyde_lib::models::FileEntry) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
+        move |_, cx| cx.new(|_| Self {
+            title: file.name.clone().into(), meta: None, shortcut: None,
+            file_info: Some(FileInfo { network: Some(file.clone()), ext: "Réseau".into(), size: (0, false, false), date: 0 }),
+            preview_view: None,
+        }).into()
+    }
     /// Keep action labels and their optional keyboard shortcut on one line.
     pub fn with_shortcut(
         title: impl Into<SharedString>,
@@ -166,6 +194,7 @@ impl Tooltip {
                 meta: None,
                 shortcut: None,
                 file_info: Some(FileInfo {
+                    network: None,
                     ext: ext.clone(),
                     size: size.clone(),
                     date: date.clone(),
@@ -221,7 +250,7 @@ impl Tooltip {
                 title: SharedString::from(name),
                 meta: None,
                 shortcut: None,
-                file_info: Some(FileInfo { ext, size, date }),
+                file_info: Some(FileInfo { network: None, ext, size, date }),
                 preview_view,
             }
         })
@@ -330,6 +359,9 @@ impl Render for Tooltip {
                 )
             })
             .when_some(self.file_info.as_ref(), |this, info| {
+                if let Some(file) = &info.network {
+                    return this.child(div().flex().flex_col().text_size(rems(0.6875)).text_color(theme.text_muted).children(network_tooltip_lines(file, cx.i18n()).into_iter().map(|line| div().child(line))));
+                }
                 let i18n = cx.i18n();
                 let mut args = FluentArgs::new();
                 let type_label = match info.ext.as_str() {
@@ -586,6 +618,15 @@ fn fitted_preview_size(image: &RenderImage, maximum_width: Pixels) -> Size<Pixel
     let ratio = natural.width.0 as f32 / (natural.height.0 as f32).max(1.0);
     let width = maximum_width.min(rem_pixels(rems(23.75)) * ratio);
     size(width, width / ratio.max(0.001))
+}
+
+fn network_tooltip_lines(file: &oxyde_lib::models::FileEntry, i18n: &crate::ui::i18n::I18n) -> Vec<SharedString> {
+    let details = file.network_details.as_ref();
+    let category = details.map(|d| d.category.clone()).filter(|value| !value.is_empty()).unwrap_or_else(|| i18n.text(if oxyde_lib::commands::io::is_network_server(&file.path) { Message::NetworkComputer } else { Message::NetworkOtherDevices }).to_string());
+    [(Message::TooltipNetworkCategory, category), (Message::TooltipNetworkWorkgroup, details.map(|d| d.workgroup.clone()).unwrap_or_default()), (Message::TooltipNetworkLocation, details.map(|d| d.location.clone()).unwrap_or_default())]
+        .into_iter().filter(|(_, value)| !value.is_empty()).map(|(message, value)| {
+            let mut args = FluentArgs::new(); args.set("value", value); i18n.text_with_args(message, &args)
+        }).collect()
 }
 
 impl Render for PreviewTask {

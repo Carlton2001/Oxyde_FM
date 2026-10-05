@@ -32,8 +32,8 @@ impl Platform for LinuxPlatform {
     fn map_network_drive(&self, _letter: String, _path: String, _reconnect: bool, _username: Option<String>, _password: Option<String>) -> Result<(), String> {
         Err("Network drive mapping is only available on Windows".into())
     }
-    fn disconnect_network_drive(&self, _path: String, _force: bool) -> Result<(), String> {
-        Err("Network drive disconnect is only available on Windows".into())
+    fn disconnect_network_drive(&self, _path: String, _force: bool) -> Result<(), super::NetworkDisconnectError> {
+        Err(super::NetworkDisconnectError::Other("Network drive disconnect is only available on Windows".into()))
     }
     fn eject_drive(&self, path: &str) -> Result<(), String> {
         let output = std::process::Command::new("findmnt")

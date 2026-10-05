@@ -1,5 +1,11 @@
 use crate::models::{DriveInfo, QuickAccessItem};
 
+#[derive(Debug)]
+pub enum NetworkDisconnectError {
+    Busy,
+    Other(String),
+}
+
 #[derive(Clone, Copy)]
 pub enum ThreadPriority {
     Background,
@@ -47,7 +53,7 @@ pub trait Platform: Send + Sync {
     fn is_network_path(&self, path: &std::path::Path) -> bool;
     /// Blocking network operations; call on a background worker.
     fn map_network_drive(&self, letter: String, path: String, reconnect: bool, username: Option<String>, password: Option<String>) -> Result<(), String>;
-    fn disconnect_network_drive(&self, path: String, force: bool) -> Result<(), String>;
+    fn disconnect_network_drive(&self, path: String, force: bool) -> Result<(), NetworkDisconnectError>;
     fn physical_disk_id(&self, path: &std::path::Path) -> u64;
     fn is_ssd(&self, path: &std::path::Path) -> bool;
 

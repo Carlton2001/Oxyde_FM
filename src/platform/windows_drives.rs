@@ -1,5 +1,30 @@
 use crate::models::DriveInfo;
 
+fn mounted_drive_label(volume_label: String, remote_path: Option<&str>) -> String {
+    if let Some(name) = remote_path
+        .and_then(|path| path.strip_prefix("\\\\"))
+        .and_then(|path| path.split('\\').filter(|part| !part.is_empty()).nth(1))
+    {
+        return name.to_string();
+    }
+    if volume_label.is_empty() { "Local Disk".to_string() } else { volume_label }
+}
+
+#[cfg(test)]
+mod label_tests {
+    use super::mounted_drive_label;
+
+    #[test]
+    fn mapped_drive_uses_share_name_instead_of_remote_volume_label() {
+        for path in ["\\\\PCS\\so39i Agde", "\\\\PCS\\so39i Agde\\", "\\\\PCS\\so39i Agde\\folder"] {
+            assert_eq!(mounted_drive_label("Data".into(), Some(path)), "so39i Agde");
+        }
+        assert_eq!(mounted_drive_label("Data".into(), None), "Data");
+        assert_eq!(mounted_drive_label("Data".into(), Some("\\\\PCS")), "Data");
+        assert_eq!(mounted_drive_label(String::new(), None), "Local Disk");
+    }
+}
+
 pub fn list_drive_roots() -> Vec<DriveInfo> {
     use windows::core::PCWSTR;
     use windows::Win32::Storage::FileSystem::{GetDriveTypeW, GetLogicalDriveStringsW};
@@ -521,11 +546,7 @@ pub fn list_drives(skip_hardware_info: bool) -> Vec<DriveInfo> {
 
                 drives.push(DriveInfo {
                     path: drive_path.to_string(),
-                    label: if label.is_empty() {
-                        "Local Disk".to_string()
-                    } else {
-                        label
-                    },
+                    label: mounted_drive_label(label, remote_path.as_deref()),
                     drive_type,
                     is_readonly: is_readonly_vol || win_type == 5, // CD-ROM is read-only
                     total_bytes,

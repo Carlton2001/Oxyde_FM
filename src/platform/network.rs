@@ -23,6 +23,32 @@ use windows::Win32::UI::WindowsAndMessaging::{
 
 use crate::models::FileEntry;
 
+/// Read the actual Network-folder columns while the shell item is alive on its COM worker.
+unsafe fn shell_network_details(item: &IShellItem) -> Option<crate::models::file_entry::NetworkDetails> {
+    use windows::Win32::UI::Shell::{SHGetIDListFromObject, SHBindToParent, IShellFolder2, StrRetToStrW};
+    use windows::Win32::UI::Shell::Common::{ITEMIDLIST, SHELLDETAILS};
+    use windows::Win32::System::Com::CoTaskMemFree;
+    let pidl = unsafe { SHGetIDListFromObject(item) }.ok()?;
+    let result = (|| {
+        let mut child: *mut ITEMIDLIST = std::ptr::null_mut();
+        let folder: IShellFolder2 = unsafe { SHBindToParent(pidl, Some(&mut child)) }.ok()?;
+        let get = |column| -> String {
+            let mut details = SHELLDETAILS::default();
+            if unsafe { folder.GetDetailsOf(child, column, &mut details) }.is_err() { return String::new(); }
+            // SHELLDETAILS is packed: copy STRRET before passing its address.
+            let mut text = details.str;
+            let mut value = PWSTR::null();
+            if unsafe { StrRetToStrW(&mut text, Some(child), &mut value) }.is_err() { return String::new(); }
+            let result = unsafe { value.to_string() }.unwrap_or_default();
+            unsafe { CoTaskMemFree(Some(value.as_ptr().cast())) };
+            result
+        };
+        Some(crate::models::file_entry::NetworkDetails { category: get(1), workgroup: get(2), location: get(3) })
+    })();
+    unsafe { CoTaskMemFree(Some(pidl.cast())) };
+    result
+}
+
 pub fn list_network_vicinity() -> Result<Vec<FileEntry>, crate::models::CommandError> {
     list_network_entries(None)
 }
@@ -36,6 +62,7 @@ pub fn list_network_entries(path: Option<String>) -> Result<Vec<FileEntry>, crat
         .filter(|r| !shares_only || r.resource_type == RESOURCETYPE_DISK.0)
         .map(|r| {
             FileEntry {
+                network_details: r.network_details,
                 name: r.name,
                 path: r.remote_path,
                 is_dir: !r.is_media_device.unwrap_or(false),
@@ -164,6 +191,7 @@ pub fn get_network_resources(path: Option<String>) -> Result<Vec<NetResource>, S
                                 // Ignore empty unreadable names
                                 if !name.is_empty() {
                                     resources.push(NetResource {
+                                        network_details: shell_network_details(i),
                                         name,
                                         remote_path,
                                         resource_type: 1, // Disk
@@ -225,6 +253,7 @@ pub fn get_network_resources(path: Option<String>) -> Result<Vec<NetResource>, S
 
                                             if !exists && !server_name.is_empty() {
                                                 resources.push(NetResource {
+                                                    network_details: None,
                                                     name: server_name.to_string(),
                                                     remote_path: server_path,
                                                     resource_type: 1, // Disk
@@ -317,6 +346,7 @@ pub fn get_network_resources(path: Option<String>) -> Result<Vec<NetResource>, S
                             };
 
                             resources.push(NetResource {
+                                network_details: None,
                                 name,
                                 remote_path: remote_name,
                                 resource_type: item.dwType.0,
@@ -437,7 +467,7 @@ pub fn map_network_drive(
     }
 }
 
-pub fn disconnect_network_drive(letter: String, force: bool) -> Result<(), String> {
+pub fn disconnect_network_drive(letter: String, force: bool) -> Result<(), super::NetworkDisconnectError> {
     #[cfg(target_os = "windows")]
     {
         unsafe {
@@ -451,13 +481,16 @@ pub fn disconnect_network_drive(letter: String, force: bool) -> Result<(), Strin
                 WNetCancelConnection2W(PCWSTR(wide_local.as_ptr()), CONNECT_UPDATE_PROFILE, force);
             if result == WIN32_ERROR(0) {
                 Ok(())
+            } else if result == windows::Win32::Foundation::ERROR_OPEN_FILES
+                || result == windows::Win32::Foundation::ERROR_DEVICE_IN_USE {
+                Err(super::NetworkDisconnectError::Busy)
             } else {
-                Err(std::io::Error::from_raw_os_error(result.0 as i32).to_string())
+                Err(super::NetworkDisconnectError::Other(std::io::Error::from_raw_os_error(result.0 as i32).to_string()))
             }
         }
     }
     #[cfg(not(target_os = "windows"))]
     {
-        Err("Network drive disconnect is only available on Windows".to_string())
+        Err(super::NetworkDisconnectError::Other("Network drive disconnect is only available on Windows".to_string()))
     }
 }

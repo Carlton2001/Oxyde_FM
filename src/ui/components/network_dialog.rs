@@ -15,6 +15,136 @@ use crate::ui::theme::ThemeContext;
 use gpui::prelude::*;
 use gpui::*;
 
+pub(crate) fn render_force_confirmation(
+    view: &OxydeApp,
+    handle: Entity<OxydeApp>,
+    window: &mut Window,
+    cx: &mut Context<OxydeApp>,
+) -> impl IntoElement {
+    let confirmation = view
+        .network_force_confirmation
+        .as_ref()
+        .expect("force confirmation");
+    let theme = *cx.theme();
+    let mut args = FluentArgs::new();
+    args.set(
+        "drive",
+        confirmation.paths.first().cloned().unwrap_or_default(),
+    );
+    let cancel = handle.clone();
+    let force = handle.clone();
+    let keyboard = handle.clone();
+    let close = handle.clone();
+    div()
+        .absolute()
+        .inset_0()
+        .track_focus(&confirmation.focus)
+        .on_key_down(move |event, window, cx| {
+            keyboard.update(cx, |view, cx| match event.keystroke.key.as_str() {
+                "escape" => view.resolve_network_force(false, window, cx),
+                "tab" => {
+                    if let Some(confirmation) = &view.network_force_confirmation {
+                        let focus = if confirmation.confirm_focus.is_focused(window) {
+                            &confirmation.focus
+                        } else {
+                            &confirmation.confirm_focus
+                        };
+                        window.focus(focus, cx);
+                    }
+                }
+                "enter" | "space" => {
+                    let force = view
+                        .network_force_confirmation
+                        .as_ref()
+                        .is_some_and(|confirmation| confirmation.confirm_focus.is_focused(window));
+                    view.resolve_network_force(force, window, cx);
+                }
+                _ => {}
+            });
+            cx.stop_propagation();
+        })
+        .on_action(|_: &crate::ui::app::Supprimer, _, cx| cx.stop_propagation())
+        .on_action(|_: &crate::ui::app::Ouvrir, _, cx| cx.stop_propagation())
+        .on_action(|_: &crate::ui::app::Renommer, _, cx| cx.stop_propagation())
+        .on_action(|_: &crate::ui::app::Copier, _, cx| cx.stop_propagation())
+        .on_action(|_: &crate::ui::app::Couper, _, cx| cx.stop_propagation())
+        .on_action(|_: &crate::ui::app::Coller, _, cx| cx.stop_propagation())
+        .on_action(|_: &crate::ui::app::ToutSelectionner, _, cx| cx.stop_propagation())
+        .child(
+            Modal::new(
+                "network-force-confirmation",
+                cx.i18n().text(Message::DisconnectThisNetworkDrive),
+                div().child(cx.i18n().text_with_args(Message::NetworkForcePrompt, &args)),
+            )
+            .title_icon("icons/triangle-alert.svg")
+            .header(
+                div()
+                    .w_full()
+                    .flex()
+                    .items_center()
+                    .gap(rems(0.5))
+                    .child(
+                        svg()
+                            .path("icons/triangle-alert.svg")
+                            .size(rems(1.0))
+                            .text_color(theme.error),
+                    )
+                    .child(
+                        div()
+                            .flex_1()
+                            .text_size(rems(0.875))
+                            .child(cx.i18n().text(Message::DisconnectThisNetworkDrive)),
+                    )
+                    .child(
+                        div()
+                            .id("network-force-close")
+                            .p_1()
+                            .on_click(move |_, window, cx| {
+                                close.update(cx, |view, cx| {
+                                    view.resolve_network_force(false, window, cx)
+                                });
+                            })
+                            .child(
+                                svg()
+                                    .path("icons/x.svg")
+                                    .size(rems(1.0))
+                                    .text_color(theme.text_muted),
+                            ),
+                    ),
+            )
+            .action(
+                action_button("network-force-cancel")
+                    .bg(theme.control_hover)
+                    .border(rems(0.0625))
+                    .border_color(if confirmation.focus.is_focused(window) {
+                        theme.accent
+                    } else {
+                        theme.control_hover
+                    })
+                    .child(cx.i18n().text(Message::Cancel))
+                    .on_click(move |_, window, cx| {
+                        cancel.update(cx, |view, cx| view.resolve_network_force(false, window, cx));
+                    }),
+            )
+            .action(
+                action_button("network-force-accept")
+                    .track_focus(&confirmation.confirm_focus)
+                    .bg(theme.error)
+                    .text_color(theme.text_on_accent)
+                    .border(rems(0.0625))
+                    .border_color(if confirmation.confirm_focus.is_focused(window) {
+                        theme.text
+                    } else {
+                        theme.error
+                    })
+                    .child(cx.i18n().text(Message::NetworkForceAction))
+                    .on_click(move |_, window, cx| {
+                        force.update(cx, |view, cx| view.resolve_network_force(true, window, cx));
+                    }),
+            ),
+        )
+}
+
 fn update_letter_scroll(view: &mut OxydeApp, position: Point<Pixels>, cx: &mut App) {
     let Some(dialog) = &mut view.network_dialog else {
         return;

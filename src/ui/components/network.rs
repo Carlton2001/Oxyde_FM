@@ -40,9 +40,9 @@ pub(crate) fn network_actions(
         items.push(
             DropdownItem::new(
                 i18n.text(Message::MapNetworkDrive).to_string(),
-            move |window, cx| {
+                move |window, cx| {
                     h.update(cx, |this, cx| {
-                    this.network_drive_dialog(false, path.clone(), window, cx)
+                        this.network_drive_dialog(false, path.clone(), window, cx)
                     });
                 },
             )
@@ -57,10 +57,19 @@ pub(crate) fn network_actions(
         };
         items.push(
             DropdownItem::new(
-                i18n.text(Message::DisconnectNetworkDrive).to_string(),
-            move |window, cx| {
+                i18n.text(if neighborhood {
+                    Message::DisconnectNetworkDrive
+                } else {
+                    Message::DisconnectThisNetworkDrive
+                })
+                .to_string(),
+                move |window, cx| {
                     handle.update(cx, |this, cx| {
-                    this.network_drive_dialog(true, path.clone(), window, cx)
+                        if let Some(path) = &path {
+                            this.disconnect_network_drive_direct(path, cx);
+                        } else {
+                            this.network_drive_dialog(true, None, window, cx);
+                        }
                     });
                 },
             )

@@ -214,6 +214,7 @@ fn list_iso(path: &Path, internal_prefix: &str) -> Result<Vec<FileEntry>, Comman
             is_readonly: true,
             is_protected: false,
             original_path: None,
+            network_details: None,
             deleted_time: None,
         });
     }
@@ -292,6 +293,7 @@ fn list_zip(path: &Path, internal_prefix: &str) -> Result<Vec<FileEntry>, Comman
                 is_readonly: false,
                 is_protected: false,
                 original_path: None,
+                network_details: None,
                 deleted_time: None,
             });
         }
@@ -341,6 +343,7 @@ fn list_seven_zip(path: &Path, internal_prefix: &str) -> Result<Vec<FileEntry>, 
                         is_readonly: false,
                         is_protected: false,
                         original_path: None,
+                        network_details: None,
                         deleted_time: None,
                     });
                 }
@@ -419,6 +422,7 @@ fn list_tar(
                 is_readonly: false,
                 is_protected: false,
                 original_path: None,
+                network_details: None,
                 deleted_time: None,
             });
         }
