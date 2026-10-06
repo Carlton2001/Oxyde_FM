@@ -419,6 +419,11 @@ use gpui::prelude::*;
 use gpui::*;
 
 struct SystemIconAsset;
+pub(crate) fn invalidate_file_icon(path: &str, cx: &mut App) {
+    for large in [false, true] {
+        cx.remove_asset::<SystemIconAsset>(&(SharedString::from(path.to_string()), large));
+    }
+}
 impl Asset for SystemIconAsset {
     type Source = (SharedString, bool);
     type Output = Result<std::sync::Arc<RenderImage>, ImageCacheError>;

@@ -58,6 +58,9 @@ fn date_group_button(pane_id: &str, enabled: bool, handle: Entity<OxydeApp>, the
 }
 
 struct GridThumbnailAsset;
+pub(crate) fn invalidate_thumbnail(path: &str, cx: &mut App) {
+    cx.remove_asset::<GridThumbnailAsset>(&SharedString::from(path.to_string()));
+}
 
 impl Asset for GridThumbnailAsset {
     type Source = SharedString;

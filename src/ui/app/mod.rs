@@ -46,6 +46,18 @@ actions!(
     ]
 );
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SettingsDataAction {
+    ClearCache,
+    ResetPreferences,
+}
+
+pub(crate) struct SettingsDataConfirmation {
+    pub action: SettingsDataAction,
+    pub focus: FocusHandle,
+    pub confirm_focus: FocusHandle,
+}
+
 #[derive(Debug, PartialEq, Clone)]
 pub enum DragTarget {
     SidebarV {
@@ -475,9 +487,12 @@ pub struct OxydeApp {
     pub(crate) tools_button_bounds: Option<Bounds<Pixels>>,
     pub(crate) settings_submenu_bounds: Option<Bounds<Pixels>>,
     pub(crate) settings_picker: Option<crate::ui::components::settings::SettingsPicker>,
+    pub(crate) settings_confirmation: Option<SettingsDataConfirmation>,
     pub(crate) theme_id: crate::ui::theme::ThemeId,
     pub(crate) language: crate::ui::i18n::Language,
     pub(crate) settings_error: Option<Message>,
+    pub(crate) settings_data_status: Option<Message>,
+    pub(crate) clearing_cache: bool,
     config: oxyde_lib::models::AppConfig,
     config_path: Option<std::path::PathBuf>,
     preferences_load_failed: bool,
@@ -916,9 +931,12 @@ impl OxydeApp {
             tools_button_bounds: None,
             settings_submenu_bounds: None,
             settings_picker: None,
+            settings_confirmation: None,
             theme_id: crate::ui::theme::ThemeId::from_id(&config.theme),
             language: crate::ui::i18n::Language::from_id(&config.language),
             settings_error: load_failed.then_some(Message::SettingsLoadError),
+            settings_data_status: None,
+            clearing_cache: false,
             config,
             config_path,
             preferences_load_failed: load_failed,
@@ -3736,6 +3754,14 @@ impl Render for OxydeApp {
         if self.settings_open {
             use crate::ui::components::settings::render_settings_panel;
             root = root.child(deferred(render_settings_panel(self, handle.clone(), _window, cx)));
+        }
+
+        if self.settings_confirmation.is_some() {
+            root = root.child(deferred(
+                crate::ui::components::settings::render_settings_confirmation(
+                    self, handle.clone(), _window, cx,
+                ),
+            ));
         }
 
         if let Some(pending) = self.pending_file_operations.front() {

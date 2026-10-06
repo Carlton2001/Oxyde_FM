@@ -852,43 +852,53 @@ fn execute_shell_verb_by_canonical_name(
 }
 
 pub fn clear_app_cache() -> Result<(), CommandError> {
-    // 1. Clear Icon RAM Cache
+    #[cfg(target_os = "windows")]
     super::icons::purge_icon_cache();
-
-    // 2. Clear app_cache_dir (Icons, etc.)
-    if let Some(mut path) = dirs::cache_dir() {
-        path.push("oxyde");
-        if path.exists() {
-            let _ = std::fs::remove_dir_all(&path);
-            let _ = std::fs::create_dir_all(&path);
-        }
+    if let Some(root) = dirs::cache_dir() {
+        clear_generated_cache(&root.join("oxyde"))?;
     }
+    Ok(())
+}
 
-    // 3. Clear local data (thumbnails, thumbnails.db, etc.)
-    if let Some(mut path) = dirs::data_local_dir() {
-        path.push("oxyde");
-        if path.exists() {
-            if let Ok(entries) = std::fs::read_dir(&path) {
-                for entry in entries.filter_map(|e| e.ok()) {
-                    let entry_path = entry.path();
-                    let file_name = entry_path.file_name().unwrap_or_default().to_string_lossy();
-
-                    if file_name.to_lowercase().contains("ebwebview")
-                        || file_name.to_lowercase() == "webview2"
-                    {
-                        continue;
-                    }
-
-                    if entry_path.is_dir() {
-                        let _ = std::fs::remove_dir_all(&entry_path);
-                    } else {
-                        let _ = std::fs::remove_file(&entry_path);
-                    }
-                }
-            }
+fn clear_generated_cache(root: &std::path::Path) -> Result<(), CommandError> {
+    for name in ["icons", "thumbnails"] {
+        let path = root.join(name);
+        match std::fs::remove_dir_all(&path) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(CommandError::IoError(error.to_string())),
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod cache_tests {
+    use super::clear_generated_cache;
+
+    #[test]
+    fn cleanup_preserves_configuration_and_unrelated_data() {
+        let root = tempfile::tempdir().unwrap();
+        for name in ["icons", "thumbnails", "other-data"] {
+            let directory = root.path().join(name);
+            std::fs::create_dir(&directory).unwrap();
+            std::fs::write(directory.join("asset"), b"data").unwrap();
+        }
+        std::fs::write(root.path().join("config.json"), b"preferences").unwrap();
+        clear_generated_cache(root.path()).unwrap();
+        assert!(!root.path().join("icons").exists());
+        assert!(!root.path().join("thumbnails").exists());
+        assert!(root.path().join("other-data/asset").exists());
+        assert_eq!(std::fs::read(root.path().join("config.json")).unwrap(), b"preferences");
+        clear_generated_cache(root.path()).unwrap();
+    }
+
+    #[test]
+    fn cleanup_reports_failure_for_an_invalid_cache_directory() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::write(root.path().join("icons"), b"invalid directory").unwrap();
+        assert!(clear_generated_cache(root.path()).is_err());
+    }
 }
 
 pub fn restart_app() {

@@ -162,6 +162,7 @@ impl RenderOnce for Modal {
                     .flex()
                     .flex_col()
                     .rounded_lg()
+                    .shadow(crate::ui::style::rem_shadow(true))
                     .bg(theme.surface)
                     .text_color(theme.text)
                     .text_size(rems(0.8125))

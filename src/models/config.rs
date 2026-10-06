@@ -111,6 +111,42 @@ impl Default for AppConfig {
     }
 }
 
+impl AppConfig {
+    /// Restore known preferences while retaining workspace and extension data.
+    pub fn reset_preferences(&mut self) {
+        let extra = std::mem::take(&mut self.extra);
+        let operations_panel_position = self.operations_panel_position;
+        *self = Self { extra, operations_panel_position, ..Self::default() };
+    }
+}
+
+#[cfg(test)]
+mod reset_tests {
+    use super::AppConfig;
+
+    #[test]
+    fn reset_restores_defaults_and_preserves_workspace_and_unknown_options() {
+        let mut config = AppConfig::default();
+        config.theme = "light".into();
+        config.language = "en".into();
+        config.ui_rem_size = 24;
+        config.show_hidden = true;
+        config.zip_quality = "best".into();
+        config.extra.insert("workspace".into(), serde_json::json!({"tabs": ["C:/"]}));
+        config.extra.insert("unknown".into(), serde_json::json!(42));
+        config.operations_panel_position = Some([20.0, 30.0]);
+        let extra = config.extra.clone();
+        config.reset_preferences();
+        assert_eq!(config.theme, "dark");
+        assert_eq!(config.language, "fr");
+        assert_eq!(config.ui_rem_size, 16);
+        assert!(!config.show_hidden);
+        assert_eq!(config.zip_quality, "fast");
+        assert_eq!(config.extra, extra);
+        assert_eq!(config.operations_panel_position, Some([20.0, 30.0]));
+    }
+}
+
 pub struct ConfigManager(pub Mutex<AppConfig>);
 
 impl Default for ConfigManager {

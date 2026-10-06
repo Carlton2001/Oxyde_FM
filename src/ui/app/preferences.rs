@@ -5,6 +5,122 @@ use gpui::Context;
 use oxyde_lib::models::ConfigManager;
 
 impl OxydeApp {
+    pub(crate) fn open_settings_confirmation(
+        &mut self,
+        action: super::SettingsDataAction,
+        window: &mut gpui::Window,
+        cx: &mut Context<Self>,
+    ) {
+        if action == super::SettingsDataAction::ClearCache && self.clearing_cache {
+            return;
+        }
+        self.finish_pointer_drag(cx);
+        self.settings_open = false;
+        self.settings_picker = None;
+        self.settings_submenu_bounds = None;
+        let focus = cx.focus_handle();
+        window.focus(&focus, cx);
+        self.settings_confirmation = Some(super::SettingsDataConfirmation {
+            action,
+            focus,
+            confirm_focus: cx.focus_handle(),
+        });
+        cx.notify();
+    }
+
+    pub(crate) fn resolve_settings_confirmation(
+        &mut self,
+        confirm: bool,
+        window: &mut gpui::Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(confirmation) = self.settings_confirmation.take() else { return; };
+        self.settings_open = true;
+        window.focus(&self.focus_handle, cx);
+        if confirm {
+            match confirmation.action {
+                super::SettingsDataAction::ClearCache => self.clear_cache(cx),
+                super::SettingsDataAction::ResetPreferences => self.reset_preferences(window, cx),
+            }
+        }
+        cx.notify();
+    }
+
+    pub(crate) fn clear_cache(&mut self, cx: &mut Context<Self>) {
+        if self.clearing_cache { return; }
+        self.clearing_cache = true;
+        self.settings_data_status = Some(Message::SettingsCacheClearing);
+        cx.notify();
+        cx.spawn(async move |this, cx| {
+            let result = cx.background_executor().spawn(async {
+                oxyde_lib::commands::system::clear_app_cache()
+            }).await;
+            let _ = this.update(cx, |this, cx| {
+                this.clearing_cache = false;
+                this.settings_data_status = Some(if result.is_ok() {
+                    Message::SettingsCacheCleared
+                } else { Message::SettingsCacheError });
+                if let Err(error) = result { log::warn!("Cache cleanup failed: {error}"); }
+                this.state.layout.visit_panes(&mut |pane| {
+                    for tab in &pane.tabs {
+                        for file in &tab.files {
+                            crate::ui::components::icons::invalidate_file_icon(&file.path, cx);
+                            crate::ui::components::file_list::invalidate_thumbnail(&file.path, cx);
+                        }
+                    }
+                });
+                cx.refresh_windows();
+                cx.notify();
+            });
+        }).detach();
+    }
+
+    pub(crate) fn reset_preferences(&mut self, window: &mut gpui::Window, cx: &mut Context<Self>) {
+        if self.preferences_load_failed {
+            self.settings_error = Some(Message::SettingsLoadError);
+            cx.notify();
+            return;
+        }
+        self.config.reset_preferences();
+        self.show_hidden = self.config.show_hidden;
+        self.show_system = self.config.show_system;
+        self.show_media_previews = self.config.show_previews;
+        self.show_grid_thumbnails = self.config.show_grid_thumbnails;
+        self.sidebar_follow_path = None;
+        self.sidebar_follow_task = None;
+        self.finish_pointer_drag(cx);
+        self.state.layout.visit_panes_mut(&mut |pane| {
+            for tab in &mut pane.tabs {
+                tab.group_by_date = false;
+                tab.collapsed_date_groups.clear();
+            }
+        });
+        self.set_theme(ThemeId::default(), cx);
+        self.set_language(Language::default(), cx);
+        cx.set_global(crate::ui::format::DateFormatPreference(crate::ui::format::DateFormat::default()));
+        crate::ui::scale::set_reference(self.config.ui_rem_size);
+        window.set_rem_size(gpui::px(self.config.ui_rem_size as f32));
+        self.context_menus.clear();
+        self.breadcrumb_menu = None;
+        self.refresh_all_tabs(cx);
+        self.save_workspace(cx);
+        self.settings_data_status = Some(Message::SettingsPreferencesReset);
+        // Resolve the regional default away from the UI thread.
+        cx.spawn(async move |this, cx| {
+            let format = cx.background_executor().spawn(async {
+                crate::ui::format::DateFormat::for_locale(
+                    &oxyde_lib::platform::platform().regional_locale().unwrap_or_default())
+            }).await;
+            let _ = this.update(cx, |this, cx| {
+                if this.config.date_format.is_empty() {
+                    this.set_date_format(format, cx);
+                }
+            });
+        }).detach();
+        cx.refresh_windows();
+        cx.notify();
+    }
+
     pub(crate) fn toggle_date_grouping(&mut self, pane_id: &str, cx: &mut Context<Self>) {
         self.finish_pointer_drag(cx);
         if let Some(pane) = self.state.find_pane_mut(pane_id) {

@@ -383,3 +383,10 @@ duplicate-disk = Disk #{ $disk }
 duplicate-go-to-folder = Click to go to the folder
 folder-size-empty = Empty
 quick-search-current-folder = Current folder
+
+settings-clear-cache-confirm = Delete icon and thumbnail caches? They will be recreated when needed.
+settings-reset-confirm = Restore default preferences? Open tabs will be preserved.
+settings-cache-clearing = Clearing cache…
+settings-cache-cleared = Cache cleared.
+settings-cache-error = Could not clear the entire cache. Try again.
+settings-preferences-reset = Preferences reset.
