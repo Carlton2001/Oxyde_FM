@@ -26,28 +26,26 @@ pub fn render_settings_panel(
     let theme = *cx.theme();
     let i18n = cx.i18n();
     let backdrop = handle.clone();
-    let themes = [
-        (ThemeId::Dark, Message::ThemeDark),
-        (ThemeId::Light, Message::ThemeLight),
-    ]
-    .map(|(id, label)| {
+    let themes = ThemeId::ALL.into_iter().map(|id| {
         let handle = handle.clone();
-        choice(
-            id.as_str(),
-            i18n.text(label),
-            view.theme_id == id,
-            theme,
+        let mut args = FluentArgs::new();
+        args.set("name", id.name());
+        let label = if id == ThemeId::Monokai {
+            id.name().into()
+        } else {
+            i18n.text_with_args(if id.is_light() { Message::ThemeLight } else { Message::ThemeDark }, &args)
+        };
+        choice_with_icon(
+            id.as_str(), label, view.theme_id == id, theme,
+            Some(if id.is_light() { "icons/sun.svg" } else { "icons/moon.svg" }),
             move |cx| {
                 handle.update(cx, |view, cx| {
                     view.set_theme(id, cx);
                     cx.notify();
                 });
             },
-        )
-        .into_any_element()
-    })
-    .into_iter()
-    .collect();
+        ).into_any_element()
+    }).collect();
     let languages = [
         (Language::French, "Français"),
         (Language::English, "English"),
@@ -405,10 +403,14 @@ pub fn render_settings_panel(
                 18.0
             }))
             .min(window.viewport_size().width - margin * 2.0);
+        // Let the content determine the height. Anchoring moves the menu upwards
+        // when needed; scrolling is only necessary if it exceeds the viewport.
+        let submenu_available_height =
+            (window.viewport_size().height - margin * 2.0).max(px(1.0));
         let submenu = div()
             .id("settings-submenu")
             .w(submenu_width)
-            .max_h(available_height.min(crate::ui::scale::rem_pixels(rems(20.0))))
+            .max_h(submenu_available_height)
             .overflow_y_scroll()
             .p(rems(0.25))
             .rounded_lg()
@@ -784,6 +786,17 @@ fn choice(
     theme: OxydeTheme,
     on_select: impl Fn(&mut App) + 'static,
 ) -> impl IntoElement {
+    choice_with_icon(id, label, selected, theme, None, on_select)
+}
+
+fn choice_with_icon(
+    id: &'static str,
+    label: SharedString,
+    selected: bool,
+    theme: OxydeTheme,
+    icon_path: Option<&'static str>,
+    on_select: impl Fn(&mut App) + 'static,
+) -> impl IntoElement {
     div()
         .id(id)
         .px(rems(0.75))
@@ -800,6 +813,7 @@ fn choice(
         })
         .text_color(theme.text)
         .hover(|style| style.bg(theme.menu_hover))
+        .when_some(icon_path, |row, path| row.child(icon(path, theme)))
         .child(div().flex_1().child(label))
         .when(selected, |row| row.child(icon("icons/check.svg", theme)))
         .on_mouse_down(MouseButton::Left, move |_, _, cx| on_select(cx))

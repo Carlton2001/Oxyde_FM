@@ -14,7 +14,7 @@ Ce document décrit les conventions à suivre pour faire évoluer l'interface GP
 
 ## Thèmes
 
-Le thème actif est accessible avec `cx.theme()`. Les thèmes pris en charge sont `ThemeId::Dark` et `ThemeId::Light`, définis dans `src/models/preferences.rs`.
+Le thème actif est accessible avec `cx.theme()`. Les 13 thèmes de `ThemeId::ALL`, définis dans `src/models/preferences.rs`, reprennent Oxyde, Ayu, GitHub, One, Solarized et Windows en variantes claires et sombres, ainsi que Monokai sombre. Les identifiants historiques `dark` et `light` restent ceux des thèmes Oxyde. Les libellés Fluent paramétrés traduisent Clair/Sombre (Light/Dark), avec une icône Lucide Sun/Moon à gauche de chaque choix.
 
 - Utiliser les jetons de `OxydeTheme` pour les surfaces, textes, bordures, actions, sélection, survol, erreurs, menus, onglets, icônes et barres de défilement.
 - Si un rôle visuel partagé manque, ajouter un jeton sémantique et lui donner une valeur dans chaque palette. Ne pas introduire une couleur littérale dans une vue pour contourner le thème.

@@ -42,12 +42,59 @@ pub enum ThemeId {
     Dark,
     #[serde(alias = "oxyde-light")]
     Light,
+    AyuLight,
+    AyuDark,
+    GithubLight,
+    GithubDark,
+    Monokai,
+    OneLight,
+    OneDark,
+    SolarizedLight,
+    SolarizedDark,
+    WindowsLight,
+    WindowsDark,
 }
 
 impl ThemeId {
+    pub const ALL: [Self; 13] = [
+        Self::Light, Self::Dark,
+        Self::AyuLight, Self::AyuDark,
+        Self::GithubLight, Self::GithubDark,
+        Self::Monokai,
+        Self::OneLight, Self::OneDark,
+        Self::SolarizedLight, Self::SolarizedDark,
+        Self::WindowsLight, Self::WindowsDark,
+    ];
+
+    pub fn is_light(self) -> bool {
+        matches!(self, Self::Light | Self::AyuLight | Self::GithubLight | Self::OneLight | Self::SolarizedLight | Self::WindowsLight)
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Light | Self::Dark => "Oxyde",
+            Self::AyuLight | Self::AyuDark => "Ayu",
+            Self::GithubLight | Self::GithubDark => "GitHub",
+            Self::Monokai => "Monokai",
+            Self::OneLight | Self::OneDark => "One",
+            Self::SolarizedLight | Self::SolarizedDark => "Solarized",
+            Self::WindowsLight | Self::WindowsDark => "Windows",
+        }
+    }
     pub fn from_id(id: &str) -> Self {
         match id {
             "light" | "oxyde-light" => Self::Light,
+            "ayu-light" => Self::AyuLight,
+            "ayu-dark" => Self::AyuDark,
+            "github-light" => Self::GithubLight,
+            "github-dark" => Self::GithubDark,
+            "monokai" => Self::Monokai,
+            "one-light" => Self::OneLight,
+            "one-dark" => Self::OneDark,
+            "solarized-light" => Self::SolarizedLight,
+            "solarized-dark" => Self::SolarizedDark,
+            "windows-light" => Self::WindowsLight,
+            "windows-dark" => Self::WindowsDark,
             _ => Self::Dark,
         }
     }
@@ -56,6 +103,17 @@ impl ThemeId {
         match self {
             Self::Dark => "dark",
             Self::Light => "light",
+            Self::AyuLight => "ayu-light",
+            Self::AyuDark => "ayu-dark",
+            Self::GithubLight => "github-light",
+            Self::GithubDark => "github-dark",
+            Self::Monokai => "monokai",
+            Self::OneLight => "one-light",
+            Self::OneDark => "one-dark",
+            Self::SolarizedLight => "solarized-light",
+            Self::SolarizedDark => "solarized-dark",
+            Self::WindowsLight => "windows-light",
+            Self::WindowsDark => "windows-dark",
         }
     }
 }
