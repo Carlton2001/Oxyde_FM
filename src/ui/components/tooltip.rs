@@ -11,7 +11,11 @@ use std::time::Duration;
 use unicode_segmentation::UnicodeSegmentation;
 
 fn filename_line_ranges(name: &str, width: f32, x_for_index: impl Fn(usize) -> f32) -> Vec<std::ops::Range<usize>> {
-    let extension = name.rfind('.').filter(|index| *index > 0 && *index + 1 < name.len());
+    text_line_ranges(name, width, true, x_for_index)
+}
+
+fn text_line_ranges(name: &str, width: f32, preserve_extension: bool, x_for_index: impl Fn(usize) -> f32) -> Vec<std::ops::Range<usize>> {
+    let extension = name.rfind('.').filter(|index| preserve_extension && *index > 0 && *index + 1 < name.len());
     let mut ranges = Vec::new();
     let mut start = 0;
     let mut end = 0;
@@ -27,10 +31,47 @@ fn filename_line_ranges(name: &str, width: f32, x_for_index: impl Fn(usize) -> f
     ranges
 }
 
+fn location_line_ranges(text: &str, width: f32, x_for_index: impl Fn(usize) -> f32) -> Vec<std::ops::Range<usize>> {
+    let mut ranges = Vec::new();
+    let mut start = 0;
+    while start < text.len() {
+        let mut end = start;
+        let mut boundary = None;
+        for (index, grapheme) in text[start..].grapheme_indices(true) {
+            let next = start + index + grapheme.len();
+            if end > start && x_for_index(next) - x_for_index(start) > width { break; }
+            end = next;
+            if matches!(grapheme, "\\" | "/" | " ") { boundary = Some(end); }
+        }
+        if end < text.len() { end = boundary.filter(|end| *end > start).unwrap_or(end); }
+        ranges.push(start..end);
+        start = end;
+    }
+    ranges
+}
+
 #[cfg(test)]
 mod filename_tests {
     use super::filename_line_ranges;
     use unicode_segmentation::UnicodeSegmentation;
+
+    #[test]
+    fn search_location_wraps_long_paths_without_truncating_unicode_or_dotted_folders() {
+        let path = r"\\serveur\Été👩‍💻\dossier.trèslongsansespaces\sous-dossier";
+        let ranges = super::location_line_ranges(path, 8.0, |index| path[..index].graphemes(true).count() as f32);
+        let lines: Vec<_> = ranges.into_iter().map(|range| &path[range]).collect();
+        assert_eq!(lines.concat(), path);
+        assert!(lines.iter().all(|line| line.graphemes(true).count() <= 8));
+    }
+
+    #[test]
+    fn location_wrap_prefers_directory_boundaries() {
+        let text = r"Emplacement : C:\Users\Biluf\Downloads\zed-1.21.0\crates\gpui\examples";
+        let ranges = super::location_line_ranges(text, (text.len() - 7) as f32, |index| index as f32);
+        let lines: Vec<_> = ranges.into_iter().map(|range| &text[range]).collect();
+        assert_eq!(lines.concat(), text);
+        assert_eq!(lines.last(), Some(&"examples"));
+    }
 
     #[test]
     fn network_tooltips_show_only_available_network_properties() {
@@ -86,6 +127,7 @@ pub struct Tooltip {
 }
 
 struct FileInfo {
+    location: Option<String>,
     network: Option<oxyde_lib::models::FileEntry>,
     ext: String,
     size: (u64, bool, bool),
@@ -127,7 +169,7 @@ impl Tooltip {
     pub fn for_network(file: oxyde_lib::models::FileEntry) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
         move |_, cx| cx.new(|_| Self {
             title: file.name.clone().into(), meta: None, shortcut: None,
-            file_info: Some(FileInfo { network: Some(file.clone()), ext: "Réseau".into(), size: (0, false, false), date: 0 }),
+            file_info: Some(FileInfo { location: None, network: Some(file.clone()), ext: "Réseau".into(), size: (0, false, false), date: 0 }),
             preview_view: None,
         }).into()
     }
@@ -194,6 +236,7 @@ impl Tooltip {
                 meta: None,
                 shortcut: None,
                 file_info: Some(FileInfo {
+                    location: None,
                     network: None,
                     ext: ext.clone(),
                     size: size.clone(),
@@ -235,9 +278,30 @@ impl Tooltip {
         date: u64,
         cx: &mut App,
     ) -> Entity<Self> {
+        Self::new_for_file(name, path, ext, size, date, true, None, cx)
+    }
+
+    pub fn for_search_result(
+        file: oxyde_lib::models::FileEntry,
+        ext: String,
+        previews: bool,
+    ) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
+        move |_, cx| {
+            let location = std::path::Path::new(&file.path).parent()
+                .map(|parent| parent.to_string_lossy().into_owned());
+            Self::new_for_file(file.name.clone(), file.path.clone(), ext.clone(),
+                (file.size, file.is_dir, file.is_calculated), file.modified, previews, location, cx).into()
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn new_for_file(
+        name: String, path: String, ext: String, size: (u64, bool, bool),
+        date: u64, previews: bool, location: Option<String>, cx: &mut App,
+    ) -> Entity<Self> {
         let preview_type = get_preview_type(&name);
         cx.new(|cx| {
-            let preview_view = if preview_type != PreviewType::None {
+            let preview_view = if previews && preview_type != PreviewType::None {
                 Some(cx.new(|cx| PreviewTask::new(path, preview_type, cx)))
             } else {
                 None
@@ -250,7 +314,7 @@ impl Tooltip {
                 title: SharedString::from(name),
                 meta: None,
                 shortcut: None,
-                file_info: Some(FileInfo { network: None, ext, size, date }),
+                file_info: Some(FileInfo { location, network: None, ext, size, date }),
                 preview_view,
             }
         })
@@ -381,6 +445,20 @@ impl Render for Tooltip {
                 let file_size = i18n.text_with_args(Message::TooltipSize, &args);
                 args.set("value", format_date(info.date, crate::ui::format::date_format(cx)));
                 let modified = i18n.text_with_args(Message::TooltipModified, &args);
+                let location_lines = info.location.as_ref().map(|location| {
+                    args.set("value", location.clone());
+                    let text = i18n.text_with_args(Message::TooltipLocation, &args);
+                    let mut font = window.text_style().font();
+                    font.family = "Inter".into();
+                    font.weight = crate::ui::style::DEFAULT_FONT_WEIGHT;
+                    font.features = TNUM.clone();
+                    let line = window.text_system().shape_line(text.clone(), rem_pixels(rems(0.6875)), &[TextRun {
+                        len: text.len(), font, color: theme.text_muted, background_color: None,
+                        underline: None, strikethrough: None,
+                    }], None);
+                    location_line_ranges(&text, (tooltip_width - chrome - px(1.0)).as_f32().max(1.0), |index| line.x_for_index(index).as_f32())
+                        .into_iter().map(|range| text[range].to_string()).collect::<Vec<_>>()
+                });
                 this.child(
                     div()
                         .flex()
@@ -390,7 +468,8 @@ impl Render for Tooltip {
                         .child(file_type)
                         .when(info.ext != "Réseau", |tooltip| {
                             tooltip.child(file_size).child(modified)
-                        }),
+                        })
+                        .when_some(location_lines, |tooltip, lines| tooltip.children(lines.into_iter().map(|line| div().whitespace_nowrap().child(line)))),
                 )
             });
 

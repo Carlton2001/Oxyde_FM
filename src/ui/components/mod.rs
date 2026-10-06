@@ -31,7 +31,7 @@ pub(crate) fn context_menu_sections(items: Vec<dropdown::DropdownItem>, i18n: &I
             pending_separator = true;
             continue;
         }
-        let group = if [Message::Open, Message::OpenNewTab, Message::ExpandAll, Message::CollapseAll]
+        let group = if [Message::OpenFileLocation, Message::Open, Message::OpenNewTab, Message::ExpandAll, Message::CollapseAll]
             .iter().any(|message| item.label == i18n.text(*message).as_ref()) { 0 }
             else if item.label == i18n.text(Message::Delete).as_ref() { 2 }
             else if item.label == i18n.text(Message::Properties).as_ref() { 3 }
@@ -152,6 +152,29 @@ fn oxyde_context_menu_items_raw(
     use crate::ui::components::dropdown::IconName;
 
     let mut items = vec![];
+
+    if view.state.find_pane(&view.state.active_pane_id).is_some_and(|pane| pane.active_tab().quick_search.is_some()) {
+        if let Some(parent) = std::path::Path::new(&path).parent() {
+            let parent = parent.to_string_lossy().into_owned();
+            let target = path.clone();
+            let handle = h_app.clone();
+            items.push(crate::ui::components::dropdown::DropdownItem {
+                label: i18n.text(Message::OpenFileLocation).to_string(),
+                icon: Some(IconName::ExternalLink), stay_open: false, has_submenu: false, is_dimmed: false,
+                on_click: std::rc::Rc::new(move |_, app| { handle.update(app, |this, cx| {
+                    this.context_menus.clear();
+                    let pane = this.state.active_pane_id.clone();
+                    this.navigate_to(&pane, parent.clone(), cx);
+                    if let Some(pane) = this.state.find_pane_mut(&pane) {
+                        pane.active_tab_mut().selected_paths.insert(target.clone());
+                        pane.active_tab_mut().selection_anchor = Some(target.clone());
+                        pane.active_tab_mut().pending_reveal = Some(target.clone());
+                    }
+                    cx.notify();
+                }); }), on_hover: None,
+            });
+        }
+    }
 
     items.push(crate::ui::components::dropdown::DropdownItem {
         label: i18n.text(Message::Open).to_string(),
@@ -675,6 +698,10 @@ pub fn pane_context_menu_items(i18n: &I18n, h: Entity<crate::ui::app::OxydeApp>,
         items.extend(network::network_actions(i18n, h.clone(), &drive.path, true));
     }
     items.extend(pane_context_menu_items_raw(i18n, h, pane_id));
+    if path.starts_with("search://") {
+        items.retain(|item| ![Message::NewFolder, Message::Paste, Message::Properties, Message::MoreOptions]
+            .iter().any(|message| item.label == i18n.text(*message).as_ref()));
+    }
     context_menu_sections(items, i18n)
 }
 

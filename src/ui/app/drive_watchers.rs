@@ -213,7 +213,7 @@ impl OxydeApp {
             needed.extend(
                 pane.tabs
                     .iter()
-                    .filter(|tab| !tab.path.is_empty())
+                    .filter(|tab| !tab.path.is_empty() && !tab.path.starts_with("search://"))
                     .map(|tab| oxyde_lib::utils::archive::split_virtual_path(&tab.path)
                         .and_then(|(archive, _)| archive.parent().map(|parent| parent.to_string_lossy().into_owned()))
                         .unwrap_or_else(|| tab.path.clone())),
@@ -314,7 +314,11 @@ fn redirect_tabs(
     removed: &[String],
     fallback: &str,
 ) -> Vec<(String, usize, String)> {
-    let affected = |path: &str| removed.iter().any(|root| path_on_drive(path, root));
+    let affected = |path: &str| {
+        let search_root = super::search::parse_search_path(path).map(|(root, _)| root);
+        let path = search_root.as_deref().unwrap_or(path);
+        removed.iter().any(|root| path_on_drive(path, root))
+    };
     let mut requests = Vec::new();
     state.layout.visit_panes_mut(&mut |pane| {
         for (index, tab) in pane.tabs.iter_mut().enumerate() {
@@ -324,6 +328,13 @@ fn redirect_tabs(
                 continue;
             }
             tab.path = fallback.to_owned();
+            tab.search_revision = tab.search_revision.wrapping_add(1);
+            tab.search_input = None;
+            tab.search_text.clear();
+            tab.pending_reveal = None;
+            if let Some(search) = tab.quick_search.take() {
+                search.cancellation.0.store(true, std::sync::atomic::Ordering::Relaxed);
+            }
             tab.files.clear();
             tab.cached_filtered_files.clear();
             tab.selected_paths.clear();
@@ -435,6 +446,28 @@ mod tests {
             &root.with_file_name("usb-other").to_string_lossy(),
             &root.to_string_lossy()
         ));
+    }
+
+    #[::core::prelude::v1::test]
+    fn removing_search_root_cancels_and_redirects_its_tab() {
+        let root = std::env::temp_dir().join("search-drive").to_string_lossy().into_owned();
+        let token = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let mut tab = TabState::new("search".into(), super::super::search::search_path(&root, "us"));
+        tab.search_text = "us".into();
+        tab.quick_search = Some(super::super::search::QuickSearchState {
+            root: root.clone(), query: "us".into(), running: true, limited: false,
+            cancellation: Arc::new(super::super::search::SearchCancellation(token.clone())),
+        });
+        tab.back_stack.push(tab.path.clone());
+        let mut state = super::super::WorkspaceState::new();
+        state.layout = LayoutNode::Pane(Box::new(PaneState::new(tab)));
+        assert_eq!(redirect_tabs(&mut state, &[root], "fallback").len(), 1);
+        assert!(token.load(std::sync::atomic::Ordering::Relaxed));
+        let tab = state.find_tab_mut("search").unwrap();
+        assert_eq!(tab.path, "fallback");
+        assert!(tab.quick_search.is_none());
+        assert!(tab.search_text.is_empty());
+        assert!(tab.back_stack.is_empty());
     }
 
     #[::core::prelude::v1::test]

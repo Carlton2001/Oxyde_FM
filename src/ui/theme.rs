@@ -9,6 +9,7 @@ pub struct OxydeTheme {
     pub sidebar: Hsla,           // Sidebar et panneaux latéraux
     pub header: Hsla,            // TopBar / TabBar
     pub surface: Hsla,           // Éléments de surface (Dropdowns, Modals)
+    pub search_banner: Hsla,     // Barre des résultats, distincte de la navigation et des colonnes
     pub border: Hsla,            // Bordures subtiles
     pub text: Hsla,              // Texte principal
     pub text_muted: Hsla,        // Texte secondaire / Headers
@@ -55,6 +56,7 @@ impl OxydeTheme {
             sidebar: rgb(0xf1ede6).into(),
             header: rgb(0xf1ede6).into(),
             surface: rgb(0xfafafa).into(),
+            search_banner: rgb(0xf3f0e9).into(),
             border: rgb(0xe6e1d6).into(),
             text: rgb(0x242433).into(),
             text_muted: rgb(0x6e6b85).into(),
@@ -89,6 +91,7 @@ impl OxydeTheme {
             sidebar: rgb(0x08070d).into(),
             header: rgb(0x08070d).into(),
             surface: rgb(0x151320).into(),
+            search_banner: rgb(0x201c2c).into(),
             border: rgb(0x232031).into(),
             text: rgb(0xe2e0ed).into(),
             text_muted: rgb(0x8b86a3).into(),

@@ -13,6 +13,7 @@ pub mod navigation;
 mod preferences;
 pub(crate) mod network;
 pub mod selection;
+pub(crate) mod search;
 
 #[allow(unused_imports)]
 pub use filters::*;
@@ -1459,6 +1460,7 @@ impl OxydeApp {
         let pane_id = self.state.active_pane_id.clone();
         if let Some(pane) = self.state.layout.find_pane(&pane_id) {
             let target_dir = pane.active_tab().path.clone();
+            if target_dir.starts_with("search://") { return; }
             if let Ok((paths, is_cut)) = oxyde_lib::platform::platform().get_clipboard_files() {
                 if !paths.is_empty() {
                     if is_cut {
@@ -1943,6 +1945,7 @@ impl OxydeApp {
 
         if let Some(pane) = self.state.layout.find_pane(pane_id) {
             let current_path = pane.active_tab().path.clone();
+            if current_path.starts_with("search://") { return; }
             let language = cx.i18n().language();
             let quality = self.archive_quality_for_path(std::path::Path::new(&current_path));
             let tab_id = pane.active_tab().id.clone();
@@ -2311,6 +2314,7 @@ impl Render for OxydeApp {
             let pos = current_pos;
             self.handle_selection_drag(p_id, pos, cx);
         }
+        self.measure_metadata_columns(_window, cx);
         self.clamp_scrolls();
         self.follow_active_path(cx);
 

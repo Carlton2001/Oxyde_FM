@@ -38,6 +38,132 @@ enum SearchPattern {
 
 static DISK_IO_LOCKS: Lazy<DashMap<u64, Arc<Mutex<()>>>> = Lazy::new(DashMap::new);
 
+/// Native quick search, independent of the legacy two-panel session.
+pub enum QuickSearchEvent {
+    Batch(Vec<FileEntry>),
+    Finished { limited: bool },
+    Failed(String),
+}
+
+pub fn quick_search(
+    root: String,
+    query: String,
+    limit: usize,
+    show_hidden: bool,
+    show_system: bool,
+    cancellation: Arc<AtomicBool>,
+) -> std::sync::mpsc::Receiver<QuickSearchEvent> {
+    let (sender, receiver) = std::sync::mpsc::sync_channel(8);
+    thread::spawn(move || {
+        let pattern = if query.contains('*') || query.contains('?') {
+            match Pattern::new(&query.to_lowercase()) {
+                Ok(pattern) => SearchPattern::Glob(pattern, false),
+                Err(error) => {
+                    let _ = sender.send(QuickSearchEvent::Failed(error.to_string()));
+                    return;
+                }
+            }
+        } else {
+            SearchPattern::Literal(query, false, false)
+        };
+        let walker = walkdir::WalkDir::new(&root)
+            .follow_links(false)
+            .into_iter()
+            .filter_entry(|entry| {
+                if cancellation.load(Ordering::Relaxed) {
+                    return false;
+                }
+                if entry.depth() == 0 {
+                    return true;
+                }
+                let name = entry.file_name().to_string_lossy();
+                if !show_system
+                    && entry.file_type().is_dir()
+                    && matches!(
+                        name.to_ascii_lowercase().as_str(),
+                        "windows"
+                            | "programdata"
+                            | "$recycle.bin"
+                            | "system volume information"
+                            | "winsxs"
+                    )
+                {
+                    return false;
+                }
+                let Ok(metadata) = entry.metadata() else {
+                    return false;
+                };
+                let (hidden, system, _) = crate::utils::get_file_attributes(&metadata, &name);
+                (show_hidden || !hidden) && (show_system || !system)
+            });
+        let mut batch = Vec::new();
+        let mut count = 0;
+        let mut last_flush = std::time::Instant::now();
+        for entry in walker {
+            if cancellation.load(Ordering::Relaxed) {
+                return;
+            }
+            let entry = match entry {
+                Ok(entry) => entry,
+                Err(error) if error.depth() == 0 => {
+                    let _ = sender.send(QuickSearchEvent::Failed(error.to_string()));
+                    return;
+                }
+                Err(_) => continue,
+            };
+            if entry.depth() == 0 {
+                continue;
+            }
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if pattern.matches(&name) {
+                if let Ok(metadata) = entry.metadata() {
+                    let (hidden, system, _) = crate::utils::get_file_attributes(&metadata, &name);
+                    batch.push(FileEntry {
+                        name,
+                        path: entry.path().to_string_lossy().into_owned(),
+                        is_dir: metadata.is_dir(),
+                        is_hidden: hidden,
+                        is_system: system,
+                        is_symlink: entry.file_type().is_symlink(),
+                        size: if metadata.is_dir() { 0 } else { metadata.len() },
+                        modified: metadata
+                            .modified()
+                            .unwrap_or(SystemTime::UNIX_EPOCH)
+                            .duration_since(SystemTime::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_millis() as u64,
+                        is_readonly: metadata.permissions().readonly(),
+                        ..FileEntry::default()
+                    });
+                    count += 1;
+                }
+            }
+            if !batch.is_empty()
+                && (batch.len() >= 100
+                    || last_flush.elapsed().as_millis() >= 100
+                    || count >= limit.max(1))
+            {
+                if sender
+                    .send(QuickSearchEvent::Batch(std::mem::take(&mut batch)))
+                    .is_err()
+                {
+                    return;
+                }
+                last_flush = std::time::Instant::now();
+            }
+            if count >= limit.max(1) {
+                let _ = sender.send(QuickSearchEvent::Finished { limited: true });
+                return;
+            }
+        }
+        if !batch.is_empty() && sender.send(QuickSearchEvent::Batch(batch)).is_err() {
+            return;
+        }
+        let _ = sender.send(QuickSearchEvent::Finished { limited: false });
+    });
+    receiver
+}
+
 impl SearchPattern {
     fn matches(&self, text: &str) -> bool {
         match self {
@@ -962,4 +1088,90 @@ pub async fn cancel_search(
         ctx.results.clear();
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod quick_search_tests {
+    use super::*;
+
+    fn collect(
+        root: &std::path::Path,
+        query: &str,
+        limit: usize,
+        cancelled: bool,
+    ) -> (Vec<FileEntry>, bool) {
+        let receiver = quick_search(
+            root.to_string_lossy().into_owned(),
+            query.to_owned(),
+            limit,
+            true,
+            true,
+            Arc::new(AtomicBool::new(cancelled)),
+        );
+        let mut files = Vec::new();
+        while let Ok(event) = receiver.recv_timeout(std::time::Duration::from_secs(5)) {
+            match event {
+                QuickSearchEvent::Batch(batch) => files.extend(batch),
+                QuickSearchEvent::Finished { limited } => return (files, limited),
+                QuickSearchEvent::Failed(error) => panic!("{error}"),
+            }
+        }
+        assert!(cancelled, "search did not finish");
+        (files, false)
+    }
+
+    #[test]
+    fn recursive_names_are_case_insensitive_and_keep_actual_paths() {
+        let directory = tempfile::tempdir().unwrap();
+        let nested = directory.path().join("UserFolder");
+        std::fs::create_dir(&nested).unwrap();
+        std::fs::write(nested.join("en-US.json"), "abc").unwrap();
+        std::fs::write(nested.join("other.txt"), "us in content only").unwrap();
+        let (files, limited) = collect(directory.path(), "us", 100, false);
+        assert!(!limited);
+        assert_eq!(files.len(), 2);
+        assert!(files
+            .iter()
+            .any(|file| file.is_dir && file.name == "UserFolder"));
+        let file = files.iter().find(|file| file.name == "en-US.json").unwrap();
+        assert_eq!(std::path::Path::new(&file.path), nested.join("en-US.json"));
+        assert_eq!(file.size, 3);
+    }
+
+    #[test]
+    fn wildcard_limit_and_cancellation() {
+        let directory = tempfile::tempdir().unwrap();
+        for name in ["a.json", "b.JSON", "c.txt"] {
+            std::fs::write(directory.path().join(name), "").unwrap();
+        }
+        let (files, limited) = collect(directory.path(), "*.json", 1, false);
+        assert!(limited);
+        assert_eq!(files.len(), 1);
+        assert!(files[0].name.to_lowercase().ends_with(".json"));
+        assert!(collect(directory.path(), "*", 100, true).0.is_empty());
+        assert!(collect(directory.path(), "absent", 100, false).0.is_empty());
+    }
+
+    #[test]
+    fn invalid_root_reports_failure() {
+        let directory = tempfile::tempdir().unwrap();
+        let receiver = quick_search(
+            directory
+                .path()
+                .join("absent")
+                .to_string_lossy()
+                .into_owned(),
+            "us".into(),
+            100,
+            true,
+            true,
+            Arc::new(AtomicBool::new(false)),
+        );
+        assert!(matches!(
+            receiver
+                .recv_timeout(std::time::Duration::from_secs(5))
+                .unwrap(),
+            QuickSearchEvent::Failed(_)
+        ));
+    }
 }

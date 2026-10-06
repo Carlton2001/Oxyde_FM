@@ -86,7 +86,7 @@ fn status_bar_height() -> f32 { rem_pixels(STATUS_BAR_HEIGHT).as_f32() }
 
 /// Returns the display type label for a file entry.
 /// Symlinks and junctions are identified before extension/dir detection.
-fn file_type_label(f: &FileEntry) -> String {
+pub(crate) fn file_type_label(f: &FileEntry) -> String {
     if network_entry(f) { return "Réseau".to_string(); }
     if f.is_symlink {
         return "Symlink".to_string();
@@ -185,6 +185,7 @@ pub fn render_file_list(
         return render_grid_file_list(view, pane_id, handle, cx).into_any_element();
     }
     let active_tab = pane.active_tab();
+    let search_results = active_tab.quick_search.is_some();
     let files = active_tab.filtered_files().to_vec();
     let rows = display_rows(&files, active_tab.group_by_date, &active_tab.collapsed_date_groups, 1);
     let count = rows.len() as f32;
@@ -195,7 +196,7 @@ pub fn render_file_list(
     } else {
         match &active_tab.load_status {
             TabLoadStatus::Loading => Some(cx.i18n().text(Message::FolderLoading).to_string()),
-            TabLoadStatus::Ready => Some(cx.i18n().text(Message::FolderEmpty).to_string()),
+            TabLoadStatus::Ready => Some(cx.i18n().text(if active_tab.quick_search.is_some() { Message::QuickSearchEmpty } else { Message::FolderEmpty }).to_string()),
             TabLoadStatus::Error(message) => Some(cx.i18n().text(*message).to_string()),
         }
     };
@@ -207,20 +208,22 @@ pub fn render_file_list(
     let pane_viewport_w = pane_size.width.max(1.0);
 
     let v_v_h =
-        (pane_size.height - logical(32.0) - crate::ui::style::row_height() - status_bar_height() - crate::ui::components::scrollbar::zed_track_width()).max(1.0);
+        (pane_size.height - logical(32.0) - if active_tab.quick_search.is_some() { logical(32.0) } else { 0.0 } - crate::ui::style::row_height() - status_bar_height() - crate::ui::components::scrollbar::zed_track_width()).max(1.0);
     let content_h = (count * crate::ui::style::row_height()).max(1.0);
 
-    let columns = DetailsColumnWidths::for_viewport(
+    let columns = DetailsColumnWidths::for_viewport_with_search(
         pane_viewport_w,
         active_tab.type_col_width,
         active_tab.size_col_width,
         active_tab.date_col_width,
+        search_results,
     );
     let network_panel = active_tab.path == "__network_vincinity__";
     let name_w = if network_panel { columns.total() * 0.34 } else { columns.name };
     let type_w = if network_panel { columns.total() * 0.22 } else { columns.file_type };
     let size_w = if network_panel { columns.total() * 0.22 } else { columns.size };
     let date_w = if network_panel { columns.total() * 0.22 } else { columns.date };
+    let location_w = columns.location;
     let total_w = columns.total();
 
     let is_active_pane = view.state.active_pane_id == pane_id;
@@ -319,7 +322,7 @@ pub fn render_file_list(
                         .h_full()
                         .flex()
                         .flex_col()
-                        .child(render_headers(view, pane_id.clone(), handle.clone(), name_w, type_w, size_w, date_w, &theme, cx.i18n()))
+                        .child(render_headers(view, pane_id.clone(), handle.clone(), name_w, location_w, type_w, size_w, date_w, &theme, cx.i18n()))
                         .child(
                             uniform_list(
                                 SharedString::from(format!("file-list-{}", pane_id)),
@@ -373,8 +376,9 @@ pub fn render_file_list(
                                                 .bg(if is_selected { theme.selected } else if is_active_pane { theme.active_background } else { theme.background })
                                                 .when(!is_selected, |s| s.hover(|s| s.bg(theme.hover)))
                                                 .when(show_tooltips && network_entry(file), |d| d.tooltip(Tooltip::for_network(file.clone())))
-                                                .when(show_tooltips && !network_entry(file) && show_media_previews, |d| d.tooltip(Tooltip::for_file_full(file_name_tt.clone(), path_tt, ext_tt.clone(), size_tt.clone(), date_tt.clone())))
-                                                .when(show_tooltips && !network_entry(file) && !show_media_previews, |d| d.tooltip(Tooltip::for_file_no_preview(file_name_tt, ext_tt, size_tt, date_tt)))
+                                                .when(show_tooltips && search_results, |d| d.tooltip(Tooltip::for_search_result(file.clone(), ext_tt.clone(), show_media_previews)))
+                                                .when(show_tooltips && !search_results && !network_entry(file) && show_media_previews, |d| d.tooltip(Tooltip::for_file_full(file_name_tt.clone(), path_tt, ext_tt.clone(), size_tt.clone(), date_tt.clone())))
+                                                .when(show_tooltips && !search_results && !network_entry(file) && !show_media_previews, |d| d.tooltip(Tooltip::for_file_no_preview(file_name_tt, ext_tt, size_tt, date_tt)))
                                                 .on_mouse_down(MouseButton::Left, {
                                                     let p = path.clone();
                                                     let h_inner_inner = h.clone();
@@ -661,6 +665,7 @@ pub fn render_file_list(
                                                     let category = network_category(file, cx.i18n());
                                                     row.children([(type_w, category), (size_w, details.map(|d| d.workgroup.clone()).unwrap_or_default()), (date_w, details.map(|d| d.location.clone()).unwrap_or_default())].into_iter().map(|(width, value)| div().w(px(width)).flex_none().px(rems(0.5)).text_color(theme.text_muted).truncate().text_size(rems(0.75)).child(value)))
                                                 })
+                                                .when(location_w > 0.0, |row| row.child(div().w(px(location_w)).flex_none().px(rems(0.5)).text_color(theme.text_muted).truncate().text_size(rems(0.75)).child(std::path::Path::new(&file.path).parent().map(|parent| parent.to_string_lossy().into_owned()).unwrap_or_default())))
                                                 .when(!network_panel, |row| row.child(div().w(px(type_w)).flex_none().px(rems(0.5)).text_color(theme.text_muted).truncate().text_size(rems(0.75)).when(is_dimmed, |d| d.opacity(0.5)).child(file_type_display(file, cx.i18n()))))
                                                 .when(!network_panel, |row| row
                                                     .child(div().w(px(size_w)).flex_none().px(rems(0.5)).text_align(TextAlign::Right).text_color(theme.text_muted).truncate().text_size(rems(0.75)).when(is_dimmed, |d| d.opacity(0.5)).child(format_size(file.size, is_dir, file.is_calculated, language)))
@@ -969,7 +974,7 @@ pub fn render_file_list(
     // Horizontal scrollbar overlay
     container = container.child(
         div().absolute().left_0().bottom(px(status_bar_height())).right(px(crate::ui::components::scrollbar::zed_track_width())).h(px(crate::ui::components::scrollbar::zed_track_width()))
-            .child(render_scrollbar(theme, handle.clone(), ScrollbarAxis::Horizontal, pane_viewport_w, total_w + logical(28.0), -active_tab.list_scroll_h.offset().x.as_f32(), matches!(view.drag_target, Some(DragTarget::FileListH { ref pane_id, .. }) if pane_id == &p_id_cap), format!("h-{}", pane_suffix), None, {
+            .child(render_scrollbar(theme, handle.clone(), ScrollbarAxis::Horizontal, pane_viewport_w, columns.content_width(), -active_tab.list_scroll_h.offset().x.as_f32(), matches!(view.drag_target, Some(DragTarget::FileListH { ref pane_id, .. }) if pane_id == &p_id_cap), format!("h-{}", pane_suffix), None, {
                 let p_id = p_id_cap.clone();
                 move |this, track_id, v_w, c_w, _| {
                     this.drag_target = Some(DragTarget::FileListH { pane_id: p_id.clone(), viewport_w: v_w, content_w: c_w, track_id });
@@ -1073,6 +1078,7 @@ fn render_grid_file_list(
 ) -> impl IntoElement {
     let pane = view.state.layout.find_pane(&pane_id).expect("pane exists");
     let tab = pane.active_tab();
+    let search_results = tab.quick_search.is_some();
     let files = tab.filtered_files().to_vec();
     let selected = tab.selected_paths.clone();
     let inline_rename = view.inline_rename;
@@ -1108,7 +1114,7 @@ fn render_grid_file_list(
     } else {
         match &tab.load_status {
             TabLoadStatus::Loading => Some(cx.i18n().text(Message::FolderLoading).to_string()),
-            TabLoadStatus::Ready => Some(cx.i18n().text(Message::FolderEmpty).to_string()),
+            TabLoadStatus::Ready => Some(cx.i18n().text(if tab.quick_search.is_some() { Message::QuickSearchEmpty } else { Message::FolderEmpty }).to_string()),
             TabLoadStatus::Error(message) => Some(cx.i18n().text(*message).to_string()),
         }
     };
@@ -1242,7 +1248,8 @@ fn render_grid_file_list(
                                         .group("file-grid-card")
                                         .relative().when(!is_selected, |d| d.hover(|d| d.bg(theme.hover)))
                                         .when(show_tooltips && network_entry(file), |d| d.tooltip(Tooltip::for_network(file.clone())))
-                                                .when(show_tooltips && !network_entry(file) && show_media_previews, |d| {
+                                        .when(show_tooltips && search_results, |d| d.tooltip(Tooltip::for_search_result(file.clone(), ext_tt.clone(), show_media_previews)))
+                                                .when(show_tooltips && !search_results && !network_entry(file) && show_media_previews, |d| {
                                             d.tooltip(Tooltip::for_file_full(
                                                 file_name_tt.clone(),
                                                 path_tt.clone(),
@@ -1251,7 +1258,7 @@ fn render_grid_file_list(
                                                 date_tt,
                                             ))
                                         })
-                                        .when(show_tooltips && !network_entry(file) && !show_media_previews, |d| {
+                                        .when(show_tooltips && !search_results && !network_entry(file) && !show_media_previews, |d| {
                                             d.tooltip(Tooltip::for_file_no_preview(
                                                 file_name_tt,
                                                 ext_tt,
@@ -1933,6 +1940,7 @@ fn render_headers(
     pane_id: String,
     handle: Entity<OxydeApp>,
     name_w: f32,
+    location_w: f32,
     type_w: f32,
     size_w: f32,
     date_w: f32,
@@ -2052,6 +2060,12 @@ fn render_headers(
                 }
             }),
         )
+        .when(tab.quick_search.is_some(), |headers| headers.child(
+            header_cell(i18n.text(Message::ColumnLocation).as_ref(), location_w, current_col == SortColumn::Location, current_dir, false, theme, handle.clone(), format!("search-location-{pane_id}"), {
+                let handle = handle.clone(); let pane_id = pane_id.clone();
+                move |_, _, cx| { handle.update(cx, |this, cx| this.toggle_sort(&pane_id, SortColumn::Location, cx)); }
+            })
+        ))
         .child(
             header_cell(
                 i18n.text(Message::ColumnType).as_ref(),

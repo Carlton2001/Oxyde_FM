@@ -69,6 +69,7 @@ selected-mixed = { $folder_count ->
 tooltip-type = Type: { $value }
 tooltip-size = Size: { $value }
 tooltip-modified = Modified: { $value }
+tooltip-location = Location: { $value }
 
 ## Main interface and commands
 menu-open = Open
@@ -229,6 +230,17 @@ title-new-panel = New panel on the right
 title-tools = Tools
 tool-sizes = Calculate sizes — Coming soon
 tool-search = Advanced search — Coming soon
+quick-search = Quick search
+quick-search-title = Search “{ $query }” in { $folder }
+quick-search-results = Search results
+quick-search-running = Searching…
+quick-search-limited = Result limit reached
+quick-search-empty = No results
+quick-search-failed = Unable to search
+quick-search-clear = Clear
+quick-search-stop = Stop searching
+open-file-location = Open file location
+column-location = Location
 tool-duplicates = Find duplicates — Coming soon
 
 tabs-new-tab = New tab

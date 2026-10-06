@@ -6,6 +6,46 @@ pub use gpui::prelude::*;
 use gpui::*;
 
 impl OxydeApp {
+    pub(crate) fn measure_metadata_columns(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let i18n = cx.i18n();
+        let language = i18n.language();
+        let reference = crate::ui::scale::normalized_reference(self.config.ui_rem_size);
+        let date_format = crate::ui::format::date_format(cx);
+        // Every format has the same number of tabular digits. One sample suffices.
+        let date_sample = crate::ui::format::format_date(1_760_000_000_000, date_format);
+        let measure = |text: &str, bold: bool| {
+            let mut font = window.text_style().font();
+            font.family = "Inter".into();
+            font.weight = if bold { FontWeight::BOLD } else { crate::ui::style::DEFAULT_FONT_WEIGHT };
+            font.features = crate::ui::style::TNUM.clone();
+            let line = window.text_system().shape_line(text.to_string().into(), crate::ui::scale::rem_pixels(rems(if bold { 0.8125 } else { 0.75 })), &[TextRun {
+                len: text.len(), font, color: cx.theme().text, background_color: None, underline: None, strikethrough: None,
+            }], None);
+            line.width.as_f32() / logical(1.0)
+        };
+        self.state.layout.visit_panes_mut(&mut |pane| {
+            let tab = pane.active_tab_mut();
+            let key = (reference, language, date_format, !tab.filter_types.is_empty(), !tab.filter_dates.is_empty(), !tab.filter_sizes.is_empty());
+            if tab.column_measurement_key == Some(key) { return; }
+            let type_width = tab.column_type_labels.iter().map(|label| {
+                let message = match label.as_str() {
+                    "Dossier" => Some(Message::FileTypeFolder), "Fichier" => Some(Message::FileTypeFile),
+                    "Symlink" => Some(Message::FileTypeSymlink), "Junction" => Some(Message::FileTypeJunction),
+                    "Réseau" => Some(Message::SidebarNetwork), _ => None,
+                };
+                let text = message.map(|message| i18n.text(message).to_string()).unwrap_or_else(|| label.clone());
+                measure(&text, false)
+            }).fold(0.0_f32, f32::max);
+            tab.type_col_width = crate::ui::style::metadata_column_width(type_width, measure(i18n.text(Message::ColumnType).as_ref(), true), key.3);
+            tab.date_col_width = crate::ui::style::metadata_column_width(measure(&date_sample, false), measure(i18n.text(Message::ColumnModified).as_ref(), true), key.4);
+            let size_width = tab.column_size_values.iter().map(|&(size, directory, calculated)| {
+                measure(&crate::ui::format::format_size(size, directory, calculated, language), false)
+            }).fold(0.0_f32, f32::max);
+            tab.size_col_width = crate::ui::style::metadata_column_width(size_width, measure(i18n.text(Message::ColumnSize).as_ref(), true), key.5);
+            tab.column_measurement_key = Some(key);
+        });
+    }
+
     pub fn clamp_scrolls(&mut self) {
         // Clamp Sidebar horizontal scroll
         let sidebar_viewport_w = self.sidebar_display_width();
@@ -32,13 +72,14 @@ impl OxydeApp {
                 height: l_h,
             });
 
-            let columns = crate::ui::style::DetailsColumnWidths::for_viewport(
+            let columns = crate::ui::style::DetailsColumnWidths::for_viewport_with_search(
                 pane_size.width,
                 active_tab.type_col_width,
                 active_tab.size_col_width,
                 active_tab.date_col_width,
+                active_tab.quick_search.is_some(),
             );
-            let total_w = columns.total() + crate::ui::style::details_horizontal_padding();
+            let total_w = columns.content_width();
 
             let max_h_offset = (total_w - pane_size.width).max(0.0);
             let current_h_offset = active_tab.list_scroll_h.offset().x.as_f32().abs();
@@ -366,7 +407,9 @@ impl OxydeApp {
 
                     let is_root =
                         tab_data.path.len() <= 3 && tab_data.path.chars().nth(1) == Some(':');
-                    let label = if tab_data.path == "__network_vincinity__" {
+                    let label = if let Some(label) = crate::ui::app::search::search_label(&tab_data.path, cx.i18n()) {
+                        label
+                    } else if tab_data.path == "__network_vincinity__" {
                         cx.i18n().text(Message::SidebarNetwork).to_string()
                     } else if tab_data.path == "trash://" {
                         cx.i18n().text(Message::SidebarTrash).to_string()
@@ -808,6 +851,7 @@ impl OxydeApp {
                     .flex_col()
                     .relative()
                     .child(render_top_bar(self, p_id.clone(), handle.clone(), cx))
+                    .when(self.state.find_pane(&p_id).is_some_and(|pane| pane.active_tab().quick_search.is_some()), |pane| pane.child(self.render_quick_search_banner(&p_id, cx)))
                     .child(render_file_list(self, p_id.clone(), handle.clone(), cx))
                     // Visual highlights for splits
                     .when(self.highlight_split_pane == Some(p_id.clone()), |s| {

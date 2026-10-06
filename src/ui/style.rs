@@ -77,17 +77,36 @@ impl GridGeometry {
 /// not depend on whether a background file load finishes before or after zoom.
 pub struct DetailsColumnWidths {
     pub name: f32,
+    pub location: f32,
     pub file_type: f32,
     pub size: f32,
     pub date: f32,
 }
 
 impl DetailsColumnWidths {
+    pub fn content_width(&self) -> f32 {
+        self.total() + details_horizontal_padding()
+    }
+
+    pub fn for_viewport_with_search(viewport: f32, file_type: f32, size: f32, date: f32, search: bool) -> Self {
+        if !search { return Self::for_viewport(viewport, file_type, size, date); }
+        let location_min = logical(180.0);
+        let name_min = logical(220.0);
+        let mut columns = Self::for_viewport(viewport - location_min, file_type, size, date);
+        // Name and location share the space remaining after the metadata columns.
+        // Keep their minima in narrow panes; only that case needs horizontal scrolling.
+        let extra = (columns.name - name_min).max(0.0);
+        columns.location = location_min + extra * 0.45;
+        columns.name -= extra * 0.45;
+        columns
+    }
+
     pub fn for_viewport(viewport: f32, file_type: f32, size: f32, date: f32) -> Self {
         let name_min = logical(220.0);
         let available = (viewport - details_horizontal_padding()).max(0.0);
         let name_target = name_min.max(available * 0.4);
-        let minimums = [logical(80.0), logical(80.0), logical(150.0)];
+        // Dates keep their measured width, even when the panel becomes narrow.
+        let minimums = [logical(64.0), logical(64.0), logical(date).max(logical(64.0))];
         let preferred = [
             logical(file_type).max(minimums[0]),
             logical(size).max(minimums[1]),
@@ -110,6 +129,7 @@ impl DetailsColumnWidths {
         });
         Self {
             name: (available - widths.iter().sum::<f32>()).max(name_min),
+            location: 0.0,
             file_type: widths[0],
             size: widths[1],
             date: widths[2],
@@ -117,8 +137,13 @@ impl DetailsColumnWidths {
     }
 
     pub fn total(&self) -> f32 {
-        self.name + self.file_type + self.size + self.date
+        self.name + self.location + self.file_type + self.size + self.date
     }
+}
+
+/// Baseline width: row padding, or header padding plus its sort/filter indicators.
+pub(crate) fn metadata_column_width(content: f32, header: f32, filtered: bool) -> f32 {
+    (content + 16.0).max(header + 36.0 + if filtered { 12.0 } else { 0.0 }).ceil()
 }
 
 pub fn h_flex() -> Div {
@@ -134,6 +159,45 @@ pub fn v_flex() -> Div {
 mod tests {
     use super::{grid_card_row_height, logical, row_height, DetailsColumnWidths, GridGeometry};
     use crate::ui::scale::set_reference;
+
+    #[test]
+    fn search_columns_resize_together_and_scroll_only_below_their_minima() {
+        set_reference(16);
+        for reference in [16, 24, 32] {
+            set_reference(reference);
+            let mut previous = None;
+            for width in [400.0, 736.0, 1000.0, 1400.0] {
+                let viewport = logical(width);
+                let columns = DetailsColumnWidths::for_viewport_with_search(viewport, 100.0, 100.0, 180.0, true);
+                assert!(columns.name >= logical(220.0));
+                assert!(columns.location >= logical(180.0));
+                assert!(columns.file_type >= logical(64.0));
+                assert!(columns.size >= logical(64.0));
+                assert_eq!(columns.date, logical(180.0));
+                if width >= 736.0 {
+                    assert!((columns.content_width() - viewport).abs() < 0.01);
+                } else {
+                    let max_offset = columns.content_width() - viewport;
+                    assert!(max_offset > logical(120.0));
+                    assert_eq!(logical(120.0).min(max_offset), logical(120.0));
+                }
+                if let Some((name, location)) = previous {
+                    assert!(columns.name >= name && columns.location >= location);
+                }
+                previous = Some((columns.name, columns.location));
+            }
+        }
+        set_reference(16);
+    }
+
+    #[test]
+    fn measured_metadata_widths_reserve_padding_and_header_indicators_only() {
+        use super::metadata_column_width;
+        assert_eq!(metadata_column_width(48.0, 28.0, false), 64.0);
+        assert_eq!(metadata_column_width(48.0, 28.0, true), 76.0);
+        assert_eq!(metadata_column_width(136.0, 75.0, false), 152.0);
+        assert_eq!(metadata_column_width(190.0, 28.0, false), 206.0);
+    }
 
     #[test]
     fn grid_and_detail_geometry_follow_the_reference_without_double_scaling() {

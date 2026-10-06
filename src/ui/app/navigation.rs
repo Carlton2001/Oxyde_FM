@@ -286,6 +286,7 @@ impl OxydeApp {
                 pane.active_tab().load_status,
                 crate::ui::workspace::TabLoadStatus::Loading
             ) && pane.active_tab().files.is_empty()
+                && pane.active_tab().quick_search.is_none()
             {
                 load_path = Some(pane.active_tab().path.clone());
             }
@@ -305,7 +306,7 @@ impl OxydeApp {
                 && matches!(
                     pane.active_tab().load_status,
                     crate::ui::workspace::TabLoadStatus::Loading
-                ))
+                ) && pane.active_tab().quick_search.is_none())
             .then(|| (pane.active_tab_index, pane.active_tab().path.clone()))
         });
         if let Some((index, path)) = reload {
@@ -331,6 +332,13 @@ impl OxydeApp {
             let tab_idx = pane.active_tab_index;
             let active_tab = pane.active_tab_mut();
             active_tab.path = path.clone();
+            active_tab.search_revision = active_tab.search_revision.wrapping_add(1);
+            active_tab.search_input = None;
+            active_tab.search_text.clear();
+            active_tab.pending_reveal = None;
+            if let Some(search) = active_tab.quick_search.take() {
+                search.cancellation.0.store(true, std::sync::atomic::Ordering::Relaxed);
+            }
             active_tab.files.clear();
             active_tab.cached_filtered_files.clear();
             active_tab.filter_types.clear();
@@ -357,6 +365,10 @@ impl OxydeApp {
         reset_scroll: bool,
         cx: &mut Context<Self>,
     ) {
+        if path.starts_with("search://") {
+            self.request_quick_search(pane_id, tab_idx, path, cx);
+            return;
+        }
         let Some(tab_id) = self
             .state
             .find_pane(pane_id)
@@ -375,6 +387,7 @@ impl OxydeApp {
             .insert(tab_id.clone(), request_id);
         let show_hidden = self.show_hidden;
         let show_system = self.show_system;
+        let pane_width = self.pane_sizes.get(pane_id).map(|size| size.width).unwrap_or(self.list_width);
         cx.spawn(move |_, cx: &mut AsyncApp| {
             let mut cx = cx.clone();
             async move {
@@ -409,6 +422,7 @@ impl OxydeApp {
                                 if reset_scroll {
                                     tab.list_scroll = UniformListScrollHandle::new();
                                 }
+                                tab.reveal_pending_item(pane_width);
                             }
                             Err(error) => {
                                 tab.files.clear();

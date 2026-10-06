@@ -69,6 +69,7 @@ pub struct SavedTab {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum SortColumn {
     Name,
+    Location,
     Type,
     Size,
     Modified,
@@ -172,6 +173,12 @@ impl DateCategory {
 
 #[derive(Clone)]
 pub struct TabState {
+    pub quick_search: Option<crate::ui::app::search::QuickSearchState>,
+    pub search_input: Option<gpui::Entity<crate::ui::components::input::TextInput>>,
+    pub search_slide: crate::ui::app::search::SearchInputSlide,
+    pub search_text: String,
+    pub search_revision: u64,
+    pub pending_reveal: Option<String>,
     pub id: String,
     pub path: String,
     pub files: Vec<FileEntry>,
@@ -197,6 +204,9 @@ pub struct TabState {
     pub type_col_width: f32,
     pub size_col_width: f32,
     pub date_col_width: f32,
+    pub column_type_labels: std::collections::HashSet<String>,
+    pub column_size_values: std::collections::HashSet<(u64, bool, bool)>,
+    pub column_measurement_key: Option<(u32, crate::ui::i18n::Language, crate::ui::format::DateFormat, bool, bool, bool)>,
     pub load_status: TabLoadStatus,
 }
 
@@ -208,9 +218,32 @@ pub enum TabLoadStatus {
 }
 
 impl TabState {
+    pub(crate) fn reveal_pending_item(&mut self, width: f32) {
+        let Some(path) = self.pending_reveal.take() else { return; };
+        let Some(index) = self.filtered_files().iter().position(|file| file.path == path) else { return; };
+        let modified = self.filtered_files()[index].modified;
+        self.collapsed_date_groups.remove(&crate::ui::date_groups::DateGroup::for_timestamp(modified, chrono::Local::now().date_naive()));
+        let grid = self.view_mode == ViewMode::Grid;
+        let columns = if grid { crate::ui::style::GridGeometry::for_viewport(width, crate::ui::components::scrollbar::zed_track_width()).columns } else { 1 };
+        let rows = crate::ui::date_groups::display_rows(self.filtered_files(), self.group_by_date, &self.collapsed_date_groups, columns);
+        if let Some(row) = rows.iter().position(|row| matches!(row, crate::ui::date_groups::DisplayRow::Files(indices) if indices.contains(&index))) {
+            if grid && self.group_by_date {
+                let y = crate::ui::date_groups::content_height(&rows[..row], true);
+                self.list_scroll.0.borrow().base_handle.set_offset(gpui::point(gpui::px(0.0), gpui::px(-y)));
+            } else { self.list_scroll.scroll_to_item(row, gpui::ScrollStrategy::Top); }
+        }
+    }
+
+
     pub fn new(id: String, path: String) -> Self {
         Self {
             id,
+            quick_search: None,
+            search_input: None,
+            search_slide: Default::default(),
+            search_text: String::new(),
+            search_revision: 0,
+            pending_reveal: None,
             path: path.clone(),
             files: Vec::new(),
             back_stack: Vec::new(),
@@ -235,6 +268,9 @@ impl TabState {
             type_col_width: 100.0,
             size_col_width: 100.0,
             date_col_width: 180.0,
+            column_type_labels: Default::default(),
+            column_size_values: Default::default(),
+            column_measurement_key: None,
             load_status: TabLoadStatus::Loading,
         }
     }
@@ -290,43 +326,17 @@ impl TabState {
     }
 
     pub fn recalculate_column_widths(&mut self) {
-        use crate::ui::format::{format_date, format_size};
-        use crate::ui::i18n::Language;
-        let measure = |txt: &str| txt.chars().count() as f32 * 6.5;
-
-        // Width reservations cover the longest built-in labels in both catalogs.
-        // These are layout measurements, not user-facing strings.
-        let mut max_type_w: f32 = 15.0 * 6.5;
-        let mut max_size_w: f32 = 6.0 * 6.5;
-        let mut max_date_w: f32 = 13.0 * 6.5;
+        self.column_type_labels.clear();
+        self.column_size_values.clear();
+        self.column_measurement_key = None;
 
         // We use the full files list instead of cached_filtered_files
         // to keep columns stable while the user interacts with filters.
         for f in &self.files {
-            let type_str = if f.is_dir {
-                "Dossier".to_string()
-            } else {
-                std::path::Path::new(&f.name)
-                    .extension()
-                    .and_then(|e| e.to_str())
-                    .map(|s| s.to_uppercase())
-                    .unwrap_or("Fichier".to_string())
-            };
-            max_type_w = max_type_w.max(measure(&type_str));
+            self.column_type_labels.insert(crate::ui::components::file_list::file_type_label(f));
 
-            // Reserve enough width for both supported display languages.
-            // This keeps columns stable when the user switches language.
-            for language in [Language::French, Language::English] {
-                let size_str = format_size(f.size, f.is_dir, f.is_calculated, language);
-                max_size_w = max_size_w.max(measure(&size_str));
-                let date_str = format_date(f.modified, crate::ui::format::DateFormat::Iso);
-                max_date_w = max_date_w.max(measure(&date_str));
-            }
+            self.column_size_values.insert((f.size, f.is_dir, f.is_calculated));
         }
-
-        self.type_col_width = (max_type_w + 36.0).max(70.0);
-        self.size_col_width = (max_size_w + 36.0).max(70.0);
-        self.date_col_width = (max_date_w + 36.0).max(130.0);
     }
 
     pub fn filtered_files(&self) -> &[FileEntry] {
@@ -361,6 +371,7 @@ impl TabState {
                 }
                 SortColumn::Size => a.size.cmp(&b.size),
                 SortColumn::Modified => a.modified.cmp(&b.modified),
+                SortColumn::Location => std::path::Path::new(&a.path).parent().cmp(&std::path::Path::new(&b.path).parent()),
             };
 
             let cmp = if cmp == Ordering::Equal {

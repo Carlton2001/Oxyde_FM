@@ -137,6 +137,14 @@ impl OxydeApp {
             }
         }
         // Menus contain snapshots of labels; recreate them on the next opening.
+        let placeholder = cx.i18n().text(Message::QuickSearch);
+        self.state.layout.visit_panes(&mut |pane| {
+            for tab in &pane.tabs {
+                if let Some(input) = &tab.search_input {
+                    input.update(cx, |input, cx| input.set_placeholder(placeholder.clone(), cx));
+                }
+            }
+        });
         self.context_menus.clear();
         cx.refresh_windows();
         self.save_preferences(cx);

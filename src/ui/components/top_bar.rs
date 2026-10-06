@@ -82,6 +82,8 @@ pub fn render_top_bar(
         Some(_cx.i18n().text(Message::SidebarTrash).to_string())
     } else if is_network_neighborhood {
         Some(_cx.i18n().text(Message::SidebarNetwork).to_string())
+    } else if current_path.starts_with("search://") {
+        crate::ui::app::search::search_label(&current_path, _cx.i18n())
     } else {
         None
     };
@@ -160,9 +162,10 @@ pub fn render_top_bar(
         .w_full()
         .flex()
         .items_center()
-        .px_4()
+        .pl_4()
+        .pr(rems(0.25))
         .when(view.breadcrumb_editing && view.breadcrumb_pane_id.as_deref() == Some(pane_id.as_str()), |bar| bar.pr(rems(0.5)))
-        .bg(theme.background)
+        .bg(theme.surface)
         .border_b(rems(0.0625))
         .border_color(theme.border)
         .child(
@@ -676,8 +679,6 @@ pub fn render_top_bar(
                     let wheel_scroll = breadcrumb_scroll.clone();
                     let wheel_handle = handle.clone();
                     let measure_handle = handle.clone();
-                    let measure_pane = pane_id.clone();
-                    let measured_width = breadcrumb_viewport_width.get();
                     let viewport_width = breadcrumb_viewport_width.clone();
                     let resize_scroll = breadcrumb_scroll.clone();
                     let auto_scroll_to_end = breadcrumb_path_changed;
@@ -696,24 +697,19 @@ pub fn render_top_bar(
                         .relative()
                         .flex()
                         .flex_1()
-                        .when(measured_width > 0.0, |bar| bar.w(px(measured_width)).flex_none())
                         .min_w_0()
                         .h_full()
-                        .child(canvas(|bounds, _, _| bounds, move |_, bounds: Bounds<Pixels>, window, cx| {
-                            measure_handle.update(cx, |this, cx| {
-                                if let (Some(origin), Some(size)) = (this.pane_origins.get(&measure_pane), this.pane_sizes.get(&measure_pane)) {
-                                    let right = (origin.x + size.width).min(window.bounds().size.width.as_f32());
-                                    let available = (right - bounds.origin.x.as_f32() - logical(16.0)).max(0.0);
+                        .child(canvas(|bounds, _, _| bounds, move |_, bounds: Bounds<Pixels>, _, cx| {
+                            measure_handle.update(cx, |_, cx| {
+                                {
+                                    let available = bounds.size.width.as_f32().max(0.0);
                                     if auto_scroll_to_end {
                                         resize_scroll.set_offset(point(-resize_scroll.max_offset().x, px(0.0)));
                                     }
                                     if (viewport_width.get() - available).abs() > 1.0 {
                                         viewport_width.set(available);
                                         if total_parts > 0 {
-                                            if let Some(last) = resize_scroll.bounds_for_item(total_parts * 2 - 1) {
-                                                let overflow = (last.right().as_f32() - bounds.origin.x.as_f32() - available).max(0.0);
-                                                resize_scroll.set_offset(point(px(-overflow), px(0.0)));
-                                            }
+                                            resize_scroll.scroll_to_item(total_parts * 2 - 2);
                                         }
                                         cx.notify();
                                     }
@@ -756,7 +752,7 @@ pub fn render_top_bar(
                                     .top_0()
                                     .h_full()
                                     .w(rems(1.5))
-                                    .bg(linear_gradient(logical(90.0), linear_color_stop(theme.background, 0.0), linear_color_stop(theme.background.alpha(0.0), 1.0))),
+                                    .bg(linear_gradient(logical(90.0), linear_color_stop(theme.surface, 0.0), linear_color_stop(theme.surface.alpha(0.0), 1.0))),
                             )
                         })
                         .when(fade_right, |bar| {
@@ -767,10 +763,13 @@ pub fn render_top_bar(
                                     .top_0()
                                     .h_full()
                                     .w(rems(1.5))
-                                    .bg(linear_gradient(logical(270.0), linear_color_stop(theme.background, 0.0), linear_color_stop(theme.background.alpha(0.0), 1.0))),
+                                    .bg(linear_gradient(logical(270.0), linear_color_stop(theme.surface, 0.0), linear_color_stop(theme.surface.alpha(0.0), 1.0))),
                             )
                         }))
                     },
                 )
         )
+        .when(!is_trash_path && !is_network_neighborhood && !current_path.starts_with("::{"), |bar| {
+            bar.child(view.render_quick_search_control(&pane_id, _cx))
+        })
 }
