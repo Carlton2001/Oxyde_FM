@@ -10,6 +10,7 @@ pub(crate) mod disk_images;
 mod drive_watchers;
 pub mod layout;
 pub mod navigation;
+mod sizes;
 mod preferences;
 pub(crate) mod network;
 pub mod selection;

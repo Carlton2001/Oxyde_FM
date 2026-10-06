@@ -57,6 +57,9 @@ pub fn render_title_bar(
                     .into_iter().map(|message| {
                         let search_handle = tools_handle.clone();
                         let mut item = DropdownItem::new(cx.i18n().text(message).to_string(), move |window, cx| {
+                            if message == Message::ToolSizes {
+                                search_handle.update(cx, |view, cx| view.calculate_sizes(cx));
+                            }
                             if message == Message::ToolDuplicates {
                                 search_handle.update(cx, |view, cx| view.open_duplicates(window, cx));
                             }
@@ -66,7 +69,7 @@ pub fn render_title_bar(
                         });
                         if message == Message::ToolSearch { item.icon = Some(crate::ui::components::dropdown::IconName::Search); }
                         if message == Message::ToolDuplicates { item.icon = Some(crate::ui::components::dropdown::IconName::Copy); }
-                        item.is_dimmed = message == Message::ToolSizes;
+                        if message == Message::ToolSizes { item.icon = Some(crate::ui::components::dropdown::IconName::ChartBar); }
                         item
                     }).collect();
                 view.settings_open = false;

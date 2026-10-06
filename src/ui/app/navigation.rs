@@ -331,6 +331,8 @@ impl OxydeApp {
         if let Some(pane) = self.state.find_pane_mut(pane_id) {
             let tab_idx = pane.active_tab_index;
             let active_tab = pane.active_tab_mut();
+            active_tab.size_calculation = None;
+            active_tab.show_size_histogram = false;
             active_tab.path = path.clone();
             active_tab.search_revision = active_tab.search_revision.wrapping_add(1);
             active_tab.search_input = None;
@@ -381,6 +383,9 @@ impl OxydeApp {
         let Some(handle) = self.handle.clone() else {
             return;
         };
+        if let Some(tab) = self.state.find_tab_mut(&tab_id) {
+            tab.size_calculation = None;
+        }
         self.next_file_request = self.next_file_request.wrapping_add(1);
         let request_id = self.next_file_request;
         self.pending_file_requests

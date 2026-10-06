@@ -228,7 +228,7 @@ settings-coming-soon = Coming soon
 
 title-new-panel = New panel on the right
 title-tools = Tools
-tool-sizes = Calculate sizes — Coming soon
+tool-sizes = Calculate sizes
 tool-search = Advanced search
 quick-search = Quick search
 quick-search-title = Search “{ $query }” in { $folder }
@@ -381,3 +381,5 @@ duplicate-failed = Search failed: { $error }
 duplicate-more = Load more
 duplicate-disk = Disk #{ $disk }
 duplicate-go-to-folder = Click to go to the folder
+folder-size-empty = Empty
+quick-search-current-folder = Current folder

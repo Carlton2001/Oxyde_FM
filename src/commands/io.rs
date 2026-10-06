@@ -916,28 +916,117 @@ pub async fn calculate_folder_size(path: String) -> Result<FolderSizeResult, Com
             ));
         }
 
-        let mut size = 0;
-        let mut folders_count = 0;
-        let mut files_count = 0;
-        use walkdir::WalkDir;
-        // skip(1) to avoid counting the root folder itself
-        for entry in WalkDir::new(&pb).into_iter().skip(1).filter_map(|e| e.ok()) {
-            if entry.file_type().is_file() {
-                files_count += 1;
-                size += entry.metadata().map(|m| m.len()).unwrap_or(0);
-            } else if entry.file_type().is_dir() {
-                folders_count += 1;
-            }
-        }
+        use std::sync::{Arc, atomic::{AtomicU64, Ordering}};
+        let size = Arc::new(AtomicU64::new(0));
+        let folders_count = Arc::new(AtomicU64::new(0));
+        let files_count = Arc::new(AtomicU64::new(0));
+        let size_acc = size.clone();
+        let folders_acc = folders_count.clone();
+        let files_acc = files_count.clone();
+        let num_threads = if crate::utils::hardware::is_ssd(&pb) { 16 } else { 2 };
+
+        jwalk::WalkDir::new(&pb)
+            .skip_hidden(false)
+            .follow_links(false)
+            .parallelism(jwalk::Parallelism::RayonNewPool(num_threads))
+            .process_read_dir(move |depth, path, _, children| {
+                if size_scan_excluded(path) {
+                    children.clear();
+                    return;
+                }
+                children.retain(|child| match child {
+                    Ok(entry) => !entry.file_type().is_symlink()
+                        && (!entry.file_type().is_dir() || !size_scan_excluded(&entry.path())),
+                    Err(_) => true,
+                });
+                if depth.is_none() {
+                    return;
+                }
+                // Count and read metadata on the parallel workers, as in Tauri.
+                // Only children are counted, so the scan root is excluded.
+                for entry in children.iter().flatten() {
+                    if entry.file_type().is_file() {
+                        files_acc.fetch_add(1, Ordering::Relaxed);
+                        if let Ok(metadata) = entry.metadata() {
+                            let _ = size_acc.fetch_update(Ordering::Relaxed, Ordering::Relaxed,
+                                |value| Some(value.saturating_add(metadata.len())));
+                        }
+                    } else if entry.file_type().is_dir() {
+                        folders_acc.fetch_add(1, Ordering::Relaxed);
+                    }
+                }
+            })
+            .into_iter()
+            .for_each(|_| {});
 
         Ok(FolderSizeResult {
-            size,
-            folders_count,
-            files_count,
+            size: size.load(Ordering::Relaxed),
+            folders_count: folders_count.load(Ordering::Relaxed),
+            files_count: files_count.load(Ordering::Relaxed),
         })
     })
     .await
     .map_err(|e| CommandError::SystemError(format!("Task join error: {}", e)))?
+}
+
+/// Preserve the former Tauri size scan exclusions, matching whole components
+/// case-insensitively so similarly named user folders remain measurable.
+fn size_scan_excluded(path: &std::path::Path) -> bool {
+    let normalized = path.to_string_lossy().replace('\\', "/").to_ascii_lowercase();
+    let parts: Vec<_> = normalized.split('/').collect();
+    parts.contains(&"system volume information")
+        || parts.windows(3).any(|parts| parts == ["microsoft", "windows", "containers"])
+}
+
+#[cfg(test)]
+mod size_scan_tests {
+    use super::*;
+
+    #[test]
+    fn excludes_system_branches_without_excluding_similar_user_names() {
+        for path in [r"C:\SYSTEM VOLUME INFORMATION\data", r"C:\Users\user\Microsoft\Windows\Containers\data"] {
+            assert!(size_scan_excluded(std::path::Path::new(path)));
+        }
+        for path in [r"C:\Windows", r"C:\Program Files", r"C:\System Volume Information backup", r"C:\Microsoft\Windows\Containers backup"] {
+            assert!(!size_scan_excluded(std::path::Path::new(path)));
+        }
+    }
+
+    #[test]
+    fn recursive_size_ignores_excluded_content_and_counts_nested_files() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::create_dir(root.path().join("normal")).unwrap();
+        std::fs::create_dir(root.path().join("System Volume Information")).unwrap();
+        std::fs::write(root.path().join("normal/file"), b"12345").unwrap();
+        std::fs::write(root.path().join("System Volume Information/ignored"), b"123456789").unwrap();
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        let result = runtime.block_on(calculate_folder_size(root.path().to_string_lossy().into_owned())).unwrap();
+        assert_eq!(result.size, 5);
+        assert_eq!(result.files_count, 1);
+        assert_eq!(result.folders_count, 1);
+    }
+
+    #[test]
+    fn concurrent_scans_keep_exact_independent_totals_including_hidden_files() {
+        let root = tempfile::tempdir().unwrap();
+        for name in ["first", "second"] {
+            for index in 0..32 {
+                let directory = root.path().join(name).join(format!(".branch-{index}"));
+                std::fs::create_dir_all(&directory).unwrap();
+                std::fs::write(directory.join(".file"), vec![0; index + 1]).unwrap();
+            }
+        }
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        let results = runtime.block_on(futures::future::join_all(["first", "second"].map(|name| {
+            calculate_folder_size(root.path().join(name).to_string_lossy().into_owned())
+        })));
+        for result in results {
+            let result = result.unwrap();
+            assert_eq!(result.size, 528);
+            assert_eq!(result.files_count, 32);
+            assert_eq!(result.folders_count, 32);
+        }
+    }
 }
 
 pub async fn set_shortcut_info(

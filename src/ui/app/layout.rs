@@ -39,7 +39,7 @@ impl OxydeApp {
             tab.type_col_width = crate::ui::style::metadata_column_width(type_width, measure(i18n.text(Message::ColumnType).as_ref(), true), key.3);
             tab.date_col_width = crate::ui::style::metadata_column_width(measure(&date_sample, false), measure(i18n.text(Message::ColumnModified).as_ref(), true), key.4);
             let size_width = tab.column_size_values.iter().map(|&(size, directory, calculated)| {
-                measure(&crate::ui::format::format_size(size, directory, calculated, language), false)
+                if directory && calculated && size == 0 { measure(i18n.text(Message::FolderSizeEmpty).as_ref(), false) } else { measure(&crate::ui::format::format_size(size, directory, calculated, language), false) }
             }).fold(0.0_f32, f32::max);
             tab.size_col_width = crate::ui::style::metadata_column_width(size_width, measure(i18n.text(Message::ColumnSize).as_ref(), true), key.5);
             tab.column_measurement_key = Some(key);

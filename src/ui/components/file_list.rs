@@ -186,7 +186,11 @@ pub fn render_file_list(
     }
     let active_tab = pane.active_tab();
     let search_results = active_tab.quick_search.is_some();
+    let calculating_sizes = active_tab.size_calculation.is_some();
     let files = active_tab.filtered_files().to_vec();
+    let histogram_total = if active_tab.show_size_histogram && files.iter().all(|file| !file.is_dir || file.is_calculated) {
+        files.iter().fold(0u64, |total, file| total.saturating_add(file.size))
+    } else { 0 };
     let rows = display_rows(&files, active_tab.group_by_date, &active_tab.collapsed_date_groups, 1);
     let count = rows.len() as f32;
     let empty_message = if !files.is_empty() {
@@ -368,7 +372,7 @@ pub fn render_file_list(
                                             let date_tt = file.modified;
                                             let is_dimmed = file.is_hidden || file.is_system;
                                             div()
-                                                .id(SharedString::from(format!("file-row-{}", path))).relative().when(is_selected, |d| d.child(div().absolute().left_0().top_0().bottom_0().w(rems(0.1875)).bg(theme.accent)))
+                                                .id(SharedString::from(format!("file-row-{}", path))).relative().when(histogram_total > 0, |d| d.child(size_histogram(file.size, histogram_total, theme.accent))).when(is_selected, |d| d.child(div().absolute().left_0().top_0().bottom_0().w(rems(0.1875)).bg(theme.accent)))
                                                 .flex()
                                                 .items_center()
                                                 .h(px(crate::ui::style::row_height()))
@@ -668,7 +672,7 @@ pub fn render_file_list(
                                                 .when(location_w > 0.0, |row| row.child(div().w(px(location_w)).flex_none().px(rems(0.5)).text_color(theme.text_muted).truncate().text_size(rems(0.75)).child(std::path::Path::new(&file.path).parent().map(|parent| parent.to_string_lossy().into_owned()).unwrap_or_default())))
                                                 .when(!network_panel, |row| row.child(div().w(px(type_w)).flex_none().px(rems(0.5)).text_color(theme.text_muted).truncate().text_size(rems(0.75)).when(is_dimmed, |d| d.opacity(0.5)).child(file_type_display(file, cx.i18n()))))
                                                 .when(!network_panel, |row| row
-                                                    .child(div().w(px(size_w)).flex_none().px(rems(0.5)).text_align(TextAlign::Right).text_color(theme.text_muted).truncate().text_size(rems(0.75)).when(is_dimmed, |d| d.opacity(0.5)).child(format_size(file.size, is_dir, file.is_calculated, language)))
+                                                    .child(div().w(px(size_w)).flex_none().px(rems(0.5)).text_align(TextAlign::Right).text_color(theme.text_muted).truncate().text_size(rems(0.75)).when(is_dimmed, |d| d.opacity(0.5)).child(if calculating_sizes && is_dir && !file.is_calculated { size_loading(&path, theme.accent) } else if is_dir && file.is_calculated && file.size == 0 { div().child(cx.i18n().text(Message::FolderSizeEmpty)).into_any_element() } else { div().child(format_size(file.size, is_dir, file.is_calculated, language)).into_any_element() }))
                                                     .child(div().w(px(date_w)).flex_none().px(rems(0.5)).text_color(theme.text_muted).truncate().text_size(rems(0.75)).when(is_dimmed, |d| d.opacity(0.5)).child(format_date(file.modified, crate::ui::format::date_format(cx)))))
                                                 .into_any_element()
                                             }}).collect::<Vec<_>>()
@@ -1079,7 +1083,11 @@ fn render_grid_file_list(
     let pane = view.state.layout.find_pane(&pane_id).expect("pane exists");
     let tab = pane.active_tab();
     let search_results = tab.quick_search.is_some();
+    let calculating_sizes = tab.size_calculation.is_some();
     let files = tab.filtered_files().to_vec();
+    let histogram_total = if tab.show_size_histogram && files.iter().all(|file| !file.is_dir || file.is_calculated) {
+        files.iter().fold(0u64, |total, file| total.saturating_add(file.size))
+    } else { 0 };
     let selected = tab.selected_paths.clone();
     let inline_rename = view.inline_rename;
     let editing_path = view.editing_path.clone();
@@ -1219,7 +1227,7 @@ fn render_grid_file_list(
                                     let size_tt = (file.size, is_dir, file.is_calculated);
                                     let date_tt = file.modified;
                                     let mut card = div()
-                                        .id(SharedString::from(format!("file-card-{path}")))
+                                        .id(SharedString::from(format!("file-card-{path}"))).when(calculating_sizes && is_dir && !file.is_calculated, |d| d.child(size_loading(&path, theme.accent))).relative().when(histogram_total > 0, |d| d.child(size_histogram(file.size, histogram_total, theme.accent)))
                                         .w(px(card_width - logical(4.0)))
                                         .h(px(crate::ui::style::grid_card_row_height() - logical(4.0)))
                                         .m_0p5()
@@ -2435,4 +2443,24 @@ pub fn get_size_filter_items(
     }
 
     items
+}
+
+fn size_histogram(size: u64, total: u64, color: Hsla) -> Div {
+    div().absolute().left_0().top_0().bottom_0().w(relative((size as f64 / total as f64).clamp(0.0, 1.0) as f32)).bg(color.opacity(0.12))
+}
+
+fn size_loading(path: &str, color: Hsla) -> AnyElement {
+    div().flex().items_center().justify_end().gap(rems(0.1875))
+        .h(rems(1.0))
+        .children((0..3).map(|index| {
+            div().size(rems(0.1875)).rounded_full().bg(color)
+                .with_animation(
+                    SharedString::from(format!("size-loading-{path}-{index}")),
+                    Animation::new(std::time::Duration::from_millis(1000)).repeat(),
+                    move |dot, delta| {
+                        let wave = (1.0 + ((delta - index as f32 / 3.0) * std::f32::consts::TAU).cos()) * 0.5;
+                        dot.opacity(0.25 + wave * 0.75)
+                    },
+                )
+        })).into_any_element()
 }

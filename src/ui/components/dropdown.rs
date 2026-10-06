@@ -7,6 +7,7 @@ use std::rc::Rc;
 
 #[derive(Clone)]
 pub enum IconName {
+    ChartBar,
     Separator,
     ListOrdered,
     ALargeSmall,
@@ -375,6 +376,7 @@ impl<T: crate::ui::components::scrollbar::ScrollbarState + 'static> RenderOnce f
                                                                     IconName::HardDrive => {
                                                                         "icons/hard-drive.svg"
                                                                     }
+                                                                    IconName::ChartBar => "icons/chart-bar.svg",
                                                                     IconName::Copy => {
                                                                         "icons/copy.svg"
                                                                     }

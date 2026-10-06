@@ -397,7 +397,7 @@ impl AdvancedSearchWindow {
         cx.notify();
     }
 
-    fn submit_advanced_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    fn submit_advanced_search(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
         let Some(d) = &self.advanced_search else {
             return;
         };
@@ -459,7 +459,8 @@ impl AdvancedSearchWindow {
             "search://{}",
             serde_json::to_string(&("advanced", root, options)).expect("search options")
         );
-        window.remove_window();
+        self.advanced_search.as_mut().unwrap().error = false;
+        cx.notify();
         let owner = self.owner.clone();
         cx.defer(move |cx| {
             let _ = owner.update(cx, |owner, cx| {

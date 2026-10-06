@@ -235,7 +235,7 @@ settings-coming-soon = À venir
 
 title-new-panel = Nouveau panneau à droite
 title-tools = Outils
-tool-sizes = Calculer les tailles — À venir
+tool-sizes = Calculer les tailles
 tool-search = Recherche avancée
 quick-search = Recherche rapide
 quick-search-title = Rechercher « { $query } » dans { $folder }
@@ -388,3 +388,5 @@ duplicate-failed = La recherche a échoué : { $error }
 duplicate-more = Afficher davantage
 duplicate-disk = Disque #{ $disk }
 duplicate-go-to-folder = Cliquez pour aller au dossier
+folder-size-empty = Vide
+quick-search-current-folder = Dossier courant
