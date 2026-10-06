@@ -527,8 +527,8 @@ fn format_elapsed_duration(duration_ms: u64, language: crate::ui::i18n::Language
     if total_seconds < 60 {
         let tenths = duration_ms.saturating_add(50) / 100;
         let decimal = match language {
-            crate::ui::i18n::Language::French => ',',
             crate::ui::i18n::Language::English => '.',
+            _ => ',',
         };
         return format!(
             "{}{decimal}{} s",

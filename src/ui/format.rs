@@ -25,6 +25,7 @@ pub fn format_number(number: u64, language: Language) -> String {
     let separator = match language {
         Language::French => '\u{202f}',
         Language::English => ',',
+        Language::German | Language::Spanish | Language::Italian => '.',
     };
     let mut result = String::new();
     for (index, ch) in digits.chars().enumerate() {
@@ -42,7 +43,7 @@ pub fn format_size(bytes: u64, is_dir: bool, is_calculated: bool, language: Lang
     }
     let units = match language {
         Language::French => ["o", "Ko", "Mo", "Go", "To", "Po", "Eo"],
-        Language::English => ["B", "KB", "MB", "GB", "TB", "PB", "EB"],
+        _ => ["B", "KB", "MB", "GB", "TB", "PB", "EB"],
     };
     let mut unit = 0;
     let mut divisor = 1u128;
@@ -60,7 +61,7 @@ pub fn format_size(bytes: u64, is_dir: bool, is_calculated: bool, language: Lang
         tenths = (u128::from(bytes) * 10 + divisor / 2) / divisor;
     }
     let decimal = match language {
-        Language::French => ',',
+        Language::French | Language::German | Language::Spanish | Language::Italian => ',',
         Language::English => '.',
     };
     format!(
@@ -106,6 +107,12 @@ mod tests {
         );
         assert_eq!(format_size(1536, false, false, Language::French), "1,5 Ko");
         assert_eq!(format_size(1536, false, false, Language::English), "1.5 KB");
+        for language in [Language::German, Language::Spanish, Language::Italian] {
+            assert_eq!(format_number(1234567, language), "1.234.567");
+            assert_eq!(format_size(1536, false, false, language), "1,5 KB");
+            assert_eq!(format_size(1023, false, false, language), "1.023 B");
+            assert_eq!(format_size(1048575, false, false, language), "1,0 MB");
+        }
         assert_eq!(format_size(0, false, false, Language::English), "0 B");
         assert_eq!(
             format_size(1023, false, false, Language::French),
@@ -146,6 +153,9 @@ mod tests {
         for (language, expected) in [
             (Language::French, "Disque local"),
             (Language::English, "Local Disk"),
+            (Language::German, "Lokaler Datenträger"),
+            (Language::Spanish, "Disco local"),
+            (Language::Italian, "Disco locale"),
         ] {
             let i18n = crate::ui::i18n::I18n::for_language(language);
             for label in ["", "Local Disk"] {

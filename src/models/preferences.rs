@@ -125,20 +125,41 @@ pub enum Language {
     French,
     #[serde(rename = "en")]
     English,
+    #[serde(rename = "de")]
+    German,
+    #[serde(rename = "es")]
+    Spanish,
+    #[serde(rename = "it")]
+    Italian,
 }
 
 impl Language {
+    pub const ALL: [Self; 5] = [Self::French, Self::English, Self::German, Self::Spanish, Self::Italian];
+
     /// Unsupported and empty identifiers use the initial French UI language.
     pub fn from_id(id: &str) -> Self {
+        Self::supported_id(id).unwrap_or(Self::French)
+    }
+
+    /// Used only for a fresh configuration; unsupported system languages use English.
+    pub fn from_system_locale(locale: Option<&str>) -> Self {
+        locale.and_then(Self::supported_id).unwrap_or(Self::English)
+    }
+
+    fn supported_id(id: &str) -> Option<Self> {
         match id
-            .split(['-', '_'])
+            .split(['-', '_', '.', '@'])
             .next()
             .unwrap_or("")
             .to_ascii_lowercase()
             .as_str()
         {
-            "en" => Self::English,
-            _ => Self::French,
+            "fr" => Some(Self::French),
+            "en" => Some(Self::English),
+            "de" => Some(Self::German),
+            "es" => Some(Self::Spanish),
+            "it" => Some(Self::Italian),
+            _ => None,
         }
     }
 
@@ -146,7 +167,53 @@ impl Language {
         match self {
             Self::French => "fr",
             Self::English => "en",
+            Self::German => "de",
+            Self::Spanish => "es",
+            Self::Italian => "it",
         }
+    }
+}
+
+#[cfg(test)]
+mod language_tests {
+    use super::Language;
+
+    #[test]
+    fn system_language_uses_supported_languages_or_english() {
+        for (locale, expected) in [
+            (Some("fr-CA"), Language::French),
+            (Some("en-GB"), Language::English),
+            (Some("DE-de"), Language::German),
+            (Some("es_MX.UTF-8"), Language::Spanish),
+            (Some("it_IT@euro"), Language::Italian),
+            (Some("en.UTF-8"), Language::English),
+            (Some("pt-BR"), Language::English),
+            (Some("ja-JP"), Language::English),
+            (Some("C.UTF-8"), Language::English),
+            (Some(""), Language::English),
+            (None, Language::English),
+        ] {
+            assert_eq!(Language::from_system_locale(locale), expected, "{locale:?}");
+        }
+    }
+
+    #[test]
+    fn language_identifiers_accept_regions_and_survive_serialization() {
+        for (locale, language) in [
+            ("fr-FR", Language::French),
+            ("en-US", Language::English),
+            ("DE-de", Language::German),
+            ("es_ES", Language::Spanish),
+            ("it-IT", Language::Italian),
+        ] {
+            assert_eq!(Language::from_id(locale), language);
+        }
+        for language in Language::ALL {
+            let serialized = serde_json::to_string(&language).unwrap();
+            assert_eq!(serialized, format!("\"{}\"", language.as_str()));
+            assert_eq!(serde_json::from_str::<Language>(&serialized).unwrap(), language);
+        }
+        assert_eq!(Language::from_id("pt-BR"), Language::French);
     }
 }
 

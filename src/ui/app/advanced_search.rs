@@ -486,7 +486,7 @@ impl AdvancedSearchWindow {
         let theme = *cx.theme();
         let units = match cx.i18n().language() {
             crate::ui::i18n::Language::French => ["o", "Ko", "Mo", "Go", "To"],
-            crate::ui::i18n::Language::English => ["B", "KB", "MB", "GB", "TB"],
+            _ => ["B", "KB", "MB", "GB", "TB"],
         };
         let mut body = div()
             .flex()

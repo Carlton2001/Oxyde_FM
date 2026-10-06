@@ -112,6 +112,13 @@ impl Default for AppConfig {
 }
 
 impl AppConfig {
+    pub fn for_system_locale(locale: Option<&str>) -> Self {
+        Self {
+            language: super::preferences::Language::from_system_locale(locale).as_str().into(),
+            ..Self::default()
+        }
+    }
+
     /// Restore known preferences while retaining workspace and extension data.
     pub fn reset_preferences(&mut self) {
         let extra = std::mem::take(&mut self.extra);
@@ -183,7 +190,9 @@ impl ConfigManager {
             Ok(content) => {
                 serde_json::from_str(&content).map_err(|e| CommandError::Other(e.to_string()))
             }
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(AppConfig::default()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                Ok(AppConfig::for_system_locale(crate::platform::platform().interface_locale().as_deref()))
+            }
             Err(error) => Err(CommandError::IoError(error.to_string())),
         }
     }
@@ -230,6 +239,24 @@ mod tests {
     use crate::models::preferences::{Language, ThemeId};
 
     #[test]
+    fn fresh_configuration_detects_language_and_preserves_saved_choices() {
+        for language in Language::ALL {
+            let config = AppConfig::for_system_locale(Some(language.as_str()));
+            assert_eq!(config.language, language.as_str());
+        }
+        for locale in [None, Some(""), Some("pt-BR")] {
+            assert_eq!(AppConfig::for_system_locale(locale).language, "en");
+        }
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.json");
+        for language in Language::ALL {
+            let config = AppConfig::for_system_locale(Some(language.as_str()));
+            ConfigManager::write_to_path(&path, &config).unwrap();
+            assert_eq!(ConfigManager::read_from_path(&path).unwrap().language, language.as_str());
+        }
+    }
+
+    #[test]
     fn older_configs_have_defaults_and_legacy_identifiers_still_resolve() {
         let missing: AppConfig = serde_json::from_str("{}").unwrap();
         assert_eq!(missing.theme, "dark");
@@ -244,7 +271,8 @@ mod tests {
         assert_eq!(Language::from_id(&legacy.language), Language::English);
         assert_eq!(ThemeId::from_id(""), ThemeId::Dark);
         assert_eq!(ThemeId::from_id("unknown"), ThemeId::Dark);
-        assert_eq!(Language::from_id("de-DE"), Language::French);
+        assert_eq!(Language::from_id("de-DE"), Language::German);
+        assert_eq!(Language::from_id("unknown"), Language::French);
     }
 
     #[test]
@@ -259,6 +287,9 @@ mod tests {
         for (theme, language) in [
             (ThemeId::Light, Language::English),
             (ThemeId::Dark, Language::French),
+            (ThemeId::Light, Language::German),
+            (ThemeId::Dark, Language::Spanish),
+            (ThemeId::Dark, Language::Italian),
         ] {
             config.theme = theme.as_str().into();
             config.language = language.as_str().into();
@@ -295,7 +326,9 @@ mod tests {
             ConfigManager::read_from_path(&dir.path().join("missing"))
                 .unwrap()
                 .language,
-            "fr"
+            crate::models::preferences::Language::from_system_locale(
+                crate::platform::platform().interface_locale().as_deref()
+            ).as_str()
         );
     }
 }

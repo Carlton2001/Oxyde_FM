@@ -11,6 +11,9 @@ use unic_langid::LanguageIdentifier;
 
 const FRENCH: &str = include_str!("../../locales/fr.ftl");
 const ENGLISH: &str = include_str!("../../locales/en.ftl");
+const GERMAN: &str = include_str!("../../locales/de.ftl");
+const SPANISH: &str = include_str!("../../locales/es.ftl");
+const ITALIAN: &str = include_str!("../../locales/it.ftl");
 
 /// Stable identifiers, independent of the text displayed to users.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -718,6 +721,9 @@ impl I18n {
         let catalog = match language {
             Language::French => FRENCH,
             Language::English => ENGLISH,
+            Language::German => GERMAN,
+            Language::Spanish => SPANISH,
+            Language::Italian => ITALIAN,
         };
         Self::new(language.as_str(), catalog).expect("embedded catalogs must be valid")
     }
@@ -795,8 +801,35 @@ mod tests {
     use super::*;
 
     #[test]
+    fn catalogs_preserve_all_keys_and_named_parameters() {
+        fn parameters(catalog: &str) -> std::collections::BTreeMap<String, std::collections::BTreeSet<String>> {
+            let variables = regex::Regex::new(r"\$([A-Za-z][A-Za-z0-9_-]*)").unwrap();
+            let mut messages = std::collections::BTreeMap::new();
+            let mut current = None;
+            for line in catalog.lines() {
+                if !line.starts_with(char::is_whitespace) {
+                    current = line.split_once('=').map(|(key, _)| key.trim().to_owned());
+                }
+                if let Some(key) = &current {
+                    let args: &mut std::collections::BTreeSet<String> = messages.entry(key.clone()).or_default();
+                    args.extend(variables.captures_iter(line).map(|capture| capture[1].to_owned()));
+                }
+            }
+            messages
+        }
+        let expected = parameters(FRENCH);
+        for (locale, catalog) in [("en", ENGLISH), ("de", GERMAN), ("es", SPANISH), ("it", ITALIAN)] {
+            let actual = parameters(catalog);
+            assert_eq!(actual.keys().collect::<Vec<_>>(), expected.keys().collect::<Vec<_>>(), "keys in {locale}");
+            for (key, arguments) in &expected {
+                assert_eq!(actual.get(key), Some(arguments), "parameters of {key} in {locale}");
+            }
+        }
+    }
+
+    #[test]
     fn dialog_catalog_has_all_messages_and_valid_parameters() {
-        for language in [Language::French, Language::English] {
+        for language in Language::ALL {
             let i18n = I18n::for_language(language);
             let messages = [
                 Message::EjectDrive,
@@ -1192,6 +1225,9 @@ mod tests {
         for (language, singular, plural) in [
             (Language::French, "Opération", "Opérations"),
             (Language::English, "Operation", "Operations"),
+            (Language::German, "Vorgang", "Vorgänge"),
+            (Language::Spanish, "Operación", "Operaciones"),
+            (Language::Italian, "Operazione", "Operazioni"),
         ] {
             let i18n = I18n::for_language(language);
             for count in [0, 1, 2, 1000] {
@@ -1265,6 +1301,9 @@ mod tests {
         for (language, expected) in [
             (Language::French, "0 fichier"),
             (Language::English, "0 files"),
+            (Language::German, "0 Dateien"),
+            (Language::Spanish, "0 archivos"),
+            (Language::Italian, "0 file"),
         ] {
             let i18n = I18n::for_language(language);
             let mut args = FluentArgs::new();
@@ -1278,11 +1317,37 @@ mod tests {
     }
 
     #[test]
+    fn new_languages_translate_plural_counts_and_theme_variants() {
+        for (language, singular, plural, light, dark) in [
+            (Language::German, "Datei", "Dateien", "Hell", "Dunkel"),
+            (Language::Spanish, "archivo", "archivos", "Claro", "Oscuro"),
+            (Language::Italian, "file", "file", "Chiaro", "Scuro"),
+        ] {
+            let i18n = I18n::for_language(language);
+            for count in [0, 1, 2] {
+                let mut args = FluentArgs::new();
+                args.set("count", count);
+                args.set("number", count.to_string());
+                let text = i18n.text_with_args(Message::StatusFiles, &args)
+                    .replace(['\u{2068}', '\u{2069}'], "");
+                assert_eq!(text, format!("{count} {}", if count == 1 { singular } else { plural }));
+            }
+            let mut args = FluentArgs::new();
+            args.set("name", "Windows");
+            for (message, suffix) in [(Message::ThemeLight, light), (Message::ThemeDark, dark)] {
+                let text = i18n.text_with_args(message, &args)
+                    .replace(['\u{2068}', '\u{2069}'], "");
+                assert_eq!(text, format!("Windows {suffix}"));
+            }
+        }
+    }
+
+    #[test]
     fn user_values_are_not_interpreted_as_translation_syntax() {
         let value = "Données { $count } 日本語.txt";
         let mut args = FluentArgs::new();
         args.set("value", value);
-        for language in [Language::French, Language::English] {
+        for language in Language::ALL {
             assert!(I18n::for_language(language)
                 .text_with_args(Message::TooltipType, &args)
                 .contains(value));

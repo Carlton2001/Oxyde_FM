@@ -49,6 +49,9 @@ pub fn render_settings_panel(
     let languages = [
         (Language::French, "Français"),
         (Language::English, "English"),
+        (Language::German, "Deutsch"),
+        (Language::Spanish, "Español"),
+        (Language::Italian, "Italiano"),
     ]
     .map(|(id, label)| {
         let handle = handle.clone();

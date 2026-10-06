@@ -226,6 +226,14 @@ impl Platform for WindowsPlatform {
         let length = unsafe { windows::Win32::Globalization::GetUserDefaultLocaleName(&mut buffer) };
         (length > 0).then(|| String::from_utf16_lossy(&buffer[..length as usize - 1]))
     }
+    fn interface_locale(&self) -> Option<String> {
+        use windows::Win32::Globalization::{GetUserDefaultUILanguage, LCIDToLocaleName};
+        let mut buffer = [0u16; 85];
+        let length = unsafe {
+            LCIDToLocaleName(u32::from(GetUserDefaultUILanguage()), Some(&mut buffer), 0)
+        };
+        (length > 0).then(|| String::from_utf16_lossy(&buffer[..length as usize - 1]))
+    }
     fn name(&self) -> &'static str {
         "windows"
     }

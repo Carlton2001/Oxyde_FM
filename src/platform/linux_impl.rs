@@ -110,6 +110,13 @@ impl Platform for LinuxPlatform {
     fn regional_locale(&self) -> Option<String> {
         ["LC_ALL", "LC_TIME", "LANG"].into_iter().filter_map(|key| std::env::var(key).ok()).find(|value| !value.is_empty())
     }
+    fn interface_locale(&self) -> Option<String> {
+        ["LC_ALL", "LANGUAGE", "LC_MESSAGES", "LANG"]
+            .into_iter()
+            .filter_map(|key| std::env::var(key).ok())
+            .find(|value| !value.is_empty())
+            .and_then(|value| value.split(':').find(|locale| !locale.is_empty()).map(str::to_owned))
+    }
     fn name(&self) -> &'static str {
         "linux"
     }
