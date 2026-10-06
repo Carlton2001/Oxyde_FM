@@ -454,6 +454,7 @@ pub fn render_top_bar(
                                                             icon: Some(if cfg!(target_os = "windows") && view.use_system_icons() {
                                                                 IconName::NativeFolder(entry.path.clone())
                                                             } else { IconName::FolderOpen }),
+                                                            badge: None,
                                                             stay_open: false,
                                                             has_submenu: false,
                                                             is_dimmed,
@@ -607,6 +608,7 @@ pub fn render_top_bar(
                                     let item = crate::ui::components::dropdown::DropdownItem {
                                         label: cx.i18n().text(crate::ui::i18n::Message::CopyPath).to_string(),
                                         icon: Some(IconName::Copy),
+                                        badge: None,
                                         stay_open: false,
                                         has_submenu: false,
                                         is_dimmed: false,
@@ -625,6 +627,7 @@ pub fn render_top_bar(
                                         items.push(crate::ui::components::dropdown::DropdownItem {
                                             label: cx.i18n().text(Message::OpenNewTab).to_string(),
                                             icon: Some(IconName::ExternalLink),
+                                            badge: None,
                                             stay_open: false,
                                             has_submenu: false,
                                             is_dimmed: false,

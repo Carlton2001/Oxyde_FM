@@ -3068,6 +3068,7 @@ impl Render for OxydeApp {
                             crate::ui::components::dropdown::DropdownItem {
                                 label: it.label.clone(),
                                 icon: it.icon.clone(),
+                                badge: it.badge.clone(),
                                 stay_open: it.stay_open,
                                 has_submenu: it.has_submenu,
                                 is_dimmed: it.is_dimmed,
@@ -3367,6 +3368,7 @@ impl Render for OxydeApp {
                                 } else {
                                     None
                                 },
+                                badge: None,
                                 stay_open: has_sub,
                                 has_submenu: has_sub,
                                 // Windows returns -1 for popup entries that own a submenu.

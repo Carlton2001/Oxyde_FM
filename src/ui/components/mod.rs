@@ -161,7 +161,7 @@ fn oxyde_context_menu_items_raw(
             let handle = h_app.clone();
             items.push(crate::ui::components::dropdown::DropdownItem {
                 label: i18n.text(Message::OpenFileLocation).to_string(),
-                icon: Some(IconName::ExternalLink), stay_open: false, has_submenu: false, is_dimmed: false,
+                icon: Some(IconName::ExternalLink), badge: None, stay_open: false, has_submenu: false, is_dimmed: false,
                 on_click: std::rc::Rc::new(move |_, app| { handle.update(app, |this, cx| {
                     this.context_menus.clear();
                     let pane = this.state.active_pane_id.clone();
@@ -180,6 +180,7 @@ fn oxyde_context_menu_items_raw(
     items.push(crate::ui::components::dropdown::DropdownItem {
         label: i18n.text(Message::Open).to_string(),
         icon: Some(IconName::ExternalLink),
+        badge: None,
         stay_open: false,
         has_submenu: false,
         is_dimmed: false,
@@ -202,6 +203,7 @@ fn oxyde_context_menu_items_raw(
         items.push(crate::ui::components::dropdown::DropdownItem {
             label: i18n.text(Message::OpenNewTab).to_string(),
             icon: Some(IconName::ExternalLink),
+            badge: None,
             stay_open: false,
             has_submenu: false,
             is_dimmed: false,
@@ -260,6 +262,7 @@ fn oxyde_context_menu_items_raw(
             } else {
                 IconName::Pin
             }),
+            badge: None,
             stay_open: false,
             has_submenu: false,
             is_dimmed: false,
@@ -287,6 +290,7 @@ fn oxyde_context_menu_items_raw(
     items.push(crate::ui::components::dropdown::DropdownItem {
         label: i18n.text(Message::Cut).to_string(),
         icon: Some(IconName::Scissors),
+        badge: None,
         stay_open: false,
         has_submenu: false,
         is_dimmed: false,
@@ -305,6 +309,7 @@ fn oxyde_context_menu_items_raw(
     items.push(crate::ui::components::dropdown::DropdownItem {
         label: i18n.text(Message::Copy).to_string(),
         icon: Some(IconName::Copy),
+        badge: None,
         stay_open: false,
         has_submenu: false,
         is_dimmed: false,
@@ -323,6 +328,7 @@ fn oxyde_context_menu_items_raw(
     items.push(crate::ui::components::dropdown::DropdownItem {
         label: i18n.text(Message::Paste).to_string(),
         icon: Some(IconName::ClipboardPaste),
+        badge: None,
         stay_open: false,
         has_submenu: false,
         is_dimmed: false,
@@ -394,6 +400,7 @@ fn oxyde_context_menu_items_raw(
         items.push(crate::ui::components::dropdown::DropdownItem {
             label: i18n.text(Message::OpExtractHere).to_string(),
             icon: Some(IconName::ArchiveRestore),
+            badge: None,
             stay_open: false,
             has_submenu: false,
             is_dimmed: false,
@@ -414,6 +421,7 @@ fn oxyde_context_menu_items_raw(
     items.push(crate::ui::components::dropdown::DropdownItem {
         label: i18n.text(Message::Rename).to_string(),
         icon: Some(IconName::Pencil),
+        badge: None,
         stay_open: false,
         has_submenu: false,
         is_dimmed: false,
@@ -432,6 +440,7 @@ fn oxyde_context_menu_items_raw(
     items.push(crate::ui::components::dropdown::DropdownItem {
         label: i18n.text(Message::Delete).to_string(),
         icon: Some(IconName::Trash),
+        badge: None,
         stay_open: false,
         has_submenu: false,
         is_dimmed: false,
@@ -450,6 +459,7 @@ fn oxyde_context_menu_items_raw(
     items.push(crate::ui::components::dropdown::DropdownItem {
         label: i18n.text(Message::Properties).to_string(),
         icon: Some(IconName::Settings),
+        badge: None,
         stay_open: false,
         has_submenu: false,
         is_dimmed: false,
@@ -469,6 +479,7 @@ fn oxyde_context_menu_items_raw(
     items.push(crate::ui::components::dropdown::DropdownItem {
         label: i18n.text(Message::MoreOptions).to_string(),
         icon: Some(IconName::Ellipsis),
+        badge: None,
         stay_open: true,
         has_submenu: true,
         is_dimmed: false,
@@ -505,6 +516,7 @@ fn pane_context_menu_items_raw(
         crate::ui::components::dropdown::DropdownItem {
             label: i18n.text(Message::NewFolder).to_string(),
             icon: Some(IconName::FolderPlus),
+            badge: None,
             stay_open: false,
             has_submenu: false,
             is_dimmed: false,
@@ -523,6 +535,7 @@ fn pane_context_menu_items_raw(
         crate::ui::components::dropdown::DropdownItem {
             label: i18n.text(Message::SelectAll).to_string(),
             icon: Some(IconName::Square),
+            badge: None,
             stay_open: false,
             has_submenu: false,
             is_dimmed: false,
@@ -536,6 +549,7 @@ fn pane_context_menu_items_raw(
         crate::ui::components::dropdown::DropdownItem {
             label: i18n.text(Message::Paste).to_string(),
             icon: Some(IconName::ClipboardPaste),
+            badge: None,
             stay_open: false,
             has_submenu: false,
             is_dimmed: false,
@@ -553,6 +567,7 @@ fn pane_context_menu_items_raw(
         crate::ui::components::dropdown::DropdownItem {
             label: i18n.text(Message::Properties).to_string(),
             icon: Some(IconName::Settings),
+            badge: None,
             stay_open: false,
             has_submenu: false,
             is_dimmed: false,
@@ -575,6 +590,7 @@ fn pane_context_menu_items_raw(
         crate::ui::components::dropdown::DropdownItem {
             label: i18n.text(Message::MoreOptions).to_string(),
             icon: Some(IconName::Ellipsis),
+            badge: None,
             stay_open: true,
             has_submenu: true,
             is_dimmed: false,
@@ -609,6 +625,7 @@ pub fn tab_context_menu_items(
         crate::ui::components::dropdown::DropdownItem {
             label: i18n.text(Message::DuplicateTab).to_string(),
             icon: Some(IconName::CopyPlus),
+            badge: None,
             stay_open: false,
             has_submenu: false,
             is_dimmed: false,
@@ -627,6 +644,7 @@ pub fn tab_context_menu_items(
         crate::ui::components::dropdown::DropdownItem {
             label: i18n.text(Message::CloseOtherTabs).to_string(),
             icon: Some(IconName::CopyX),
+            badge: None,
             stay_open: false,
             has_submenu: false,
             is_dimmed: !can_close_other_tabs,
@@ -646,6 +664,7 @@ pub fn tab_context_menu_items(
         crate::ui::components::dropdown::DropdownItem {
             label: i18n.text(Message::CloseTab).to_string(),
             icon: Some(IconName::CircleX),
+            badge: None,
             stay_open: false,
             has_submenu: false,
             is_dimmed: !can_close_tab,

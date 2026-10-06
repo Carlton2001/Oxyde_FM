@@ -115,6 +115,7 @@ pub fn native_menu_icon(verb: Option<&str>, label: &str) -> Option<IconName> {
 #[derive(Clone)]
 pub struct DropdownItem {
     pub label: String,
+    pub badge: Option<String>,
     pub icon: Option<IconName>,
     pub stay_open: bool,
     pub has_submenu: bool,
@@ -135,6 +136,7 @@ impl DropdownItem {
         Self {
             label: label.into(),
             icon: None,
+            badge: None,
             stay_open: false,
             has_submenu: false,
             is_dimmed: false,
@@ -224,9 +226,19 @@ impl<T: crate::ui::components::scrollbar::ScrollbarState + 'static> RenderOnce f
                 0.0
             };
             let chevron_width = if item.has_submenu { logical(14.0) } else { 0.0 };
+            let badge_width = item.badge.as_ref().map_or(0.0, |badge| {
+                let line = text_system.shape_line(
+                    badge.clone().into(), rem_pixels(rems(0.6875)),
+                    &[TextRun {
+                        len: badge.len(), font: font.clone(), color: theme.text_muted,
+                        background_color: None, underline: None, strikethrough: None,
+                    }], None,
+                );
+                line.width.as_f32().max(logical(12.0)) + logical(16.0)
+            });
             // Row padding (16) + optional icon slot + optional submenu arrow.
             calculated_width =
-                calculated_width.max(line.width.as_f32() + logical(16.0) + icon_width + chevron_width);
+                calculated_width.max(line.width.as_f32() + logical(16.0) + icon_width + chevron_width + badge_width);
         }
 
         let requested_width = self.width.unwrap_or(calculated_width);
@@ -503,6 +515,19 @@ impl<T: crate::ui::components::scrollbar::ScrollbarState + 'static> RenderOnce f
                                                 })
                                                 .child(item.label.clone()),
                                         )
+                                        .when_some(item.badge.clone(), |row, badge| {
+                                            row.child(div()
+                                                .flex_none()
+                                                .min_w(rems(1.25))
+                                                .px(rems(0.25))
+                                                .ml(rems(0.5))
+                                                .rounded(rems(0.25))
+                                                .bg(theme.badge_surface)
+                                                .text_color(theme.text_muted)
+                                                .text_size(rems(0.6875))
+                                                .text_center()
+                                                .child(badge))
+                                        })
                                         // Submenu arrow
                                         .when(item.has_submenu, |s| {
                                             s.child(

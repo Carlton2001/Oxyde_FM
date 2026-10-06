@@ -57,6 +57,7 @@ fn pinned_context_menu_raw(i18n: &I18n, h: Entity<OxydeApp>, path: String) -> Ve
         DropdownItem {
             label: i18n.text(Message::Open).to_string(),
             icon: Some(IconName::ExternalLink),
+            badge: None,
             stay_open: false,
             has_submenu: false,
             is_dimmed: false,
@@ -76,6 +77,7 @@ fn pinned_context_menu_raw(i18n: &I18n, h: Entity<OxydeApp>, path: String) -> Ve
         DropdownItem {
             label: i18n.text(Message::OpenNewTab).to_string(),
             icon: Some(IconName::ExternalLink),
+            badge: None,
             stay_open: false,
             has_submenu: false,
             is_dimmed: false,
@@ -95,6 +97,7 @@ fn pinned_context_menu_raw(i18n: &I18n, h: Entity<OxydeApp>, path: String) -> Ve
         DropdownItem {
             label: i18n.text(Message::UnpinQuickAccess).to_string(),
             icon: Some(IconName::PinOff),
+            badge: None,
             stay_open: false,
             has_submenu: false,
             is_dimmed: false,
@@ -115,6 +118,7 @@ fn pinned_context_menu_raw(i18n: &I18n, h: Entity<OxydeApp>, path: String) -> Ve
         DropdownItem {
             label: i18n.text(Message::Properties).to_string(),
             icon: Some(IconName::Settings),
+            badge: None,
             stay_open: false,
             has_submenu: false,
             is_dimmed: false,
@@ -138,6 +142,7 @@ fn location_context_menu_raw(i18n: &I18n, h: Entity<OxydeApp>, path: String) -> 
         DropdownItem {
             label: i18n.text(Message::Open).to_string(),
             icon: Some(IconName::ExternalLink),
+            badge: None,
             stay_open: false,
             has_submenu: false,
             is_dimmed: false,
@@ -157,6 +162,7 @@ fn location_context_menu_raw(i18n: &I18n, h: Entity<OxydeApp>, path: String) -> 
         DropdownItem {
             label: i18n.text(Message::Properties).to_string(),
             icon: Some(IconName::Settings),
+            badge: None,
             stay_open: false,
             has_submenu: false,
             is_dimmed: false,
@@ -180,6 +186,7 @@ fn drive_context_menu_raw(i18n: &I18n, h: Entity<OxydeApp>, path: String, is_usb
         DropdownItem {
             label: i18n.text(Message::Open).to_string(),
             icon: Some(IconName::ExternalLink),
+            badge: None,
             stay_open: false,
             has_submenu: false,
             is_dimmed: false,
@@ -199,6 +206,7 @@ fn drive_context_menu_raw(i18n: &I18n, h: Entity<OxydeApp>, path: String, is_usb
         DropdownItem {
             label: i18n.text(Message::OpenNewTab).to_string(),
             icon: Some(IconName::ExternalLink),
+            badge: None,
             stay_open: false,
             has_submenu: false,
             is_dimmed: false,
@@ -222,6 +230,7 @@ fn drive_context_menu_raw(i18n: &I18n, h: Entity<OxydeApp>, path: String, is_usb
         items.push(DropdownItem {
             label: i18n.text(Message::EjectDrive).to_string(),
             icon: None,
+            badge: None,
             stay_open: false,
             has_submenu: false,
             is_dimmed: false,
@@ -240,6 +249,7 @@ fn directory_context_menu_raw(i18n: &I18n, h: Entity<OxydeApp>, path: String) ->
         DropdownItem {
             label: i18n.text(Message::Open).to_string(),
             icon: Some(IconName::ExternalLink),
+            badge: None,
             stay_open: false,
             has_submenu: false,
             is_dimmed: false,
@@ -259,6 +269,7 @@ fn directory_context_menu_raw(i18n: &I18n, h: Entity<OxydeApp>, path: String) ->
         DropdownItem {
             label: i18n.text(Message::OpenNewTab).to_string(),
             icon: Some(IconName::ExternalLink),
+            badge: None,
             stay_open: false,
             has_submenu: false,
             is_dimmed: false,
@@ -296,6 +307,7 @@ fn sidebar_tree_actions(
         items.push(DropdownItem {
             label: i18n.text(message).to_string(),
             icon: Some(icon),
+            badge: None,
             stay_open: false,
             has_submenu: false,
             is_dimmed: false,
@@ -320,6 +332,7 @@ fn sidebar_tree_actions(
         items.push(DropdownItem {
             label: i18n.text(Message::PinQuickAccess).to_string(),
             icon: Some(IconName::Pin),
+            badge: None,
             stay_open: false,
             has_submenu: false,
             is_dimmed: false,
@@ -339,6 +352,7 @@ fn sidebar_tree_actions(
     items.push(DropdownItem {
         label: i18n.text(Message::Properties).to_string(),
         icon: Some(IconName::Settings),
+        badge: None,
         stay_open: false,
         has_submenu: false,
         is_dimmed: false,
@@ -354,6 +368,7 @@ fn sidebar_tree_actions(
     items.push(DropdownItem {
         label: i18n.text(Message::MoreOptions).to_string(),
         icon: Some(IconName::Ellipsis),
+        badge: None,
         stay_open: true,
         has_submenu: true,
         is_dimmed: false,
@@ -514,6 +529,7 @@ fn render_sidebar_rail(
                     DropdownItem {
                         label: pinned_display_name(item, cx.i18n()),
                         icon: Some(IconName::Pin),
+                        badge: None,
                         stay_open: false,
                         has_submenu: false,
                         is_dimmed: false,

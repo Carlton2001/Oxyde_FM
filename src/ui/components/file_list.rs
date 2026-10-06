@@ -2270,11 +2270,11 @@ pub fn get_type_filter_items(
 ) -> Vec<crate::ui::components::dropdown::DropdownItem> {
     use crate::ui::components::dropdown::{DropdownItem, IconName};
 
-    let mut exts = std::collections::HashSet::new();
+    let mut exts = std::collections::HashMap::<String, u64>::new();
     for f in &tab_files {
-        exts.insert(file_type_label(f));
+        *exts.entry(file_type_label(f)).or_default() += 1;
     }
-    let mut sorted_exts: Vec<String> = exts.into_iter().collect();
+    let mut sorted_exts: Vec<String> = exts.keys().cloned().collect();
     sorted_exts.sort();
 
     let mut items = Vec::new();
@@ -2298,6 +2298,7 @@ pub fn get_type_filter_items(
             } else {
                 IconName::Square
             }),
+            badge: Some(crate::ui::format::format_number(exts[&ext], i18n.language())),
             stay_open: true,
             has_submenu: false,
             is_dimmed: false,
@@ -2336,11 +2337,11 @@ pub fn get_date_filter_items(
         DateCategory::PlusAncien,
     ];
 
-    let mut present_categories = std::collections::HashSet::new();
+    let mut present_categories = std::collections::HashMap::<_, u64>::new();
     for f in &files {
         for cat in &categories {
             if cat.matches(f.modified) {
-                present_categories.insert(*cat);
+                *present_categories.entry(*cat).or_default() += 1;
                 break;
             }
         }
@@ -2349,7 +2350,7 @@ pub fn get_date_filter_items(
     let mut items = Vec::new();
 
     for cat in categories {
-        if !present_categories.contains(&cat) {
+        if !present_categories.contains_key(&cat) {
             continue;
         }
 
@@ -2365,6 +2366,7 @@ pub fn get_date_filter_items(
             } else {
                 IconName::Square
             }),
+            badge: Some(crate::ui::format::format_number(present_categories[&cat], i18n.language())),
             stay_open: true,
             has_submenu: false,
             is_dimmed: false,
@@ -2402,11 +2404,11 @@ pub fn get_size_filter_items(
         SizeCategory::Huge,
     ];
 
-    let mut present_categories = std::collections::HashSet::new();
+    let mut present_categories = std::collections::HashMap::<_, u64>::new();
     for f in &files {
         for cat in &categories {
             if cat.matches(f.size) {
-                present_categories.insert(*cat);
+                *present_categories.entry(*cat).or_default() += 1;
                 break;
             }
         }
@@ -2415,7 +2417,7 @@ pub fn get_size_filter_items(
     let mut items = Vec::new();
 
     for cat in categories {
-        if !present_categories.contains(&cat) {
+        if !present_categories.contains_key(&cat) {
             continue;
         }
 
@@ -2431,6 +2433,7 @@ pub fn get_size_filter_items(
             } else {
                 IconName::Square
             }),
+            badge: Some(crate::ui::format::format_number(present_categories[&cat], i18n.language())),
             stay_open: true,
             has_submenu: false,
             is_dimmed: false,
