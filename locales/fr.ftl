@@ -231,7 +231,6 @@ settings-search-limit = Limite de recherche
 settings-data = Données de l’application
 settings-clear-cache = Effacer le cache
 settings-reset-preferences = Réinitialiser les préférences
-settings-coming-soon = À venir
 
 title-new-panel = Nouveau panneau à droite
 title-tools = Outils
@@ -397,3 +396,6 @@ settings-cache-clearing = Nettoyage du cache…
 settings-cache-cleared = Cache effacé.
 settings-cache-error = Impossible d’effacer entièrement le cache. Réessayez.
 settings-preferences-reset = Préférences réinitialisées.
+
+settings-turbo-description = Mode Turbo par défaut des nouvelles copies et déplacements. Les transferts en cours conservent leur réglage.
+settings-search-limit-description = Nombre maximal de résultats des nouvelles recherches rapides et avancées. Pas de 500, minimum 500.

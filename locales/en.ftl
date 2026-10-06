@@ -224,7 +224,6 @@ settings-search-limit = Search limit
 settings-data = Application data
 settings-clear-cache = Clear cache
 settings-reset-preferences = Reset preferences
-settings-coming-soon = Coming soon
 
 title-new-panel = New panel on the right
 title-tools = Tools
@@ -390,3 +389,6 @@ settings-cache-clearing = Clearing cache…
 settings-cache-cleared = Cache cleared.
 settings-cache-error = Could not clear the entire cache. Try again.
 settings-preferences-reset = Preferences reset.
+
+settings-turbo-description = Default Turbo mode for new copies and moves. Transfers already running keep their current setting.
+settings-search-limit-description = Maximum results for new quick and advanced searches. Steps of 500, minimum 500.

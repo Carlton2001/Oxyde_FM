@@ -132,6 +132,8 @@ mod reset_tests {
         config.ui_rem_size = 24;
         config.show_hidden = true;
         config.zip_quality = "best".into();
+        config.search_limit = 4500;
+        config.default_turbo_mode = false;
         config.extra.insert("workspace".into(), serde_json::json!({"tabs": ["C:/"]}));
         config.extra.insert("unknown".into(), serde_json::json!(42));
         config.operations_panel_position = Some([20.0, 30.0]);
@@ -142,6 +144,8 @@ mod reset_tests {
         assert_eq!(config.ui_rem_size, 16);
         assert!(!config.show_hidden);
         assert_eq!(config.zip_quality, "fast");
+        assert_eq!(config.search_limit, 3000);
+        assert!(config.default_turbo_mode);
         assert_eq!(config.extra, extra);
         assert_eq!(config.operations_panel_position, Some([20.0, 30.0]));
     }
@@ -262,11 +266,13 @@ mod tests {
             config.show_checkboxes = theme == ThemeId::Light;
             config.show_network = theme == ThemeId::Light;
             config.sync_sidebar_with_path = theme == ThemeId::Light;
+            config.default_turbo_mode = theme == ThemeId::Light;
             ConfigManager::write_to_path(&path, &config).unwrap();
             config = ConfigManager::read_from_path(&path).unwrap();
             assert_eq!(ThemeId::from_id(&config.theme), theme);
             assert_eq!(Language::from_id(&config.language), language);
             assert_eq!(config.search_limit, 123);
+            assert_eq!(config.default_turbo_mode, theme == ThemeId::Light);
             assert_eq!(config.use_system_icons, theme == ThemeId::Light);
             assert_eq!(config.show_checkboxes, theme == ThemeId::Light);
             assert_eq!(config.sync_sidebar_with_path, theme == ThemeId::Light);

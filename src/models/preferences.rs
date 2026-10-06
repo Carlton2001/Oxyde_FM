@@ -1,5 +1,39 @@
 use serde::{Deserialize, Serialize};
 
+pub const SEARCH_LIMIT_STEP: u32 = 500;
+pub const MAX_SEARCH_LIMIT: u32 = u32::MAX / SEARCH_LIMIT_STEP * SEARCH_LIMIT_STEP;
+
+pub fn normalized_search_limit(value: u32) -> u32 {
+    value.clamp(SEARCH_LIMIT_STEP, MAX_SEARCH_LIMIT)
+}
+
+pub fn stepped_search_limit(value: u32, increase: bool) -> u32 {
+    let value = normalized_search_limit(value);
+    if increase {
+        value.saturating_add(SEARCH_LIMIT_STEP).min(MAX_SEARCH_LIMIT)
+    } else {
+        value.saturating_sub(SEARCH_LIMIT_STEP).max(SEARCH_LIMIT_STEP)
+    }
+}
+
+#[cfg(test)]
+mod search_limit_tests {
+    use super::*;
+
+    #[test]
+    fn search_limit_steps_are_bounded_and_handle_legacy_values() {
+        assert_eq!(stepped_search_limit(3000, true), 3500);
+        assert_eq!(stepped_search_limit(3000, false), 2500);
+        assert_eq!(stepped_search_limit(500, false), 500);
+        assert_eq!(stepped_search_limit(0, false), 500);
+        assert_eq!(normalized_search_limit(123), 500);
+        assert_eq!(normalized_search_limit(3200), 3200);
+        assert_eq!(stepped_search_limit(3200, true), 3700);
+        assert_eq!(stepped_search_limit(u32::MAX, true), MAX_SEARCH_LIMIT);
+        assert_eq!(stepped_search_limit(MAX_SEARCH_LIMIT, false), MAX_SEARCH_LIMIT - 500);
+    }
+}
+
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum ThemeId {

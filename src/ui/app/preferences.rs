@@ -5,6 +5,24 @@ use gpui::Context;
 use oxyde_lib::models::ConfigManager;
 
 impl OxydeApp {
+    pub(crate) fn default_turbo_mode(&self) -> bool { self.config.default_turbo_mode }
+
+    pub(crate) fn toggle_default_turbo(&mut self, cx: &mut Context<Self>) {
+        self.config.default_turbo_mode = !self.config.default_turbo_mode;
+        self.save_preferences(cx);
+    }
+
+    pub(crate) fn search_limit(&self) -> u32 {
+        oxyde_lib::models::preferences::normalized_search_limit(self.config.search_limit)
+    }
+
+    pub(crate) fn step_search_limit(&mut self, increase: bool, cx: &mut Context<Self>) {
+        self.config.search_limit = oxyde_lib::models::preferences::stepped_search_limit(
+            self.config.search_limit, increase,
+        );
+        self.save_preferences(cx);
+    }
+
     pub(crate) fn open_settings_confirmation(
         &mut self,
         action: super::SettingsDataAction,

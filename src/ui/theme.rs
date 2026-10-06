@@ -28,6 +28,7 @@ pub struct OxydeTheme {
     pub error: Hsla,             // Messages d'erreur
     pub text_on_accent: Hsla,    // Texte sur une action remplie avec accent
     pub control_hover: Hsla,     // Survol d'une action secondaire
+    pub stepper_surface: Hsla,   // Fond des contrôles − valeur +
     pub menu_surface: Hsla,
     pub menu_border: Hsla,
     pub menu_hover: Hsla,
@@ -85,6 +86,7 @@ impl OxydeTheme {
             error: rgb(0xb42335).into(),
             text_on_accent: rgb(0xffffff).into(),
             control_hover: rgb(0xe6e2d9).into(),
+            stepper_surface: rgb(0xdfddd9).into(),
             menu_surface: rgb(0xfafafa).into(),
             menu_border: rgb(0xe6e1d6).into(),
             menu_hover: rgb(0xe6e2d9).into(),
@@ -130,6 +132,7 @@ impl OxydeTheme {
             error: rgb(0xf87171).into(),
             text_on_accent: rgb(0x0e0c15).into(),
             control_hover: rgb(0x1c1a2b).into(),
+            stepper_surface: rgb(0x302b3d).into(),
             menu_surface: rgb(0x151320).into(),
             menu_border: rgb(0x2d2a3c).into(),
             menu_hover: rgb(0x1c1a2b).into(),

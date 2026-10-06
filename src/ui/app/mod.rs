@@ -1847,6 +1847,8 @@ impl OxydeApp {
         );
         op.compression_quality = self.archive_quality_for_path(op.destination.as_ref().unwrap());
         op.archive_qualities = self.archive_qualities();
+        op.turbo = self.config.default_turbo_mode;
+        op.turbo_flag.store(op.turbo, std::sync::atomic::Ordering::Relaxed);
         let op_id = self
             .file_ops
             .queue_operation_on(&runtime, self.history.clone(), op);

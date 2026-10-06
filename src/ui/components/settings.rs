@@ -286,18 +286,14 @@ pub fn render_settings_panel(
             i18n.text(Message::Compression),
             theme,
         ))
-        .child(placeholder(
+        .child(settings_row(
             i18n.text(Message::SettingsTurbo),
-            "icons/zap.svg",
-            i18n.text(Message::SettingsComingSoon),
-            theme,
+            i18n.text(Message::SettingsTurboDescription),
+            "icons/zap.svg", view.default_turbo_mode(), "toggle-default-turbo",
+            handle.clone(), theme,
+            |view, cx| view.toggle_default_turbo(cx),
         ))
-        .child(placeholder(
-            i18n.text(Message::SettingsSearchLimit),
-            "icons/zap.svg",
-            i18n.text(Message::SettingsComingSoon),
-            theme,
-        ))
+        .child(search_limit_row(view, handle.clone(), cx))
         .child(separator(theme))
         .child(section(i18n.text(Message::SettingsData), theme))
         .child(data_action_row(
@@ -646,24 +642,6 @@ fn picker(
         })
 }
 
-fn placeholder(
-    label: SharedString,
-    icon_path: &'static str,
-    status: SharedString,
-    theme: OxydeTheme,
-) -> impl IntoElement {
-    div()
-        .min_h(rems(2.0))
-        .px(rems(0.375))
-        .flex()
-        .items_center()
-        .gap(rems(0.5))
-        .text_color(theme.text_muted)
-        .child(icon(icon_path, theme))
-        .child(div().flex_1().child(label))
-        .child(div().flex_none().text_size(rems(0.6875)).child(status))
-}
-
 fn scale_row(view: &OxydeApp, handle: Entity<OxydeApp>, cx: &App) -> impl IntoElement {
     use crate::ui::scale::{BASE_REM_SIZE, MAX_REM_SIZE, MIN_REM_SIZE};
     let theme = *cx.theme();
@@ -671,73 +649,42 @@ fn scale_row(view: &OxydeApp, handle: Entity<OxydeApp>, cx: &App) -> impl IntoEl
     let mut args = FluentArgs::new();
     args.set("reference", reference);
     let reset = handle.clone();
-    let step = |id: &'static str, label: &'static str, increase: bool| {
-        let handle = handle.clone();
-        let enabled = if increase {
-            reference < MAX_REM_SIZE
-        } else {
-            reference > MIN_REM_SIZE
-        };
-        div()
-            .id(id)
-            .size(rems(1.25))
-            .flex_none()
-            .flex()
-            .items_center()
-            .justify_center()
-            .rounded_md()
-            .when(!enabled, |d| d.opacity(0.4))
-            .when(enabled, |d| d.hover(|s| s.bg(theme.control_hover)))
-            .child(label)
-            .on_mouse_down(MouseButton::Left, move |_, window, cx| {
-                cx.stop_propagation();
-                if enabled {
-                    handle.update(cx, |view, cx| {
-                        let reference = view.ui_rem_size();
-                        let next = if increase {
-                            reference + 1
-                        } else {
-                            reference.saturating_sub(1)
-                        };
-                        view.set_ui_rem_size(next, window, cx);
-                    });
-                }
-            })
-    };
-    div()
-        .min_h(rems(2.0))
-        .px(rems(0.375))
-        .gap(rems(0.5))
-        .flex()
-        .items_center()
+    let value = div().id("scale-reset").min_w(rems(3.25)).h(rems(1.5)).flex().items_center().justify_center()
+        .tooltip(Tooltip::text(cx.i18n().text(Message::SettingsScaleReset)))
+        .child(cx.i18n().text_with_args(Message::SettingsScaleValue, &args))
+        .on_mouse_down(MouseButton::Left, move |_, window, cx| {
+            cx.stop_propagation();
+            reset.update(cx, |view, cx| view.set_ui_rem_size(BASE_REM_SIZE, window, cx));
+        });
+    div().min_h(rems(2.0)).px(rems(0.375)).gap(rems(0.5)).flex().items_center()
         .child(icon("icons/type.svg", theme))
-        .child(div().flex_1().child(cx.i18n().text(Message::SettingsScale)))
-        .child(
-            div()
-                .flex()
-                .items_center()
-                .rounded_md()
-                .bg(theme.surface)
-                .child(step("scale-decrease", "−", false))
-                .child(
-                    div()
-                        .id("scale-reset")
-                        .min_w(rems(2.5))
-                        .h(rems(1.25))
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .text_color(theme.accent)
-                        .tooltip(Tooltip::text(cx.i18n().text(Message::SettingsScaleReset)))
-                        .child(cx.i18n().text_with_args(Message::SettingsScaleValue, &args))
-                        .on_mouse_down(MouseButton::Left, move |_, window, cx| {
-                            reset.update(cx, |view, cx| {
-                                view.set_ui_rem_size(BASE_REM_SIZE, window, cx)
-                            });
-                        }),
-                )
-                .child(step("scale-increase", "+", true)),
-        )
+        .child(div().flex_1().min_w_0().child(cx.i18n().text(Message::SettingsScale)))
+        .child(crate::ui::elements::stepper::stepper(
+            "scale", value, reference > MIN_REM_SIZE, reference < MAX_REM_SIZE, theme,
+            move |increase, window, cx| {
+                handle.update(cx, |view, cx| {
+                    let reference = view.ui_rem_size();
+                    let next = if increase { reference + 1 } else { reference.saturating_sub(1) };
+                    view.set_ui_rem_size(next, window, cx);
+                });
+            },
+        ))
+}
+
+fn search_limit_row(view: &OxydeApp, handle: Entity<OxydeApp>, cx: &App) -> impl IntoElement {
+    use oxyde_lib::models::preferences::{SEARCH_LIMIT_STEP, MAX_SEARCH_LIMIT};
+    let theme = *cx.theme();
+    let limit = view.search_limit();
+    div().id("settings-search-limit-row").min_h(rems(2.0)).px(rems(0.375)).gap(rems(0.5)).flex().items_center()
+        .tooltip(Tooltip::text(cx.i18n().text(Message::SettingsSearchLimitDescription)))
+        .child(icon("icons/zap.svg", theme))
+        .child(div().flex_1().min_w_0().child(cx.i18n().text(Message::SettingsSearchLimit)))
+        .child(crate::ui::elements::stepper::stepper(
+            "search-limit", limit.to_string(), limit > SEARCH_LIMIT_STEP, limit < MAX_SEARCH_LIMIT, theme,
+            move |increase, _, cx| {
+                handle.update(cx, |view, cx| view.step_search_limit(increase, cx));
+            },
+        ))
 }
 
 fn section(label: SharedString, theme: OxydeTheme) -> impl IntoElement {

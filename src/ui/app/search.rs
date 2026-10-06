@@ -681,7 +681,7 @@ impl OxydeApp {
             oxyde_lib::commands::search::advanced_search(
                 root,
                 options,
-                self.config.search_limit as usize,
+                self.search_limit() as usize,
                 self.show_hidden,
                 self.show_system,
                 cancellation.clone(),
@@ -690,7 +690,7 @@ impl OxydeApp {
             oxyde_lib::commands::search::quick_search(
                 root,
                 query,
-                self.config.search_limit as usize,
+                self.search_limit() as usize,
                 self.show_hidden,
                 self.show_system,
                 cancellation.clone(),
