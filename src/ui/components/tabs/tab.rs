@@ -51,7 +51,7 @@ impl Render for TabDragPreview {
         let theme = *cx.theme();
         div()
             .px_4()
-            .h(rems(2.0))
+            .h(crate::ui::style::TAB_BAR_HEIGHT)
             .bg(theme.tab_active)
             .rounded_sm()
             .border(rems(0.0625))
@@ -183,14 +183,14 @@ impl RenderOnce for Tab {
         let mut container = div()
             .id(self.id.clone())
             .relative()
-            .h(rems(2.0))
+            .h(crate::ui::style::TAB_BAR_HEIGHT)
             .flex_none()
             .bg(bg_color)
             .flex()
             .items_center()
             .text_color(text_color)
             .text_size(rems(0.8125))
-            .font_weight(FontWeight::MEDIUM)
+            .font_weight(crate::ui::style::DEFAULT_FONT_WEIGHT)
             .group("tab");
 
         if let Some(on_click) = self.on_click {

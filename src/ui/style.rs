@@ -28,6 +28,14 @@ pub fn rem_shadow(large: bool) -> Vec<BoxShadow> {
     shadows
 }
 
+// Pane chrome follows the heights of the Tauri interface.
+pub const TAB_BAR_HEIGHT: Rems = rems(2.0);
+pub const NAV_BAR_HEIGHT: Rems = rems(2.25);
+pub const COLUMN_HEADER_HEIGHT: Rems = rems(1.625);
+pub fn column_header_height() -> f32 {
+    rem_pixels(COLUMN_HEADER_HEIGHT).as_f32()
+}
+
 pub const ROW_HEIGHT: Rems = rems(1.75);
 pub fn row_height() -> f32 {
     rem_pixels(ROW_HEIGHT).as_f32()

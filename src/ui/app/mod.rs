@@ -35,6 +35,8 @@ actions!(
     [
         Ouvrir,
         Copier,
+        CopierNom,
+        CopierChemin,
         Couper,
         Coller,
         Renommer,
@@ -456,6 +458,8 @@ pub struct OxydeApp {
     pub editing_view: Option<Entity<TextInput>>,
     pub inline_rename: bool,
     created_item_rename: Option<(String, String, bool)>,
+    pub(crate) trash_busy: bool,
+    pub(crate) clipboard_has_files: bool,
     pub breadcrumb_editing: bool,
     pub breadcrumb_text: String,
     pub breadcrumb_pane_id: Option<String>,
@@ -483,6 +487,7 @@ pub struct OxydeApp {
     pub show_media_previews: bool,
     pub show_grid_thumbnails: bool,
     pub settings_open: bool,
+    pub(crate) settings_about_open: bool,
     pub(crate) settings_button_bounds: Option<Bounds<Pixels>>,
     pub(crate) tools_button_bounds: Option<Bounds<Pixels>>,
     pub(crate) settings_submenu_bounds: Option<Bounds<Pixels>>,
@@ -705,8 +710,11 @@ impl OxydeApp {
     pub fn bind_keys(cx: &mut App) {
         cx.bind_keys([
             KeyBinding::new("f5", Actualiser, None),
+            KeyBinding::new("delete", Supprimer, None),
             KeyBinding::new("ctrl-a", ToutSelectionner, None),
             KeyBinding::new("ctrl-c", Copier, None),
+            KeyBinding::new("ctrl-alt-c", CopierNom, None),
+            KeyBinding::new("ctrl-shift-c", CopierChemin, None),
             KeyBinding::new("ctrl-x", Couper, None),
             KeyBinding::new("ctrl-v", Coller, None),
             KeyBinding::new("ctrl-z", Annuler, None),
@@ -903,6 +911,8 @@ impl OxydeApp {
             editing_view: None,
             inline_rename: false,
             created_item_rename: None,
+            trash_busy: false,
+            clipboard_has_files: false,
             breadcrumb_editing: false,
             breadcrumb_text: String::new(),
             breadcrumb_pane_id: None,
@@ -927,6 +937,7 @@ impl OxydeApp {
             show_media_previews: config.show_previews,
             show_grid_thumbnails: config.show_grid_thumbnails,
             settings_open: false,
+            settings_about_open: false,
             settings_button_bounds: None,
             tools_button_bounds: None,
             settings_submenu_bounds: None,
@@ -1443,6 +1454,47 @@ impl OxydeApp {
         .detach();
     }
 
+    pub(crate) fn execute_copy_text(&mut self, names_only: bool, cx: &mut Context<Self>) {
+        let Some(pane) = self.state.find_pane(&self.state.active_pane_id) else { return; };
+        let tab = pane.active_tab();
+        let text = tab.filtered_files().iter()
+            .filter(|file| tab.selected_paths.contains(&file.path))
+            .map(|file| if names_only { file.name.clone() } else { file.path.clone() })
+            .collect::<Vec<_>>().join("\n");
+        if !text.is_empty() { cx.write_to_clipboard(ClipboardItem::new_string(text)); }
+    }
+
+    pub(crate) fn execute_trash_action(&mut self, restore: bool, all: bool, cx: &mut Context<Self>) {
+        if self.trash_busy { return; }
+        let Some(pane) = self.state.find_pane(&self.state.active_pane_id) else { return; };
+        let tab = pane.active_tab();
+        if tab.path != "trash://" { return; }
+        let paths: Vec<_> = tab.files.iter()
+            .filter(|file| all || tab.selected_paths.contains(&file.path))
+            .map(|file| file.path.clone()).collect();
+        if paths.is_empty() { return; }
+        self.trash_busy = true;
+        cx.notify();
+        cx.spawn(async move |this, cx| {
+            let runtime = tokio::runtime::Handle::current();
+            let result = tokio::task::spawn_blocking(move || runtime.block_on(async move {
+                if restore { oxyde_lib::commands::ops::restore_items(paths).await.map(|_| ()) }
+                else { oxyde_lib::commands::ops::purge_recycle_bin(paths).await }
+            })).await;
+            let _ = this.update(cx, |this, cx| {
+                this.trash_busy = false;
+                let error = match result {
+                    Ok(Ok(())) => None,
+                    Ok(Err(error)) => Some(error.to_string()),
+                    Err(error) => Some(error.to_string()),
+                };
+                if let Some(error) = error { this.file_operation_notice = Some((Message::OperationFailed, error)); }
+                this.refresh_all_tabs(cx);
+                cx.notify();
+            });
+        }).detach();
+    }
+
     pub fn execute_copier(&mut self, _cx: &mut Context<Self>) {
         let pane_id = self.state.active_pane_id.clone();
         if let Some(pane) = self.state.layout.find_pane(&pane_id) {
@@ -1582,6 +1634,10 @@ impl OxydeApp {
     }
 
     pub fn execute_supprimer(&mut self, cx: &mut Context<Self>) {
+        if self.state.find_pane(&self.state.active_pane_id).is_some_and(|pane| pane.active_tab().path == "trash://") {
+            self.execute_trash_action(false, false, cx);
+            return;
+        }
         let pane_id = self.state.active_pane_id.clone();
         if let Some(pane) = self.state.layout.find_pane(&pane_id) {
             let paths: Vec<String> = pane.active_tab().selected_paths.iter().cloned().collect();
@@ -2202,6 +2258,16 @@ impl OxydeApp {
                     cx.background_executor()
                         .timer(std::time::Duration::from_millis(500))
                         .await;
+                    let clipboard_has_files = tokio::task::spawn_blocking(|| {
+                        oxyde_lib::platform::platform().get_clipboard_files()
+                            .is_ok_and(|(paths, _)| !paths.is_empty())
+                    }).await.unwrap_or(false);
+                    h.update(&mut cx, |this, cx| {
+                        if this.clipboard_has_files != clipboard_has_files {
+                            this.clipboard_has_files = clipboard_has_files;
+                            cx.notify();
+                        }
+                    });
                     let changed: Vec<String> = if let Ok(mut q) = changes.lock() {
                         q.drain(..).collect()
                     } else {
@@ -2358,6 +2424,7 @@ impl Render for OxydeApp {
                                 this.settings_submenu_bounds = None;
                             } else {
                                 this.settings_open = false;
+                                this.settings_about_open = false;
                             }
                             cx.stop_propagation();
                             cx.notify();
@@ -2396,6 +2463,8 @@ impl Render for OxydeApp {
             .on_action(cx.listener(Self::on_action_refaire))
             .on_action(cx.listener(|this, _: &Actualiser, _, cx| this.refresh_all(cx)))
             .on_action(cx.listener(Self::on_action_copier))
+            .on_action(cx.listener(|this, _: &CopierNom, _, cx| this.execute_copy_text(true, cx)))
+            .on_action(cx.listener(|this, _: &CopierChemin, _, cx| this.execute_copy_text(false, cx)))
             .on_action(cx.listener(Self::on_action_couper))
             .on_action(cx.listener(Self::on_action_coller))
             .on_action(cx.listener(Self::on_action_ouvrir))

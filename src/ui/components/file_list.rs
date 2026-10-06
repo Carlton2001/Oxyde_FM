@@ -215,7 +215,7 @@ pub fn render_file_list(
     let pane_viewport_w = pane_size.width.max(1.0);
 
     let v_v_h =
-        (pane_size.height - logical(32.0) - if active_tab.quick_search.is_some() { logical(32.0) } else { 0.0 } - crate::ui::style::row_height() - status_bar_height() - crate::ui::components::scrollbar::zed_track_width()).max(1.0);
+        (pane_size.height - rem_pixels(crate::ui::style::TAB_BAR_HEIGHT).as_f32() - rem_pixels(crate::ui::style::NAV_BAR_HEIGHT).as_f32() - if active_tab.quick_search.is_some() { logical(32.0) } else { 0.0 } - crate::ui::style::column_header_height() - status_bar_height() - crate::ui::components::scrollbar::zed_track_width()).max(1.0);
     let content_h = (count * crate::ui::style::row_height()).max(1.0);
 
     let columns = DetailsColumnWidths::for_viewport_with_search(
@@ -314,7 +314,7 @@ pub fn render_file_list(
                 .top_0()
                 .left_0()
                 .right_0()
-                .h(px(crate::ui::style::row_height()))
+                .h(crate::ui::style::COLUMN_HEADER_HEIGHT)
                 .bg(theme.header)
         )
         // 2. Contenu défilant (Headers + List)
@@ -782,7 +782,7 @@ pub fn render_file_list(
         .child(
             div()
                 .absolute()
-                .top(px(crate::ui::style::row_height()))
+                .top(px(crate::ui::style::column_header_height()))
                 .left_0()
                 .bottom_0()
                 .w(rems(0.5))
@@ -817,7 +817,7 @@ pub fn render_file_list(
         .child(
             div()
                 .absolute()
-                .top(px(crate::ui::style::row_height()))
+                .top(px(crate::ui::style::column_header_height()))
                 .right(px(crate::ui::components::scrollbar::zed_track_width()))
                 .bottom_0()
                 .w(rems(0.5))
@@ -905,7 +905,7 @@ pub fn render_file_list(
 
     let mut vertical_scroll_zone = div()
         .absolute()
-        .top(px(crate::ui::style::row_height()))
+        .top(px(crate::ui::style::column_header_height()))
         .right_0()
         .bottom(px(status_bar_height()))
         .w(rems(3.625))
@@ -993,7 +993,7 @@ pub fn render_file_list(
         container = container.child(
             div()
                 .absolute()
-                .top(px(crate::ui::style::row_height() + logical(18.0)))
+                .top(px(crate::ui::style::column_header_height() + logical(18.0)))
                 .left_0()
                 .right_0()
                 .flex()
@@ -1964,7 +1964,7 @@ fn render_headers(
     let network_panel = tab.path == "__network_vincinity__";
     let current_dir = tab.sort_direction;
     if network_panel {
-        return div().flex().items_center().h(px(crate::ui::style::row_height())).text_color(theme.text_muted).font_weight(FontWeight::BOLD).flex_none()
+        return div().flex().items_center().h(crate::ui::style::COLUMN_HEADER_HEIGHT).border_b(rems(0.0625)).border_color(theme.border).text_color(theme.text_muted).text_size(rems(0.75)).font_weight(crate::ui::style::DEFAULT_FONT_WEIGHT).flex_none()
             .child(header_cell(i18n.text(Message::ColumnName).as_ref(), name_w, current_col == SortColumn::Name, current_dir, false, theme, handle.clone(), format!("network-name-{}", pane_id), {
                 let h = handle.clone(); let pid = pane_id.clone(); move |_, _, cx| { h.update(cx, |this, cx| this.toggle_sort(&pid, SortColumn::Name, cx)); }
             }))
@@ -2032,9 +2032,9 @@ fn render_headers(
     div()
         .flex()
         .items_center()
-        .h(px(crate::ui::style::row_height()))
-        .text_color(theme.text_muted)
-        .font_weight(FontWeight::BOLD)
+        .h(crate::ui::style::COLUMN_HEADER_HEIGHT)
+        .border_b(rems(0.0625)).border_color(theme.border).text_color(theme.text_muted)
+        .text_size(rems(0.75)).font_weight(crate::ui::style::DEFAULT_FONT_WEIGHT)
         .flex_none()
         .child(
             header_cell(

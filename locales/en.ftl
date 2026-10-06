@@ -36,9 +36,8 @@ settings-previews = Media previews
 settings-previews-description = Show file previews in the list’s tooltips
 settings-grid-thumbnails = Grid image thumbnails
 settings-grid-thumbnails-description = Show image thumbnails directly on grid cards
-settings-about = ABOUT
+settings-about = About
 settings-version = Version { $version }
-settings-description = Modern file manager
 settings-save-error = Preferences applied, but could not be saved. Try again.
 settings-load-error = Saved preferences could not be read. Changes will not be saved to protect that file.
 status-folders = { $count ->
@@ -392,3 +391,23 @@ settings-preferences-reset = Preferences reset.
 
 settings-turbo-description = Default Turbo mode for new copies and moves. Transfers already running keep their current setting.
 settings-search-limit-description = Maximum results for new quick and advanced searches. Steps of 500, minimum 500.
+
+navigation-up = Up
+
+about-releases = View releases
+about-repository = GitHub repository
+about-main-tools = Main tools
+
+settings-search-limit-reset = Reset to the default limit of 3,000 results
+
+menu-copy-name = Copy name
+
+trash-restore = Restore
+trash-restore-all = Restore all
+trash-delete-permanent = Delete permanently
+trash-delete-all = Empty Recycle Bin
+trash-all = All
+trash-original-location = Original location
+trash-deleted-at = Date deleted
+
+trash-restore-selection = Restore selection

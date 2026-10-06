@@ -163,7 +163,7 @@ impl RenderOnce for TabBar {
             .w_full()
             .min_w_0()
             .overflow_hidden()
-            .h(rems(2.0))
+            .h(crate::ui::style::TAB_BAR_HEIGHT)
             .bg(theme.header)
             // Paint behind the tabs so the active surface covers the separator.
             .child(

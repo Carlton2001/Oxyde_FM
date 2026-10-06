@@ -73,7 +73,6 @@ settings-about = Informazioni
 
 settings-version = Versione { $version }
 
-settings-description = Gestore di file moderno
 
 settings-save-error = Preferenze applicate, ma impossibile salvarle. Riprova.
 
@@ -701,3 +700,23 @@ settings-preferences-reset = Preferenze ripristinate.
 settings-turbo-description = Modalità Turbo predefinita per nuove copie e spostamenti. I trasferimenti in corso mantengono l’impostazione attuale.
 
 settings-search-limit-description = Numero massimo di risultati per nuove ricerche rapide e avanzate. Incrementi di 500, minimo 500.
+
+navigation-up = Su
+
+about-releases = Visualizza versioni
+about-repository = Repository GitHub
+about-main-tools = Strumenti principali
+
+settings-search-limit-reset = Ripristina il limite predefinito di 3.000 risultati
+
+menu-copy-name = Copia nome
+
+trash-restore = Ripristina
+trash-restore-all = Ripristina tutto
+trash-delete-permanent = Elimina definitivamente
+trash-delete-all = Svuota il cestino
+trash-all = Tutti
+trash-original-location = Posizione originale
+trash-deleted-at = Data di eliminazione
+
+trash-restore-selection = Ripristina la selezione

@@ -790,7 +790,7 @@ impl OxydeApp {
                 }
 
                 div()
-                    .h(rems(2.0))
+                    .h(crate::ui::style::TAB_BAR_HEIGHT)
                     .w_full()
                     .relative()
                     .drag_over::<(String, usize)>({

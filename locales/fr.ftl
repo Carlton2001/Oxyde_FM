@@ -42,9 +42,8 @@ settings-previews = Aperçus médias
 settings-previews-description = Afficher les aperçus des fichiers dans les info-bulles de la liste
 settings-grid-thumbnails = Miniatures dans la vue grille
 settings-grid-thumbnails-description = Afficher les miniatures des images directement dans les cartes
-settings-about = À PROPOS
+settings-about = À propos
 settings-version = Version { $version }
-settings-description = Explorateur de fichiers moderne
 settings-save-error = Préférences appliquées, mais sauvegarde impossible. Réessayez.
 settings-load-error = Impossible de lire les préférences enregistrées. Les changements ne seront pas sauvegardés pour protéger ce fichier.
 
@@ -399,3 +398,23 @@ settings-preferences-reset = Préférences réinitialisées.
 
 settings-turbo-description = Mode Turbo par défaut des nouvelles copies et déplacements. Les transferts en cours conservent leur réglage.
 settings-search-limit-description = Nombre maximal de résultats des nouvelles recherches rapides et avancées. Pas de 500, minimum 500.
+
+navigation-up = Haut
+
+about-releases = Voir les versions
+about-repository = Dépôt GitHub
+about-main-tools = Outils principaux
+
+settings-search-limit-reset = Rétablir la limite par défaut de 3 000 résultats
+
+menu-copy-name = Copier le nom
+
+trash-restore = Restaurer
+trash-restore-all = Tout restaurer
+trash-delete-permanent = Supprimer définitivement
+trash-delete-all = Vider la Corbeille
+trash-all = Tous
+trash-original-location = Emplacement d’origine
+trash-deleted-at = Date de suppression
+
+trash-restore-selection = Restaurer la sélection

@@ -126,7 +126,13 @@ pub fn render_top_bar(
         .is_some_and(|transaction| transaction.undo_blocked_by_overwrite());
     let can_undo = has_undo_entry && !undo_blocked_by_overwrite;
     let can_redo = !history_state.redo_stack.is_empty();
-    let has_history_actions = has_undo_entry || can_redo;
+    let parent_path = if special_path_label.is_none() {
+        std::path::Path::new(&current_path).parent().filter(|p| !p.as_os_str().is_empty())
+            .map(|p| p.to_string_lossy().into_owned())
+    } else { None };
+    let selected = !active_tab.selected_paths.is_empty();
+    let ordinary = special_path_label.is_none()
+        && oxyde_lib::utils::archive::split_virtual_path(&current_path).is_none();
 
     let undo_tooltip = history_state.undo_stack.last().map(|t| {
         let mut args = FluentArgs::new();
@@ -158,11 +164,14 @@ pub fn render_top_bar(
     let crumb_current = theme.text; // current segment — full brightness
 
     div()
-        .h(rems(2.0))
+        .h(crate::ui::style::NAV_BAR_HEIGHT)
+        .flex_none()
+        .text_size(rems(0.8125))
+        .font_weight(crate::ui::style::DEFAULT_FONT_WEIGHT)
         .w_full()
         .flex()
         .items_center()
-        .pl_4()
+        .pl(rems(0.5))
         .pr(rems(0.25))
         .when(view.breadcrumb_editing && view.breadcrumb_pane_id.as_deref() == Some(pane_id.as_str()), |bar| bar.pr(rems(0.5)))
         .bg(theme.surface)
@@ -230,86 +239,67 @@ pub fn render_top_bar(
                     )
                 })
         )
-        // Separator
-        .child(
-            div()
-                .w(rems(0.0625))
-                .h(rems(1.0))
-                .mx_3()
-                .bg(theme.border)
-        )
-        // Undo / Redo block — only rendered when at least one action is available
-        .when(has_history_actions, |bar| {
-            bar
-                .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap_1()
-        .when(has_undo_entry, |d| {
-            let h = handle.clone();
-            let tip = if undo_blocked_by_overwrite {
-                _cx.i18n().text(Message::UndoOverwriteUnavailable).to_string()
-            } else {
-                undo_tooltip.clone().unwrap_or_default()
-            };
-            let mut button = div()
-                .id("undo-btn")
-                .w_6()
-                .h_6()
-                .flex()
-                .items_center()
-                .justify_center()
-                .rounded_md();
-            if can_undo {
-                button = button
-                    .hover(move |s| s.bg(hover_bg))
-                    .on_mouse_down(MouseButton::Left, move |_, _, cx| {
-                        h.update(cx, |this, cx| this.execute_undo(cx));
-                    });
+        .child({
+            let mut actions = div().flex().items_center().gap_1().ml_1().flex_shrink_0();
+            for (visible, id, icon, label, tip, action) in [
+                (parent_path.is_some(), "up-btn", "icons/arrow-up.svg", Message::Up, String::new(), 0u8),
+                (!is_trash_path && has_undo_entry, "undo-btn", "icons/undo-2.svg", Message::Undo,
+                    if undo_blocked_by_overwrite { _cx.i18n().text(Message::UndoOverwriteUnavailable).to_string() }
+                    else { undo_tooltip.clone().unwrap_or_default() }, 1),
+                (!is_trash_path && can_redo, "redo-btn", "icons/redo-2.svg", Message::Redo, redo_tooltip.clone().unwrap_or_default(), 2),
+                (selected && (ordinary || is_trash_path) && !view.trash_busy, "cut-btn", "icons/scissors.svg", Message::Cut, "Ctrl+X".into(), 3),
+                (selected && !is_trash_path && !is_network_neighborhood, "copy-btn", "icons/copy.svg", Message::Copy, "Ctrl+C".into(), 4),
+                (ordinary && view.clipboard_has_files, "paste-btn", "icons/clipboard-paste.svg", Message::Paste, "Ctrl+V".into(), 5),
+                (selected && !is_trash_path && !is_network_neighborhood && oxyde_lib::utils::archive::split_virtual_path(&current_path).is_none(),
+                    "delete-btn", "icons/trash.svg", Message::Delete, String::new(), 6),
+                (is_trash_path && selected, "trash-delete-btn", "icons/trash-2.svg", Message::TrashDeletePermanent, String::new(), 7),
+                (is_trash_path, "trash-restore-btn", "icons/rotate-ccw.svg", Message::TrashRestoreSelection, String::new(), 8),
+                (is_trash_path, "trash-restore-all-btn", "icons/rotate-ccw.svg", Message::TrashRestoreAll, String::new(), 9),
+                (is_trash_path, "trash-delete-all-btn", "icons/trash-2.svg", Message::TrashDeleteAll, String::new(), 10),
+            ] {
+                if !visible { continue; }
+                let enabled = (action != 1 || can_undo)
+                    && (action < 7 || (!view.trash_busy && if action < 9 { selected } else { !active_tab.files.is_empty() }));
+                let mut button = div().id(id).min_w(rems(1.5)).h_6().px(rems(0.125)).flex().items_center().justify_center().rounded_md()
+                    .when(show_tooltips && (action == 1 || action == 2), |d| d.tooltip(Tooltip::with_meta(_cx.i18n().text(label), tip.clone())))
+                    .when(show_tooltips && action != 1 && action != 2, |d| d.tooltip(Tooltip::with_shortcut(_cx.i18n().text(label),
+                        (!tip.is_empty()).then(|| SharedString::from(tip)))));
+                if enabled {
+                    let h = handle.clone();
+                    let p = pane_id.clone();
+                    let parent = parent_path.clone();
+                    button = button.hover(move |s| s.bg(hover_bg))
+                        .on_mouse_down(MouseButton::Left, move |_, _, cx| {
+                            h.update(cx, |this, cx| {
+                                this.state.active_pane_id = p.clone();
+                                match action {
+                                    0 => { if let Some(parent) = &parent { this.navigate_to(&p, parent.clone(), cx); } }
+                                    1 => this.execute_undo(cx),
+                                    2 => this.execute_redo(cx),
+                                    3 => this.execute_couper(cx),
+                                    4 => this.execute_copier(cx),
+                                    5 => this.execute_coller(cx),
+                                    7 => this.execute_trash_action(false, false, cx),
+                                    8 => this.execute_trash_action(true, false, cx),
+                                    9 => this.execute_trash_action(true, true, cx),
+                                    10 => this.execute_trash_action(false, true, cx),
+                                    _ => this.execute_supprimer(cx),
+                                }
+                                cx.notify();
+                            });
+                        });
+                }
+                actions = actions.child(button.child(svg().path(icon).size_4()
+                    .text_color(if !enabled { icon_disabled } else if action == 7 || action == 10 { theme.error } else { icon_active }))
+                    .when(action == 9 || action == 10, |button| button.child(
+                        div().ml(rems(0.125)).text_size(rems(0.625)).text_color(theme.text_muted)
+                            .child(_cx.i18n().text(Message::TrashAll))
+                    )));
             }
-            d.child(
-                button
-                    .when(show_tooltips, |d| d.tooltip(Tooltip::with_meta(_cx.i18n().text(Message::Undo), tip)))
-                    .child(svg().path("icons/undo-2.svg").size_4().text_color(
-                        if can_undo { icon_active } else { icon_disabled }
-                    ))
-            )
+            actions
         })
-                        .when(can_redo, |d| {
-                            let h = handle.clone();
-                            let tip = redo_tooltip.clone().unwrap_or_default();
-                            d.child(
-                                div()
-                                    .id("redo-btn")
-                                    .w_6()
-                                    .h_6()
-                                    .flex()
-                                    .items_center()
-                                    .justify_center()
-                                    .rounded_md()
-                                    .hover(move |s| s.bg(hover_bg))
-                                    .when(show_tooltips, |d| d.tooltip(Tooltip::with_meta(_cx.i18n().text(Message::Redo), tip)))
-                                    .on_mouse_down(MouseButton::Left, move |_, _, cx| {
-                                        h.update(cx, |this, cx| this.execute_redo(cx));
-                                    })
-                                    .child(
-                                        svg()
-                                            .path("icons/redo-2.svg")
-                                            .size_4()
-                                            .text_color(icon_active)
-                                    )
-                            )
-                        })
-                )
-                .child(
-                    div()
-                        .w(rems(0.0625))
-                        .h(rems(1.0))
-                        .mx_3()
-                        .bg(theme.border)
-                )
-        })
+        // The only separator divides the actions from the breadcrumb.
+        .child(div().w(rems(0.0625)).h(rems(1.0)).mx_3().flex_shrink_0().bg(theme.border))
         .child(
             div()
                 .flex()
@@ -543,7 +533,6 @@ pub fn render_top_bar(
                             .items_center()
                             .rounded_md()
                             .text_color(seg_color)
-                            .when(is_last, |d| d.font_weight(FontWeight::MEDIUM))
                             .when(!is_last, |d| d.hover(move |s| s.text_color(theme.text_muted).bg(hover_bg)))
                             .on_mouse_down(MouseButton::Left, {
                                 let h = handle.clone();

@@ -1,9 +1,17 @@
 use crate::ui::scale::{logical, rem_pixels};
 use crate::ui::app::OxydeApp;
+use crate::ui::i18n::{I18n, I18nContext, Message};
 use crate::ui::components::scrollbar::{render_scrollbar_with_pointer, ScrollbarAxis};
 use gpui::prelude::*;
 use gpui::*;
 use std::rc::Rc;
+
+
+fn context_shortcut(label: &str, i18n: &I18n) -> Option<&'static str> {
+    [(Message::Copy, "Ctrl+C"), (Message::CopyName, "Ctrl+Alt+C"),
+        (Message::CopyPath, "Ctrl+Shift+C"), (Message::TrashDeletePermanent, "Del")].into_iter()
+        .find_map(|(message, shortcut)| (label == i18n.text(message).as_ref()).then_some(shortcut))
+}
 
 #[derive(Clone)]
 pub enum IconName {
@@ -48,6 +56,8 @@ pub enum IconName {
     ChevronUp,
     CircleX,
     Trash,
+    TrashPermanent,
+    Restore,
     CopyPlus,
     CopyX,
 }
@@ -225,7 +235,17 @@ impl<T: crate::ui::components::scrollbar::ScrollbarState + 'static> RenderOnce f
             } else {
                 0.0
             };
-            let chevron_width = if item.has_submenu { logical(14.0) } else { 0.0 };
+            let split_copy = self.is_context_menu && item.has_submenu
+                && item.label == cx.i18n().text(Message::Copy).as_ref();
+            let chevron_width = if item.has_submenu { logical(if split_copy { 23.0 } else { 14.0 }) } else { 0.0 };
+            let shortcut_width = if self.is_context_menu {
+                context_shortcut(&item.label, cx.i18n()).map_or(0.0, |shortcut| {
+                    text_system.shape_line(shortcut.into(), rem_pixels(rems(0.75)), &[TextRun {
+                        len: shortcut.len(), font: font.clone(), color: theme.text_muted,
+                        background_color: None, underline: None, strikethrough: None,
+                    }], None).width.as_f32() + logical(16.0)
+                })
+            } else { 0.0 };
             let badge_width = item.badge.as_ref().map_or(0.0, |badge| {
                 let line = text_system.shape_line(
                     badge.clone().into(), rem_pixels(rems(0.6875)),
@@ -238,7 +258,7 @@ impl<T: crate::ui::components::scrollbar::ScrollbarState + 'static> RenderOnce f
             });
             // Row padding (16) + optional icon slot + optional submenu arrow.
             calculated_width =
-                calculated_width.max(line.width.as_f32() + logical(16.0) + icon_width + chevron_width + badge_width);
+                calculated_width.max(line.width.as_f32() + logical(16.0) + icon_width + chevron_width + badge_width + shortcut_width);
         }
 
         let requested_width = self.width.unwrap_or(calculated_width);
@@ -289,6 +309,7 @@ impl<T: crate::ui::components::scrollbar::ScrollbarState + 'static> RenderOnce f
             width
         };
 
+        let self_is_context_menu = self.is_context_menu;
         let on_item_hover = self.on_item_hover.clone();
         let reserve_icon_space = self.reserve_icon_space;
 
@@ -326,8 +347,12 @@ impl<T: crate::ui::components::scrollbar::ScrollbarState + 'static> RenderOnce f
                                     let stay_open = item.stay_open;
                                     let is_dimmed = item.is_dimmed;
                                     let is_destructive =
-                                        matches!(item.icon.as_ref(), Some(IconName::Trash));
+                                        matches!(item.icon.as_ref(), Some(IconName::Trash | IconName::TrashPermanent));
                                     let on_h = on_hover_list.clone();
+                                    let arrow_hover = on_hover_list.clone();
+                                    let shortcut = if self_is_context_menu { context_shortcut(&item.label, cx.i18n()) } else { None };
+                                    let split_copy = self_is_context_menu && item.has_submenu
+                                        && item.label == cx.i18n().text(Message::Copy).as_ref();
 
                                     let row = div()
                                         // Keep action hover state stable across menu renders.
@@ -475,6 +500,8 @@ impl<T: crate::ui::components::scrollbar::ScrollbarState + 'static> RenderOnce f
                                                                     IconName::CircleX => {
                                                                         "icons/circle-x.svg"
                                                                     }
+                                                                    IconName::Restore => { "icons/rotate-ccw.svg" }
+                                                                    IconName::TrashPermanent => { "icons/trash-2.svg" }
                                                                     IconName::Trash => {
                                                                         "icons/trash.svg"
                                                                     }
@@ -528,14 +555,27 @@ impl<T: crate::ui::components::scrollbar::ScrollbarState + 'static> RenderOnce f
                                                 .text_center()
                                                 .child(badge))
                                         })
+                                        .when_some(shortcut, |row, shortcut| row.child(
+                                            div().flex_none().ml(rems(0.5)).mr(rems(0.25))
+                                                .text_size(rems(0.75)).text_color(theme.text_muted).child(shortcut)
+                                        ))
+                                        .when(split_copy, |row| row.child(
+                                            div().flex_none().w(rems(0.0625)).h(rems(1.0))
+                                                .mx(rems(0.25)).bg(theme.border)
+                                        ))
                                         // Submenu arrow
                                         .when(item.has_submenu, |s| {
                                             s.child(
-                                                svg()
-                                                    .path("icons/chevron-right.svg")
-                                                    .w(rems(0.875))
-                                                    .h(rems(0.875))
-                                                    .text_color(chevron_color),
+                                                div().id(("submenu-arrow", ix)).flex_none().h_full()
+                                                    .flex().items_center()
+                                                    .when(split_copy, |arrow| arrow.on_mouse_down(MouseButton::Left, move |event, _, cx| {
+                                                        cx.stop_propagation();
+                                                        if let Some(on_hover) = &arrow_hover {
+                                                            on_hover(original_ix, event.position, cx);
+                                                        }
+                                                    }))
+                                                    .child(svg().path("icons/chevron-right.svg")
+                                                        .size(rems(0.875)).text_color(chevron_color)),
                                             )
                                         });
                                     div().flex_col().flex_none()

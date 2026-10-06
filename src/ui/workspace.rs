@@ -70,6 +70,8 @@ pub struct SavedTab {
 pub enum SortColumn {
     Name,
     Location,
+    OriginalLocation,
+    DeletedAt,
     Type,
     Size,
     Modified,
@@ -375,6 +377,13 @@ impl TabState {
                 }
                 SortColumn::Size => a.size.cmp(&b.size),
                 SortColumn::Modified => a.modified.cmp(&b.modified),
+                SortColumn::OriginalLocation => {
+                    let location = |file: &FileEntry| file.original_path.as_deref()
+                        .and_then(|path| std::path::Path::new(path).parent())
+                        .map(|path| path.to_string_lossy().to_lowercase()).unwrap_or_default();
+                    location(a).cmp(&location(b))
+                }
+                SortColumn::DeletedAt => a.deleted_time.cmp(&b.deleted_time),
                 SortColumn::Location => std::path::Path::new(&a.path).parent().cmp(&std::path::Path::new(&b.path).parent()),
             };
 
@@ -1300,6 +1309,29 @@ impl WorkspaceState {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn trash_sort_uses_original_location_and_deletion_time() {
+        let mut tab = super::TabState::new("trash".into(), "trash://".into());
+        tab.files = vec![
+            oxyde_lib::models::FileEntry { name: "A".into(), path: "id-a".into(),
+                original_path: Some(std::path::Path::new("z-folder").join("A").to_string_lossy().into_owned()),
+                deleted_time: Some(100), ..Default::default() },
+            oxyde_lib::models::FileEntry { name: "Z".into(), path: "id-z".into(),
+                original_path: Some(std::path::Path::new("a-folder").join("Z").to_string_lossy().into_owned()),
+                deleted_time: Some(200), ..Default::default() },
+        ];
+        tab.sort_column = super::SortColumn::OriginalLocation;
+        tab.sort_direction = super::SortDirection::Ascending;
+        tab.sort_files();
+        assert_eq!(tab.files[0].name, "Z");
+        tab.sort_column = super::SortColumn::DeletedAt;
+        tab.sort_files();
+        assert_eq!(tab.files[0].name, "A");
+        tab.sort_direction = super::SortDirection::Descending;
+        tab.sort_files();
+        assert_eq!(tab.files[0].name, "Z");
+    }
+
     #[test]
     fn new_panel_is_full_height_after_stacked_panes_and_preserves_tabs() {
         let mut state = WorkspaceState::new();

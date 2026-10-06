@@ -94,9 +94,48 @@ pub fn render_settings_panel(
     .into_iter()
     .collect();
     let compression = compression_table(view, handle.clone(), cx);
+    // Keep the settings columns compact and stable when About is toggled.
+    // Measure translated labels before allocating space to icons and controls.
+    // These widths depend on the content, never on whether About is open.
+    let mut settings_font = window.text_style().font();
+    settings_font.family = "Inter".into();
+    settings_font.weight = crate::ui::style::DEFAULT_FONT_WEIGHT;
+    let label_width = |message| {
+        let label = i18n.text(message);
+        let line = window.text_system().shape_line(
+            label.clone(), crate::ui::scale::rem_pixels(rems(0.8125)),
+            &[TextRun {
+                len: label.len(), font: settings_font.clone(), color: theme.text,
+                background_color: None, underline: None, strikethrough: None,
+            }], None,
+        );
+        line.width.as_f32() / crate::ui::scale::rem_pixels(rems(1.0)).as_f32()
+    };
+    let left_width = [
+        Message::SettingsTheme, Message::SettingsGroupByDate,
+        Message::SettingsGridThumbnails, Message::SettingsWindowsIcons,
+        Message::SettingsCheckboxes, Message::SettingsPathTracking,
+        Message::SettingsHidden, Message::SettingsSystem,
+        Message::SettingsPreviews, Message::SettingsNetwork,
+    ].into_iter().map(|message| label_width(message) + 5.0625)
+        .fold(16.5_f32, f32::max)
+        .max(label_width(Message::SettingsScale) + 9.6875);
+    let right_width = [
+        Message::SettingsLanguage, Message::SettingsDateFormat, Message::Compression,
+        Message::SettingsTurbo, Message::SettingsClearCache,
+        Message::SettingsResetPreferences, Message::SettingsAbout,
+    ].into_iter().map(|message| label_width(message) + 4.5)
+        .fold(17.5_f32, f32::max)
+        .max(label_width(Message::SettingsSearchLimit) + 9.125);
+    let about_width = 16.5;
+    let column_gap = 0.5;
+    // Panel padding (2 × 0.375 rem) and borders (2 × 0.0625 rem).
+    let panel_frame = 0.875;
+    let panel_width = left_width + right_width + column_gap + panel_frame
+        + if view.settings_about_open { about_width + column_gap } else { 0.0 };
     let left = div()
-        .flex_1()
-        .min_w_0()
+        .w(rems(left_width))
+        .flex_none()
         .flex()
         .flex_col()
         .pr(rems(0.5))
@@ -226,35 +265,36 @@ pub fn render_settings_panel(
         ));
     let mut version = FluentArgs::new();
     version.set("version", env!("CARGO_PKG_VERSION"));
-    let about = vec![div()
-        .flex()
-        .items_center()
-        .gap(rems(0.75))
-        .py(rems(0.375))
-        .child(img("icons/logo.png").size(rems(2.5)).flex_none())
-        .child(
-            div()
-                .flex()
-                .flex_col()
-                .gap(rems(0.25))
-                .child("Oxyde")
-                .child(
-                    div()
-                        .text_size(rems(0.8125))
-                        .text_color(theme.text_muted)
-                        .child(i18n.text_with_args(Message::SettingsVersion, &version)),
-                )
-                .child(
-                    div()
-                        .text_size(rems(0.6875))
-                        .text_color(theme.text_muted)
-                        .child(i18n.text(Message::SettingsDescription)),
-                ),
-        )
-        .into_any_element()];
+    let about = div()
+        .id("settings-about-column")
+        .w(rems(about_width)).flex_none()
+        .flex().flex_col().gap(rems(0.5))
+        .pl(rems(0.75)).pr(rems(0.25))
+        .border_l(rems(0.0625)).border_color(theme.border)
+        .child(section(i18n.text(Message::SettingsAbout), theme))
+        .child(div().flex().flex_col().items_center().gap(rems(0.5)).py(rems(0.75))
+            .child(img("icons/logo.png").size(rems(4.5)).flex_none())
+            .child(div().text_size(rems(1.5)).font_weight(FontWeight::BOLD).child("Oxyde"))
+            .child(div().text_color(theme.text_muted)
+                .child(i18n.text_with_args(Message::SettingsVersion, &version))))
+        .child(about_link("about-releases", i18n.text(Message::AboutReleases),
+            "icons/refresh-cw.svg", "https://github.com/Carlton2001/Oxyde_FM/releases",
+            handle.clone(), theme))
+        .child(about_link("about-repository", i18n.text(Message::AboutRepository),
+            "icons/github.svg", "https://github.com/Carlton2001/Oxyde_FM",
+            handle.clone(), theme))
+        .child(separator(theme))
+        .child(section(i18n.text(Message::AboutMainTools), theme))
+        .child(about_tool("about-rust", "Rust", "icons/rust.svg",
+            "https://www.rust-lang.org", false, handle.clone(), theme))
+        .child(about_tool("about-gpui", "GPUI", "icons/zed.svg",
+            "https://www.gpui.rs", false, handle.clone(), theme))
+        .child(about_tool("about-lucide", "Lucide",
+            if view.theme_id.is_light() { "icons/lucide-light.svg" } else { "icons/lucide-dark.svg" },
+            "https://lucide.dev", true, handle.clone(), theme));
     let right = div()
-        .flex_1()
-        .min_w_0()
+        .w(rems(right_width))
+        .flex_none()
         .flex()
         .flex_col()
         .child(section(i18n.text(Message::SettingsRegionLanguage), theme))
@@ -321,7 +361,8 @@ pub fn render_settings_panel(
     let body = div()
         .flex()
         .flex_col()
-        .child(div().flex().gap(rems(0.5)).child(left).child(right))
+        .child(div().flex().gap(rems(column_gap)).child(left).child(right)
+            .when(view.settings_about_open, |columns| columns.child(about)))
         .when_some(view.settings_data_status, |body, status| {
             body.child(div().px(rems(0.375)).py(rems(0.375))
                 .text_color(if status == Message::SettingsCacheError { theme.error } else { theme.text_muted })
@@ -359,9 +400,10 @@ pub fn render_settings_panel(
     let available_height = (window.viewport_size().height - origin.y - margin).max(px(1.0));
     let panel = div()
         .id("settings-panel")
-        .w(rems(38.0))
+        .w(rems(panel_width))
         .max_w(window.viewport_size().width - margin * 2.0)
         .max_h(available_height)
+        .overflow_x_scroll()
         .overflow_y_scroll()
         .p(rems(0.375))
         .rounded_lg()
@@ -384,18 +426,19 @@ pub fn render_settings_panel(
             cx.stop_propagation();
             backdrop.update(cx, |view, cx| {
                 view.settings_open = false;
+                view.settings_about_open = false;
                 view.settings_picker = None;
                 view.settings_submenu_bounds = None;
                 cx.notify();
             });
         })
         .child(anchored().position(origin).snap_to_window().child(panel));
-    if let (Some(kind), Some(bounds)) = (view.settings_picker, view.settings_submenu_bounds) {
+    if let (Some(kind), Some(bounds)) = (view.settings_picker.filter(|kind| *kind != SettingsPicker::About), view.settings_submenu_bounds) {
         let (title, choices): (SharedString, Vec<AnyElement>) = match kind {
             SettingsPicker::Theme => (i18n.text(Message::SettingsTheme), themes),
             SettingsPicker::Language => (i18n.text(Message::SettingsLanguage), languages),
             SettingsPicker::Date => (i18n.text(Message::SettingsDateFormat), dates),
-            SettingsPicker::About => (i18n.text(Message::SettingsAbout), about),
+            SettingsPicker::About => unreachable!("About is rendered as a settings column"),
             SettingsPicker::Compression => (i18n.text(Message::Compression), compression),
 
         };
@@ -564,7 +607,7 @@ fn data_action_row(
         .when(enabled, |row| row.hover(|s| s.bg(theme.menu_hover)))
         .when(!enabled, |row| row.opacity(0.5))
         .child(icon(icon_path, theme))
-        .child(div().flex_1().min_w_0().child(label))
+        .child(div().flex_1().flex_shrink_0().whitespace_nowrap().child(label))
         .on_mouse_down(MouseButton::Left, move |_, window, cx| {
             if enabled {
                 handle.update(cx, |view, cx| view.open_settings_confirmation(action, window, cx));
@@ -597,7 +640,8 @@ fn picker(
     label: SharedString,
     theme: OxydeTheme,
 ) -> impl IntoElement {
-    let active = view.settings_picker == Some(kind);
+    let active = if kind == SettingsPicker::About { view.settings_about_open }
+        else { view.settings_picker == Some(kind) };
     let row_bounds = Rc::new(Cell::new(None::<Bounds<Pixels>>));
     let paint_bounds = row_bounds.clone();
     let paint_handle = handle.clone();
@@ -617,7 +661,7 @@ fn picker(
                 |bounds, _, _| bounds,
                 move |_, bounds, _, cx| {
                     paint_bounds.set(Some(bounds));
-                    if active {
+                    if active && kind != SettingsPicker::About {
                         paint_handle.update(cx, |view, cx| {
                             if view.settings_submenu_bounds != Some(bounds) {
                                 view.settings_submenu_bounds = Some(bounds);
@@ -631,11 +675,16 @@ fn picker(
             .size_full(),
         )
         .child(icon(icon_path, theme))
-        .child(div().flex_1().min_w_0().child(label))
-        .child(icon("icons/chevron-right.svg", theme))
+        .child(div().flex_1().flex_shrink_0().whitespace_nowrap().child(label))
+        .child(icon(if kind == SettingsPicker::About && active { "icons/chevron-left.svg" }
+            else { "icons/chevron-right.svg" }, theme))
         .on_mouse_down(MouseButton::Left, move |_, _, cx| {
             handle.update(cx, |view, cx| {
-                if view.settings_picker == Some(kind) {
+                if kind == SettingsPicker::About {
+                    view.settings_about_open = !view.settings_about_open;
+                    view.settings_picker = None;
+                    view.settings_submenu_bounds = None;
+                } else if view.settings_picker == Some(kind) {
                     view.settings_picker = None;
                     view.settings_submenu_bounds = None;
                 } else {
@@ -663,7 +712,7 @@ fn scale_row(view: &OxydeApp, handle: Entity<OxydeApp>, cx: &App) -> impl IntoEl
         });
     div().min_h(rems(2.0)).px(rems(0.375)).gap(rems(0.5)).flex().items_center()
         .child(icon("icons/type.svg", theme))
-        .child(div().flex_1().min_w_0().child(cx.i18n().text(Message::SettingsScale)))
+        .child(div().flex_1().flex_shrink_0().whitespace_nowrap().child(cx.i18n().text(Message::SettingsScale)))
         .child(crate::ui::elements::stepper::stepper(
             "scale", value, reference > MIN_REM_SIZE, reference < MAX_REM_SIZE, theme,
             move |increase, window, cx| {
@@ -680,12 +729,21 @@ fn search_limit_row(view: &OxydeApp, handle: Entity<OxydeApp>, cx: &App) -> impl
     use oxyde_lib::models::preferences::{SEARCH_LIMIT_STEP, MAX_SEARCH_LIMIT};
     let theme = *cx.theme();
     let limit = view.search_limit();
+    let reset = handle.clone();
+    let value = div().id("search-limit-reset").min_w(rems(3.25)).h(rems(1.5))
+        .flex().items_center().justify_center()
+        .tooltip(Tooltip::text(cx.i18n().text(Message::SettingsSearchLimitReset)))
+        .child(limit.to_string())
+        .on_mouse_down(MouseButton::Left, move |_, _, cx| {
+            cx.stop_propagation();
+            reset.update(cx, |view, cx| view.reset_search_limit(cx));
+        });
     div().id("settings-search-limit-row").min_h(rems(2.0)).px(rems(0.375)).gap(rems(0.5)).flex().items_center()
         .tooltip(Tooltip::text(cx.i18n().text(Message::SettingsSearchLimitDescription)))
         .child(icon("icons/zap.svg", theme))
-        .child(div().flex_1().min_w_0().child(cx.i18n().text(Message::SettingsSearchLimit)))
+        .child(div().flex_1().flex_shrink_0().whitespace_nowrap().child(cx.i18n().text(Message::SettingsSearchLimit)))
         .child(crate::ui::elements::stepper::stepper(
-            "search-limit", limit.to_string(), limit > SEARCH_LIMIT_STEP, limit < MAX_SEARCH_LIMIT, theme,
+            "search-limit", value, limit > SEARCH_LIMIT_STEP, limit < MAX_SEARCH_LIMIT, theme,
             move |increase, _, cx| {
                 handle.update(cx, |view, cx| view.step_search_limit(increase, cx));
             },
@@ -843,7 +901,7 @@ fn settings_row(
         .hover(|s| s.bg(theme.control_hover))
         .tooltip(Tooltip::text(description))
         .child(icon(icon_path, theme))
-        .child(div().flex_1().min_w_0().text_size(rems(0.8125)).child(label))
+        .child(div().flex_1().flex_shrink_0().whitespace_nowrap().text_size(rems(0.8125)).child(label))
         .child(
             div()
                 .w(rems(1.875))
@@ -865,5 +923,40 @@ fn settings_row(
         )
         .on_mouse_down(MouseButton::Left, move |_, _, cx| {
             handle.update(cx, |view, cx| on_toggle(view, cx));
+        })
+}
+
+/// Links use the platform worker because the shell can pump native messages.
+fn about_link(
+    id: &'static str, label: SharedString, icon_path: &'static str,
+    url: &'static str, handle: Entity<OxydeApp>, theme: OxydeTheme,
+) -> impl IntoElement {
+    div().id(id).flex().items_center().gap(rems(0.5))
+        .px(rems(0.75)).py(rems(0.5)).rounded_md()
+        .bg(theme.control_hover).hover(|s| s.bg(theme.menu_hover))
+        .child(icon(icon_path, theme))
+        .child(div().flex_1().flex_shrink_0().whitespace_nowrap().child(label))
+        .child(icon("icons/external-link.svg", theme))
+        .on_mouse_down(MouseButton::Left, move |_, _, cx| {
+            handle.update(cx, |this, cx| this.open_external_item(url.into(), cx));
+        })
+}
+
+fn about_tool(
+    id: &'static str, name: &'static str, logo: &'static str, url: &'static str,
+    color_logo: bool, handle: Entity<OxydeApp>, theme: OxydeTheme,
+) -> impl IntoElement {
+    div().id(id).flex().items_center().justify_center().gap(rems(0.75))
+        .py(rems(0.625)).px(rems(0.75)).rounded_md()
+        .border(rems(0.0625)).border_color(theme.border)
+        .hover(|s| s.bg(theme.menu_hover))
+        .child(if color_logo {
+            img(logo).size(rems(1.75)).into_any_element()
+        } else {
+            svg().path(logo).size(rems(1.75)).text_color(theme.text).into_any_element()
+        })
+        .child(div().text_size(rems(1.125)).child(name))
+        .on_mouse_down(MouseButton::Left, move |_, _, cx| {
+            handle.update(cx, |this, cx| this.open_external_item(url.into(), cx));
         })
 }

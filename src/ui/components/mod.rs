@@ -64,14 +64,23 @@ pub fn with_grid_sort(
     let column = tab.sort_column;
     let direction = tab.sort_direction;
     let mut choices = Vec::new();
-    for (label, selected_column, selected_direction) in [
+    let mut sort_options = vec![
         (Message::ColumnName, Some(SortColumn::Name), None),
         (Message::SortExtension, Some(SortColumn::Type), None),
         (Message::ColumnSize, Some(SortColumn::Size), None),
         (Message::ColumnModified, Some(SortColumn::Modified), None),
+    ];
+    if tab.path == "trash://" {
+        sort_options.extend([
+            (Message::TrashOriginalLocation, Some(SortColumn::OriginalLocation), None),
+            (Message::TrashDeletedAt, Some(SortColumn::DeletedAt), None),
+        ]);
+    }
+    sort_options.extend([
         (Message::SortAscending, None, Some(SortDirection::Ascending)),
         (Message::SortDescending, None, Some(SortDirection::Descending)),
-    ] {
+    ]);
+    for (label, selected_column, selected_direction) in sort_options {
         if label == Message::SortAscending {
             choices.push(dropdown::DropdownItem::separator());
         }
@@ -152,6 +161,9 @@ fn oxyde_context_menu_items_raw(
 ) -> Vec<crate::ui::components::dropdown::DropdownItem> {
     use crate::ui::components::dropdown::IconName;
 
+    if view.state.find_pane(&view.state.active_pane_id).is_some_and(|pane| pane.active_tab().path == "trash://") {
+        return trash_context_menu_items(i18n, h_app, Some(path), view);
+    }
     let mut items = vec![];
 
     if view.state.find_pane(&view.state.active_pane_id).is_some_and(|pane| pane.active_tab().quick_search.is_some()) {
@@ -311,7 +323,7 @@ fn oxyde_context_menu_items_raw(
         icon: Some(IconName::Copy),
         badge: None,
         stay_open: false,
-        has_submenu: false,
+        has_submenu: true,
         is_dimmed: false,
         on_click: std::rc::Rc::new({
             let h = h_app.clone();
@@ -322,7 +334,34 @@ fn oxyde_context_menu_items_raw(
                 });
             }
         }),
-        on_hover: None,
+        on_hover: Some(std::rc::Rc::new({
+            let h = h_app.clone();
+            let labels = [(i18n.text(Message::CopyName).to_string(), true),
+                (i18n.text(Message::CopyPath).to_string(), false)];
+            move |position, open_left, app| {
+                h.update(app, |this, cx| {
+                    use crate::ui::app::{ContextMenuContent, ContextMenuInstance};
+                    let choices = labels.iter().map(|(label, names_only)| {
+                        let h = h.clone();
+                        let names_only = *names_only;
+                        crate::ui::components::dropdown::DropdownItem::new(label.clone(), move |_, app| {
+                            h.update(app, |this, cx| {
+                                this.execute_copy_text(names_only, cx);
+                                this.context_menus.clear();
+                                cx.notify();
+                            });
+                        }).icon(IconName::Copy)
+                    }).collect();
+                    this.context_menus.truncate(1);
+                    this.context_menus.push(ContextMenuInstance {
+                        position, content: ContextMenuContent::Items(choices, None),
+                        scroll_handle: UniformListScrollHandle::new(), width: px(0.0),
+                        bottom_padding: 0.0, open_left, hovered_item: None, native_request_id: None,
+                    });
+                    cx.notify();
+                });
+            }
+        })),
     });
 
     items.push(crate::ui::components::dropdown::DropdownItem {
@@ -700,6 +739,7 @@ pub fn oxyde_context_menu_items(
 
 pub fn pane_context_menu_items(i18n: &I18n, h: Entity<crate::ui::app::OxydeApp>, pane_id: String, view: &crate::ui::app::OxydeApp) -> Vec<dropdown::DropdownItem> {
     let path = view.state.find_pane(&pane_id).map(|pane| pane.active_tab().path.as_str()).unwrap_or_default();
+    if path == "trash://" { return trash_context_menu_items(i18n, h, None, view); }
     let mut items = network::network_actions(i18n, h.clone(), path, false);
     if path == "__network_vincinity__" {
         let h = h.clone();
@@ -751,4 +791,39 @@ mod context_menu_tests {
             assert!(!matches!(items.last().unwrap().icon, Some(dropdown::IconName::Separator)));
         }
     }
+}
+
+fn trash_context_menu_items(i18n: &I18n, handle: Entity<crate::ui::app::OxydeApp>, path: Option<String>, view: &crate::ui::app::OxydeApp) -> Vec<dropdown::DropdownItem> {
+    use dropdown::{DropdownItem, IconName};
+    let mut items = Vec::new();
+    let all = path.is_none();
+    if !all {
+        let h = handle.clone();
+        items.push(DropdownItem::new(i18n.text(Message::Cut).to_string(), move |_, cx| {
+            h.update(cx, |this, cx| { this.execute_couper(cx); this.context_menus.clear(); cx.notify(); });
+        }).icon(IconName::Scissors));
+    }
+    for (label, restore, icon) in [
+        (if all { Message::TrashRestoreAll } else { Message::TrashRestore }, true, IconName::Restore),
+        (if all { Message::TrashDeleteAll } else { Message::TrashDeletePermanent }, false, IconName::TrashPermanent),
+    ] {
+        let h = handle.clone();
+        let mut item = DropdownItem::new(i18n.text(label).to_string(), move |_, cx| {
+            h.update(cx, |this, cx| { this.execute_trash_action(restore, all, cx); this.context_menus.clear(); cx.notify(); });
+        }).icon(icon);
+        item.is_dimmed = view.trash_busy;
+        items.push(item);
+    }
+    items.push(DropdownItem::separator());
+    items.push(DropdownItem::new(i18n.text(Message::Properties).to_string(), move |_, cx| {
+        let path = path.clone().unwrap_or_else(|| "trash://".into());
+        handle.update(cx, |this, cx| {
+            this.context_menus.clear();
+            cx.spawn(async move |_, _| {
+                let _ = tokio::task::spawn_blocking(move || oxyde_lib::platform::platform().show_properties_dialog(&path)).await;
+            }).detach();
+            cx.notify();
+        });
+    }).icon(IconName::Settings));
+    items
 }

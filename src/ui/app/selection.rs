@@ -48,7 +48,7 @@ impl OxydeApp {
 
             if new_scroll_y != scroll_y {
                 let visible_list_h = if grid_mode { bounds.size.height.max(1.0) }
-                    else { (bounds.size.height - crate::ui::style::row_height()).max(1.0) };
+                    else { (bounds.size.height - crate::ui::style::column_header_height()).max(1.0) };
                 let content_h = crate::ui::date_groups::content_height(&rows, grid_mode).max(1.0);                let max_scroll = (content_h - visible_list_h).max(0.0);
 
                 new_scroll_y = new_scroll_y.clamp(-max_scroll, 0.0);
@@ -81,7 +81,7 @@ impl OxydeApp {
                 let rect_top = start_pos.y.as_f32().min(current_pos.y.as_f32());
                 let rect_bottom = start_pos.y.as_f32().max(current_pos.y.as_f32());
                 let card_width = grid_width / grid_columns as f32;
-                let mut top = bounds.origin.y + scroll_y + if grid_mode { 0.0 } else { crate::ui::style::row_height() };
+                let mut top = bounds.origin.y + scroll_y + if grid_mode { 0.0 } else { crate::ui::style::column_header_height() };
                 let mut current_rect_paths = std::collections::HashSet::new();
                 for row in &rows {
                     let height = crate::ui::date_groups::row_height(row, grid_mode);

@@ -73,7 +73,6 @@ settings-about = Über
 
 settings-version = Version { $version }
 
-settings-description = Moderner Dateimanager
 
 settings-save-error = Einstellungen angewendet, aber nicht gespeichert. Versuchen Sie es erneut.
 
@@ -701,3 +700,23 @@ settings-preferences-reset = Einstellungen zurückgesetzt.
 settings-turbo-description = Standard-Turbomodus für neue Kopier- und Verschiebevorgänge. Laufende Übertragungen behalten ihre Einstellung.
 
 settings-search-limit-description = Maximale Ergebnisse für neue Schnell- und erweiterte Suchen. Schritte von 500, mindestens 500.
+
+navigation-up = Nach oben
+
+about-releases = Versionen ansehen
+about-repository = GitHub-Repository
+about-main-tools = Wichtigste Werkzeuge
+
+settings-search-limit-reset = Auf das Standardlimit von 3.000 Ergebnissen zurücksetzen
+
+menu-copy-name = Name kopieren
+
+trash-restore = Wiederherstellen
+trash-restore-all = Alles wiederherstellen
+trash-delete-permanent = Endgültig löschen
+trash-delete-all = Papierkorb leeren
+trash-all = Alle
+trash-original-location = Ursprünglicher Speicherort
+trash-deleted-at = Löschdatum
+
+trash-restore-selection = Auswahl wiederherstellen

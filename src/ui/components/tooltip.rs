@@ -451,7 +451,7 @@ impl Render for Tooltip {
                     .gap(rems(0.75))
                     .child(div().flex_1().min_w_0().flex().flex_col()
                         .children(title_lines.into_iter().map(|line| div()
-                            .when(self.file_info.is_some() || self.shortcut.is_some(), |title| title.whitespace_nowrap())
+                            .when(self.file_info.is_some() || self.meta.is_none(), |title| title.whitespace_nowrap())
                             .child(line))))
                     .when_some(self.shortcut.clone(), |row, shortcut| {
                         row.child(div().whitespace_nowrap().text_color(theme.text_muted)

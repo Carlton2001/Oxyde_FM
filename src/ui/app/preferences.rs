@@ -16,6 +16,12 @@ impl OxydeApp {
         oxyde_lib::models::preferences::normalized_search_limit(self.config.search_limit)
     }
 
+    pub(crate) fn reset_search_limit(&mut self, cx: &mut Context<Self>) {
+        self.config.search_limit = oxyde_lib::models::AppConfig::default().search_limit;
+        self.save_preferences(cx);
+        cx.notify();
+    }
+
     pub(crate) fn step_search_limit(&mut self, increase: bool, cx: &mut Context<Self>) {
         self.config.search_limit = oxyde_lib::models::preferences::stepped_search_limit(
             self.config.search_limit, increase,
