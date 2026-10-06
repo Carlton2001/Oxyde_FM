@@ -55,8 +55,13 @@ pub fn render_title_bar(
                 use crate::ui::components::dropdown::DropdownItem;
                 let items = [Message::ToolSizes, Message::ToolSearch, Message::ToolDuplicates]
                     .into_iter().map(|message| {
-                        let mut item = DropdownItem::new(cx.i18n().text(message).to_string(), |_, _| {});
-                        item.is_dimmed = true;
+                        let search_handle = tools_handle.clone();
+                        let mut item = DropdownItem::new(cx.i18n().text(message).to_string(), move |window, cx| {
+                            if message == Message::ToolSearch {
+                                search_handle.update(cx, |view, cx| view.open_advanced_search(window, cx));
+                            }
+                        });
+                        item.is_dimmed = message != Message::ToolSearch;
                         item
                     }).collect();
                 view.settings_open = false;

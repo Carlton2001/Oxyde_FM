@@ -14,6 +14,7 @@ mod preferences;
 pub(crate) mod network;
 pub mod selection;
 pub(crate) mod search;
+pub(crate) mod advanced_search;
 
 #[allow(unused_imports)]
 pub use filters::*;
@@ -421,6 +422,7 @@ pub struct OxydeApp {
     pub(super) disk_image_refresh_task: Option<Task<()>>,
     pub(crate) network_dialog: Option<network::NetworkDialog>,
     pub(crate) network_dialog_revision: u64,
+    pub(crate) advanced_search: Option<advanced_search::AdvancedSearchDialog>,
     pub(crate) network_force_confirmation: Option<network::NetworkForceConfirmation>,
     pub(crate) network_force_focus_pending: bool,
     pub(crate) network_focus_restore: bool,
@@ -857,6 +859,7 @@ impl OxydeApp {
             disk_image_refresh_task: None,
             network_dialog: None,
             network_dialog_revision: 0,
+            advanced_search: None,
             network_force_confirmation: None,
             network_force_focus_pending: false,
             network_focus_restore: false,
@@ -2807,6 +2810,9 @@ impl Render for OxydeApp {
                     )
             });
 
+        if self.advanced_search.is_some() {
+            root = root.child(deferred(self.render_advanced_search(handle.clone(), cx)));
+        }
         // Keep modal content below transient context menus in the render tree:
         // a text field inside the rename dialog can open its own context menu.
         if self.network_force_confirmation.is_some() {

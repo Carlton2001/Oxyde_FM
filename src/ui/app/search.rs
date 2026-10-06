@@ -101,6 +101,39 @@ mod tests {
     }
 
     #[test]
+    fn advanced_history_keeps_filters_without_reinterpreting_quick_queries() {
+        let options = oxyde_lib::commands::search::AdvancedSearchOptions {
+            query: r"^Été\d".into(),
+            regex: true,
+            recursive: true,
+            min_size: Some(1536),
+            content: "résumé".into(),
+            ..Default::default()
+        };
+        let root = r"\\server\share";
+        let path = format!(
+            "search://{}",
+            serde_json::to_string(&("advanced", root, options)).unwrap()
+        );
+        assert_eq!(
+            parse_search_path(&path),
+            Some((root.into(), r"^Été\d".into()))
+        );
+        let (_, restored) = crate::ui::app::advanced_search::parse_advanced_path(&path).unwrap();
+        assert_eq!(restored.min_size, Some(1536));
+        assert!(restored.regex);
+        assert!(restored.recursive);
+        assert_eq!(restored.content, "résumé");
+        assert!(
+            crate::ui::app::advanced_search::parse_advanced_path(&search_path(
+                root,
+                "advanced-options:{}"
+            ))
+            .is_none()
+        );
+    }
+
+    #[test]
     fn closing_last_search_state_cancels_worker() {
         let token = Arc::new(AtomicBool::new(false));
         let owner = Arc::new(SearchCancellation(token.clone()));
@@ -152,7 +185,12 @@ pub fn search_path(root: &str, query: &str) -> String {
 }
 
 pub fn parse_search_path(path: &str) -> Option<(String, String)> {
-    serde_json::from_str(path.strip_prefix("search://")?).ok()
+    serde_json::from_str(path.strip_prefix("search://")?)
+        .ok()
+        .or_else(|| {
+            super::advanced_search::parse_advanced_path(path)
+                .map(|(root, options)| (root, options.query))
+        })
 }
 
 pub fn search_label(path: &str, i18n: &crate::ui::i18n::I18n) -> Option<String> {
@@ -619,6 +657,9 @@ impl OxydeApp {
         if let Some(search) = tab.quick_search.take() {
             search.cancellation.0.store(true, Ordering::Relaxed);
         }
+        let options =
+            super::advanced_search::parse_advanced_path(&path).map(|(_, options)| options);
+        let query = options.as_ref().map(|o| o.query.clone()).unwrap_or(query);
         let cancellation = Arc::new(AtomicBool::new(false));
         tab.quick_search = Some(QuickSearchState {
             root: root.clone(),
@@ -635,14 +676,25 @@ impl OxydeApp {
         tab.load_status = crate::ui::workspace::TabLoadStatus::Loading;
         let id = tab.id.clone();
         self.pending_file_requests.remove(&id);
-        let receiver = oxyde_lib::commands::search::quick_search(
-            root,
-            query,
-            self.config.search_limit as usize,
-            self.show_hidden,
-            self.show_system,
-            cancellation.clone(),
-        );
+        let receiver = if let Some(options) = options {
+            oxyde_lib::commands::search::advanced_search(
+                root,
+                options,
+                self.config.search_limit as usize,
+                self.show_hidden,
+                self.show_system,
+                cancellation.clone(),
+            )
+        } else {
+            oxyde_lib::commands::search::quick_search(
+                root,
+                query,
+                self.config.search_limit as usize,
+                self.show_hidden,
+                self.show_system,
+                cancellation.clone(),
+            )
+        };
         cx.spawn(async move |this, cx| loop {
             cx.background_executor()
                 .timer(std::time::Duration::from_millis(100))

@@ -112,6 +112,15 @@ impl TextInput {
         &self.content
     }
 
+    pub fn set_content(&mut self, content: String, cx: &mut Context<Self>) {
+        self.content = content;
+        self.selected_range = self.content.len()..self.content.len();
+        self.selection_anchor = self.content.len();
+        self.selection_reversed = false;
+        self.last_layout = None;
+        cx.notify();
+    }
+
     fn display_index(&self, byte: usize) -> usize {
         if self.password {
             masked_display_index(&self.content, byte)
@@ -120,6 +129,7 @@ impl TextInput {
         }
     }
     pub fn set_placeholder(&mut self, placeholder: SharedString, cx: &mut Context<Self>) {
+        if self.placeholder == placeholder { return; }
         self.placeholder = placeholder;
         cx.notify();
     }

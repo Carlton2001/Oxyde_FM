@@ -5,13 +5,23 @@ use gpui::*;
 
 /// Standard compact label/value row for internal popup forms.
 pub fn form_row(label: SharedString, value: impl IntoElement, cx: &App) -> impl IntoElement {
+    form_row_with_label_width(label, value, rems(5.5), cx)
+}
+
+/// Forms with longer labels can reserve their own label column.
+pub fn form_row_with_label_width(
+    label: SharedString,
+    value: impl IntoElement,
+    width: Rems,
+    cx: &App,
+) -> impl IntoElement {
     div()
         .flex()
         .items_center()
         .gap(rems(0.75))
         .child(
             div()
-                .w(rems(5.5))
+                .w(width)
                 .flex_none()
                 .text_size(rems(0.8125))
                 .text_color(cx.theme().text_muted)
