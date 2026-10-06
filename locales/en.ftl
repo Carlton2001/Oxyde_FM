@@ -241,7 +241,7 @@ quick-search-clear = Clear
 quick-search-stop = Stop searching
 open-file-location = Open file location
 column-location = Location
-tool-duplicates = Find duplicates — Coming soon
+tool-duplicates = Find duplicates
 
 tabs-new-tab = New tab
 
@@ -355,3 +355,29 @@ advanced-max = Max
 advanced-invalid = Check patterns, sizes and dates (YYYY-MM-DD).
 advanced-date-placeholder = YYYY-MM-DD
 advanced-weekdays = Mon Tue Wed Thu Fri Sat Sun
+
+duplicate-locations = Search locations
+duplicate-settings = Search settings
+duplicate-name = Name
+duplicate-size = Size
+duplicate-content = Content (slow)
+duplicate-current = Current folder
+duplicate-warning = Selecting multiple locations can considerably slow down the search.
+duplicate-filter = Filter results…
+duplicate-idle = Configure the search and click Search.
+duplicate-empty = No duplicates found.
+duplicate-scanning = Scanning files: { $current }
+duplicate-hashing = Comparing content: { $current } / { $total }
+duplicate-groups = { $groups ->
+    [one] { $group_count } duplicate group
+   *[other] { $group_count } duplicate groups
+    }
+duplicate-files = { $file_count ->
+    [one] { $file_number } file
+   *[other] { $file_number } files
+    }
+duplicate-group = Group { $index }
+duplicate-failed = Search failed: { $error }
+duplicate-more = Load more
+duplicate-disk = Disk #{ $disk }
+duplicate-go-to-folder = Click to go to the folder

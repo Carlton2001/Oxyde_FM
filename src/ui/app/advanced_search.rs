@@ -83,7 +83,94 @@ mod tests {
     }
 }
 
+pub struct AdvancedSearchWindow {
+    owner: WeakEntity<OxydeApp>,
+    advanced_search: Option<AdvancedSearchDialog>,
+    context_menus: Vec<ContextMenuInstance>,
+    handle: WeakEntity<Self>,
+    scrollbar_origins: std::collections::HashMap<String, Point<f32>>,
+    grab_offset: f32,
+    _subscriptions: Vec<Subscription>,
+}
+
+impl crate::ui::components::scrollbar::ScrollbarState for AdvancedSearchWindow {
+    fn scrollbar_origins(&mut self) -> &mut std::collections::HashMap<String, Point<f32>> {
+        &mut self.scrollbar_origins
+    }
+    fn set_grab_offset(&mut self, offset: f32) {
+        self.grab_offset = offset;
+    }
+}
+
+pub(crate) fn close_advanced_search_windows(cx: &mut App) {
+    for handle in cx.windows() {
+        if let Some(handle) = handle.downcast::<AdvancedSearchWindow>() {
+            let _ = handle.update(cx, |_, window, _| window.remove_window());
+        }
+    }
+}
+
 impl OxydeApp {
+    pub(crate) fn open_advanced_search(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
+        self.context_menus.clear();
+        self.settings_open = false;
+        for handle in cx.windows() {
+            if let Some(handle) = handle.downcast::<AdvancedSearchWindow>() {
+                cx.defer(move |cx| {
+                    let _ = handle.update(cx, |_, window, _| window.activate_window());
+                });
+                cx.notify();
+                return;
+            }
+        }
+        let pane = self.state.active_pane_id.clone();
+        let Some(tab) = self.state.find_pane(&pane).map(|p| p.active_tab()) else {
+            return;
+        };
+        let (root, old) = super::search::parse_search_path(&tab.path)
+            .unwrap_or((tab.path.clone(), String::new()));
+        let options = parse_advanced_path(&tab.path)
+            .map(|(_, options)| options)
+            .unwrap_or(AdvancedSearchOptions {
+                query: old,
+                recursive: true,
+                ..Default::default()
+            });
+        let owner = cx.entity().downgrade();
+        let title = cx.i18n().text(Message::ToolSearch);
+        // A new window draws synchronously; defer until the owner update ends.
+        cx.defer(move |cx| {
+            if owner.upgrade().is_none() {
+                return;
+            }
+            let result = cx.open_window(
+                WindowOptions {
+                    window_bounds: Some(WindowBounds::Windowed(Bounds::new(
+                        point(px(160.0), px(140.0)),
+                        size(px(760.0), px(520.0)),
+                    ))),
+                    is_resizable: false,
+                    is_minimizable: false,
+                    titlebar: Some(TitlebarOptions {
+                        appears_transparent: true,
+                        title: Some(title),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                },
+                move |window, cx| {
+                    cx.new(|cx| AdvancedSearchWindow::new(owner, pane, root, options, window, cx))
+                },
+            );
+            if let Err(error) = result {
+                log::error!("Cannot open advanced search window: {error}");
+            }
+        });
+        cx.notify();
+    }
+}
+
+impl AdvancedSearchWindow {
     fn drag_advanced_help(&mut self, position: Point<Pixels>, cx: &mut App) {
         let Some(d) = &mut self.advanced_search else {
             return;
@@ -100,26 +187,18 @@ impl OxydeApp {
         let offset = ((position.y.as_f32() - origin.y - self.grab_offset) / travel).clamp(0.0, 1.0)
             * (content - viewport);
         d.help_scroll.set_offset(point(px(0.0), px(-offset)));
-        if let Some(handle) = &self.handle {
+        if let Some(handle) = self.handle.upgrade() {
             cx.notify(handle.entity_id());
         }
     }
-    pub(crate) fn open_advanced_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.context_menus.clear();
-        self.settings_open = false;
-        let pane = self.state.active_pane_id.clone();
-        let Some(tab) = self.state.find_pane(&pane).map(|p| p.active_tab()) else {
-            return;
-        };
-        let (root, old) = super::search::parse_search_path(&tab.path)
-            .unwrap_or((tab.path.clone(), String::new()));
-        let options = parse_advanced_path(&tab.path)
-            .map(|(_, options)| options)
-            .unwrap_or(AdvancedSearchOptions {
-                query: old,
-                recursive: true,
-                ..Default::default()
-            });
+    fn new(
+        owner: WeakEntity<OxydeApp>,
+        pane: String,
+        root: String,
+        options: AdvancedSearchOptions,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
         let unit = if options
             .min_size
             .into_iter()
@@ -157,17 +236,17 @@ impl OxydeApp {
         ];
         let mut inputs = Vec::new();
         for (index, value) in values.iter().enumerate() {
-            let change = cx.entity();
-            let enter = cx.entity();
-            let escape = cx.entity();
-            let menu = cx.entity();
+            let change = cx.entity().downgrade();
+            let enter = cx.entity().downgrade();
+            let escape = cx.entity().downgrade();
+            let menu = cx.entity().downgrade();
             inputs.push(cx.new(|cx| {
                 TextInput::new(
                     cx,
                     "",
                     value.clone(),
                     move |value, _, cx| {
-                        change.update(cx, |this, cx| {
+                        let _ = change.update(cx, |this, cx| {
                             if let Some(d) = &mut this.advanced_search {
                                 d.values[index] = value.into();
                                 d.error = false;
@@ -176,13 +255,15 @@ impl OxydeApp {
                         });
                     },
                     move |window, cx| {
-                        enter.update(cx, |this, cx| this.submit_advanced_search(window, cx));
+                        let _ =
+                            enter.update(cx, |this, cx| this.submit_advanced_search(window, cx));
                     },
                     move |window, cx| {
-                        escape.update(cx, |this, cx| this.close_advanced_search(window, cx));
+                        let _ =
+                            escape.update(cx, |this, cx| this.close_advanced_search(window, cx));
                     },
                     move |input, selected, position, window, cx| {
-                        menu.update(cx, |this, cx| {
+                        let _ = menu.update(cx, |this, cx| {
                             this.open_text_context_menu(input, selected, position, window, cx)
                         });
                     },
@@ -196,7 +277,7 @@ impl OxydeApp {
         }
         let focus = inputs[0].read(cx).focus_handle.clone();
         window.focus(&focus, cx);
-        self.advanced_search = Some(AdvancedSearchDialog {
+        let advanced_search = Some(AdvancedSearchDialog {
             inputs,
             values,
             flags: [
@@ -213,18 +294,106 @@ impl OxydeApp {
             focus: cx.focus_handle(),
             pane,
             calendar: None,
-            controls: (0..15).map(|_| cx.focus_handle()).collect(),
+            controls: (0..14).map(|_| cx.focus_handle()).collect(),
             help_scroll: ScrollHandle::new(),
             help_metrics: (0.0, 0.0),
             help_drag: None,
+        });
+        crate::ui::components::tool_window::install_icon("icons/search.svg", window);
+        let mut subscriptions = Vec::new();
+        if let Some(main) = owner.upgrade() {
+            subscriptions.push(
+                cx.observe_release_in(&main, window, |_, _, window, _| window.remove_window()),
+            );
+        }
+        Self {
+            owner,
+            advanced_search,
+            context_menus: Vec::new(),
+            handle: cx.entity().downgrade(),
+            scrollbar_origins: std::collections::HashMap::new(),
+            grab_offset: 0.0,
+            _subscriptions: subscriptions,
+        }
+    }
+
+    pub(crate) fn open_text_context_menu(
+        &mut self,
+        input: Entity<TextInput>,
+        has_selection: bool,
+        position: Point<Pixels>,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        use crate::ui::components::dropdown::{DropdownItem, IconName};
+
+        let Some(handle) = self.handle.upgrade() else {
+            return;
+        };
+        let can_paste = cx
+            .read_from_clipboard()
+            .and_then(|clipboard| clipboard.text())
+            .is_some();
+
+        let mut items = Vec::new();
+        for (label, command, is_dimmed) in [
+            (Message::Cut, 0u8, !has_selection),
+            (Message::Copy, 1u8, !has_selection),
+            (Message::Paste, 2u8, !can_paste),
+            (Message::SelectAll, 3u8, false),
+        ] {
+            if command == 3 {
+                items.push(DropdownItem::separator());
+            }
+            let h = handle.downgrade();
+            let target_input = input.clone();
+            let mut item =
+                DropdownItem::new(cx.i18n().text(label).to_string(), move |window, app| {
+                    target_input.update(app, |input, cx| match command {
+                        0 => input.cut_selected_text(window, cx),
+                        1 => input.copy_selected_text(cx),
+                        2 => input.paste_from_clipboard(window, cx),
+                        _ => input.select_all_text(cx),
+                    });
+                    let _ = h.update(app, |_this, cx| {
+                        cx.notify();
+                    });
+                });
+            item.icon = match command {
+                1 => Some(IconName::Copy),
+                3 => Some(IconName::ALargeSmall),
+                _ => None,
+            };
+            item.is_dimmed = is_dimmed;
+            items.push(item);
+        }
+
+        self.context_menus.clear();
+        self.context_menus.push(ContextMenuInstance {
+            position,
+            content: ContextMenuContent::Items(items, None),
+            scroll_handle: UniformListScrollHandle::new(),
+            width: px(0.0),
+            bottom_padding: 0.0,
+            open_left: false,
+            hovered_item: None,
+            native_request_id: None,
         });
         cx.notify();
     }
 
     fn close_advanced_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.advanced_search = None;
-        self.context_menus.clear();
-        window.focus(&self.focus_handle, cx);
+        if !self.context_menus.is_empty() {
+            self.context_menus.clear();
+        } else if self
+            .advanced_search
+            .as_mut()
+            .is_some_and(|d| d.calendar.take().is_some())
+        {
+            // Escape dismisses the date picker before closing the tool window.
+        } else {
+            window.remove_window();
+        }
         cx.notify();
     }
 
@@ -290,13 +459,26 @@ impl OxydeApp {
             "search://{}",
             serde_json::to_string(&("advanced", root, options)).expect("search options")
         );
-        self.close_advanced_search(window, cx);
-        self.navigate_to(&pane, path, cx);
+        window.remove_window();
+        let owner = self.owner.clone();
+        cx.defer(move |cx| {
+            let _ = owner.update(cx, |owner, cx| {
+                owner.navigate_to(&pane, path, cx);
+                for handle in cx.windows() {
+                    if let Some(handle) = handle.downcast::<OxydeApp>() {
+                        cx.defer(move |cx| {
+                            let _ = handle.update(cx, |_, window, _| window.activate_window());
+                        });
+                    }
+                }
+            });
+        });
     }
 
     pub(crate) fn render_advanced_search(
         &self,
         handle: Entity<Self>,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let d = self.advanced_search.as_ref().unwrap();
@@ -305,10 +487,18 @@ impl OxydeApp {
             crate::ui::i18n::Language::French => ["o", "Ko", "Mo", "Go", "To"],
             crate::ui::i18n::Language::English => ["B", "KB", "MB", "GB", "TB"],
         };
-        let mut body = div().flex().flex_col().gap(rems(0.75));
+        let mut body = div()
+            .flex()
+            .flex_col()
+            .gap(rems(0.75))
+            .when(d.help, |body| body.h_full().min_h_0());
         let mut tabs = div()
             .flex()
-            .gap(rems(0.75))
+            .flex_none()
+            .items_center()
+            .px(rems(1.25))
+            .bg(theme.dialog_tabs)
+            .gap(rems(0.25))
             .border_b(rems(0.0625))
             .border_color(theme.border);
         for (help, message) in [
@@ -317,13 +507,15 @@ impl OxydeApp {
         ] {
             let h = handle.clone();
             tabs = tabs.child(
-                action_button(if help {
-                    "advanced-help"
-                } else {
-                    "advanced-settings"
-                })
+                div().id(if help { "advanced-help" } else { "advanced-settings" })
+                .px(rems(1.0))
+                .py(rems(0.75))
+                .text_size(rems(0.8125))
+                .font_weight(FontWeight::MEDIUM)
                 .flex()
                 .items_center()
+                .justify_center()
+                .when(d.help != help, |tab| tab.hover(move |style| style.bg(theme.hover).text_color(theme.text)))
                 .gap(rems(0.5))
                 .child(
                     svg()
@@ -341,11 +533,11 @@ impl OxydeApp {
                 )
                 .track_focus(&d.controls[if help { 7 } else { 6 }])
                 .rounded_none()
-                .border_b(rems(0.125))
+                .border_b(rems(0.0625))
                 .border_color(if d.help == help {
                     theme.accent
                 } else {
-                    theme.border
+                    transparent_black()
                 })
                 .text_color(if d.help == help {
                     theme.accent
@@ -363,7 +555,6 @@ impl OxydeApp {
                 }),
             );
         }
-        body = body.child(tabs);
         if d.help {
             let patterns = [
                 ".", "\\d", "\\w", "^", "$", "+", "?", "|", "[abc]", "[^abc]", "()", "{n}",
@@ -497,7 +688,8 @@ impl OxydeApp {
             body = body.child(
                 div()
                     .relative()
-                    .h(rems(21.0))
+                    .flex_1()
+                    .min_h_0()
                     .w_full()
                     .min_w_0()
                     .child(rows)
@@ -690,9 +882,9 @@ impl OxydeApp {
                                 .into_iter()
                                 .enumerate()
                                 .map(|(index, label)| {
-                                    let h = unit_handle.clone();
+                                    let h = unit_handle.downgrade();
                                     DropdownItem::new(label, move |_, cx| {
-                                        h.update(cx, |this, cx| {
+                                        let _ = h.update(cx, |this, cx| {
                                             if let Some(d) = &mut this.advanced_search {
                                                 d.unit = index;
                                             }
@@ -829,100 +1021,124 @@ impl OxydeApp {
         let reset = handle.clone();
         let cancel = handle.clone();
         let submit = handle.clone();
-        let close = handle.clone();
         let keyboard = handle.clone();
-        let header = div()
-            .flex()
+        let frame = div()
+            .relative()
             .w_full()
-            .items_center()
-            .gap(rems(0.5))
-            .child(
-                svg()
-                    .path("icons/search.svg")
-                    .size(rems(1.0))
-                    .text_color(theme.text_muted),
-            )
-            .child(cx.i18n().text(Message::AdvancedSearch))
-            .child(div().flex_1())
+            .when(d.help, |frame| frame.h_full())
+            .when(!d.help, |frame| {
+                frame.child(
+                    canvas(
+                        |bounds, _, _| bounds,
+                        |bounds, _, window, _| {
+                            // Fit the native content size to the form, not a saved oversized viewport.
+                            if (window.viewport_size().height - bounds.size.height).abs() > px(1.0)
+                            {
+                                window.on_next_frame(move |window, _| window.resize(bounds.size));
+                            }
+                        },
+                    )
+                    .absolute()
+                    .size_full(),
+                )
+            })
+            .flex()
+            .flex_col()
+            .child(crate::ui::components::tool_window::header(
+                "icons/search.svg",
+                cx.i18n().text(Message::ToolSearch),
+                window.is_maximized(),
+                false,
+                cx,
+                |window, _| window.remove_window(),
+            ))
+            .child(tabs)
             .child(
                 div()
-                    .id("advanced-close")
-                    .size(rems(1.5))
+                    .id("advanced-form-scroll")
+                    .when(d.help, |body| body.flex_1().min_h_0())
+                    .when(!d.help, |body| body.flex_none())
+                    .overflow_y_scroll()
+                    .px(rems(1.0))
+                    .py(rems(1.25))
+                    .child(body),
+            )
+            .child(
+                div()
                     .flex_none()
                     .flex()
                     .items_center()
-                    .justify_center()
-                    .rounded_sm()
-                    .hover(move |style| style.bg(theme.control_hover))
-                    .track_focus(&d.controls[14])
-                    .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                    .gap(rems(0.625))
+                    .border_t(rems(0.0625))
+                    .border_color(theme.border)
+                    .p(rems(0.625))
                     .child(
-                        svg()
-                            .path("icons/x.svg")
-                            .size(rems(1.0))
-                            .text_color(theme.text_muted),
+                        div().flex_1().flex().child(
+                            crate::ui::components::tool_window::action_button(
+                                "advanced-reset",
+                                "".into(),
+                                false,
+                                cx,
+                            )
+                            .track_focus(&d.controls[11])
+                            .child(cx.i18n().text(Message::AdvancedReset))
+                            .on_click(move |_, window, cx| {
+                                reset.update(cx, |this, cx| {
+                                    let Some(d) = &mut this.advanced_search else {
+                                        return;
+                                    };
+                                    d.flags = [false, false, true, false, false, false];
+                                    d.unit = 1;
+                                    d.error = false;
+                                    for i in [0, 2, 3, 4, 5, 6] {
+                                        d.values[i].clear();
+                                        d.inputs[i].update(cx, |input, cx| {
+                                            input.set_content(String::new(), cx)
+                                        });
+                                    }
+                                    let focus = d.inputs[0].read(cx).focus_handle.clone();
+                                    window.focus(&focus, cx);
+                                    cx.notify();
+                                });
+                            }),
+                        ),
                     )
-                    .on_click(move |_, window, cx| {
-                        close.update(cx, |this, cx| this.close_advanced_search(window, cx));
-                    }),
+                    .child(
+                        crate::ui::components::tool_window::action_button(
+                            "advanced-cancel",
+                            "".into(),
+                            false,
+                            cx,
+                        )
+                        .track_focus(&d.controls[12])
+                        .child(cx.i18n().text(Message::Cancel))
+                        .on_click(move |_, window, cx| {
+                            cancel.update(cx, |this, cx| this.close_advanced_search(window, cx));
+                        }),
+                    )
+                    .child(
+                        crate::ui::components::tool_window::action_button(
+                            "advanced-submit",
+                            "".into(),
+                            true,
+                            cx,
+                        )
+                        .track_focus(&d.controls[13])
+                        .child(
+                            svg()
+                                .path("icons/search.svg")
+                                .size(rems(0.875))
+                                .text_color(theme.text_on_accent),
+                        )
+                        .child(cx.i18n().text(Message::AdvancedSearch))
+                        .on_click(move |_, window, cx| {
+                            submit.update(cx, |this, cx| this.submit_advanced_search(window, cx));
+                        }),
+                    ),
             );
-        let modal = Modal::new(
-            "advanced-search-dialog",
-            cx.i18n().text(Message::AdvancedSearch),
-            body,
-        )
-        .width(rems(44.0))
-        .header(header)
-        .action(
-            div().flex_1().flex().child(
-                action_button("advanced-reset")
-                    .track_focus(&d.controls[11])
-                    .bg(theme.header)
-                    .hover(move |style| style.bg(theme.control_hover))
-                    .child(cx.i18n().text(Message::AdvancedReset))
-                    .on_click(move |_, window, cx| {
-                        reset.update(cx, |this, cx| {
-                            let Some(d) = &mut this.advanced_search else {
-                                return;
-                            };
-                            d.flags = [false, false, true, false, false, false];
-                            d.unit = 1;
-                            d.error = false;
-                            for i in [0, 2, 3, 4, 5, 6] {
-                                d.values[i].clear();
-                                d.inputs[i]
-                                    .update(cx, |input, cx| input.set_content(String::new(), cx));
-                            }
-                            let focus = d.inputs[0].read(cx).focus_handle.clone();
-                            window.focus(&focus, cx);
-                            cx.notify();
-                        });
-                    }),
-            ),
-        )
-        .action(
-            action_button("advanced-cancel")
-                .track_focus(&d.controls[12])
-                .bg(theme.header)
-                .hover(move |style| style.bg(theme.control_hover))
-                .child(cx.i18n().text(Message::Cancel))
-                .on_click(move |_, window, cx| {
-                    cancel.update(cx, |this, cx| this.close_advanced_search(window, cx));
-                }),
-        )
-        .action(
-            action_button("advanced-submit")
-                .track_focus(&d.controls[13])
-                .bg(theme.accent)
-                .text_color(theme.text_on_accent)
-                .child(cx.i18n().text(Message::AdvancedSearch))
-                .on_click(move |_, window, cx| {
-                    submit.update(cx, |this, cx| this.submit_advanced_search(window, cx));
-                }),
-        );
         let mut layer = div()
-            .absolute()
-            .inset_0()
+            .relative()
+            .size_full()
             .track_focus(&d.focus)
             // Block file actions at the modal boundary while allowing TextInput
             // actions and unhandled keystrokes to reach its text input handler.
@@ -938,6 +1154,12 @@ impl OxydeApp {
             .on_action(|_: &super::Actualiser, _, cx| cx.stop_propagation())
             .on_key_down(move |event, window, cx| {
                 keyboard.update(cx, |this, cx| {
+                    if event.keystroke.key == "escape" && !this.context_menus.is_empty() {
+                        this.context_menus.clear();
+                        cx.stop_propagation();
+                        cx.notify();
+                        return;
+                    }
                     if let Some(d) = &mut this.advanced_search {
                         if let Some((index, date)) = d.calendar {
                             let delta = match event.keystroke.key.as_str() {
@@ -1006,7 +1228,7 @@ impl OxydeApp {
                                         });
                                     }
                                 }
-                                12 | 14 => this.close_advanced_search(window, cx),
+                                12 => this.close_advanced_search(window, cx),
                                 13 => this.submit_advanced_search(window, cx),
                                 _ => {}
                             }
@@ -1053,7 +1275,7 @@ impl OxydeApp {
                     cx.stop_propagation();
                 });
             })
-            .child(modal);
+            .child(frame);
         if let Some((index, month)) = d.calendar {
             use chrono::Datelike;
             let first = month.with_day(1).unwrap();
@@ -1272,5 +1494,73 @@ impl OxydeApp {
                 });
             })
             .into_any_element()
+    }
+}
+
+impl Render for AdvancedSearchWindow {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let theme = *cx.theme();
+        window.set_window_title(cx.i18n().text(Message::ToolSearch).as_ref());
+        if let Some(owner) = self.owner.upgrade() {
+            window.set_rem_size(px(owner.read(cx).ui_rem_size() as f32));
+        }
+        let handle = cx.entity();
+        let mut root = div()
+            .size_full()
+            .relative()
+            .bg(theme.background)
+            .text_color(theme.text)
+            .font_family("Inter")
+            .font_weight(crate::ui::style::DEFAULT_FONT_WEIGHT)
+            .text_size(rems(0.8125))
+            .line_height(relative(1.25));
+        if self.advanced_search.is_some() {
+            root = root.child(self.render_advanced_search(handle.clone(), window, cx));
+        }
+        // These menus belong to this window, including its text input actions.
+        {
+            for (index, menu) in self.context_menus.iter().enumerate() {
+                let ContextMenuContent::Items(items, _) = &menu.content else {
+                    continue;
+                };
+                let close = handle.clone();
+                let width = crate::ui::scale::rem_pixels(rems(13.0));
+                let height = crate::ui::scale::rem_pixels(rems(items.len() as f32 * 1.625 + 1.0));
+                let viewport = window.viewport_size();
+                let position = point(
+                    menu.position.x.min((viewport.width - width).max(px(0.0))),
+                    menu.position.y.min((viewport.height - height).max(px(0.0))),
+                );
+                root = root.child(deferred(
+                    div().absolute().left(position.x).top(position.y).child(
+                        crate::ui::components::dropdown::GenericDropdown {
+                            id: ("advanced-menu", index).into(),
+                            items: items.clone(),
+                            reserve_icon_space: true,
+                            is_context_menu: true,
+                            bottom_padding: 4.0,
+                            scroll_handle: menu.scroll_handle.clone(),
+                            h_app: handle.clone(),
+                            on_drag: std::rc::Rc::new(|_, _, _, _, _| {}),
+                            on_close: std::rc::Rc::new(move |_, cx| {
+                                close.update(cx, |this, cx| {
+                                    this.context_menus.clear();
+                                    cx.notify();
+                                });
+                            }),
+                            on_outside: None,
+                            is_dragging: false,
+                            width: Some(width.as_f32()),
+                            max_height: viewport.height.as_f32(),
+                            header: None,
+                            on_item_hover: None,
+                            on_width_calculated: None,
+                            on_hover_change: None,
+                        },
+                    ),
+                ));
+            }
+        }
+        root
     }
 }

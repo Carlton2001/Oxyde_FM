@@ -203,6 +203,26 @@ pub enum Message {
     OpenFileLocation,
     ColumnLocation,
     ToolDuplicates,
+    DuplicateLocations,
+    DuplicateSettings,
+    DuplicateName,
+    DuplicateSize,
+    DuplicateContent,
+    DuplicateCurrent,
+    DuplicateWarning,
+    DuplicateFilter,
+    DuplicateGoToFolder,
+    DuplicateIdle,
+    DuplicateEmpty,
+    DuplicateScanning,
+    DuplicateHashing,
+    DuplicateGroups,
+    DuplicateFiles,
+    DuplicateGroup,
+    DuplicateFailed,
+    DuplicateMore,
+    DuplicateDisk,
+
     Undo,
     Redo,
     OpCopy,
@@ -516,6 +536,26 @@ impl Message {
             Self::OpenFileLocation => "open-file-location",
             Self::ColumnLocation => "column-location",
             Self::ToolDuplicates => "tool-duplicates",
+            Self::DuplicateLocations => "duplicate-locations",
+            Self::DuplicateSettings => "duplicate-settings",
+            Self::DuplicateName => "duplicate-name",
+            Self::DuplicateSize => "duplicate-size",
+            Self::DuplicateContent => "duplicate-content",
+            Self::DuplicateCurrent => "duplicate-current",
+            Self::DuplicateWarning => "duplicate-warning",
+            Self::DuplicateFilter => "duplicate-filter",
+            Self::DuplicateGoToFolder => "duplicate-go-to-folder",
+            Self::DuplicateIdle => "duplicate-idle",
+            Self::DuplicateEmpty => "duplicate-empty",
+            Self::DuplicateScanning => "duplicate-scanning",
+            Self::DuplicateHashing => "duplicate-hashing",
+            Self::DuplicateGroups => "duplicate-groups",
+            Self::DuplicateFiles => "duplicate-files",
+            Self::DuplicateGroup => "duplicate-group",
+            Self::DuplicateFailed => "duplicate-failed",
+            Self::DuplicateMore => "duplicate-more",
+            Self::DuplicateDisk => "duplicate-disk",
+
             Self::Undo => "navigation-undo",
             Self::Redo => "navigation-redo",
             Self::OpCopy => "operation-copy",
@@ -929,6 +969,26 @@ mod tests {
                 Message::OpenFileLocation,
                 Message::ColumnLocation,
                 Message::ToolDuplicates,
+                Message::DuplicateLocations,
+                Message::DuplicateSettings,
+                Message::DuplicateName,
+                Message::DuplicateSize,
+                Message::DuplicateContent,
+                Message::DuplicateCurrent,
+                Message::DuplicateWarning,
+                Message::DuplicateFilter,
+                Message::DuplicateGoToFolder,
+                Message::DuplicateIdle,
+                Message::DuplicateEmpty,
+                Message::DuplicateScanning,
+                Message::DuplicateHashing,
+                Message::DuplicateGroups,
+                Message::DuplicateFiles,
+                Message::DuplicateGroup,
+                Message::DuplicateFailed,
+                Message::DuplicateMore,
+                Message::DuplicateDisk,
+
                 Message::Undo,
                 Message::Redo,
                 Message::OpCopy,
@@ -1052,6 +1112,14 @@ mod tests {
                 Message::UnknownItem,
             ];
             let mut args = FluentArgs::new();
+            args.set("error", "Test error");
+            args.set("groups", 2);
+            args.set("group_count", "2");
+            args.set("file_count", 2);
+            args.set("file_number", "2");
+            args.set("disk", "0");
+            args.set("index", 1);
+            args.set("current", 2);
             args.set("count", 2);
             args.set("folder_count", 1);
             args.set("query", "us");

@@ -811,6 +811,7 @@ impl Render for TextInput {
                         div()
                             .p_1()
                             .rounded_md()
+                            .cursor(CursorStyle::Arrow)
                             .hover(|s| s.bg(theme.control_hover))
                             .on_mouse_down(MouseButton::Left, move |_, window, cx| {
                                 h_clear.update(cx, |this, cx| {

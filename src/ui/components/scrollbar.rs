@@ -4,6 +4,16 @@ use crate::ui::theme::OxydeTheme;
 use gpui::prelude::*;
 use gpui::*;
 
+/// Pointer state owned by the view using a shared scrollbar.
+pub trait ScrollbarState {
+    fn scrollbar_origins(&mut self) -> &mut std::collections::HashMap<String, Point<f32>>;
+    fn set_grab_offset(&mut self, offset: f32);
+}
+impl ScrollbarState for OxydeApp {
+    fn scrollbar_origins(&mut self) -> &mut std::collections::HashMap<String, Point<f32>> { &mut self.scrollbar_origins }
+    fn set_grab_offset(&mut self, offset: f32) { self.grab_offset = offset; }
+}
+
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum ScrollbarAxis {
     Vertical,
@@ -53,9 +63,9 @@ pub fn render_scrollbar(
         move |view, track, viewport, content, _, cx| on_drag(view, track, viewport, content, cx),
     )
 }
-pub fn render_scrollbar_with_pointer(
+pub fn render_scrollbar_with_pointer<T: ScrollbarState + 'static>(
     theme: OxydeTheme,
-    handle: Entity<OxydeApp>,
+    handle: Entity<T>,
     axis: ScrollbarAxis,
     viewport_size: f32,
     content_size: f32,
@@ -63,7 +73,7 @@ pub fn render_scrollbar_with_pointer(
     is_dragging: bool,
     id_suffix: String,
     min_thumb_size: Option<f32>,
-    on_drag: impl Fn(&mut OxydeApp, String, f32, f32, Point<Pixels>, &mut App) + 'static,
+    on_drag: impl Fn(&mut T, String, f32, f32, Point<Pixels>, &mut App) + 'static,
 ) -> AnyElement {
     let is_v = axis == ScrollbarAxis::Vertical;
 
@@ -147,7 +157,7 @@ pub fn render_scrollbar_with_pointer(
                 |bounds, _, _| bounds,
                 move |bounds, _, _, cx| {
                     handle_cap.update(cx, |this, _| {
-                        this.scrollbar_origins.insert(
+                        this.scrollbar_origins().insert(
                             track_id_cap.clone(),
                             bounds.origin.map(|p| p.to_f64() as f32),
                         );
@@ -170,7 +180,7 @@ pub fn render_scrollbar_with_pointer(
                 };
 
                 h.update(cx, |this, app| {
-                    if let Some(origin) = this.scrollbar_origins.get(&track_id_for_drag) {
+                    if let Some(origin) = this.scrollbar_origins().get(&track_id_for_drag) {
                         let track_origin_coord = if is_v { origin.y } else { origin.x };
                         let mouse_in_track = mouse_pos - track_origin_coord;
 
@@ -188,7 +198,7 @@ pub fn render_scrollbar_with_pointer(
                                 t_size / 2.0
                             };
 
-                        this.grab_offset = grab_offset;
+                        this.set_grab_offset(grab_offset);
                         on_drag(
                             this,
                             track_id_for_drag.clone(),

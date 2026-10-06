@@ -57,11 +57,16 @@ pub fn render_title_bar(
                     .into_iter().map(|message| {
                         let search_handle = tools_handle.clone();
                         let mut item = DropdownItem::new(cx.i18n().text(message).to_string(), move |window, cx| {
+                            if message == Message::ToolDuplicates {
+                                search_handle.update(cx, |view, cx| view.open_duplicates(window, cx));
+                            }
                             if message == Message::ToolSearch {
                                 search_handle.update(cx, |view, cx| view.open_advanced_search(window, cx));
                             }
                         });
-                        item.is_dimmed = message != Message::ToolSearch;
+                        if message == Message::ToolSearch { item.icon = Some(crate::ui::components::dropdown::IconName::Search); }
+                        if message == Message::ToolDuplicates { item.icon = Some(crate::ui::components::dropdown::IconName::Copy); }
+                        item.is_dimmed = message == Message::ToolSizes;
                         item
                     }).collect();
                 view.settings_open = false;
@@ -130,72 +135,6 @@ pub fn render_title_bar(
             window.minimize_window();
         });
 
-    // ── Window controls (right) ──────────────────────────────────────────────
-    let minimize_btn = {
-        div()
-            .id("wc-minimize")
-            .w(rems(2.875))
-            .h_full()
-            .flex()
-            .items_center()
-            .justify_center()
-            .flex_none()
-            .window_control_area(WindowControlArea::Min)
-            .hover(move |s| s.bg(btn_hover_bg))
-            .on_mouse_down(MouseButton::Left, |_, window, _| {
-                window.minimize_window();
-            })
-            .child(
-                svg()
-                    .path("icons/window-minimize.svg")
-                    .size_3()
-                    .text_color(icon_color),
-            )
-    };
-
-    let maximize_icon = if is_maximized {
-        "icons/window-restore.svg"
-    } else {
-        "icons/window-maximize.svg"
-    };
-    let maximize_btn = div()
-        .id("wc-maximize")
-        .w(rems(2.875))
-        .h_full()
-        .flex()
-        .items_center()
-        .justify_center()
-        .flex_none()
-        .window_control_area(WindowControlArea::Max)
-        .hover(move |s| s.bg(btn_hover_bg))
-        .on_mouse_down(MouseButton::Left, |_, window, _| {
-            window.zoom_window();
-        })
-        .child(svg().path(maximize_icon).size_3().text_color(icon_color));
-
-    let close_btn = div()
-        .id("wc-close")
-        .group("window-close")
-        .w(rems(2.875))
-        .h_full()
-        .flex()
-        .items_center()
-        .justify_center()
-        .flex_none()
-        .window_control_area(WindowControlArea::Close)
-        .hover(|s| s.bg(theme.danger_hover))
-        .on_mouse_down(MouseButton::Left, |_, window, _| {
-            crate::trace_shutdown_request("title bar close button");
-            window.remove_window();
-        })
-        .child(
-            svg()
-                .path("icons/x.svg")
-                .size_3()
-                .text_color(icon_color)
-                .group_hover("window-close", |s| s.text_color(theme.text_on_danger)),
-        );
-
     // ── Assemble ─────────────────────────────────────────────────────────────
     div()
         .id("title-bar")
@@ -214,7 +153,95 @@ pub fn render_title_bar(
         .child(tools)
         .child(crate::ui::components::operations::render_operations_footer(view, handle.clone(), cx))
         .child(div().w(rems(0.5)).h_full().flex_none())
-        .child(minimize_btn)
-        .child(maximize_btn)
-        .child(close_btn)
+        .child(render_window_controls(is_maximized, cx, |window, cx| {
+            crate::trace_shutdown_request("title bar close button");
+            crate::ui::app::duplicates::close_duplicate_windows(cx);
+            crate::ui::app::advanced_search::close_advanced_search_windows(cx);
+            window.remove_window();
+        }))
 }
+
+/// Shared native title-bar controls. The caller owns its close lifecycle.
+pub fn render_window_controls(
+    is_maximized: bool,
+    cx: &App,
+    on_close: impl Fn(&mut Window, &mut App) + 'static,
+) -> impl IntoElement {
+    render_window_controls_with_options(is_maximized, true, cx, on_close)
+}
+
+pub(crate) fn render_window_controls_with_options(
+    is_maximized: bool,
+    allow_resize: bool,
+    cx: &App,
+    on_close: impl Fn(&mut Window, &mut App) + 'static,
+) -> impl IntoElement {
+    let theme = *cx.theme();
+    let minimize_btn = {
+        div()
+            .id("wc-minimize")
+            .w(rems(2.875))
+            .h_full()
+            .flex()
+            .items_center()
+            .justify_center()
+            .flex_none()
+            .window_control_area(WindowControlArea::Min)
+            .hover(move |s| s.bg(theme.control_hover))
+            .on_mouse_down(MouseButton::Left, |_, window, _| {
+                window.minimize_window();
+            })
+            .child(
+                svg()
+                    .path("icons/window-minimize.svg")
+                    .size_3()
+                    .text_color(theme.text_muted),
+            )
+    };
+
+    let maximize_icon = if is_maximized {
+        "icons/window-restore.svg"
+    } else {
+        "icons/window-maximize.svg"
+    };
+    let maximize_btn = div()
+        .id("wc-maximize")
+        .w(rems(2.875))
+        .h_full()
+        .flex()
+        .items_center()
+        .justify_center()
+        .flex_none()
+        .window_control_area(WindowControlArea::Max)
+        .hover(move |s| s.bg(theme.control_hover))
+        .on_mouse_down(MouseButton::Left, |_, window, _| {
+            window.zoom_window();
+        })
+        .child(svg().path(maximize_icon).size_3().text_color(theme.text_muted));
+
+    let close_btn = div()
+        .id("wc-close")
+        .group("window-close")
+        .w(rems(2.875))
+        .h_full()
+        .flex()
+        .items_center()
+        .justify_center()
+        .flex_none()
+        .window_control_area(WindowControlArea::Close)
+        .hover(|s| s.bg(theme.danger_hover))
+        .on_mouse_down(MouseButton::Left, move |_, window, cx| {
+            on_close(window, cx);
+        })
+        .child(
+            svg()
+                .path("icons/x.svg")
+                .size_3()
+                .text_color(theme.text_muted)
+                .group_hover("window-close", |s| s.text_color(theme.text_on_danger)),
+        );
+
+    div().h_full().flex().items_center().flex_none()
+        .when(allow_resize, |controls| controls.child(minimize_btn).child(maximize_btn)).child(close_btn)
+}
+use gpui::prelude::FluentBuilder;

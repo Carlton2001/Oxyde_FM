@@ -294,6 +294,10 @@ impl Tooltip {
         }
     }
 
+    pub fn duplicate_result(name: String, location: String, cx: &mut App) -> AnyView {
+        cx.new(|_| DuplicateResultTooltip { name: name.into(), location }).into()
+    }
+
     #[allow(clippy::too_many_arguments)]
     fn new_for_file(
         name: String, path: String, ext: String, size: (u64, bool, bool),
@@ -318,6 +322,47 @@ impl Tooltip {
                 preview_view,
             }
         })
+    }
+}
+
+struct DuplicateResultTooltip {
+    name: SharedString,
+    location: String,
+}
+
+impl Render for DuplicateResultTooltip {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let theme = *OxydeTheme::global(cx);
+        let width = rem_pixels(rems(26.5)).min((window.viewport_size().width - rem_pixels(rems(2.0))).max(px(1.0)));
+        let content_width = (width - rem_pixels(rems(1.625))).as_f32().max(1.0);
+        let wrap = |text: SharedString, size: Rems, weight: FontWeight, location: bool| {
+            let mut font = window.text_style().font();
+            font.family = "Inter".into(); font.weight = weight;
+            let line = window.text_system().shape_line(text.clone(), rem_pixels(size), &[TextRun {
+                len: text.len(), font, color: theme.text, background_color: None,
+                underline: None, strikethrough: None,
+            }], None);
+            let ranges = if location {
+                location_line_ranges(&text, content_width, |index| line.x_for_index(index).as_f32())
+            } else {
+                text_line_ranges(&text, content_width, false, |index| line.x_for_index(index).as_f32())
+            };
+            ranges.into_iter().map(|range| text[range].to_string()).collect::<Vec<_>>()
+        };
+        let mut args = FluentArgs::new(); args.set("value", self.location.as_str());
+        let location = cx.i18n().text_with_args(Message::TooltipLocation, &args);
+        div().w(width).max_w(width).px(rems(0.75)).py(rems(0.5))
+            .bg(theme.surface).border(rems(0.0625)).border_color(theme.border).rounded(rems(0.375))
+            .shadow(crate::ui::style::rem_shadow(true)).font_family("Inter")
+            .font_weight(crate::ui::style::DEFAULT_FONT_WEIGHT).line_height(relative(1.25))
+            .flex().flex_col().gap(rems(0.5))
+            .child(div().text_size(rems(0.75)).font_weight(FontWeight::MEDIUM).text_color(theme.text)
+                .children(wrap(self.name.clone(), rems(0.75), FontWeight::MEDIUM, false).into_iter().map(|line| div().whitespace_nowrap().child(line))))
+            .child(div().text_size(rems(0.6875)).text_color(theme.text_muted)
+                .children(wrap(location, rems(0.6875), crate::ui::style::DEFAULT_FONT_WEIGHT, true).into_iter().map(|line| div().whitespace_nowrap().child(line))))
+            .child(div().flex().items_center().gap(rems(0.375)).text_size(rems(0.75)).text_color(theme.accent)
+                .child(cx.i18n().text(Message::DuplicateGoToFolder))
+                .child(svg().path("icons/arrow-right.svg").size(rems(0.875)).text_color(theme.accent)))
     }
 }
 

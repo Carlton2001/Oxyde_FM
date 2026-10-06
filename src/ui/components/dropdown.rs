@@ -1,6 +1,6 @@
 use crate::ui::scale::{logical, rem_pixels};
 use crate::ui::app::OxydeApp;
-use crate::ui::components::scrollbar::{render_scrollbar, ScrollbarAxis};
+use crate::ui::components::scrollbar::{render_scrollbar_with_pointer, ScrollbarAxis};
 use gpui::prelude::*;
 use gpui::*;
 use std::rc::Rc;
@@ -164,7 +164,7 @@ impl DropdownItem {
 }
 
 #[derive(IntoElement)]
-pub struct GenericDropdown {
+pub struct GenericDropdown<T: crate::ui::components::scrollbar::ScrollbarState + 'static = OxydeApp> {
     pub id: ElementId,
     pub items: Vec<DropdownItem>,
     /// Keep labels aligned when some rows have no icon.
@@ -172,8 +172,8 @@ pub struct GenericDropdown {
     pub is_context_menu: bool,
     pub bottom_padding: f32,
     pub scroll_handle: UniformListScrollHandle,
-    pub h_app: Entity<OxydeApp>,
-    pub on_drag: Rc<dyn Fn(&mut OxydeApp, String, f32, f32, &mut App)>,
+    pub h_app: Entity<T>,
+    pub on_drag: Rc<dyn Fn(&mut T, String, f32, f32, &mut App)>,
     pub on_close: Rc<dyn Fn(&mut Window, &mut App)>,
     pub on_outside: Option<Rc<dyn Fn(Point<Pixels>, &mut Window, &mut App)>>,
     pub is_dragging: bool,
@@ -186,7 +186,7 @@ pub struct GenericDropdown {
     pub on_hover_change: Option<Rc<dyn Fn(bool, &mut App)>>,
 }
 
-impl RenderOnce for GenericDropdown {
+impl<T: crate::ui::components::scrollbar::ScrollbarState + 'static> RenderOnce for GenericDropdown<T> {
     fn render(mut self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         use crate::ui::theme::OxydeTheme;
         let theme = *OxydeTheme::global(cx);
@@ -534,7 +534,7 @@ impl RenderOnce for GenericDropdown {
                         .y
                         .as_f32()
                         .abs();
-                    render_scrollbar(
+                    render_scrollbar_with_pointer(
                         theme,
                         h_app_copy,
                         ScrollbarAxis::Vertical,
@@ -544,7 +544,7 @@ impl RenderOnce for GenericDropdown {
                         is_dragging,
                         "context-menu-scrollbar".to_string(),
                         None,
-                        move |this, tid, vh, ch, cx| {
+                        move |this, tid, vh, ch, _, cx| {
                             (on_drag)(this, tid, vh, ch, cx);
                         },
                     )

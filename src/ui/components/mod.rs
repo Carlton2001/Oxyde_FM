@@ -14,6 +14,7 @@ pub mod sidebar;
 pub mod tabs;
 pub mod title_bar;
 pub mod tooltip;
+pub(crate) mod tool_window;
 pub mod top_bar;
 
 use crate::ui::i18n::{I18n, Message};

@@ -130,8 +130,10 @@ fn main() {
                     ..Default::default()
                 },
                 move |window, cx| {
-                    window.on_window_should_close(cx, |_, _| {
+                    window.on_window_should_close(cx, |_, cx| {
                         trace_shutdown_request("native window close");
+                        crate::ui::app::duplicates::close_duplicate_windows(cx);
+                        crate::ui::app::advanced_search::close_advanced_search_windows(cx);
                         true
                     });
                     let focus_handle = app.read(cx).focus_handle.clone();

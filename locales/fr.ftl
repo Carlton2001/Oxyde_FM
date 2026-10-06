@@ -248,7 +248,7 @@ quick-search-clear = Effacer
 quick-search-stop = Arrêter la recherche
 open-file-location = Ouvrir l’emplacement du fichier
 column-location = Emplacement
-tool-duplicates = Rechercher les doublons — À venir
+tool-duplicates = Rechercher les doublons
 
 tabs-new-tab = Nouvel onglet
 
@@ -362,3 +362,29 @@ advanced-max = Max
 advanced-invalid = Vérifiez les expressions, les tailles et les dates (AAAA-MM-JJ).
 advanced-date-placeholder = AAAA-MM-JJ
 advanced-weekdays = Lun Mar Mer Jeu Ven Sam Dim
+
+duplicate-locations = Emplacements de recherche
+duplicate-settings = Paramètres de recherche
+duplicate-name = Nom
+duplicate-size = Taille
+duplicate-content = Contenu (lent)
+duplicate-current = Dossier actuel
+duplicate-warning = Sélectionner plusieurs emplacements peut ralentir considérablement la recherche.
+duplicate-filter = Filtrer les résultats…
+duplicate-idle = Configurez la recherche puis cliquez sur Rechercher.
+duplicate-empty = Aucun doublon trouvé.
+duplicate-scanning = Parcours des fichiers : { $current }
+duplicate-hashing = Comparaison du contenu : { $current } / { $total }
+duplicate-groups = { $groups ->
+    [one] { $group_count } groupe de doublons
+   *[other] { $group_count } groupes de doublons
+    }
+duplicate-files = { $file_count ->
+    [one] { $file_number } fichier
+   *[other] { $file_number } fichiers
+    }
+duplicate-group = Groupe { $index }
+duplicate-failed = La recherche a échoué : { $error }
+duplicate-more = Afficher davantage
+duplicate-disk = Disque #{ $disk }
+duplicate-go-to-folder = Cliquez pour aller au dossier
