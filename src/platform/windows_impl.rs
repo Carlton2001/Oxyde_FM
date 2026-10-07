@@ -193,18 +193,6 @@ impl Platform for WindowsPlatform {
         super::network::list_network_vicinity().map_err(|error| error.to_string())
     }
 
-    fn recycle_for_history(&self, path: &std::path::Path) -> Result<(), String> {
-        trash::delete(path).map_err(|error| error.to_string())
-    }
-
-    fn history_trash_items(&self) -> Result<Vec<trash::TrashItem>, String> {
-        trash::os_limited::list().map_err(|error| error.to_string())
-    }
-
-    fn restore_history_item(&self, item: trash::TrashItem) -> Result<(), String> {
-        trash::os_limited::restore_all([item]).map_err(|error| error.to_string())
-    }
-
     fn shell_delete(&self, paths: &[std::path::PathBuf], recycle: bool) -> Result<(), String> {
         use windows::core::PCWSTR;
         use windows::Win32::Foundation::HWND;
@@ -309,6 +297,27 @@ impl Platform for WindowsPlatform {
         let length = unsafe { windows::Win32::Globalization::GetUserDefaultLocaleName(&mut buffer) };
         (length > 0).then(|| String::from_utf16_lossy(&buffer[..length as usize - 1]))
     }
+    fn calendar_timezone_signature(&self) -> Option<String> {
+        use windows::Win32::System::Time::{
+            GetDynamicTimeZoneInformation, DYNAMIC_TIME_ZONE_INFORMATION, TIME_ZONE_ID_INVALID,
+        };
+        let mut info = DYNAMIC_TIME_ZONE_INFORMATION::default();
+        if unsafe { GetDynamicTimeZoneInformation(&mut info) } == TIME_ZONE_ID_INVALID {
+            return None;
+        }
+        let key = String::from_utf16_lossy(&info.TimeZoneKeyName);
+        Some(format!(
+            "{}:{}:{}:{}:{:?}:{:?}:{}",
+            key.trim_end_matches('\0'),
+            info.Bias,
+            info.StandardBias,
+            info.DaylightBias,
+            info.StandardDate,
+            info.DaylightDate,
+            info.DynamicDaylightTimeDisabled
+        ))
+    }
+
     fn interface_locale(&self) -> Option<String> {
         use windows::Win32::Globalization::{GetUserDefaultUILanguage, LCIDToLocaleName};
         let mut buffer = [0u16; 85];

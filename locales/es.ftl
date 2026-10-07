@@ -201,7 +201,6 @@ operation-extract-here = Extraer archivo comprimido
 
 operation-new-folder = Nueva carpeta
 
-operation-restore = Restaurar
 
 operations-title = { $count ->
     [1] Operación

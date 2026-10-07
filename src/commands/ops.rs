@@ -1,6 +1,6 @@
 use crate::models::{
     get_file_entry_from_path, CommandError, ConflictEntry, HistoryManager,
-    Transaction, TransactionDetails, TransactionType, TrashEntry,
+    Transaction, TransactionType, TrashEntry,
 };
 use crate::utils::path_security::validate_path;
 use log::{info, warn};
@@ -121,7 +121,7 @@ pub(crate) fn original_trash_path(item: &trash::TrashItem) -> PathBuf {
     get_restoration_paths(item).corrected_path
 }
 
-pub(super) fn item_with_correct_restore_name(item: &trash::TrashItem) -> trash::TrashItem {
+fn item_with_correct_restore_name(item: &trash::TrashItem) -> trash::TrashItem {
     let mut item = item.clone();
     let original_path = original_trash_path(&item);
     if let Some(name) = original_path.file_name() {
@@ -587,167 +587,6 @@ pub async fn restore_items(paths: Vec<String>) -> Result<Vec<String>, CommandErr
     Ok(restored_paths)
 }
 
-/// Move items from trash to a target directory safely
-/// Uses temp directory as intermediate to avoid overwriting files at original location
-pub async fn move_from_trash(
-    history: &HistoryManager,
-    paths: Vec<String>,
-    target_dir: String,
-) -> Result<(), CommandError> {
-    let trash_items =
-        trash::os_limited::list().map_err(|e| CommandError::TrashError(e.to_string()))?;
-
-    let normalize = |p: &std::path::Path| -> String {
-        p.to_string_lossy()
-            .to_lowercase()
-            .replace("/", "\\")
-            .trim_start_matches("\\\\?\\")
-            .to_string()
-    };
-
-    let target_base = validate_path(&target_dir)?;
-
-    // Create a unique temp directory for this operation
-    let temp_dir = std::env::temp_dir().join(format!("biluf_trash_restore_{}", std::process::id()));
-    if !temp_dir.exists() {
-        std::fs::create_dir_all(&temp_dir)?;
-    }
-
-    let mut restored_files = Vec::new();
-
-    for path_str in &paths {
-        let path = validate_path(path_str)?;
-        let normalized_target = normalize(&path);
-
-        // Find the trash item by internal ID
-        let found = trash_items.iter().find(|item| {
-            let item_id = normalize(&PathBuf::from(&item.id));
-            item_id == normalized_target
-        });
-
-        if let Some(item) = found {
-            let res_paths = get_restoration_paths(item);
-            let original_name = res_paths
-                .corrected_path
-                .file_name()
-                .map(|n| n.to_string_lossy().to_string())
-                .unwrap_or_else(|| item.name.to_string_lossy().into_owned());
-
-            let original_path = res_paths.crate_path.clone();
-
-            // Check if a file with the same name exists at original location
-            let conflict_at_original =
-                res_paths.crate_path.exists() || res_paths.corrected_path.exists();
-            let mut backup_path: Option<PathBuf> = None;
-
-            // If there's a conflict, temporarily move the existing file
-            if conflict_at_original {
-                backup_path = Some(temp_dir.join(format!("backup_{}", original_name)));
-                let options = fs_extra::dir::CopyOptions::new().overwrite(true);
-                fs_extra::move_items(&[&original_path], &temp_dir, &options).map_err(|e| {
-                    CommandError::IoError(format!("Failed to backup existing file: {}", e))
-                })?;
-                // Rename the backup to include prefix
-                let moved_to = temp_dir.join(&original_name);
-                if moved_to.exists() {
-                    std::fs::rename(
-                        &moved_to,
-                        backup_path
-                            .as_ref()
-                            .ok_or(CommandError::Other("Backup path missing".to_string()))?,
-                    )
-                    .map_err(|e| {
-                        CommandError::IoError(format!("Failed to rename backup: {}", e))
-                    })?;
-                }
-            }
-
-            // Restore the item from trash (goes to original location)
-            trash::os_limited::restore_all(vec![item_with_correct_restore_name(item)])
-                .map_err(|e| CommandError::TrashError(e.to_string()))?;
-
-            // Determine where it actually landed and ensure extension is correct
-            let actual_restored_path = if res_paths.corrected_path.exists() {
-                res_paths.corrected_path
-            } else if res_paths.crate_path.exists() {
-                if res_paths.crate_path != res_paths.corrected_path {
-                    let _ = std::fs::rename(&res_paths.crate_path, &res_paths.corrected_path);
-                    res_paths.corrected_path
-                } else {
-                    res_paths.crate_path
-                }
-            } else {
-                res_paths.crate_path
-            };
-
-            // Move from original location to target
-            let dest_path = target_base.join(&original_name);
-
-            if actual_restored_path.exists() && actual_restored_path != dest_path {
-                let options = fs_extra::dir::CopyOptions::new().overwrite(true);
-                fs_extra::move_items(&[&actual_restored_path], &target_base, &options)
-                    .map_err(|e| CommandError::IoError(e.to_string()))?;
-            }
-
-            if dest_path.exists() {
-                restored_files.push(dest_path.to_string_lossy().to_string());
-            }
-
-            // Restore the backup if there was a conflict
-            if let Some(backup) = backup_path {
-                if backup.exists() {
-                    let options = fs_extra::dir::CopyOptions::new().overwrite(true);
-                    // Move back to original location with original name
-                    let restore_target = if original_path.exists() {
-                        // If something took the crate_path, we still try to restore the backup
-                        original_path
-                    } else {
-                        // Prefer the path it was originally at
-                        actual_restored_path
-                    };
-                    let parent = restore_target.parent().unwrap_or(&restore_target);
-                    std::fs::rename(&backup, &restore_target)
-                        .or_else(|_| {
-                            fs_extra::move_items(&[&backup], parent, &options)
-                                .map(|_| ())
-                                .map_err(|e| std::io::Error::other(e.to_string()))
-                        })
-                        .map_err(|e| {
-                            CommandError::IoError(format!("Failed to restore backup: {}", e))
-                        })?;
-                }
-            }
-        }
-    }
-
-    // Clean up temp dir
-    let _ = std::fs::remove_dir_all(&temp_dir);
-
-    // Record History
-    let abs_restored: Vec<String> = restored_files.to_vec();
-    let target_abs = target_base.to_string_lossy().to_string();
-
-    if !abs_restored.is_empty() {
-        let tx_details = TransactionDetails {
-            paths: vec![], // Redo uses the exact receipts recorded by Undo, not these old IDs.
-            target_dir: Some(target_abs),
-            old_path: None,
-            new_path: None,
-            created_files: Some(abs_restored),
-            created_dirs: None,
-            replaced_files: None,
-            overwritten_files: None,
-            moved_files: None,
-            moved_dirs: None,
-            copied_files: None,
-            copied_file_hashes: None,
-        };
-        history.push(Transaction::new(TransactionType::Restore, tx_details));
-    }
-
-    Ok(())
-}
-
 fn fast_trash(paths: Vec<PathBuf>) -> Result<(), CommandError> {
     if paths.is_empty() {
         return Ok(());
@@ -853,7 +692,7 @@ fn remove_undo_copy_files(paths: Vec<PathBuf>) -> Result<(), CommandError> {
 pub async fn undo_last_action(
     history: &HistoryManager,
 ) -> Result<Option<Transaction>, CommandError> {
-    let Some(mut operation) = history
+    let Some(operation) = history
         .begin_undo()
         .map_err(|error| CommandError::Other(error.to_string()))?
     else {
@@ -1157,13 +996,6 @@ pub async fn undo_last_action(
                     fast_trash(files_to_delete)?;
                 }
             }
-            TransactionType::Restore => {
-                operation.set_restore_journal(super::restore_history::journal(tx)?);
-                super::restore_history::undo(
-                    operation.restore_journal_mut(),
-                    &super::restore_history::NativeTrash,
-                )?;
-            }
         }
         operation.complete();
     }
@@ -1173,7 +1005,7 @@ pub async fn undo_last_action(
 pub async fn redo_last_action(
     history: &HistoryManager,
 ) -> Result<Option<Transaction>, CommandError> {
-    let Some(mut operation) = history
+    let Some(operation) = history
         .begin_redo()
         .map_err(|error| CommandError::Other(error.to_string()))?
     else {
@@ -1187,13 +1019,6 @@ pub async fn redo_last_action(
             TransactionType::Delete => {
                 let paths: Vec<PathBuf> = tx.details.paths.iter().map(PathBuf::from).collect();
                 fast_trash(paths)?;
-            }
-            TransactionType::Restore => {
-                operation.set_restore_journal(super::restore_history::journal(tx)?);
-                super::restore_history::redo(
-                    operation.restore_journal_mut(),
-                    &super::restore_history::NativeTrash,
-                )?;
             }
             TransactionType::Copy => {
                 if tx.details.copied_files.is_none()

@@ -1,4 +1,4 @@
-use crate::ui::date_groups::DateGroup;
+use crate::ui::date_groups::{CalendarReference, DateGroup};
 use crate::ui::i18n::Message;
 use gpui::{ScrollHandle, UniformListScrollHandle};
 use oxyde_lib::commands::system::{get_drives, get_quick_access_items};
@@ -167,6 +167,8 @@ pub struct TabState {
     pub group_by_date: bool,
     pub collapsed_date_groups: std::collections::HashSet<crate::ui::date_groups::DateGroup>,
     pub cached_filtered_files: Vec<FileEntry>,
+    filter_cache_revision: u64,
+    calendar_reference: Option<CalendarReference>,
     pub type_col_width: f32,
     pub size_col_width: f32,
     pub date_col_width: f32,
@@ -182,6 +184,111 @@ pub enum TabLoadStatus {
     Loading,
     Ready,
     Error(Message),
+}
+
+#[derive(Clone)]
+struct FileFilters {
+    filter_types: std::collections::HashSet<String>,
+    filter_name: String,
+    filter_original_location: String,
+    filter_sizes: std::collections::HashSet<SizeCategory>,
+    filter_dates: std::collections::HashSet<DateGroup>,
+}
+impl FileFilters {
+    fn from_tab(tab: &TabState) -> Self {
+        Self {
+            filter_types: tab.filter_types.clone(),
+            filter_name: tab.filter_name.clone(),
+            filter_original_location: tab.filter_original_location.clone(),
+            filter_sizes: tab.filter_sizes.clone(),
+            filter_dates: tab.filter_dates.clone(),
+        }
+    }
+    fn filtered_files_on(&self, files: &[FileEntry], today: chrono::NaiveDate) -> Vec<FileEntry> {
+        if !self.filter_types.is_empty()
+            || !self.filter_name.is_empty()
+            || !self.filter_original_location.is_empty()
+            || !self.filter_sizes.is_empty()
+            || !self.filter_dates.is_empty()
+        {
+            files
+                .iter()
+                .filter(|f| {
+                    let matches_type = if self.filter_types.is_empty() {
+                        true
+                    } else {
+                        if f.is_dir {
+                            self.filter_types.contains("Dossier")
+                        } else {
+                            std::path::Path::new(&f.name)
+                                .extension()
+                                .and_then(|e| e.to_str())
+                                .map(|s| self.filter_types.contains(&s.to_uppercase()))
+                                .unwrap_or(false)
+                        }
+                    };
+                    let matches_name = if self.filter_name.is_empty() {
+                        true
+                    } else {
+                        f.name
+                            .to_lowercase()
+                            .contains(&self.filter_name.to_lowercase())
+                    };
+                    let matches_size = if self.filter_sizes.is_empty() {
+                        true
+                    } else {
+                        self.filter_sizes.iter().any(|cat| cat.matches(f.size))
+                    };
+                    let matches_date = if self.filter_dates.is_empty() {
+                        true
+                    } else {
+                        self.filter_dates
+                            .contains(&DateGroup::for_timestamp(f.modified, today))
+                    };
+                    let matches_location = self.filter_original_location.is_empty()
+                        || f.original_path
+                            .as_deref()
+                            .and_then(|path| std::path::Path::new(path).parent())
+                            .is_some_and(|path| {
+                                path.to_string_lossy()
+                                    .to_lowercase()
+                                    .contains(&self.filter_original_location.to_lowercase())
+                            });
+                    matches_type && matches_name && matches_size && matches_date && matches_location
+                })
+                .cloned()
+                .collect()
+        } else {
+            files.to_vec()
+        }
+    }
+}
+
+pub(crate) struct CalendarFilterRequest {
+    tab_id: String,
+    revision: u64,
+    reference: CalendarReference,
+    files: Vec<FileEntry>,
+    filters: FileFilters,
+}
+pub(crate) struct CalendarFilterResult {
+    tab_id: String,
+    revision: u64,
+    reference: CalendarReference,
+    files: Vec<FileEntry>,
+}
+impl CalendarFilterRequest {
+    pub fn calculate(self) -> CalendarFilterResult {
+        let files = self
+            .filters
+            .filtered_files_on(&self.files, self.reference.today);
+        CalendarFilterResult {
+            tab_id: self.tab_id,
+            revision: self.revision,
+            reference: self.reference,
+            files,
+        }
+    }
 }
 
 impl TabState {
@@ -236,6 +343,8 @@ impl TabState {
             group_by_date: false,
             collapsed_date_groups: Default::default(),
             cached_filtered_files: Vec::new(),
+            filter_cache_revision: 0,
+            calendar_reference: None,
             type_col_width: 100.0,
             size_col_width: 100.0,
             date_col_width: 180.0,
@@ -252,57 +361,39 @@ impl TabState {
     }
 
     fn update_cache_on(&mut self, today: chrono::NaiveDate) {
-        if !self.filter_types.is_empty()
-            || !self.filter_name.is_empty()
-            || !self.filter_original_location.is_empty()
-            || !self.filter_sizes.is_empty()
-            || !self.filter_dates.is_empty()
-        {
-            self.cached_filtered_files = self
-                .files
-                .iter()
-                .filter(|f| {
-                    let matches_type = if self.filter_types.is_empty() {
-                        true
-                    } else {
-                        if f.is_dir {
-                            self.filter_types.contains("Dossier")
-                        } else {
-                            std::path::Path::new(&f.name)
-                                .extension()
-                                .and_then(|e| e.to_str())
-                                .map(|s| self.filter_types.contains(&s.to_uppercase()))
-                                .unwrap_or(false)
-                        }
-                    };
-                    let matches_name = if self.filter_name.is_empty() {
-                        true
-                    } else {
-                        f.name
-                            .to_lowercase()
-                            .contains(&self.filter_name.to_lowercase())
-                    };
-                    let matches_size = if self.filter_sizes.is_empty() {
-                        true
-                    } else {
-                        self.filter_sizes.iter().any(|cat| cat.matches(f.size))
-                    };
-                    let matches_date = if self.filter_dates.is_empty() {
-                        true
-                    } else {
-                        self.filter_dates.contains(&DateGroup::for_timestamp(f.modified, today))
-                    };
-                    let matches_location = self.filter_original_location.is_empty() || f.original_path.as_deref()
-                        .and_then(|path| std::path::Path::new(path).parent())
-                        .is_some_and(|path| path.to_string_lossy().to_lowercase().contains(&self.filter_original_location.to_lowercase()));
-                    matches_type && matches_name && matches_size && matches_date && matches_location
-                })
-                .cloned()
-                .collect();
-        } else {
-            self.cached_filtered_files = self.files.clone();
-        }
+        let mut reference = CalendarReference::current();
+        reference.today = today;
+        self.cached_filtered_files =
+            FileFilters::from_tab(self).filtered_files_on(&self.files, today);
+        self.calendar_reference = Some(reference);
+        self.filter_cache_revision = self.filter_cache_revision.wrapping_add(1);
         self.recalculate_column_widths();
+    }
+
+    fn calendar_filter_request(
+        &self,
+        reference: &CalendarReference,
+    ) -> Option<CalendarFilterRequest> {
+        if self.filter_dates.is_empty() || self.calendar_reference.as_ref() == Some(reference) {
+            return None;
+        }
+        Some(CalendarFilterRequest {
+            tab_id: self.id.clone(),
+            revision: self.filter_cache_revision,
+            reference: reference.clone(),
+            files: self.files.clone(),
+            filters: FileFilters::from_tab(self),
+        })
+    }
+
+    fn apply_calendar_filter(&mut self, result: CalendarFilterResult) -> bool {
+        if self.id != result.tab_id || self.filter_cache_revision != result.revision {
+            return false;
+        }
+        self.cached_filtered_files = result.files;
+        self.calendar_reference = Some(result.reference);
+        self.filter_cache_revision = self.filter_cache_revision.wrapping_add(1);
+        true
     }
 
     pub fn recalculate_column_widths(&mut self) {
@@ -597,6 +688,43 @@ impl LayoutNode {
                 }
             }
         }
+    }
+
+    pub(crate) fn calendar_filter_requests(
+        &self,
+        reference: &CalendarReference,
+    ) -> Vec<CalendarFilterRequest> {
+        let mut requests = Vec::new();
+        self.visit_panes(&mut |pane| {
+            for tab in &pane.tabs {
+                if let Some(request) = tab.calendar_filter_request(reference) {
+                    requests.push(request);
+                }
+            }
+        });
+        requests
+    }
+
+    pub(crate) fn apply_calendar_filters(&mut self, results: Vec<CalendarFilterResult>) -> bool {
+        let mut changed = false;
+        for result in results {
+            let mut result = Some(result);
+            self.visit_panes_mut(&mut |pane| {
+                for tab in &mut pane.tabs {
+                    if result.as_ref().is_some_and(|r| r.tab_id == tab.id) {
+                        changed |= tab.apply_calendar_filter(result.take().unwrap());
+                        break;
+                    }
+                }
+            });
+        }
+        changed
+    }
+
+    pub(crate) fn has_date_groups(&self) -> bool {
+        let mut grouped = false;
+        self.visit_panes(&mut |pane| grouped |= pane.tabs.iter().any(|tab| tab.group_by_date));
+        grouped
     }
 
     pub fn find_split_mut(&mut self, id: &str) -> Option<(&LayoutAxis, &mut Vec<f32>)> {
@@ -1655,5 +1783,220 @@ mod tests {
 
         assert!(tab.filter_types.contains("TXT"));
         assert_eq!(tab.cached_filtered_files.len(), 1);
+    }
+}
+
+#[cfg(test)]
+mod calendar_refresh_tests {
+    use super::*;
+    use chrono::{Duration, Local, NaiveDate, TimeZone};
+
+    fn reference(day: NaiveDate) -> CalendarReference {
+        CalendarReference {
+            today: day,
+            utc_offset: 7200,
+            timezone: Some("fixture-zone".into()),
+        }
+    }
+    fn tab(id: &str, day: NaiveDate, group: DateGroup) -> TabState {
+        let timestamp = Local
+            .from_local_datetime(&day.and_hms_opt(12, 0, 0).unwrap())
+            .single()
+            .unwrap();
+        let mut tab = TabState::new(id.into(), "fixture".into());
+        tab.files = vec![FileEntry {
+            name: "Document école.txt".into(),
+            path: format!("fixture/{id}/Document école.txt"),
+            modified: timestamp.timestamp_millis() as u64,
+            ..Default::default()
+        }];
+        tab.filter_dates.insert(group);
+        tab.update_cache_on(day);
+        tab.calendar_reference = Some(reference(day));
+        tab
+    }
+    fn layout(day: NaiveDate) -> LayoutNode {
+        let mut first = PaneState::new(tab("active", day, DateGroup::Today));
+        first.tabs.push(tab("inactive", day, DateGroup::Yesterday));
+        let second = PaneState::new(tab("other-pane", day, DateGroup::Yesterday));
+        LayoutNode::Split {
+            id: "split".into(),
+            axis: LayoutAxis::Horizontal,
+            weights: vec![0.5, 0.5],
+            children: vec![
+                LayoutNode::Pane(Box::new(first)),
+                LayoutNode::Pane(Box::new(second)),
+            ],
+        }
+    }
+
+    #[test]
+    fn midnight_refresh_updates_active_and_inactive_tabs_without_reloading_files() {
+        let day = NaiveDate::from_ymd_opt(2026, 10, 7).unwrap();
+        let mut layout = layout(day);
+        let next = reference(day + Duration::days(1));
+        let requests = layout.calendar_filter_requests(&next);
+        assert_eq!(requests.len(), 3);
+        // Exercise the worker boundary: no GPUI entities or scroll handles travel to it.
+        let results =
+            std::thread::spawn(move || requests.into_iter().map(|r| r.calculate()).collect())
+                .join()
+                .unwrap();
+        assert!(layout.apply_calendar_filters(results));
+        layout.visit_panes(&mut |pane| {
+            for tab in &pane.tabs {
+                assert_eq!(tab.files.len(), 1);
+                assert_eq!(
+                    tab.filtered_files().len(),
+                    if tab.id == "active" { 0 } else { 1 }
+                );
+                assert_eq!(tab.calendar_reference.as_ref(), Some(&next));
+            }
+        });
+        assert!(layout.calendar_filter_requests(&next).is_empty());
+    }
+
+    #[test]
+    fn clock_jumps_and_timezone_changes_invalidate_once() {
+        let day = NaiveDate::from_ymd_opt(2026, 10, 7).unwrap();
+        let mut tab = tab("clock", day, DateGroup::Today);
+        let mut reference = reference(day + Duration::days(4));
+        for key in [
+            reference.clone(),
+            {
+                reference.today = day;
+                reference.clone()
+            },
+            {
+                reference.utc_offset = 3600;
+                reference.clone()
+            },
+            {
+                reference.timezone = Some("another-zone-with-same-offset".into());
+                reference.clone()
+            },
+        ] {
+            let result = tab.calendar_filter_request(&key).unwrap().calculate();
+            assert!(tab.apply_calendar_filter(result));
+            assert!(tab.calendar_filter_request(&key).is_none());
+        }
+        assert_eq!(tab.filtered_files().len(), 1);
+    }
+
+    #[test]
+    fn obsolete_results_cannot_override_a_filter_edit_navigation_or_reload() {
+        let day = NaiveDate::from_ymd_opt(2026, 10, 7).unwrap();
+        let next = reference(day + Duration::days(1));
+        for change in 0..3 {
+            let mut tab = tab("revision", day, DateGroup::Today);
+            let result = tab.calendar_filter_request(&next).unwrap().calculate();
+            match change {
+                0 => {
+                    tab.filter_dates.clear();
+                }
+                1 => {
+                    tab.path = "another-folder".into();
+                    tab.files.clear();
+                }
+                _ => {
+                    tab.files[0].name = "new result.txt".into();
+                }
+            }
+            tab.update_cache_on(day);
+            let current: Vec<_> = tab
+                .filtered_files()
+                .iter()
+                .map(|file| file.name.clone())
+                .collect();
+            assert!(!tab.apply_calendar_filter(result));
+            assert_eq!(
+                tab.filtered_files()
+                    .iter()
+                    .map(|file| file.name.clone())
+                    .collect::<Vec<_>>(),
+                current
+            );
+        }
+    }
+
+    #[test]
+    fn closed_tabs_are_ignored_and_tabs_moved_between_panes_receive_their_results() {
+        let day = NaiveDate::from_ymd_opt(2026, 10, 7).unwrap();
+        let mut layout = layout(day);
+        let next = reference(day + Duration::days(1));
+        let results = layout
+            .calendar_filter_requests(&next)
+            .into_iter()
+            .map(|r| r.calculate())
+            .collect();
+        let LayoutNode::Split { children, .. } = &mut layout else {
+            panic!();
+        };
+        let mut moved = None;
+        if let LayoutNode::Pane(pane) = &mut children[0] {
+            moved = Some(pane.tabs.remove(1));
+        }
+        if let LayoutNode::Pane(pane) = &mut children[1] {
+            pane.tabs.clear(); // The old tab is closed and replaced by the moved one.
+            pane.tabs.push(moved.unwrap());
+        }
+        assert!(layout.apply_calendar_filters(results));
+        layout.visit_panes(&mut |pane| {
+            for tab in &pane.tabs {
+                assert_eq!(tab.calendar_reference.as_ref(), Some(&next));
+                assert_eq!(
+                    tab.filtered_files().len(),
+                    if tab.id == "active" { 0 } else { 1 }
+                );
+            }
+        });
+    }
+
+    #[test]
+    fn calendar_refresh_preserves_filters_selection_scroll_and_column_measurements() {
+        let day = NaiveDate::from_ymd_opt(2026, 10, 7).unwrap();
+        let mut tab = tab("preserved", day, DateGroup::Yesterday);
+        tab.filter_name = "école".into();
+        tab.filter_types.insert("TXT".into());
+        tab.update_cache_on(day);
+        tab.calendar_reference = Some(reference(day));
+        let selected = tab.files[0].path.clone();
+        tab.selected_paths.insert(selected.clone());
+        tab.selection_anchor = Some(selected.clone());
+        tab.type_col_width = 123.0;
+        tab.column_type_labels.insert("measurement-marker".into());
+        tab.list_scroll
+            .0
+            .borrow()
+            .base_handle
+            .set_offset(gpui::point(gpui::px(0.0), gpui::px(-100.0)));
+        let offset = tab.list_scroll.0.borrow().base_handle.offset();
+        let result = tab
+            .calendar_filter_request(&reference(day + Duration::days(1)))
+            .unwrap()
+            .calculate();
+        assert!(tab.apply_calendar_filter(result));
+        assert_eq!(tab.filtered_files().len(), 1);
+        assert_eq!(tab.filter_name, "école");
+        assert!(tab.filter_types.contains("TXT"));
+        assert!(tab.selected_paths.contains(&selected));
+        assert_eq!(tab.selection_anchor, Some(selected));
+        assert_eq!(tab.list_scroll.0.borrow().base_handle.offset(), offset);
+        assert_eq!(tab.type_col_width, 123.0);
+        assert!(tab.column_type_labels.contains("measurement-marker"));
+    }
+
+    #[test]
+    fn tabs_without_date_filters_never_schedule_a_cache_rebuild() {
+        let day = NaiveDate::from_ymd_opt(2026, 10, 7).unwrap();
+        let mut tab = tab("grouped", day, DateGroup::Today);
+        tab.filter_dates.clear();
+        tab.group_by_date = true;
+        tab.update_cache_on(day);
+        let layout = LayoutNode::Pane(Box::new(PaneState::new(tab)));
+        assert!(layout
+            .calendar_filter_requests(&reference(day + Duration::days(1)))
+            .is_empty());
+        assert!(layout.has_date_groups());
     }
 }

@@ -197,3 +197,7 @@ Construction finale `cargo build --bin oxyde --offline` : réussie, sans avertis
 ### Suite A04 — propriétés de corbeille
 
 Les champs `FileProperties::original_path` et `deleted_time`, réservés lors de N09, sont désormais lus par le dialogue de propriétés pour afficher le nom, l'emplacement d'origine et la date de suppression. Leur collecte reste active et partage les règles de nommage de la restauration ; ils ne sont plus des champs sans lecteur. Voir [AUDIT_AMELIORATIONS.md](AUDIT_AMELIORATIONS.md).
+
+### Revalidation après A14 — chaîne Restore sans appelant GPUI
+
+La recherche des appelants de production montre que `move_from_trash` n'est utilisée que par la fixture native ajoutée dans le commit A14 `b8c7523`. GPUI passe par son gestionnaire générique de déplacements et ne crée pas de transaction Restore. La fonction, la variante de transaction, les deux branches Annuler/Rétablir, le journal ajouté en A14, ses tests dédiés, ses méthodes Platform et son libellé d'historique dans les cinq catalogues sont retirés. La restauration ordinaire `restore_items`, les propriétés A04 et les protections d'historique A02 restent actives. La bibliothèque étant réservée à cette application, aucune compatibilité externe n'est conservée. A14/A16/A17 sont requalifiés dans [AUDIT_AMELIORATIONS.md](AUDIT_AMELIORATIONS.md), et le parcours GPUI réel est consigné séparément en A18.

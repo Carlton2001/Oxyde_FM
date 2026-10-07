@@ -16,7 +16,6 @@ fn op_label(op: &TransactionType) -> Message {
         TransactionType::Rename => Message::OpRename,
         TransactionType::Delete => Message::OpDelete,
         TransactionType::NewFolder => Message::OpNewFolder,
-        TransactionType::Restore => Message::OpRestore,
     }
 }
 

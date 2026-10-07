@@ -201,7 +201,6 @@ operation-extract-here = Archiv entpacken
 
 operation-new-folder = Neuer Ordner
 
-operation-restore = Wiederherstellen
 
 operations-title = { $count ->
     [1] Vorgang

@@ -201,7 +201,6 @@ operation-extract-here = Estrai archivio
 
 operation-new-folder = Nuova cartella
 
-operation-restore = Ripristina
 
 operations-title = { $count ->
     [1] Operazione

@@ -3,6 +3,24 @@ use chrono::{Datelike, Duration, Local, NaiveDate};
 use oxyde_lib::models::FileEntry;
 use std::collections::{HashMap, HashSet};
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct CalendarReference {
+    pub today: NaiveDate,
+    pub utc_offset: i32,
+    pub timezone: Option<String>,
+}
+
+impl CalendarReference {
+    pub fn current() -> Self {
+        let now = Local::now();
+        Self {
+            today: now.date_naive(),
+            utc_offset: now.offset().local_minus_utc(),
+            timezone: oxyde_lib::platform::platform().calendar_timezone_signature(),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum DateGroup {
     Today,

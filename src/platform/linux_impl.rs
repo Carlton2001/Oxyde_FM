@@ -106,18 +106,6 @@ impl Platform for LinuxPlatform {
         Err("Network neighborhood is unavailable on this platform".to_string())
     }
 
-    fn recycle_for_history(&self, path: &std::path::Path) -> Result<(), String> {
-        trash::delete(path).map_err(|error| error.to_string())
-    }
-
-    fn history_trash_items(&self) -> Result<Vec<trash::TrashItem>, String> {
-        trash::os_limited::list().map_err(|error| error.to_string())
-    }
-
-    fn restore_history_item(&self, item: trash::TrashItem) -> Result<(), String> {
-        trash::os_limited::restore_all([item]).map_err(|error| error.to_string())
-    }
-
     fn shell_delete(&self, paths: &[std::path::PathBuf], recycle: bool) -> Result<(), String> {
         if recycle {
             return trash::delete_all(paths).map_err(|error| error.to_string());
@@ -152,6 +140,8 @@ impl Platform for LinuxPlatform {
     fn regional_locale(&self) -> Option<String> {
         ["LC_ALL", "LC_TIME", "LANG"].into_iter().filter_map(|key| std::env::var(key).ok()).find(|value| !value.is_empty())
     }
+    fn calendar_timezone_signature(&self) -> Option<String> { None }
+
     fn interface_locale(&self) -> Option<String> {
         ["LC_ALL", "LANGUAGE", "LC_MESSAGES", "LANG"]
             .into_iter()

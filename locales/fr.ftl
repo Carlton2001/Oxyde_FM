@@ -117,7 +117,6 @@ operation-compress = Compression
 operation-extract = Extraction
 operation-extract-here = Extraire l’archive
 operation-new-folder = Nouveau dossier
-operation-restore = Restauration
 operations-title = { $count ->
     [1] Opération
    *[other] Opérations

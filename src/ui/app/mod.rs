@@ -17,6 +17,7 @@ mod preferences;
 mod keyboard;
 mod toasts;
 mod shell_features;
+mod calendar;
 use toasts::{Toast, ToastKind};
 pub(crate) mod network;
 pub mod selection;
@@ -428,6 +429,7 @@ pub struct OxydeApp {
     pub(super) drive_refresh_epoch: u64,
     pub _watcher_task: Option<Task<()>>,
     pub(super) shell_features_task: Option<Task<()>>,
+    calendar_task: Option<Task<()>>,
     pub(super) quick_access_request: u64,
     pub(crate) peek_status: oxyde_lib::platform::PeekStatus,
     pub _drive_refresh_task: Option<Task<()>>,
@@ -877,6 +879,7 @@ impl OxydeApp {
             drive_refresh_epoch: 0,
             _watcher_task: None,
             shell_features_task: None,
+            calendar_task: None,
             quick_access_request: 0,
             peek_status: Default::default(),
             _drive_refresh_task: None,
@@ -2270,6 +2273,7 @@ impl OxydeApp {
     pub fn start_watcher_task(&mut self, cx: &mut Context<Self>) {
         self.start_drive_refresh_task(cx);
         self.start_shell_features_task(cx);
+        self.start_calendar_task(cx);
         self.refresh_disk_images(cx);
         let changes = self.watcher_changes.clone();
         let h = self.handle.clone().expect("handle set");

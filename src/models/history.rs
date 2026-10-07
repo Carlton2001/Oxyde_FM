@@ -58,17 +58,6 @@ impl HistoryOperation<'_> {
         &self.transaction
     }
 
-    pub(crate) fn set_restore_journal(&mut self, journal: Vec<super::transaction::RestoreEntry>) {
-        self.transaction.restore_journal = Some(journal);
-    }
-
-    pub(crate) fn restore_journal_mut(&mut self) -> &mut Vec<super::transaction::RestoreEntry> {
-        self.transaction
-            .restore_journal
-            .as_mut()
-            .expect("configured restoration journal")
-    }
-
     pub fn complete(mut self) {
         self.completed = true;
     }
@@ -85,13 +74,6 @@ impl Drop for HistoryOperation<'_> {
                 expired.append(&mut data.pending);
                 data.clear_requested = false;
             } else {
-                let reserved = match self.direction {
-                    Direction::Undo => data.history.undo_stack.last_mut(),
-                    Direction::Redo => data.history.redo_stack.last_mut(),
-                }
-                .expect("reserved history entry");
-                // Keep the effects already observed even if the worker returns an error.
-                reserved.restore_journal = self.transaction.restore_journal.take();
                 if self.completed {
                     match self.direction {
                         Direction::Undo => {

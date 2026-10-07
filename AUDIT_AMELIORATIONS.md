@@ -18,11 +18,11 @@ Validation : le test de minuit passe après correction. Les fixtures couvrent lu
 
 `HistoryManager::begin_undo` / `begin_redo` réservent désormais une transaction jusqu'à la fin du traitement. Une seconde demande est refusée avant les effets sur les fichiers. Les ajouts d'historique arrivant pendant ce traitement sont différés, puis intégrés dans leur ordre d'arrivée ; une nouvelle action invalide Rétablir après la validation de la transaction réservée. Le verrou du modèle reste libéré pendant les opérations de fichiers. La réservation se libère aussi sur erreur ou panique du worker, et le nettoyage attend sa fin pour préserver les sauvegardes utilisées.
 
-GPUI partage un état d'exécution entre Annuler et Rétablir : les clics et raccourcis répétés sont ignorés pendant le travail, les deux boutons sont désactivés, et l'état est rétabli au retour du worker, y compris sur erreur. Le rejeu d'une restauration ne crée plus une deuxième transaction d'historique. La sortie finale du processus et le délai d'arrêt Tokio restent ceux documentés dans `SHUTDOWN_DIAGNOSTICS.md` ; si un worker dépasse ce délai à la fermeture, son nettoyage différé reste soumis à cette limite existante.
+GPUI partage un état d'exécution entre Annuler et Rétablir : les clics et raccourcis répétés sont ignorés pendant le travail, les deux boutons sont désactivés, et l'état est rétabli au retour du worker, y compris sur erreur. Le rejeu de l'ancienne API de restauration avait été adapté, puis cette chaîne sans appelant GPUI a été retirée après revalidation d'A14. La sortie finale du processus et le délai d'arrêt Tokio restent ceux documentés dans `SHUTDOWN_DIAGNOSTICS.md` ; si un worker dépasse ce délai à la fermeture, son nettoyage différé reste soumis à cette limite existante.
 
 Validation : demandes concurrentes sur deux threads, entrées ajoutées pendant Annuler et Rétablir, abandon/erreur/panique, ordre et limite de 100 entrées, nettoyage différé des sauvegardes. Une fixture de renommage vérifie le refus avant mutation, puis l'aller-retour Annuler/Rétablir et la conservation du contenu. Ces contrôles portent sur le modèle et les commandes ; aucune validation interactive GPUI ni Linux.
 
-**Limite de portée :** cette réservation protège l'historique ; elle ne réserve pas les chemins auprès du planificateur de copies/déplacements. La coordination des effets physiques d'une opération de fichiers indépendante avec Annuler/Rétablir reste à examiner séparément. Le défaut de rejeu des restaurations déplacées est consigné en A14.
+**Limite de portée :** cette réservation protège l'historique ; elle ne réserve pas les chemins auprès du planificateur de copies/déplacements. La coordination des effets physiques d'une opération de fichiers indépendante avec Annuler/Rétablir reste à examiner séparément. L'observation A14 a ensuite été requalifiée : son API n'avait pas d'appelant GPUI et a été retirée.
 
 ## A03 — Marqueur d'onglet potentiellement périmé sur la zone libre — P2
 
@@ -100,43 +100,45 @@ Traiter les simplifications utiles dans des changements limités ; ne pas conver
 
 ## A14 — Rétablir une restauration déplacée depuis la corbeille — P2
 
-**Corrigé le 7 octobre 2026, avec validation native Windows.** Le parcours précédent enregistrait les destinations restaurées, mais Rétablir relançait le déplacement depuis une liste de sources vide. Il pouvait donc annoncer un succès sans restaurer les éléments.
+**Requalifié le 7 octobre 2026 : chaîne sans appelant dans l'application, retirée après A14.** La relecture des appelants établit que `move_from_trash` était invoqué uniquement par le test natif ajouté en A14. GPUI utilise `execute_coller` → `execute_file_move` → le gestionnaire `file_ops`, qui ne produit aucune transaction Restore. L'action Restaurer passe directement par `restore_items`.
 
-Chaque transaction Restore possède désormais un journal par destination. Annuler capture l'identifiant exact du nouvel élément de corbeille, en excluant les identifiants déjà présents et en exigeant une seule correspondance avec le chemin d'origine. Rétablir vérifie cet identifiant et le chemin, puis restaure directement l'élément dans sa destination, avec les mêmes règles de nommage que la restauration ordinaire. Un homonyme plus ancien, un reçu disparu ou ambigu et une destination occupée provoquent une erreur ; les conflits présents au début du lot sont vérifiés avant les effets. Le rejeu conserve une seule transaction et ne repasse plus par le déplacement initial.
+Le commit A14 `b8c7523` validait le rejeu de cette API isolée, pas une fonctionnalité raccordée à GPUI. La variante Restore, `move_from_trash`, le journal et ses tests dédiés, ses nouvelles méthodes Platform et son libellé traduit d'historique sont donc retirés dans le lot suivant. Les tests et gardes d'A02 pour les opérations actives restent conservés. La restauration ordinaire et ses deux fixtures natives restent actives.
 
-Les effets observés restent dans la transaction réservée, même sur erreur ou panique. Les états intermédiaires permettent de reprendre après une erreur d'énumération ou un traitement partiel, en ignorant les éléments déjà traités. Un reçu non confirmé bloque le rejeu au lieu de deviner une correspondance. Les opérations natives passent par Platform ; la remise à la corbeille utilise le parcours réversible du crate `trash`, sans choisir explicitement la suppression définitive.
-
-Validation : sept tests déterministes couvrent fichiers/dossiers, cycles répétés et nouveaux identifiants, échecs avant/après effet, reprise partielle, panique, énumération interrompue, conflits, homonymes et reçus absents/ambigus. Un test Windows dédié vérifie le déplacement initial puis deux cycles Annuler/Rétablir sur des fichiers Unicode, `.lnk`, `.url` et un dossier temporaire avec contenu, y compris un conflit de destination. Ce test utilise exclusivement ses fixtures et reste ignoré dans la suite ordinaire ; il est exécuté explicitement pour ce lot. Aucun Computer Use ni Linux.
-
-**Limites :** les mutations externes entre les vérifications et les effets natifs ne sont pas réservées par le planificateur de fichiers (limite d'A02). Le journal vit en mémoire comme l'historique actuel ; il ne constitue pas une récupération après arrêt du processus. Le déplacement initial conserve ses anciens traitements de conflits et de sauvegardes temporaires, à revoir en A16.
+L'affirmation initiale d'un défaut Annuler/Rétablir de restauration dans l'application était incorrecte. Le parcours réel de Couper/Coller depuis la corbeille fait l'objet de l'observation distincte A18 ; aucune nouvelle intégration de l'ancienne API n'est ajoutée implicitement.
 
 ## A15 — Cache de filtrage lors d'un changement de jour — P2
 
-**Risque structurel établi, à reproduire sur une vue laissée ouverte.** `TabState::update_cache` mémorise les fichiers filtrés sans conserver la date de référence comme clé d'invalidation. Les groupes et compteurs relisent le jour local pendant leur calcul. Un onglet avec un filtre Date actif peut donc garder le résultat de la veille après minuit, jusqu'à une action ou un événement provoquant le recalcul du cache.
+**Corrigé le 7 octobre 2026, avec validation déterministe.** Le cache de chaque onglet mémorise désormais le jour local, le décalage UTC et la signature des règles du fuseau Windows utilisés lors de sa construction. Une tâche dédiée vérifie cette référence toutes les cinq secondes, indépendamment du watcher de fichiers et du presse-papiers, et prépare uniquement les caches avec un filtre Date actif et une référence différente.
 
-Prévoir une invalidation lors d'un changement de jour local, sans recharger les fichiers ni recalculer continuellement le cache. Vérifier les onglets actifs et inactifs, la reprise après veille et un changement d'horloge ou de fuseau. A01 aligne les règles de calcul ; il ne rajoute pas de surveillance d'horloge à l'application.
+Les règles de filtrage sont partagées avec le calcul ordinaire du cache. Le recalcul calendaire s'effectue sur un worker à partir d'un snapshot des fichiers et critères ; chaque réponse conserve l'identifiant de l'onglet et la révision de son cache. Une modification de filtre, de tri, une navigation ou une réception de fichiers invalide les anciennes réponses. Un changement de référence pendant le calcul fait aussi abandonner les résultats. Les onglets inactifs et ceux déplacés entre panneaux sont traités, les onglets fermés sont ignorés.
+
+Les fichiers ne sont pas relus, et les filtres, sélection, position de défilement et mesures des colonnes sont conservés. Les onglets regroupés sans filtre Date demandent uniquement un nouveau rendu lorsque la référence change. Aucune notification périodique si la référence et les caches sont déjà à jour. Un retour de veille ou un saut d'horloge est pris en compte à la prochaine vérification ; la conversion des dates continue d'utiliser Chrono et le fuseau natif. Les menus reprennent leurs compteurs lors de leur ouverture, comme auparavant.
+
+Validation : six fixtures déterministes couvrant minuit dans plusieurs panneaux et onglets actifs/inactifs, sauts d'horloge, changements de décalage et de signature de fuseau, résultats obsolètes, fermeture/déplacement d'onglet, conservation de l'état et absence de recalcul sans filtre Date. Aucun Computer Use ni modification de l'horloge ou du fuseau de la machine ; Linux reste hors validation.
 
 ## A16 — Conflits et espace temporaire du déplacement initial depuis la corbeille — P1
 
-**Branches établies dans le code, défauts à reproduire séparément.** `move_from_trash` déplace vers la destination avec `fs_extra::dir::CopyOptions::overwrite(true)`, puis inscrit les destinations dans une transaction Restore sans conserver l'ancien contenu remplacé. Il utilise aussi un dossier temporaire partagé par PID et des sauvegardes nommées à partir du seul nom de fichier. Des déplacements concurrents ou des éléments homonymes peuvent donc partager un emplacement de sauvegarde. Le traitement d'un conflit à l'emplacement d'origine choisit `crate_path`, même lorsque seul `corrected_path` existe.
-
-Prévoir un espace temporaire unique par opération, une résolution explicite des conflits à la destination, un journal des effets initiaux et une restauration des sauvegardes sur toutes les sorties d'erreur. Reproduire chaque cas sur des fixtures dédiées. A14 corrige Annuler/Rétablir après un déplacement réussi ; il ne réécrit pas ce parcours initial. Aucun de ces scénarios supplémentaires n'a été exécuté sur des données utilisateur dans ce lot.
+**Clos par suppression de la chaîne inutilisée, après revalidation des appelants.** Les conflits et sauvegardes partagées recensés appartenaient à `move_from_trash`, sans appelant de production GPUI. La fonction et sa chaîne Restore sont retirées avec la correction de qualification A14. Il n'y a donc pas de nouvel espace temporaire ou de nouveau dialogue de conflit à implémenter pour cette API. Le parcours actif de Couper/Coller doit être examiné séparément en A18.
 
 ## A17 — Énumérations de corbeille lors du rejeu des restaurations — P2
 
-**Coût structurel établi après A14, impact non mesuré.** Le journal de restauration relit la corbeille avant et après chaque effet pour identifier puis confirmer les reçus exacts. Un cycle sans erreur utilise une énumération de préparation puis deux par élément traité. Ces lectures restent sur le worker, mais un grand lot dans une corbeille volumineuse peut être lent.
+**Clos par retrait du journal A14 inutilisé.** Les énumérations par effet appartenaient au journal d'une API sans appelant de l'application. Ce journal a été supprimé ; aucun benchmark ou optimisation n'est nécessaire pour ce parcours retiré.
 
-Mesurer des lots de tailles différentes avant optimisation. Envisager des reçus retournés directement par les opérations natives ou un regroupement compatible avec les erreurs partielles, en conservant le refus des homonymes et la reprise du journal. Aucun benchmark de grande corbeille effectué dans A14.
+## A18 — Couper/Coller depuis la corbeille dans le parcours GPUI actuel — P1
+
+**Parcours de code établi, à reproduire séparément sur Windows.** `copy_files_to_clipboard` publie les chemins physiques sélectionnés, `execute_coller` les transmet au gestionnaire générique, et `perform_copy` construit la destination depuis `source.file_name()`. Ce parcours ne consulte ni le nom d'origine de la corbeille ni son fichier `$I`, et ne passe pas par `restore_items`. Le nom `$R…` et la cohérence des métadonnées de corbeille après déplacement sont donc à vérifier.
+
+Reproduire Couper/Coller sur des fichiers et dossiers temporaires, depuis GPUI et avec l'Explorateur Windows, avant de choisir l'intégration native adaptée. Vérifier noms, conflits, métadonnées et comportement de l'historique. Ne pas réintroduire automatiquement `move_from_trash` : les défauts de cette ancienne API ne décrivaient pas les effets du gestionnaire actuel. Cette observation est consignée pour le lot suivant ; aucun scénario supplémentaire n'a été exécuté sur des fichiers utilisateur.
 
 ## Validation et suite
 
 La compilation Windows actuelle passe sans avertissement du projet. Les observations ci-dessus sont issues de la lecture des sources et de Clippy ; aucun nouveau test de comportement ou benchmark n'a été exécuté pendant cet audit. Snap Layouts et le témoin de déplacement actuel sont confirmés par l'utilisateur. Les validations des lots précédents restent décrites dans [AUDIT_CODE_MORT.md](AUDIT_CODE_MORT.md).
 
-Après A01/A02/A03/A04/A14, poursuivre avec les corrections de comportement A16/A15 et les ressources natives A05/A06. Les optimisations demandent des mesures avant modification. Cet ordre est proposé, pas une liste de corrections déjà autorisées ou réalisées.
+Après A01/A02/A03/A04 et A15, examiner le parcours actif A18 et les ressources natives A05/A06. Les optimisations demandent des mesures avant modification. Cet ordre est proposé, pas une liste de corrections déjà autorisées ou réalisées.
 
 ### État après les lots N01 à N16
 
-Le nettoyage retire les anciennes sérialisations, les estimations et plusieurs lectures natives dont les résultats étaient abandonnés. Ce nettoyage ne corrige pas les observations A01–A13. A01, A02, A03, A04 et A14 sont corrigés dans les lots suivants, décrits plus haut. Les références de lignes ci-dessus restent celles de `3cc7d14` ; utiliser les noms de fonctions pour retrouver leur nouvel emplacement.
+Le nettoyage retire les anciennes sérialisations, les estimations et plusieurs lectures natives dont les résultats étaient abandonnés. Ce nettoyage ne corrige pas les observations A01–A13. A01, A02, A03, A04 et A15 sont traités dans les lots suivants ; A14/A16/A17 ont été requalifiés après relecture des appelants, puis leur chaîne inutilisée a été retirée. Ces suites sont décrites plus haut. Les références de lignes ci-dessus restent celles de `3cc7d14` ; utiliser les noms de fonctions pour retrouver leur nouvel emplacement.
 
 Depuis A04, `FileProperties::original_path` / `deleted_time` et leur collecte alimentent les propriétés des éléments de corbeille. Pour A05, l'énumération de diagnostic du property store et les lectures de métadonnées d'appareil sans affichage disparaissent ; la récupération du nom convivial et son traitement COM restent actifs. Pour A10, les variantes de tri backend inaccessibles disparaissent, mais le tri naturel actif et les tris GPUI restent distincts. Pour A13, la branche de couleur identique des onglets disparaît avec N05 ; les autres suggestions ne font pas l'objet d'une correction générale.
 
@@ -156,6 +158,12 @@ Depuis A04, `FileProperties::original_path` / `deleted_time` et leur collecte al
 
 `cargo test --all-targets --offline` : 104 tests backend et 102 tests du binaire passent, soit 206 ; les trois tests natifs déjà ignorés restent ignorés. Six tests de régression ont été ajoutés. `cargo check --all-targets --offline` passe sans avertissement du projet, et `cargo build --bin oxyde --offline` réussit. Les traductions des deux libellés existent dans les cinq catalogues. Aucun Computer Use, aucune validation visuelle interactive ni Linux.
 
-### Validation du lot A14
+### Validation historique du lot A14 — API isolée, retirée ensuite
+
+Ces résultats valident l’API isolée testée dans `b8c7523`, sans prouver son usage par GPUI. Ses huit tests dédiés sont retirés avec cette chaîne ; les trois tests natifs antérieurs restent conservés.
 
 `cargo test --all-targets --offline` : 111 tests backend et 102 tests du binaire passent, soit 213. Quatre tests natifs restent ignorés dans cette invocation ; le nouveau test `native_restore_history_roundtrip_and_conflict` est exécuté explicitement avec `--ignored` et passe, soit 214 tests distincts validés dans le lot. Les trois anciens tests natifs ignorés n'ont pas été relancés. `cargo check --all-targets --offline` passe sans avertissement du projet, et `cargo build --bin oxyde --offline` réussit. Aucun Computer Use ni Linux ; aucun fichier utilisateur n'est utilisé par les fixtures natives.
+
+### Validation du retrait de la chaîne Restore et du lot A15
+
+`cargo test --all-targets --offline` : 104 tests backend et 108 tests du binaire passent, soit 212 ; les trois tests natifs antérieurs restent ignorés. Les huit tests du journal A14 isolé disparaissent avec sa chaîne, et six tests A15 sont ajoutés. Les tests des catalogues et de l'historique actif passent. `cargo check --all-targets --offline` passe sans avertissement du projet, et `cargo build --bin oxyde --offline` réussit. La vérification des appelants confirme que la tâche A15 est démarrée par `start_watcher_task`, appelé à l'initialisation de la fenêtre principale. Aucun Computer Use ni validation Linux, aucune modification du fuseau ou de l'horloge système.
