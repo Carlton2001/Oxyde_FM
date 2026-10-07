@@ -51,7 +51,6 @@ pub fn list_drive_roots() -> Vec<DriveInfo> {
                 path: path.into(),
                 label: "Local Disk".into(),
                 drive_type: drive_type.into(),
-                is_readonly: kind == 5,
                 total_bytes: 0,
                 free_bytes: 0,
                 media_type: None,
@@ -369,27 +368,21 @@ pub fn list_drives(skip_hardware_info: bool) -> Vec<DriveInfo> {
                 };
 
                 let mut volume_name = [0u16; 261];
-                let mut fs_name = [0u16; 261];
-                let mut flags = 0u32;
-
-                let (label, is_readonly_vol) = if GetVolumeInformationW(
+                let label = if GetVolumeInformationW(
                     PCWSTR(root_path.as_ptr()),
                     Some(&mut volume_name),
                     None,
                     None,
-                    Some(&mut flags),
-                    Some(&mut fs_name),
+                    None,
+                    None,
                 )
                 .is_ok()
                 {
-                    (
-                        String::from_utf16_lossy(&volume_name)
-                            .trim_matches(char::from(0))
-                            .to_string(),
-                        (flags & 0x00080000) != 0, // FILE_READ_ONLY_VOLUME
-                    )
+                    String::from_utf16_lossy(&volume_name)
+                        .trim_matches(char::from(0))
+                        .to_string()
                 } else {
-                    (String::new(), false)
+                    String::new()
                 };
 
                 // Get disk space information
@@ -548,7 +541,6 @@ pub fn list_drives(skip_hardware_info: bool) -> Vec<DriveInfo> {
                     path: drive_path.to_string(),
                     label: mounted_drive_label(label, remote_path.as_deref()),
                     drive_type,
-                    is_readonly: is_readonly_vol || win_type == 5, // CD-ROM is read-only
                     total_bytes,
                     free_bytes: free_bytes_available,
                     media_type,

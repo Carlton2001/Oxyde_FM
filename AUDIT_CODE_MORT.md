@@ -309,3 +309,15 @@ Deux validations restent ouvertes :
 ### Correction signalée après le lot 6 — témoin d’insertion des onglets
 
 Lors d’un glissement entre panneaux vers la fin de la liste d’onglets, deux traits utilisaient le même index de dépôt : le bord droit du dernier onglet dans `layout.rs` et un second trait après le bouton Nouvel onglet dans `TabBar`. Le second rendu, son champ et son builder sont supprimés. Les marqueurs placés aux limites des onglets, les zones de dépôt et la géométrie de la barre restent conservés. `cargo check --all-targets --offline` a réussi sans avertissement du projet. La vérification visuelle est laissée à l’utilisateur, conformément à sa préférence ; Computer Use n’est pas relancé pour cette correction.
+
+### Confirmation utilisateur et nouvel audit — 7 octobre 2026
+
+L’utilisateur confirme Snap Layouts et le témoin de déplacement des onglets. Ces validations sont donc closes. Linux est différé à sa demande ; son absence de validation ne bloque pas la suite Windows.
+
+Une nouvelle revue du code après les six lots est consignée dans [AUDIT_CODE_MORT_2.md](AUDIT_CODE_MORT_2.md). Les corrections, améliorations et optimisations à examiner ensuite sont séparées dans [AUDIT_AMELIORATIONS.md](AUDIT_AMELIORATIONS.md). Aucun nouveau nettoyage n’est appliqué pendant cet audit.
+
+Rectification du lot 6 : contrairement à la mention « utilisé pour les éléments individuels », `FileEntry::is_protected` n’a pas de lecteur actuel. Il est recensé dans le nouvel audit avec les autres métadonnées sans consommateur.
+
+### Nouvelle série de nettoyage N01 à N16
+
+Les points du nouvel audit sont traités en quatre lots enchaînés à la demande de l'utilisateur. Le détail des suppressions et les validations figurent dans le journal de [AUDIT_CODE_MORT_2.md](AUDIT_CODE_MORT_2.md). Deux champs de propriétés de corbeille sont conservés jusqu'au traitement d'A04, comme prévu dans l'audit. Les corrections et optimisations restent dans [AUDIT_AMELIORATIONS.md](AUDIT_AMELIORATIONS.md). Computer Use et la validation Linux sont exclus de cette série à la demande de l'utilisateur.

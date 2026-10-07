@@ -16,13 +16,11 @@ use windows::Win32::UI::Shell::PropertiesSystem::{
 
 pub async fn list_dir(
     path: String,
-    sort_config: Option<crate::models::sort::SortConfig>,
     show_hidden: Option<bool>,
     show_system: Option<bool>,
 ) -> Result<Vec<FileEntry>, CommandError> {
     let show_hidden = show_hidden.unwrap_or(false);
     let show_system = show_system.unwrap_or(false);
-    let sort_config = sort_config.unwrap_or_default();
 
     if path == "trash://" {
         let trash_items = tokio::task::spawn_blocking(crate::commands::ops::list_trash)
@@ -40,8 +38,6 @@ pub async fn list_dir(
                 is_junction: false,
                 size: t.size,
                 modified: t.modified,
-                is_readonly: false,
-                is_protected: false,
                 is_calculated: true,
                 folders_count: None,
                 files_count: None,
@@ -71,7 +67,7 @@ pub async fn list_dir(
     }
 
     tokio::task::spawn_blocking(move || {
-        list_dir_blocking(path, sort_config, show_hidden, show_system)
+        list_dir_blocking(path, show_hidden, show_system)
     })
     .await
     .map_err(|e| CommandError::IoError(e.to_string()))?
@@ -87,7 +83,6 @@ pub fn is_network_server(path: &str) -> bool {
 
 fn list_dir_blocking(
     path: String,
-    sort_config: crate::models::sort::SortConfig,
     show_hidden: bool,
     show_system: bool,
 ) -> Result<Vec<FileEntry>, CommandError> {
@@ -98,7 +93,7 @@ fn list_dir_blocking(
                 archive.to_string_lossy().into_owned(),
                 internal,
             )?;
-            sort_file_entries(&mut entries, &sort_config);
+            sort_file_entries(&mut entries);
             return Ok(entries);
         }
     }
@@ -133,67 +128,15 @@ fn list_dir_blocking(
         }
     }
 
-    sort_file_entries(&mut entries, &sort_config);
+    sort_file_entries(&mut entries);
     Ok(entries)
 }
 
-pub fn sort_file_entries(entries: &mut [FileEntry], config: &crate::models::sort::SortConfig) {
-    use crate::models::sort::SortDirection;
-    use crate::models::sort::SortField;
-
+fn sort_file_entries(entries: &mut [FileEntry]) {
     entries.sort_unstable_by(|a, b| {
-        // Folders-first by default.
-        // Exception: when sorting by size, we mix them ONLY IF the folders involved have been calculated.
-        if config.field == SortField::Size {
-            let a_uncalc = a.is_dir && !a.is_calculated;
-            let b_uncalc = b.is_dir && !b.is_calculated;
-            if (a_uncalc || b_uncalc) && a.is_dir != b.is_dir {
-                return b.is_dir.cmp(&a.is_dir);
-            }
-        } else if a.is_dir != b.is_dir {
-            return b.is_dir.cmp(&a.is_dir);
-        }
-
-        let cmp = match config.field {
-            SortField::Name => crate::utils::compare_natural(&a.name, &b.name),
-            SortField::Size => a
-                .size
-                .cmp(&b.size)
-                .then_with(|| crate::utils::compare_natural(&a.name, &b.name)),
-            SortField::Date => a
-                .modified
-                .cmp(&b.modified)
-                .then_with(|| crate::utils::compare_natural(&a.name, &b.name)),
-            SortField::Type => {
-                let ext_a = std::path::Path::new(&a.name)
-                    .extension()
-                    .and_then(|s| s.to_str())
-                    .unwrap_or("")
-                    .to_lowercase();
-                let ext_b = std::path::Path::new(&b.name)
-                    .extension()
-                    .and_then(|s| s.to_str())
-                    .unwrap_or("")
-                    .to_lowercase();
-                ext_a
-                    .cmp(&ext_b)
-                    .then_with(|| crate::utils::compare_natural(&a.name, &b.name))
-            }
-            SortField::Location => a
-                .path
-                .to_lowercase()
-                .cmp(&b.path.to_lowercase())
-                .then_with(|| crate::utils::compare_natural(&a.name, &b.name)),
-            SortField::DeletedDate => a
-                .deleted_time
-                .cmp(&b.deleted_time)
-                .then_with(|| crate::utils::compare_natural(&a.name, &b.name)),
-        };
-
-        match config.direction {
-            SortDirection::Asc => cmp,
-            SortDirection::Desc => cmp.reverse(),
-        }
+        b.is_dir
+            .cmp(&a.is_dir)
+            .then_with(|| crate::utils::compare_natural(&a.name, &b.name))
     });
 }
 
@@ -275,7 +218,6 @@ pub fn get_file_properties(path: String) -> Result<FileProperties, CommandError>
     {
         // Handle shell items (Network devices or Computer roots)
         let mut props = FileProperties {
-            // ... (rest initialized in code)
             name: path.split('\\').next_back().unwrap_or(&path).to_string(), // Best effort name
             path: path.clone(),
             parent: "Réseau".to_string(),
@@ -290,17 +232,6 @@ pub fn get_file_properties(path: String) -> Result<FileProperties, CommandError>
             folders_count: None,
             files_count: None,
             shortcut: None,
-            is_media_device: Some(true),
-            has_web_page: Some(false),
-            manufacturer: None,
-            model_name: None,
-            model_number: None,
-            serial_number: None,
-            mac_address: None,
-            ip_address: None,
-            unique_id: None,
-            web_page_url: None,
-            debug_props: None,
         };
 
         #[cfg(target_os = "windows")]
@@ -319,26 +250,6 @@ pub fn get_file_properties(path: String) -> Result<FileProperties, CommandError>
                 IPropertyStore,
             >(PCWSTR(wide_path.as_ptr()), None, GPS_DEFAULT)
             {
-                let mut d_props = Vec::new();
-                // Debug out what properties are actually here
-                if let Ok(count) = store.GetCount() {
-                    for i in 0..count {
-                        let mut key = PROPERTYKEY::default();
-                        if let Ok(()) = store.GetAt(i, &mut key) {
-                            if let Ok(var) = store.GetValue(&key) {
-                                if let Ok(pwstr) = windows::Win32::System::Com::StructuredStorage::PropVariantToStringAlloc(&var) {
-                                    let val = pwstr.to_string().unwrap_or_default();
-                                    if !val.is_empty() {
-                                        d_props.push(format!("[{:?}, {}] = {}", key.fmtid, key.pid, val));
-                                    }
-                                    windows::Win32::System::Com::CoTaskMemFree(Some(pwstr.as_ptr() as *const _));
-                                }
-                            }
-                        }
-                    }
-                }
-                props.debug_props = Some(d_props);
-
                 let get_prop = |guid_values: (u32, u16, u16, [u8; 8]),
                                 pid: u32|
                  -> Option<String> {
@@ -369,78 +280,6 @@ pub fn get_file_properties(path: String) -> Result<FileProperties, CommandError>
                     None
                 };
 
-                // PKEY_Device_Manufacturer {A45C2502-DFC5-491D-8F1D-DC141151D4B2}, 7
-                props.manufacturer = get_prop(
-                    (
-                        0xA45C2502,
-                        0xDFC5,
-                        0x491D,
-                        [0x8F, 0x1D, 0xDC, 0x14, 0x11, 0x51, 0xD4, 0xB2],
-                    ),
-                    7,
-                );
-                // PKEY_Device_ModelName {A45C2502-DFC5-491D-8F1D-DC141151D4B2}, 11
-                props.model_name = get_prop(
-                    (
-                        0xA45C2502,
-                        0xDFC5,
-                        0x491D,
-                        [0x8F, 0x1D, 0xDC, 0x14, 0x11, 0x51, 0xD4, 0xB2],
-                    ),
-                    11,
-                );
-                // PKEY_Device_ModelNumber {A45C2502-DFC5-491D-8F1D-DC141151D4B2}, 12
-                props.model_number = get_prop(
-                    (
-                        0xA45C2502,
-                        0xDFC5,
-                        0x491D,
-                        [0x8F, 0x1D, 0xDC, 0x14, 0x11, 0x51, 0xD4, 0xB2],
-                    ),
-                    12,
-                );
-                // PKEY_Device_SerialNumber {A45C2502-DFC5-491D-8F1D-DC141151D4B2}, 15
-                props.serial_number = get_prop(
-                    (
-                        0xA45C2502,
-                        0xDFC5,
-                        0x491D,
-                        [0x8F, 0x1D, 0xDC, 0x14, 0x11, 0x51, 0xD4, 0xB2],
-                    ),
-                    15,
-                );
-
-                // PKEY_Devices_IpAddress {65AD9E1B-0A09-40A4-9780-45C31E310531}, 3
-                props.ip_address = get_prop(
-                    (
-                        0x65AD9E1B,
-                        0x0A09,
-                        0x40A4,
-                        [0x97, 0x80, 0x45, 0xC3, 0x1E, 0x31, 0x05, 0x31],
-                    ),
-                    3,
-                );
-                // PKEY_Devices_MacAddress {65AD9E1B-0A09-40A4-9780-45C31E310531}, 2
-                props.mac_address = get_prop(
-                    (
-                        0x65AD9E1B,
-                        0x0A09,
-                        0x40A4,
-                        [0x97, 0x80, 0x45, 0xC3, 0x1E, 0x31, 0x05, 0x31],
-                    ),
-                    2,
-                );
-                // PKEY_Devices_DiscoveryId {65AD9E1B-0A09-40A4-9780-45C31E310531}, 10 (Unique ID)
-                props.unique_id = get_prop(
-                    (
-                        0x65AD9E1B,
-                        0x0A09,
-                        0x40A4,
-                        [0x97, 0x80, 0x45, 0xC3, 0x1E, 0x31, 0x05, 0x31],
-                    ),
-                    10,
-                );
-
                 // For name, sometimes PKEY_Device_FriendlyName {A45C2502-DFC5-491D-8F1D-DC141151D4B2}, 14 is better
                 if let Some(friendly) = get_prop(
                     (
@@ -453,13 +292,6 @@ pub fn get_file_properties(path: String) -> Result<FileProperties, CommandError>
                 ) {
                     props.name = friendly;
                 }
-
-                // Check for webpage verb again to be sure
-                props.has_web_page =
-                    Some(props.ip_address.is_some() || props.name.to_lowercase() == "bbox");
-            } else {
-                props.debug_props =
-                    Some(vec!["SHGetPropertyStoreFromParsingName failed".to_string()]);
             }
             CoUninitialize();
         }
@@ -553,29 +385,11 @@ pub fn get_file_properties(path: String) -> Result<FileProperties, CommandError>
         folders_count: None,
         files_count: None,
         shortcut,
-        is_media_device: Some(false),
-        has_web_page: Some(false),
-        manufacturer: None,
-        model_name: None,
-        model_number: None,
-        serial_number: None,
-        mac_address: None,
-        ip_address: None,
-        unique_id: None,
-        web_page_url: None,
-        debug_props: None,
     })
 }
 
 fn get_shortcut_info(path: &std::path::Path) -> Option<crate::models::ShortcutInfo> {
     crate::platform::platform().shortcut_info(path)
-}
-
-/// Retourne le chemin cible d'un raccourci (.lnk sur Windows, .desktop sur Linux).
-pub fn resolve_shortcut_target(path: &str) -> Option<String> {
-    get_shortcut_info(std::path::Path::new(path))
-        .map(|info| info.target)
-        .or_else(|| crate::platform::platform().resolve_shortcut(path))
 }
 
 pub async fn calculate_folder_size(path: String) -> Result<FolderSizeResult, CommandError> {
@@ -728,7 +542,7 @@ mod directory_tests {
         let missing = root.path().join("missing").to_string_lossy().into_owned();
         let runtime = tokio::runtime::Runtime::new().unwrap();
         assert!(runtime
-            .block_on(list_dir(missing, None, None, None))
+            .block_on(list_dir(missing, None, None))
             .is_err());
     }
 
@@ -738,7 +552,22 @@ mod directory_tests {
         let source = directory.path().join("folder");
         fs::create_dir_all(source.join("nested")).unwrap();
         fs::write(source.join("nested/file.txt"), b"data").unwrap();
+        fs::write(source.join("nested/File10.txt"), b"ten").unwrap();
+        fs::write(source.join("nested/file2.txt"), b"two").unwrap();
+        fs::create_dir(source.join("nested/child")).unwrap();
         let runtime = tokio::runtime::Runtime::new().unwrap();
+        let ordinary = runtime
+            .block_on(list_dir(
+                source.join("nested").to_string_lossy().into_owned(),
+                None,
+                None,
+            ))
+            .unwrap();
+        let expected = ["child", "file.txt", "file2.txt", "File10.txt"];
+        assert_eq!(
+            ordinary.iter().map(|entry| entry.name.as_str()).collect::<Vec<_>>(),
+            expected,
+        );
         for format in ["zip", "7z", "tar", "tar.zst"] {
             let archive = directory.path().join(format!("listing.{format}"));
             FileOperationManager::perform_compress(
@@ -750,7 +579,6 @@ mod directory_tests {
             let root = runtime
                 .block_on(list_dir(
                     archive.to_string_lossy().into_owned(),
-                    None,
                     None,
                     None,
                 ))
@@ -765,12 +593,14 @@ mod directory_tests {
                     archive.join("folder/nested").to_string_lossy().into_owned(),
                     None,
                     None,
-                    None,
                 ))
                 .unwrap();
-            assert_eq!(nested.len(), 1);
             assert_eq!(
-                std::path::PathBuf::from(&nested[0].path),
+                nested.iter().map(|entry| entry.name.as_str()).collect::<Vec<_>>(),
+                expected,
+            );
+            assert_eq!(
+                std::path::PathBuf::from(&nested[1].path),
                 archive.join("folder").join("nested").join("file.txt")
             );
         }

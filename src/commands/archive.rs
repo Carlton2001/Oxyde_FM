@@ -107,8 +107,6 @@ fn list_iso(path: &Path, internal_prefix: &str) -> Result<Vec<FileEntry>, Comman
             folders_count: None,
             files_count: None,
             modified: 0,
-            is_readonly: true,
-            is_protected: false,
             original_path: None,
             network_details: None,
             deleted_time: None,
@@ -186,8 +184,6 @@ fn list_zip(path: &Path, internal_prefix: &str) -> Result<Vec<FileEntry>, Comman
                     })
                     .map(|ts| ts.and_utc().timestamp_millis() as u64)
                     .unwrap_or(0),
-                is_readonly: false,
-                is_protected: false,
                 original_path: None,
                 network_details: None,
                 deleted_time: None,
@@ -236,8 +232,6 @@ fn list_seven_zip(path: &Path, internal_prefix: &str) -> Result<Vec<FileEntry>, 
                         folders_count: None,
                         files_count: None,
                         modified: 0,
-                        is_readonly: false,
-                        is_protected: false,
                         original_path: None,
                         network_details: None,
                         deleted_time: None,
@@ -315,8 +309,6 @@ fn list_tar(
                 folders_count: None,
                 files_count: None,
                 modified: entry.header().mtime().unwrap_or(0) * 1000,
-                is_readonly: false,
-                is_protected: false,
                 original_path: None,
                 network_details: None,
                 deleted_time: None,
@@ -847,7 +839,6 @@ mod disk_image_tests {
         let root =
             list_archive_contents(image.to_string_lossy().into_owned(), String::new()).unwrap();
         assert_eq!(root.len(), 2);
-        assert!(root.iter().all(|entry| entry.is_readonly));
         let docs = root.iter().find(|entry| entry.name == "DOCS").unwrap();
         assert!(docs.is_dir);
         let nested =

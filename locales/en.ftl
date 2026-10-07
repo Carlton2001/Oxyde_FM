@@ -8,11 +8,6 @@ rename-error-access-denied = Renaming was denied. Check this item’s permission
 rename-error-invalid-name = Renaming failed. Check the name and try again.
 rename-error-unavailable = This item cannot be renamed right now.
 rename-error-task-failed = Renaming failed. Try again.
-conflict-title = Files already exist
-conflict-description = { $count ->
-    [one] { $number } conflict detected. What would you like to do?
-   *[other] { $number } conflicts detected. What would you like to do?
-    }
 conflict-skip-all = Skip all
 conflict-replace-all = Replace all
 

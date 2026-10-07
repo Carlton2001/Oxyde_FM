@@ -549,7 +549,6 @@ impl TextInput {
                     .await;
                 let result = oxyde_lib::commands::io::list_dir(
                     parent.clone(),
-                    None,
                     Some(true),
                     Some(true),
                 )

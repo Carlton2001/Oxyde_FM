@@ -2,7 +2,6 @@ use crate::models::{CommandError, FileEntry};
 use dashmap::DashMap;
 use jwalk::WalkDir;
 use rayon::prelude::*;
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufReader, Read};
@@ -12,7 +11,7 @@ use std::sync::{Arc, Mutex};
 
 use crate::utils::hardware::{get_physical_disk_id, is_ssd};
 
-#[derive(Clone, Serialize)]
+#[derive(Clone)]
 pub struct DuplicatesProgress {
     pub stage: String,
     pub current: usize,
@@ -42,13 +41,11 @@ impl Default for DuplicateSearchState {
     }
 }
 
-#[derive(Serialize, Deserialize)]
 pub struct DuplicateGroup {
     pub size: u64,
     pub files: Vec<FileEntry>,
 }
 
-#[derive(Deserialize)]
 pub struct DuplicateSearchOptions {
     pub by_name: bool,
     pub by_size: bool,

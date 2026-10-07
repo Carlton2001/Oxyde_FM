@@ -410,7 +410,6 @@ pub struct OxydeApp {
     pub list_width: f32,
     pub split_sizes: std::collections::HashMap<String, f32>,
     pub pane_sizes: std::collections::HashMap<String, Size<f32>>,
-    pub pane_origins: std::collections::HashMap<String, Point<f32>>,
     pub list_bounds: std::collections::HashMap<String, Bounds<f32>>,
     pub scrollbar_origins: std::collections::HashMap<String, Point<f32>>,
     pub breadcrumb_menu: Option<(String, String, usize, Vec<FileEntry>)>, // (pane_id, path, index, dirs)
@@ -419,7 +418,6 @@ pub struct OxydeApp {
     pub submenu_timer: Option<Task<()>>,
     pub submenu_close_timer: Option<Task<()>>,
     pub dragging_tab: Option<(String, usize)>,
-    pub mouse_pos: Point<Pixels>,
     pub file_ops: std::sync::Arc<oxyde_lib::systems::file_ops::FileOperationManager>,
     pub watcher_changes: std::sync::Arc<std::sync::Mutex<std::collections::VecDeque<String>>>,
     pub _path_watchers: std::collections::HashMap<String, drive_watchers::DirectoryWatcher>,
@@ -846,7 +844,6 @@ impl OxydeApp {
             list_width: logical(1000.0),
             split_sizes: std::collections::HashMap::new(),
             pane_sizes: std::collections::HashMap::new(),
-            pane_origins: std::collections::HashMap::new(),
             list_bounds: std::collections::HashMap::new(),
             scrollbar_origins: std::collections::HashMap::new(),
             breadcrumb_menu: None,
@@ -855,7 +852,6 @@ impl OxydeApp {
             submenu_timer: None,
             submenu_close_timer: None,
             dragging_tab: None,
-            mouse_pos: Point::default(),
             file_ops: std::sync::Arc::new(oxyde_lib::systems::file_ops::FileOperationManager::new()),
             watcher_changes: std::sync::Arc::new(std::sync::Mutex::new(
                 std::collections::VecDeque::new(),
@@ -1853,13 +1849,13 @@ impl OxydeApp {
                 })
                 .await;
                 handle.update(&mut cx, |this, cx| match checked {
-                    Ok(Ok(response)) if !response.conflicts.is_empty() => {
+                    Ok(Ok(response)) if !response.is_empty() => {
                         this.pending_file_operations
                             .push_back(PendingFileOperation {
                                 paths,
                                 target_dir,
                                 is_move,
-                                conflicts: response.conflicts,
+                                conflicts: response,
                                 dialog: Default::default(),
                                 runtime,
                             });
@@ -2535,7 +2531,6 @@ impl Render for OxydeApp {
                         }
                     }
                     h.update(cx, |this, cx| {
-                        this.mouse_pos = e.position;
                         if !e.dragging() {
                             this.finish_pointer_drag(cx);
                             return;
@@ -2988,7 +2983,6 @@ impl Render for OxydeApp {
                             )))
                             .label(cx.i18n().text(label))
                             .label_size(13.0)
-                            .variant(crate::ui::elements::button::ButtonVariant::Subtle)
                             .on_click(move |_, cx| {
                                 let pid_inner = pid_cap.clone();
                                 h_inner.update(cx, |this, cx| {
@@ -3060,7 +3054,6 @@ impl Render for OxydeApp {
                             )))
                             .label(cx.i18n().text(label))
                             .label_size(13.0)
-                            .variant(crate::ui::elements::button::ButtonVariant::Subtle)
                             .on_click(move |_, cx| {
                                 let pid_inner = pid_cap.clone();
                                 h_inner.update(cx, |this, cx| {
@@ -3126,7 +3119,6 @@ impl Render for OxydeApp {
                             )))
                             .label(cx.i18n().text(label))
                             .label_size(13.0)
-                            .variant(crate::ui::elements::button::ButtonVariant::Subtle)
                             .on_click(move |_, cx| {
                                 let pid_inner = pid_cap.clone();
                                 h_inner.update(cx, |this, cx| {

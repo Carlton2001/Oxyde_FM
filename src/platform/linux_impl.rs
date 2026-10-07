@@ -182,7 +182,6 @@ impl Platform for LinuxPlatform {
                 let device = parts.next()?;
                 let mount = parts.next()?;
                 let fs_type = parts.next()?;
-                let options = parts.next().unwrap_or("");
 
                 if SKIP_FS.contains(&fs_type) {
                     return None;
@@ -228,13 +227,10 @@ impl Platform for LinuxPlatform {
                 }
                 .to_string();
 
-                let is_readonly = options.split(',').any(|o| o == "ro");
-
                 Some(DriveInfo {
                     path: mount.to_string(),
                     label,
                     drive_type,
-                    is_readonly,
                     // TODO: remplir via statvfs (nécessite la crate `nix`)
                     total_bytes: 0,
                     free_bytes: 0,
@@ -254,7 +250,6 @@ impl Platform for LinuxPlatform {
                 path: "/".to_string(),
                 label: "Root".to_string(),
                 drive_type: "fixed".to_string(),
-                is_readonly: false,
                 total_bytes: 0,
                 free_bytes: 0,
                 media_type: None,
@@ -319,34 +314,6 @@ impl Platform for LinuxPlatform {
                 })
             })
             .collect()
-    }
-
-    fn resolve_shortcut(&self, path: &str) -> Option<String> {
-        // Fichiers .desktop (freedesktop.org)
-        let p = std::path::Path::new(path);
-        if p.extension()?.eq_ignore_ascii_case("desktop") {
-            let content = std::fs::read_to_string(p).ok()?;
-            // Cherche d'abord Path= (répertoire de travail), puis Exec=
-            for line in content.lines() {
-                if let Some(val) = line.strip_prefix("Path=") {
-                    let val = val.trim();
-                    if !val.is_empty() {
-                        return Some(val.to_string());
-                    }
-                }
-            }
-            for line in content.lines() {
-                if let Some(exec) = line.strip_prefix("Exec=") {
-                    // Supprime les codes de champs (%u, %f, %F, etc.)
-                    let cmd = exec.trim().split_whitespace().next()?;
-                    let cmd = cmd.trim_end_matches(|c: char| c == '%' || c.is_ascii_uppercase());
-                    if !cmd.is_empty() {
-                        return Some(cmd.to_string());
-                    }
-                }
-            }
-        }
-        None
     }
 
     fn show_properties_dialog(&self, path: &str) {

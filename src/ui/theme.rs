@@ -550,19 +550,12 @@ mod tests {
     fn theme_preference_has_a_stable_identifier() {
         for id in ThemeId::ALL {
             assert_eq!(ThemeId::from_id(id.as_str()), id);
-            let serialized = serde_json::to_string(&id).unwrap();
-            assert_eq!(serialized, format!("\"{}\"", id.as_str()));
-            assert_eq!(serde_json::from_str::<ThemeId>(&serialized).unwrap(), id);
         }
         assert!(!ThemeId::Monokai.is_light());
-        assert_eq!(
-            serde_json::to_string(&ThemeId::default()).unwrap(),
-            "\"dark\""
-        );
-        assert_eq!(
-            serde_json::from_str::<ThemeId>("\"dark\"").unwrap(),
-            ThemeId::Dark
-        );
+        assert_eq!(ThemeId::default().as_str(), "dark");
+        assert_eq!(ThemeId::from_id("dark"), ThemeId::Dark);
+        assert_eq!(ThemeId::from_id("oxyde-dark"), ThemeId::Dark);
+        assert_eq!(ThemeId::from_id("oxyde-light"), ThemeId::Light);
     }
 }
 

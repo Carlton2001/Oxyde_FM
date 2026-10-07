@@ -186,17 +186,12 @@ impl OxydeApp {
                                     width: bounds.size.width.as_f32(),
                                     height: bounds.size.height.as_f32(),
                                 };
-                                let origin = Point {
-                                    x: bounds.origin.x.as_f32(),
-                                    y: bounds.origin.y.as_f32(),
-                                };
                                 h.update(cx, |this, cx| {
                                     let width_changed = this
                                         .pane_sizes
                                         .get(&p_id)
                                         .is_none_or(|old| (old.width - size.width).abs() > 1.0);
                                     this.pane_sizes.insert(p_id.clone(), size);
-                                    this.pane_origins.insert(p_id.clone(), origin);
                                     if width_changed {
                                         if let Some(pane) = this.state.layout.find_pane(&p_id) {
                                             let parts = pane
@@ -449,7 +444,7 @@ impl OxydeApp {
                     } else if t_ix == tabs_count - 1 {
                         TabPosition::Last
                     } else {
-                        TabPosition::Middle(t_ix.cmp(&active_idx))
+                        TabPosition::Middle
                     };
 
                     let label_cap = label.clone();

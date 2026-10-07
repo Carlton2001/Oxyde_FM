@@ -381,7 +381,6 @@ mod tests {
             path: "C:\\".into(),
             label: "System".into(),
             drive_type: "fixed".into(),
-            is_readonly: false,
             total_bytes: 100,
             free_bytes: 50,
             media_type: Some("SSD".into()),

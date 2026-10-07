@@ -1,10 +1,9 @@
 use crate::models::{
-    get_file_entry_from_path, CommandError, ConflictEntry, ConflictResponse, HistoryManager,
+    get_file_entry_from_path, CommandError, ConflictEntry, HistoryManager,
     Transaction, TransactionDetails, TransactionType, TrashEntry,
 };
 use crate::utils::path_security::validate_path;
 use log::{info, warn};
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -316,7 +315,7 @@ pub async fn purge_recycle_bin(paths: Vec<String>) -> Result<(), CommandError> {
 pub async fn check_conflicts(
     paths: Vec<String>,
     target_dir: String,
-) -> Result<ConflictResponse, CommandError> {
+) -> Result<Vec<ConflictEntry>, CommandError> {
     use crate::systems::archive_workspace::{
         virtual_destination, virtual_source, ArchiveWorkspaces,
     };
@@ -339,7 +338,7 @@ pub async fn check_conflicts(
             .collect::<Result<Vec<_>, _>>()
             .map_err(CommandError::ArchiveError)?;
         let mut response = check_conflicts_real(sources, target.to_string_lossy().into_owned())?;
-        for conflict in &mut response.conflicts {
+        for conflict in &mut response {
             conflict.source.path = workspaces
                 .display(std::path::Path::new(&conflict.source.path))
                 .to_string_lossy()
@@ -357,54 +356,12 @@ pub async fn check_conflicts(
 fn check_conflicts_real(
     paths: Vec<String>,
     target_dir: String,
-) -> Result<ConflictResponse, CommandError> {
+) -> Result<Vec<ConflictEntry>, CommandError> {
     let mut conflicts = Vec::new();
     let target_base = validate_path(&target_dir)?;
 
-    let mut is_cross_volume = false;
-    let mut total_size = 0;
-    let mut total_files = 0;
-    let mut likely_large = false;
-
-    let target_root = target_base.components().next();
-    let start_time = std::time::Instant::now();
-
     for path_str in paths {
         let source_path = validate_path(&path_str)?;
-
-        // Cross-volume check
-        if let Some(t_root) = target_root {
-            if let Some(s_root) = source_path.components().next() {
-                if t_root != s_root {
-                    is_cross_volume = true;
-                }
-            }
-        }
-
-        // Quick capped estimation walk
-        if !likely_large {
-            if source_path.is_dir() {
-                for entry in walkdir::WalkDir::new(&source_path)
-                    .into_iter()
-                    .filter_map(|e| e.ok())
-                {
-                    if entry.file_type().is_file() {
-                        total_size += entry.metadata().map(|m| m.len()).unwrap_or(0);
-                        total_files += 1;
-                    }
-                    // Cap at 200 items or 50ms to keep UI responsive
-                    if total_files > 200 || start_time.elapsed().as_millis() > 50 {
-                        likely_large = true;
-                        break;
-                    }
-                }
-            } else {
-                total_size += std::fs::metadata(&source_path)
-                    .map(|m| m.len())
-                    .unwrap_or(0);
-                total_files += 1;
-            }
-        }
 
         // Conflict check
         if let Some(file_name) = source_path.file_name() {
@@ -416,13 +373,7 @@ fn check_conflicts_real(
         }
     }
 
-    Ok(ConflictResponse {
-        conflicts,
-        total_size,
-        total_files,
-        is_cross_volume,
-        likely_large,
-    })
+    Ok(conflicts)
 }
 
 fn add_conflict_recursive(
@@ -510,7 +461,7 @@ fn add_conflict_recursive(
     Ok(())
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct TrashSystemConfig {
     pub drive_path: String,
     pub max_size_mb: u64,
@@ -1300,11 +1251,10 @@ pub async fn redo_last_action(
                             }
                         }
                     }
-                    let total_bytes = files.iter().try_fold(0u64, |total, (source, _)| {
+                    for (source, _) in &files {
                         std::fs::metadata(source)
-                            .map(|metadata| total.saturating_add(metadata.len()))
-                            .map_err(|error| CommandError::IoError(error.to_string()))
-                    })?;
+                            .map_err(|error| CommandError::IoError(error.to_string()))?;
+                    }
                     let mut created_dirs: Vec<PathBuf> = tx
                         .details
                         .created_dirs
@@ -1334,8 +1284,6 @@ pub async fn redo_last_action(
                     if !files.is_empty() {
                         if let Err(error) = perform_copy_with_progress(
                             files,
-                            total_bytes,
-                            "redo_copy",
                             Arc::new(AtomicBool::new(false)),
                         ) {
                             for directory in made_dirs.iter().rev() {
@@ -1546,11 +1494,9 @@ pub async fn redo_last_action(
     Ok(transaction)
 }
 
-// Helper to perform copy with progress
+// Copies files with cancellation and rollback on failure.
 fn perform_copy_with_progress(
     files: Vec<(PathBuf, PathBuf)>,
-    _total_bytes: u64,
-    _task_name: &str,
     cancel_flag: Arc<AtomicBool>,
 ) -> Result<(), CommandError> {
     use std::fs;
@@ -1795,8 +1741,6 @@ mod copy_redo_tests {
                 (first_source, first_destination.clone()),
                 (second_source, second_destination.clone()),
             ],
-            0,
-            "test",
             Arc::new(AtomicBool::new(false)),
         );
 

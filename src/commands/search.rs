@@ -14,17 +14,6 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::SystemTime;
 
-/*
-#[derive(Clone, serde::Serialize)]
-struct SearchEvent {
-    pub panel_id: String,
-    pub tab_id: String,
-    pub results: Vec<FileEntry>,
-    pub completed: bool,
-    pub request_id: Option<u64>,
-}
-*/
-
 #[derive(Clone)]
 enum SearchPattern {
     Glob(Pattern, bool, bool),   // (pattern, ignore_accents, case_sensitive)
@@ -210,7 +199,6 @@ pub fn advanced_search(
                             is_hidden: hidden,
                             is_system: system,
                             is_symlink: entry.file_type().is_symlink(),
-                            is_readonly: m.permissions().readonly(),
                             ..Default::default()
                         });
                     }
@@ -340,7 +328,6 @@ pub fn quick_search(
                             .duration_since(SystemTime::UNIX_EPOCH)
                             .unwrap_or_default()
                             .as_millis() as u64,
-                        is_readonly: metadata.permissions().readonly(),
                         ..FileEntry::default()
                     });
                     count += 1;

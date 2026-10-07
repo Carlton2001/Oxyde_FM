@@ -18,13 +18,6 @@ rename-error-unavailable = Questo elemento non può essere rinominato al momento
 
 rename-error-task-failed = Rinomina non riuscita. Riprova.
 
-conflict-title = I file esistono già
-
-conflict-description = { $count ->
-    [one] Rilevato { $number } conflitto. Cosa vuoi fare?
-   *[other] Rilevati { $number } conflitti. Cosa vuoi fare?
-    }
-
 conflict-skip-all = Ignora tutti
 
 conflict-replace-all = Sostituisci tutti

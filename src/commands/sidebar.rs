@@ -35,8 +35,6 @@ fn get_sidebar_nodes_blocking(path: String) -> Result<Vec<SidebarNode>, CommandE
         let (is_hidden, is_system, _) = crate::utils::get_file_attributes(&metadata, &name);
 
         // Efficiently check for subdirectories
-        // Detect if directory is protected (Access Denied)
-        let mut is_protected = false;
         let mut node_has_subdirs = false;
 
         let node_path = entry.path();
@@ -46,14 +44,7 @@ fn get_sidebar_nodes_blocking(path: String) -> Result<Vec<SidebarNode>, CommandE
                     .filter_map(|e| e.ok())
                     .any(|sub_entry| sub_entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false));
             }
-            Err(e) => {
-                let kind = e.kind();
-                if kind == std::io::ErrorKind::PermissionDenied
-                    || kind == std::io::ErrorKind::NotFound
-                {
-                    is_protected = true;
-                }
-            }
+            Err(_) => {}
         }
 
         nodes.push(SidebarNode {
@@ -61,8 +52,6 @@ fn get_sidebar_nodes_blocking(path: String) -> Result<Vec<SidebarNode>, CommandE
             path: node_path.to_string_lossy().to_string(),
             is_hidden,
             is_system,
-            is_readonly: metadata.permissions().readonly(),
-            is_protected,
             has_subdirs: node_has_subdirs,
         });
     }
@@ -124,7 +113,6 @@ fn get_subtree_nodes_blocking(
 
             let node_path = entry.path();
             let mut node_has_subdirs = false;
-            let mut is_protected = false;
 
             if !is_reparse_point {
                 match fs::read_dir(&node_path) {
@@ -133,14 +121,7 @@ fn get_subtree_nodes_blocking(
                             .filter_map(|e| e.ok())
                             .any(|se| se.file_type().map(|ft| ft.is_dir()).unwrap_or(false));
                     }
-                    Err(e) => {
-                        let kind = e.kind();
-                        if kind == std::io::ErrorKind::PermissionDenied
-                            || kind == std::io::ErrorKind::NotFound
-                        {
-                            is_protected = true;
-                        }
-                    }
+                    Err(_) => {}
                 }
             }
 
@@ -149,8 +130,6 @@ fn get_subtree_nodes_blocking(
                 path: node_path.to_string_lossy().to_string(),
                 is_hidden,
                 is_system,
-                is_readonly: metadata.permissions().readonly(),
-                is_protected,
                 has_subdirs: node_has_subdirs,
             });
         }

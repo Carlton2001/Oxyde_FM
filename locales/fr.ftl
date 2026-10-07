@@ -12,13 +12,7 @@ rename-error-invalid-name = Le renommage a échoué. Vérifiez le nom et réessa
 rename-error-unavailable = Impossible de renommer cet élément pour le moment.
 rename-error-task-failed = Le renommage a échoué. Réessayez.
 
-## Copy/move conflicts. $count is a number, never a preformatted string.
-conflict-title = Fichiers déjà présents
-conflict-description =
-    { $count ->
-        [one] { $number } conflit détecté. Que souhaitez-vous faire ?
-       *[other] { $number } conflits détectés. Que souhaitez-vous faire ?
-    }
+## Copy/move conflicts.
 conflict-skip-all = Tout ignorer
 conflict-replace-all = Tout remplacer
 

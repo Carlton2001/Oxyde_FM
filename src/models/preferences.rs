@@ -1,5 +1,3 @@
-use serde::{Deserialize, Serialize};
-
 pub const SEARCH_LIMIT_STEP: u32 = 500;
 pub const MAX_SEARCH_LIMIT: u32 = u32::MAX / SEARCH_LIMIT_STEP * SEARCH_LIMIT_STEP;
 
@@ -34,13 +32,10 @@ mod search_limit_tests {
     }
 }
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum ThemeId {
     #[default]
-    #[serde(alias = "oxyde-dark")]
     Dark,
-    #[serde(alias = "oxyde-light")]
     Light,
     AyuLight,
     AyuDark,
@@ -118,18 +113,13 @@ impl ThemeId {
     }
 }
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum Language {
     #[default]
-    #[serde(rename = "fr")]
     French,
-    #[serde(rename = "en")]
     English,
-    #[serde(rename = "de")]
     German,
-    #[serde(rename = "es")]
     Spanish,
-    #[serde(rename = "it")]
     Italian,
 }
 
@@ -198,7 +188,7 @@ mod language_tests {
     }
 
     #[test]
-    fn language_identifiers_accept_regions_and_survive_serialization() {
+    fn language_identifiers_accept_regions_and_round_trip() {
         for (locale, language) in [
             ("fr-FR", Language::French),
             ("en-US", Language::English),
@@ -209,9 +199,7 @@ mod language_tests {
             assert_eq!(Language::from_id(locale), language);
         }
         for language in Language::ALL {
-            let serialized = serde_json::to_string(&language).unwrap();
-            assert_eq!(serialized, format!("\"{}\"", language.as_str()));
-            assert_eq!(serde_json::from_str::<Language>(&serialized).unwrap(), language);
+            assert_eq!(Language::from_id(language.as_str()), language);
         }
         assert_eq!(Language::from_id("pt-BR"), Language::French);
     }

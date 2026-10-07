@@ -93,10 +93,6 @@ pub enum Message {
     ConflictBack,
     ConflictRecentTab,
     ConflictOlderTab,
-    #[cfg(test)]
-    ConflictTitle,
-    #[cfg(test)]
-    ConflictDescription,
     ConflictSkipAll,
     ConflictReplaceAll,
     Close,
@@ -503,10 +499,6 @@ impl Message {
             Self::ConflictBack => "conflict-back",
             Self::ConflictRecentTab => "conflict-recent-tab",
             Self::ConflictOlderTab => "conflict-older-tab",
-            #[cfg(test)]
-            Self::ConflictTitle => "conflict-title",
-            #[cfg(test)]
-            Self::ConflictDescription => "conflict-description",
             Self::ConflictSkipAll => "conflict-skip-all",
             Self::ConflictReplaceAll => "conflict-replace-all",
             Self::Close => "common-close",
@@ -1103,8 +1095,6 @@ mod tests {
                 Message::ConflictBack,
                 Message::ConflictRecentTab,
                 Message::ConflictOlderTab,
-                Message::ConflictTitle,
-                Message::ConflictDescription,
                 Message::ConflictSkipAll,
                 Message::ConflictReplaceAll,
                 Message::Close,
@@ -1562,19 +1552,21 @@ mod tests {
     }
 
     #[test]
-    fn conflict_count_uses_french_plural_rules() {
+    fn file_count_uses_french_plural_rules() {
         let i18n = I18n::default();
         for (count, expected) in [
-            (0, "conflit détecté"),
-            (1, "conflit détecté"),
-            (2, "conflits détectés"),
+            (0, "fichier"),
+            (1, "fichier"),
+            (2, "fichiers"),
         ] {
             let mut args = FluentArgs::new();
             args.set("count", count);
             args.set("number", count.to_string());
-            let text = i18n.text_with_args(Message::ConflictDescription, &args);
-            assert!(text.contains(expected), "{text}");
-            assert!(text.contains(&count.to_string()), "{text}");
+            let text = i18n.text_with_args(Message::StatusFiles, &args);
+            assert_eq!(
+                text.replace(['\u{2068}', '\u{2069}'], ""),
+                format!("{count} {expected}"),
+            );
         }
     }
 
@@ -1584,8 +1576,8 @@ mod tests {
         assert_eq!(i18n.text(Message::Cancel).as_ref(), "Cancel");
         assert_eq!(i18n.text(Message::RenameTitle).as_ref(), "Renommer");
         assert_eq!(
-            i18n.text(Message::ConflictTitle).as_ref(),
-            "Fichiers déjà présents"
+            i18n.text(Message::ConflictAdvancedTitle).as_ref(),
+            "Résolution de conflits"
         );
         assert_eq!(i18n.format("unknown-key", None).as_ref(), "[unknown-key]");
     }
@@ -1596,16 +1588,18 @@ mod tests {
         let mut args = FluentArgs::new();
         args.set("count", 0);
         args.set("number", "0");
-        assert!(i18n
-            .text_with_args(Message::ConflictDescription, &args)
-            .contains("conflit détecté"));
+        assert_eq!(
+            i18n.text_with_args(Message::StatusFiles, &args)
+                .replace(['\u{2068}', '\u{2069}'], ""),
+            "0 fichier",
+        );
     }
 
     #[test]
     fn missing_arguments_produce_a_visible_marker_without_panicking() {
         assert_eq!(
-            I18n::default().text(Message::ConflictDescription).as_ref(),
-            "[conflict-description]"
+            I18n::default().text(Message::StatusFiles).as_ref(),
+            "[status-files]"
         );
     }
 

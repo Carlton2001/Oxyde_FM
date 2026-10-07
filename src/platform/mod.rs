@@ -19,7 +19,7 @@ pub struct MountedDiskImage {
     pub roots: Vec<String>,
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Debug, Default, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct PeekStatus {
     pub installed: bool,
     pub enabled: bool,
@@ -128,10 +128,6 @@ pub trait Platform: Send + Sync {
     /// The returned guard owns the watcher. All these calls run in the background.
     fn watch_quick_access_changes(&self, revision: std::sync::Arc<std::sync::atomic::AtomicU64>)
         -> Result<Option<Box<dyn Send>>, String>;
-
-    /// Résout un fichier de raccourci (.lnk sur Windows, .desktop sur Linux).
-    /// Retourne le chemin cible, ou `None` si le fichier n'est pas un raccourci connu.
-    fn resolve_shortcut(&self, path: &str) -> Option<String>;
 
     /// Affiche la boîte de dialogue propriétés native pour un fichier/dossier.
     fn show_properties_dialog(&self, path: &str);

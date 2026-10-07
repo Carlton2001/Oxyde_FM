@@ -1,5 +1,4 @@
 use crate::models::transaction::Transaction;
-use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
 
 fn cleanup_replacement_backups(transaction: &Transaction) {
@@ -17,7 +16,7 @@ fn cleanup_replacement_backups(transaction: &Transaction) {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct HistoryState {
     pub undo_stack: Vec<Transaction>,
     pub redo_stack: Vec<Transaction>,

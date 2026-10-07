@@ -1,29 +1,16 @@
 use crate::models::CommandError;
-use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::time::SystemTime;
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct NetworkDetails {
     pub category: String,
     pub workgroup: String,
     pub location: String,
 }
 
-#[cfg(test)]
-mod network_metadata_tests {
-    #[test]
-    fn older_entries_without_network_metadata_still_deserialize() {
-        let mut json = serde_json::to_value(super::FileEntry::default()).unwrap();
-        json.as_object_mut().unwrap().remove("network_details");
-        let file: super::FileEntry = serde_json::from_value(json).unwrap();
-        assert!(file.network_details.is_none());
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct FileEntry {
-    #[serde(default)]
     pub network_details: Option<NetworkDetails>,
     pub name: String,
     pub path: String,
@@ -36,25 +23,21 @@ pub struct FileEntry {
     pub folders_count: Option<u64>,
     pub files_count: Option<u64>,
     pub modified: u64,
-    pub is_readonly: bool,
-    pub is_protected: bool,
     pub is_calculated: bool,
     pub original_path: Option<String>,
     pub deleted_time: Option<i64>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct ShortcutInfo {
     pub target: String,
     pub arguments: String,
     pub working_dir: String,
     pub description: String,
-    pub icon_location: String,
-    pub icon_index: i32,
     pub run_window: i32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct FileProperties {
     pub name: String,
     pub path: String,
@@ -70,43 +53,29 @@ pub struct FileProperties {
     pub folders_count: Option<u64>,
     pub files_count: Option<u64>,
     pub shortcut: Option<ShortcutInfo>,
-    pub is_media_device: Option<bool>,
-    pub has_web_page: Option<bool>,
-    pub manufacturer: Option<String>,
-    pub model_name: Option<String>,
-    pub model_number: Option<String>,
-    pub serial_number: Option<String>,
-    pub mac_address: Option<String>,
-    pub ip_address: Option<String>,
-    pub unique_id: Option<String>,
-    pub web_page_url: Option<String>,
-    pub debug_props: Option<Vec<String>>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct FolderSizeResult {
     pub size: u64,
     pub folders_count: u64,
     pub files_count: u64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct SidebarNode {
     pub name: String,
     pub path: String,
     pub is_hidden: bool,
     pub is_system: bool,
-    pub is_readonly: bool,
-    pub is_protected: bool,
     pub has_subdirs: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DriveInfo {
     pub path: String,
     pub label: String,
     pub drive_type: String,
-    pub is_readonly: bool,
     pub total_bytes: u64,
     pub free_bytes: u64,
     pub media_type: Option<String>,
@@ -121,13 +90,13 @@ impl DriveInfo {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct QuickAccessItem {
     pub name: String,
     pub path: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct WinMenuItem {
     pub id: i32,
     pub label: String,
@@ -136,30 +105,20 @@ pub struct WinMenuItem {
     pub children: Vec<WinMenuItem>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct ConflictEntry {
     pub name: String,
     pub source: FileEntry,
     pub target: FileEntry,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ConflictResponse {
-    pub conflicts: Vec<ConflictEntry>,
-    pub total_size: u64,
-    pub total_files: usize,
-    pub is_cross_volume: bool,
-    pub likely_large: bool,
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "lowercase")]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ConflictAction {
     Replace,
     Skip,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct TrashEntry {
     pub name: String,
     pub original_path: String,
@@ -170,18 +129,13 @@ pub struct TrashEntry {
     pub modified: u64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct NetResource {
-    #[serde(default)]
     pub network_details: Option<NetworkDetails>,
     pub name: String,
     pub remote_path: String,
     pub resource_type: u32, // 1 = Disk, 2 = Print, etc.
-    pub display_type: u32,  // 1 = Generic, 2 = Domain, 3 = Server, 4 = Share, etc.
-    pub usage: u32,         // 1 = Connectable, 2 = Container
-    pub provider: Option<String>,
     pub is_media_device: Option<bool>,
-    pub has_web_page: Option<bool>,
 }
 
 pub fn get_file_entry_from_path(path: &Path) -> Result<FileEntry, CommandError> {
@@ -203,8 +157,6 @@ pub fn get_file_entry_from_path(path: &Path) -> Result<FileEntry, CommandError> 
 
     let (is_hidden, is_system, is_reparse_point) =
         crate::utils::get_file_attributes(&metadata, &name);
-
-    let is_readonly = metadata.permissions().readonly();
 
     // For is_dir, we want to know if it behaves like a directory.
     // On Windows, a Junction/SymlinkDir has the Directory attribute in its symlink_metadata too.
@@ -239,8 +191,6 @@ pub fn get_file_entry_from_path(path: &Path) -> Result<FileEntry, CommandError> 
         folders_count: None,
         files_count: None,
         modified,
-        is_readonly,
-        is_protected: false,
         is_calculated: false,
         original_path: None,
         network_details: None,

@@ -2,7 +2,7 @@
 
 use crate::models::NetResource;
 use log::info;
-use windows::core::{PCWSTR, PSTR, PWSTR};
+use windows::core::{PCWSTR, PWSTR};
 use windows::Win32::Foundation::{WIN32_ERROR, ERROR_MORE_DATA, ERROR_NO_MORE_ITEMS};
 use windows::Win32::NetworkManagement::WNet::{
     WNetAddConnection2W, WNetCancelConnection2W, WNetCloseEnum, WNetEnumResourceW, WNetOpenEnumW,
@@ -13,12 +13,9 @@ use windows::Win32::System::Com::{
     CoInitializeEx, CoUninitialize, IBindCtx, COINIT_APARTMENTTHREADED,
 };
 use windows::Win32::UI::Shell::{
-    BHID_EnumItems, BHID_SFUIObject, FOLDERID_NetworkFolder, IContextMenu, IEnumShellItems,
-    IShellItem, SHGetKnownFolderItem, CMF_NORMAL, GCS_VERBA, KF_FLAG_DEFAULT,
+    BHID_EnumItems, FOLDERID_NetworkFolder, IEnumShellItems,
+    IShellItem, SHGetKnownFolderItem, KF_FLAG_DEFAULT,
     SIGDN_DESKTOPABSOLUTEPARSING, SIGDN_NORMALDISPLAY,
-};
-use windows::Win32::UI::WindowsAndMessaging::{
-    CreatePopupMenu, DestroyMenu, GetMenuItemCount, GetMenuItemID,
 };
 
 use crate::models::FileEntry;
@@ -72,8 +69,6 @@ pub fn list_network_entries(path: Option<String>) -> Result<Vec<FileEntry>, crat
                 is_junction: false,
                 size: 0,
                 modified: 0,
-                is_readonly: false,
-                is_protected: false,
                 is_calculated: true,
                 folders_count: None,
                 files_count: None,
@@ -127,7 +122,6 @@ pub fn get_network_resources(path: Option<String>) -> Result<Vec<NetResource>, S
                                 };
 
                                 let mut is_media_device = Some(false);
-                                let mut has_web_page = Some(false);
 
                                 // Clean up non-UNC paths
                                 if remote_path.is_empty() {
@@ -137,55 +131,6 @@ pub fn get_network_resources(path: Option<String>) -> Result<Vec<NetResource>, S
                                 {
                                     // Found a UPnP or WSD device! Ensure we keep the full path so ShellExecute works.
                                     is_media_device = Some(true);
-
-                                    // Check if it has an "open" verb (means it has a webpage/app for these devices)
-                                    let bind_ctx: Option<&IBindCtx> = None;
-                                    if let Ok(context_menu) = i
-                                        .BindToHandler::<Option<&IBindCtx>, IContextMenu>(
-                                            bind_ctx,
-                                            &BHID_SFUIObject,
-                                        )
-                                    {
-                                        if let Ok(hmenu) = CreatePopupMenu() {
-                                            if context_menu
-                                                .QueryContextMenu(hmenu, 0, 1, 0x7FFF, CMF_NORMAL)
-                                                .is_ok()
-                                            {
-                                                let count = GetMenuItemCount(Some(hmenu));
-                                                for idx in 0..count {
-                                                    let id = GetMenuItemID(hmenu, idx);
-                                                    if id > 0 {
-                                                        let mut name_buf = [0u8; 128];
-                                                        if context_menu
-                                                            .GetCommandString(
-                                                                (id - 1) as usize,
-                                                                GCS_VERBA,
-                                                                None,
-                                                                PSTR::from_raw(
-                                                                    name_buf.as_mut_ptr(),
-                                                                ),
-                                                                name_buf.len() as u32,
-                                                            )
-                                                            .is_ok()
-                                                        {
-                                                            let len = name_buf
-                                                                .iter()
-                                                                .position(|&x| x == 0)
-                                                                .unwrap_or(name_buf.len());
-                                                            let verb = String::from_utf8_lossy(
-                                                                &name_buf[..len],
-                                                            );
-                                                            if verb == "open" {
-                                                                has_web_page = Some(true);
-                                                                break;
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                            let _ = DestroyMenu(hmenu);
-                                        }
-                                    }
                                 }
 
                                 // Ignore empty unreadable names
@@ -195,11 +140,7 @@ pub fn get_network_resources(path: Option<String>) -> Result<Vec<NetResource>, S
                                         name,
                                         remote_path,
                                         resource_type: 1, // Disk
-                                        display_type: 1,  // Server
-                                        usage: 2,         // Container
-                                        provider: Some("Windows Shell".to_string()),
                                         is_media_device,
-                                        has_web_page,
                                     });
                                 }
                             }
@@ -257,19 +198,7 @@ pub fn get_network_resources(path: Option<String>) -> Result<Vec<NetResource>, S
                                                     name: server_name.to_string(),
                                                     remote_path: server_path,
                                                     resource_type: 1, // Disk
-                                                    display_type: 1,  // Server
-                                                    usage: 2,         // Container
-                                                    provider: if !item.lpProvider.is_null() {
-                                                        Some(
-                                                            item.lpProvider
-                                                                .to_string()
-                                                                .unwrap_or_default(),
-                                                        )
-                                                    } else {
-                                                        None
-                                                    },
                                                     is_media_device: Some(false),
-                                                    has_web_page: Some(false),
                                                 });
                                             }
                                         }
@@ -350,15 +279,7 @@ pub fn get_network_resources(path: Option<String>) -> Result<Vec<NetResource>, S
                                 name,
                                 remote_path: remote_name,
                                 resource_type: item.dwType.0,
-                                display_type: item.dwDisplayType,
-                                usage: item.dwUsage,
-                                provider: if !item.lpProvider.is_null() {
-                                    Some(item.lpProvider.to_string().unwrap_or_default())
-                                } else {
-                                    None
-                                },
                                 is_media_device: None,
-                                has_web_page: None,
                             });
                         }
                     } else {

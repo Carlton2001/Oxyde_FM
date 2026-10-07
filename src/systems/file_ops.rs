@@ -1,6 +1,5 @@
 use crate::models::ConflictAction;
 use crate::models::{HistoryManager, Transaction, TransactionDetails, TransactionType};
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -42,7 +41,7 @@ impl Drop for RestoreNormalPriority {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum OpStatus {
     Queued,
     Calculating,
@@ -54,7 +53,7 @@ pub enum OpStatus {
     // Note: WaitingForConflictResolution was removed — conflicts are resolved before the operation starts
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub enum FileOpType {
     Copy,
     Move,
@@ -64,7 +63,7 @@ pub enum FileOpType {
     Extract,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone)]
 pub struct FileOperation {
     pub id: String,
     pub sequence: u64,
@@ -78,49 +77,29 @@ pub struct FileOperation {
     pub processed_files: usize,
     pub current_file: Option<String>,
     pub bytes_per_second: u64,
-    #[serde(skip)]
     pub speed_history: Vec<u64>,
     pub duration_ms: Option<u64>,
-    #[serde(skip)]
     started_at: Option<std::time::Instant>,
-    #[serde(skip)]
     speed_sample_at: Option<std::time::Instant>,
-    #[serde(skip)]
     speed_sample_bytes: u64,
     pub compression_quality: String,
-    #[serde(skip)]
     pub archive_qualities: HashMap<String, String>,
-    #[serde(skip)]
     archive_path_mappings: Vec<(PathBuf, PathBuf)>,
     pub turbo: bool,
-    pub is_cross_volume: bool,
     pub resolutions: Option<HashMap<String, ConflictAction>>,
-    #[serde(skip)]
     pub created_files: Vec<PathBuf>,
-    #[serde(skip)]
     pub created_dirs: Vec<PathBuf>,
-    #[serde(skip)]
     pub replaced_files: Vec<(PathBuf, PathBuf)>,
-    #[serde(skip)]
     pub overwritten_files: Vec<PathBuf>,
-    #[serde(skip)]
     pub moved_files: Vec<(PathBuf, PathBuf)>,
-    #[serde(skip)]
     pub moved_dirs: Vec<(PathBuf, PathBuf)>,
-    #[serde(skip)]
     pub copied_files: Vec<(PathBuf, PathBuf)>,
-    #[serde(skip)]
     pub copied_file_hashes: Vec<(PathBuf, String)>,
-    // Private/Internal state, not serialized by default unless needed
-    #[serde(skip)]
+    // Internal execution state.
     pub cancel_flag: Arc<AtomicBool>,
-    #[serde(skip)]
     pub pause_flag: Arc<AtomicBool>,
-    #[serde(skip)]
     pub turbo_flag: Arc<AtomicBool>,
-    #[serde(skip)]
     resume_requested: bool,
-    #[serde(skip)]
     execution_started: bool,
 }
 
@@ -160,7 +139,6 @@ impl FileOperation {
             archive_qualities: self.archive_qualities.clone(),
             archive_path_mappings: self.archive_path_mappings.clone(),
             turbo: self.turbo,
-            is_cross_volume: self.is_cross_volume,
             resolutions: None,
             created_files: Vec::new(),
             created_dirs: Vec::new(),
@@ -206,7 +184,6 @@ impl FileOperation {
             archive_qualities: HashMap::new(),
             archive_path_mappings: Vec::new(),
             turbo: false,
-            is_cross_volume: false,
             resolutions,
             created_files: Vec::new(),
             created_dirs: Vec::new(),
@@ -349,14 +326,6 @@ impl Default for FileOperationManager {
 impl FileOperationManager {
     pub fn new() -> Self {
         Self::default()
-    }
-
-    pub fn queue_operation(
-        &self,
-        history_manager: Arc<HistoryManager>,
-        op: FileOperation,
-    ) -> String {
-        self.queue_operation_on(&tokio::runtime::Handle::current(), history_manager, op)
     }
 
     pub fn queue_operation_on(
@@ -567,7 +536,7 @@ impl FileOperationManager {
         tokio::task::spawn_blocking(move || {
             let checked = futures::executor::block_on(crate::commands::ops::check_conflicts(sources, destination))
                 .map_err(|error| error.to_string())?;
-            if checked.conflicts.iter().any(|conflict| {
+            if checked.iter().any(|conflict| {
                 Self::get_resolution(std::path::Path::new(&conflict.source.path), &resolutions).is_none()
             }) {
                 return Err("Destination changed while the operation was waiting; retry the transfer to resolve new conflicts".to_string());
@@ -2883,7 +2852,6 @@ mod tests {
             ))
             .unwrap();
         assert!(conflicts
-            .conflicts
             .iter()
             .any(|conflict| conflict.source.path
                 == virtual_folder.join("keep.txt").to_string_lossy()));
@@ -3089,7 +3057,8 @@ mod tests {
                 .acquire_many_owned(2)
                 .await
                 .unwrap();
-            let id = manager.queue_operation(
+            let id = manager.queue_operation_on(
+                &tokio::runtime::Handle::current(),
                 Arc::new(HistoryManager::new()),
                 FileOperation::new(
                     FileOpType::Copy,
@@ -3137,7 +3106,11 @@ mod tests {
                 std::fs::write(&source, b"copy me").unwrap();
                 let op = FileOperation::new(FileOpType::Copy, vec![source], Some(target_dir), None);
                 op.pause_flag.store(true, Ordering::Relaxed);
-                ids.push(manager.queue_operation(history.clone(), op));
+                ids.push(manager.queue_operation_on(
+                    &tokio::runtime::Handle::current(),
+                    history.clone(),
+                    op,
+                ));
             }
             tokio::time::timeout(std::time::Duration::from_secs(5), async {
                 loop {
@@ -3234,7 +3207,8 @@ mod tests {
                 .acquire_owned()
                 .await
                 .unwrap();
-            let first = manager.queue_operation(
+            let first = manager.queue_operation_on(
+                &tokio::runtime::Handle::current(),
                 history.clone(),
                 FileOperation::new(
                     FileOpType::Copy,
@@ -3245,11 +3219,13 @@ mod tests {
             );
             wait_for_status(&manager, &first, OpStatus::Running).await;
             assert!(manager.set_paused(&first, true));
-            let next = manager.queue_operation(
+            let next = manager.queue_operation_on(
+                &tokio::runtime::Handle::current(),
                 history.clone(),
                 FileOperation::new(FileOpType::Copy, vec![other], Some(target.clone()), None),
             );
-            let overlapping = manager.queue_operation(
+            let overlapping = manager.queue_operation_on(
+                &tokio::runtime::Handle::current(),
                 history.clone(),
                 FileOperation::new(FileOpType::Copy, vec![source], Some(target.clone()), None),
             );
@@ -3496,7 +3472,8 @@ mod tests {
             )]);
             let history = Arc::new(HistoryManager::new());
             let manager = FileOperationManager::new();
-            let id = manager.queue_operation(
+            let id = manager.queue_operation_on(
+                &tokio::runtime::Handle::current(),
                 history.clone(),
                 FileOperation::new(
                     FileOpType::Copy,
@@ -3554,7 +3531,8 @@ mod tests {
             )]);
             let history = Arc::new(HistoryManager::new());
             let manager = FileOperationManager::new();
-            let id = manager.queue_operation(
+            let id = manager.queue_operation_on(
+                &tokio::runtime::Handle::current(),
                 history.clone(),
                 FileOperation::new(
                     FileOpType::Copy,
@@ -3608,7 +3586,8 @@ mod tests {
             )]);
             let history = Arc::new(HistoryManager::new());
             let manager = FileOperationManager::new();
-            let id = manager.queue_operation(
+            let id = manager.queue_operation_on(
+                &tokio::runtime::Handle::current(),
                 history.clone(),
                 FileOperation::new(
                     FileOpType::Move,

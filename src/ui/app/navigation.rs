@@ -399,7 +399,6 @@ impl OxydeApp {
             async move {
                 let result = list_dir(
                     path.clone(),
-                    None,
                     Some(show_hidden),
                     Some(show_system),
                 )
@@ -552,7 +551,7 @@ mod sidebar_tests {
         let directory = |path: &str, hidden, system| SidebarItem::Directory {
             node: oxyde_lib::models::SidebarNode {
                 name: path.into(), path: path.into(), is_hidden: hidden, is_system: system,
-                is_readonly: false, is_protected: false, has_subdirs: false,
+                has_subdirs: false,
             },
             depth: 1, is_expanded: false,
         };
@@ -579,7 +578,7 @@ mod sidebar_tests {
             SidebarItem::Directory {
                 node: oxyde_lib::models::SidebarNode {
                     name: "current".into(), path: "/current".into(), is_hidden: false,
-                    is_system: false, is_readonly: false, is_protected: false, has_subdirs: false,
+                    is_system: false, has_subdirs: false,
                 }, depth: 1, is_expanded: false,
             },
         ];

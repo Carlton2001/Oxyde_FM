@@ -1,5 +1,5 @@
 use crate::models::CommandError;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 /// Validates that a path is absolute and exists (optional).
 /// For a File Manager, we generally want to allow access to any valid system path.
@@ -31,15 +31,6 @@ pub fn validate_path(path_str: &str) -> Result<PathBuf, CommandError> {
     Ok(path)
 }
 
-/// Joins a user-supplied path fragment to a base path without claiming confinement.
-///
-/// This is intentionally not a security boundary: absolute paths and `..` components
-/// retain the platform's normal `Path::join` semantics. Use canonicalized containment
-/// checks separately if an operation is ever restricted to a sandbox.
-pub fn join_path(base: &Path, input: &str) -> PathBuf {
-    base.join(input)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -61,22 +52,6 @@ mod tests {
         } else {
             panic!("Expected PathError");
         }
-    }
-
-    #[cfg(target_os = "windows")]
-    #[test]
-    fn test_join_path_windows() {
-        let base = PathBuf::from("C:\\Base");
-
-        let joined = join_path(&base, "sub/file.txt");
-        assert_eq!(joined, PathBuf::from("C:\\Base\\sub/file.txt"));
-    }
-
-    #[test]
-    fn test_join_path_keeps_parent_components() {
-        let base = PathBuf::from("/base");
-        let joined = join_path(&base, "../outside/file.txt");
-        assert_eq!(joined, PathBuf::from("/base/../outside/file.txt"));
     }
 
     #[cfg(target_os = "windows")]

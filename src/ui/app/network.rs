@@ -594,7 +594,6 @@ mod tests {
             label: String::new(),
             total_bytes: 0,
             free_bytes: 0,
-            is_readonly: false,
             media_type: None,
             physical_id: None,
             remote_path: None,

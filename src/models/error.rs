@@ -1,7 +1,6 @@
-use serde::Serialize;
 use std::fmt;
 
-#[derive(Debug, Serialize)]
+#[derive(Debug)]
 pub enum CommandError {
     IoError(String),
     PathNotFound(String),

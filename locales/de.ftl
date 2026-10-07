@@ -18,13 +18,6 @@ rename-error-unavailable = Dieses Element kann derzeit nicht umbenannt werden.
 
 rename-error-task-failed = Umbenennen fehlgeschlagen. Versuchen Sie es erneut.
 
-conflict-title = Dateien sind bereits vorhanden
-
-conflict-description = { $count ->
-    [one] { $number } Konflikt erkannt. Was möchten Sie tun?
-   *[other] { $number } Konflikte erkannt. Was möchten Sie tun?
-    }
-
 conflict-skip-all = Alle überspringen
 
 conflict-replace-all = Alle ersetzen

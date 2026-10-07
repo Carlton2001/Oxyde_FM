@@ -351,13 +351,6 @@ impl Platform for WindowsPlatform {
         crate::commands::system::get_quick_access_items().unwrap_or_default()
     }
 
-    fn resolve_shortcut(&self, path: &str) -> Option<String> {
-        // La résolution .lnk est gérée par get_shortcut_info() dans io.rs,
-        // appelée depuis resolve_shortcut_target(). On ne duplique pas ici.
-        let _ = path;
-        None
-    }
-
     fn show_properties_dialog(&self, path: &str) {
         use windows::core::{HSTRING, PCWSTR};
         use windows::Win32::UI::Shell::{

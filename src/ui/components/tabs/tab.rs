@@ -2,7 +2,6 @@ use crate::ui::scale::rem_pixels;
 use crate::ui::theme::ThemeContext;
 use gpui::prelude::*;
 use gpui::*;
-use std::cmp::Ordering;
 
 #[derive(Clone)]
 pub enum TabIcon {
@@ -37,7 +36,7 @@ impl TabIcon {
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum TabPosition {
     First,
-    Middle(Ordering),
+    Middle,
     Last,
 }
 
@@ -80,7 +79,6 @@ pub struct Tab {
     on_bounds: Option<Box<dyn Fn(Bounds<Pixels>, &mut App) + 'static>>,
     on_close: Option<Box<dyn Fn(&mut Window, &mut App) + 'static>>,
     drag_refinement: Option<Box<dyn FnOnce(Stateful<Div>) -> Stateful<Div> + 'static>>,
-    is_drop_target: bool,
     is_dragging: bool,
 }
 
@@ -98,7 +96,6 @@ impl Tab {
             on_bounds: None,
             on_close: None,
             drag_refinement: None,
-            is_drop_target: false,
             is_dragging: false,
         }
     }
@@ -234,22 +231,11 @@ impl RenderOnce for Tab {
                     container.border_b(rems(0.0625)).border_color(theme.border)
                 }
             }
-            TabPosition::Middle(Ordering::Greater)
-            | TabPosition::Middle(Ordering::Less)
-            | TabPosition::Middle(Ordering::Equal) => container
+            TabPosition::Middle => container
                 .border_r(rems(0.0625))
                 .when(!self.selected, |s| s.border_b(rems(0.0625)))
                 .border_color(theme.border),
         };
-
-        container = container.child(
-            div()
-                .absolute()
-                .left_0()
-                .w(rems(0.125))
-                .h_full()
-                .when(self.is_drop_target, |s| s.bg(theme.accent)),
-        );
 
         container = container.child(
             div()
@@ -278,11 +264,7 @@ impl RenderOnce for Tab {
                                 svg()
                                     .path("icons/x.svg")
                                     .size_3()
-                                    .text_color(if self.selected {
-                                        theme.icon_muted
-                                    } else {
-                                        theme.icon_muted
-                                    })
+                                    .text_color(theme.icon_muted)
                                     .group_hover("tab", |st| st.text_color(theme.text)),
                             ),
                     )

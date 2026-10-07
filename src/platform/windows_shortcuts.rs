@@ -72,13 +72,6 @@ pub(super) fn get_shortcut_info(path: &std::path::Path) -> Option<crate::models:
             .trim_matches('\0')
             .to_string();
 
-        let mut icon_buf = [0u16; 260];
-        let mut icon_index = 0i32;
-        let _ = link.GetIconLocation(&mut icon_buf, &mut icon_index);
-        let icon_location = String::from_utf16_lossy(&icon_buf)
-            .trim_matches('\0')
-            .to_string();
-
         let run_window = link.GetShowCmd().map(|cmd| cmd.0).unwrap_or(1);
 
         Some(crate::models::ShortcutInfo {
@@ -86,8 +79,6 @@ pub(super) fn get_shortcut_info(path: &std::path::Path) -> Option<crate::models:
             arguments,
             working_dir,
             description,
-            icon_location,
-            icon_index,
             run_window,
         })
     }
@@ -223,8 +214,6 @@ mod tests {
         assert_eq!(loaded.working_dir, info.working_dir);
         assert_eq!(loaded.description, info.description);
         assert_eq!(loaded.run_window, 3);
-        assert_eq!(loaded.icon_location, info.icon_location);
-        assert_eq!(loaded.icon_index, 4);
         unsafe {
             CoInitializeEx(None, COINIT_APARTMENTTHREADED).ok().unwrap();
             let _com = ComGuard;
@@ -237,6 +226,14 @@ mod tests {
                     windows::Win32::System::Com::STGM_READ,
                 )
                 .unwrap();
+            let mut icon_buf = [0u16; 260];
+            let mut icon_index = 0;
+            link.GetIconLocation(&mut icon_buf, &mut icon_index).unwrap();
+            assert_eq!(
+                String::from_utf16_lossy(&icon_buf).trim_matches('\0'),
+                "C:\\icons.dll",
+            );
+            assert_eq!(icon_index, 4);
             assert_eq!(link.GetHotkey().unwrap(), 0x0241);
         }
         info.target.clear();

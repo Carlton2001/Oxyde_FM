@@ -416,7 +416,7 @@ pub fn render_top_bar(
                                                        let path_cap = path_cap.clone();
                                                        let idx_cap = idx_cap;
                                                        async move {
-                                                           if let Ok(dirs) = oxyde_lib::commands::io::list_dir(path_cap.clone(), None, Some(show_hidden_cap), Some(show_system_cap)).await {
+                                                           if let Ok(dirs) = oxyde_lib::commands::io::list_dir(path_cap.clone(), Some(show_hidden_cap), Some(show_system_cap)).await {
                                                                 cx.update(|cx| {
                                                                     handle.update(cx, |this, cx| {
                                                                         let filtered_entries: Vec<FileEntry> = dirs.into_iter().filter(|e| e.is_dir).collect();
