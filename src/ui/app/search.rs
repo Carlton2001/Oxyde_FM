@@ -267,9 +267,9 @@ impl OxydeApp {
                     .justify_center()
                     .rounded_sm()
                     .hover(move |style| style.bg(theme.control_hover))
-                    .tooltip(crate::ui::components::tooltip::Tooltip::with_meta(
-                        cx.i18n().text(Message::QuickSearch).to_string(),
-                        cx.i18n().text(Message::QuickSearchCurrentFolder),
+                    .tooltip(crate::ui::components::tooltip::Tooltip::with_shortcut(
+                        format!("{} — {}", cx.i18n().text(Message::QuickSearch), cx.i18n().text(Message::QuickSearchCurrentFolder)),
+                        Some("Ctrl+F".into()),
                     ))
                     .child(
                         svg()

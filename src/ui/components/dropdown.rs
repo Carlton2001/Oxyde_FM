@@ -7,9 +7,12 @@ use gpui::*;
 use std::rc::Rc;
 
 
-fn context_shortcut(label: &str, i18n: &I18n) -> Option<&'static str> {
-    [(Message::Copy, "Ctrl+C"), (Message::CopyName, "Ctrl+Alt+C"),
-        (Message::CopyPath, "Ctrl+Shift+C"), (Message::TrashDeletePermanent, "Del")].into_iter()
+fn context_shortcut(label: &str, i18n: &I18n, shift: bool) -> Option<&'static str> {
+    [(Message::Open, "Enter"), (Message::Cut, "Ctrl+X"),
+        (Message::Rename, "F2"), (Message::Delete, "Del"),
+        (Message::Properties, "Alt+Enter"), (Message::Paste, "Ctrl+V"),
+        (Message::NewFolder, "Ctrl+Shift+N"), (Message::Copy, "Ctrl+C"), (Message::CopyName, "Ctrl+Alt+C"),
+        (Message::CopyPath, "Ctrl+Shift+C"), (Message::TrashDeletePermanent, if shift { "Shift+Del" } else { "Del" })].into_iter()
         .find_map(|(message, shortcut)| (label == i18n.text(message).as_ref()).then_some(shortcut))
 }
 
@@ -245,7 +248,7 @@ impl<T: crate::ui::components::scrollbar::ScrollbarState + 'static> RenderOnce f
                 && item.label == cx.i18n().text(Message::Copy).as_ref();
             let chevron_width = if item.has_submenu { logical(if split_copy { 23.0 } else { 14.0 }) } else { 0.0 };
             let shortcut_width = if self.is_context_menu {
-                context_shortcut(&item.label, cx.i18n()).map_or(0.0, |shortcut| {
+                context_shortcut(&item.label, cx.i18n(), window.modifiers().shift).map_or(0.0, |shortcut| {
                     text_system.shape_line(shortcut.into(), rem_pixels(rems(0.75)), &[TextRun {
                         len: shortcut.len(), font: font.clone(), color: theme.text_muted,
                         background_color: None, underline: None, strikethrough: None,
@@ -356,7 +359,7 @@ impl<T: crate::ui::components::scrollbar::ScrollbarState + 'static> RenderOnce f
                                         matches!(item.icon.as_ref(), Some(IconName::Trash | IconName::TrashPermanent));
                                     let on_h = on_hover_list.clone();
                                     let arrow_hover = on_hover_list.clone();
-                                    let shortcut = if self_is_context_menu { context_shortcut(&item.label, cx.i18n()) } else { None };
+                                    let shortcut = if self_is_context_menu { context_shortcut(&item.label, cx.i18n(), window.modifiers().shift) } else { None };
                                     let split_copy = self_is_context_menu && item.has_submenu
                                         && item.label == cx.i18n().text(Message::Copy).as_ref();
 

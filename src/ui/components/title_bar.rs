@@ -27,7 +27,7 @@ pub fn render_title_bar(
             .hover(move |s| s.bg(btn_hover_bg))
             .tooltip(Tooltip::with_shortcut(
                 cx.i18n().text(label),
-                if label == Message::Refresh { Some("F5".into()) } else { None },
+                match label { Message::Refresh => Some("F5 / Ctrl+R".into()), Message::NewPanel => Some("Ctrl+N".into()), _ => None },
             ))
             .child(svg().path(icon).size_4().text_color(icon_color))
     };

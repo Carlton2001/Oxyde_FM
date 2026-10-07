@@ -242,7 +242,7 @@ pub fn render_top_bar(
         .child({
             let mut actions = div().flex().items_center().gap_1().ml_1().flex_shrink_0();
             for (visible, id, icon, label, tip, action) in [
-                (parent_path.is_some(), "up-btn", "icons/arrow-up.svg", Message::Up, String::new(), 0u8),
+                (parent_path.is_some(), "up-btn", "icons/arrow-up.svg", Message::Up, "Alt+↑".into(), 0u8),
                 (!is_trash_path && has_undo_entry, "undo-btn", "icons/undo-2.svg", Message::Undo,
                     if undo_blocked_by_overwrite { _cx.i18n().text(Message::UndoOverwriteUnavailable).to_string() }
                     else { undo_tooltip.clone().unwrap_or_default() }, 1),

@@ -5,6 +5,51 @@ use crate::ui::workspace::ViewMode;
 use gpui::*;
 
 impl OxydeApp {
+    pub(super) fn move_file_selection(&mut self, key: &str, shift: bool, cx: &mut Context<Self>) {
+        use crate::ui::date_groups::{display_rows, DisplayRow};
+        let pane_id = self.state.active_pane_id.clone();
+        let width = self.list_bounds.get(&pane_id).map_or(self.list_width, |bounds| bounds.size.width);
+        let Some(pane) = self.state.find_pane(&pane_id) else { return; };
+        let tab = pane.active_tab();
+        let grid = tab.view_mode == ViewMode::Grid;
+        if !grid && matches!(key, "left" | "right") { return; }
+        let columns = if grid {
+            crate::ui::style::GridGeometry::for_viewport(width, crate::ui::components::scrollbar::zed_track_width()).columns
+        } else { 1 };
+        let rows = display_rows(tab.filtered_files(), tab.group_by_date, &tab.collapsed_date_groups, columns);
+        let file_rows: Vec<_> = rows.iter().filter_map(|row| match row {
+            DisplayRow::Files(indices) => Some(indices.as_slice()), _ => None,
+        }).collect();
+        let current = tab.keyboard_cursor.as_ref().filter(|path| tab.selected_paths.contains(*path))
+            .or(tab.selection_anchor.as_ref().filter(|path| tab.selected_paths.contains(*path)))
+            .and_then(|path| tab.filtered_files().iter().position(|file| &file.path == path))
+            .or_else(|| file_rows.iter().flat_map(|row| row.iter()).copied()
+                .find(|index| tab.selected_paths.contains(&tab.filtered_files()[*index].path)));
+        let Some(index) = arrow_target(&file_rows, current, key) else { return; };
+        let path = tab.filtered_files()[index].path.clone();
+        self.toggle_selection(&pane_id, path.clone(), false, shift, cx);
+        if let Some(pane) = self.state.find_pane_mut(&pane_id) {
+            let tab = pane.active_tab_mut();
+            let mut top = 0.0;
+            for row in &rows {
+                let height = crate::ui::date_groups::row_height(row, grid);
+                if matches!(row, DisplayRow::Files(indices) if indices.contains(&index)) {
+                    let handle = &tab.list_scroll.0.borrow().base_handle;
+                    let offset = handle.offset();
+                    let viewport = self.list_bounds.get(&pane_id).map_or(self.list_height, |bounds| bounds.size.height)
+                        - if grid { 0.0 } else { crate::ui::style::column_header_height() };
+                    let visible_top = -offset.y.as_f32();
+                    let target = if top < visible_top { top }
+                        else if top + height > visible_top + viewport { (top + height - viewport).max(0.0) }
+                        else { visible_top };
+                    handle.set_offset(point(offset.x, px(-target)));
+                    break;
+                }
+                top += height;
+            }
+        }
+    }
+
     pub fn handle_selection_drag(
         &mut self,
         pane_id: String,
@@ -138,6 +183,7 @@ impl OxydeApp {
     ) {
         if let Some(pane) = self.state.find_pane_mut(pane_id) {
             let tab = pane.active_tab_mut();
+            tab.keyboard_cursor = Some(path.clone());
             if shift {
                 let rows = crate::ui::date_groups::display_rows(tab.filtered_files(), tab.group_by_date, &tab.collapsed_date_groups, 1);
                 let filtered: Vec<_> = crate::ui::date_groups::visible_indices(&rows).into_iter().map(|index| &tab.filtered_files()[index]).collect();
@@ -199,5 +245,40 @@ impl OxydeApp {
             }
             cx.notify();
         }
+    }
+}
+
+fn arrow_target(rows: &[&[usize]], current: Option<usize>, key: &str) -> Option<usize> {
+    let Some((row, column)) = current.and_then(|index| rows.iter().enumerate()
+        .find_map(|(row, indices)| indices.iter().position(|i| *i == index).map(|column| (row, column)))) else {
+        return rows.first().and_then(|row| row.first()).copied();
+    };
+    let target_row = match key {
+        "up" => row.saturating_sub(1),
+        "down" => (row + 1).min(rows.len() - 1),
+        _ => row,
+    };
+    let target_column = match key {
+        "left" => column.saturating_sub(1),
+        "right" => column + 1,
+        _ => column,
+    }.min(rows[target_row].len() - 1);
+    Some(rows[target_row][target_column])
+}
+
+#[cfg(test)]
+mod keyboard_tests {
+    use super::arrow_target;
+
+    #[test]
+    fn arrows_follow_visible_rows_and_clamp_partial_grid_rows() {
+        let rows: Vec<&[usize]> = vec![&[0, 1, 2], &[5, 6, 7], &[9]];
+        assert_eq!(arrow_target(&rows, None, "down"), Some(0));
+        assert_eq!(arrow_target(&rows, Some(1), "down"), Some(6));
+        assert_eq!(arrow_target(&rows, Some(7), "down"), Some(9));
+        assert_eq!(arrow_target(&rows, Some(5), "left"), Some(5));
+        assert_eq!(arrow_target(&rows, Some(2), "right"), Some(2));
+        assert_eq!(arrow_target(&rows, Some(0), "up"), Some(0));
+        assert_eq!(arrow_target(&[], None, "down"), None);
     }
 }

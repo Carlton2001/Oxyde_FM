@@ -100,9 +100,8 @@ fn main() {
                 crate::ui::i18n::Language::from_id(&config.language),
             ));
             cx.set_global(crate::ui::format::DateFormatPreference(date_format));
-            OxydeApp::bind_keys(cx);
-            // GPUI gives later bindings precedence. Text editing shortcuts must
-            // override file actions while the TextInput context is focused.
+            // Text fields handle their own editing actions; file shortcuts are
+            // handled by the explorer only while its focus handle is focused.
             crate::ui::components::input::bind_keys(cx);
             let app = cx.new(|cx| OxydeApp::new(config, config_path, load_failed, cx));
             let operations_panel = cx.new(|cx| {

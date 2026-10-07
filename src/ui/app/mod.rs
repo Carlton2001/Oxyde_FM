@@ -14,6 +14,7 @@ pub mod layout;
 pub mod navigation;
 mod sizes;
 mod preferences;
+mod keyboard;
 mod toasts;
 mod shell_features;
 use toasts::{Toast, ToastKind};
@@ -720,23 +721,6 @@ impl OxydeApp {
             }
         })
         .detach();
-    }
-
-    pub fn bind_keys(cx: &mut App) {
-        cx.bind_keys([
-            KeyBinding::new("f5", Actualiser, None),
-            KeyBinding::new("delete", Supprimer, None),
-            KeyBinding::new("shift-delete", Supprimer, None),
-            KeyBinding::new("ctrl-a", ToutSelectionner, None),
-            KeyBinding::new("ctrl-c", Copier, None),
-            KeyBinding::new("ctrl-alt-c", CopierNom, None),
-            KeyBinding::new("ctrl-shift-c", CopierChemin, None),
-            KeyBinding::new("ctrl-x", Couper, None),
-            KeyBinding::new("ctrl-v", Coller, None),
-            KeyBinding::new("ctrl-z", Annuler, None),
-            KeyBinding::new("ctrl-y", Refaire, None),
-            KeyBinding::new("ctrl-shift-z", Refaire, None),
-        ]);
     }
 
     pub fn execute_undo(&mut self, cx: &mut Context<Self>) {
@@ -2447,6 +2431,8 @@ impl Render for OxydeApp {
         let settings_keyboard = handle.clone();
         let mut root = div()
             .on_key_down(move |event, window, cx| {
+                let handled = settings_keyboard.update(cx, |this, cx| this.handle_file_key(event, window, cx));
+                if handled { cx.stop_propagation(); return; }
                 let peek = settings_keyboard.update(cx, |this, cx| {
                     if this.focus_handle.is_focused(window) && this.peek_shortcut_matches(&event.keystroke) {
                         this.peek_selected(cx);
@@ -2505,7 +2491,7 @@ impl Render for OxydeApp {
             .on_action(cx.listener(Self::on_action_tout_selectionner))
             .on_action(cx.listener(Self::on_action_annuler))
             .on_action(cx.listener(Self::on_action_refaire))
-            .on_action(cx.listener(|this, _: &Actualiser, _, cx| this.refresh_all(cx)))
+            .on_action(cx.listener(|this, _: &Actualiser, window, cx| this.refresh_active_view(window, cx)))
             .on_action(cx.listener(Self::on_action_copier))
             .on_action(cx.listener(|this, _: &CopierNom, _, cx| this.execute_copy_text(true, cx)))
             .on_action(cx.listener(|this, _: &CopierChemin, _, cx| this.execute_copy_text(false, cx)))

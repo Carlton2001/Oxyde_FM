@@ -60,7 +60,7 @@ impl OxydeTheme {
             ThemeId::AyuLight => Self {
                 accent: rgb(0xff9940).into(),
                 active_background: rgb(0xf8f9fa).into(),
-                background: rgb(0xf8f9fa).into(),
+                background: rgb(0xeef0f2).into(),
                 border: rgb(0xedeeef).into(),
                 control_hover: rgb(0xe6e7e8).into(),
                 header: rgb(0xf3f4f5).into(),
@@ -93,7 +93,7 @@ impl OxydeTheme {
             ThemeId::AyuDark => Self {
                 accent: rgb(0xe6b450).into(),
                 active_background: rgb(0x0b0e14).into(),
-                background: rgb(0x0b0e14).into(),
+                background: rgb(0x10151e).into(),
                 border: rgb(0x151a24).into(),
                 control_hover: rgb(0x191e2a).into(),
                 header: rgb(0x090c10).into(),
@@ -126,7 +126,7 @@ impl OxydeTheme {
             ThemeId::GithubLight => Self {
                 accent: rgb(0x0969da).into(),
                 active_background: rgb(0xffffff).into(),
-                background: rgb(0xffffff).into(),
+                background: rgb(0xf0f2f4).into(),
                 border: rgb(0xd0d7de).into(),
                 control_hover: rgb(0xf0f2f4).into(),
                 header: rgb(0xf6f8fa).into(),
@@ -159,7 +159,7 @@ impl OxydeTheme {
             ThemeId::GithubDark => Self {
                 accent: rgb(0x2f81f7).into(),
                 active_background: rgb(0x0d1117).into(),
-                background: rgb(0x0d1117).into(),
+                background: rgb(0x161b22).into(),
                 border: rgb(0x30363d).into(),
                 control_hover: rgb(0x21262d).into(),
                 header: rgb(0x010409).into(),
@@ -192,7 +192,7 @@ impl OxydeTheme {
             ThemeId::Monokai => Self {
                 accent: rgb(0xfd971f).into(),
                 active_background: rgb(0x272822).into(),
-                background: rgb(0x272822).into(),
+                background: rgb(0x32332c).into(),
                 border: rgb(0x171814).into(),
                 control_hover: rgb(0x4a493e).into(),
                 header: rgb(0x1e1f1c).into(),
@@ -225,7 +225,7 @@ impl OxydeTheme {
             ThemeId::OneLight => Self {
                 accent: rgb(0x4078f2).into(),
                 active_background: rgb(0xfafafa).into(),
-                background: rgb(0xfafafa).into(),
+                background: rgb(0xeaeaeb).into(),
                 border: rgb(0xe8e8e8).into(),
                 control_hover: rgb(0xe5e5e6).into(),
                 header: rgb(0xf3f3f3).into(),
@@ -258,7 +258,7 @@ impl OxydeTheme {
             ThemeId::OneDark => Self {
                 accent: rgb(0x61afef).into(),
                 active_background: rgb(0x282c34).into(),
-                background: rgb(0x282c34).into(),
+                background: rgb(0x21252b).into(),
                 border: rgb(0x181a1f).into(),
                 control_hover: rgb(0x313640).into(),
                 header: rgb(0x21252b).into(),
@@ -291,7 +291,7 @@ impl OxydeTheme {
             ThemeId::SolarizedLight => Self {
                 accent: rgb(0xd33682).into(),
                 active_background: rgb(0xfdf6e3).into(),
-                background: rgb(0xfdf6e3).into(),
+                background: rgb(0xeee8d5).into(),
                 border: rgb(0xdcd6c0).into(),
                 control_hover: rgb(0xe2dbbf).into(),
                 header: rgb(0xeee8d5).into(),
@@ -324,7 +324,7 @@ impl OxydeTheme {
             ThemeId::SolarizedDark => Self {
                 accent: rgb(0x268bd2).into(),
                 active_background: rgb(0x002b36).into(),
-                background: rgb(0x002b36).into(),
+                background: rgb(0x073642).into(),
                 border: rgb(0x073642).into(),
                 control_hover: rgb(0x0d3944).into(),
                 header: rgb(0x001e26).into(),
@@ -357,7 +357,7 @@ impl OxydeTheme {
             ThemeId::WindowsLight => Self {
                 accent: rgb(0x0672cb).into(),
                 active_background: rgb(0xfbfbfb).into(),
-                background: rgb(0xfbfbfb).into(),
+                background: rgb(0xeeeeee).into(),
                 border: rgb(0xe5e5e5).into(),
                 control_hover: rgb(0xededed).into(),
                 header: rgb(0xf2f2f2).into(),
@@ -390,7 +390,7 @@ impl OxydeTheme {
             ThemeId::WindowsDark => Self {
                 accent: rgb(0x52a8ff).into(),
                 active_background: rgb(0x181818).into(),
-                background: rgb(0x181818).into(),
+                background: rgb(0x222222).into(),
                 border: rgb(0x282828).into(),
                 control_hover: rgb(0x2a2a2a).into(),
                 header: rgb(0x111111).into(),
@@ -438,7 +438,7 @@ impl OxydeTheme {
     // Les sélections gardent le texte normal sur un accent à 20 % (30 % au survol).
     pub fn light() -> Self {
         Self {
-            background: rgb(0xfdfbf7).into(),
+            background: rgb(0xf0ede6).into(),
             active_background: rgb(0xfdfbf7).into(),
             sidebar: rgb(0xf1ede6).into(),
             header: rgb(0xf1ede6).into(),
@@ -487,7 +487,7 @@ impl OxydeTheme {
 
     pub fn dark() -> Self {
         Self {
-            background: rgb(0x12101b).into(),
+            background: rgb(0x1c1927).into(),
             active_background: rgb(0x12101b).into(),
             sidebar: rgb(0x08070d).into(),
             header: rgb(0x08070d).into(),
@@ -537,6 +537,13 @@ impl OxydeTheme {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn inactive_panes_have_a_distinct_background_in_every_theme() {
+        for id in super::ThemeId::ALL {
+            let theme = super::OxydeTheme::for_id(id);
+            assert_ne!(theme.background, theme.active_background, "{id:?}");
+        }
+    }
     use super::ThemeId;
 
     #[test]

@@ -175,9 +175,10 @@ impl Tooltip {
             cx.new(|cx| {
                 cx.observe(&handle, |tooltip: &mut Self, app, cx| {
                     tooltip.title = cx.i18n().text(if app.read(cx).shift_delete { Message::TrashDeletePermanent } else { Message::Delete });
+                    tooltip.shortcut = Some(if app.read(cx).shift_delete { "Shift+Del" } else { "Del" }.into());
                     cx.notify();
                 }).detach();
-                Self { title, meta: None, shortcut: None, file_info: None, preview_view: None }
+                Self { title, meta: None, shortcut: Some(if window.modifiers().shift { "Shift+Del" } else { "Del" }.into()), file_info: None, preview_view: None }
             }).into()
         }
     }
