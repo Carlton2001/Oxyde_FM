@@ -61,6 +61,11 @@ pub trait Platform: Send + Sync {
     /// Deletes files permanently or sends them to the system trash.
     fn shell_delete(&self, paths: &[std::path::PathBuf], recycle: bool) -> Result<(), String>;
 
+    /// Reversible history operations must never opt into permanent deletion.
+    fn recycle_for_history(&self, path: &std::path::Path) -> Result<(), String>;
+    fn history_trash_items(&self) -> Result<Vec<trash::TrashItem>, String>;
+    fn restore_history_item(&self, item: trash::TrashItem) -> Result<(), String>;
+
     /// Lists entries in the operating system's network neighborhood.
     fn list_network_vicinity(&self) -> Result<Vec<crate::models::FileEntry>, String>;
     fn list_network_shares(&self, server: &str) -> Result<Vec<crate::models::FileEntry>, String>;

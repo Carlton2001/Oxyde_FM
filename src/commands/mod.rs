@@ -5,3 +5,5 @@ pub mod ops;
 pub mod search;
 pub mod sidebar;
 pub mod system;
+
+mod restore_history;

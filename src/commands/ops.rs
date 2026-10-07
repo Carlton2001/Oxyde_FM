@@ -121,7 +121,7 @@ pub(crate) fn original_trash_path(item: &trash::TrashItem) -> PathBuf {
     get_restoration_paths(item).corrected_path
 }
 
-fn item_with_correct_restore_name(item: &trash::TrashItem) -> trash::TrashItem {
+pub(super) fn item_with_correct_restore_name(item: &trash::TrashItem) -> trash::TrashItem {
     let mut item = item.clone();
     let original_path = original_trash_path(&item);
     if let Some(name) = original_path.file_name() {
@@ -594,14 +594,6 @@ pub async fn move_from_trash(
     paths: Vec<String>,
     target_dir: String,
 ) -> Result<(), CommandError> {
-    move_from_trash_impl(Some(history), paths, target_dir).await
-}
-
-async fn move_from_trash_impl(
-    history: Option<&HistoryManager>,
-    paths: Vec<String>,
-    target_dir: String,
-) -> Result<(), CommandError> {
     let trash_items =
         trash::os_limited::list().map_err(|e| CommandError::TrashError(e.to_string()))?;
 
@@ -735,9 +727,9 @@ async fn move_from_trash_impl(
     let abs_restored: Vec<String> = restored_files.to_vec();
     let target_abs = target_base.to_string_lossy().to_string();
 
-    if let Some(history) = history.filter(|_| !abs_restored.is_empty()) {
+    if !abs_restored.is_empty() {
         let tx_details = TransactionDetails {
-            paths: vec![], // Source paths in trash are not reliable for redo usually
+            paths: vec![], // Redo uses the exact receipts recorded by Undo, not these old IDs.
             target_dir: Some(target_abs),
             old_path: None,
             new_path: None,
@@ -861,7 +853,7 @@ fn remove_undo_copy_files(paths: Vec<PathBuf>) -> Result<(), CommandError> {
 pub async fn undo_last_action(
     history: &HistoryManager,
 ) -> Result<Option<Transaction>, CommandError> {
-    let Some(operation) = history
+    let Some(mut operation) = history
         .begin_undo()
         .map_err(|error| CommandError::Other(error.to_string()))?
     else {
@@ -1166,18 +1158,11 @@ pub async fn undo_last_action(
                 }
             }
             TransactionType::Restore => {
-                if let Some(ref created) = tx.details.created_files {
-                    let mut files_to_delete = Vec::new();
-                    for path_str in created {
-                        let path = PathBuf::from(path_str);
-                        if path.exists() {
-                            files_to_delete.push(path);
-                        }
-                    }
-                    if !files_to_delete.is_empty() {
-                        fast_trash(files_to_delete)?;
-                    }
-                }
+                operation.set_restore_journal(super::restore_history::journal(tx)?);
+                super::restore_history::undo(
+                    operation.restore_journal_mut(),
+                    &super::restore_history::NativeTrash,
+                )?;
             }
         }
         operation.complete();
@@ -1188,7 +1173,7 @@ pub async fn undo_last_action(
 pub async fn redo_last_action(
     history: &HistoryManager,
 ) -> Result<Option<Transaction>, CommandError> {
-    let Some(operation) = history
+    let Some(mut operation) = history
         .begin_redo()
         .map_err(|error| CommandError::Other(error.to_string()))?
     else {
@@ -1204,10 +1189,11 @@ pub async fn redo_last_action(
                 fast_trash(paths)?;
             }
             TransactionType::Restore => {
-                if let Some(ref target_dir) = tx.details.target_dir {
-                    let paths = tx.details.paths.clone();
-                    move_from_trash_impl(None, paths, target_dir.clone()).await?;
-                }
+                operation.set_restore_journal(super::restore_history::journal(tx)?);
+                super::restore_history::redo(
+                    operation.restore_journal_mut(),
+                    &super::restore_history::NativeTrash,
+                )?;
             }
             TransactionType::Copy => {
                 if tx.details.copied_files.is_none()

@@ -100,9 +100,15 @@ Traiter les simplifications utiles dans des changements limités ; ne pas conver
 
 ## A14 — Rétablir une restauration déplacée depuis la corbeille — P2
 
-**Défaut établi dans le code, à reproduire avec une fixture native.** `move_from_trash_impl` enregistre une transaction Restore avec `paths: vec![]` et les destinations dans `created_files`. Annuler remet ces destinations à la corbeille ; Rétablir passe ensuite `tx.details.paths` (vide) au déplacement depuis la corbeille. Il peut donc annoncer un succès sans restaurer les éléments. Les identifiants de corbeille après Annuler ne sont pas conservés non plus.
+**Corrigé le 7 octobre 2026, avec validation native Windows.** Le parcours précédent enregistrait les destinations restaurées, mais Rétablir relançait le déplacement depuis une liste de sources vide. Il pouvait donc annoncer un succès sans restaurer les éléments.
 
-Concevoir un journal permettant de retrouver précisément les éléments remis à la corbeille, vérifier leurs noms et destinations, puis rejouer la restauration. Tester l'aller-retour sur des fichiers et dossiers temporaires, y compris en présence d'un conflit. A02 empêche déjà ce rejeu de créer une seconde transaction ; il ne répare pas les informations manquantes du journal. Aucun test de corbeille native exécuté dans ce lot.
+Chaque transaction Restore possède désormais un journal par destination. Annuler capture l'identifiant exact du nouvel élément de corbeille, en excluant les identifiants déjà présents et en exigeant une seule correspondance avec le chemin d'origine. Rétablir vérifie cet identifiant et le chemin, puis restaure directement l'élément dans sa destination, avec les mêmes règles de nommage que la restauration ordinaire. Un homonyme plus ancien, un reçu disparu ou ambigu et une destination occupée provoquent une erreur ; les conflits présents au début du lot sont vérifiés avant les effets. Le rejeu conserve une seule transaction et ne repasse plus par le déplacement initial.
+
+Les effets observés restent dans la transaction réservée, même sur erreur ou panique. Les états intermédiaires permettent de reprendre après une erreur d'énumération ou un traitement partiel, en ignorant les éléments déjà traités. Un reçu non confirmé bloque le rejeu au lieu de deviner une correspondance. Les opérations natives passent par Platform ; la remise à la corbeille utilise le parcours réversible du crate `trash`, sans choisir explicitement la suppression définitive.
+
+Validation : sept tests déterministes couvrent fichiers/dossiers, cycles répétés et nouveaux identifiants, échecs avant/après effet, reprise partielle, panique, énumération interrompue, conflits, homonymes et reçus absents/ambigus. Un test Windows dédié vérifie le déplacement initial puis deux cycles Annuler/Rétablir sur des fichiers Unicode, `.lnk`, `.url` et un dossier temporaire avec contenu, y compris un conflit de destination. Ce test utilise exclusivement ses fixtures et reste ignoré dans la suite ordinaire ; il est exécuté explicitement pour ce lot. Aucun Computer Use ni Linux.
+
+**Limites :** les mutations externes entre les vérifications et les effets natifs ne sont pas réservées par le planificateur de fichiers (limite d'A02). Le journal vit en mémoire comme l'historique actuel ; il ne constitue pas une récupération après arrêt du processus. Le déplacement initial conserve ses anciens traitements de conflits et de sauvegardes temporaires, à revoir en A16.
 
 ## A15 — Cache de filtrage lors d'un changement de jour — P2
 
@@ -110,15 +116,27 @@ Concevoir un journal permettant de retrouver précisément les éléments remis 
 
 Prévoir une invalidation lors d'un changement de jour local, sans recharger les fichiers ni recalculer continuellement le cache. Vérifier les onglets actifs et inactifs, la reprise après veille et un changement d'horloge ou de fuseau. A01 aligne les règles de calcul ; il ne rajoute pas de surveillance d'horloge à l'application.
 
+## A16 — Conflits et espace temporaire du déplacement initial depuis la corbeille — P1
+
+**Branches établies dans le code, défauts à reproduire séparément.** `move_from_trash` déplace vers la destination avec `fs_extra::dir::CopyOptions::overwrite(true)`, puis inscrit les destinations dans une transaction Restore sans conserver l'ancien contenu remplacé. Il utilise aussi un dossier temporaire partagé par PID et des sauvegardes nommées à partir du seul nom de fichier. Des déplacements concurrents ou des éléments homonymes peuvent donc partager un emplacement de sauvegarde. Le traitement d'un conflit à l'emplacement d'origine choisit `crate_path`, même lorsque seul `corrected_path` existe.
+
+Prévoir un espace temporaire unique par opération, une résolution explicite des conflits à la destination, un journal des effets initiaux et une restauration des sauvegardes sur toutes les sorties d'erreur. Reproduire chaque cas sur des fixtures dédiées. A14 corrige Annuler/Rétablir après un déplacement réussi ; il ne réécrit pas ce parcours initial. Aucun de ces scénarios supplémentaires n'a été exécuté sur des données utilisateur dans ce lot.
+
+## A17 — Énumérations de corbeille lors du rejeu des restaurations — P2
+
+**Coût structurel établi après A14, impact non mesuré.** Le journal de restauration relit la corbeille avant et après chaque effet pour identifier puis confirmer les reçus exacts. Un cycle sans erreur utilise une énumération de préparation puis deux par élément traité. Ces lectures restent sur le worker, mais un grand lot dans une corbeille volumineuse peut être lent.
+
+Mesurer des lots de tailles différentes avant optimisation. Envisager des reçus retournés directement par les opérations natives ou un regroupement compatible avec les erreurs partielles, en conservant le refus des homonymes et la reprise du journal. Aucun benchmark de grande corbeille effectué dans A14.
+
 ## Validation et suite
 
 La compilation Windows actuelle passe sans avertissement du projet. Les observations ci-dessus sont issues de la lecture des sources et de Clippy ; aucun nouveau test de comportement ou benchmark n'a été exécuté pendant cet audit. Snap Layouts et le témoin de déplacement actuel sont confirmés par l'utilisateur. Les validations des lots précédents restent décrites dans [AUDIT_CODE_MORT.md](AUDIT_CODE_MORT.md).
 
-Après A01/A02/A03/A04, poursuivre avec les corrections de comportement A14/A15 et les ressources natives A05/A06. Les optimisations demandent des mesures avant modification. Cet ordre est proposé, pas une liste de corrections déjà autorisées ou réalisées.
+Après A01/A02/A03/A04/A14, poursuivre avec les corrections de comportement A16/A15 et les ressources natives A05/A06. Les optimisations demandent des mesures avant modification. Cet ordre est proposé, pas une liste de corrections déjà autorisées ou réalisées.
 
 ### État après les lots N01 à N16
 
-Le nettoyage retire les anciennes sérialisations, les estimations et plusieurs lectures natives dont les résultats étaient abandonnés. Ce nettoyage ne corrige pas les observations A01–A13. A01, A02, A03 et A04 sont corrigés dans les lots suivants, décrits plus haut. Les références de lignes ci-dessus restent celles de `3cc7d14` ; utiliser les noms de fonctions pour retrouver leur nouvel emplacement.
+Le nettoyage retire les anciennes sérialisations, les estimations et plusieurs lectures natives dont les résultats étaient abandonnés. Ce nettoyage ne corrige pas les observations A01–A13. A01, A02, A03, A04 et A14 sont corrigés dans les lots suivants, décrits plus haut. Les références de lignes ci-dessus restent celles de `3cc7d14` ; utiliser les noms de fonctions pour retrouver leur nouvel emplacement.
 
 Depuis A04, `FileProperties::original_path` / `deleted_time` et leur collecte alimentent les propriétés des éléments de corbeille. Pour A05, l'énumération de diagnostic du property store et les lectures de métadonnées d'appareil sans affichage disparaissent ; la récupération du nom convivial et son traitement COM restent actifs. Pour A10, les variantes de tri backend inaccessibles disparaissent, mais le tri naturel actif et les tris GPUI restent distincts. Pour A13, la branche de couleur identique des onglets disparaît avec N05 ; les autres suggestions ne font pas l'objet d'une correction générale.
 
@@ -137,3 +155,7 @@ Depuis A04, `FileProperties::original_path` / `deleted_time` et leur collecte al
 ### Validation du lot A04
 
 `cargo test --all-targets --offline` : 104 tests backend et 102 tests du binaire passent, soit 206 ; les trois tests natifs déjà ignorés restent ignorés. Six tests de régression ont été ajoutés. `cargo check --all-targets --offline` passe sans avertissement du projet, et `cargo build --bin oxyde --offline` réussit. Les traductions des deux libellés existent dans les cinq catalogues. Aucun Computer Use, aucune validation visuelle interactive ni Linux.
+
+### Validation du lot A14
+
+`cargo test --all-targets --offline` : 111 tests backend et 102 tests du binaire passent, soit 213. Quatre tests natifs restent ignorés dans cette invocation ; le nouveau test `native_restore_history_roundtrip_and_conflict` est exécuté explicitement avec `--ignored` et passe, soit 214 tests distincts validés dans le lot. Les trois anciens tests natifs ignorés n'ont pas été relancés. `cargo check --all-targets --offline` passe sans avertissement du projet, et `cargo build --bin oxyde --offline` réussit. Aucun Computer Use ni Linux ; aucun fichier utilisateur n'est utilisé par les fixtures natives.

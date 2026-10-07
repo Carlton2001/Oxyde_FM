@@ -193,6 +193,18 @@ impl Platform for WindowsPlatform {
         super::network::list_network_vicinity().map_err(|error| error.to_string())
     }
 
+    fn recycle_for_history(&self, path: &std::path::Path) -> Result<(), String> {
+        trash::delete(path).map_err(|error| error.to_string())
+    }
+
+    fn history_trash_items(&self) -> Result<Vec<trash::TrashItem>, String> {
+        trash::os_limited::list().map_err(|error| error.to_string())
+    }
+
+    fn restore_history_item(&self, item: trash::TrashItem) -> Result<(), String> {
+        trash::os_limited::restore_all([item]).map_err(|error| error.to_string())
+    }
+
     fn shell_delete(&self, paths: &[std::path::PathBuf], recycle: bool) -> Result<(), String> {
         use windows::core::PCWSTR;
         use windows::Win32::Foundation::HWND;
