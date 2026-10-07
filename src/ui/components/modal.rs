@@ -72,6 +72,11 @@ pub struct Modal {
     body_gap: AbsoluteLength,
     on_backdrop_dismiss: Option<Box<dyn Fn(&mut Window, &mut App)>>,
     header: Option<AnyElement>,
+    wrap_actions: bool,
+    body_padding: (Rems, Rems),
+    header_background: Option<Hsla>,
+    body_background: Option<Hsla>,
+    overlay: Option<AnyElement>,
 }
 
 impl Modal {
@@ -90,7 +95,34 @@ impl Modal {
             body_gap: rems(0.375).into(),
             on_backdrop_dismiss: None,
             header: None,
+            wrap_actions: false,
+            body_padding: (rems(1.0), rems(1.25)),
+            header_background: None,
+            body_background: None,
+            overlay: None,
         }
+    }
+
+    /// Optional presentation anchored to the entire panel, above its body and footer.
+    pub fn overlay(mut self, element: impl IntoElement) -> Self {
+        self.overlay = Some(element.into_any_element());
+        self
+    }
+    pub fn body_padding(mut self, horizontal: Rems, vertical: Rems) -> Self {
+        self.body_padding = (horizontal, vertical);
+        self
+    }
+    pub fn header_background(mut self, color: Hsla) -> Self {
+        self.header_background = Some(color);
+        self
+    }
+    pub fn body_background(mut self, color: Hsla) -> Self {
+        self.body_background = Some(color);
+        self
+    }
+    pub fn wrap_actions(mut self) -> Self {
+        self.wrap_actions = true;
+        self
     }
 
     pub fn title_icon(mut self, path: impl Into<SharedString>) -> Self {
@@ -236,7 +268,7 @@ impl RenderOnce for Modal {
                             .px(rems(1.0))
                             .flex()
                             .items_center()
-                            .bg(theme.header)
+                            .bg(self.header_background.unwrap_or(theme.header))
                             .rounded_t_lg()
                             .border_b(rems(0.0625))
                             .border_color(theme.border)
@@ -269,8 +301,9 @@ impl RenderOnce for Modal {
                             .id("modal-body")
                             .min_h_0()
                             .overflow_y_scroll()
-                            .px(rems(1.0))
-                            .py(rems(1.25))
+                            .px(self.body_padding.0)
+                            .py(self.body_padding.1)
+                            .bg(self.body_background.unwrap_or(theme.surface))
                             .flex()
                             .flex_col()
                             .gap(self.body_gap)
@@ -286,9 +319,13 @@ impl RenderOnce for Modal {
                                 .border_color(theme.border)
                                 .flex()
                                 .justify_end()
+                                .when(self.wrap_actions, |d| d.flex_wrap())
                                 .gap(rems(0.5))
                                 .children(self.actions),
                         )
+                    })
+                    .when_some(self.overlay, |panel, overlay| {
+                        panel.child(deferred(overlay))
                     }),
             )
     }

@@ -19,8 +19,8 @@ conflict-description =
         [one] { $number } conflit détecté. Que souhaitez-vous faire ?
        *[other] { $number } conflits détectés. Que souhaitez-vous faire ?
     }
-conflict-skip-all = Ignorer tout
-conflict-replace-all = Remplacer tout
+conflict-skip-all = Tout ignorer
+conflict-replace-all = Tout remplacer
 
 common-close = Fermer
 common-retry = Réessayer
@@ -488,3 +488,33 @@ toast-trash-completed = Mise à la corbeille terminée
 toast-delete-completed = Suppression définitive terminée
 toast-compress-completed = Archive créée
 toast-extract-completed = Extraction terminée
+
+conflict-source = Nouveau fichier
+conflict-target = Fichier existant
+conflict-newer = Plus récent
+conflict-older = Plus ancien
+conflict-larger = Plus volumineux
+conflict-items = éléments
+conflict-skip = Ignorer
+conflict-replace = Remplacer
+conflict-all = Tous
+conflict-identical = Identiques
+conflict-search = Filtrer les résultats…
+conflict-empty = Aucun conflit correspondant
+conflict-prompt = Un élément nommé « { $name } » existe déjà. Que voulez-vous faire ?
+conflict-advanced-title = Résolution de conflits
+conflict-advanced = Avancé
+conflict-apply = Appliquer les décisions
+conflict-step-title = { $current } / { $total } Conflit de fichier
+conflict-inherited = Hérité de { $parent } : { $action }
+conflict-back = Retour
+conflict-recent-tab = Récents
+conflict-older-tab = Anciens
+conflict-automatic = Auto
+conflict-apply-summary = Appliquer: { $replace_count ->
+        [one] { $replace_number } remplacement
+       *[other] { $replace_number } remplacements
+    }, { $skip_count ->
+        [one] { $skip_number } ignoré
+       *[other] { $skip_number } ignorés
+    }

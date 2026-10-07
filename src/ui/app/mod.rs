@@ -158,11 +158,12 @@ pub struct ContextMenuInstance {
 }
 
 #[derive(Clone)]
-struct PendingFileOperation {
-    paths: Vec<String>,
+pub(crate) struct PendingFileOperation {
+    pub(crate) paths: Vec<String>,
     target_dir: String,
-    is_move: bool,
-    conflict_paths: Vec<String>,
+    pub(crate) is_move: bool,
+    pub(crate) conflicts: Vec<oxyde_lib::models::ConflictEntry>,
+    pub(crate) dialog: crate::ui::components::conflict_dialog::ConflictDialogState,
     runtime: tokio::runtime::Handle,
 }
 
@@ -477,7 +478,7 @@ pub struct OxydeApp {
     rename_pending: bool,
     rename_cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
     rename_generation: u64,
-    pending_file_operations: std::collections::VecDeque<PendingFileOperation>,
+    pub(crate) pending_file_operations: std::collections::VecDeque<PendingFileOperation>,
     file_operation_notice: Option<(Message, String)>,
     toasts: Vec<Toast>,
     next_toast_id: u64,
@@ -1877,11 +1878,8 @@ impl OxydeApp {
                                 paths,
                                 target_dir,
                                 is_move,
-                                conflict_paths: response
-                                    .conflicts
-                                    .into_iter()
-                                    .map(|conflict| conflict.source.path)
-                                    .collect(),
+                                conflicts: response.conflicts,
+                                dialog: Default::default(),
                                 runtime,
                             });
                         cx.notify();
@@ -2032,21 +2030,11 @@ impl OxydeApp {
         cx.notify();
     }
 
-    pub(crate) fn resolve_pending_file_operation(&mut self, replace: bool, cx: &mut Context<Self>) {
-        use oxyde_lib::models::ConflictAction;
+    pub(crate) fn apply_conflict_decisions(&mut self, cx: &mut Context<Self>) {
         let Some(pending) = self.pending_file_operations.pop_front() else {
             return;
         };
-        let action = if replace {
-            ConflictAction::Replace
-        } else {
-            ConflictAction::Skip
-        };
-        let resolutions = pending
-            .conflict_paths
-            .into_iter()
-            .map(|path| (path, action))
-            .collect();
+        let resolutions = pending.dialog.completed_resolutions(&pending.conflicts);
         self.queue_file_operation(
             pending.paths,
             pending.target_dir,
@@ -3888,10 +3876,13 @@ impl Render for OxydeApp {
             ));
         }
 
-        if let Some(pending) = self.pending_file_operations.front() {
+        let conflict_system_icons = self.use_system_icons();
+        if let Some(pending) = self.pending_file_operations.front_mut() {
             root = root.child(deferred(
                 crate::ui::components::conflict_dialog::render_conflict_dialog(
-                    pending.conflict_paths.len(),
+                    pending,
+                    conflict_system_icons,
+                    _window,
                     handle.clone(),
                     cx,
                 ),

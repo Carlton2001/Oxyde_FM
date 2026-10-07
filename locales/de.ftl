@@ -790,3 +790,33 @@ toast-trash-completed = In den Papierkorb verschoben
 toast-delete-completed = Endgültiges Löschen abgeschlossen
 toast-compress-completed = Archiv erstellt
 toast-extract-completed = Entpacken abgeschlossen
+
+conflict-source = Neue Datei
+conflict-target = Vorhandene Datei
+conflict-newer = Neuer
+conflict-older = Älter
+conflict-larger = Größer
+conflict-items = Elemente
+conflict-skip = Überspringen
+conflict-replace = Ersetzen
+conflict-all = Alle
+conflict-identical = Identisch
+conflict-search = Ergebnisse filtern…
+conflict-empty = Keine passenden Konflikte
+conflict-prompt = Ein Element namens „{ $name }“ existiert bereits. Was möchten Sie tun?
+conflict-advanced-title = Konfliktlösung
+conflict-advanced = Erweitert
+conflict-apply = Entscheidungen anwenden
+conflict-step-title = { $current } / { $total } Dateikonflikt
+conflict-inherited = Von { $parent } übernommen: { $action }
+conflict-back = Zurück
+conflict-recent-tab = Neuer
+conflict-older-tab = Älter
+conflict-automatic = Auto
+conflict-apply-summary = Anwenden: { $replace_count ->
+        [one] { $replace_number } Ersetzung
+       *[other] { $replace_number } Ersetzungen
+    }, { $skip_count ->
+        [one] { $skip_number } übersprungen
+       *[other] { $skip_number } übersprungen
+    }
