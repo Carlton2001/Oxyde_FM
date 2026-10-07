@@ -1,3 +1,4 @@
+use super::windows_com::ComApartment;
 use super::{Platform, ThreadPriority};
 use crate::models::{DriveInfo, QuickAccessItem};
 
@@ -124,8 +125,7 @@ impl Platform for WindowsPlatform {
     }
 
     fn file_icon(&self, path: String, large: bool) -> Result<image::RgbaImage, String> {
-        use windows::Win32::System::Com::{CoInitializeEx, CoUninitialize, COINIT_MULTITHREADED};
-        let initialized = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED).is_ok() };
+        let _com = ComApartment::mta_or_existing().map_err(|error| error.to_string())?;
         let result = super::icons::get_file_icon(
             path,
             if large { "large" } else { "small" }.into(),
@@ -134,7 +134,6 @@ impl Platform for WindowsPlatform {
                 .map(|image| image.to_rgba8())
                 .map_err(|error| error.to_string())
         });
-        if initialized { unsafe { CoUninitialize(); } }
         result
     }
 
@@ -170,7 +169,7 @@ impl Platform for WindowsPlatform {
         path: &str,
         is_background: bool,
     ) -> Result<Vec<crate::models::WinMenuItem>, String> {
-        crate::commands::system::get_native_context_menu_items(path.to_string(), is_background)
+        super::windows_shell::get_native_context_menu_items(path.to_string(), is_background)
             .map_err(|error| error.to_string())
     }
 
@@ -180,7 +179,7 @@ impl Platform for WindowsPlatform {
         id: i32,
         is_background: bool,
     ) -> Result<(), String> {
-        crate::commands::system::execute_native_menu_item(path.to_string(), id, is_background)
+        super::windows_shell::execute_native_menu_item(path.to_string(), id, is_background)
             .map_err(|error| error.to_string())
     }
 
@@ -343,10 +342,8 @@ impl Platform for WindowsPlatform {
         use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
 
         if path.starts_with("::{") || path.starts_with('?') {
-            use windows::Win32::System::Com::{CoInitializeEx, CoUninitialize, COINIT_APARTMENTTHREADED};
             // Network-device Shell extensions require COM on this worker.
-            unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED).ok() }
-                .map_err(|error| error.to_string())?;
+            let _com = ComApartment::sta().map_err(|error| error.to_string())?;
             let result = unsafe {
                 let wide = HSTRING::from(path);
                 let res = ShellExecuteW(
@@ -364,7 +361,6 @@ impl Platform for WindowsPlatform {
                     ))
                 } else { Ok(()) }
             };
-            unsafe { CoUninitialize() };
             result?;
         } else {
             std::process::Command::new("explorer")
@@ -376,7 +372,25 @@ impl Platform for WindowsPlatform {
     }
 
     fn get_quick_access_items(&self) -> Vec<QuickAccessItem> {
-        crate::commands::system::get_quick_access_items().unwrap_or_default()
+        super::windows_shell::get_quick_access_items().unwrap_or_default()
+    }
+
+    fn pin_quick_access(&self, path: &str) -> Result<(), crate::models::CommandError> {
+        super::windows_shell::execute_shell_verb_by_canonical_name(
+            path,
+            &["pintohome", "pintofavorites"],
+        )
+    }
+
+    fn unpin_quick_access(&self, path: &str) -> Result<(), crate::models::CommandError> {
+        super::windows_shell::execute_shell_verb_by_canonical_name(
+            path,
+            &["unpinfromhome", "unpinfromquickaccess"],
+        )
+    }
+
+    fn shell_item_friendly_name(&self, path: &str) -> Result<Option<String>, String> {
+        super::windows_shell_properties::friendly_name(path)
     }
 
     fn show_properties_dialog(&self, path: &str) {

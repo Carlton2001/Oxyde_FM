@@ -5,15 +5,6 @@ use std::fs;
 use std::path::PathBuf;
 use std::time::SystemTime;
 
-#[cfg(target_os = "windows")]
-use windows::core::{GUID, PCWSTR};
-#[cfg(target_os = "windows")]
-use windows::Win32::System::Com::IBindCtx;
-#[cfg(target_os = "windows")]
-use windows::Win32::UI::Shell::PropertiesSystem::{
-    IPropertyStore, SHGetPropertyStoreFromParsingName, GPS_DEFAULT,
-};
-
 pub async fn list_dir(
     path: String,
     show_hidden: Option<bool>,
@@ -234,66 +225,8 @@ pub fn get_file_properties(path: String) -> Result<FileProperties, CommandError>
             shortcut: None,
         };
 
-        #[cfg(target_os = "windows")]
-        unsafe {
-            use windows::Win32::Foundation::PROPERTYKEY;
-            use windows::Win32::System::Com::{
-                CoInitializeEx, CoUninitialize, COINIT_MULTITHREADED,
-            };
-
-            let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
-
-            let wide_path: Vec<u16> = path.encode_utf16().chain(std::iter::once(0)).collect();
-            if let Ok(store) = SHGetPropertyStoreFromParsingName::<
-                _,
-                Option<&IBindCtx>,
-                IPropertyStore,
-            >(PCWSTR(wide_path.as_ptr()), None, GPS_DEFAULT)
-            {
-                let get_prop = |guid_values: (u32, u16, u16, [u8; 8]),
-                                pid: u32|
-                 -> Option<String> {
-                    let key = PROPERTYKEY {
-                        fmtid: GUID::from_values(
-                            guid_values.0,
-                            guid_values.1,
-                            guid_values.2,
-                            guid_values.3,
-                        ),
-                        pid,
-                    };
-                    if let Ok(var) = store.GetValue(&key) {
-                        if let Ok(pwstr) =
-                            windows::Win32::System::Com::StructuredStorage::PropVariantToStringAlloc(
-                                &var,
-                            )
-                        {
-                            let val = pwstr.to_string().unwrap_or_default();
-                            windows::Win32::System::Com::CoTaskMemFree(Some(
-                                pwstr.as_ptr() as *const _
-                            ));
-                            if !val.is_empty() {
-                                return Some(val);
-                            }
-                        }
-                    }
-                    None
-                };
-
-                // For name, sometimes PKEY_Device_FriendlyName {A45C2502-DFC5-491D-8F1D-DC141151D4B2}, 14 is better
-                if let Some(friendly) = get_prop(
-                    (
-                        0xA45C2502,
-                        0xDFC5,
-                        0x491D,
-                        [0x8F, 0x1D, 0xDC, 0x14, 0x11, 0x51, 0xD4, 0xB2],
-                    ),
-                    14,
-                ) {
-                    props.name = friendly;
-                }
-            }
-            CoUninitialize();
+        if let Ok(Some(name)) = crate::platform::platform().shell_item_friendly_name(&path) {
+            props.name = name;
         }
 
         return Ok(props);

@@ -136,6 +136,23 @@ pub trait Platform: Send + Sync {
     /// Retourne les éléments de l'Accès Rapide (Windows) ou des Favoris GTK (Linux).
     fn get_quick_access_items(&self) -> Vec<QuickAccessItem>;
 
+    fn pin_quick_access(&self, path: &str) -> Result<(), crate::models::CommandError> {
+        let _ = path;
+        Err(crate::models::CommandError::SystemError(
+            "Quick access is only supported on Windows".into(),
+        ))
+    }
+    fn unpin_quick_access(&self, path: &str) -> Result<(), crate::models::CommandError> {
+        let _ = path;
+        Err(crate::models::CommandError::SystemError(
+            "Quick access is only supported on Windows".into(),
+        ))
+    }
+    /// Best-effort native name of a virtual Shell item; ordinary properties keep their fallback.
+    fn shell_item_friendly_name(&self, path: &str) -> Result<Option<String>, String> {
+        let _ = path;
+        Ok(None)
+    }
     fn peek_status(&self) -> Result<PeekStatus, String>;
     fn open_peek(&self, path: &str) -> Result<(), String>;
     fn shortcut_info(&self, path: &std::path::Path) -> Option<crate::models::ShortcutInfo>;
@@ -196,6 +213,12 @@ mod windows_disk_images;
 mod windows_drives;
 #[cfg(target_os = "windows")]
 mod windows_impl;
+#[cfg(target_os = "windows")]
+mod windows_com;
+#[cfg(target_os = "windows")]
+mod windows_shell;
+#[cfg(target_os = "windows")]
+mod windows_shell_properties;
 #[cfg(target_os = "windows")]
 mod windows_trash;
 

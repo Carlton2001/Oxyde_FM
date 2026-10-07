@@ -146,17 +146,39 @@ where
 }
 
 #[cfg(target_os = "windows")]
+struct MediaFoundationGuard;
+#[cfg(target_os = "windows")]
+impl MediaFoundationGuard {
+    fn new() -> Result<Self, CommandError> {
+        unsafe {
+            windows::Win32::Media::MediaFoundation::MFStartup(
+                windows::Win32::Media::MediaFoundation::MF_SDK_VERSION,
+                windows::Win32::Media::MediaFoundation::MFSTARTUP_FULL,
+            )
+        }
+        .map_err(|error| CommandError::SystemError(error.to_string()))?;
+        Ok(Self)
+    }
+}
+#[cfg(target_os = "windows")]
+impl Drop for MediaFoundationGuard {
+    fn drop(&mut self) {
+        unsafe {
+            let _ = windows::Win32::Media::MediaFoundation::MFShutdown();
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
 pub fn stream_video_frames_sync<F>(path: String, mut on_frame: F) -> Result<(), CommandError>
 where
     F: FnMut(RgbaImage, Duration) -> bool,
 {
     use windows::Win32::Media::MediaFoundation::*;
     unsafe {
-        let _ = windows::Win32::System::Com::CoInitializeEx(
-            None,
-            windows::Win32::System::Com::COINIT_MULTITHREADED,
-        );
-        let _ = MFStartup(MF_SDK_VERSION, MFSTARTUP_FULL);
+        let _com = super::windows_com::ComApartment::mta_or_existing()
+            .map_err(|error| CommandError::SystemError(error.to_string()))?;
+        let _media = MediaFoundationGuard::new()?;
 
         let res: Result<(), CommandError> = {
             let wide_path = windows::core::HSTRING::from(&path);
@@ -271,9 +293,6 @@ where
             }
             Ok(())
         };
-
-        let _ = MFShutdown();
-        windows::Win32::System::Com::CoUninitialize();
         res
     }
 }
@@ -370,9 +389,9 @@ pub fn get_pdf_thumbnail_raw(path: String) -> Result<RgbaImage, CommandError> {
     use windows::Graphics::Imaging::BitmapDecoder;
     use windows::Storage::StorageFile;
     use windows::Storage::Streams::InMemoryRandomAccessStream;
-    unsafe {
-        use windows::Win32::System::Com::{CoInitializeEx, CoUninitialize, COINIT_MULTITHREADED};
-        let co_ok = CoInitializeEx(None, COINIT_MULTITHREADED).is_ok();
+    {
+        let _com = super::windows_com::ComApartment::mta_or_existing()
+            .map_err(|error| CommandError::SystemError(error.to_string()))?;
         let res = (|| -> Result<RgbaImage, CommandError> {
             let abs_path =
                 std::fs::canonicalize(&path).map_err(|e| CommandError::IoError(e.to_string()))?;
@@ -401,9 +420,6 @@ pub fn get_pdf_thumbnail_raw(path: String) -> Result<RgbaImage, CommandError> {
             RgbaImage::from_raw(width, height, rgba)
                 .ok_or_else(|| CommandError::Other("Invalid pixel data".to_string()))
         })();
-        if co_ok {
-            CoUninitialize();
-        }
         res
     }
 }
@@ -417,10 +433,10 @@ fn shell_thumbnail_raw(path: &str) -> Result<RgbaImage, CommandError> {
         CreateCompatibleDC, DeleteDC, DeleteObject, GetDIBits, GetObjectW, BITMAP, BITMAPINFO,
         BITMAPINFOHEADER, DIB_RGB_COLORS, HGDIOBJ,
     };
-    use windows::Win32::System::Com::{CoInitializeEx, CoUninitialize, COINIT_APARTMENTTHREADED};
     use windows::Win32::UI::Shell::{IShellItemImageFactory, SHCreateItemFromParsingName, SIIGBF};
     unsafe {
-        let co_ok = CoInitializeEx(None, COINIT_APARTMENTTHREADED).is_ok();
+        let _com = super::windows_com::ComApartment::sta_or_existing()
+            .map_err(|error| CommandError::SystemError(error.to_string()))?;
         let res = (|| -> Result<RgbaImage, CommandError> {
             let wide_path = windows::core::HSTRING::from(path);
             let factory: IShellItemImageFactory =
@@ -458,9 +474,6 @@ fn shell_thumbnail_raw(path: &str) -> Result<RgbaImage, CommandError> {
             RgbaImage::from_raw(bmp.bmWidth as u32, bmp.bmHeight as u32, pixels)
                 .ok_or_else(|| CommandError::Other("Invalid bitmap".to_string()))
         })();
-        if co_ok {
-            CoUninitialize();
-        }
         res
     }
 }

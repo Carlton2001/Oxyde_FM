@@ -1,5 +1,6 @@
 #![cfg(target_os = "windows")]
 
+use super::windows_com::{take_string, ComApartment};
 use crate::models::NetResource;
 use log::info;
 use windows::core::{PCWSTR, PWSTR};
@@ -9,9 +10,7 @@ use windows::Win32::NetworkManagement::WNet::{
     CONNECT_UPDATE_PROFILE, NETRESOURCEW, NET_CONNECT_FLAGS, RESOURCETYPE_ANY, RESOURCETYPE_DISK,
     RESOURCEUSAGE_CONTAINER, RESOURCE_CONNECTED, RESOURCE_GLOBALNET, WNET_OPEN_ENUM_USAGE,
 };
-use windows::Win32::System::Com::{
-    CoInitializeEx, CoUninitialize, IBindCtx, COINIT_APARTMENTTHREADED,
-};
+use windows::Win32::System::Com::IBindCtx;
 use windows::Win32::UI::Shell::{
     BHID_EnumItems, FOLDERID_NetworkFolder, IEnumShellItems,
     IShellItem, SHGetKnownFolderItem, KF_FLAG_DEFAULT,
@@ -86,7 +85,8 @@ pub fn get_network_resources(path: Option<String>) -> Result<Vec<NetResource>, S
 
         unsafe {
             if path.is_none() {
-                let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+                let _com = ComApartment::sta_or_existing()
+                    .map_err(|error| error.to_string())?;
 
                 if let Ok(folder_item) = SHGetKnownFolderItem::<IShellItem>(
                     &FOLDERID_NetworkFolder,
@@ -108,7 +108,7 @@ pub fn get_network_resources(path: Option<String>) -> Result<Vec<NetResource>, S
                             if let Some(i) = &item[0] {
                                 let name =
                                     if let Ok(name_ptr) = i.GetDisplayName(SIGDN_NORMALDISPLAY) {
-                                        name_ptr.to_string().unwrap_or_default()
+                                        take_string(name_ptr).unwrap_or_default()
                                     } else {
                                         "Unknown".to_string()
                                     };
@@ -116,7 +116,7 @@ pub fn get_network_resources(path: Option<String>) -> Result<Vec<NetResource>, S
                                 let mut remote_path = if let Ok(p_ptr) =
                                     i.GetDisplayName(SIGDN_DESKTOPABSOLUTEPARSING)
                                 {
-                                    p_ptr.to_string().unwrap_or_default()
+                                    take_string(p_ptr).unwrap_or_default()
                                 } else {
                                     "".to_string()
                                 };
@@ -211,9 +211,6 @@ pub fn get_network_resources(path: Option<String>) -> Result<Vec<NetResource>, S
                     }
                     let _ = WNetCloseEnum(connected_handle);
                 }
-
-                CoUninitialize();
-
                 // Sort by name
                 resources.sort_by_key(|resource| resource.name.to_lowercase());
                 return Ok(resources);

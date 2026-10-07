@@ -44,11 +44,15 @@ Validation : six nouveaux tests couvrent l'identité affichée, la conservation 
 
 ## A05 — Durée de vie des ressources COM/Shell — P2
 
-**Points de code établis, conséquences à mesurer.** `platform/network.rs:94` et `commands/io.rs:313` ignorent le résultat de `CoInitializeEx` puis appellent `CoUninitialize` sans condition. Des parcours analogues existent dans les commandes système. Revoir l'équilibre initialisation/désinitialisation, les erreurs et l'ordre de destruction des objets avec un garde commun conforme aux contrats COM.
+**Corrigé le 8 octobre 2026 sur les parcours actifs relus.** Les initialisations ignorées de l'énumération réseau, des propriétés virtuelles, de l'accès rapide et des verbes Shell pouvaient être suivies d'une désinitialisation sans référence COM acquise. Les noms et chemins réseau n'étaient pas libérés ; la valeur native du property store ne recevait pas `PropVariantClear`. Aucun profil mémoire n'a été effectué.
 
-Les noms et chemins issus de `IShellItem::GetDisplayName` (`network.rs:115`, `:122`) sont convertis sans libération explicite du buffer ; le parcours d'accès rapide dans `commands/system.rs` libère les buffers correspondants. Auditer ces allocations, ainsi que les valeurs obtenues depuis le property store, avant de conclure sur l'ampleur des fuites. Aucun profil mémoire effectué. Refaire cette revue après N09/N10, qui peuvent retirer une partie des appels.
+Une garde commune lie chaque initialisation réussie (`S_OK` ou `S_FALSE`) à une désinitialisation sur le même thread. Les traitements qui fonctionnaient déjà dans un appartement existant acceptent explicitement `RPC_E_CHANGED_MODE`, sans acquérir ni libérer de référence. Les autres échecs arrêtent le traitement natif ; les propriétés et l'accès rapide conservent leurs replis existants. Les menus, raccourcis et ouvertures virtuelles gardent leur exigence STA. La garde est déclarée avant les interfaces pour que celles-ci soient détruites avant COM, y compris sur erreur ou panique.
 
-Relecture après A06 : les parcours actifs `platform/network.rs::get_network_resources`, les propriétés virtuelles de `commands/io.rs`, l'accès rapide et `commands/system.rs::execute_shell_verb` conservent ces initialisations ignorées. Les deux noms `GetDisplayName` de l'énumération réseau ne sont toujours pas libérés. Dans l'accès rapide, certains retours désinitialisent COM avant la destruction des interfaces locales. Le menu contextuel possède déjà une garde conditionnelle, et le nouveau presse-papiers Shell A18 équilibre OLE ; conserver ces comportements corrects lors de la factorisation.
+Les chaînes Shell et PIDL possédés sont libérés par `CoTaskMemFree`, les valeurs de propriétés par `PropVariantClear`, les menus par `DestroyMenu`. Les sous-menus et PIDL relatifs empruntés ne reçoivent pas de libération indépendante. Les aperçus vidéo équilibrent également chaque démarrage réussi de Media Foundation après la destruction des lecteurs et échantillons. Les gardes OLE du presse-papiers A18 restent séparées. La sortie finale documentée dans `SHUTDOWN_DIAGNOSTICS.md` est conservée.
+
+Huit régressions vérifient les résultats COM injectés, les références natives imbriquées, un worker MTA conservé après refus STA, les erreurs/paniques, le décodage de chaînes allouées Unicode et invalides, les erreurs des parcours actifs de propriétés/PDF/menu, la destruction des menus natifs et deux conversions indépendantes d'une propriété Unicode réelle. Ces tests ne mesurent pas une fuite mémoire globale et ne valident pas le rendu d'un aperçu PDF/vidéo ou les extensions Shell installées.
+
+Contrats natifs : [CoInitializeEx](https://learn.microsoft.com/en-us/windows/win32/api/combaseapi/nf-combaseapi-coinitializeex), [CoUninitialize](https://learn.microsoft.com/en-us/windows/win32/api/combaseapi/nf-combaseapi-couninitialize), [IShellItem::GetDisplayName](https://learn.microsoft.com/en-us/windows/win32/api/shobjidl_core/nf-shobjidl_core-ishellitem-getdisplayname).
 
 ## A06 — Presse-papiers : allocations et erreurs du format Couper — P2
 
@@ -64,9 +68,9 @@ Contrats natifs : [SetClipboardData](https://learn.microsoft.com/en-us/windows/w
 
 ## A07 — API Windows encore dans les commandes — P2
 
-**Dette d'architecture établie.** Plusieurs traitements Shell/COM restent dans `commands/io.rs`, `commands/system.rs` et `commands/ops.rs`. Certaines méthodes de plateforme délèguent encore à ces commandes. Le filtre de dossiers système de `commands/sidebar.rs` connaît également des détails Windows.
+**Partiellement traité le 8 octobre 2026 avec A05.** Les menus natifs, l'énumération/épinglage de l'accès rapide et le nom convivial des propriétés virtuelles passent maintenant par `Platform`, avec leurs implémentations dans des modules Windows privés. Les wrappers publics sans autre appelant des menus dans `commands/system.rs` sont retirés ; la plateforme ne redélègue plus à ces commandes pour ces traitements. Les résultats et replis existants restent conservés, hormis les échecs d'initialisation COM désormais équilibrés.
 
-Déplacer les appels natifs actifs derrière `Platform` et les modules Windows, selon AGENTS.md, en conservant les résultats et erreurs. Après retrait des branches mortes, établir une liste précise des responsabilités restantes. Linux reste hors validation pour le moment ; conserver ses conditions de compilation et ses interfaces.
+Restent notamment les appels natifs de vidage/suppression permanente de corbeille dans `commands/ops.rs`, les usages de `trash::os_limited` dans les commandes et les détails de filtrage Windows dans `commands/sidebar.rs`. Déplacer ces responsabilités dans un lot distinct, en revalidant leurs appelants et erreurs. Linux reste hors validation ; ses conditions de compilation et interfaces sont conservées.
 
 ## A08 — Annulation de recherche et détection SSD — P2
 
@@ -184,11 +188,23 @@ Des gardes déverrouillent les blocs puis ferment la session sur toute sortie. L
 
 Contrats natifs : [GetClipboardData](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getclipboarddata), [GlobalSize](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-globalsize), [DROPFILES](https://learn.microsoft.com/en-us/windows/win32/api/shlobj_core/ns-shlobj_core-dropfiles).
 
+## A24 — Erreurs de menus et d'épinglage Shell ignorées — P2
+
+**Points de code établis pendant A05, sans reproduction utilisateur.** Les fonctions actives de `platform/windows_shell.rs` ignorent le résultat de `QueryContextMenu` ; `execute_native_menu_item` ignore aussi celui de `InvokeCommand`. Le repli PowerShell de désépinglage d'un chemin absent retourne une réussite sans vérifier le résultat du processus. Une erreur native peut donc être présentée comme une réussite. Propager les erreurs utiles et distinguer une commande absente d'un échec d'exécution dans un lot dédié ; ne pas modifier les épingles utilisateur pour les tests.
+
+## A25 — Lecture de verbes Shell hors du buffer si terminateur absent — P2
+
+**Point de code établi, sans crash reproduit.** Les trois lectures `GetCommandString` de `platform/windows_shell.rs` convertissent un tableau de 128 octets via `CStr::from_ptr`. Si une extension remplit le tableau sans terminateur, la conversion cherche au-delà de la mémoire disponible. Borne explicite et politique de refus à introduire séparément, avec fixture de réponse tronquée ; les conversions restent inchangées dans A05.
+
+## A26 — Échecs du lecteur vidéo masqués — P2
+
+**Points de code établis, sans reproduction native.** `platform/thumbnails.rs::stream_video_frames_sync` abandonne la boucle sur certains échecs de création/type puis retourne `Ok(())`. Une erreur de lecture termine seulement la boucle interne : le lecteur est relancé après 200 ms. Si aucune image n'arrive, le callback ne peut pas signaler l'arrêt. Examiner la propagation des erreurs et l'annulation indépendante des images dans un lot distinct ; A05 équilibre seulement les ressources COM/Media Foundation.
+
 ## Validation et suite
 
 La compilation Windows actuelle passe sans avertissement du projet. Les observations ci-dessus sont issues de la lecture des sources et de Clippy ; aucun nouveau test de comportement ou benchmark n'a été exécuté pendant cet audit. Snap Layouts et le témoin de déplacement actuel sont confirmés par l'utilisateur. Les validations des lots précédents restent décrites dans [AUDIT_CODE_MORT.md](AUDIT_CODE_MORT.md).
 
-Après A01/A02/A03/A04/A06/A15/A23 et le raccordement A18, examiner A05, puis A19 ; conserver A20 pour la validation native interactive. Les optimisations demandent des mesures avant modification. Cet ordre est proposé, pas une liste de corrections déjà autorisées ou réalisées.
+Après A01/A02/A03/A04/A06/A15/A23 et le raccordement A18, A05 étant traité, examiner A19 ; conserver A20 pour la validation native interactive. Les optimisations demandent des mesures avant modification. Cet ordre est proposé, pas une liste de corrections déjà autorisées ou réalisées.
 
 ### État après les lots N01 à N16
 
@@ -251,3 +267,11 @@ Sept tests ciblés passent : chaque préfixe tronqué d'une liste valide, décal
 `cargo test --all-targets --offline` : 120 tests backend et 108 tests du binaire passent, soit 228 ; les 10 tests natifs ignorés restent ignorés. Les sept tests A23 sont inclus. `cargo check --all-targets --offline` passe sans avertissement du projet.
 
 `cargo build --bin oxyde --offline` réussit ; `target/debug/oxyde.exe` est reconstruit. Le lot A23 reste séparé du commit A06 `03d90e6`.
+
+### Validation du lot A05 et du déplacement partiel A07
+
+`cargo test --all-targets --offline` : 128 tests backend et 108 tests du binaire passent, soit 236 ; les 10 tests natifs ignorés restent ignorés. Les huit nouvelles régressions A05 sont incluses et ont aussi été exécutées dans le filtre des modules Windows. Le test natif existant de modification des raccourcis passe avec la garde commune. Les fixtures ne modifient ni les épingles, ni le presse-papiers utilisateur, ni les fichiers utilisateur.
+
+`cargo check --all-targets --offline` passe sans avertissement du projet ; le formatage des trois nouveaux modules et `git diff --check` sont vérifiés. Aucun Computer Use ni validation Linux. La lecture réseau réelle, les extensions de menus, les aperçus PDF/vidéo et leur fermeture restent à confirmer manuellement ; le contournement de sortie finale du processus est conservé.
+
+`cargo build --bin oxyde --offline` réussit ; `target/debug/oxyde.exe` est reconstruit. Le lot A05/A07 reste séparé du commit A23 `f555f30`.

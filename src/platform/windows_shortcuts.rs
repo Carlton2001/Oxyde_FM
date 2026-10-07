@@ -1,19 +1,9 @@
-struct ComGuard;
-impl Drop for ComGuard {
-    fn drop(&mut self) {
-        unsafe {
-            windows::Win32::System::Com::CoUninitialize();
-        }
-    }
-}
-
 #[cfg(target_os = "windows")]
 pub(super) fn get_shortcut_info(path: &std::path::Path) -> Option<crate::models::ShortcutInfo> {
     use windows::core::{Interface, HSTRING, PCWSTR};
     use windows::Win32::Storage::FileSystem::WIN32_FIND_DATAW;
     use windows::Win32::System::Com::{
-        CoCreateInstance, CoInitializeEx, IPersistFile, CLSCTX_INPROC_SERVER,
-        COINIT_APARTMENTTHREADED, STGM_READ,
+        CoCreateInstance, IPersistFile, CLSCTX_INPROC_SERVER, STGM_READ,
     };
     use windows::Win32::UI::Shell::{IShellLinkW, ShellLink};
 
@@ -25,8 +15,7 @@ pub(super) fn get_shortcut_info(path: &std::path::Path) -> Option<crate::models:
     }
 
     unsafe {
-        CoInitializeEx(None, COINIT_APARTMENTTHREADED).ok().ok()?;
-        let _com = ComGuard;
+        let _com = super::windows_com::ComApartment::sta().ok()?;
 
         let link: IShellLinkW = match CoCreateInstance(&ShellLink, None, CLSCTX_INPROC_SERVER) {
             Ok(l) => l,
@@ -111,18 +100,15 @@ pub(super) fn set_shortcut_info(
         use std::path::PathBuf;
         use windows::core::{Interface, HSTRING, PCWSTR};
         use windows::Win32::System::Com::{
-            CoCreateInstance, CoInitializeEx, IPersistFile, CLSCTX_INPROC_SERVER,
-            COINIT_APARTMENTTHREADED, STGM_READWRITE,
+            CoCreateInstance, IPersistFile, CLSCTX_INPROC_SERVER, STGM_READWRITE,
         };
         use windows::Win32::UI::Shell::{IShellLinkW, ShellLink};
 
         let path_buf = PathBuf::from(&path);
 
         unsafe {
-            CoInitializeEx(None, COINIT_APARTMENTTHREADED)
-                .ok()
+            let _com = super::windows_com::ComApartment::sta()
                 .map_err(|e| CommandError::SystemError(e.to_string()))?;
-            let _com = ComGuard;
 
             let link: IShellLinkW = CoCreateInstance(&ShellLink, None, CLSCTX_INPROC_SERVER)
                 .map_err(|e| {
@@ -174,18 +160,14 @@ pub(super) fn set_shortcut_info(
 mod tests {
     use super::*;
     use windows::core::{Interface, HSTRING, PCWSTR};
-    use windows::Win32::System::Com::{
-        CoCreateInstance, CoInitializeEx, IPersistFile, CLSCTX_INPROC_SERVER,
-        COINIT_APARTMENTTHREADED,
-    };
+    use windows::Win32::System::Com::{CoCreateInstance, IPersistFile, CLSCTX_INPROC_SERVER};
     use windows::Win32::UI::Shell::{IShellLinkW, ShellLink};
     #[test]
     fn shortcut_edits_preserve_icon_and_hotkey() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("test.lnk");
         unsafe {
-            CoInitializeEx(None, COINIT_APARTMENTTHREADED).ok().unwrap();
-            let _com = ComGuard;
+            let _com = super::super::windows_com::ComApartment::sta().unwrap();
             let link: IShellLinkW =
                 CoCreateInstance(&ShellLink, None, CLSCTX_INPROC_SERVER).unwrap();
             link.SetPath(PCWSTR(HSTRING::from("C:\\original.exe").as_ptr()))
@@ -215,8 +197,7 @@ mod tests {
         assert_eq!(loaded.description, info.description);
         assert_eq!(loaded.run_window, 3);
         unsafe {
-            CoInitializeEx(None, COINIT_APARTMENTTHREADED).ok().unwrap();
-            let _com = ComGuard;
+            let _com = super::super::windows_com::ComApartment::sta().unwrap();
             let link: IShellLinkW =
                 CoCreateInstance(&ShellLink, None, CLSCTX_INPROC_SERVER).unwrap();
             let persist: IPersistFile = link.cast().unwrap();
