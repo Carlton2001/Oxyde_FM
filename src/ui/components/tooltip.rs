@@ -166,6 +166,34 @@ enum PreviewData {
 }
 
 impl Tooltip {
+    pub fn for_drive(name: String, drive: oxyde_lib::models::DriveInfo) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
+        move |_, cx| cx.new(|_| DriveTooltip { name: name.clone().into(), drive: drive.clone() }).into()
+    }
+    pub fn for_delete(handle: Entity<crate::ui::app::OxydeApp>) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
+        move |window, cx| {
+            let title = cx.i18n().text(if window.modifiers().shift { Message::TrashDeletePermanent } else { Message::Delete });
+            cx.new(|cx| {
+                cx.observe(&handle, |tooltip: &mut Self, app, cx| {
+                    tooltip.title = cx.i18n().text(if app.read(cx).shift_delete { Message::TrashDeletePermanent } else { Message::Delete });
+                    cx.notify();
+                }).detach();
+                Self { title, meta: None, shortcut: None, file_info: None, preview_view: None }
+            }).into()
+        }
+    }
+    pub fn for_trash(file: oxyde_lib::models::FileEntry, ext: String, previews: bool) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
+        move |_, cx| {
+            let view = Self::new_for_file(file.name.clone(), file.path.clone(), ext.clone(),
+                (file.size, file.is_dir, file.is_calculated), file.modified, previews, None, cx);
+            let location = file.original_path.as_deref().and_then(|path| std::path::Path::new(path).parent())
+                .map(|path| path.to_string_lossy().into_owned()).unwrap_or_default();
+            let date = file.deleted_time.and_then(|date| u64::try_from(date).ok()).unwrap_or(0);
+            let metadata = format!("{} : {}\n{} : {}", cx.i18n().text(Message::TrashOriginalLocation), location,
+                cx.i18n().text(Message::TrashDeletedAt), format_date(date, crate::ui::format::date_format(cx)));
+            view.update(cx, |tooltip, _| tooltip.meta = Some(metadata.into()));
+            view.into()
+        }
+    }
     pub fn for_network(file: oxyde_lib::models::FileEntry) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
         move |_, cx| cx.new(|_| Self {
             title: file.name.clone().into(), meta: None, shortcut: None,
@@ -322,6 +350,77 @@ impl Tooltip {
                 preview_view,
             }
         })
+    }
+}
+
+struct DriveTooltip {
+    name: SharedString,
+    drive: oxyde_lib::models::DriveInfo,
+}
+
+fn drive_usage(total: u64, free: u64) -> Option<(u64, f32)> {
+    (total > 0).then(|| {
+        let used = total.saturating_sub(free);
+        (used, (used as f64 / total as f64) as f32)
+    })
+}
+
+fn ring_sector(center: Point<Pixels>, radius: f32, inner: f32, start: f32, end: f32) -> Option<Path<Pixels>> {
+    if end <= start { return None; }
+    let steps = ((end - start) * 32.0).ceil().max(1.0) as usize;
+    let vertex = |radius: f32, angle: f32| center + point(px(radius * angle.cos()), px(radius * angle.sin()));
+    let mut path = PathBuilder::fill();
+    path.move_to(vertex(radius, start));
+    for index in 1..=steps { path.line_to(vertex(radius, start + (end - start) * index as f32 / steps as f32)); }
+    for index in (0..=steps).rev() { path.line_to(vertex(inner, start + (end - start) * index as f32 / steps as f32)); }
+    path.close();
+    path.build().ok()
+}
+
+impl Render for DriveTooltip {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let theme = *OxydeTheme::global(cx);
+        let usage = drive_usage(self.drive.total_bytes, self.drive.free_bytes);
+        let mut body = div().flex().flex_col().items_center().gap(rems(0.5))
+            .child(div().max_w(rems(18.0)).text_size(rems(0.8125)).child(self.name.clone()));
+        if let Some((used, ratio)) = usage {
+            let chart = canvas(|bounds, _, _| bounds, move |_, bounds, window, _| {
+                let center = bounds.center();
+                let radius = bounds.size.width.as_f32() * 0.43;
+                let inner = radius * 0.68;
+                let start = -std::f32::consts::FRAC_PI_2;
+                let split = start + std::f32::consts::TAU * ratio;
+                let end = start + std::f32::consts::TAU;
+                for (from, to, color) in [(start, split, theme.accent), (split, end, theme.border)] {
+                    if let Some(path) = ring_sector(center, radius, inner, from, to) { window.paint_path(path, color); }
+                }
+            }).absolute().inset_0();
+            let mut args = FluentArgs::new();
+            args.set("used", format_size(used, false, false, cx.i18n().language()));
+            args.set("total", format_size(self.drive.total_bytes, false, false, cx.i18n().language()));
+            body = body.child(div().relative().size(rems(4.75)).flex().items_center().justify_center()
+                .child(chart).child(div().text_size(rems(0.875)).font_weight(FontWeight::SEMIBOLD).child(format!("{}%", (ratio * 100.0).round() as u32))))
+                .child(div().text_size(rems(0.6875)).text_color(theme.text_muted).child(cx.i18n().text_with_args(Message::DriveTooltipUsage, &args)));
+        } else {
+            body = body.child(div().text_size(rems(0.6875)).text_color(theme.text_muted).child(self.drive.path.clone()));
+        }
+        div().pl(rems(0.5)).pt(rems(0.625)).child(div().bg(theme.surface).text_color(theme.text)
+            .font_family("Inter").font_weight(crate::ui::style::DEFAULT_FONT_WEIGHT)
+            .border(rems(0.0625)).border_color(theme.border).rounded_md().shadow(crate::ui::style::rem_shadow(true))
+            .px(rems(0.75)).py(rems(0.5)).child(body))
+    }
+}
+
+#[cfg(test)]
+mod drive_usage_tests {
+    #[test]
+    fn drive_usage_handles_empty_full_unknown_and_inconsistent_capacity() {
+        assert_eq!(super::drive_usage(0, 0), None);
+        assert_eq!(super::drive_usage(100, 100), Some((0, 0.0)));
+        assert_eq!(super::drive_usage(100, 0), Some((100, 1.0)));
+        assert_eq!(super::drive_usage(100, 200), Some((0, 0.0)));
+        let (used, ratio) = super::drive_usage(100, 21).unwrap();
+        assert_eq!(used, 79); assert!((ratio - 0.79).abs() < 0.0001);
     }
 }
 

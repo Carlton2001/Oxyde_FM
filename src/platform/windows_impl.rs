@@ -10,6 +10,50 @@ impl WindowsPlatform {
 }
 
 impl Platform for WindowsPlatform {
+    fn recycle_bin_usage(&self) -> Result<(u64, u64), String> {
+        use windows::core::PCWSTR;
+        use windows::Win32::Storage::FileSystem::GetLogicalDriveStringsW;
+        use windows::Win32::UI::Shell::{SHQueryRecycleBinW, SHQUERYRBINFO};
+
+        let mut total_size = 0u64;
+        let mut total_items = 0u64;
+
+        unsafe {
+            let mut buffer = [0u16; 260];
+            let len = GetLogicalDriveStringsW(Some(&mut buffer));
+            if len > 0 {
+                let drive_strings = String::from_utf16_lossy(&buffer[..len as usize]);
+                for drive_path in drive_strings.split('\0').filter(|s| !s.is_empty()) {
+                    let wide_path: Vec<u16> = drive_path
+                        .encode_utf16()
+                        .chain(std::iter::once(0))
+                        .collect();
+
+                    let mut info = SHQUERYRBINFO {
+                        cbSize: std::mem::size_of::<SHQUERYRBINFO>() as u32,
+                        i64Size: 0,
+                        i64NumItems: 0,
+                    };
+
+                    if SHQueryRecycleBinW(PCWSTR(wide_path.as_ptr()), &mut info).is_ok() {
+                        total_size += info.i64Size as u64;
+                        total_items += info.i64NumItems as u64;
+                    }
+                }
+            }
+        }
+
+        Ok((total_size, total_items))
+
+    }
+
+    fn recycle_bin_config(&self, path: String) -> Result<crate::commands::ops::TrashSystemConfig, String> {
+        read_recycle_bin_config(path).map_err(|error| error.to_string())
+    }
+    fn set_recycle_bin_config(&self, config: crate::commands::ops::TrashSystemConfig) -> Result<(), String> {
+        write_recycle_bin_config(config).map_err(|error| error.to_string())
+    }
+
     fn finish_process_shutdown(&self) -> Result<(), String> {
         // A captured shutdown dump showed the final thread spinning in Intel's
         // igd10um64xe through d3d11 / Windows.Data.Pdf during process detach,
@@ -151,6 +195,19 @@ impl Platform for WindowsPlatform {
             buffer.push(0);
         }
         buffer.push(0);
+        // Explicitly honor the per-volume setting even when the caller requests undo.
+        let immediate = |path: &std::path::PathBuf| path.ancestors().last()
+            .and_then(|root| read_recycle_bin_config(root.to_string_lossy().into_owned()).ok())
+            .is_some_and(|config| config.nuke_on_delete);
+        if recycle && paths.len() > 1 {
+            let (permanent, recyclable): (Vec<_>, Vec<_>) = paths.iter().cloned().partition(immediate);
+            if !permanent.is_empty() {
+                self.shell_delete(&permanent, false)?;
+                if !recyclable.is_empty() { self.shell_delete(&recyclable, true)?; }
+                return Ok(());
+            }
+        }
+        let recycle = recycle && !paths.first().is_some_and(immediate);
         let mut flags = FOF_NOCONFIRMATION.0 | FOF_NOERRORUI.0 | FOF_SILENT.0;
         if recycle {
             flags |= FOF_ALLOWUNDO.0;
@@ -428,3 +485,127 @@ impl Platform for WindowsPlatform {
         }
     }
 }
+
+mod recycle_settings {
+    use crate::commands::ops::TrashSystemConfig;
+    use crate::models::CommandError;
+    use windows::core::PCWSTR;
+    use windows::Win32::Storage::FileSystem::GetVolumeNameForVolumeMountPointW;
+    use windows::Win32::System::Registry::{RegOpenKeyExW, RegQueryValueExW, RegSetValueExW, HKEY_CURRENT_USER, KEY_READ, KEY_WRITE, REG_DWORD};
+    use windows::Win32::UI::Shell::{SHChangeNotify, SHCNE_ASSOCCHANGED, SHCNF_FLUSH};
+pub(super) fn read_recycle_bin_config(drive_path: String) -> Result<TrashSystemConfig, CommandError> {
+    let wide_drive: Vec<u16> = drive_path
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .collect();
+    let mut max_size_mb = 0u64;
+    let mut nuke_on_delete = false;
+
+    unsafe {
+        let mut volume_name = [0u16; 50];
+        if GetVolumeNameForVolumeMountPointW(PCWSTR(wide_drive.as_ptr()), &mut volume_name).is_ok()
+        {
+            let vol_string = String::from_utf16_lossy(&volume_name);
+            let vol_trimmed = vol_string.trim_matches(char::from(0));
+            if let Some(start) = vol_trimmed.find("Volume{") {
+                let guid_part = &vol_trimmed[start + 6..];
+                if let Some(end) = guid_part.find('}') {
+                    let guid_str = &guid_part[..=end];
+                    let key_path = format!("Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\BitBucket\\Volume\\{}", guid_str);
+                    let wide_key: Vec<u16> =
+                        key_path.encode_utf16().chain(std::iter::once(0)).collect();
+
+                    let mut hkey = windows::Win32::System::Registry::HKEY::default();
+                    if RegOpenKeyExW(
+                        HKEY_CURRENT_USER,
+                        PCWSTR(wide_key.as_ptr()),
+                        Some(0),
+                        KEY_READ,
+                        &mut hkey,
+                    )
+                    .0 == 0
+                    {
+                        // Read MaxCapacity
+                        let mut data = 0u32;
+                        let mut data_size = std::mem::size_of::<u32>() as u32;
+                        let mut key_type =
+                            windows::Win32::System::Registry::REG_VALUE_TYPE::default();
+                        let wide_cap: Vec<u16> = "MaxCapacity"
+                            .encode_utf16()
+                            .chain(std::iter::once(0))
+                            .collect();
+                        if RegQueryValueExW(
+                            hkey,
+                            PCWSTR(wide_cap.as_ptr()),
+                            None,
+                            Some(&mut key_type as *mut _),
+                            Some(&mut data as *mut _ as *mut u8),
+                            Some(&mut data_size as *mut _),
+                        )
+                        .0 == 0
+                        {
+                            max_size_mb = data as u64;
+                        }
+
+                        // Read NukeOnDelete
+                        let wide_nuke: Vec<u16> = "NukeOnDelete"
+                            .encode_utf16()
+                            .chain(std::iter::once(0))
+                            .collect();
+                        if RegQueryValueExW(
+                            hkey,
+                            PCWSTR(wide_nuke.as_ptr()),
+                            None,
+                            Some(&mut key_type as *mut _),
+                            Some(&mut data as *mut _ as *mut u8),
+                            Some(&mut data_size as *mut _),
+                        )
+                        .0 == 0
+                        {
+                            nuke_on_delete = data == 1;
+                        }
+                        let _ = windows::Win32::System::Registry::RegCloseKey(hkey);
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(TrashSystemConfig {
+        drive_path,
+        max_size_mb,
+        nuke_on_delete,
+    })
+}
+
+pub(super) fn write_recycle_bin_config(config: TrashSystemConfig) -> Result<(), CommandError> {
+    use windows::Win32::System::Registry::{RegCreateKeyExW, RegCloseKey, REG_OPTION_NON_VOLATILE};
+    let fail = |error: windows::core::Error| CommandError::SystemError(error.to_string());
+    let capacity = u32::try_from(config.max_size_mb).map_err(|_| CommandError::SystemError("Capacity exceeds Windows limit".into()))?;
+    let drive: Vec<u16> = config.drive_path.encode_utf16().chain(Some(0)).collect();
+    unsafe {
+        let mut volume = [0u16; 50];
+        GetVolumeNameForVolumeMountPointW(PCWSTR(drive.as_ptr()), &mut volume).map_err(fail)?;
+        let volume = String::from_utf16_lossy(&volume);
+        let start = volume.find("Volume{").ok_or_else(|| CommandError::SystemError("Invalid volume identifier".into()))? + 6;
+        let end = volume[start..].find('}').ok_or_else(|| CommandError::SystemError("Invalid volume identifier".into()))? + start;
+        let key = format!(r"Software\Microsoft\Windows\CurrentVersion\Explorer\BitBucket\Volume\{}", &volume[start..=end]);
+        let key: Vec<u16> = key.encode_utf16().chain(Some(0)).collect();
+        let mut handle = windows::Win32::System::Registry::HKEY::default();
+        RegCreateKeyExW(HKEY_CURRENT_USER, PCWSTR(key.as_ptr()), Some(0), None, REG_OPTION_NON_VOLATILE, KEY_WRITE, None, &mut handle, None).ok().map_err(fail)?;
+        let result: Result<(), CommandError> = (|| {
+            for (name, value) in [("MaxCapacity", capacity), ("NukeOnDelete", u32::from(config.nuke_on_delete))] {
+                let name: Vec<u16> = name.encode_utf16().chain(Some(0)).collect();
+                RegSetValueExW(handle, PCWSTR(name.as_ptr()), Some(0), REG_DWORD, Some(&value.to_le_bytes())).ok().map_err(fail)?;
+            }
+            Ok(())
+        })();
+        let _ = RegCloseKey(handle);
+        result?;
+        SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_FLUSH, None, None);
+    }
+    Ok(())
+}
+
+}
+use recycle_settings::{read_recycle_bin_config, write_recycle_bin_config};

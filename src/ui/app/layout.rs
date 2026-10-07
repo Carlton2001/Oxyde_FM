@@ -38,6 +38,7 @@ impl OxydeApp {
             }).fold(0.0_f32, f32::max);
             tab.type_col_width = crate::ui::style::metadata_column_width(type_width, measure(i18n.text(Message::ColumnType).as_ref(), true), key.3);
             tab.date_col_width = crate::ui::style::metadata_column_width(measure(&date_sample, false), measure(i18n.text(Message::ColumnModified).as_ref(), true), key.4);
+            tab.deleted_col_width = crate::ui::style::metadata_column_width(measure(&date_sample, false), measure(i18n.text(Message::TrashDeletedAt).as_ref(), false), false);
             let size_width = tab.column_size_values.iter().map(|&(size, directory, calculated)| {
                 if directory && calculated && size == 0 { measure(i18n.text(Message::FolderSizeEmpty).as_ref(), false) } else { measure(&crate::ui::format::format_size(size, directory, calculated, language), false) }
             }).fold(0.0_f32, f32::max);
@@ -73,13 +74,13 @@ impl OxydeApp {
             });
 
             let columns = crate::ui::style::DetailsColumnWidths::for_viewport_with_search(
-                pane_size.width,
+                pane_size.width - if active_tab.path == "trash://" { logical(active_tab.deleted_col_width) } else { 0.0 },
                 active_tab.type_col_width,
                 active_tab.size_col_width,
                 active_tab.date_col_width,
-                active_tab.quick_search.is_some(),
+                active_tab.quick_search.is_some() || active_tab.path == "trash://",
             );
-            let total_w = columns.content_width();
+            let total_w = columns.content_width() + if active_tab.path == "trash://" { logical(active_tab.deleted_col_width) } else { 0.0 };
 
             let max_h_offset = (total_w - pane_size.width).max(0.0);
             let current_h_offset = active_tab.list_scroll_h.offset().x.as_f32().abs();

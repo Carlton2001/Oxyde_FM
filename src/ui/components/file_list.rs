@@ -218,12 +218,14 @@ pub fn render_file_list(
         (pane_size.height - rem_pixels(crate::ui::style::TAB_BAR_HEIGHT).as_f32() - rem_pixels(crate::ui::style::NAV_BAR_HEIGHT).as_f32() - if active_tab.quick_search.is_some() { logical(32.0) } else { 0.0 } - crate::ui::style::column_header_height() - status_bar_height() - crate::ui::components::scrollbar::zed_track_width()).max(1.0);
     let content_h = (count * crate::ui::style::row_height()).max(1.0);
 
+    let trash_panel = active_tab.path == "trash://";
+    let active_deleted_width = active_tab.deleted_col_width;
     let columns = DetailsColumnWidths::for_viewport_with_search(
-        pane_viewport_w,
+        pane_viewport_w - if trash_panel { logical(active_tab.deleted_col_width) } else { 0.0 },
         active_tab.type_col_width,
         active_tab.size_col_width,
         active_tab.date_col_width,
-        search_results,
+        search_results || trash_panel,
     );
     let network_panel = active_tab.path == "__network_vincinity__";
     let name_w = if network_panel { columns.total() * 0.34 } else { columns.name };
@@ -231,7 +233,7 @@ pub fn render_file_list(
     let size_w = if network_panel { columns.total() * 0.22 } else { columns.size };
     let date_w = if network_panel { columns.total() * 0.22 } else { columns.date };
     let location_w = columns.location;
-    let total_w = columns.total();
+    let total_w = columns.total() + if trash_panel { logical(active_tab.deleted_col_width) } else { 0.0 };
 
     let is_active_pane = view.state.active_pane_id == pane_id;
     let is_dragging_v = matches!(view.drag_target, Some(DragTarget::FileListV { ref pane_id, .. }) if pane_id == &p_id_cap);
@@ -329,7 +331,7 @@ pub fn render_file_list(
                         .h_full()
                         .flex()
                         .flex_col()
-                        .child(render_headers(view, pane_id.clone(), handle.clone(), name_w, location_w, type_w, size_w, date_w, &theme, cx.i18n()))
+                        .child(render_headers(view, pane_id.clone(), handle.clone(), name_w, location_w, type_w, size_w, date_w, if trash_panel { logical(active_tab.deleted_col_width) } else { 0.0 }, &theme, cx.i18n()))
                         .child(
                             uniform_list(
                                 SharedString::from(format!("file-list-{}", pane_id)),
@@ -382,10 +384,11 @@ pub fn render_file_list(
                                                 .w(px(total_w))
                                                 .bg(if is_selected { theme.selected } else if is_active_pane { theme.active_background } else { theme.background })
                                                 .when(!is_selected, |s| s.hover(|s| s.bg(theme.hover)))
+                                                .when(show_tooltips && file.original_path.is_some(), |d| d.tooltip(Tooltip::for_trash(file.clone(), ext_tt.clone(), show_media_previews)))
                                                 .when(show_tooltips && network_entry(file), |d| d.tooltip(Tooltip::for_network(file.clone())))
                                                 .when(show_tooltips && search_results, |d| d.tooltip(Tooltip::for_search_result(file.clone(), ext_tt.clone(), show_media_previews)))
-                                                .when(show_tooltips && !search_results && !network_entry(file) && show_media_previews, |d| d.tooltip(Tooltip::for_file_full(file_name_tt.clone(), path_tt, ext_tt.clone(), size_tt.clone(), date_tt.clone())))
-                                                .when(show_tooltips && !search_results && !network_entry(file) && !show_media_previews, |d| d.tooltip(Tooltip::for_file_no_preview(file_name_tt, ext_tt, size_tt, date_tt)))
+                                                .when(show_tooltips && file.original_path.is_none() && !search_results && !network_entry(file) && show_media_previews, |d| d.tooltip(Tooltip::for_file_full(file_name_tt.clone(), path_tt, ext_tt.clone(), size_tt.clone(), date_tt.clone())))
+                                                .when(show_tooltips && file.original_path.is_none() && !search_results && !network_entry(file) && !show_media_previews, |d| d.tooltip(Tooltip::for_file_no_preview(file_name_tt, ext_tt, size_tt, date_tt)))
                                                 .on_mouse_down(MouseButton::Left, {
                                                     let p = path.clone();
                                                     let h_inner_inner = h.clone();
@@ -672,11 +675,12 @@ pub fn render_file_list(
                                                     let category = network_category(file, cx.i18n());
                                                     row.children([(type_w, category), (size_w, details.map(|d| d.workgroup.clone()).unwrap_or_default()), (date_w, details.map(|d| d.location.clone()).unwrap_or_default())].into_iter().map(|(width, value)| div().w(px(width)).flex_none().px(rems(0.5)).text_color(theme.text_muted).truncate().text_size(rems(0.75)).child(value)))
                                                 })
-                                                .when(location_w > 0.0, |row| row.child(div().w(px(location_w)).flex_none().px(rems(0.5)).text_color(theme.text_muted).truncate().text_size(rems(0.75)).child(std::path::Path::new(&file.path).parent().map(|parent| parent.to_string_lossy().into_owned()).unwrap_or_default())))
+                                                .when(location_w > 0.0, |row| row.child(div().w(px(location_w)).flex_none().px(rems(0.5)).text_color(theme.text_muted).truncate().text_size(rems(0.75)).child(std::path::Path::new(file.original_path.as_deref().unwrap_or(&file.path)).parent().map(|parent| parent.to_string_lossy().into_owned()).unwrap_or_default())))
                                                 .when(!network_panel, |row| row.child(div().w(px(type_w)).flex_none().px(rems(0.5)).text_color(theme.text_muted).truncate().text_size(rems(0.75)).when(is_dimmed, |d| d.opacity(0.5)).child(file_type_display(file, cx.i18n()))))
                                                 .when(!network_panel, |row| row
                                                     .child(div().w(px(size_w)).flex_none().px(rems(0.5)).text_align(TextAlign::Right).text_color(theme.text_muted).truncate().text_size(rems(0.75)).when(is_dimmed, |d| d.opacity(0.5)).child(if calculating_sizes && is_dir && !file.is_calculated { size_loading(&path, theme.accent) } else if is_dir && file.is_calculated && file.size == 0 { div().child(cx.i18n().text(Message::FolderSizeEmpty)).into_any_element() } else { div().child(format_size(file.size, is_dir, file.is_calculated, language)).into_any_element() }))
                                                     .child(div().w(px(date_w)).flex_none().px(rems(0.5)).text_color(theme.text_muted).truncate().text_size(rems(0.75)).when(is_dimmed, |d| d.opacity(0.5)).child(format_date(file.modified, crate::ui::format::date_format(cx)))))
+                                                .when(trash_panel, |row| row.child(div().w(px(logical(active_deleted_width))).flex_none().px(rems(0.5)).text_color(theme.text_muted).truncate().text_size(rems(0.75)).child(format_date(file.deleted_time.and_then(|date| u64::try_from(date).ok()).unwrap_or(0), crate::ui::format::date_format(cx)))))
                                                 .into_any_element()
                                             }}).collect::<Vec<_>>()
                                     }
@@ -981,7 +985,7 @@ pub fn render_file_list(
     // Horizontal scrollbar overlay
     container = container.child(
         div().absolute().left_0().bottom(px(status_bar_height())).right(px(crate::ui::components::scrollbar::zed_track_width())).h(px(crate::ui::components::scrollbar::zed_track_width()))
-            .child(render_scrollbar(theme, handle.clone(), ScrollbarAxis::Horizontal, pane_viewport_w, columns.content_width(), -active_tab.list_scroll_h.offset().x.as_f32(), matches!(view.drag_target, Some(DragTarget::FileListH { ref pane_id, .. }) if pane_id == &p_id_cap), format!("h-{}", pane_suffix), None, {
+            .child(render_scrollbar(theme, handle.clone(), ScrollbarAxis::Horizontal, pane_viewport_w, columns.content_width() + if trash_panel { logical(active_deleted_width) } else { 0.0 }, -active_tab.list_scroll_h.offset().x.as_f32(), matches!(view.drag_target, Some(DragTarget::FileListH { ref pane_id, .. }) if pane_id == &p_id_cap), format!("h-{}", pane_suffix), None, {
                 let p_id = p_id_cap.clone();
                 move |this, track_id, v_w, c_w, _| {
                     this.drag_target = Some(DragTarget::FileListH { pane_id: p_id.clone(), viewport_w: v_w, content_w: c_w, track_id });
@@ -1258,9 +1262,10 @@ fn render_grid_file_list(
                                         })
                                         .group("file-grid-card")
                                         .relative().when(!is_selected, |d| d.hover(|d| d.bg(theme.hover)))
-                                        .when(show_tooltips && network_entry(file), |d| d.tooltip(Tooltip::for_network(file.clone())))
+                                        .when(show_tooltips && file.original_path.is_some(), |d| d.tooltip(Tooltip::for_trash(file.clone(), ext_tt.clone(), show_media_previews)))
+                                                .when(show_tooltips && network_entry(file), |d| d.tooltip(Tooltip::for_network(file.clone())))
                                         .when(show_tooltips && search_results, |d| d.tooltip(Tooltip::for_search_result(file.clone(), ext_tt.clone(), show_media_previews)))
-                                                .when(show_tooltips && !search_results && !network_entry(file) && show_media_previews, |d| {
+                                                .when(show_tooltips && file.original_path.is_none() && !search_results && !network_entry(file) && show_media_previews, |d| {
                                             d.tooltip(Tooltip::for_file_full(
                                                 file_name_tt.clone(),
                                                 path_tt.clone(),
@@ -1269,7 +1274,7 @@ fn render_grid_file_list(
                                                 date_tt,
                                             ))
                                         })
-                                        .when(show_tooltips && !search_results && !network_entry(file) && !show_media_previews, |d| {
+                                        .when(show_tooltips && file.original_path.is_none() && !search_results && !network_entry(file) && !show_media_previews, |d| {
                                             d.tooltip(Tooltip::for_file_no_preview(
                                                 file_name_tt,
                                                 ext_tt,
@@ -1955,6 +1960,7 @@ fn render_headers(
     type_w: f32,
     size_w: f32,
     date_w: f32,
+    deleted_w: f32,
     theme: &OxydeTheme,
     i18n: &crate::ui::i18n::I18n,
 ) -> impl IntoElement {
@@ -2071,10 +2077,18 @@ fn render_headers(
                 }
             }),
         )
-        .when(tab.quick_search.is_some(), |headers| headers.child(
-            header_cell(i18n.text(Message::ColumnLocation).as_ref(), location_w, current_col == SortColumn::Location, current_dir, false, theme, handle.clone(), format!("search-location-{pane_id}"), {
+        .when(tab.quick_search.is_some() || tab.path == "trash://", |headers| headers.child(
+            header_cell(i18n.text(if tab.path == "trash://" { Message::TrashOriginalLocation } else { Message::ColumnLocation }).as_ref(), location_w, current_col == if tab.path == "trash://" { SortColumn::OriginalLocation } else { SortColumn::Location }, current_dir, !tab.filter_original_location.is_empty(), theme, handle.clone(), format!("filter-{pane_id}-location"), {
                 let handle = handle.clone(); let pane_id = pane_id.clone();
-                move |_, _, cx| { handle.update(cx, |this, cx| this.toggle_sort(&pane_id, SortColumn::Location, cx)); }
+                move |_, _, cx| { handle.update(cx, |this, cx| this.toggle_sort(&pane_id, if this.state.find_pane(&pane_id).is_some_and(|pane| pane.active_tab().path == "trash://") { SortColumn::OriginalLocation } else { SortColumn::Location }, cx)); }
+            }).on_mouse_down(MouseButton::Right, {
+                let handle = handle.clone(); let pane_id = pane_id.clone(); let trash = tab.path == "trash://";
+                move |event, window, cx| {
+                    if trash { handle.update(cx, |this, cx| {
+                        let anchor = this.context_anchor_points.get(&format!("filter-{pane_id}-location")).copied().unwrap_or(event.position);
+                        this.open_original_location_filter(&pane_id, anchor, window, cx);
+                    }); }
+                }
             })
         ))
         .child(
@@ -2184,6 +2198,13 @@ fn render_headers(
                 }
             }),
         ))
+        .when(deleted_w > 0.0, |row| row.child(header_cell(
+            i18n.text(Message::TrashDeletedAt).as_ref(), deleted_w, current_col == SortColumn::DeletedAt,
+            current_dir, false, theme, handle.clone(), format!("trash-deleted-{pane_id}"), {
+                let handle = handle.clone(); let pane_id = pane_id.clone();
+                move |_, _, cx| { handle.update(cx, |this, cx| this.toggle_sort(&pane_id, SortColumn::DeletedAt, cx)); }
+            }
+        )))
 }
 
 fn header_cell(

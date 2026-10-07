@@ -485,8 +485,9 @@ fn oxyde_context_menu_items_raw(
         is_dimmed: false,
         on_click: std::rc::Rc::new({
             let h = h_app.clone();
-            move |_, app| {
+            move |event, app| {
                 h.update(app, |this, cx| {
+                    this.shift_delete = event.modifiers().shift;
                     this.context_menus.clear();
                     this.execute_supprimer(cx);
                 });
@@ -505,10 +506,9 @@ fn oxyde_context_menu_items_raw(
         on_click: std::rc::Rc::new({
             let h = h_app.clone();
             let p = path.clone();
-            move |_, app| {
-                h.update(app, |this, _cx| {
-                    this.context_menus.clear();
-                    oxyde_lib::platform::platform().show_properties_dialog(&p);
+            move |window, app| {
+                h.update(app, |this, cx| {
+                    this.open_file_properties(p.clone(), window, cx);
                 });
             }
         }),
@@ -613,12 +613,12 @@ fn pane_context_menu_items_raw(
             on_click: std::rc::Rc::new({
                 let h = h_app.clone();
                 let p_id = pane_id.clone();
-                move |_, app| {
+                move |window, app| {
                     h.update(app, |this, cx| {
                         this.context_menus.clear();
                         if let Some(pane) = this.state.layout.find_pane(&p_id) {
                             let path = pane.active_tab().path.clone();
-                            oxyde_lib::platform::platform().show_properties_dialog(&path);
+                            this.open_file_properties(path, window, cx);
                         }
                         cx.notify();
                     });
@@ -815,13 +815,12 @@ fn trash_context_menu_items(i18n: &I18n, handle: Entity<crate::ui::app::OxydeApp
         items.push(item);
     }
     items.push(DropdownItem::separator());
-    items.push(DropdownItem::new(i18n.text(Message::Properties).to_string(), move |_, cx| {
+    items.push(DropdownItem::new(i18n.text(Message::Properties).to_string(), move |window, cx| {
         let path = path.clone().unwrap_or_else(|| "trash://".into());
         handle.update(cx, |this, cx| {
             this.context_menus.clear();
-            cx.spawn(async move |_, _| {
-                let _ = tokio::task::spawn_blocking(move || oxyde_lib::platform::platform().show_properties_dialog(&path)).await;
-            }).detach();
+            if path == "trash://" { this.open_trash_settings(window, cx); return; }
+            this.open_file_properties(path, window, cx);
             cx.notify();
         });
     }).icon(IconName::Settings));

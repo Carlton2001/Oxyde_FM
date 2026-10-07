@@ -262,15 +262,17 @@ pub fn render_top_bar(
                     && (action < 7 || (!view.trash_busy && if action < 9 { selected } else { !active_tab.files.is_empty() }));
                 let mut button = div().id(id).min_w(rems(1.5)).h_6().px(rems(0.125)).flex().items_center().justify_center().rounded_md()
                     .when(show_tooltips && (action == 1 || action == 2), |d| d.tooltip(Tooltip::with_meta(_cx.i18n().text(label), tip.clone())))
-                    .when(show_tooltips && action != 1 && action != 2, |d| d.tooltip(Tooltip::with_shortcut(_cx.i18n().text(label),
+                    .when(show_tooltips && action == 6, |d| d.tooltip(Tooltip::for_delete(handle.clone())))
+                    .when(show_tooltips && action != 1 && action != 2 && action != 6, |d| d.tooltip(Tooltip::with_shortcut(_cx.i18n().text(label),
                         (!tip.is_empty()).then(|| SharedString::from(tip)))));
                 if enabled {
                     let h = handle.clone();
                     let p = pane_id.clone();
                     let parent = parent_path.clone();
                     button = button.hover(move |s| s.bg(hover_bg))
-                        .on_mouse_down(MouseButton::Left, move |_, _, cx| {
+                        .on_mouse_down(MouseButton::Left, move |event, _, cx| {
                             h.update(cx, |this, cx| {
+                                this.shift_delete = event.modifiers.shift;
                                 this.state.active_pane_id = p.clone();
                                 match action {
                                     0 => { if let Some(parent) = &parent { this.navigate_to(&p, parent.clone(), cx); } }

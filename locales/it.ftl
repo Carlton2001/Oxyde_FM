@@ -720,3 +720,40 @@ trash-original-location = Posizione originale
 trash-deleted-at = Data di eliminazione
 
 trash-restore-selection = Ripristina la selezione
+
+original-location-filter-placeholder = Filtra per posizione originale…
+
+trash-properties = Proprietà del Cestino
+trash-locations = Posizione del Cestino
+trash-available-space = Spazio disponibile
+trash-selected-settings = Impostazioni per la posizione selezionata
+trash-custom-size = Dimensione personalizzata
+trash-max-capacity = Dimensione massima
+trash-dont-move = Non spostare i file nel Cestino
+trash-delete-immediately = Elimina i file immediatamente
+trash-confirm-delete = Mostra conferma di eliminazione
+trash-megabytes = MB
+trash-settings-error = Impossibile applicare le impostazioni. Controlla la capacità.
+
+trash-settings-ok = OK
+trash-delete-prompt = Eliminare gli elementi selezionati?
+
+trash-item-count = { $count ->
+    [one] ({ $formatted } elemento)
+   *[other] ({ $formatted } elementi)
+    }
+
+trash-permanent-delete-prompt = Eliminare definitivamente gli elementi selezionati?
+
+drive-tooltip-usage = { $used } / { $total }
+
+properties-system = Proprietà di sistema
+properties-created = Creato
+properties-accessed = Ultimo accesso
+properties-used = Spazio utilizzato
+properties-capacity = Capacità
+properties-contains = Contenuto
+properties-counts = { $files } file, { $folders } cartelle
+properties-drive = Unità
+
+properties-copy-name-double-click = Doppio clic per copiare il nome

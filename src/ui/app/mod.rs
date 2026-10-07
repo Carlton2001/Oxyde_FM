@@ -6,6 +6,8 @@ use gpui::*;
 pub use oxyde_lib::models::FileEntry;
 
 pub mod filters;
+pub(crate) mod trash_settings;
+pub(crate) mod properties;
 pub(crate) mod disk_images;
 mod drive_watchers;
 pub mod layout;
@@ -436,6 +438,11 @@ pub struct OxydeApp {
     pub(crate) ejecting_drive: bool,
     pub(crate) mounted_disk_images: Vec<oxyde_lib::platform::MountedDiskImage>,
     pub(super) disk_image_refresh_task: Option<Task<()>>,
+    pub(crate) properties_dialog: Option<properties::PropertiesDialog>,
+    properties_revision: u64,
+    pub(crate) shift_delete: bool,
+    pub(crate) pending_trash_delete: Option<trash_settings::PendingDelete>,
+    pub(crate) trash_settings: Option<trash_settings::TrashSettings>,
     pub(crate) network_dialog: Option<network::NetworkDialog>,
     pub(crate) network_dialog_revision: u64,
     pub(crate) network_force_confirmation: Option<network::NetworkForceConfirmation>,
@@ -711,6 +718,7 @@ impl OxydeApp {
         cx.bind_keys([
             KeyBinding::new("f5", Actualiser, None),
             KeyBinding::new("delete", Supprimer, None),
+            KeyBinding::new("shift-delete", Supprimer, None),
             KeyBinding::new("ctrl-a", ToutSelectionner, None),
             KeyBinding::new("ctrl-c", Copier, None),
             KeyBinding::new("ctrl-alt-c", CopierNom, None),
@@ -882,6 +890,11 @@ impl OxydeApp {
             mounted_disk_images: Vec::new(),
             disk_image_refresh_task: None,
             network_dialog: None,
+            trash_settings: None,
+            pending_trash_delete: None,
+            shift_delete: false,
+            properties_dialog: None,
+            properties_revision: 0,
             network_dialog_revision: 0,
             network_force_confirmation: None,
             network_force_focus_pending: false,
@@ -1629,7 +1642,8 @@ impl OxydeApp {
         }
     }
 
-    pub fn on_action_supprimer(&mut self, _: &Supprimer, _: &mut Window, cx: &mut Context<Self>) {
+    pub fn on_action_supprimer(&mut self, _: &Supprimer, window: &mut Window, cx: &mut Context<Self>) {
+        self.shift_delete = window.modifiers().shift;
         self.execute_supprimer(cx);
     }
 
@@ -1644,6 +1658,15 @@ impl OxydeApp {
             if paths.is_empty() {
                 return;
             }
+            if self.config.confirm_delete {
+                self.pending_trash_delete = Some(trash_settings::PendingDelete { paths, permanent: self.shift_delete, focus: cx.focus_handle(), confirm_focus: cx.focus_handle() }); cx.notify(); return;
+            }
+            self.queue_trash_delete(paths, self.shift_delete, cx);
+
+        }
+    }
+
+    pub(crate) fn queue_trash_delete(&mut self, paths: Vec<String>, permanent: bool, cx: &mut Context<Self>) {
             let Some(handle) = self.handle.clone() else {
                 return;
             };
@@ -1653,7 +1676,7 @@ impl OxydeApp {
                     let runtime = tokio::runtime::Handle::current();
                     handle.update(&mut cx, |this, cx| {
                         let mut op = oxyde_lib::systems::file_ops::FileOperation::new(
-                            oxyde_lib::systems::file_ops::FileOpType::Trash,
+                            if permanent { oxyde_lib::systems::file_ops::FileOpType::Delete } else { oxyde_lib::systems::file_ops::FileOpType::Trash },
                             paths.into_iter().map(std::path::PathBuf::from).collect(),
                             None,
                             None,
@@ -1667,7 +1690,6 @@ impl OxydeApp {
                 }
             })
             .detach();
-        }
     }
 
     pub fn execute_compress_selected(
@@ -2339,6 +2361,7 @@ impl Render for OxydeApp {
                     self.created_item_rename = None;
                 } else if tab.files.iter().any(|file| file.path == path) {
                     tab.filter_name.clear();
+                    tab.filter_original_location.clear();
                     tab.filter_types.clear();
                     tab.filter_sizes.clear();
                     tab.filter_dates.clear();
@@ -2403,6 +2426,7 @@ impl Render for OxydeApp {
             let pos = current_pos;
             self.handle_selection_drag(p_id, pos, cx);
         }
+        self.shift_delete = _window.modifiers().shift;
         self.measure_metadata_columns(_window, cx);
         self.clamp_scrolls();
         self.follow_active_path(cx);
@@ -2482,6 +2506,10 @@ impl Render for OxydeApp {
                     None // auto → determined by drive context
                 };
                 h.update(cx, |this, cx| {
+                    if this.shift_delete != e.modifiers.shift {
+                        this.shift_delete = e.modifiers.shift;
+                        cx.notify();
+                    }
                     if this.drag_modifier_copy != modifier {
                         this.drag_modifier_copy = modifier;
                         this.update_drag_copy_mode(cx);
@@ -3726,7 +3754,9 @@ impl Render for OxydeApp {
                         })),
                     }
                 }
-                ContextMenuContent::NameFilter { input } => GenericDropdown {
+                ContextMenuContent::NameFilter { input } => {
+                    let input_width = (input.read(cx).placeholder_width(_window).as_f32() + logical(32.0)).max(logical(200.0));
+                    GenericDropdown {
                     id: ("context-menu", m_idx).into(),
                     h_app: h.clone(),
                     items: vec![],
@@ -3734,7 +3764,7 @@ impl Render for OxydeApp {
                     is_context_menu: true,
                     bottom_padding: instance.bottom_padding,
                     scroll_handle,
-                    width: Some(logical(200.0)),
+                    width: Some(input_width + logical(8.0)),
                     max_height: logical(480.0),
                     on_close: {
                         let h = h.clone();
@@ -3782,7 +3812,7 @@ impl Render for OxydeApp {
                     is_dragging: false,
                     header: Some(
                         div()
-                            .w(rems(12.5))
+                            .w(px(input_width))
                             .h(px(crate::ui::style::row_height()))
                             .child(input.clone())
                             .into_any_element(),
@@ -3799,6 +3829,7 @@ impl Render for OxydeApp {
                         }
                     })),
                     on_hover_change: None,
+                }
                 },
             };
 
@@ -3829,6 +3860,9 @@ impl Render for OxydeApp {
             root = root.child(deferred(render_settings_panel(self, handle.clone(), _window, cx)));
         }
 
+        if self.properties_dialog.is_some() { root = root.child(deferred(properties::render(self, handle.clone(), _window, cx))); }
+        if self.pending_trash_delete.is_some() { root = root.child(deferred(trash_settings::render_delete_confirmation(self, handle.clone(), _window, cx))); }
+        if self.trash_settings.is_some() { root = root.child(deferred(trash_settings::render(self, handle.clone(), cx))); }
         if self.settings_confirmation.is_some() {
             root = root.child(deferred(
                 crate::ui::components::settings::render_settings_confirmation(

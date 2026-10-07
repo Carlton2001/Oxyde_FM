@@ -418,3 +418,40 @@ trash-original-location = Emplacement d’origine
 trash-deleted-at = Date de suppression
 
 trash-restore-selection = Restaurer la sélection
+
+original-location-filter-placeholder = Filtrer par emplacement d’origine…
+
+trash-properties = Propriétés de : Corbeille
+trash-locations = Emplacement de la Corbeille
+trash-available-space = Espace disponible
+trash-selected-settings = Paramètres pour l’emplacement sélectionné
+trash-custom-size = Taille personnalisée
+trash-max-capacity = Taille maximale
+trash-dont-move = Ne pas déplacer les fichiers vers la Corbeille
+trash-delete-immediately = Supprimer immédiatement les fichiers lorsqu’ils sont effacés
+trash-confirm-delete = Afficher la confirmation de suppression
+trash-megabytes = Mo
+trash-settings-error = Impossible d’appliquer les paramètres. Vérifiez la capacité saisie.
+
+trash-settings-ok = OK
+trash-delete-prompt = Supprimer les éléments sélectionnés ?
+
+trash-item-count = { $count ->
+    [one] ({ $formatted } élément)
+   *[other] ({ $formatted } éléments)
+    }
+
+trash-permanent-delete-prompt = Supprimer définitivement les éléments sélectionnés ?
+
+drive-tooltip-usage = { $used } / { $total }
+
+properties-system = Propriétés Système
+properties-created = Créé le
+properties-accessed = Accédé le
+properties-used = Espace utilisé
+properties-capacity = Capacité
+properties-contains = Contenu
+properties-counts = { $files } fichiers, { $folders } dossiers
+properties-drive = Lecteur
+
+properties-copy-name-double-click = Copier le nom sur double clic

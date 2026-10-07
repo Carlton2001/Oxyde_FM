@@ -411,3 +411,40 @@ trash-original-location = Original location
 trash-deleted-at = Date deleted
 
 trash-restore-selection = Restore selection
+
+original-location-filter-placeholder = Filter by original location…
+
+trash-properties = Recycle Bin properties
+trash-locations = Recycle Bin location
+trash-available-space = Available space
+trash-selected-settings = Settings for selected location
+trash-custom-size = Custom size
+trash-max-capacity = Maximum size
+trash-dont-move = Do not move files to the Recycle Bin
+trash-delete-immediately = Delete files immediately when removed
+trash-confirm-delete = Display delete confirmation
+trash-megabytes = MB
+trash-settings-error = Could not apply settings. Check the entered capacity.
+
+trash-settings-ok = OK
+trash-delete-prompt = Delete the selected items?
+
+trash-item-count = { $count ->
+    [one] ({ $formatted } item)
+   *[other] ({ $formatted } items)
+    }
+
+trash-permanent-delete-prompt = Permanently delete the selected items?
+
+drive-tooltip-usage = { $used } / { $total }
+
+properties-system = System properties
+properties-created = Created
+properties-accessed = Accessed
+properties-used = Used space
+properties-capacity = Capacity
+properties-contains = Contains
+properties-counts = { $files } files, { $folders } folders
+properties-drive = Drive
+
+properties-copy-name-double-click = Double-click to copy the name

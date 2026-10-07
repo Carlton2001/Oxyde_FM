@@ -720,3 +720,40 @@ trash-original-location = Ubicación original
 trash-deleted-at = Fecha de eliminación
 
 trash-restore-selection = Restaurar la selección
+
+original-location-filter-placeholder = Filtrar por ubicación original…
+
+trash-properties = Propiedades de la Papelera
+trash-locations = Ubicación de la Papelera
+trash-available-space = Espacio disponible
+trash-selected-settings = Configuración de la ubicación seleccionada
+trash-custom-size = Tamaño personalizado
+trash-max-capacity = Tamaño máximo
+trash-dont-move = No mover archivos a la Papelera
+trash-delete-immediately = Eliminar los archivos inmediatamente
+trash-confirm-delete = Mostrar confirmación de eliminación
+trash-megabytes = MB
+trash-settings-error = No se pudo aplicar la configuración. Compruebe la capacidad.
+
+trash-settings-ok = OK
+trash-delete-prompt = ¿Eliminar los elementos seleccionados?
+
+trash-item-count = { $count ->
+    [one] ({ $formatted } elemento)
+   *[other] ({ $formatted } elementos)
+    }
+
+trash-permanent-delete-prompt = ¿Eliminar definitivamente los elementos seleccionados?
+
+drive-tooltip-usage = { $used } / { $total }
+
+properties-system = Propiedades del sistema
+properties-created = Creado
+properties-accessed = Accedido
+properties-used = Espacio utilizado
+properties-capacity = Capacidad
+properties-contains = Contenido
+properties-counts = { $files } archivos, { $folders } carpetas
+properties-drive = Unidad
+
+properties-copy-name-double-click = Doble clic para copiar el nombre

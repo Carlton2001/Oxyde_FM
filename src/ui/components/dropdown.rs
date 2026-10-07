@@ -203,6 +203,12 @@ impl<T: crate::ui::components::scrollbar::ScrollbarState + 'static> RenderOnce f
     fn render(mut self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         use crate::ui::theme::OxydeTheme;
         let theme = *OxydeTheme::global(cx);
+        for item in &mut self.items {
+            if matches!(item.icon, Some(IconName::Trash)) &&
+                [Message::Delete, Message::TrashDeletePermanent].iter().any(|message| item.label == cx.i18n().text(*message).as_ref()) {
+                item.label = cx.i18n().text(if window.modifiers().shift { Message::TrashDeletePermanent } else { Message::Delete }).to_string();
+            }
+        }
 
         // Menu-specific colors — richer and more visible than the generic theme values
         let menu_bg: Hsla = theme.menu_surface;

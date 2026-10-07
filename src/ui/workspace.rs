@@ -197,6 +197,7 @@ pub struct TabState {
     pub sort_direction: SortDirection,
     pub filter_types: std::collections::HashSet<String>,
     pub filter_name: String,
+    pub filter_original_location: String,
     pub filter_sizes: std::collections::HashSet<SizeCategory>,
     pub filter_dates: std::collections::HashSet<DateCategory>,
     pub selected_paths: std::collections::HashSet<String>,
@@ -208,6 +209,7 @@ pub struct TabState {
     pub type_col_width: f32,
     pub size_col_width: f32,
     pub date_col_width: f32,
+    pub deleted_col_width: f32,
     pub column_type_labels: std::collections::HashSet<String>,
     pub column_size_values: std::collections::HashSet<(u64, bool, bool)>,
     pub column_measurement_key: Option<(u32, crate::ui::i18n::Language, crate::ui::format::DateFormat, bool, bool, bool)>,
@@ -263,6 +265,7 @@ impl TabState {
             sort_direction: SortDirection::Ascending,
             filter_types: std::collections::HashSet::new(),
             filter_name: String::new(),
+            filter_original_location: String::new(),
             filter_sizes: std::collections::HashSet::new(),
             filter_dates: std::collections::HashSet::new(),
             selected_paths: std::collections::HashSet::new(),
@@ -274,6 +277,7 @@ impl TabState {
             type_col_width: 100.0,
             size_col_width: 100.0,
             date_col_width: 180.0,
+            deleted_col_width: 180.0,
             column_type_labels: Default::default(),
             column_size_values: Default::default(),
             column_measurement_key: None,
@@ -284,6 +288,7 @@ impl TabState {
     pub fn update_cache(&mut self) {
         if !self.filter_types.is_empty()
             || !self.filter_name.is_empty()
+            || !self.filter_original_location.is_empty()
             || !self.filter_sizes.is_empty()
             || !self.filter_dates.is_empty()
         {
@@ -321,7 +326,10 @@ impl TabState {
                     } else {
                         self.filter_dates.iter().any(|cat| cat.matches(f.modified))
                     };
-                    matches_type && matches_name && matches_size && matches_date
+                    let matches_location = self.filter_original_location.is_empty() || f.original_path.as_deref()
+                        .and_then(|path| std::path::Path::new(path).parent())
+                        .is_some_and(|path| path.to_string_lossy().to_lowercase().contains(&self.filter_original_location.to_lowercase()));
+                    matches_type && matches_name && matches_size && matches_date && matches_location
                 })
                 .cloned()
                 .collect();
@@ -1309,6 +1317,26 @@ impl WorkspaceState {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn trash_location_filter_matches_displayed_parent_and_combines_with_name() {
+        let mut tab = super::TabState::new("trash".into(), "trash://".into());
+        tab.files = vec![
+            oxyde_lib::models::FileEntry { name: "report.txt".into(), original_path: Some(std::path::Path::new("Documents").join("report.txt").to_string_lossy().into_owned()), ..Default::default() },
+            oxyde_lib::models::FileEntry { name: "Documents.txt".into(), original_path: Some(std::path::Path::new("Downloads").join("Documents.txt").to_string_lossy().into_owned()), ..Default::default() },
+            oxyde_lib::models::FileEntry { name: "missing".into(), ..Default::default() },
+        ];
+        tab.filter_original_location = "DOCUMENTS".into();
+        tab.update_cache();
+        assert_eq!(tab.cached_filtered_files.len(), 1);
+        assert_eq!(tab.cached_filtered_files[0].name, "report.txt");
+        tab.filter_name = "other".into();
+        tab.update_cache();
+        assert!(tab.cached_filtered_files.is_empty());
+        tab.filter_name.clear();
+        tab.filter_original_location.clear();
+        tab.update_cache();
+        assert_eq!(tab.cached_filtered_files.len(), 3);
+    }
     #[test]
     fn trash_sort_uses_original_location_and_deletion_time() {
         let mut tab = super::TabState::new("trash".into(), "trash://".into());

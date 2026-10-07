@@ -10,17 +10,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-#[cfg(target_os = "windows")]
-use windows::core::PCWSTR;
-#[cfg(target_os = "windows")]
-use windows::Win32::Storage::FileSystem::GetVolumeNameForVolumeMountPointW;
-#[cfg(target_os = "windows")]
-use windows::Win32::System::Registry::{
-    RegOpenKeyExW, RegQueryValueExW, RegSetValueExW, HKEY_CURRENT_USER, KEY_READ, KEY_WRITE,
-    REG_DWORD,
-};
-#[cfg(target_os = "windows")]
-use windows::Win32::UI::Shell::{SHChangeNotify, SHCNE_ASSOCCHANGED, SHCNF_FLUSH};
+
 
 use crate::systems::file_ops::{FileOpType, FileOperation, FileOperationManager};
 
@@ -757,198 +747,14 @@ pub struct TrashSystemConfig {
     pub nuke_on_delete: bool,
 }
 
-#[cfg(target_os = "windows")]
 pub async fn get_recycle_bin_config(drive_path: String) -> Result<TrashSystemConfig, CommandError> {
-    let wide_drive: Vec<u16> = drive_path
-        .encode_utf16()
-        .chain(std::iter::once(0))
-        .collect();
-    let mut max_size_mb = 0u64;
-    let mut nuke_on_delete = false;
-
-    unsafe {
-        let mut volume_name = [0u16; 50];
-        if GetVolumeNameForVolumeMountPointW(PCWSTR(wide_drive.as_ptr()), &mut volume_name).is_ok()
-        {
-            let vol_string = String::from_utf16_lossy(&volume_name);
-            let vol_trimmed = vol_string.trim_matches(char::from(0));
-            if let Some(start) = vol_trimmed.find("Volume{") {
-                let guid_part = &vol_trimmed[start + 6..];
-                if let Some(end) = guid_part.find('}') {
-                    let guid_str = &guid_part[..=end];
-                    let key_path = format!("Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\BitBucket\\Volume\\{}", guid_str);
-                    let wide_key: Vec<u16> =
-                        key_path.encode_utf16().chain(std::iter::once(0)).collect();
-
-                    let mut hkey = windows::Win32::System::Registry::HKEY::default();
-                    if RegOpenKeyExW(
-                        HKEY_CURRENT_USER,
-                        PCWSTR(wide_key.as_ptr()),
-                        Some(0),
-                        KEY_READ,
-                        &mut hkey,
-                    )
-                    .0 == 0
-                    {
-                        // Read MaxCapacity
-                        let mut data = 0u32;
-                        let mut data_size = std::mem::size_of::<u32>() as u32;
-                        let mut key_type =
-                            windows::Win32::System::Registry::REG_VALUE_TYPE::default();
-                        let wide_cap: Vec<u16> = "MaxCapacity"
-                            .encode_utf16()
-                            .chain(std::iter::once(0))
-                            .collect();
-                        if RegQueryValueExW(
-                            hkey,
-                            PCWSTR(wide_cap.as_ptr()),
-                            None,
-                            Some(&mut key_type as *mut _),
-                            Some(&mut data as *mut _ as *mut u8),
-                            Some(&mut data_size as *mut _),
-                        )
-                        .0 == 0
-                        {
-                            max_size_mb = data as u64;
-                        }
-
-                        // Read NukeOnDelete
-                        let wide_nuke: Vec<u16> = "NukeOnDelete"
-                            .encode_utf16()
-                            .chain(std::iter::once(0))
-                            .collect();
-                        if RegQueryValueExW(
-                            hkey,
-                            PCWSTR(wide_nuke.as_ptr()),
-                            None,
-                            Some(&mut key_type as *mut _),
-                            Some(&mut data as *mut _ as *mut u8),
-                            Some(&mut data_size as *mut _),
-                        )
-                        .0 == 0
-                        {
-                            nuke_on_delete = data == 1;
-                        }
-                        let _ = windows::Win32::System::Registry::RegCloseKey(hkey);
-                    }
-                }
-            }
-        }
-    }
-
-    Ok(TrashSystemConfig {
-        drive_path,
-        max_size_mb,
-        nuke_on_delete,
-    })
+    crate::platform::platform().recycle_bin_config(drive_path).map_err(CommandError::SystemError)
 }
-
-#[cfg(target_os = "windows")]
-pub async fn set_recycle_bin_config(
-    config_state: &crate::models::ConfigManager,
-    config: TrashSystemConfig,
-) -> Result<(), CommandError> {
-    let wide_drive: Vec<u16> = config
-        .drive_path
-        .encode_utf16()
-        .chain(std::iter::once(0))
-        .collect();
-
-    unsafe {
-        let mut volume_name = [0u16; 50];
-        if GetVolumeNameForVolumeMountPointW(PCWSTR(wide_drive.as_ptr()), &mut volume_name).is_ok()
-        {
-            let vol_string = String::from_utf16_lossy(&volume_name);
-            let vol_trimmed = vol_string.trim_matches(char::from(0));
-            if let Some(start) = vol_trimmed.find("Volume{") {
-                let guid_part = &vol_trimmed[start + 6..];
-                if let Some(end) = guid_part.find('}') {
-                    let guid_str = &guid_part[..=end];
-                    let key_path = format!("Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\BitBucket\\Volume\\{}", guid_str);
-                    let wide_key: Vec<u16> =
-                        key_path.encode_utf16().chain(std::iter::once(0)).collect();
-
-                    let mut hkey = windows::Win32::System::Registry::HKEY::default();
-                    if RegOpenKeyExW(
-                        HKEY_CURRENT_USER,
-                        PCWSTR(wide_key.as_ptr()),
-                        Some(0),
-                        KEY_WRITE,
-                        &mut hkey,
-                    )
-                    .is_ok()
-                    {
-                        // Set MaxCapacity
-                        let data_cap = config.max_size_mb as u32;
-                        let wide_cap: Vec<u16> = "MaxCapacity"
-                            .encode_utf16()
-                            .chain(std::iter::once(0))
-                            .collect();
-                        let slice_cap = std::slice::from_raw_parts(
-                            &data_cap as *const u32 as *const u8,
-                            std::mem::size_of::<u32>(),
-                        );
-                        let _ = RegSetValueExW(
-                            hkey,
-                            PCWSTR(wide_cap.as_ptr()),
-                            Some(0),
-                            REG_DWORD,
-                            Some(slice_cap),
-                        );
-
-                        // Set NukeOnDelete
-                        let data_nuke = if config.nuke_on_delete { 1u32 } else { 0u32 };
-                        let wide_nuke: Vec<u16> = "NukeOnDelete"
-                            .encode_utf16()
-                            .chain(std::iter::once(0))
-                            .collect();
-                        let slice_nuke = std::slice::from_raw_parts(
-                            &data_nuke as *const u32 as *const u8,
-                            std::mem::size_of::<u32>(),
-                        );
-                        let _ = RegSetValueExW(
-                            hkey,
-                            PCWSTR(wide_nuke.as_ptr()),
-                            Some(0),
-                            REG_DWORD,
-                            Some(slice_nuke),
-                        );
-
-                        let _ = windows::Win32::System::Registry::RegCloseKey(hkey);
-
-                        // Notify Shell of changes (SHChangeNotify)
-                        SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_FLUSH, None, None);
-                    }
-                }
-            }
-        }
-    }
-
-    // Update Internal Oxyde Config as well
-    {
-        use crate::models::TrashDriveSettings;
-        let mut app_config = config_state
-            .0
-            .lock()
-            .map_err(|_| CommandError::SystemError("Lock failed".into()))?;
-
-        // Find existing or add new
-        if let Some(setting) = app_config
-            .trash_drive_settings
-            .iter_mut()
-            .find(|s| s.drive_path == config.drive_path)
-        {
-            setting.max_size_mb = config.max_size_mb;
-            setting.use_trash = !config.nuke_on_delete;
-        } else {
-            app_config.trash_drive_settings.push(TrashDriveSettings {
-                drive_path: config.drive_path,
-                max_size_mb: config.max_size_mb,
-                use_trash: !config.nuke_on_delete,
-            });
-        }
-    }
-
+pub async fn set_recycle_bin_config(config_state: &crate::models::ConfigManager, config: TrashSystemConfig) -> Result<(), CommandError> {
+    crate::platform::platform().set_recycle_bin_config(config.clone()).map_err(CommandError::SystemError)?;
+    let mut app = config_state.0.lock().map_err(|_| CommandError::SystemError("Lock failed".into()))?;
+    app.trash_drive_settings.retain(|setting| setting.drive_path != config.drive_path);
+    app.trash_drive_settings.push(crate::models::TrashDriveSettings { drive_path: config.drive_path, max_size_mb: config.max_size_mb, use_trash: !config.nuke_on_delete });
     Ok(())
 }
 
@@ -1092,44 +898,7 @@ fn get_nuke_on_delete_estimate(_path_str: &str, _config: &crate::models::AppConf
 }
 
 pub async fn get_total_recycle_bin_usage() -> Result<(u64, u64), CommandError> {
-    #[cfg(target_os = "windows")]
-    {
-        use windows::core::PCWSTR;
-        use windows::Win32::Storage::FileSystem::GetLogicalDriveStringsW;
-        use windows::Win32::UI::Shell::{SHQueryRecycleBinW, SHQUERYRBINFO};
-
-        let mut total_size = 0u64;
-        let mut total_items = 0u64;
-
-        unsafe {
-            let mut buffer = [0u16; 260];
-            let len = GetLogicalDriveStringsW(Some(&mut buffer));
-            if len > 0 {
-                let drive_strings = String::from_utf16_lossy(&buffer[..len as usize]);
-                for drive_path in drive_strings.split('\0').filter(|s| !s.is_empty()) {
-                    let wide_path: Vec<u16> = drive_path
-                        .encode_utf16()
-                        .chain(std::iter::once(0))
-                        .collect();
-
-                    let mut info = SHQUERYRBINFO {
-                        cbSize: std::mem::size_of::<SHQUERYRBINFO>() as u32,
-                        i64Size: 0,
-                        i64NumItems: 0,
-                    };
-
-                    if SHQueryRecycleBinW(PCWSTR(wide_path.as_ptr()), &mut info).is_ok() {
-                        total_size += info.i64Size as u64;
-                        total_items += info.i64NumItems as u64;
-                    }
-                }
-            }
-        }
-
-        Ok((total_size, total_items))
-    }
-    #[cfg(not(target_os = "windows"))]
-    Ok((0, 0))
+    crate::platform::platform().recycle_bin_usage().map_err(CommandError::SystemError)
 }
 
 pub async fn delete_items(

@@ -311,4 +311,90 @@ impl OxydeApp {
             window.focus(&focus_handle, cx);
         });
     }
+    pub fn update_filter_original_location(&mut self, pane_id: &str, name: String, cx: &mut Context<Self>) {
+        if let Some(pane) = self.state.find_pane_mut(pane_id) {
+            let tab = pane.active_tab_mut();
+            tab.filter_original_location = name;
+            tab.update_cache();
+            cx.notify();
+        }
+    }
+
+    pub fn open_original_location_filter(
+        &mut self,
+        pane_id: &str,
+        pos: Point<Pixels>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let h_cap = self.handle.as_ref().unwrap().clone();
+        let pid_cap = pane_id.to_string();
+
+        let initial_text = self
+            .state
+            .find_pane(pane_id)
+            .map(|p: &crate::ui::workspace::PaneState| p.active_tab().filter_original_location.clone())
+            .unwrap_or_default();
+
+        let input = cx.new(|cx| {
+            let h_change = h_cap.clone();
+            let pid_change = pid_cap.clone();
+            let h_enter = h_cap.clone();
+            let h_esc = h_cap.clone();
+            let pid_esc = pid_cap.clone();
+            let h_context = h_cap.clone();
+
+            crate::ui::components::input::TextInput::new(
+                cx,
+                cx.i18n().text(Message::OriginalLocationFilterPlaceholder).to_string(),
+                initial_text,
+                move |text, _, cx| {
+                    h_change.update(cx, |this, cx| {
+                        this.update_filter_original_location(&pid_change, text.to_string(), cx)
+                    });
+                },
+                move |_, cx| {
+                    h_enter.update(cx, |this, _| {
+                        this.context_menus.clear();
+                    });
+                },
+                move |_, cx| {
+                    h_esc.update(cx, |this, cx| {
+                        this.update_filter_original_location(&pid_esc, "".to_string(), cx);
+                        this.context_menus.clear();
+                    });
+                },
+                move |input, has_selection, position, window, cx| {
+                    h_context.update(cx, |this, cx| {
+                        this.open_text_context_menu(input, has_selection, position, window, cx)
+                    });
+                },
+                false,
+                false,
+                false,
+                None,
+                window,
+            )
+        });
+
+        self.context_menus.clear();
+        self.context_menus.push(ContextMenuInstance {
+            position: pos,
+            content: ContextMenuContent::NameFilter {
+                input: input.clone(),
+            },
+            scroll_handle: UniformListScrollHandle::new(),
+            width: px(0.0),
+            bottom_padding: 2.0,
+            open_left: false,
+            hovered_item: None,
+            native_request_id: None,
+        });
+        cx.notify();
+
+        let focus_handle = input.read(cx).focus_handle.clone();
+        cx.on_next_frame(window, move |_, window, cx| {
+            window.focus(&focus_handle, cx);
+        });
+    }
 }

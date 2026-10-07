@@ -134,6 +134,13 @@ impl TextInput {
         cx.notify();
     }
 
+    pub fn placeholder_width(&self, window: &Window) -> Pixels {
+        let style = window.text_style();
+        window.text_system().shape_line(self.placeholder.clone(), style.font_size.to_pixels(window.rem_size()),
+            &[TextRun { len: self.placeholder.len(), font: style.font(), color: style.color,
+                background_color: None, underline: None, strikethrough: None }], None).width
+    }
+
     pub fn new(
         cx: &mut Context<Self>,
         placeholder: impl Into<SharedString>,

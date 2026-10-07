@@ -345,6 +345,7 @@ impl OxydeApp {
             active_tab.cached_filtered_files.clear();
             active_tab.filter_types.clear();
             active_tab.filter_name.clear();
+            active_tab.filter_original_location.clear();
             active_tab.filter_sizes.clear();
             active_tab.filter_dates.clear();
             active_tab.selected_paths.clear();

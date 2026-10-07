@@ -588,6 +588,7 @@ impl OxydeApp {
         tab.forward_stack.clear();
         tab.path = path.clone();
         tab.filter_name.clear();
+                    tab.filter_original_location.clear();
         tab.filter_types.clear();
         tab.filter_sizes.clear();
         tab.filter_dates.clear();

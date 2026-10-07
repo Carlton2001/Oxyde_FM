@@ -125,10 +125,11 @@ fn pinned_context_menu_raw(i18n: &I18n, h: Entity<OxydeApp>, path: String) -> Ve
             on_click: std::rc::Rc::new({
                 let h = h.clone();
                 let p = path.clone();
-                move |_, app| {
-                    h.update(app, |this, _| {
+                move |window, app| {
+                    h.update(app, |this, cx| {
                         this.context_menus.clear();
-                        oxyde_lib::platform::platform().show_properties_dialog(&p);
+                        if p == "trash://" { this.open_trash_settings(window, cx); return; }
+                        this.open_file_properties(p.clone(), window, cx);
                     });
                 }
             }),
@@ -169,10 +170,11 @@ fn location_context_menu_raw(i18n: &I18n, h: Entity<OxydeApp>, path: String) -> 
             on_click: std::rc::Rc::new({
                 let h = h.clone();
                 let p = path.clone();
-                move |_, app| {
-                    h.update(app, |this, _| {
+                move |window, app| {
+                    h.update(app, |this, cx| {
                         this.context_menus.clear();
-                        oxyde_lib::platform::platform().show_properties_dialog(&p);
+                        if p == "trash://" { this.open_trash_settings(window, cx); return; }
+                        this.open_file_properties(p.clone(), window, cx);
                     });
                 }
             }),
@@ -356,10 +358,11 @@ fn sidebar_tree_actions(
         stay_open: false,
         has_submenu: false,
         is_dimmed: false,
-        on_click: std::rc::Rc::new(move |_, app| {
-            h_prop.update(app, |this, _| {
+        on_click: std::rc::Rc::new(move |window, app| {
+            h_prop.update(app, |this, cx| {
                 this.context_menus.clear();
-                oxyde_lib::platform::platform().show_properties_dialog(&p);
+                if p == "trash://" { this.open_trash_settings(window, cx); return; }
+                this.open_file_properties(p.clone(), window, cx);
             })
         }),
         on_hover: None,
@@ -903,7 +906,7 @@ pub fn render_sidebar(
                                                     .items_center()
                                                     .relative().when(is_sel, |d| d.bg(sel_bg).child(div().absolute().left_0().top_0().bottom_0().w(rems(0.1875)).bg(theme.accent)))
                                                     .hover(move |s| s.bg(hov_bg))
-                                                    .tooltip(Tooltip::with_meta(label.clone(), path.clone()))
+                                                    .when(show_tooltips, |d| d.tooltip(Tooltip::for_drive(label.clone(), drive.clone())))
                                                     // Left click → select + navigate (single) / toggle (double)
                                                     .on_mouse_down(MouseButton::Left, {
                                                         let h = h.clone(); let p = path.clone();

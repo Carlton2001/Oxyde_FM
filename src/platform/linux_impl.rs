@@ -10,6 +10,28 @@ impl LinuxPlatform {
 }
 
 impl Platform for LinuxPlatform {
+    fn recycle_bin_usage(&self) -> Result<(u64, u64), String> {
+        let entries = crate::commands::ops::list_trash().map_err(|error| error.to_string())?;
+        let mut size = 0_u64;
+        for entry in &entries {
+            let mut stack = vec![std::path::PathBuf::from(&entry.path)];
+            while let Some(path) = stack.pop() {
+                let Ok(metadata) = std::fs::symlink_metadata(&path) else { continue; };
+                if metadata.is_dir() {
+                    if let Ok(children) = std::fs::read_dir(path) { stack.extend(children.filter_map(Result::ok).map(|child| child.path())); }
+                } else { size = size.saturating_add(metadata.len()); }
+            }
+        }
+        Ok((size, entries.len() as u64))
+    }
+
+    fn recycle_bin_config(&self, _path: String) -> Result<crate::commands::ops::TrashSystemConfig, String> {
+        Err("Recycle bin capacity settings are not supported on Linux".into())
+    }
+    fn set_recycle_bin_config(&self, _config: crate::commands::ops::TrashSystemConfig) -> Result<(), String> {
+        Err("Recycle bin capacity settings are not supported on Linux".into())
+    }
+
     fn finish_process_shutdown(&self) -> Result<(), String> {
         Ok(())
     }

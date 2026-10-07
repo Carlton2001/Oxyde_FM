@@ -720,3 +720,40 @@ trash-original-location = Ursprünglicher Speicherort
 trash-deleted-at = Löschdatum
 
 trash-restore-selection = Auswahl wiederherstellen
+
+original-location-filter-placeholder = Nach ursprünglichem Speicherort filtern…
+
+trash-properties = Papierkorb-Eigenschaften
+trash-locations = Papierkorb-Speicherort
+trash-available-space = Verfügbarer Speicher
+trash-selected-settings = Einstellungen für den ausgewählten Speicherort
+trash-custom-size = Benutzerdefinierte Größe
+trash-max-capacity = Maximale Größe
+trash-dont-move = Dateien nicht in den Papierkorb verschieben
+trash-delete-immediately = Dateien beim Löschen sofort entfernen
+trash-confirm-delete = Löschbestätigung anzeigen
+trash-megabytes = MB
+trash-settings-error = Einstellungen konnten nicht angewendet werden. Prüfen Sie die Kapazität.
+
+trash-settings-ok = OK
+trash-delete-prompt = Ausgewählte Elemente löschen?
+
+trash-item-count = { $count ->
+    [one] ({ $formatted } Element)
+   *[other] ({ $formatted } Elemente)
+    }
+
+trash-permanent-delete-prompt = Ausgewählte Elemente endgültig löschen?
+
+drive-tooltip-usage = { $used } / { $total }
+
+properties-system = Systemeigenschaften
+properties-created = Erstellt
+properties-accessed = Zugriff
+properties-used = Belegter Speicher
+properties-capacity = Kapazität
+properties-contains = Inhalt
+properties-counts = { $files } Dateien, { $folders } Ordner
+properties-drive = Laufwerk
+
+properties-copy-name-double-click = Doppelklicken, um den Namen zu kopieren
