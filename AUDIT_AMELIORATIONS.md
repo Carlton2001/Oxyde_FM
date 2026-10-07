@@ -174,13 +174,21 @@ Deux régressions natives ciblent les anciens seuils : un fichier creux de 4 Gio
 
 ## A23 — Lecture non bornée des buffers de presse-papiers — P2
 
-**Point de code établi pendant A06, sans reproduction de crash.** Le lecteur `platform/clipboard.rs::get_clipboard_files` interprète directement l'en-tête CF_HDROP, son décalage et ses chaînes sans vérifier la taille du bloc. Le format Preferred DropEffect est également déréférencé sans vérifier qu'il contient au moins quatre octets. Ces données peuvent provenir d'autres applications. Remplacer la lecture des chemins par une API Shell bornée ou vérifier les tailles et terminateurs avant accès ; ajouter des fixtures de formats tronqués. Le lot A06 corrige la publication et sa propriété mémoire, pas ce lecteur ni le polling A12.
+**Corrigé le 8 octobre 2026 dans le lecteur actif de `Platform::get_clipboard_files`.** La relecture des appelants confirme que Coller et le watcher GPUI utilisent ce lecteur en arrière-plan. Il interprétait l'en-tête CF_HDROP, son décalage et ses chaînes sans vérifier la taille du bloc ; l'effet Couper était déréférencé sans vérifier la présence de quatre octets. Aucun crash utilisateur n'a été reproduit.
+
+La taille native est vérifiée avant de verrouiller le bloc. Le parseur n'accède qu'à cette plage de mémoire, valide l'en-tête et le décalage puis recherche les deux terminateurs dans les octets disponibles. Il refuse une liste tronquée ou un nom UTF-16 mal formé en entier, avant de retourner des chemins au collage. Un effet présent mais illisible ou tronqué est une erreur, au lieu d'être interprété comme Copier. Un effet absent garde le comportement Copier.
+
+Les chaînes et champs sont décodés depuis des octets, sans déréférencement aligné supposé. Les chemins Unicode et réseau restent pris en charge, les listes ANSI restent ignorées comme auparavant, et le padding inutilisé après le terminateur reste autorisé car `GlobalSize` peut dépasser la taille demandée. Le presse-papiers occupé garde son repli vide.
+
+Des gardes déverrouillent les blocs puis ferment la session sur toute sortie. Les allocations empruntées au système ne sont jamais libérées par le lecteur ; les noms retournés sont des chaînes Rust indépendantes. Les fixtures de validation ne lisent ni ne remplacent le presse-papiers utilisateur.
+
+Contrats natifs : [GetClipboardData](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getclipboarddata), [GlobalSize](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-globalsize), [DROPFILES](https://learn.microsoft.com/en-us/windows/win32/api/shlobj_core/ns-shlobj_core-dropfiles).
 
 ## Validation et suite
 
 La compilation Windows actuelle passe sans avertissement du projet. Les observations ci-dessus sont issues de la lecture des sources et de Clippy ; aucun nouveau test de comportement ou benchmark n'a été exécuté pendant cet audit. Snap Layouts et le témoin de déplacement actuel sont confirmés par l'utilisateur. Les validations des lots précédents restent décrites dans [AUDIT_CODE_MORT.md](AUDIT_CODE_MORT.md).
 
-Après A01/A02/A03/A04/A06/A15 et le raccordement A18, examiner A05/A23, puis A19 ; conserver A20 pour la validation native interactive. Les optimisations demandent des mesures avant modification. Cet ordre est proposé, pas une liste de corrections déjà autorisées ou réalisées.
+Après A01/A02/A03/A04/A06/A15/A23 et le raccordement A18, examiner A05, puis A19 ; conserver A20 pour la validation native interactive. Les optimisations demandent des mesures avant modification. Cet ordre est proposé, pas une liste de corrections déjà autorisées ou réalisées.
 
 ### État après les lots N01 à N16
 
@@ -235,3 +243,11 @@ Sept tests ciblés passent : injection d'erreurs dans les parcours Copier/Couper
 `cargo test --all-targets --offline` : 113 tests backend et 108 tests du binaire passent, soit 221 ; les 10 tests natifs déjà ignorés restent ignorés. Les sept nouveaux tests A06 sont inclus dans cette invocation. `cargo check --all-targets --offline` passe sans avertissement du projet.
 
 `cargo build --bin oxyde --offline` réussit ; le binaire habituel `target/debug/oxyde.exe` est reconstruit. Le nouveau lot A06 est séparé du commit corbeille `f081c4d`.
+
+### Validation du lot A23
+
+Sept tests ciblés passent : chaque préfixe tronqué d'une liste valide, décalages dans l'en-tête ou hors du bloc, Unicode/UNC avec décalage non aligné, padding inutilisé, UTF-16 invalide après un premier chemin correct, liste vide et politique ANSI conservée, effets tronqués et valeurs nominales. Le test natif vérifie le compteur de verrous avant/après un décodage réussi ou refusé, et la conservation de l'allocation empruntée. Une assertion de libération de la fixture a été ajustée au retour nul de réussite de `GlobalFree`, que le binding Rust représente comme `Err(S_OK)`. Aucun accès au presse-papiers utilisateur, aucun Computer Use ni validation Linux.
+
+`cargo test --all-targets --offline` : 120 tests backend et 108 tests du binaire passent, soit 228 ; les 10 tests natifs ignorés restent ignorés. Les sept tests A23 sont inclus. `cargo check --all-targets --offline` passe sans avertissement du projet.
+
+`cargo build --bin oxyde --offline` réussit ; `target/debug/oxyde.exe` est reconstruit. Le lot A23 reste séparé du commit A06 `03d90e6`.
