@@ -48,11 +48,19 @@ Validation : six nouveaux tests couvrent l'identité affichée, la conservation 
 
 Les noms et chemins issus de `IShellItem::GetDisplayName` (`network.rs:115`, `:122`) sont convertis sans libération explicite du buffer ; le parcours d'accès rapide dans `commands/system.rs` libère les buffers correspondants. Auditer ces allocations, ainsi que les valeurs obtenues depuis le property store, avant de conclure sur l'ampleur des fuites. Aucun profil mémoire effectué. Refaire cette revue après N09/N10, qui peuvent retirer une partie des appels.
 
+Relecture après A06 : les parcours actifs `platform/network.rs::get_network_resources`, les propriétés virtuelles de `commands/io.rs`, l'accès rapide et `commands/system.rs::execute_shell_verb` conservent ces initialisations ignorées. Les deux noms `GetDisplayName` de l'énumération réseau ne sont toujours pas libérés. Dans l'accès rapide, certains retours désinitialisent COM avant la destruction des interfaces locales. Le menu contextuel possède déjà une garde conditionnelle, et le nouveau presse-papiers Shell A18 équilibre OLE ; conserver ces comportements corrects lors de la factorisation.
+
 ## A06 — Presse-papiers : allocations et erreurs du format Couper — P2
 
-**Branches d'erreur identifiées, non injectées.** `platform/clipboard.rs:153–207` et `:232–249` allouent de la mémoire globale puis peuvent sortir sur échec de verrouillage ou publication sans libération locale. La publication du format d'effet de dépôt ignore son résultat (`:207`), ce qui pourrait perdre l'intention Couper alors que les chemins sont publiés.
+**Corrigé le 8 octobre 2026 dans le parcours actif de fichiers ordinaires et de texte.** La relecture confirme les sorties sans `GlobalFree` après un verrouillage ou une publication refusés, et les résultats ignorés pour `Preferred DropEffect`. Le parcours de corbeille A18 garde son objet Shell.
 
-Revoir la propriété des buffers et les erreurs de chaque publication, avec un garde qui transfère la propriété uniquement au moment approprié. Prévoir des simulations d'échec et une vérification Copier/Couper native. Ne pas modifier les formats ni le comportement nominal pendant un simple nettoyage.
+Un module Windows privé prépare les deux buffers avant de vider le presse-papiers. Chaque buffer reste possédé par une garde jusqu'à la réussite de `SetClipboardData` ; toute sortie avant cette réussite le libère. L'effet Copier/Couper est publié avant les chemins. Un refus de publication est propagé et le contenu partiel est vidé, sans libérer localement les buffers déjà possédés par Windows. La session est fermée avant de détruire sa fenêtre propriétaire, y compris sur erreur.
+
+L'ouverture en écriture utilise une fenêtre réservée aux messages, créée et détruite sur le thread appelant. L'ancien `OpenClipboard(NULL)` suivi de `EmptyClipboard` laisse un propriétaire nul, ce qui ne respecte pas le contrat de publication documenté par Windows. Aucun rendu visible, aucune modification de curseur ou du parcours GPUI.
+
+Les formats restent CF_HDROP Unicode, Preferred DropEffect (1 pour Copier, 2 pour Couper) et CF_UNICODETEXT. La préparation ou l'ouverture refusée conserve l'ancien contenu. Une publication partiellement acceptée ne permet pas de garantir le retour à l'ancien contenu ; elle est nettoyée et signalée. Les tests injectent les erreurs sans ouvrir le presse-papiers utilisateur. La publication réelle et le collage interactif de fichiers ordinaires restent à confirmer manuellement.
+
+Contrats natifs : [SetClipboardData](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setclipboarddata), [OpenClipboard](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-openclipboard), [GlobalFree](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-globalfree).
 
 ## A07 — API Windows encore dans les commandes — P2
 
@@ -164,11 +172,15 @@ Le rejeu Delete et l'annulation NewFolder utilisent désormais `Platform::shell_
 
 Deux régressions natives ciblent les anciens seuils : un fichier creux de 4 Gio + 1 octet et 1 001 petits fichiers, avec Supprimer → Annuler → Rétablir → Annuler et contrôle du nom et du contenu. Les fixtures sont générées puis récupérées ; le test de grand fichier exige une marge de capacité avant mutation et ne change pas la configuration de corbeille. Les deux tests natifs exécutés explicitement passent. Le fichier de 4 Gio + 1 octet conserve sa taille et ses marqueurs de contenu ; les 1 001 fichiers conservent leurs noms et leur contenu après les deux restaurations.
 
+## A23 — Lecture non bornée des buffers de presse-papiers — P2
+
+**Point de code établi pendant A06, sans reproduction de crash.** Le lecteur `platform/clipboard.rs::get_clipboard_files` interprète directement l'en-tête CF_HDROP, son décalage et ses chaînes sans vérifier la taille du bloc. Le format Preferred DropEffect est également déréférencé sans vérifier qu'il contient au moins quatre octets. Ces données peuvent provenir d'autres applications. Remplacer la lecture des chemins par une API Shell bornée ou vérifier les tailles et terminateurs avant accès ; ajouter des fixtures de formats tronqués. Le lot A06 corrige la publication et sa propriété mémoire, pas ce lecteur ni le polling A12.
+
 ## Validation et suite
 
 La compilation Windows actuelle passe sans avertissement du projet. Les observations ci-dessus sont issues de la lecture des sources et de Clippy ; aucun nouveau test de comportement ou benchmark n'a été exécuté pendant cet audit. Snap Layouts et le témoin de déplacement actuel sont confirmés par l'utilisateur. Les validations des lots précédents restent décrites dans [AUDIT_CODE_MORT.md](AUDIT_CODE_MORT.md).
 
-Après A01/A02/A03/A04/A15 et le raccordement A18, examiner A05/A06, puis A19 ; conserver A20 pour la validation native interactive. Les optimisations demandent des mesures avant modification. Cet ordre est proposé, pas une liste de corrections déjà autorisées ou réalisées.
+Après A01/A02/A03/A04/A06/A15 et le raccordement A18, examiner A05/A23, puis A19 ; conserver A20 pour la validation native interactive. Les optimisations demandent des mesures avant modification. Cet ordre est proposé, pas une liste de corrections déjà autorisées ou réalisées.
 
 ### État après les lots N01 à N16
 
@@ -215,3 +227,11 @@ Les deux tests `native_delete_redo_above_old_size_limit` et `native_delete_redo_
 `cargo test --all-targets --offline` : 106 tests backend et 108 tests du binaire passent (214), avec 10 tests natifs ignorés par défaut. Les deux régressions natives A22 passent séparément. `cargo check --all-targets --offline` passe sans avertissement du projet.
 
 Le lien du nouveau binaire est produit dans `target/debug/deps/oxyde.exe`, mais `cargo build --bin oxyde --offline` échoue ensuite à remplacer `target/debug/oxyde.exe` avec « Accès refusé ». Le nouveau binaire est copié sous `target/debug/oxyde-corrige.exe` pour permettre le test sans arrêter l’application ouverte. Le remplacement du nom habituel reste à refaire après fermeture.
+
+### Validation du lot A06
+
+Sept tests ciblés passent : injection d'erreurs dans les parcours Copier/Couper et texte, transfert de propriété après réussite, nettoyage partiel, conservation de l'ancien contenu avant publication, vidage sans allocation, texte Unicode, lecture native CF_HDROP Unicode/UNC et durée de vie de la fenêtre propriétaire invisible. Les échecs de fermeture sont aussi injectés. Aucun test n'ouvre le presse-papiers utilisateur ; aucun Computer Use ni validation Linux. La publication réelle et le collage interactif restent à confirmer manuellement.
+
+`cargo test --all-targets --offline` : 113 tests backend et 108 tests du binaire passent, soit 221 ; les 10 tests natifs déjà ignorés restent ignorés. Les sept nouveaux tests A06 sont inclus dans cette invocation. `cargo check --all-targets --offline` passe sans avertissement du projet.
+
+`cargo build --bin oxyde --offline` réussit ; le binaire habituel `target/debug/oxyde.exe` est reconstruit. Le nouveau lot A06 est séparé du commit corbeille `f081c4d`.

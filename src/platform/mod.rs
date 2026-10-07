@@ -180,6 +180,8 @@ pub trait Platform: Send + Sync {
 
 #[cfg(target_os = "windows")]
 pub mod clipboard;
+#[cfg(target_os = "windows")]
+mod windows_clipboard_write;
 mod hardware;
 #[cfg(target_os = "windows")]
 pub mod icons;
