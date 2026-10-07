@@ -448,3 +448,36 @@ properties-counts = { $files } files, { $folders } folders
 properties-drive = Drive
 
 properties-copy-name-double-click = Double-click to copy the name
+
+toast-copied = Copied to clipboard
+toast-cut = Cut to clipboard
+toast-names-copied = { $count ->
+    [one] { $number } name copied
+   *[other] { $number } names copied
+    }
+toast-paths-copied = { $count ->
+    [one] { $number } path copied
+   *[other] { $number } paths copied
+    }
+toast-restored = { $count ->
+    [one] { $number } item restored
+   *[other] { $number } items restored
+    }
+toast-purged = { $count ->
+    [one] { $number } item permanently deleted
+   *[other] { $number } items permanently deleted
+    }
+toast-mounted = Disk image mounted
+toast-unmounted = Disk image unmounted
+
+toast-undo = Operation undone
+toast-redo = Operation redone
+
+toast-failed = Operation failed: { $detail }
+
+toast-copy-completed = Copy completed
+toast-move-completed = Move completed
+toast-trash-completed = Moved to the recycle bin
+toast-delete-completed = Permanent deletion completed
+toast-compress-completed = Archive created
+toast-extract-completed = Extraction completed

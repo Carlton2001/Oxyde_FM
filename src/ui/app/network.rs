@@ -532,8 +532,7 @@ impl OxydeApp {
                             }
                             NetworkOperationError::Other(error) => {
                                 if direct {
-                                    this.file_operation_notice =
-                                        Some((Message::NetworkDriveFailed, error));
+                                    this.toast(super::ToastKind::Error, Message::NetworkDriveFailed, error, 0, cx);
                                 } else if let Some(dialog) = this.network_dialog.as_mut() {
                                     dialog.error = Some((Message::NetworkDriveFailed, error));
                                 }
@@ -542,26 +541,7 @@ impl OxydeApp {
                     } else {
                         this.network_dialog = None;
                         this.network_focus_restore = true;
-                        this.network_notice = Some((
-                            if disconnect {
-                                Message::NetworkDisconnected
-                            } else {
-                                Message::NetworkConnected
-                            },
-                            revision,
-                        ));
-                        cx.spawn(async move |this, cx| {
-                            cx.background_executor()
-                                .timer(std::time::Duration::from_secs(4))
-                                .await;
-                            let _ = this.update(cx, |this, cx| {
-                                if this.network_notice.is_some_and(|(_, id)| id == revision) {
-                                    this.network_notice = None;
-                                    cx.notify();
-                                }
-                            });
-                        })
-                        .detach();
+                        this.toast(super::ToastKind::Success, if disconnect { Message::NetworkDisconnected } else { Message::NetworkConnected }, String::new(), 0, cx);
                     }
                 }
                 this.request_drive_details(cx);

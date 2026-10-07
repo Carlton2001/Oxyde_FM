@@ -14,6 +14,8 @@ pub mod layout;
 pub mod navigation;
 mod sizes;
 mod preferences;
+mod toasts;
+use toasts::{Toast, ToastKind};
 pub(crate) mod network;
 pub mod selection;
 pub(crate) mod search;
@@ -448,7 +450,6 @@ pub struct OxydeApp {
     pub(crate) network_force_confirmation: Option<network::NetworkForceConfirmation>,
     pub(crate) network_force_focus_pending: bool,
     pub(crate) network_focus_restore: bool,
-    pub(crate) network_notice: Option<(Message, u64)>,
     pub _subscriptions: Vec<Subscription>,
     /// Effective drag operation: true = copy, false = move.
     /// Derived from `drag_modifier_copy` (if Some) or `drag_target_default_copy` otherwise.
@@ -478,6 +479,8 @@ pub struct OxydeApp {
     rename_generation: u64,
     pending_file_operations: std::collections::VecDeque<PendingFileOperation>,
     file_operation_notice: Option<(Message, String)>,
+    toasts: Vec<Toast>,
+    next_toast_id: u64,
     pub(crate) operations_panel_open: bool,
     pub(crate) operations_panel_opened_manually: bool,
     pub(crate) operations_panel_position: Option<Point<Pixels>>,
@@ -747,11 +750,11 @@ impl OxydeApp {
                 handle.update(&mut cx, |this, cx| {
                     if let Ok(Err(error)) = &result {
                         log::warn!("Undo failed: {error:?}");
-                        this.file_operation_notice =
-                            Some((Message::UndoFailed, format!("{error:?}")));
+                        this.toast(ToastKind::Error, Message::UndoFailed, format!("{error:?}"), 0, cx);
                     } else if let Err(error) = &result {
-                        this.file_operation_notice =
-                            Some((Message::UndoFailed, format!("{error}")));
+                        this.toast(ToastKind::Error, Message::UndoFailed, format!("{error}"), 0, cx);
+                    } else if matches!(result, Ok(Ok(Some(_)))) {
+                        this.toast(ToastKind::Success, Message::ToastUndo, String::new(), 0, cx);
                     }
                     cx.notify();
                 });
@@ -786,11 +789,11 @@ impl OxydeApp {
                 handle.update(&mut cx, |this, cx| {
                     if let Ok(Err(error)) = &result {
                         log::warn!("Redo failed: {error:?}");
-                        this.file_operation_notice =
-                            Some((Message::RedoFailed, format!("{error:?}")));
+                        this.toast(ToastKind::Error, Message::RedoFailed, format!("{error:?}"), 0, cx);
                     } else if let Err(error) = &result {
-                        this.file_operation_notice =
-                            Some((Message::RedoFailed, format!("{error}")));
+                        this.toast(ToastKind::Error, Message::RedoFailed, format!("{error}"), 0, cx);
+                    } else if matches!(result, Ok(Ok(Some(_)))) {
+                        this.toast(ToastKind::Success, Message::ToastRedo, String::new(), 0, cx);
                     }
                     cx.notify();
                 });
@@ -899,7 +902,6 @@ impl OxydeApp {
             network_force_confirmation: None,
             network_force_focus_pending: false,
             network_focus_restore: false,
-            network_notice: None,
             _subscriptions: vec![cx.on_app_quit(|this, _| {
                 crate::trace_shutdown_request("GPUI quit hook");
                 crate::trace_shutdown_stage("history cleanup started");
@@ -937,6 +939,8 @@ impl OxydeApp {
             rename_generation: 0,
             pending_file_operations: std::collections::VecDeque::new(),
             file_operation_notice: None,
+            toasts: Vec::new(),
+            next_toast_id: 0,
             operations_panel_open: false,
             operations_panel_opened_manually: false,
             operations_panel_position,
@@ -1474,7 +1478,11 @@ impl OxydeApp {
             .filter(|file| tab.selected_paths.contains(&file.path))
             .map(|file| if names_only { file.name.clone() } else { file.path.clone() })
             .collect::<Vec<_>>().join("\n");
-        if !text.is_empty() { cx.write_to_clipboard(ClipboardItem::new_string(text)); }
+        if !text.is_empty() {
+            let count = text.lines().count();
+            cx.write_to_clipboard(ClipboardItem::new_string(text));
+            self.toast(ToastKind::Info, if names_only { Message::ToastNamesCopied } else { Message::ToastPathsCopied }, String::new(), count, cx);
+        }
     }
 
     pub(crate) fn execute_trash_action(&mut self, restore: bool, all: bool, cx: &mut Context<Self>) {
@@ -1486,6 +1494,7 @@ impl OxydeApp {
             .filter(|file| all || tab.selected_paths.contains(&file.path))
             .map(|file| file.path.clone()).collect();
         if paths.is_empty() { return; }
+        let count = paths.len();
         self.trash_busy = true;
         cx.notify();
         cx.spawn(async move |this, cx| {
@@ -1501,41 +1510,31 @@ impl OxydeApp {
                     Ok(Err(error)) => Some(error.to_string()),
                     Err(error) => Some(error.to_string()),
                 };
-                if let Some(error) = error { this.file_operation_notice = Some((Message::OperationFailed, error)); }
+                if let Some(error) = error { this.toast(ToastKind::Error, Message::ToastFailed, error, 0, cx); }
+                else { this.toast(ToastKind::Success, if restore { Message::ToastRestored } else { Message::ToastPurged }, String::new(), count, cx); }
                 this.refresh_all_tabs(cx);
                 cx.notify();
             });
         }).detach();
     }
 
-    pub fn execute_copier(&mut self, _cx: &mut Context<Self>) {
-        let pane_id = self.state.active_pane_id.clone();
-        if let Some(pane) = self.state.layout.find_pane(&pane_id) {
-            let paths: Vec<String> = pane.active_tab().selected_paths.iter().cloned().collect();
-            log::info!("Action 'Copier': paths={:?}", paths);
-            if !paths.is_empty() {
-                if let Err(e) = oxyde_lib::platform::platform().set_clipboard_files(paths, false) {
-                    log::error!("Action 'Copier' failed: {:?}", e);
+    pub fn execute_copier(&mut self, cx: &mut Context<Self>) { self.copy_files_to_clipboard(false, cx); }
+    pub fn on_action_couper(&mut self, _: &Couper, _: &mut Window, cx: &mut Context<Self>) { self.execute_couper(cx); }
+    pub fn execute_couper(&mut self, cx: &mut Context<Self>) { self.copy_files_to_clipboard(true, cx); }
+    fn copy_files_to_clipboard(&mut self, cut: bool, cx: &mut Context<Self>) {
+        let Some(pane) = self.state.find_pane(&self.state.active_pane_id) else { return; };
+        let paths: Vec<_> = pane.active_tab().selected_paths.iter().cloned().collect();
+        if paths.is_empty() { return; }
+        cx.spawn(async move |this, cx| {
+            let result = tokio::task::spawn_blocking(move || oxyde_lib::platform::platform().set_clipboard_files(paths, cut)).await;
+            let _ = this.update(cx, |this, cx| {
+                match result {
+                    Ok(Ok(())) => this.toast(ToastKind::Info, if cut { Message::ToastCut } else { Message::ToastCopied }, String::new(), 0, cx),
+                    Ok(Err(error)) => this.toast(ToastKind::Error, Message::ToastFailed, error, 0, cx),
+                    Err(error) => this.toast(ToastKind::Error, Message::ToastFailed, error.to_string(), 0, cx),
                 }
-            }
-        }
-    }
-
-    pub fn on_action_couper(&mut self, _: &Couper, _: &mut Window, cx: &mut Context<Self>) {
-        self.execute_couper(cx);
-    }
-
-    pub fn execute_couper(&mut self, _cx: &mut Context<Self>) {
-        let pane_id = self.state.active_pane_id.clone();
-        if let Some(pane) = self.state.layout.find_pane(&pane_id) {
-            let paths: Vec<String> = pane.active_tab().selected_paths.iter().cloned().collect();
-            log::info!("Action 'Couper': paths={:?}", paths);
-            if !paths.is_empty() {
-                if let Err(e) = oxyde_lib::platform::platform().set_clipboard_files(paths, true) {
-                    log::error!("Action 'Couper' failed: {:?}", e);
-                }
-            }
-        }
+            });
+        }).detach();
     }
 
     pub fn on_action_coller(&mut self, _: &Coller, _: &mut Window, cx: &mut Context<Self>) {
@@ -1543,20 +1542,23 @@ impl OxydeApp {
     }
 
     pub fn execute_coller(&mut self, cx: &mut Context<Self>) {
-        let pane_id = self.state.active_pane_id.clone();
-        if let Some(pane) = self.state.layout.find_pane(&pane_id) {
-            let target_dir = pane.active_tab().path.clone();
-            if target_dir.starts_with("search://") { return; }
-            if let Ok((paths, is_cut)) = oxyde_lib::platform::platform().get_clipboard_files() {
-                if !paths.is_empty() {
-                    if is_cut {
-                        self.execute_file_move(paths, target_dir, cx);
-                    } else {
-                        self.execute_file_copy(paths, target_dir, cx);
+        let Some(pane) = self.state.find_pane(&self.state.active_pane_id) else { return; };
+        let target_dir = pane.active_tab().path.clone();
+        if target_dir.starts_with("search://") { return; }
+        cx.spawn(async move |this, cx| {
+            let result = tokio::task::spawn_blocking(|| oxyde_lib::platform::platform().get_clipboard_files()).await;
+            let _ = this.update(cx, |this, cx| {
+                match result {
+                    Ok(Ok((paths, is_cut))) if !paths.is_empty() => {
+                        if is_cut { this.execute_file_move(paths, target_dir, cx); }
+                        else { this.execute_file_copy(paths, target_dir, cx); }
                     }
+                    Ok(Ok(_)) => {}
+                    Ok(Err(error)) => this.toast(ToastKind::Error, Message::ToastFailed, error, 0, cx),
+                    Err(error) => this.toast(ToastKind::Error, Message::ToastFailed, error.to_string(), 0, cx),
                 }
-            }
-        }
+            });
+        }).detach();
     }
 
     pub fn on_action_ouvrir(&mut self, _: &Ouvrir, _: &mut Window, cx: &mut Context<Self>) {
@@ -1581,7 +1583,7 @@ impl OxydeApp {
                 Err(error) => error.to_string(),
             };
             let _ = this.update(cx, |this, cx| {
-                this.file_operation_notice = Some((Message::OpenItemFailed, error));
+                this.toast(ToastKind::Error, Message::OpenItemFailed, error, 0, cx);
                 cx.notify();
             });
         }).detach();
@@ -1934,7 +1936,7 @@ impl OxydeApp {
     }
 
     fn watch_file_operation(&mut self, op_id: String, cx: &mut Context<Self>) {
-        use oxyde_lib::systems::file_ops::OpStatus;
+        use oxyde_lib::systems::file_ops::{FileOpType, OpStatus};
         let operations = self.file_ops.clone();
         let Some(handle) = self.handle.clone() else {
             return;
@@ -1944,6 +1946,7 @@ impl OxydeApp {
             async move {
                 let opened_at = std::time::Instant::now();
                 let mut automatic_open_checked = false;
+                let mut panel_was_visible = handle.update(&mut cx, |this, _| this.operations_panel_open);
                 loop {
                     cx.background_executor()
                         .timer(std::time::Duration::from_millis(200))
@@ -1951,6 +1954,7 @@ impl OxydeApp {
                     let Some(operation) = operations.get_operation(&op_id) else {
                         break;
                     };
+                    panel_was_visible |= handle.update(&mut cx, |this, _| this.operations_panel_open);
                     if !automatic_open_checked
                         && opened_at.elapsed() >= std::time::Duration::from_millis(700)
                     {
@@ -1961,6 +1965,7 @@ impl OxydeApp {
                         ) {
                             handle.update(&mut cx, |this, cx| {
                                 this.operations_panel_open = true;
+                                panel_was_visible = true;
                                 cx.notify();
                             });
                         }
@@ -1987,13 +1992,25 @@ impl OxydeApp {
                                 this.state.refresh_sidebar();
                                 this.reconcile_watchers(cx);
                                 let operations = this.file_ops.list_operations();
-                                if !this.operations_panel_opened_manually
+                                let close_automatically = !this.operations_panel_opened_manually
                                     && !operations.is_empty()
                                     && operations.iter().all(|operation| {
                                         matches!(operation.status, OpStatus::Completed)
-                                    })
-                                {
+                                    });
+                                let panel_closed_automatically = close_automatically && this.operations_panel_open;
+                                if close_automatically {
                                     this.operations_panel_open = false;
+                                }
+                                if !panel_was_visible || panel_closed_automatically {
+                                    let message = match operation.op_type {
+                                        FileOpType::Copy => Message::ToastCopyCompleted,
+                                        FileOpType::Move => Message::ToastMoveCompleted,
+                                        FileOpType::Trash => Message::ToastTrashCompleted,
+                                        FileOpType::Delete => Message::ToastDeleteCompleted,
+                                        FileOpType::Compress => Message::ToastCompressCompleted,
+                                        FileOpType::Extract => Message::ToastExtractCompleted,
+                                    };
+                                    this.toast(ToastKind::Success, message, String::new(), 0, cx);
                                 }
                                 cx.notify();
                             });
@@ -2116,8 +2133,8 @@ impl OxydeApp {
                             this.reconcile_watchers(cx);
                             cx.notify();
                         }
-                        Ok(Err(error)) => log::warn!("Create folder failed: {error}"),
-                        Err(error) => log::warn!("Create folder task failed: {error}"),
+                        Ok(Err(error)) => this.toast(ToastKind::Error, Message::ToastFailed, error.to_string(), 0, cx),
+                        Err(error) => this.toast(ToastKind::Error, Message::ToastFailed, error.to_string(), 0, cx),
                     });
                 }
             })
@@ -2203,7 +2220,7 @@ impl OxydeApp {
                     Err(error) => Some(error.to_string()),
                 };
                 if let Some(error) = error {
-                    this.file_operation_notice = Some((Message::EjectDriveFailed, error));
+                    this.toast(ToastKind::Error, Message::EjectDriveFailed, error, 0, cx);
                 }
                 this.reconcile_watchers(cx);
                 cx.notify();
@@ -3908,18 +3925,7 @@ impl Render for OxydeApp {
             ));
         }
 
-        if let Some((message, _)) = self.network_notice {
-            let close = handle.clone();
-            let theme = *cx.theme();
-            root = root.child(deferred(div().id("network-success-notice").absolute().bottom(rems(1.0)).right(rems(1.0))
-                .max_w(_window.viewport_size().width - rem_pixels(rems(2.0)))
-                .rounded_md().border(rems(0.0625)).border_color(theme.accent).bg(theme.surface)
-                .px_3().py_2().flex().items_center().gap(rems(0.5)).text_size(rems(0.8125)).text_color(theme.text).occlude()
-                .child(svg().path("icons/circle-check.svg").size(rems(1.0)).text_color(theme.accent))
-                .child(cx.i18n().text(message))
-                .child(div().id("network-notice-close").p_1().on_click(move |_, _, cx| close.update(cx, |view, cx| { view.network_notice = None; cx.notify(); }))
-                    .child(svg().path("icons/x.svg").size(rems(0.875)).text_color(theme.text_muted)))));
-        }
+        root = root.child(deferred(self.render_toasts(_window, cx)));
         root
     }
 }

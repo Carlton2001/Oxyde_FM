@@ -107,8 +107,7 @@ fn pinned_context_menu_raw(i18n: &I18n, h: Entity<OxydeApp>, path: String) -> Ve
                 move |_, app| {
                     h.update(app, |this, cx| {
                         this.context_menus.clear();
-                        let _ = oxyde_lib::commands::system::remove_from_quick_access(p.clone());
-                        this.state.reload_quick_access_and_refresh();
+                        this.change_favorite(p.clone(), true, cx);
                         cx.notify();
                     });
                 }
@@ -341,8 +340,7 @@ fn sidebar_tree_actions(
             on_click: std::rc::Rc::new(move |_, app| {
                 h_pin.update(app, |this, cx| {
                     this.context_menus.clear();
-                    let _ = oxyde_lib::commands::system::add_to_quick_access(path_pin.clone());
-                    this.state.reload_quick_access_and_refresh();
+                    this.change_favorite(path_pin.clone(), false, cx);
                     cx.notify();
                 })
             }),

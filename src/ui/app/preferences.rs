@@ -81,9 +81,8 @@ impl OxydeApp {
             }).await;
             let _ = this.update(cx, |this, cx| {
                 this.clearing_cache = false;
-                this.settings_data_status = Some(if result.is_ok() {
-                    Message::SettingsCacheCleared
-                } else { Message::SettingsCacheError });
+                this.settings_data_status = None;
+                this.toast(if result.is_ok() { super::ToastKind::Success } else { super::ToastKind::Error }, if result.is_ok() { Message::SettingsCacheCleared } else { Message::SettingsCacheError }, String::new(), 0, cx);
                 if let Err(error) = result { log::warn!("Cache cleanup failed: {error}"); }
                 this.state.layout.visit_panes(&mut |pane| {
                     for tab in &pane.tabs {
@@ -128,7 +127,8 @@ impl OxydeApp {
         self.breadcrumb_menu = None;
         self.refresh_all_tabs(cx);
         self.save_workspace(cx);
-        self.settings_data_status = Some(Message::SettingsPreferencesReset);
+        self.settings_data_status = None;
+        self.toast(super::ToastKind::Success, Message::SettingsPreferencesReset, String::new(), 0, cx);
         // Resolve the regional default away from the UI thread.
         cx.spawn(async move |this, cx| {
             let format = cx.background_executor().spawn(async {

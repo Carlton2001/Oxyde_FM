@@ -18,6 +18,24 @@ const ITALIAN: &str = include_str!("../../locales/it.ftl");
 /// Stable identifiers, independent of the text displayed to users.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Message {
+    ToastCopyCompleted,
+    ToastMoveCompleted,
+    ToastTrashCompleted,
+    ToastDeleteCompleted,
+    ToastCompressCompleted,
+    ToastExtractCompleted,
+    ToastFailed,
+    ToastUndo,
+    ToastRedo,
+    ToastCopied,
+    ToastCut,
+    ToastNamesCopied,
+    ToastPathsCopied,
+    ToastRestored,
+    ToastPurged,
+    ToastMounted,
+    ToastUnmounted,
+
     EjectDrive,
     EjectDriveFailed,
     MountDiskImage,
@@ -542,6 +560,23 @@ impl Message {
             Self::FolderEmpty => "folder-empty",
             Self::FolderSizeEmpty => "folder-size-empty",
             Self::PreviewLoading => "preview-loading",
+            Self::ToastCopyCompleted => "toast-copy-completed",
+            Self::ToastMoveCompleted => "toast-move-completed",
+            Self::ToastTrashCompleted => "toast-trash-completed",
+            Self::ToastDeleteCompleted => "toast-delete-completed",
+            Self::ToastCompressCompleted => "toast-compress-completed",
+            Self::ToastExtractCompleted => "toast-extract-completed",
+            Self::ToastFailed => "toast-failed",
+            Self::ToastUndo => "toast-undo",
+            Self::ToastRedo => "toast-redo",
+            Self::ToastCopied => "toast-copied",
+            Self::ToastCut => "toast-cut",
+            Self::ToastNamesCopied => "toast-names-copied",
+            Self::ToastPathsCopied => "toast-paths-copied",
+            Self::ToastRestored => "toast-restored",
+            Self::ToastPurged => "toast-purged",
+            Self::ToastMounted => "toast-mounted",
+            Self::ToastUnmounted => "toast-unmounted",
             Self::OperationFailed => "operation-failed",
             Self::PathPlaceholder => "path-placeholder",
             Self::Up => "navigation-up",
@@ -909,6 +944,25 @@ mod tests {
     }
 
     #[test]
+    fn toast_plurals_resolve_in_every_language() {
+        for language in Language::ALL {
+            let i18n = I18n::for_language(language);
+            for count in [1, 2, 1000] {
+                let mut args = FluentArgs::new();
+                args.set("count", count);
+                args.set("number", crate::ui::format::format_number(count as u64, language));
+                for message in [Message::ToastNamesCopied, Message::ToastPathsCopied, Message::ToastRestored, Message::ToastPurged] {
+                    let pattern = i18n.active.get_message(message.key()).unwrap().value().unwrap();
+                    let mut errors = Vec::new();
+                    let text = i18n.active.format_pattern(pattern, Some(&args), &mut errors);
+                    assert!(!text.is_empty());
+                    assert!(errors.is_empty(), "{}: {errors:?}", message.key());
+                }
+            }
+        }
+    }
+
+    #[test]
     fn dialog_catalog_has_all_messages_and_valid_parameters() {
         for language in Language::ALL {
             let i18n = I18n::for_language(language);
@@ -1054,6 +1108,23 @@ mod tests {
                 Message::FolderEmpty,
                 Message::FolderSizeEmpty,
                 Message::PreviewLoading,
+                Message::ToastCopyCompleted,
+                Message::ToastMoveCompleted,
+                Message::ToastTrashCompleted,
+                Message::ToastDeleteCompleted,
+                Message::ToastCompressCompleted,
+                Message::ToastExtractCompleted,
+                Message::ToastFailed,
+                Message::ToastUndo,
+                Message::ToastRedo,
+                Message::ToastCopied,
+                Message::ToastCut,
+                Message::ToastNamesCopied,
+                Message::ToastPathsCopied,
+                Message::ToastRestored,
+                Message::ToastPurged,
+                Message::ToastMounted,
+                Message::ToastUnmounted,
                 Message::OperationFailed,
                 Message::PathPlaceholder,
                 Message::Up,
@@ -1303,6 +1374,8 @@ mod tests {
             args.set("disk", "0");
             args.set("index", 1);
             args.set("current", 2);
+            args.set("used", "1 Ko");
+            args.set("formatted", "2");
             args.set("count", 2);
             args.set("folder_count", 1);
             args.set("query", "us");

@@ -25,6 +25,8 @@ pub struct OxydeTheme {
     pub warning_border: Hsla,
     pub warning_background: Hsla,
     pub warning_text: Hsla,
+    pub toast_success: Hsla,
+    pub toast_error: Hsla,
     pub error: Hsla,             // Messages d'erreur
     pub text_on_accent: Hsla,    // Texte sur une action remplie avec accent
     pub control_hover: Hsla,     // Survol d'une action secondaire
@@ -446,6 +448,8 @@ impl OxydeTheme {
             warning_border: rgb(0xf4e7ad).into(),
             warning_background: rgb(0xfff8df).into(),
             warning_text: rgb(0x915500).into(),
+            toast_success: rgb(0x10b981).into(),
+            toast_error: rgb(0xef4444).into(),
             error: rgb(0xb42335).into(),
             text_on_accent: rgb(0xffffff).into(),
             control_hover: rgb(0xe6e2d9).into(),
@@ -492,6 +496,8 @@ impl OxydeTheme {
             warning_border: rgb(0x5a4522).into(),
             warning_background: rgb(0x302618).into(),
             warning_text: rgb(0xf3c56a).into(),
+            toast_success: rgb(0x10b981).into(),
+            toast_error: rgb(0xef4444).into(),
             error: rgb(0xf87171).into(),
             text_on_accent: rgb(0x0e0c15).into(),
             control_hover: rgb(0x1c1a2b).into(),

@@ -757,3 +757,36 @@ properties-counts = { $files } Dateien, { $folders } Ordner
 properties-drive = Laufwerk
 
 properties-copy-name-double-click = Doppelklicken, um den Namen zu kopieren
+
+toast-copied = In die Zwischenablage kopiert
+toast-cut = In die Zwischenablage ausgeschnitten
+toast-names-copied = { $count ->
+    [one] { $number } Name kopiert
+   *[other] { $number } Namen kopiert
+    }
+toast-paths-copied = { $count ->
+    [one] { $number } Pfad kopiert
+   *[other] { $number } Pfade kopiert
+    }
+toast-restored = { $count ->
+    [one] { $number } Element wiederhergestellt
+   *[other] { $number } Elemente wiederhergestellt
+    }
+toast-purged = { $count ->
+    [one] { $number } Element endgültig gelöscht
+   *[other] { $number } Elemente endgültig gelöscht
+    }
+toast-mounted = Datenträgerabbild eingebunden
+toast-unmounted = Datenträgerabbild ausgehängt
+
+toast-undo = Vorgang rückgängig gemacht
+toast-redo = Vorgang wiederholt
+
+toast-failed = Vorgang fehlgeschlagen: { $detail }
+
+toast-copy-completed = Kopieren abgeschlossen
+toast-move-completed = Verschieben abgeschlossen
+toast-trash-completed = In den Papierkorb verschoben
+toast-delete-completed = Endgültiges Löschen abgeschlossen
+toast-compress-completed = Archiv erstellt
+toast-extract-completed = Entpacken abgeschlossen

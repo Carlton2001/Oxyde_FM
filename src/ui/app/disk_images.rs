@@ -113,7 +113,7 @@ impl OxydeApp {
                 .map(|image| image.roots.as_slice())
                 .unwrap_or_default();
             if image_operations_in_progress(&self.file_ops.list_operations(), roots) {
-                self.file_operation_notice = Some((Message::DiskImageBusy, String::new()));
+                self.toast(super::ToastKind::Error, Message::DiskImageBusy, String::new(), 0, cx);
                 cx.notify();
                 return;
             }
@@ -169,17 +169,17 @@ impl OxydeApp {
                 };
                 match outcome {
                     Ok(roots) => {
+                        this.toast(super::ToastKind::Success, if unmount { Message::ToastUnmounted } else { Message::ToastMounted }, String::new(), 0, cx);
                         if let Some((pane, new_tab)) = open {
                             if let Some(root) = roots.into_iter().next() {
                                 this.open_directory_item(&pane, root, new_tab, cx);
                             } else {
-                                this.file_operation_notice =
-                                    Some((Message::DiskImageNoVolume, String::new()));
+                                this.toast(super::ToastKind::Error, Message::DiskImageNoVolume, String::new(), 0, cx);
                             }
                         }
                     }
                     Err(error) => {
-                        this.file_operation_notice = Some((
+                        this.toast(super::ToastKind::Error,
                             if unmount {
                                 Message::DiskImageUnmountFailed
                             } else if open.is_some() {
@@ -187,8 +187,7 @@ impl OxydeApp {
                             } else {
                                 Message::DiskImageMountFailed
                             },
-                            error,
-                        ));
+                            error, 0, cx);
                         this.refresh_disk_images(cx);
                     }
                 }

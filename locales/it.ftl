@@ -757,3 +757,36 @@ properties-counts = { $files } file, { $folders } cartelle
 properties-drive = Unità
 
 properties-copy-name-double-click = Doppio clic per copiare il nome
+
+toast-copied = Copiato negli appunti
+toast-cut = Tagliato negli appunti
+toast-names-copied = { $count ->
+    [one] { $number } nome copiato
+   *[other] { $number } nomi copiati
+    }
+toast-paths-copied = { $count ->
+    [one] { $number } percorso copiato
+   *[other] { $number } percorsi copiati
+    }
+toast-restored = { $count ->
+    [one] { $number } elemento ripristinato
+   *[other] { $number } elementi ripristinati
+    }
+toast-purged = { $count ->
+    [one] { $number } elemento eliminato definitivamente
+   *[other] { $number } elementi eliminati definitivamente
+    }
+toast-mounted = Immagine disco montata
+toast-unmounted = Immagine disco smontata
+
+toast-undo = Operazione annullata
+toast-redo = Operazione ripetuta
+
+toast-failed = Operazione non riuscita: { $detail }
+
+toast-copy-completed = Copia completata
+toast-move-completed = Spostamento completato
+toast-trash-completed = Spostato nel cestino
+toast-delete-completed = Eliminazione definitiva completata
+toast-compress-completed = Archivio creato
+toast-extract-completed = Estrazione completata

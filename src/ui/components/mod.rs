@@ -284,13 +284,7 @@ fn oxyde_context_menu_items_raw(
                 move |_, app| {
                     h.update(app, |this, cx| {
                         this.context_menus.clear();
-                        if is_pinned {
-                            let _ =
-                                oxyde_lib::commands::system::remove_from_quick_access(p.clone());
-                        } else {
-                            let _ = oxyde_lib::commands::system::add_to_quick_access(p.clone());
-                        }
-                        this.state.reload_quick_access_and_refresh();
+                        this.change_favorite(p.clone(), is_pinned, cx);
                         cx.notify();
                     });
                 }
