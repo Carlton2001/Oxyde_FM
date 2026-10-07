@@ -193,3 +193,7 @@ La suite finale compte **181 tests réussis, aucun échec**. Les trois tests ret
 Le premier `cargo check` sous sandbox a échoué parce que RustEmbed ne pouvait pas résoudre le chemin absolu des assets (`PermissionDenied`). La même commande hors sandbox a réussi ; aucun contournement ni modification de l'embarquement des ressources n'a été ajouté.
 
 Construction finale `cargo build --bin oxyde --offline` : réussie, sans avertissement du projet. `git diff --check` ne signale aucune erreur. Aucun lancement ni pilotage de l'application, aucune validation visuelle revendiquée et aucune compilation Linux.
+
+### Suite A04 — propriétés de corbeille
+
+Les champs `FileProperties::original_path` et `deleted_time`, réservés lors de N09, sont désormais lus par le dialogue de propriétés pour afficher le nom, l'emplacement d'origine et la date de suppression. Leur collecte reste active et partage les règles de nommage de la restauration ; ils ne sont plus des champs sans lecteur. Voir [AUDIT_AMELIORATIONS.md](AUDIT_AMELIORATIONS.md).

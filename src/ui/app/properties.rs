@@ -25,6 +25,38 @@ pub(crate) struct PropertiesDialog {
     validation_error: Option<Message>,
 }
 
+struct PropertyPresentation<'a> {
+    name: &'a str,
+    location: &'a str,
+    location_label: Message,
+    deleted_time: Option<u64>,
+}
+
+fn property_presentation(properties: &FileProperties) -> PropertyPresentation<'_> {
+    let original_identity = properties
+        .original_path
+        .as_deref()
+        .map(std::path::Path::new)
+        .filter(|path| path.is_absolute())
+        .and_then(|path| Some((path.file_name()?.to_str()?, path.parent()?.to_str()?)));
+    let (name, location, location_label) = match original_identity {
+        Some((name, location)) => (name, location, Message::TrashOriginalLocation),
+        None => (
+            properties.name.as_str(),
+            properties.parent.as_str(),
+            Message::ColumnLocation,
+        ),
+    };
+    PropertyPresentation {
+        name,
+        location,
+        location_label,
+        deleted_time: properties
+            .deleted_time
+            .and_then(|time| u64::try_from(time).ok()),
+    }
+}
+
 fn same_root(a: &str, b: &str) -> bool {
     a.trim_end_matches(['\\', '/'])
         .eq_ignore_ascii_case(b.trim_end_matches(['\\', '/']))
@@ -342,6 +374,7 @@ pub(crate) fn render(
 ) -> impl IntoElement {
     let dialog = view.properties_dialog.as_ref().unwrap();
     let theme = *cx.theme();
+    let presentation = dialog.properties.as_ref().map(property_presentation);
     let mut font = window.text_style().font();
     font.family = "Inter".into();
     font.weight = crate::ui::style::DEFAULT_FONT_WEIGHT;
@@ -358,6 +391,10 @@ pub(crate) fn render(
         Message::PropertiesAccessed,
     ]
     .into_iter()
+    .chain(presentation.as_ref()
+        .filter(|p| matches!(p.location_label, Message::TrashOriginalLocation))
+        .map(|_| Message::TrashOriginalLocation))
+    .chain(presentation.as_ref().and_then(|p| p.deleted_time).map(|_| Message::TrashDeletedAt))
     .map(|message| {
         let label = cx.i18n().text(message);
         window
@@ -404,7 +441,8 @@ pub(crate) fn render(
     };
     let mut body = div().flex().flex_col().gap(rems(0.375));
     if let Some(p) = dialog.properties.as_ref().filter(|_| !dialog.shortcut_tab) {
-        let icon = get_icon_type(&p.name, p.is_dir, Some(&p.path), false, false);
+        let presentation = presentation.as_ref().unwrap();
+        let icon = get_icon_type(presentation.name, p.is_dir, Some(&p.path), false, false);
         let graphic = if let Some(drive) = &dialog.drive {
             if cfg!(target_os = "windows") && view.use_system_icons() {
                 render_file_icon(
@@ -439,7 +477,7 @@ pub(crate) fn render(
         let name = if let Some(drive) = &dialog.drive {
             format!("{} ({})", drive.label, drive.path.trim_end_matches('\\'))
         } else {
-            p.name.clone()
+            presentation.name.to_owned()
         };
         let copy_name = name.clone();
         body = body.child(
@@ -478,7 +516,7 @@ pub(crate) fn render(
         let file_type = if p.is_dir {
             cx.i18n().text(Message::FileTypeFolder).to_string()
         } else {
-            std::path::Path::new(&p.name)
+            std::path::Path::new(presentation.name)
                 .extension()
                 .map(|extension| extension.to_string_lossy().to_uppercase())
                 .unwrap_or_else(|| cx.i18n().text(Message::FileTypeFile).to_string())
@@ -595,8 +633,8 @@ pub(crate) fn render(
         } else {
             body = body
                 .child(row(
-                    cx.i18n().text(Message::ColumnLocation),
-                    p.parent.clone(),
+                    cx.i18n().text(presentation.location_label),
+                    presentation.location.to_owned(),
                 ))
                 .child(row(
                     cx.i18n().text(Message::ColumnSize),
@@ -632,6 +670,12 @@ pub(crate) fn render(
         ] {
             body = body.child(row(
                 cx.i18n().text(label),
+                format_date(timestamp, date_format(cx)),
+            ));
+        }
+        if let Some(timestamp) = presentation.deleted_time {
+            body = body.child(row(
+                cx.i18n().text(Message::TrashDeletedAt),
                 format_date(timestamp, date_format(cx)),
             ));
         }
@@ -1048,5 +1092,118 @@ fn run_window_message(mode: i32) -> Message {
         3 => Message::ShortcutMaximized,
         7 => Message::ShortcutMinimized,
         _ => Message::ShortcutNormal,
+    }
+}
+
+#[cfg(test)]
+mod property_presentation_tests {
+    use super::{property_presentation, FileProperties, Message};
+
+    fn fixture() -> FileProperties {
+        FileProperties {
+            name: "$Rfixture".into(),
+            path: std::env::temp_dir()
+                .join("physical")
+                .join("$Rfixture")
+                .to_string_lossy()
+                .into_owned(),
+            parent: std::env::temp_dir()
+                .join("physical")
+                .to_string_lossy()
+                .into_owned(),
+            is_dir: false,
+            size: 17,
+            is_calculated: false,
+            created: 0,
+            modified: 0,
+            accessed: 0,
+            original_path: Some(
+                std::env::temp_dir()
+                    .join("Documents")
+                    .join("Rapport école.pdf")
+                    .to_string_lossy()
+                    .into_owned(),
+            ),
+            deleted_time: Some(1_791_370_123_000),
+            folders_count: None,
+            files_count: None,
+            shortcut: None,
+        }
+    }
+
+    #[test]
+    fn trash_properties_present_original_identity_and_keep_physical_path() {
+        let properties = fixture();
+        let physical = properties.path.clone();
+        let original = properties.original_path.clone().unwrap();
+        let presentation = property_presentation(&properties);
+        assert_eq!(presentation.name, "Rapport école.pdf");
+        assert_eq!(
+            presentation.location,
+            std::path::Path::new(&original)
+                .parent()
+                .unwrap()
+                .to_str()
+                .unwrap()
+        );
+        assert!(matches!(
+            presentation.location_label,
+            Message::TrashOriginalLocation
+        ));
+        assert_eq!(presentation.deleted_time, Some(1_791_370_123_000));
+        assert_eq!(properties.path, physical);
+        assert_eq!(properties.name, "$Rfixture");
+        assert_ne!(properties.path, original);
+    }
+    #[test]
+    fn folder_and_shortcut_names_keep_their_original_extensions() {
+        use crate::ui::components::icons::{get_icon_type, IconType};
+        for (name, is_dir, icon) in [
+            ("Dossier école", true, IconType::Folder),
+            ("Raccourci école.lnk", false, IconType::ExternalLink),
+            ("Lien école.url", false, IconType::Link),
+            ("Rapport école.pdf", false, IconType::FileText),
+        ] {
+            let mut properties = fixture();
+            properties.is_dir = is_dir;
+            properties.original_path = Some(
+                std::env::temp_dir()
+                    .join("Documents")
+                    .join(name)
+                    .to_string_lossy()
+                    .into_owned(),
+            );
+            let presentation = property_presentation(&properties);
+            assert_eq!(presentation.name, name);
+            assert_eq!(
+                get_icon_type(
+                    presentation.name,
+                    is_dir,
+                    Some(&properties.path),
+                    false,
+                    false
+                ),
+                icon
+            );
+        }
+    }
+
+    #[test]
+    fn ordinary_or_incomplete_properties_fall_back_without_a_fake_deletion_date() {
+        let mut properties = fixture();
+        for original in [None, Some(String::new()), Some("relative.txt".into())] {
+            properties.original_path = original;
+            properties.deleted_time = None;
+            let presentation = property_presentation(&properties);
+            assert_eq!(presentation.name, properties.name);
+            assert_eq!(presentation.location, properties.parent);
+            assert!(matches!(
+                presentation.location_label,
+                Message::ColumnLocation
+            ));
+            assert!(presentation.deleted_time.is_none());
+        }
+        properties.deleted_time = Some(-1);
+        assert!(property_presentation(&properties).deleted_time.is_none());
     }
 }

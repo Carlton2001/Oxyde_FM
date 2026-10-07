@@ -49,6 +49,7 @@ pub struct FileProperties {
     pub modified: u64,
     pub accessed: u64,
     pub original_path: Option<String>,
+    /// Milliseconds since the Unix epoch, matching the other property timestamps.
     pub deleted_time: Option<i64>,
     pub folders_count: Option<u64>,
     pub files_count: Option<u64>,

@@ -116,9 +116,14 @@ fn get_restoration_paths(item: &trash::TrashItem) -> RestorationPaths {
     }
 }
 
+/// Shares the original identity used by trash listings, restore, and properties.
+pub(crate) fn original_trash_path(item: &trash::TrashItem) -> PathBuf {
+    get_restoration_paths(item).corrected_path
+}
+
 fn item_with_correct_restore_name(item: &trash::TrashItem) -> trash::TrashItem {
     let mut item = item.clone();
-    let original_path = get_restoration_paths(&item).corrected_path;
+    let original_path = original_trash_path(&item);
     if let Some(name) = original_path.file_name() {
         item.name = name.to_os_string();
         if let Some(parent) = original_path.parent() {
@@ -136,7 +141,7 @@ pub fn list_trash() -> Result<Vec<TrashEntry>, CommandError> {
     let mut entries: Vec<TrashEntry> = trash_items
         .into_iter()
         .map(|item| {
-            let original_path = get_restoration_paths(&item).corrected_path;
+            let original_path = original_trash_path(&item);
             let mut name = original_path
                 .file_name()
                 .map(|n| n.to_string_lossy().to_string())
@@ -540,7 +545,7 @@ pub async fn restore_items(paths: Vec<String>) -> Result<Vec<String>, CommandErr
 
     for (item, intended_path) in restoration_tasks {
         let item = item_with_correct_restore_name(&item);
-        let original_path = get_restoration_paths(&item).corrected_path;
+        let original_path = original_trash_path(&item);
         let original_path_str = original_path.to_string_lossy().to_string();
 
         trash::os_limited::restore_all(vec![item.clone()])

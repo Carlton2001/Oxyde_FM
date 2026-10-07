@@ -34,9 +34,13 @@ Validation : quatre tests couvrent limite → zone libre/bouton +, correspondanc
 
 ## A04 — Propriétés d'un élément de corbeille : nom et emplacement physiques — P2
 
-**Parcours établi, affichage à vérifier.** L'action Propriétés transmet le chemin physique de l'élément supprimé à `get_file_properties`. `commands/io.rs:508` récupère son chemin d'origine et sa date de suppression, mais `ui/app/properties.rs` affiche `name` et `parent` dérivés du chemin physique, sans lire ces deux métadonnées.
+**Corrigé le 7 octobre 2026, après reproduction déterministe de la présentation.** Avant correction, une fixture de fichier supprimé affiche `$Rfixture` au lieu de son nom d'origine. Le dialogue affichait également le dossier physique de corbeille sans lire `original_path` et `deleted_time`.
 
-Vérifier si le dialogue affiche un nom `$R…` et le dossier interne de corbeille. Adapter la présentation au nom/emplacement d'origine tout en conservant le chemin physique pour les opérations natives. Réserver `FileProperties::original_path` et `deleted_time` jusqu'à cette décision. La restauration sous le nom d'origine a déjà été testée séparément et n'est pas remise en cause par cette observation.
+La présentation utilise désormais le nom et le dossier du chemin d'origine, avec les libellés existants Emplacement d'origine et Date de suppression. Les métadonnées partagent les règles de nommage de la liste et de la restauration : lecture du fichier `$I` via Platform et conservation des extensions `.lnk` / `.url` lorsque le Shell les masque. Le chemin physique reste utilisé pour les icônes natives, les calculs de taille et les actions système. En l'absence d'un chemin d'origine absolu exploitable, le dialogue conserve la présentation physique.
+
+La date de suppression du crate `trash`, exprimée en secondes Unix, est convertie en millisecondes comme les autres dates du modèle et le formateur. Les dates négatives ou débordantes ne sont pas publiées comme dates valides. La largeur des libellés tient compte des deux lignes supplémentaires seulement lorsqu'elles sont présentes, avec les traductions existantes dans les cinq langues.
+
+Validation : six nouveaux tests couvrent l'identité affichée, la conservation du chemin physique, dossiers et raccourcis, le repli sans métadonnées, les unités et dates invalides. Une fixture locale Windows `$I` vérifie le nom Unicode d'origine malgré un libellé Shell différent. Aucun élément n'est envoyé à la corbeille par ces tests ; aucune validation visuelle interactive, aucun Computer Use ni Linux.
 
 ## A05 — Durée de vie des ressources COM/Shell — P2
 
@@ -110,13 +114,13 @@ Prévoir une invalidation lors d'un changement de jour local, sans recharger les
 
 La compilation Windows actuelle passe sans avertissement du projet. Les observations ci-dessus sont issues de la lecture des sources et de Clippy ; aucun nouveau test de comportement ou benchmark n'a été exécuté pendant cet audit. Snap Layouts et le témoin de déplacement actuel sont confirmés par l'utilisateur. Les validations des lots précédents restent décrites dans [AUDIT_CODE_MORT.md](AUDIT_CODE_MORT.md).
 
-Après A01/A02/A03, poursuivre avec les corrections de comportement A04/A14/A15 et les ressources natives A05/A06. Les optimisations demandent des mesures avant modification. Cet ordre est proposé, pas une liste de corrections déjà autorisées ou réalisées.
+Après A01/A02/A03/A04, poursuivre avec les corrections de comportement A14/A15 et les ressources natives A05/A06. Les optimisations demandent des mesures avant modification. Cet ordre est proposé, pas une liste de corrections déjà autorisées ou réalisées.
 
 ### État après les lots N01 à N16
 
-Le nettoyage retire les anciennes sérialisations, les estimations et plusieurs lectures natives dont les résultats étaient abandonnés. Ce nettoyage ne corrige pas les observations A01–A13. A01, A02 et A03 sont corrigés dans les lots suivants, décrits plus haut. Les références de lignes ci-dessus restent celles de `3cc7d14` ; utiliser les noms de fonctions pour retrouver leur nouvel emplacement.
+Le nettoyage retire les anciennes sérialisations, les estimations et plusieurs lectures natives dont les résultats étaient abandonnés. Ce nettoyage ne corrige pas les observations A01–A13. A01, A02, A03 et A04 sont corrigés dans les lots suivants, décrits plus haut. Les références de lignes ci-dessus restent celles de `3cc7d14` ; utiliser les noms de fonctions pour retrouver leur nouvel emplacement.
 
-Pour A04, `FileProperties::original_path` / `deleted_time` et leur collecte restent réservés. Pour A05, l'énumération de diagnostic du property store et les lectures de métadonnées d'appareil sans affichage disparaissent ; la récupération du nom convivial et son traitement COM restent actifs. Pour A10, les variantes de tri backend inaccessibles disparaissent, mais le tri naturel actif et les tris GPUI restent distincts. Pour A13, la branche de couleur identique des onglets disparaît avec N05 ; les autres suggestions ne font pas l'objet d'une correction générale.
+Depuis A04, `FileProperties::original_path` / `deleted_time` et leur collecte alimentent les propriétés des éléments de corbeille. Pour A05, l'énumération de diagnostic du property store et les lectures de métadonnées d'appareil sans affichage disparaissent ; la récupération du nom convivial et son traitement COM restent actifs. Pour A10, les variantes de tri backend inaccessibles disparaissent, mais le tri naturel actif et les tris GPUI restent distincts. Pour A13, la branche de couleur identique des onglets disparaît avec N05 ; les autres suggestions ne font pas l'objet d'une correction générale.
 
 ### Validation du lot A02
 
@@ -129,3 +133,7 @@ Pour A04, `FileProperties::original_path` / `deleted_time` et leur collecte rest
 ### Validation du lot A03
 
 `cargo test --bin oxyde --offline` : 99 tests passent, dont quatre nouveaux tests de régression. `cargo check --all-targets --offline` passe sans avertissement du projet, et `cargo build --bin oxyde --offline` réussit. Aucun Computer Use ni test visuel de fenêtre GPUI ; Linux reste hors validation.
+
+### Validation du lot A04
+
+`cargo test --all-targets --offline` : 104 tests backend et 102 tests du binaire passent, soit 206 ; les trois tests natifs déjà ignorés restent ignorés. Six tests de régression ont été ajoutés. `cargo check --all-targets --offline` passe sans avertissement du projet, et `cargo build --bin oxyde --offline` réussit. Les traductions des deux libellés existent dans les cinq catalogues. Aucun Computer Use, aucune validation visuelle interactive ni Linux.

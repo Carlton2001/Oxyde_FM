@@ -355,9 +355,8 @@ pub fn get_file_properties(path: String) -> Result<FileProperties, CommandError>
                 let item_id = normalize(&PathBuf::from(&item.id));
                 item_id == normalized_target
             }) {
-                let orig_path = item.original_path().to_string_lossy().to_string();
-                let del_time = item.time_deleted;
-                (Some(orig_path), Some(del_time))
+                let (original, deleted) = trash_properties_metadata(item);
+                (Some(original), deleted)
             } else {
                 (None, None)
             }
@@ -386,6 +385,17 @@ pub fn get_file_properties(path: String) -> Result<FileProperties, CommandError>
         files_count: None,
         shortcut,
     })
+}
+
+fn trash_properties_metadata(item: &trash::TrashItem) -> (String, Option<i64>) {
+    let original = super::ops::original_trash_path(item)
+        .to_string_lossy()
+        .into_owned();
+    let deleted = item
+        .time_deleted
+        .checked_mul(1000)
+        .filter(|time| *time >= 0);
+    (original, deleted)
 }
 
 fn get_shortcut_info(path: &std::path::Path) -> Option<crate::models::ShortcutInfo> {
@@ -639,5 +649,69 @@ mod directory_tests {
         assert!(validate_rename_target(&source, &outside).is_err());
         assert_eq!(std::fs::read(&source).unwrap(), b"source");
         assert_eq!(std::fs::read(&existing).unwrap(), b"existing");
+    }
+}
+
+#[cfg(test)]
+mod trash_properties_tests {
+    use super::trash_properties_metadata;
+
+    fn fixture() -> trash::TrashItem {
+        trash::TrashItem {
+            id: std::env::temp_dir()
+                .join("missing-trash-properties-fixture")
+                .join("$Rfixture.lnk")
+                .into_os_string(),
+            name: "Raccourci école".into(),
+            original_parent: std::env::temp_dir().join("Documents"),
+            time_deleted: 1_791_370_123,
+        }
+    }
+
+    #[test]
+    fn properties_use_restore_name_rules_and_millisecond_deletion_time() {
+        let item = fixture();
+        let (original, deleted) = trash_properties_metadata(&item);
+        assert_eq!(
+            original,
+            item.original_parent
+                .join("Raccourci école.lnk")
+                .to_string_lossy()
+        );
+        assert_eq!(deleted, Some(1_791_370_123_000));
+    }
+
+    #[test]
+    fn missing_or_overflowing_deletion_times_are_not_published_as_dates() {
+        let mut item = fixture();
+        for seconds in [-1, i64::MAX, i64::MIN] {
+            item.time_deleted = seconds;
+            assert_eq!(trash_properties_metadata(&item).1, None);
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn properties_prefer_the_sidecar_original_name_over_the_shell_label() {
+        let temp = tempfile::tempdir().unwrap();
+        let original = temp.path().join("Documents").join("Rapport école 🦀.txt");
+        let wide: Vec<_> = original
+            .to_string_lossy()
+            .encode_utf16()
+            .chain([0])
+            .collect();
+        let mut metadata = 2u64.to_le_bytes().to_vec();
+        metadata.resize(24, 0);
+        metadata.extend_from_slice(&(wide.len() as u32).to_le_bytes());
+        for unit in wide {
+            metadata.extend_from_slice(&unit.to_le_bytes());
+        }
+        std::fs::write(temp.path().join("$Ifixture.txt"), metadata).unwrap();
+        let mut item = fixture();
+        item.id = temp.path().join("$Rfixture.txt").into_os_string();
+        item.name = "Shell label".into();
+        let (name, deleted) = trash_properties_metadata(&item);
+        assert_eq!(std::path::Path::new(&name), original);
+        assert_eq!(deleted, Some(1_791_370_123_000));
     }
 }
