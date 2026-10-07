@@ -5,6 +5,34 @@ pub use crate::ui::theme::ThemeContext;
 pub use gpui::prelude::*;
 use gpui::*;
 
+fn update_tab_drop_target(
+    drop_target_pane: &mut Option<String>,
+    drop_target_idx: &mut Option<usize>,
+    source_pane: &str,
+    source_index: usize,
+    target_pane: &str,
+    target_index: usize,
+) -> bool {
+    let is_noop = source_pane == target_pane
+        && (source_index == target_index || source_index.checked_add(1) == Some(target_index));
+    let next_index = (!is_noop).then_some(target_index);
+    let next_pane = (!is_noop).then_some(target_pane);
+    let changed = *drop_target_idx != next_index || drop_target_pane.as_deref() != next_pane;
+    *drop_target_idx = next_index;
+    if drop_target_pane.as_deref() != next_pane {
+        *drop_target_pane = next_pane.map(str::to_owned);
+    }
+    changed
+}
+
+fn tab_drop_zone_contains_pointer(
+    bounds: Bounds<Pixels>,
+    viewport: Bounds<Pixels>,
+    position: Point<Pixels>,
+) -> bool {
+    bounds.contains(&position) && viewport.contains(&position)
+}
+
 impl OxydeApp {
     pub(crate) fn measure_metadata_columns(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let i18n = cx.i18n();
@@ -619,24 +647,35 @@ impl OxydeApp {
                                     .left_0()
                                     .h_full()
                                     .w_1_2()
-                                    .drag_over::<(String, usize)>({
+                                    .on_drag_move::<(String, usize)>({
                                         let h = h.clone();
                                         let p_id_cap = p_id.clone();
-                                        move |style, (f_p, f_t), _, app| {
-                                            let is_noop = f_p == &p_id_cap
-                                                && (*f_t == t_ix || *f_t + 1 == t_ix);
-                                            h.update(app, |v, _| {
-                                                if is_noop {
-                                                    v.drop_target_idx = None;
-                                                    v.drop_target_pane = None;
-                                                } else {
-                                                    v.drop_target_idx = Some(t_ix);
-                                                    v.drop_target_pane = Some(p_id_cap.clone());
+                                        move |event, _, app| {
+                                            let (source_pane, source_index) = event.drag(app).clone();
+                                            h.update(app, |v, cx| {
+                                                let Some(pane) = v.state.layout.find_pane(&p_id_cap) else {
+                                                    return;
+                                                };
+                                                if !tab_drop_zone_contains_pointer(
+                                                    event.bounds,
+                                                    pane.tab_strip.scroll.bounds(),
+                                                    event.event.position,
+                                                ) {
+                                                    return;
                                                 }
-                                                // Clear split highlights when over a tab
-                                                v.highlight_split_pane = None;
+                                                let changed = update_tab_drop_target(
+                                                    &mut v.drop_target_pane,
+                                                    &mut v.drop_target_idx,
+                                                    &source_pane,
+                                                    source_index,
+                                                    &p_id_cap,
+                                                    t_ix,
+                                                );
+                                                let had_split_highlight = v.highlight_split_pane.take().is_some();
+                                                if changed || had_split_highlight {
+                                                    cx.notify();
+                                                }
                                             });
-                                            style
                                         }
                                     })
                                     .on_drop({
@@ -679,26 +718,35 @@ impl OxydeApp {
                                     .right_0()
                                     .h_full()
                                     .w_1_2()
-                                    .drag_over::<(String, usize)>({
+                                    .on_drag_move::<(String, usize)>({
                                         let h = h.clone();
                                         let p_id_cap = p_id.clone();
-                                        move |style, (f_p, f_t), _, app| {
-                                            // For Right Zone at index t_ix. Target is t_ix + 1.
-                                            let target = t_ix + 1;
-                                            let is_noop = f_p == &p_id_cap
-                                                && (*f_t == target || *f_t + 1 == target);
-                                            h.update(app, |v, _| {
-                                                if is_noop {
-                                                    v.drop_target_idx = None;
-                                                    v.drop_target_pane = None;
-                                                } else {
-                                                    v.drop_target_idx = Some(target);
-                                                    v.drop_target_pane = Some(p_id_cap.clone());
+                                        move |event, _, app| {
+                                            let (source_pane, source_index) = event.drag(app).clone();
+                                            h.update(app, |v, cx| {
+                                                let Some(pane) = v.state.layout.find_pane(&p_id_cap) else {
+                                                    return;
+                                                };
+                                                if !tab_drop_zone_contains_pointer(
+                                                    event.bounds,
+                                                    pane.tab_strip.scroll.bounds(),
+                                                    event.event.position,
+                                                ) {
+                                                    return;
                                                 }
-                                                // Clear split highlights when over a tab
-                                                v.highlight_split_pane = None;
+                                                let changed = update_tab_drop_target(
+                                                    &mut v.drop_target_pane,
+                                                    &mut v.drop_target_idx,
+                                                    &source_pane,
+                                                    source_index,
+                                                    &p_id_cap,
+                                                    t_ix + 1,
+                                                );
+                                                let had_split_highlight = v.highlight_split_pane.take().is_some();
+                                                if changed || had_split_highlight {
+                                                    cx.notify();
+                                                }
                                             });
-                                            style
                                         }
                                     })
                                     .on_drop({
@@ -785,27 +833,32 @@ impl OxydeApp {
                     .h(crate::ui::style::TAB_BAR_HEIGHT)
                     .w_full()
                     .relative()
-                    .drag_over::<(String, usize)>({
+                    .on_drag_move::<(String, usize)>({
                         let h = h.clone();
                         let p_id_cap = p_id.clone();
-                        move |style, (f_p, f_t), _, app| {
-                            h.update(app, |v, _| {
-                                // If no specific tab or gap is already showing an indicator...
-                                if v.drop_target_pane.as_ref() != Some(&p_id_cap) {
-                                    if let Some(pane) = v.state.layout.find_pane(&p_id_cap) {
-                                        let target = pane.tabs.len();
-                                        let is_noop =
-                                            f_p == &p_id_cap && *f_t == target.saturating_sub(1);
-                                        if !is_noop {
-                                            v.drop_target_idx = Some(target);
-                                            v.drop_target_pane = Some(p_id_cap.clone());
-                                        }
+                        move |event, _, app| {
+                            if !event.bounds.contains(&event.event.position) {
+                                return;
+                            }
+                            let (source_pane, source_index) = event.drag(app).clone();
+                            h.update(app, |v, cx| {
+                                if let Some(pane) = v.state.layout.find_pane(&p_id_cap) {
+                                    // Capture dispatch visits this wrapper before the tab halves.
+                                    // Free space and the + button therefore fall back to the end.
+                                    let changed = update_tab_drop_target(
+                                        &mut v.drop_target_pane,
+                                        &mut v.drop_target_idx,
+                                        &source_pane,
+                                        source_index,
+                                        &p_id_cap,
+                                        pane.tabs.len(),
+                                    );
+                                    let had_split_highlight = v.highlight_split_pane.take().is_some();
+                                    if changed || had_split_highlight {
+                                        cx.notify();
                                     }
                                 }
-                                // Clear split highlights when over the tab bar wrapper
-                                v.highlight_split_pane = None;
                             });
-                            style
                         }
                     })
                     .on_drop({
@@ -1096,5 +1149,162 @@ impl OxydeApp {
                     )
             })
             .into_any_element()
+    }
+}
+
+#[cfg(test)]
+mod tab_drop_tests {
+    use super::update_tab_drop_target;
+    use crate::ui::workspace::WorkspaceState;
+
+    #[test]
+    fn moving_from_a_tab_boundary_to_free_space_targets_the_actual_append_slot() {
+        let mut state = WorkspaceState::new();
+        let source = state.active_pane_id.clone();
+        state.add_tab(&source, "dragged".into(), true);
+        let dragged = state.find_pane(&source).unwrap().tabs[1].id.clone();
+        let destination = state.add_panel_right().unwrap();
+        state.add_tab(&destination, "second".into(), true);
+        state.add_tab(&destination, "third".into(), true);
+        let append_slot = state.find_pane(&destination).unwrap().tabs.len();
+        let mut target_pane = Some(destination.clone());
+        let mut target_index = Some(1);
+
+        update_tab_drop_target(
+            &mut target_pane,
+            &mut target_index,
+            &source,
+            1,
+            &destination,
+            append_slot,
+        );
+        assert_eq!(target_pane.as_deref(), Some(destination.as_str()));
+        assert_eq!(target_index, Some(append_slot));
+
+        state.move_tab_to_pane_id(&source, 1, &destination);
+        assert_eq!(
+            state.find_pane(&destination).unwrap().tabs[target_index.unwrap()].id,
+            dragged
+        );
+    }
+    #[test]
+    fn same_pane_free_space_marker_matches_the_reordered_tab() {
+        let mut state = WorkspaceState::new();
+        let pane_id = state.active_pane_id.clone();
+        for path in ["second", "third", "fourth"] {
+            state.add_tab(&pane_id, path.into(), true);
+        }
+        let dragged = state.find_pane(&pane_id).unwrap().tabs[0].id.clone();
+        let append_slot = state.find_pane(&pane_id).unwrap().tabs.len();
+        let mut target_pane = Some(pane_id.clone());
+        let mut target_index = Some(2);
+        update_tab_drop_target(
+            &mut target_pane,
+            &mut target_index,
+            &pane_id,
+            0,
+            &pane_id,
+            append_slot,
+        );
+        assert_eq!(target_index, Some(append_slot));
+        state.reorder_tabs_id(&pane_id, 0, target_index.unwrap());
+        assert_eq!(
+            state.find_pane(&pane_id).unwrap().tabs.last().unwrap().id,
+            dragged
+        );
+    }
+
+    #[test]
+    fn tab_half_refines_wrapper_target_and_noop_clears_both_fields() {
+        let mut target_pane = None;
+        let mut target_index = None;
+        // Mouse capture handles the wrapper, then the half of the hovered tab.
+        update_tab_drop_target(
+            &mut target_pane,
+            &mut target_index,
+            "source",
+            0,
+            "target",
+            4,
+        );
+        update_tab_drop_target(
+            &mut target_pane,
+            &mut target_index,
+            "source",
+            0,
+            "target",
+            1,
+        );
+        assert_eq!(target_pane.as_deref(), Some("target"));
+        assert_eq!(target_index, Some(1));
+        // The next event over the + button/free space restores the append slot.
+        update_tab_drop_target(
+            &mut target_pane,
+            &mut target_index,
+            "source",
+            0,
+            "target",
+            4,
+        );
+        assert_eq!(target_index, Some(4));
+        // Moving the last source tab to its own pane's end has no effect.
+        update_tab_drop_target(
+            &mut target_pane,
+            &mut target_index,
+            "source",
+            3,
+            "source",
+            4,
+        );
+        assert!(target_pane.is_none());
+        assert!(target_index.is_none());
+        // Both adjacent boundaries around the source tab are also no-ops.
+        for slot in [1, 2] {
+            update_tab_drop_target(&mut target_pane, &mut target_index, "other", 0, "source", 4);
+            update_tab_drop_target(
+                &mut target_pane,
+                &mut target_index,
+                "source",
+                1,
+                "source",
+                slot,
+            );
+            assert!(target_pane.is_none());
+            assert!(target_index.is_none());
+        }
+    }
+
+    #[test]
+    fn overflow_tab_targets_are_clipped_to_the_visible_scroll_viewport() {
+        use super::tab_drop_zone_contains_pointer;
+        use gpui::{point, px, size, Bounds};
+        let viewport = Bounds::new(point(px(40.0), px(20.0)), size(px(200.0), px(32.0)));
+        let left_half = Bounds::new(point(px(0.0), px(20.0)), size(px(60.0), px(32.0)));
+        assert!(!tab_drop_zone_contains_pointer(
+            left_half,
+            viewport,
+            point(px(20.0), px(30.0))
+        ));
+        assert!(tab_drop_zone_contains_pointer(
+            left_half,
+            viewport,
+            point(px(50.0), px(30.0))
+        ));
+        let offscreen_half = Bounds::new(point(px(260.0), px(20.0)), size(px(60.0), px(32.0)));
+        assert!(!tab_drop_zone_contains_pointer(
+            offscreen_half,
+            viewport,
+            point(px(280.0), px(30.0))
+        ));
+        assert!(!tab_drop_zone_contains_pointer(
+            offscreen_half,
+            viewport,
+            point(px(260.0), px(20.0))
+        ));
+        assert!(!tab_drop_zone_contains_pointer(
+            left_half,
+            viewport,
+            point(px(50.0), px(60.0))
+        ));
     }
 }
