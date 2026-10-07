@@ -11,7 +11,10 @@ fn cleanup_replacement_backups(transaction: &Transaction) {
                     log::warn!("Cannot remove replacement backup {backup}: {error}");
                 }
             }
-            log::info!("history backup removal finished after {:?}: {backup}", started.elapsed());
+            log::info!(
+                "history backup removal finished after {:?}: {backup}",
+                started.elapsed()
+            );
         }
     }
 }
@@ -22,23 +25,102 @@ pub struct HistoryState {
     pub redo_stack: Vec<Transaction>,
 }
 
-pub struct HistoryManager(pub Mutex<HistoryState>);
+#[derive(Default)]
+struct HistoryData {
+    history: HistoryState,
+    active: bool,
+    pending: Vec<Transaction>,
+    clear_requested: bool,
+}
 
-impl Drop for HistoryManager {
+#[derive(Default)]
+pub struct HistoryManager {
+    state: Mutex<HistoryData>,
+}
+
+#[derive(Clone, Copy)]
+enum Direction {
+    Undo,
+    Redo,
+}
+
+/// Owns the history reservation, without holding its mutex during file I/O.
+/// Dropping without completion leaves the selected transaction in its stack.
+pub struct HistoryOperation<'a> {
+    manager: &'a HistoryManager,
+    transaction: Transaction,
+    direction: Direction,
+    completed: bool,
+}
+
+impl HistoryOperation<'_> {
+    pub fn transaction(&self) -> &Transaction {
+        &self.transaction
+    }
+
+    pub fn complete(mut self) {
+        self.completed = true;
+    }
+}
+
+impl Drop for HistoryOperation<'_> {
     fn drop(&mut self) {
-        let state = self
-            .0
-            .get_mut()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        for transaction in state.undo_stack.iter().chain(state.redo_stack.iter()) {
-            cleanup_replacement_backups(transaction);
+        let mut expired = Vec::new();
+        {
+            let mut data = self.manager.state.lock().unwrap_or_else(|e| e.into_inner());
+            if data.clear_requested {
+                expired.append(&mut data.history.undo_stack);
+                expired.append(&mut data.history.redo_stack);
+                expired.append(&mut data.pending);
+                data.clear_requested = false;
+            } else {
+                if self.completed {
+                    match self.direction {
+                        Direction::Undo => {
+                            let transaction =
+                                data.history.undo_stack.pop().expect("reserved undo entry");
+                            data.history.redo_stack.push(transaction);
+                        }
+                        Direction::Redo => {
+                            let transaction =
+                                data.history.redo_stack.pop().expect("reserved redo entry");
+                            data.history.undo_stack.push(transaction);
+                        }
+                    }
+                }
+                // New actions invalidate redo only after the reserved action finishes.
+                for transaction in std::mem::take(&mut data.pending) {
+                    push_entry(&mut data.history, transaction, &mut expired);
+                }
+            }
+            data.active = false;
+        }
+        for transaction in expired {
+            cleanup_replacement_backups(&transaction);
         }
     }
 }
 
-impl Default for HistoryManager {
-    fn default() -> Self {
-        Self(Mutex::new(HistoryState::default()))
+fn push_entry(state: &mut HistoryState, transaction: Transaction, expired: &mut Vec<Transaction>) {
+    state.undo_stack.push(transaction);
+    expired.append(&mut state.redo_stack);
+    if state.undo_stack.len() > 100 {
+        expired.push(state.undo_stack.remove(0));
+    }
+}
+
+impl Drop for HistoryManager {
+    fn drop(&mut self) {
+        let data = self.state.get_mut().unwrap_or_else(|e| e.into_inner());
+        for transaction in data
+            .history
+            .undo_stack
+            .iter()
+            .chain(data.history.redo_stack.iter())
+            .chain(data.pending.iter())
+        {
+            cleanup_replacement_backups(transaction);
+        }
     }
 }
 
@@ -48,72 +130,74 @@ impl HistoryManager {
     }
 
     pub fn push(&self, transaction: Transaction) {
-        if let Ok(mut state) = self.0.lock() {
-            state.undo_stack.push(transaction);
-            for expired in state.redo_stack.drain(..) {
-                cleanup_replacement_backups(&expired);
-            }
-
-            // Cap history to prevent memory leaks
-            if state.undo_stack.len() > 100 {
-                let expired = state.undo_stack.remove(0);
-                cleanup_replacement_backups(&expired);
+        let mut expired = Vec::new();
+        {
+            let mut data = self.state.lock().unwrap_or_else(|e| e.into_inner());
+            if data.active {
+                data.pending.push(transaction);
+            } else {
+                push_entry(&mut data.history, transaction, &mut expired);
             }
         }
-    }
-
-    pub fn last_undo(&self) -> Option<Transaction> {
-        self.0.lock().ok()?.undo_stack.last().cloned()
-    }
-
-    pub fn last_redo(&self) -> Option<Transaction> {
-        self.0.lock().ok()?.redo_stack.last().cloned()
-    }
-
-    pub fn complete_undo(&self, transaction: &Transaction) -> bool {
-        let Ok(mut state) = self.0.lock() else {
-            return false;
-        };
-        if state.undo_stack.last().map(|top| top.id.as_str()) != Some(transaction.id.as_str()) {
-            return false;
+        for transaction in expired {
+            cleanup_replacement_backups(&transaction);
         }
-        state.undo_stack.pop();
-        state.redo_stack.push(transaction.clone());
-        true
     }
 
-    pub fn complete_redo(&self, transaction: &Transaction) -> bool {
-        let Ok(mut state) = self.0.lock() else {
-            return false;
-        };
-        if state.redo_stack.last().map(|top| top.id.as_str()) != Some(transaction.id.as_str()) {
-            return false;
+    fn begin(&self, direction: Direction) -> Result<Option<HistoryOperation<'_>>, &'static str> {
+        let mut data = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        if data.active {
+            return Err("An undo or redo operation is already running");
         }
-        state.redo_stack.pop();
-        state.undo_stack.push(transaction.clone());
-        if state.undo_stack.len() > 100 {
-            let expired = state.undo_stack.remove(0);
-            cleanup_replacement_backups(&expired);
+        let transaction = match direction {
+            Direction::Undo => data.history.undo_stack.last(),
+            Direction::Redo => data.history.redo_stack.last(),
         }
-        true
+        .cloned();
+        Ok(transaction.map(|transaction| {
+            data.active = true;
+            HistoryOperation {
+                manager: self,
+                transaction,
+                direction,
+                completed: false,
+            }
+        }))
+    }
+
+    pub fn begin_undo(&self) -> Result<Option<HistoryOperation<'_>>, &'static str> {
+        self.begin(Direction::Undo)
+    }
+
+    pub fn begin_redo(&self) -> Result<Option<HistoryOperation<'_>>, &'static str> {
+        self.begin(Direction::Redo)
     }
 
     pub fn get_state(&self) -> HistoryState {
-        self.0.lock().map(|s| (*s).clone()).unwrap_or_default()
+        self.state
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .history
+            .clone()
     }
 
-    pub fn clear(&self) {
-        log::info!("history clear: waiting for state lock");
-        let mut state = self
-            .0
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        log::info!("history clear: lock acquired; undo={}; redo={}", state.undo_stack.len(), state.redo_stack.len());
-        for transaction in state.undo_stack.iter().chain(state.redo_stack.iter()) {
-            cleanup_replacement_backups(transaction);
+    /// Returns false when cleanup is deferred until the reserved action finishes.
+    pub fn clear(&self) -> bool {
+        let expired = {
+            let mut data = self.state.lock().unwrap_or_else(|e| e.into_inner());
+            if data.active {
+                data.clear_requested = true;
+                log::info!("history clear: deferred until the reserved action finishes");
+                return false;
+            }
+            let mut expired = std::mem::take(&mut data.history.undo_stack);
+            expired.append(&mut data.history.redo_stack);
+            expired
+        };
+        for transaction in expired {
+            cleanup_replacement_backups(&transaction);
         }
-        state.undo_stack.clear();
-        state.redo_stack.clear();
+        true
     }
 }
 
@@ -148,13 +232,137 @@ mod tests {
         let tx = transaction();
         history.push(tx.clone());
 
-        assert!(!history.complete_undo(&transaction()));
+        drop(history.begin_undo().unwrap().unwrap());
         assert_eq!(history.get_state().undo_stack.len(), 1);
         assert!(history.get_state().redo_stack.is_empty());
 
-        assert!(history.complete_undo(&tx));
+        history.begin_undo().unwrap().unwrap().complete();
         assert!(history.get_state().undo_stack.is_empty());
         assert_eq!(history.get_state().redo_stack[0].id, tx.id);
+        history.begin_redo().unwrap().unwrap().complete();
+        assert_eq!(history.get_state().undo_stack[0].id, tx.id);
+        assert!(history.get_state().redo_stack.is_empty());
+    }
+
+    #[test]
+    fn new_entry_during_undo_preserves_completion() {
+        let history = HistoryManager::new();
+        let first = transaction();
+        history.push(first.clone());
+        let selected = history.begin_undo().unwrap().unwrap();
+        assert_eq!(selected.transaction().id, first.id);
+        let second = transaction();
+        history.push(second.clone());
+        assert_eq!(history.get_state().undo_stack[0].id, first.id);
+        selected.complete();
+        assert_eq!(history.get_state().undo_stack.len(), 1);
+        assert_eq!(history.get_state().undo_stack[0].id, second.id);
+        assert!(history.get_state().redo_stack.is_empty());
+    }
+
+    #[test]
+    fn new_entry_during_redo_follows_the_reapplied_transaction() {
+        let history = HistoryManager::new();
+        let first = transaction();
+        history.push(first.clone());
+        history.begin_undo().unwrap().unwrap().complete();
+        let selected = history.begin_redo().unwrap().unwrap();
+        let second = transaction();
+        history.push(second.clone());
+        selected.complete();
+        let state = history.get_state();
+        assert_eq!(state.undo_stack.len(), 2);
+        assert_eq!(state.undo_stack[0].id, first.id);
+        assert_eq!(state.undo_stack[1].id, second.id);
+        assert!(state.redo_stack.is_empty());
+    }
+
+    #[test]
+    fn concurrent_requests_cannot_reserve_the_same_or_opposite_action() {
+        let history = HistoryManager::new();
+        history.push(transaction());
+        let selected = history.begin_undo().unwrap().unwrap();
+        std::thread::scope(|scope| {
+            scope
+                .spawn(|| {
+                    assert!(history.begin_undo().is_err());
+                    assert!(history.begin_redo().is_err());
+                    history.push(transaction());
+                })
+                .join()
+                .unwrap();
+        });
+        drop(selected);
+        assert_eq!(history.get_state().undo_stack.len(), 2);
+        assert!(history.begin_undo().unwrap().is_some());
+    }
+
+    #[test]
+    fn failed_redo_keeps_its_entry_and_releases_reservation() {
+        let history = HistoryManager::new();
+        let tx = transaction();
+        history.push(tx.clone());
+        history.begin_undo().unwrap().unwrap().complete();
+        drop(history.begin_redo().unwrap().unwrap());
+        assert_eq!(history.get_state().redo_stack[0].id, tx.id);
+        history.begin_redo().unwrap().unwrap().complete();
+        assert_eq!(history.get_state().undo_stack[0].id, tx.id);
+    }
+
+    #[test]
+    fn pending_entries_keep_their_order_and_history_limit_after_failure() {
+        let history = HistoryManager::new();
+        history.push(transaction());
+        let selected = history.begin_undo().unwrap().unwrap();
+        let pending: Vec<_> = (0..102).map(|_| transaction()).collect();
+        for tx in &pending {
+            history.push(tx.clone());
+        }
+        drop(selected);
+        let state = history.get_state();
+        assert_eq!(state.undo_stack.len(), 100);
+        assert_eq!(
+            state.undo_stack.iter().map(|tx| &tx.id).collect::<Vec<_>>(),
+            pending[2..].iter().map(|tx| &tx.id).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn panic_releases_reservation_and_applies_pending_entries() {
+        let history = HistoryManager::new();
+        history.push(transaction());
+        let next = transaction();
+        let result = std::panic::catch_unwind(|| {
+            let _selected = history.begin_undo().unwrap().unwrap();
+            history.push(next.clone());
+            panic!("simulated worker panic");
+        });
+        assert!(result.is_err());
+        assert_eq!(history.get_state().undo_stack.last().unwrap().id, next.id);
+        assert!(history.begin_undo().unwrap().is_some());
+    }
+
+    #[test]
+    fn clear_during_action_preserves_backups_until_completion() {
+        let temp = tempfile::tempdir().unwrap();
+        let backup = temp.path().join("replacement.bak");
+        std::fs::write(&backup, b"original content").unwrap();
+        let history = HistoryManager::new();
+        let mut tx = transaction();
+        tx.details.replaced_files = Some(vec![(
+            "destination".into(),
+            backup.to_string_lossy().into_owned(),
+        )]);
+        history.push(tx);
+        let selected = history.begin_undo().unwrap().unwrap();
+        history.push(transaction());
+        assert!(!history.clear());
+        assert!(backup.exists());
+        selected.complete();
+        assert!(!backup.exists());
+        assert!(history.get_state().undo_stack.is_empty());
+        assert!(history.get_state().redo_stack.is_empty());
+        assert!(history.clear());
     }
 
     #[test]

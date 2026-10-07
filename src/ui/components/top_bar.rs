@@ -259,6 +259,7 @@ pub fn render_top_bar(
             ] {
                 if !visible { continue; }
                 let enabled = (action != 1 || can_undo)
+                    && (!matches!(action, 1 | 2) || !view.history_operation_in_progress)
                     && (action < 7 || (!view.trash_busy && if action < 9 { selected } else { !active_tab.files.is_empty() }));
                 let mut button = div().id(id).min_w(rems(1.5)).h_6().px(rems(0.125)).flex().items_center().justify_center().rounded_md()
                     .when(show_tooltips && (action == 1 || action == 2), |d| d.tooltip(Tooltip::with_meta(_cx.i18n().text(label), tip.clone())))

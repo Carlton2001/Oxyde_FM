@@ -1,6 +1,6 @@
 # Corrections et optimisations à traiter après le nettoyage
 
-Audit du 7 octobre 2026, base `3cc7d14`, branche `codex/nettoyage-code-mort`. Ces observations proviennent de la revue du code actuel ; aucune correction n'est appliquée ici. Le nettoyage est documenté séparément dans [AUDIT_CODE_MORT_2.md](AUDIT_CODE_MORT_2.md).
+Audit du 7 octobre 2026, base `3cc7d14`, branche `codex/nettoyage-code-mort`. Ces observations proviennent de la revue du code actuel. Les corrections réalisées ensuite sont indiquées dans les entrées concernées. Le nettoyage est documenté séparément dans [AUDIT_CODE_MORT_2.md](AUDIT_CODE_MORT_2.md).
 
 Priorités proposées : P1 pour un risque sur les opérations de fichiers à reproduire en premier, P2 pour les comportements et coûts à examiner ensuite, P3 pour l'entretien. Une chaîne de code établie n'est pas une reproduction utilisateur ; les limites sont indiquées pour chaque entrée.
 
@@ -12,9 +12,15 @@ Priorités proposées : P1 pour un risque sur les opérations de fichiers à rep
 
 ## A02 — Annuler/Rétablir peuvent démarrer plusieurs fois en parallèle — P1
 
-**Risque identifié, à reproduire.** `ui/app/mod.rs:716` et `:755` lancent une tâche de travail à chaque invocation sans réservation ou état d'exécution partagé. `commands/ops.rs:900` lit la dernière transaction, effectue les mutations puis appelle `complete_undo` à la fin (`:1213`). Les verrous d'accès à l'historique ne couvrent pas l'ensemble de l'opération.
+**Corrigé le 7 octobre 2026, après reproduction déterministe.** Avant correction, sélectionner la dernière transaction, ajouter une nouvelle entrée puis valider Annuler fait échouer `complete_undo`. Le test de régression a échoué sur cette assertion avant modification. Deux workers pouvaient également sélectionner la même transaction sans réservation commune.
 
-Deux demandes rapprochées peuvent sélectionner la même transaction ; une nouvelle transaction peut aussi être ajoutée pendant son exécution. La vérification finale de l'historique intervient après les effets sur les fichiers. Concevoir une sérialisation/réservation des opérations d'historique et son interaction avec la file d'opérations. Commencer par une fixture déterministe de demandes concurrentes ; aucun incident ou perte de données observé ici.
+`HistoryManager::begin_undo` / `begin_redo` réservent désormais une transaction jusqu'à la fin du traitement. Une seconde demande est refusée avant les effets sur les fichiers. Les ajouts d'historique arrivant pendant ce traitement sont différés, puis intégrés dans leur ordre d'arrivée ; une nouvelle action invalide Rétablir après la validation de la transaction réservée. Le verrou du modèle reste libéré pendant les opérations de fichiers. La réservation se libère aussi sur erreur ou panique du worker, et le nettoyage attend sa fin pour préserver les sauvegardes utilisées.
+
+GPUI partage un état d'exécution entre Annuler et Rétablir : les clics et raccourcis répétés sont ignorés pendant le travail, les deux boutons sont désactivés, et l'état est rétabli au retour du worker, y compris sur erreur. Le rejeu d'une restauration ne crée plus une deuxième transaction d'historique. La sortie finale du processus et le délai d'arrêt Tokio restent ceux documentés dans `SHUTDOWN_DIAGNOSTICS.md` ; si un worker dépasse ce délai à la fermeture, son nettoyage différé reste soumis à cette limite existante.
+
+Validation : demandes concurrentes sur deux threads, entrées ajoutées pendant Annuler et Rétablir, abandon/erreur/panique, ordre et limite de 100 entrées, nettoyage différé des sauvegardes. Une fixture de renommage vérifie le refus avant mutation, puis l'aller-retour Annuler/Rétablir et la conservation du contenu. Ces contrôles portent sur le modèle et les commandes ; aucune validation interactive GPUI ni Linux.
+
+**Limite de portée :** cette réservation protège l'historique ; elle ne réserve pas les chemins auprès du planificateur de copies/déplacements. La coordination des effets physiques d'une opération de fichiers indépendante avec Annuler/Rétablir reste à examiner séparément. Le défaut de rejeu des restaurations déplacées est consigné en A14.
 
 ## A03 — Marqueur d'onglet potentiellement périmé sur la zone libre — P2
 
@@ -84,14 +90,24 @@ Exemples à revoir après les retraits : emprunts inutiles dans `commands/duplic
 
 Traiter les simplifications utiles dans des changements limités ; ne pas convertir automatiquement tous les diagnostics ni modifier les tests uniquement pour satisfaire une règle stylistique.
 
+## A14 — Rétablir une restauration déplacée depuis la corbeille — P2
+
+**Défaut établi dans le code, à reproduire avec une fixture native.** `move_from_trash_impl` enregistre une transaction Restore avec `paths: vec![]` et les destinations dans `created_files`. Annuler remet ces destinations à la corbeille ; Rétablir passe ensuite `tx.details.paths` (vide) au déplacement depuis la corbeille. Il peut donc annoncer un succès sans restaurer les éléments. Les identifiants de corbeille après Annuler ne sont pas conservés non plus.
+
+Concevoir un journal permettant de retrouver précisément les éléments remis à la corbeille, vérifier leurs noms et destinations, puis rejouer la restauration. Tester l'aller-retour sur des fichiers et dossiers temporaires, y compris en présence d'un conflit. A02 empêche déjà ce rejeu de créer une seconde transaction ; il ne répare pas les informations manquantes du journal. Aucun test de corbeille native exécuté dans ce lot.
+
 ## Validation et suite
 
 La compilation Windows actuelle passe sans avertissement du projet. Les observations ci-dessus sont issues de la lecture des sources et de Clippy ; aucun nouveau test de comportement ou benchmark n'a été exécuté pendant cet audit. Snap Layouts et le témoin de déplacement actuel sont confirmés par l'utilisateur. Les validations des lots précédents restent décrites dans [AUDIT_CODE_MORT.md](AUDIT_CODE_MORT.md).
 
-Après le nettoyage, commencer par A02, puis les corrections de comportement A01/A03/A04 et les ressources natives A05/A06. Les optimisations demandent des mesures avant modification. Cet ordre est proposé, pas une liste de corrections déjà autorisées ou réalisées.
+Après A02, poursuivre avec les corrections de comportement A01/A03/A04/A14 et les ressources natives A05/A06. Les optimisations demandent des mesures avant modification. Cet ordre est proposé, pas une liste de corrections déjà autorisées ou réalisées.
 
 ### État après les lots N01 à N16
 
-Le nettoyage retire les anciennes sérialisations, les estimations et plusieurs lectures natives dont les résultats étaient abandonnés. Il ne corrige pas les observations A01–A13. Les références de lignes ci-dessus restent celles de `3cc7d14` ; utiliser les noms de fonctions pour retrouver leur nouvel emplacement.
+Le nettoyage retire les anciennes sérialisations, les estimations et plusieurs lectures natives dont les résultats étaient abandonnés. Ce nettoyage ne corrige pas les observations A01–A13. A02 est corrigé dans le lot suivant, décrit plus haut. Les références de lignes ci-dessus restent celles de `3cc7d14` ; utiliser les noms de fonctions pour retrouver leur nouvel emplacement.
 
 Pour A04, `FileProperties::original_path` / `deleted_time` et leur collecte restent réservés. Pour A05, l'énumération de diagnostic du property store et les lectures de métadonnées d'appareil sans affichage disparaissent ; la récupération du nom convivial et son traitement COM restent actifs. Pour A10, les variantes de tri backend inaccessibles disparaissent, mais le tri naturel actif et les tris GPUI restent distincts. Pour A13, la branche de couleur identique des onglets disparaît avec N05 ; les autres suggestions ne font pas l'objet d'une correction générale.
+
+### Validation du lot A02
+
+`cargo test --all-targets --offline` : 101 tests backend et 89 tests du binaire passent, soit 190 ; les trois tests natifs déjà ignorés restent ignorés. `cargo check --all-targets --offline` passe sans avertissement du projet, et `cargo build --bin oxyde --offline` réussit. Neuf tests de régression ont été ajoutés, et le test existant de déplacement de l'historique a été adapté à la réservation. Aucun Computer Use et aucune validation Linux.

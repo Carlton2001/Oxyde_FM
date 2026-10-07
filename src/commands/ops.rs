@@ -589,6 +589,14 @@ pub async fn move_from_trash(
     paths: Vec<String>,
     target_dir: String,
 ) -> Result<(), CommandError> {
+    move_from_trash_impl(Some(history), paths, target_dir).await
+}
+
+async fn move_from_trash_impl(
+    history: Option<&HistoryManager>,
+    paths: Vec<String>,
+    target_dir: String,
+) -> Result<(), CommandError> {
     let trash_items =
         trash::os_limited::list().map_err(|e| CommandError::TrashError(e.to_string()))?;
 
@@ -722,7 +730,7 @@ pub async fn move_from_trash(
     let abs_restored: Vec<String> = restored_files.to_vec();
     let target_abs = target_base.to_string_lossy().to_string();
 
-    if !abs_restored.is_empty() {
+    if let Some(history) = history.filter(|_| !abs_restored.is_empty()) {
         let tx_details = TransactionDetails {
             paths: vec![], // Source paths in trash are not reliable for redo usually
             target_dir: Some(target_abs),
@@ -848,7 +856,13 @@ fn remove_undo_copy_files(paths: Vec<PathBuf>) -> Result<(), CommandError> {
 pub async fn undo_last_action(
     history: &HistoryManager,
 ) -> Result<Option<Transaction>, CommandError> {
-    let transaction = history.last_undo();
+    let Some(operation) = history
+        .begin_undo()
+        .map_err(|error| CommandError::Other(error.to_string()))?
+    else {
+        return Ok(None);
+    };
+    let transaction = Some(operation.transaction().clone());
 
     if let Some(ref tx) = transaction {
         info!("Undoing transaction: {:?}", tx.op_type);
@@ -1161,11 +1175,7 @@ pub async fn undo_last_action(
                 }
             }
         }
-        if !history.complete_undo(tx) {
-            return Err(CommandError::Other(
-                "Undo history changed while the operation was running".to_string(),
-            ));
-        }
+        operation.complete();
     }
     Ok(transaction)
 }
@@ -1173,7 +1183,13 @@ pub async fn undo_last_action(
 pub async fn redo_last_action(
     history: &HistoryManager,
 ) -> Result<Option<Transaction>, CommandError> {
-    let transaction = history.last_redo();
+    let Some(operation) = history
+        .begin_redo()
+        .map_err(|error| CommandError::Other(error.to_string()))?
+    else {
+        return Ok(None);
+    };
+    let transaction = Some(operation.transaction().clone());
 
     if let Some(ref tx) = transaction {
         info!("Redoing transaction: {:?}", tx.op_type);
@@ -1185,7 +1201,7 @@ pub async fn redo_last_action(
             TransactionType::Restore => {
                 if let Some(ref target_dir) = tx.details.target_dir {
                     let paths = tx.details.paths.clone();
-                    move_from_trash(history, paths, target_dir.clone()).await?;
+                    move_from_trash_impl(None, paths, target_dir.clone()).await?;
                 }
             }
             TransactionType::Copy => {
@@ -1485,11 +1501,7 @@ pub async fn redo_last_action(
                 }
             }
         }
-        if !history.complete_redo(tx) {
-            return Err(CommandError::Other(
-                "Redo history changed while the operation was running".to_string(),
-            ));
-        }
+        operation.complete();
     }
     Ok(transaction)
 }
@@ -1834,5 +1846,116 @@ mod copy_redo_tests {
 
         assert_eq!(std::fs::read(destination).unwrap(), b"old content");
         assert!(!backup.exists());
+    }
+}
+
+#[cfg(test)]
+mod history_concurrency_tests {
+    use super::{redo_last_action, undo_last_action};
+    use crate::models::transaction::{Transaction, TransactionDetails, TransactionType};
+    use crate::models::HistoryManager;
+
+    fn rename_transaction(old: &std::path::Path, new: &std::path::Path) -> Transaction {
+        Transaction::new(
+            TransactionType::Rename,
+            TransactionDetails {
+                paths: vec![],
+                target_dir: None,
+                old_path: Some(old.to_string_lossy().into_owned()),
+                new_path: Some(new.to_string_lossy().into_owned()),
+                created_files: None,
+                created_dirs: None,
+                replaced_files: None,
+                overwritten_files: None,
+                moved_files: None,
+                moved_dirs: None,
+                copied_files: None,
+                copied_file_hashes: None,
+            },
+        )
+    }
+
+    #[test]
+    fn concurrent_commands_do_not_touch_files_and_can_retry_after_release() {
+        let temp = tempfile::tempdir().unwrap();
+        let old = temp.path().join("old.txt");
+        let new = temp.path().join("new.txt");
+        std::fs::write(&new, b"fixture content").unwrap();
+        let history = HistoryManager::new();
+        let tx = rename_transaction(&old, &new);
+        history.push(tx.clone());
+        let selected = history.begin_undo().unwrap().unwrap();
+        std::thread::scope(|scope| {
+            scope
+                .spawn(|| {
+                    let runtime = tokio::runtime::Builder::new_current_thread()
+                        .build()
+                        .unwrap();
+                    assert!(runtime.block_on(undo_last_action(&history)).is_err());
+                    assert!(runtime.block_on(redo_last_action(&history)).is_err());
+                    assert!(!old.exists());
+                    assert_eq!(std::fs::read(&new).unwrap(), b"fixture content");
+                })
+                .join()
+                .unwrap();
+        });
+        drop(selected);
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .build()
+            .unwrap();
+        assert_eq!(
+            runtime
+                .block_on(undo_last_action(&history))
+                .unwrap()
+                .unwrap()
+                .id,
+            tx.id
+        );
+        assert!(!new.exists());
+        assert_eq!(std::fs::read(&old).unwrap(), b"fixture content");
+        let selected = history.begin_redo().unwrap().unwrap();
+        assert!(runtime.block_on(redo_last_action(&history)).is_err());
+        assert!(runtime.block_on(undo_last_action(&history)).is_err());
+        assert!(old.exists());
+        assert!(!new.exists());
+        drop(selected);
+        assert_eq!(
+            runtime
+                .block_on(redo_last_action(&history))
+                .unwrap()
+                .unwrap()
+                .id,
+            tx.id
+        );
+        assert!(!old.exists());
+        assert_eq!(std::fs::read(&new).unwrap(), b"fixture content");
+        assert_eq!(history.get_state().undo_stack[0].id, tx.id);
+        assert!(history.get_state().redo_stack.is_empty());
+    }
+
+    #[test]
+    fn io_error_keeps_history_and_allows_another_attempt() {
+        let temp = tempfile::tempdir().unwrap();
+        let old = temp.path().join("missing-parent").join("old.txt");
+        let new = temp.path().join("new.txt");
+        std::fs::write(&new, b"fixture content").unwrap();
+        let history = HistoryManager::new();
+        let tx = rename_transaction(&old, &new);
+        history.push(tx.clone());
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .build()
+            .unwrap();
+        assert!(runtime.block_on(undo_last_action(&history)).is_err());
+        assert_eq!(history.get_state().undo_stack[0].id, tx.id);
+        assert!(history.get_state().redo_stack.is_empty());
+        assert_eq!(std::fs::read(&new).unwrap(), b"fixture content");
+        std::fs::create_dir(old.parent().unwrap()).unwrap();
+        assert!(runtime
+            .block_on(undo_last_action(&history))
+            .unwrap()
+            .is_some());
+        assert_eq!(std::fs::read(&old).unwrap(), b"fixture content");
+        assert!(history.get_state().undo_stack.is_empty());
+        assert_eq!(history.get_state().redo_stack[0].id, tx.id);
     }
 }

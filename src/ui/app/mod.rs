@@ -387,6 +387,7 @@ pub struct OxydeApp {
     pub folder_has_subdirs: std::collections::HashMap<String, bool>,
     pub(crate) pending_sidebar_requests: std::collections::HashMap<String, u64>,
     pub history: std::sync::Arc<oxyde_lib::models::HistoryManager>,
+    pub(crate) history_operation_in_progress: bool,
     pub focus_handle: FocusHandle,
     pub(crate) sidebar_scroll: UniformListScrollHandle,
     pub(crate) sidebar_scroll_h: ScrollHandle,
@@ -712,10 +713,15 @@ impl OxydeApp {
     }
 
     pub fn execute_undo(&mut self, cx: &mut Context<Self>) {
+        if self.history_operation_in_progress {
+            return;
+        }
         let history = self.history.clone();
         let Some(handle) = self.handle.clone() else {
             return;
         };
+        self.history_operation_in_progress = true;
+        cx.notify();
         cx.spawn(move |_, cx: &mut AsyncApp| {
             let mut cx = cx.clone();
             async move {
@@ -725,6 +731,7 @@ impl OxydeApp {
                 })
                 .await;
                 handle.update(&mut cx, |this, cx| {
+                    this.history_operation_in_progress = false;
                     if let Ok(Err(error)) = &result {
                         log::warn!("Undo failed: {error:?}");
                         this.toast(ToastKind::Error, Message::UndoFailed, format!("{error:?}"), 0, cx);
@@ -751,10 +758,15 @@ impl OxydeApp {
     }
 
     pub fn execute_redo(&mut self, cx: &mut Context<Self>) {
+        if self.history_operation_in_progress {
+            return;
+        }
         let history = self.history.clone();
         let Some(handle) = self.handle.clone() else {
             return;
         };
+        self.history_operation_in_progress = true;
+        cx.notify();
         cx.spawn(move |_, cx: &mut AsyncApp| {
             let mut cx = cx.clone();
             async move {
@@ -764,6 +776,7 @@ impl OxydeApp {
                 })
                 .await;
                 handle.update(&mut cx, |this, cx| {
+                    this.history_operation_in_progress = false;
                     if let Ok(Err(error)) = &result {
                         log::warn!("Redo failed: {error:?}");
                         this.toast(ToastKind::Error, Message::RedoFailed, format!("{error:?}"), 0, cx);
@@ -816,6 +829,7 @@ impl OxydeApp {
             folder_has_subdirs: std::collections::HashMap::new(),
             pending_sidebar_requests: std::collections::HashMap::new(),
             history: std::sync::Arc::new(oxyde_lib::models::HistoryManager::new()),
+            history_operation_in_progress: false,
             focus_handle: cx.focus_handle(),
             sidebar_scroll: UniformListScrollHandle::new(),
             sidebar_scroll_h: ScrollHandle::new(),
@@ -885,8 +899,11 @@ impl OxydeApp {
                 crate::trace_shutdown_stage("history cleanup started");
                 // Undo history is session-only, so its replacement backups must
                 // not outlive a normal application shutdown.
-                this.history.clear();
-                crate::trace_shutdown_stage("history cleanup completed");
+                if this.history.clear() {
+                    crate::trace_shutdown_stage("history cleanup completed");
+                } else {
+                    crate::trace_shutdown_stage("history cleanup deferred to active worker");
+                }
                 let save = this.preferences_save_task.take();
                 async move {
                     if let Some(save) = save {
