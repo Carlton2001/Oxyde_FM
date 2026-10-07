@@ -24,15 +24,6 @@ pub(crate) mod search;
 pub(crate) mod advanced_search;
 pub(crate) mod duplicates;
 
-#[allow(unused_imports)]
-pub use filters::*;
-#[allow(unused_imports)]
-pub use layout::*;
-#[allow(unused_imports)]
-pub use navigation::*;
-#[allow(unused_imports)]
-pub use selection::*;
-
 use crate::ui::components::input::TextInput;
 use crate::ui::i18n::{FluentArgs, I18n, I18nContext, Message};
 

@@ -2,7 +2,7 @@ use super::*;
 use crate::ui::components::modal::{action_button, Modal};
 use crate::ui::theme::ThemeContext;
 use oxyde_lib::commands::ops::TrashSystemConfig;
-use oxyde_lib::models::{DriveInfo, TrashDriveSettings};
+use oxyde_lib::models::DriveInfo;
 
 pub(crate) struct TrashSettings {
     drives: Vec<DriveInfo>,
@@ -259,7 +259,6 @@ impl OxydeApp {
             .filter(|(a, b)| a.max_size_mb != b.max_size_mb || a.nuke_on_delete != b.nuke_on_delete)
             .map(|(a, _)| a.clone())
             .collect();
-        let configs = dialog.configs.clone();
         let confirm = dialog.confirm;
         dialog.busy = true;
         cx.notify();
@@ -274,16 +273,6 @@ impl OxydeApp {
             let _ = this.update(cx, |this, cx| {
                 match result {
                     Ok(Ok(())) => {
-                        for config in configs {
-                            this.config
-                                .trash_drive_settings
-                                .retain(|setting| setting.drive_path != config.drive_path);
-                            this.config.trash_drive_settings.push(TrashDriveSettings {
-                                drive_path: config.drive_path,
-                                max_size_mb: config.max_size_mb,
-                                use_trash: !config.nuke_on_delete,
-                            });
-                        }
                         this.config.confirm_delete = confirm;
                         this.save_preferences(cx);
                         this.trash_settings = None;

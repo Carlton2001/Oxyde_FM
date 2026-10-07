@@ -2793,9 +2793,11 @@ mod tests {
             assert_eq!(std::fs::read(output.join("added.txt")).unwrap(), b"added");
             let runtime = tokio::runtime::Runtime::new().unwrap();
             runtime
-                .block_on(crate::commands::io::rename_item(
+                .block_on(crate::commands::io::rename_item_controlled(
                     folder.join("added.txt").to_string_lossy().into_owned(),
                     folder.join("renamed.txt").to_string_lossy().into_owned(),
+                    "normal".into(),
+                    Arc::new(AtomicBool::new(false)),
                 ))
                 .unwrap();
             FileOperationManager::perform_copy(

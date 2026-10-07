@@ -1,6 +1,4 @@
-use crate::models::{
-    CommandError, FileEntry, FileProperties, FileSummary, FolderSizeResult, TransactionDetails,
-};
+use crate::models::{CommandError, FileEntry, FileProperties, FileSummary, FolderSizeResult};
 use crate::utils::path_security::validate_path;
 use log::info;
 use serde::Serialize;
@@ -23,15 +21,6 @@ pub struct DirResponse {
     pub summary: FileSummary,
     pub is_complete: bool,
     pub is_protected: bool,
-}
-
-#[derive(Serialize, Clone)]
-pub struct DirBatchEvent {
-    pub panel_id: String,
-    pub path: String,
-    pub entries: Vec<FileEntry>,
-    pub is_complete: bool,
-    pub request_id: Option<u64>,
 }
 
 pub async fn list_dir(
@@ -271,43 +260,6 @@ fn calculate_summary(entries: &[FileEntry], parent_path: Option<String>) -> File
     }
 }
 
-pub async fn create_dir(path: String) -> Result<(), CommandError> {
-    let pb = validate_path(&path)?;
-    let p_abs = pb.to_string_lossy().to_string();
-    info!("Creating directory: {:?}", pb);
-    fs::create_dir_all(&pb)?;
-
-    let _tx_details = TransactionDetails {
-        paths: vec![p_abs],
-        target_dir: None,
-        old_path: None,
-        new_path: None,
-        created_files: None,
-        created_dirs: None,
-        replaced_files: None,
-        overwritten_files: None,
-        moved_files: None,
-        moved_dirs: None,
-        copied_files: None,
-        copied_file_hashes: None,
-    };
-    // History push logic removed for now
-
-    Ok(())
-}
-
-pub async fn rename_item(old_path: String, new_path: String) -> Result<(), CommandError> {
-    rename_item_with_quality(old_path, new_path, "normal".into()).await
-}
-
-pub async fn rename_item_with_quality(
-    old_path: String,
-    new_path: String,
-    quality: String,
-) -> Result<(), CommandError> {
-    rename_item_controlled(old_path, new_path, quality, std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false))).await
-}
-
 pub async fn rename_item_controlled(
     old_path: String, new_path: String, quality: String,
     cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
@@ -345,27 +297,8 @@ pub async fn rename_item_controlled(
             .map_err(CommandError::ArchiveError);
     }
     validate_rename_target(&old_pb, &new_pb)?;
-    let old_abs = old_pb.to_string_lossy().to_string();
-    let new_abs = new_pb.to_string_lossy().to_string();
-
     info!("Renaming {:?} to {:?}", old_pb, new_pb);
     fs::rename(old_pb, new_pb)?;
-
-    let _tx_details = TransactionDetails {
-        paths: vec![],
-        target_dir: None,
-        old_path: Some(old_abs),
-        new_path: Some(new_abs),
-        created_files: None,
-        created_dirs: None,
-        replaced_files: None,
-        overwritten_files: None,
-        moved_files: None,
-        moved_dirs: None,
-        copied_files: None,
-        copied_file_hashes: None,
-    };
-    // History push logic removed
 
     Ok(())
 }

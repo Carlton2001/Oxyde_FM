@@ -15,7 +15,6 @@ opt-level = 2
 
 [lib]
 name = "oxyde_lib"
-crate-type = ["staticlib", "cdylib", "rlib"]
 
 [dependencies]
 # Keep both GPUI crates on the same Zed stable release; the crates.io release

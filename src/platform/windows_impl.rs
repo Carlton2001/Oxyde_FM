@@ -284,12 +284,12 @@ impl Platform for WindowsPlatform {
     }
 
     fn set_clipboard_files(&self, paths: Vec<String>, cut: bool) -> Result<(), String> {
-        crate::commands::clipboard::set_clipboard_files(paths, cut)
+        super::clipboard::set_clipboard_files(paths, cut)
             .map_err(|error| format!("{error:?}"))
     }
 
     fn get_clipboard_files(&self) -> Result<(Vec<String>, bool), String> {
-        crate::commands::clipboard::get_clipboard_files().map_err(|error| format!("{error:?}"))
+        super::clipboard::get_clipboard_files().map_err(|error| format!("{error:?}"))
     }
 
     fn regional_locale(&self) -> Option<String> {

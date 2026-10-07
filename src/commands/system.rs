@@ -2,8 +2,6 @@ use crate::models::{CommandError, DriveInfo, QuickAccessItem, WinMenuItem};
 use crate::utils::path_security::validate_path;
 use log::info;
 
-// app_ready removed
-
 pub fn get_drives(skip_hardware_info: Option<bool>) -> Vec<DriveInfo> {
     crate::platform::platform().list_drives(skip_hardware_info.unwrap_or(false))
 }
@@ -20,9 +18,6 @@ pub async fn open_item(path: String) -> Result<(), CommandError> {
         .map_err(CommandError::SystemError)
 }
 
-// set_webview_background removed
-
-// show_native_context_menu removed or needs refactoring for GPUI
 #[cfg(target_os = "windows")]
 struct ComApartmentGuard;
 
@@ -761,7 +756,7 @@ fn execute_shell_verb_by_canonical_name(
 
 pub fn clear_app_cache() -> Result<(), CommandError> {
     #[cfg(target_os = "windows")]
-    super::icons::purge_icon_cache();
+    crate::platform::icons::purge_icon_cache();
     if let Some(root) = dirs::cache_dir() {
         clear_generated_cache(&root.join("oxyde"))?;
     }
@@ -809,10 +804,6 @@ mod cache_tests {
     }
 }
 
-pub use crate::platform::PeekStatus;
-pub async fn get_peek_status() -> Result<PeekStatus, String> {
-    tokio::task::spawn_blocking(|| crate::platform::platform().peek_status()).await.map_err(|error| error.to_string())?
-}
 pub async fn open_peek(path: String) -> Result<(), String> {
     tokio::task::spawn_blocking(move || crate::platform::platform().open_peek(&path)).await.map_err(|error| error.to_string())?
 }

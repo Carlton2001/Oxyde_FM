@@ -1,12 +1,6 @@
 use crate::models::CommandError;
 use serde::{Deserialize, Serialize};
 use std::fs;
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TrashDriveSettings {
-    pub drive_path: String,
-    pub max_size_mb: u64,
-    pub use_trash: bool,
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
@@ -48,8 +42,6 @@ pub struct AppConfig {
     /// Window-local top-left coordinates for the operations panel.
     #[serde(default)]
     pub operations_panel_position: Option<[f32; 2]>,
-    #[serde(default)]
-    pub trash_drive_settings: Vec<TrashDriveSettings>,
     #[serde(default = "default_true")]
     pub confirm_delete: bool,
     /// Snapshots interpreted and validated by their GPUI views.
@@ -95,7 +87,6 @@ impl Default for AppConfig {
             sync_sidebar_with_path: true,
             show_network: true,
             operations_panel_position: None,
-            trash_drive_settings: Vec::new(),
             confirm_delete: true,
             workspace_state: None,
             duplicate_search_options: None,
@@ -257,6 +248,7 @@ mod tests {
             "layout": "dual",
             "group_by_date": true,
             "first_launch": false,
+            "trash_drive_settings": [{"drive_path": "C:\\", "max_size_mb": 128, "use_trash": true}],
             "future_option": {"enabled": true},
         });
         let current = serde_json::json!({
