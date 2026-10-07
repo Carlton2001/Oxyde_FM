@@ -213,3 +213,12 @@ Le mode Avancé reprend la liste hiérarchique et la comparaison de Tauri : ongl
 Les conflits utilisent un en-tête de surface claire et un corps sur le fond du thème. Le mode simple conserve une marge de 1,25 rem ; le mode avancé place le bandeau d’onglets et les colonnes directement contre le cadre, avec 1,25 rem de marge dans la comparaison. Les groupes Taille/Date restent chacun sur une ligne et ne passent à la ligne qu’entre groupes. Les compteurs d’onglets et le résumé de l’opération restent sur une ligne. Les SVG des boutons ont une couleur explicite et une taille non compressible. FileVideo dans ce dialogue utilise le SVG Lucide officiel de fichier avec bouton de lecture ; son jeton `icon_video` reprend la couleur vidéo de chacune des treize palettes Tauri.
 
 Les cartes de conflit avec une ombre utilisent un fond opaque : la teinte d’accent est composée sur le fond du thème avant le rendu, afin que l’ombre ne transparaisse pas dans la carte. La poignée de redimensionnement utilise l’overlay de Modal, ancré au cadre entier et rendu au-dessus du pied des boutons.
+
+
+### Peek, raccourcis et accès rapide
+
+Sous Windows, le menu d’un fichier propose Ouvrir avec PowerToys Peek, désactivé si Peek n’est pas installé ou activé. Le raccourci configuré dans PowerToys et Espace lorsque cette option est activée agissent sur un seul fichier sélectionné, uniquement avec le focus de la liste. Les réglages PowerToys sont relus en arrière-plan ; aucune préférence système n’est modifiée.
+
+Les propriétés des fichiers .lnk reprennent les onglets Général / Raccourci de Tauri. Raccourci propose Cible, Arguments, Démarrer dans, Commentaire et Exécuter (normale, agrandie, réduite). Le menu Exécuter flotte sous son champ sans changer la hauteur de la modale. Les modifications restent locales jusqu’à OK ; Annuler les abandonne. La sauvegarde travaille en arrière-plan, conserve les autres métadonnées du raccourci et laisse la modale ouverte en cas d’erreur. Les API COM passent par Platform.
+
+L’accès rapide est surveillé via Platform : le watcher appartient à une tâche GPUI et se libère avec elle. Les événements sont regroupés pendant 350 ms avant une lecture en arrière-plan ; une vérification toutes les cinq secondes couvre les notifications manquées. Une révision écarte les réponses des anciens rafraîchissements. Les changements provenant de l’Explorateur Windows et d’Oxyde utilisent le même parcours de chargement.

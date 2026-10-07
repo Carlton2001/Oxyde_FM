@@ -518,3 +518,18 @@ conflict-apply-summary = Appliquer: { $replace_count ->
         [one] { $skip_number } ignoré
        *[other] { $skip_number } ignorés
     }
+
+peek-open = Ouvrir avec PowerToys Peek
+peek-failed = Impossible d’ouvrir Peek
+properties-general = Général
+properties-shortcut = Raccourci
+shortcut-target = Cible
+shortcut-arguments = Arguments
+shortcut-working-directory = Démarrer dans
+shortcut-comment = Commentaire
+shortcut-run = Exécuter
+shortcut-normal = Fenêtre normale
+shortcut-minimized = Réduite
+shortcut-maximized = Agrandie
+shortcut-saving = Enregistrement…
+shortcut-invalid-target = La cible ne doit pas être vide et les champs doivent être valides.

@@ -738,99 +738,8 @@ pub fn get_file_properties(path: String) -> Result<FileProperties, CommandError>
     })
 }
 
-#[cfg(target_os = "windows")]
 fn get_shortcut_info(path: &std::path::Path) -> Option<crate::models::ShortcutInfo> {
-    use windows::core::{Interface, HSTRING, PCWSTR};
-    use windows::Win32::Storage::FileSystem::WIN32_FIND_DATAW;
-    use windows::Win32::System::Com::{
-        CoCreateInstance, CoInitializeEx, CoUninitialize, IPersistFile, CLSCTX_INPROC_SERVER,
-        COINIT_APARTMENTTHREADED, STGM_READ,
-    };
-    use windows::Win32::UI::Shell::{IShellLinkW, ShellLink};
-
-    if !path
-        .extension()
-        .is_some_and(|ext| ext.eq_ignore_ascii_case("lnk"))
-    {
-        return None;
-    }
-
-    unsafe {
-        let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
-
-        let link: IShellLinkW = match CoCreateInstance(&ShellLink, None, CLSCTX_INPROC_SERVER) {
-            Ok(l) => l,
-            Err(_) => {
-                CoUninitialize();
-                return None;
-            }
-        };
-
-        let persist: IPersistFile = match link.cast() {
-            Ok(p) => p,
-            Err(_) => {
-                CoUninitialize();
-                return None;
-            }
-        };
-
-        let wide_path = HSTRING::from(path.to_string_lossy().as_ref());
-        if persist.Load(PCWSTR(wide_path.as_ptr()), STGM_READ).is_err() {
-            CoUninitialize();
-            return None;
-        }
-
-        let mut target_buf = [0u16; 1024];
-        let mut find_data = WIN32_FIND_DATAW::default();
-        let _ = link.GetPath(&mut target_buf, &mut find_data, 0);
-        let target = String::from_utf16_lossy(&target_buf)
-            .trim_matches('\0')
-            .to_string();
-
-        let mut args_buf = [0u16; 1024];
-        let _ = link.GetArguments(&mut args_buf);
-        let arguments = String::from_utf16_lossy(&args_buf)
-            .trim_matches('\0')
-            .to_string();
-
-        let mut dir_buf = [0u16; 1024];
-        let _ = link.GetWorkingDirectory(&mut dir_buf);
-        let working_dir = String::from_utf16_lossy(&dir_buf)
-            .trim_matches('\0')
-            .to_string();
-
-        let mut desc_buf = [0u16; 1024];
-        let _ = link.GetDescription(&mut desc_buf);
-        let description = String::from_utf16_lossy(&desc_buf)
-            .trim_matches('\0')
-            .to_string();
-
-        let mut icon_buf = [0u16; 260];
-        let mut icon_index = 0i32;
-        let _ = link.GetIconLocation(&mut icon_buf, &mut icon_index);
-        let icon_location = String::from_utf16_lossy(&icon_buf)
-            .trim_matches('\0')
-            .to_string();
-
-        let run_window = link.GetShowCmd().map(|cmd| cmd.0).unwrap_or(1);
-
-        CoUninitialize();
-
-        Some(crate::models::ShortcutInfo {
-            target,
-            arguments,
-            working_dir,
-            description,
-            icon_location,
-            icon_index,
-            run_window,
-        })
-    }
-}
-
-#[cfg(not(target_os = "windows"))]
-fn get_shortcut_info(_path: &std::path::Path) -> Option<crate::models::ShortcutInfo> {
-    None
+    crate::platform::platform().shortcut_info(path)
 }
 
 /// Retourne le chemin cible d'un raccourci (.lnk sur Windows, .desktop sur Linux).
@@ -1029,70 +938,9 @@ mod size_scan_tests {
     }
 }
 
-pub async fn set_shortcut_info(
-    path: String,
-    info: crate::models::ShortcutInfo,
-) -> Result<(), CommandError> {
-    #[cfg(target_os = "windows")]
-    {
-        use std::path::PathBuf;
-        use windows::core::{Interface, HSTRING, PCWSTR};
-        use windows::Win32::System::Com::{
-            CoCreateInstance, CoInitializeEx, CoUninitialize, IPersistFile, CLSCTX_INPROC_SERVER,
-            COINIT_APARTMENTTHREADED, STGM_READWRITE,
-        };
-        use windows::Win32::UI::Shell::{IShellLinkW, ShellLink};
-
-        let path_buf = PathBuf::from(&path);
-
-        unsafe {
-            let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
-
-            let link: IShellLinkW = CoCreateInstance(&ShellLink, None, CLSCTX_INPROC_SERVER)
-                .map_err(|e| {
-                    CommandError::SystemError(format!("CoCreateInstance failed: {}", e))
-                })?;
-
-            let persist: IPersistFile = link.cast().map_err(|e| {
-                CommandError::SystemError(format!("Cast to IPersistFile failed: {}", e))
-            })?;
-
-            let wide_path = HSTRING::from(path_buf.to_string_lossy().as_ref());
-            persist
-                .Load(PCWSTR(wide_path.as_ptr()), STGM_READWRITE)
-                .map_err(|e| CommandError::SystemError(format!("Load failed: {}", e)))?;
-
-            let wide_target = HSTRING::from(info.target);
-            link.SetPath(PCWSTR(wide_target.as_ptr()))
-                .map_err(|e| CommandError::SystemError(format!("SetPath failed: {}", e)))?;
-
-            let wide_args = HSTRING::from(info.arguments);
-            link.SetArguments(PCWSTR(wide_args.as_ptr()))
-                .map_err(|e| CommandError::SystemError(format!("SetArguments failed: {}", e)))?;
-
-            let wide_dir = HSTRING::from(info.working_dir);
-            link.SetWorkingDirectory(PCWSTR(wide_dir.as_ptr()))
-                .map_err(|e| {
-                    CommandError::SystemError(format!("SetWorkingDirectory failed: {}", e))
-                })?;
-
-            let wide_desc = HSTRING::from(info.description);
-            link.SetDescription(PCWSTR(wide_desc.as_ptr()))
-                .map_err(|e| CommandError::SystemError(format!("SetDescription failed: {}", e)))?;
-
-            link.SetShowCmd(windows::Win32::UI::WindowsAndMessaging::SHOW_WINDOW_CMD(
-                info.run_window,
-            ))
-            .map_err(|e| CommandError::SystemError(format!("SetShowCmd failed: {}", e)))?;
-
-            persist
-                .Save(PCWSTR(wide_path.as_ptr()), true)
-                .map_err(|e| CommandError::SystemError(format!("Save failed: {}", e)))?;
-
-            CoUninitialize();
-        }
-    }
-    Ok(())
+pub async fn set_shortcut_info(path: String, info: crate::models::ShortcutInfo) -> Result<(), CommandError> {
+    tokio::task::spawn_blocking(move || crate::platform::platform().set_shortcut_info(&path, &info))
+        .await.map_err(|error| CommandError::SystemError(error.to_string()))?.map_err(CommandError::SystemError)
 }
 
 #[cfg(test)]

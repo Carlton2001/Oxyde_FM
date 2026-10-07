@@ -1224,13 +1224,6 @@ impl WorkspaceState {
         }
     }
 
-    /// Re-fetches Quick Access items from Windows then rebuilds the sidebar.
-    /// Call this after add_to_quick_access / remove_from_quick_access.
-    pub fn reload_quick_access_and_refresh(&mut self) {
-        self.pinned_items = get_quick_access_items().unwrap_or_default();
-        self.refresh_sidebar();
-    }
-
     pub fn refresh_sidebar(&mut self) {
         let mut new_items = Vec::new();
 

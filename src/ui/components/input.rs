@@ -38,6 +38,7 @@ pub struct TextInput {
     is_selecting: bool,
     last_layout: Option<ShapedLine>,
     last_bounds: Option<Bounds<Pixels>>,
+    horizontal_offset: Pixels,
     on_change: Box<dyn Fn(&str, &mut Window, &mut App)>,
     on_enter: Box<dyn Fn(&mut Window, &mut App)>,
     on_escape: Box<dyn Fn(&mut Window, &mut App)>,
@@ -61,10 +62,16 @@ fn masked_display_index(content: &str, byte: usize) -> usize {
 }
 
 fn completion_parts(text: &str) -> Option<(String, String, char)> {
-    if text.contains("://") || text.starts_with("::{") { return None; }
+    if text.contains("://") || text.starts_with("::{") {
+        return None;
+    }
     let index = text.rfind(['/', '\\'])?;
     let separator = std::path::MAIN_SEPARATOR;
-    Some((native_path_text(&text[..=index]), text[index + 1..].to_string(), separator))
+    Some((
+        native_path_text(&text[..=index]),
+        text[index + 1..].to_string(),
+        separator,
+    ))
 }
 
 pub(crate) fn native_path_text(path: &str) -> String {
@@ -129,16 +136,31 @@ impl TextInput {
         }
     }
     pub fn set_placeholder(&mut self, placeholder: SharedString, cx: &mut Context<Self>) {
-        if self.placeholder == placeholder { return; }
+        if self.placeholder == placeholder {
+            return;
+        }
         self.placeholder = placeholder;
         cx.notify();
     }
 
     pub fn placeholder_width(&self, window: &Window) -> Pixels {
         let style = window.text_style();
-        window.text_system().shape_line(self.placeholder.clone(), style.font_size.to_pixels(window.rem_size()),
-            &[TextRun { len: self.placeholder.len(), font: style.font(), color: style.color,
-                background_color: None, underline: None, strikethrough: None }], None).width
+        window
+            .text_system()
+            .shape_line(
+                self.placeholder.clone(),
+                style.font_size.to_pixels(window.rem_size()),
+                &[TextRun {
+                    len: self.placeholder.len(),
+                    font: style.font(),
+                    color: style.color,
+                    background_color: None,
+                    underline: None,
+                    strikethrough: None,
+                }],
+                None,
+            )
+            .width
     }
 
     pub fn new(
@@ -189,6 +211,7 @@ impl TextInput {
             is_selecting: false,
             last_layout: None,
             last_bounds: None,
+            horizontal_offset: px(0.0),
             on_change: Box::new(on_change),
             on_enter: Box::new(on_enter),
             on_escape: Box::new(on_escape),
@@ -267,7 +290,7 @@ impl TextInput {
         let (Some(bounds), Some(line)) = (&self.last_bounds, &self.last_layout) else {
             return 0;
         };
-        let index = line.closest_index_for_x(position.x - bounds.left());
+        let index = line.closest_index_for_x(position.x - bounds.left() + self.horizontal_offset);
         if self.password {
             masked_byte_index(&self.content, index)
         } else {
@@ -505,24 +528,45 @@ impl TextInput {
     }
 
     fn refresh_completions(&mut self, cx: &mut Context<Self>) {
-        if !self.path_submit { return; }
+        if !self.path_submit {
+            return;
+        }
         self.completion_epoch += 1;
         self.completion_task = None;
         self.completions.clear();
         self.completion_index = 0;
         let text = self.content.clone();
-        let Some((parent, prefix, separator)) = completion_parts(&text) else { return; };
+        let Some((parent, prefix, separator)) = completion_parts(&text) else {
+            return;
+        };
         let epoch = self.completion_epoch;
         let entity = cx.weak_entity();
         self.completion_task = Some(cx.spawn(move |_, cx: &mut AsyncApp| {
             let mut cx = cx.clone();
             async move {
-                cx.background_executor().timer(std::time::Duration::from_millis(150)).await;
-                let result = oxyde_lib::commands::io::list_dir(parent.clone(), None, Some(true), Some(true), None).await;
-                let mut paths = result.map(|listing| listing.entries.into_iter()
-                    .filter(|entry| entry.is_dir && completion_matches(&entry.name, &prefix))
-                    .map(|entry| format!("{}{}{}", parent, entry.name, separator))
-                    .collect::<Vec<_>>()).unwrap_or_default();
+                cx.background_executor()
+                    .timer(std::time::Duration::from_millis(150))
+                    .await;
+                let result = oxyde_lib::commands::io::list_dir(
+                    parent.clone(),
+                    None,
+                    Some(true),
+                    Some(true),
+                    None,
+                )
+                .await;
+                let mut paths = result
+                    .map(|listing| {
+                        listing
+                            .entries
+                            .into_iter()
+                            .filter(|entry| {
+                                entry.is_dir && completion_matches(&entry.name, &prefix)
+                            })
+                            .map(|entry| format!("{}{}{}", parent, entry.name, separator))
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default();
                 paths.sort_by_cached_key(|path| path.to_lowercase());
                 paths.truncate(12);
                 let _ = entity.update(&mut cx, |input, cx| {
@@ -693,8 +737,16 @@ impl EntityInputHandler for TextInput {
         };
         let range = self.range_from_utf16(range_utf16);
         Some(Bounds::from_corners(
-            point(bounds.left() + line.x_for_index(range.start), bounds.top()),
-            point(bounds.left() + line.x_for_index(range.end), bounds.bottom()),
+            point(
+                bounds.left() + line.x_for_index(self.display_index(range.start))
+                    - self.horizontal_offset,
+                bounds.top(),
+            ),
+            point(
+                bounds.left() + line.x_for_index(self.display_index(range.end))
+                    - self.horizontal_offset,
+                bounds.bottom(),
+            ),
         ))
     }
     fn character_index_for_point(
@@ -705,7 +757,12 @@ impl EntityInputHandler for TextInput {
     ) -> Option<usize> {
         let line = self.last_layout.as_ref()?;
         let bounds = self.last_bounds.as_ref()?;
-        let byte_index = line.closest_index_for_x(point.x - bounds.left());
+        let index = line.closest_index_for_x(point.x - bounds.left() + self.horizontal_offset);
+        let byte_index = if self.password {
+            masked_byte_index(&self.content, index)
+        } else {
+            index
+        };
         Some(self.utf16_offset_for_byte(byte_index))
     }
 }
@@ -766,31 +823,65 @@ impl Render for TextInput {
             .when(self.minimal && !self.compact, |s| s.h_full().px_3())
             .when(self.minimal && self.compact, |s| s.h_full().px(rems(0.0)))
             .when(!self.minimal, |s| s.h_full().px_3())
+            .when(!self.minimal && !self.content.is_empty(), |s| s.pr(rems(0.125)))
             .when(self.path_submit, |s| s.pr(rems(0.0625)))
             .w_full()
             .when(is_focused && !self.completions.is_empty(), |input| {
-                let rows = self.completions.iter().enumerate().map(|(index, path)| {
-                    let path = path.clone();
-                    let selected = index == self.completion_index;
-                    div().id(("path-completion", index)).px_3().h(rems(1.75))
-                        .flex().items_center().text_size(rems(0.8125)).text_color(theme.text)
-                        .when(selected, |row| row.bg(theme.selected))
-                        .hover(|style| style.bg(theme.control_hover))
-                        .child(div().min_w_0().truncate().child(path.clone()))
-                        .on_mouse_down(MouseButton::Left, cx.listener(move |this, _, window, cx| {
-                            cx.stop_propagation();
-                            this.accept_completion(path.clone(), window, cx);
-                        }))
-                }).collect::<Vec<_>>();
+                let rows = self
+                    .completions
+                    .iter()
+                    .enumerate()
+                    .map(|(index, path)| {
+                        let path = path.clone();
+                        let selected = index == self.completion_index;
+                        div()
+                            .id(("path-completion", index))
+                            .px_3()
+                            .h(rems(1.75))
+                            .flex()
+                            .items_center()
+                            .text_size(rems(0.8125))
+                            .text_color(theme.text)
+                            .when(selected, |row| row.bg(theme.selected))
+                            .hover(|style| style.bg(theme.control_hover))
+                            .child(div().min_w_0().truncate().child(path.clone()))
+                            .on_mouse_down(
+                                MouseButton::Left,
+                                cx.listener(move |this, _, window, cx| {
+                                    cx.stop_propagation();
+                                    this.accept_completion(path.clone(), window, cx);
+                                }),
+                            )
+                    })
+                    .collect::<Vec<_>>();
                 let measure = cx.entity();
-                input.child(deferred(div().absolute().top(relative(1.0)).left_0().w_full()
-                    .bg(theme.menu_surface).border(rems(0.0625)).border_color(theme.menu_border)
-                    .rounded_sm().shadow(crate::ui::style::rem_shadow(false)).occlude()
-                    .on_any_mouse_down(|_, _, cx| cx.stop_propagation())
-                    .child(canvas(|bounds, _, _| bounds, move |_, bounds, _, cx| {
-                        measure.update(cx, |input, _| input.completion_bounds = Some(bounds));
-                    }).absolute().size_full())
-                    .children(rows)))
+                input.child(deferred(
+                    div()
+                        .absolute()
+                        .top(relative(1.0))
+                        .left_0()
+                        .w_full()
+                        .bg(theme.menu_surface)
+                        .border(rems(0.0625))
+                        .border_color(theme.menu_border)
+                        .rounded_sm()
+                        .shadow(crate::ui::style::rem_shadow(false))
+                        .occlude()
+                        .on_any_mouse_down(|_, _, cx| cx.stop_propagation())
+                        .child(
+                            canvas(
+                                |bounds, _, _| bounds,
+                                move |_, bounds, _, cx| {
+                                    measure.update(cx, |input, _| {
+                                        input.completion_bounds = Some(bounds)
+                                    });
+                                },
+                            )
+                            .absolute()
+                            .size_full(),
+                        )
+                        .children(rows),
+                ))
             })
             .child(
                 div()
@@ -801,15 +892,33 @@ impl Render for TextInput {
                     .child(TextInputElement { input: cx.entity() }),
             )
             .when(self.path_submit, |input| {
-                input.child(div().id("path-submit").size_6().ml_2().flex_none().flex()
-                    .occlude().cursor(CursorStyle::Arrow)
-                    .items_center().justify_center().rounded_sm()
-                    .hover(|style| style.bg(theme.control_hover))
-                    .on_mouse_down(MouseButton::Left, cx.listener(|this, _, window, cx| {
-                        cx.stop_propagation();
-                        (this.on_enter)(window, cx);
-                    }))
-                    .child(svg().path("icons/arrow-right.svg").size_4().text_color(theme.text_muted)))
+                input.child(
+                    div()
+                        .id("path-submit")
+                        .size_6()
+                        .ml_2()
+                        .flex_none()
+                        .flex()
+                        .occlude()
+                        .cursor(CursorStyle::Arrow)
+                        .items_center()
+                        .justify_center()
+                        .rounded_sm()
+                        .hover(|style| style.bg(theme.control_hover))
+                        .on_mouse_down(
+                            MouseButton::Left,
+                            cx.listener(|this, _, window, cx| {
+                                cx.stop_propagation();
+                                (this.on_enter)(window, cx);
+                            }),
+                        )
+                        .child(
+                            svg()
+                                .path("icons/arrow-right.svg")
+                                .size_4()
+                                .text_color(theme.text_muted),
+                        ),
+                )
             })
             .when(!self.minimal && !self.content.is_empty(), |s: Div| {
                 let h_clear = cx.entity().clone();
@@ -871,7 +980,9 @@ impl Element for TextInputElement {
     ) -> (LayoutId, Self::RequestLayoutState) {
         let mut style = Style::default();
         style.size.width = relative(1.0).into();
-        style.size.height = relative(1.0).into();
+        // The flex wrapper has auto height. A percentage height resolves to zero
+        // here and would make the text's content mask empty.
+        style.size.height = window.line_height().into();
         (window.request_layout(style, [], cx), ())
     }
 
@@ -953,6 +1064,25 @@ impl Element for TextInputElement {
             None,
         );
 
+        let caret = if input.selection_reversed {
+            input.selected_range.start
+        } else {
+            input.selected_range.end
+        };
+        let offset = if input.focus_handle.is_focused(window) {
+            horizontal_scroll_offset(
+                input.horizontal_offset,
+                line.x_for_index(input.display_index(caret)),
+                line.width,
+                bounds.size.width,
+                rem_pixels(rems(0.09375)),
+            )
+        } else {
+            px(0.0)
+        };
+        self.input
+            .update(cx, |input, _| input.horizontal_offset = offset);
+
         (Some(line), Some(bounds))
     }
 
@@ -981,10 +1111,26 @@ impl Element for TextInputElement {
             let input = input_handle.read(cx);
             let selected_range = input.selected_range.clone();
             let cursor_visible = input.cursor_visible;
-            let cursor_index = input.display_index(selected_range.start);
-            if !selected_range.is_empty() {
-                line.paint_background(
-                    bounds.origin + point(px(0.0), y_offset),
+            let cursor_index = input.display_index(if input.selection_reversed {
+                selected_range.start
+            } else {
+                selected_range.end
+            });
+            let offset = input.horizontal_offset;
+            window.with_content_mask(Some(ContentMask { bounds }), |window| {
+                if !selected_range.is_empty() {
+                    line.paint_background(
+                        bounds.origin + point(-offset, y_offset),
+                        line_h,
+                        TextAlign::Left,
+                        None,
+                        window,
+                        cx,
+                    )
+                    .unwrap();
+                }
+                line.paint(
+                    bounds.origin + point(-offset, y_offset),
                     line_h,
                     TextAlign::Left,
                     None,
@@ -992,28 +1138,19 @@ impl Element for TextInputElement {
                     cx,
                 )
                 .unwrap();
-            }
-            line.paint(
-                bounds.origin + point(px(0.0), y_offset),
-                line_h,
-                TextAlign::Left,
-                None,
-                window,
-                cx,
-            )
-            .unwrap();
-            if focus_handle.is_focused(window) && cursor_visible && selected_range.is_empty() {
-                let cursor_x = line.x_for_index(cursor_index);
-                let cursor_h = line_h * 0.8;
-                let cursor_y = bounds.top() + y_offset + (line_h - cursor_h) / 2.0;
-                window.paint_quad(fill(
-                    Bounds::new(
-                        point(bounds.left() + cursor_x, cursor_y),
-                        size(rem_pixels(rems(0.09375)), cursor_h),
-                    ),
-                    cx.theme().accent,
-                ));
-            }
+                if focus_handle.is_focused(window) && cursor_visible && selected_range.is_empty() {
+                    let cursor_x = line.x_for_index(cursor_index);
+                    let cursor_h = line_h * 0.8;
+                    let cursor_y = bounds.top() + y_offset + (line_h - cursor_h) / 2.0;
+                    window.paint_quad(fill(
+                        Bounds::new(
+                            point(bounds.left() + cursor_x - offset, cursor_y),
+                            size(rem_pixels(rems(0.09375)), cursor_h),
+                        ),
+                        cx.theme().accent,
+                    ));
+                }
+            });
 
             input_handle.update(cx, |input, _| {
                 input.last_layout = Some(line);
@@ -1071,16 +1208,63 @@ mod completion_tests {
     #[::core::prelude::v1::test]
     fn native_display_preserves_virtual_paths_and_unc_roots() {
         assert_eq!(super::native_path_text("__network_vincinity__"), "\\\\");
-        assert_eq!(super::navigation_path_text(" \\\\ "), "__network_vincinity__");
+        assert_eq!(
+            super::navigation_path_text(" \\\\ "),
+            "__network_vincinity__"
+        );
         assert_eq!(super::navigation_path_text("\\\\PCS"), "\\\\PCS");
-        assert_eq!(super::navigation_path_text("\\\\PCS\\so39i Agde"), "\\\\PCS\\so39i Agde");
+        assert_eq!(
+            super::navigation_path_text("\\\\PCS\\so39i Agde"),
+            "\\\\PCS\\so39i Agde"
+        );
         assert_eq!(super::native_path_text("trash://"), "trash://");
         assert_eq!(super::native_path_text("search://query"), "search://query");
         if cfg!(target_os = "windows") {
             assert_eq!(super::native_path_text("C:/Users/été"), "C:\\Users\\été");
-            assert_eq!(super::native_path_text("//server/share/folder"), "\\\\server\\share\\folder");
+            assert_eq!(
+                super::native_path_text("//server/share/folder"),
+                "\\\\server\\share\\folder"
+            );
         } else {
             assert_eq!(super::native_path_text("/usr/local"), "/usr/local");
         }
+    }
+}
+
+/// Keep the active end of the selection visible without moving the text unnecessarily.
+fn horizontal_scroll_offset(
+    previous: Pixels,
+    caret: Pixels,
+    text_width: Pixels,
+    viewport: Pixels,
+    caret_width: Pixels,
+) -> Pixels {
+    let available = (viewport - caret_width).max(px(0.0));
+    let maximum = (text_width - available).max(px(0.0));
+    let mut offset = previous.min(maximum).max(px(0.0));
+    if caret < offset {
+        offset = caret;
+    } else if caret > offset + available {
+        offset = caret - available;
+    }
+    offset.min(maximum).max(px(0.0))
+}
+
+#[cfg(test)]
+mod horizontal_scroll_tests {
+    use super::horizontal_scroll_offset;
+    use gpui::px;
+    #[::core::prelude::v1::test]
+    fn long_text_follows_caret_and_clamps_after_resize_or_deletion() {
+        let scroll = |previous, caret, text, viewport| {
+            horizontal_scroll_offset(px(previous), px(caret), px(text), px(viewport), px(2.0))
+                .as_f32()
+        };
+        assert_eq!(scroll(0.0, 300.0, 300.0, 100.0), 202.0);
+        assert_eq!(scroll(202.0, 250.0, 300.0, 100.0), 202.0);
+        assert_eq!(scroll(202.0, 0.0, 300.0, 100.0), 0.0);
+        assert_eq!(scroll(202.0, 20.0, 20.0, 100.0), 0.0);
+        assert_eq!(scroll(202.0, 300.0, 300.0, 400.0), 0.0);
+        assert_eq!(scroll(0.0, 300.0, 300.0, 0.0), 300.0);
     }
 }

@@ -15,6 +15,14 @@ pub(crate) struct PropertiesDialog {
     error: Option<String>,
     focus: FocusHandle,
     ok_focus: FocusHandle,
+    shortcut_tab: bool,
+    shortcut_inputs: Vec<Entity<TextInput>>,
+    run_window: i32,
+    run_menu: Option<Point<Pixels>>,
+    run_focus: FocusHandle,
+    run_bounds: Option<Bounds<Pixels>>,
+    saving: bool,
+    validation_error: Option<Message>,
 }
 
 fn same_root(a: &str, b: &str) -> bool {
@@ -64,6 +72,14 @@ impl OxydeApp {
             error: None,
             focus,
             ok_focus: cx.focus_handle(),
+            shortcut_tab: false,
+            shortcut_inputs: Vec::new(),
+            run_window: 1,
+            run_menu: None,
+            run_focus: cx.focus_handle(),
+            run_bounds: None,
+            saving: false,
+            validation_error: None,
         });
         cx.notify();
         cx.spawn(async move |this, cx| {
@@ -132,9 +148,175 @@ impl OxydeApp {
     }
 
     pub(crate) fn close_file_properties(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self
+            .properties_dialog
+            .as_ref()
+            .is_some_and(|dialog| dialog.saving)
+        {
+            return;
+        }
         self.properties_dialog = None;
         window.focus(&self.focus_handle, cx);
         cx.notify();
+    }
+
+    fn select_properties_tab(
+        &mut self,
+        shortcut: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(dialog) = &self.properties_dialog else {
+            return;
+        };
+        if dialog.saving {
+            return;
+        }
+        let values = dialog
+            .properties
+            .as_ref()
+            .and_then(|properties| properties.shortcut.as_ref())
+            .map(|info| {
+                (
+                    vec![
+                        info.target.clone(),
+                        info.arguments.clone(),
+                        info.working_dir.clone(),
+                        info.description.clone(),
+                    ],
+                    info.run_window,
+                )
+            });
+        if shortcut && dialog.shortcut_inputs.is_empty() {
+            let Some((values, run_window)) = values else {
+                return;
+            };
+            let handle = cx.entity();
+            let mut inputs = Vec::new();
+            for value in values {
+                let submit = handle.clone();
+                let cancel = handle.clone();
+                let context = handle.clone();
+                inputs.push(cx.new(|cx| {
+                    TextInput::new(
+                        cx,
+                        "",
+                        value,
+                        |_, _, _| {},
+                        move |window, cx| {
+                            submit.update(cx, |this, cx| this.accept_properties(window, cx))
+                        },
+                        move |window, cx| {
+                            cancel.update(cx, |this, cx| this.close_file_properties(window, cx))
+                        },
+                        move |input, selected, point, window, cx| {
+                            context.update(cx, |this, cx| {
+                                this.open_text_context_menu(input, selected, point, window, cx)
+                            })
+                        },
+                        false,
+                        false,
+                        false,
+                        None,
+                        window,
+                    )
+                }));
+            }
+            let dialog = self.properties_dialog.as_mut().unwrap();
+            dialog.shortcut_inputs = inputs;
+            dialog.run_window = run_window;
+        }
+        let dialog = self.properties_dialog.as_mut().unwrap();
+        dialog.shortcut_tab = shortcut;
+        dialog.run_menu = None;
+        window.focus(&dialog.focus, cx);
+        cx.notify();
+    }
+
+    fn accept_properties(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(dialog) = &self.properties_dialog else {
+            return;
+        };
+        if dialog.saving {
+            return;
+        }
+        if dialog.shortcut_inputs.is_empty() {
+            self.close_file_properties(window, cx);
+            return;
+        }
+        let Some(mut info) = dialog
+            .properties
+            .as_ref()
+            .and_then(|properties| properties.shortcut.clone())
+        else {
+            return;
+        };
+        let fields: Vec<_> = dialog
+            .shortcut_inputs
+            .iter()
+            .map(|input| input.read(cx).content().to_string())
+            .collect();
+        if fields[0].trim().is_empty() || fields.iter().any(|value| value.contains('\0')) {
+            self.properties_dialog.as_mut().unwrap().validation_error =
+                Some(Message::ShortcutInvalidTarget);
+            cx.notify();
+            return;
+        }
+        info.target = fields[0].clone();
+        info.arguments = fields[1].clone();
+        info.working_dir = fields[2].clone();
+        info.description = fields[3].clone();
+        info.run_window = dialog.run_window;
+        let original = dialog
+            .properties
+            .as_ref()
+            .unwrap()
+            .shortcut
+            .as_ref()
+            .unwrap();
+        if info.target == original.target
+            && info.arguments == original.arguments
+            && info.working_dir == original.working_dir
+            && info.description == original.description
+            && info.run_window == original.run_window
+        {
+            self.close_file_properties(window, cx);
+            return;
+        }
+        let path = dialog.path.clone();
+        let revision = dialog.revision;
+        let dialog = self.properties_dialog.as_mut().unwrap();
+        dialog.saving = true;
+        dialog.error = None;
+        dialog.validation_error = None;
+        dialog.run_menu = None;
+        window.focus(&dialog.ok_focus, cx);
+        cx.notify();
+        let window_handle = window.window_handle();
+        cx.spawn(async move |this, cx| {
+            let result = oxyde_lib::commands::io::set_shortcut_info(path, info).await;
+            let _ = window_handle.update(cx, |_, window, cx| {
+                this.update(cx, |this, cx| {
+                    let Some(dialog) = this
+                        .properties_dialog
+                        .as_mut()
+                        .filter(|dialog| dialog.revision == revision)
+                    else {
+                        return;
+                    };
+                    dialog.saving = false;
+                    match result {
+                        Ok(()) => {
+                            this.close_file_properties(window, cx);
+                            this.refresh_all(cx);
+                        }
+                        Err(error) => dialog.error = Some(error.to_string()),
+                    }
+                    cx.notify();
+                })
+            });
+        })
+        .detach();
     }
 
     fn system_file_properties(&mut self, cx: &mut Context<Self>) {
@@ -221,7 +403,7 @@ pub(crate) fn render(
             .my(rems(0.75))
     };
     let mut body = div().flex().flex_col().gap(rems(0.375));
-    if let Some(p) = &dialog.properties {
+    if let Some(p) = dialog.properties.as_ref().filter(|_| !dialog.shortcut_tab) {
         let icon = get_icon_type(&p.name, p.is_dir, Some(&p.path), false, false);
         let graphic = if let Some(drive) = &dialog.drive {
             if cfg!(target_os = "windows") && view.use_system_icons() {
@@ -453,8 +635,221 @@ pub(crate) fn render(
                 format_date(timestamp, date_format(cx)),
             ));
         }
+    } else if dialog.shortcut_tab {
+        for (index, message) in [
+            Message::ShortcutTarget,
+            Message::ShortcutArguments,
+            Message::ShortcutWorkingDirectory,
+            Message::ShortcutComment,
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            body = body.child(crate::ui::components::modal::form_row_with_label_width(
+                cx.i18n().text(message),
+                div()
+                    .h(rems(2.0))
+                    .flex_1()
+                    .min_w_0()
+                    .child(dialog.shortcut_inputs[index].clone()),
+                rems(6.0),
+                cx,
+            ));
+        }
+        let picker = handle.clone();
+        let measure = handle.clone();
+        body =
+            body.child(divider())
+                .child(crate::ui::components::modal::form_row_with_label_width(
+                    cx.i18n().text(Message::ShortcutRun),
+                    div()
+                        .id("shortcut-run")
+                        .relative()
+                        .track_focus(&dialog.run_focus)
+                        .flex_1()
+                        .min_w_0()
+                        .h(rems(2.0))
+                        .px(rems(0.625))
+                        .flex()
+                        .items_center()
+                        .justify_between()
+                        .border(rems(0.0625))
+                        .border_color(theme.border)
+                        .rounded_sm()
+                        .child(
+                            canvas(
+                                |bounds, _, _| bounds,
+                                move |bounds, _, _, cx| {
+                                    measure.update(cx, |this, _| {
+                                        if let Some(dialog) = &mut this.properties_dialog {
+                                            dialog.run_bounds = Some(bounds);
+                                        }
+                                    })
+                                },
+                            )
+                            .absolute()
+                            .size_full(),
+                        )
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .truncate()
+                                .child(cx.i18n().text(run_window_message(dialog.run_window))),
+                        )
+                        .child(
+                            svg()
+                                .path("icons/chevron-down.svg")
+                                .size(rems(0.75))
+                                .flex_none()
+                                .text_color(theme.text_muted),
+                        )
+                        .on_mouse_down(MouseButton::Left, move |event, window, cx| {
+                            picker.update(cx, |this, cx| {
+                                if let Some(dialog) = &mut this.properties_dialog {
+                                    if !dialog.saving {
+                                        window.focus(&dialog.run_focus, cx);
+                                        dialog.run_menu = dialog.run_menu.is_none().then_some(
+                                            dialog
+                                                .run_bounds
+                                                .map(|bounds| point(bounds.left(), bounds.bottom()))
+                                                .unwrap_or(event.position),
+                                        );
+                                        cx.notify();
+                                    }
+                                }
+                            });
+                        }),
+                    rems(6.0),
+                    cx,
+                ));
     } else if dialog.error.is_none() {
         body = body.child(cx.i18n().text(Message::PreviewLoading));
+    }
+    let has_shortcut = dialog
+        .properties
+        .as_ref()
+        .is_some_and(|properties| properties.shortcut.is_some());
+    let mut property_tabs = None;
+    if has_shortcut {
+        let mut tabs = div()
+            .flex()
+            .flex_none()
+            .items_center()
+            .px(rems(1.25))
+            .bg(theme.dialog_tabs)
+            .gap(rems(0.25))
+            .border_b(rems(0.0625))
+            .border_color(theme.border);
+        for (shortcut, message, icon) in [
+            (false, Message::PropertiesGeneral, "icons/file-text.svg"),
+            (true, Message::PropertiesShortcut, "icons/link.svg"),
+        ] {
+            let tab = handle.clone();
+            let active = shortcut == dialog.shortcut_tab;
+            tabs =
+                tabs.child(
+                    div()
+                        .id(if shortcut {
+                            "properties-shortcut-tab"
+                        } else {
+                            "properties-general-tab"
+                        })
+                        .px(rems(1.0))
+                        .py(rems(0.75))
+                        .text_size(rems(0.8125))
+                        .font_weight(FontWeight::MEDIUM)
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .gap(rems(0.5))
+                        .when(!active, |tab| {
+                            tab.hover(move |style| style.bg(theme.hover).text_color(theme.text))
+                        })
+                        .child(svg().path(icon).size(rems(0.875)).flex_none().text_color(
+                            if active {
+                                theme.accent
+                            } else {
+                                theme.text_muted
+                            },
+                        ))
+                        .rounded_none()
+                        .border_b(rems(0.0625))
+                        .border_color(if active {
+                            theme.accent
+                        } else {
+                            transparent_black()
+                        })
+                        .text_color(if active {
+                            theme.accent
+                        } else {
+                            theme.text_muted
+                        })
+                        .child(cx.i18n().text(message))
+                        .on_click(move |_, window, cx| {
+                            cx.stop_propagation();
+                            tab.update(cx, |this, cx| {
+                                this.select_properties_tab(shortcut, window, cx)
+                            });
+                        }),
+                );
+        }
+        property_tabs = Some(tabs);
+    }
+    if dialog.saving {
+        body = body.child(cx.i18n().text(Message::ShortcutSaving));
+    }
+    if let Some(error) = dialog.validation_error {
+        body = body.child(div().text_color(theme.error).child(cx.i18n().text(error)));
+    }
+    if let Some(position) = dialog.run_menu {
+        let mut menu = div()
+            .occlude()
+            .on_any_mouse_down(|_, _, cx| cx.stop_propagation())
+            .on_mouse_up(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+            .on_mouse_move(|_, _, cx| cx.stop_propagation())
+            .on_scroll_wheel(|_, _, cx| cx.stop_propagation())
+            .w(rems(17.0))
+            .py(rems(0.25))
+            .bg(theme.menu_surface)
+            .border(rems(0.0625))
+            .border_color(theme.menu_border)
+            .shadow(crate::ui::style::rem_shadow(false));
+        for mode in [1, 3, 7] {
+            let choice = handle.clone();
+            menu = menu.child(
+                div()
+                    .id(("shortcut-run-mode", mode as usize))
+                    .px(rems(0.75))
+                    .py(rems(0.5))
+                    .hover(|row| row.bg(theme.menu_hover))
+                    .child(cx.i18n().text(run_window_message(mode)))
+                    .on_click(move |_, _, cx| {
+                        cx.stop_propagation();
+                        choice.update(cx, |this, cx| {
+                            if let Some(dialog) = &mut this.properties_dialog {
+                                dialog.run_window = mode;
+                                dialog.run_menu = None;
+                                cx.notify();
+                            }
+                        })
+                    }),
+            );
+        }
+        let close = handle.clone();
+        body = body.child(deferred(
+            anchored()
+                .position(position)
+                .snap_to_window()
+                .child(menu.on_mouse_down_out(move |_, _, cx| {
+                    close.update(cx, |this, cx| {
+                        if let Some(dialog) = &mut this.properties_dialog {
+                            dialog.run_menu = None;
+                            cx.notify();
+                        }
+                    })
+                })),
+        ));
     }
     body = body.when_some(dialog.error.as_ref(), |body, error| {
         body.child(
@@ -464,6 +859,13 @@ pub(crate) fn render(
                 .child(error.clone()),
         )
     });
+    if let Some(tabs) = property_tabs {
+        body = div()
+            .flex()
+            .flex_col()
+            .child(tabs)
+            .child(div().px(rems(1.0)).py(rems(1.25)).child(body));
+    }
     let keyboard = handle.clone();
     let close = handle.clone();
     let cancel = handle.clone();
@@ -476,17 +878,86 @@ pub(crate) fn render(
         .track_focus(&dialog.focus)
         .on_key_down(move |event, window, cx| {
             keyboard.update(cx, |this, cx| match event.keystroke.key.as_str() {
-                "escape" | "enter" | "space" => this.close_file_properties(window, cx),
+                "escape" => {
+                    if let Some(dialog) = &mut this.properties_dialog {
+                        if dialog.run_menu.take().is_some() {
+                            cx.notify();
+                            return;
+                        }
+                    }
+                    this.close_file_properties(window, cx);
+                }
+                "enter" | "space"
+                    if this
+                        .properties_dialog
+                        .as_ref()
+                        .is_some_and(|dialog| dialog.run_focus.is_focused(window)) =>
+                {
+                    if let Some(dialog) = &mut this.properties_dialog {
+                        if dialog.run_menu.take().is_none() {
+                            dialog.run_menu = dialog
+                                .run_bounds
+                                .map(|bounds| point(bounds.left(), bounds.bottom()));
+                        }
+                        cx.notify();
+                    }
+                }
+                "up" | "down"
+                    if this
+                        .properties_dialog
+                        .as_ref()
+                        .is_some_and(|dialog| dialog.run_menu.is_some()) =>
+                {
+                    if let Some(dialog) = &mut this.properties_dialog {
+                        let modes = [1, 3, 7];
+                        let index = modes
+                            .iter()
+                            .position(|mode| *mode == dialog.run_window)
+                            .unwrap_or(0);
+                        dialog.run_window =
+                            modes[(index + if event.keystroke.key == "up" { 2 } else { 1 }) % 3];
+                        cx.notify();
+                    }
+                }
+                "enter" | "space"
+                    if this
+                        .properties_dialog
+                        .as_ref()
+                        .is_some_and(|dialog| dialog.focus.is_focused(window)) =>
+                {
+                    this.close_file_properties(window, cx)
+                }
+                "enter" => this.accept_properties(window, cx),
+                "space"
+                    if this.properties_dialog.as_ref().is_some_and(|dialog| {
+                        dialog.focus.is_focused(window) || dialog.ok_focus.is_focused(window)
+                    }) =>
+                {
+                    this.accept_properties(window, cx)
+                }
                 "tab" => {
                     if let Some(dialog) = &this.properties_dialog {
-                        window.focus(
-                            if dialog.ok_focus.is_focused(window) {
-                                &dialog.focus
-                            } else {
-                                &dialog.ok_focus
-                            },
-                            cx,
-                        );
+                        let mut focuses = vec![dialog.focus.clone()];
+                        if dialog.shortcut_tab {
+                            focuses.extend(
+                                dialog
+                                    .shortcut_inputs
+                                    .iter()
+                                    .map(|input| input.read(cx).focus_handle.clone()),
+                            );
+                            focuses.push(dialog.run_focus.clone());
+                        }
+                        focuses.push(dialog.ok_focus.clone());
+                        let current = focuses
+                            .iter()
+                            .position(|focus| focus.is_focused(window))
+                            .unwrap_or(0);
+                        let next = if event.keystroke.modifiers.shift {
+                            (current + focuses.len() - 1) % focuses.len()
+                        } else {
+                            (current + 1) % focuses.len()
+                        };
+                        window.focus(&focuses[next], cx);
                     }
                 }
                 _ => {}
@@ -501,6 +972,9 @@ pub(crate) fn render(
         .on_action(|_: &Coller, _, cx| cx.stop_propagation())
         .child(
             Modal::new("file-properties", cx.i18n().text(Message::Properties), body)
+                .when(has_shortcut, |modal| {
+                    modal.body_padding(rems(0.0), rems(0.0))
+                })
                 .width(rems(28.0))
                 .title_icon("icons/settings-2.svg")
                 .header(
@@ -555,8 +1029,24 @@ pub(crate) fn render(
                         .text_color(theme.text_on_accent)
                         .child(cx.i18n().text(Message::TrashSettingsOk))
                         .on_mouse_down(MouseButton::Left, move |_, window, cx| {
-                            ok.update(cx, |this, cx| this.close_file_properties(window, cx));
+                            ok.update(cx, |this, cx| this.accept_properties(window, cx));
                         }),
                 ),
         )
+        .when(dialog.saving, |root| {
+            root.child(
+                div()
+                    .absolute()
+                    .inset_0()
+                    .on_any_mouse_down(|_, _, cx| cx.stop_propagation()),
+            )
+        })
+}
+
+fn run_window_message(mode: i32) -> Message {
+    match mode {
+        3 => Message::ShortcutMaximized,
+        7 => Message::ShortcutMinimized,
+        _ => Message::ShortcutNormal,
+    }
 }

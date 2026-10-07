@@ -19,6 +19,14 @@ pub struct MountedDiskImage {
     pub roots: Vec<String>,
 }
 
+#[derive(serde::Serialize, serde::Deserialize, Debug, Default, Clone)]
+pub struct PeekStatus {
+    pub installed: bool,
+    pub enabled: bool,
+    pub space_enabled: bool,
+    pub activation_shortcut: Option<String>,
+}
+
 /// Abstraction des opérations spécifiques à l'OS.
 /// Toute fonctionnalité native (lecteurs, ouverture, raccourcis, etc.)
 /// doit passer par ce trait plutôt qu'appeler directement les API OS.
@@ -112,6 +120,14 @@ pub trait Platform: Send + Sync {
     /// Retourne les éléments de l'Accès Rapide (Windows) ou des Favoris GTK (Linux).
     fn get_quick_access_items(&self) -> Vec<QuickAccessItem>;
 
+    fn peek_status(&self) -> Result<PeekStatus, String>;
+    fn open_peek(&self, path: &str) -> Result<(), String>;
+    fn shortcut_info(&self, path: &std::path::Path) -> Option<crate::models::ShortcutInfo>;
+    fn set_shortcut_info(&self, path: &str, info: &crate::models::ShortcutInfo) -> Result<(), String>;
+    /// The returned guard owns the watcher. All these calls run in the background.
+    fn watch_quick_access_changes(&self, revision: std::sync::Arc<std::sync::atomic::AtomicU64>)
+        -> Result<Option<Box<dyn Send>>, String>;
+
     /// Couleur d'accent système (format hex "#rrggbb").
     fn get_accent_color(&self) -> String;
 
@@ -181,3 +197,8 @@ pub fn platform() -> &'static dyn Platform {
     static INSTANCE: OnceLock<CurrentPlatform> = OnceLock::new();
     INSTANCE.get_or_init(CurrentPlatform::new)
 }
+
+#[cfg(target_os = "windows")]
+mod windows_peek;
+#[cfg(target_os = "windows")]
+mod windows_shortcuts;

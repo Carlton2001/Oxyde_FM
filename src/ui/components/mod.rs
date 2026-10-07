@@ -32,7 +32,7 @@ pub(crate) fn context_menu_sections(items: Vec<dropdown::DropdownItem>, i18n: &I
             pending_separator = true;
             continue;
         }
-        let group = if [Message::OpenFileLocation, Message::Open, Message::OpenNewTab, Message::ExpandAll, Message::CollapseAll]
+        let group = if [Message::OpenFileLocation, Message::Open, Message::PeekOpen, Message::OpenNewTab, Message::ExpandAll, Message::CollapseAll]
             .iter().any(|message| item.label == i18n.text(*message).as_ref()) { 0 }
             else if item.label == i18n.text(Message::Delete).as_ref() { 2 }
             else if item.label == i18n.text(Message::Properties).as_ref() { 3 }
@@ -376,6 +376,17 @@ fn oxyde_context_menu_items_raw(
         }),
         on_hover: None,
     });
+
+    if cfg!(target_os = "windows") && !is_dir {
+        let h = h_app.clone();
+        let target = path.clone();
+        let mut item = crate::ui::components::dropdown::DropdownItem::new(
+            i18n.text(Message::PeekOpen).to_string(), move |_, app| {
+                h.update(app, |this, cx| { this.context_menus.clear(); this.peek_file(target.clone(), cx); });
+            }).icon(IconName::ExternalLink);
+        item.is_dimmed = !view.peek_status.installed || !view.peek_status.enabled;
+        items.push(item);
+    }
 
     let choices = ["zip", "7z", "tar", "zst"]
         .into_iter()

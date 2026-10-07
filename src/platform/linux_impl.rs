@@ -10,6 +10,12 @@ impl LinuxPlatform {
 }
 
 impl Platform for LinuxPlatform {
+    fn peek_status(&self) -> Result<super::PeekStatus, String> { Ok(super::PeekStatus::default()) }
+    fn open_peek(&self, _path: &str) -> Result<(), String> { Err("Peek is only available on Windows".into()) }
+    fn shortcut_info(&self, _path: &std::path::Path) -> Option<crate::models::ShortcutInfo> { None }
+    fn set_shortcut_info(&self, _path: &str, _info: &crate::models::ShortcutInfo) -> Result<(), String> { Err("Shortcut editing is only available on Windows".into()) }
+    fn watch_quick_access_changes(&self, _revision: std::sync::Arc<std::sync::atomic::AtomicU64>) -> Result<Option<Box<dyn Send>>, String> { Ok(None) }
+
     fn recycle_bin_usage(&self) -> Result<(u64, u64), String> {
         let entries = crate::commands::ops::list_trash().map_err(|error| error.to_string())?;
         let mut size = 0_u64;

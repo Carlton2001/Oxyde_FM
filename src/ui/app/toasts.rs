@@ -30,7 +30,7 @@ impl OxydeApp {
             .await;
             let _ = this.update(cx, |this, cx| {
                 match result {
-                    Ok(Ok(())) => this.state.reload_quick_access_and_refresh(),
+                    Ok(Ok(())) => this.refresh_quick_access(cx),
                     Ok(Err(error)) => this.toast(
                         ToastKind::Error,
                         Message::ToastFailed,

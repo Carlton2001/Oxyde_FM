@@ -15,6 +15,7 @@ pub mod navigation;
 mod sizes;
 mod preferences;
 mod toasts;
+mod shell_features;
 use toasts::{Toast, ToastKind};
 pub(crate) mod network;
 pub mod selection;
@@ -436,6 +437,9 @@ pub struct OxydeApp {
     pub(super) drive_metadata_ready: bool,
     pub(super) drive_refresh_epoch: u64,
     pub _watcher_task: Option<Task<()>>,
+    pub(super) shell_features_task: Option<Task<()>>,
+    pub(super) quick_access_request: u64,
+    pub(crate) peek_status: oxyde_lib::platform::PeekStatus,
     pub _drive_refresh_task: Option<Task<()>>,
     pub(super) drive_details_task: Option<Task<()>>,
     pub(crate) ejecting_drive: bool,
@@ -888,6 +892,9 @@ impl OxydeApp {
             drive_metadata_ready: false,
             drive_refresh_epoch: 0,
             _watcher_task: None,
+            shell_features_task: None,
+            quick_access_request: 0,
+            peek_status: Default::default(),
             _drive_refresh_task: None,
             drive_details_task: None,
             ejecting_drive: false,
@@ -2275,6 +2282,7 @@ impl OxydeApp {
     }
     pub fn start_watcher_task(&mut self, cx: &mut Context<Self>) {
         self.start_drive_refresh_task(cx);
+        self.start_shell_features_task(cx);
         self.refresh_disk_images(cx);
         let changes = self.watcher_changes.clone();
         let h = self.handle.clone().expect("handle set");
@@ -2438,7 +2446,14 @@ impl Render for OxydeApp {
 
         let settings_keyboard = handle.clone();
         let mut root = div()
-            .on_key_down(move |event, _, cx| {
+            .on_key_down(move |event, window, cx| {
+                let peek = settings_keyboard.update(cx, |this, cx| {
+                    if this.focus_handle.is_focused(window) && this.peek_shortcut_matches(&event.keystroke) {
+                        this.peek_selected(cx);
+                        true
+                    } else { false }
+                });
+                if peek { cx.stop_propagation(); return; }
                 if event.keystroke.key == "escape" {
                     settings_keyboard.update(cx, |this, cx| {
                         if !this.context_menus.is_empty() {

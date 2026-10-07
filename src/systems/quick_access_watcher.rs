@@ -1,48 +1,52 @@
-use notify::{Config, RecommendedWatcher, RecursiveMode, Watcher};
-use std::path::PathBuf;
+use notify::{Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
+use std::path::Path;
+use std::sync::{
+    atomic::{AtomicU64, Ordering},
+    Arc,
+};
 
-pub fn setup_quick_access_watcher() {
-    #[cfg(target_os = "windows")]
-    {
-        std::thread::spawn(move || {
-            let app_data = std::env::var("APPDATA").unwrap_or_default();
-            if app_data.is_empty() {
-                return;
+/// Watching the parent survives creation/replacement of AutomaticDestinations files.
+pub fn watch(path: &Path, revision: Arc<AtomicU64>) -> Result<RecommendedWatcher, String> {
+    let mut watcher = RecommendedWatcher::new(
+        move |result: Result<Event, notify::Error>| match result {
+            Ok(event) if !matches!(event.kind, EventKind::Access(_)) => {
+                revision.fetch_add(1, Ordering::Release);
             }
-
-            let watch_path = PathBuf::from(app_data)
-                .join("Microsoft")
-                .join("Windows")
-                .join("Recent")
-                .join("AutomaticDestinations");
-
-            if !watch_path.exists() {
-                return;
+            Err(error) => {
+                log::warn!("Quick access watcher: {error}");
+                revision.fetch_add(1, Ordering::Release);
             }
+            _ => {}
+        },
+        Config::default(),
+    )
+    .map_err(|error| error.to_string())?;
+    watcher
+        .watch(path, RecursiveMode::Recursive)
+        .map_err(|error| error.to_string())?;
+    Ok(watcher)
+}
 
-            let watcher = RecommendedWatcher::new(
-                move |res| match res {
-                    Ok(_) => {
-                        // Quick Access files modified.
-                        // TODO: Notify GPUI via channels or shared state
-                        log::info!("Quick Access changed");
-                    }
-                    Err(e) => log::error!("Quick Access watcher error: {:?}", e),
-                },
-                Config::default(),
-            )
-            .ok();
-
-            if let Some(mut w) = watcher {
-                if let Err(e) = w.watch(&watch_path, RecursiveMode::NonRecursive) {
-                    log::error!("Failed to watch Quick Access folder: {:?}", e);
-                } else {
-                    // Keep the watcher alive in this thread
-                    loop {
-                        std::thread::sleep(std::time::Duration::from_secs(3600));
-                    }
-                }
-            }
-        });
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn observes_external_changes_and_stops_when_dropped() {
+        let root = tempfile::tempdir().unwrap();
+        let children = root.path().join("AutomaticDestinations");
+        let revision = Arc::new(AtomicU64::new(0));
+        let watcher = watch(root.path(), revision.clone()).unwrap();
+        std::fs::create_dir(&children).unwrap();
+        std::fs::write(children.join("fixture"), b"pinned").unwrap();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while revision.load(Ordering::Acquire) == 0 && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        assert!(revision.load(Ordering::Acquire) > 0);
+        drop(watcher);
+        let before = revision.load(Ordering::Acquire);
+        std::fs::write(children.join("fixture"), b"unpinned").unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        assert_eq!(revision.load(Ordering::Acquire), before);
     }
 }
