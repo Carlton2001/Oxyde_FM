@@ -22,9 +22,7 @@ fn tab_bar_button(id: impl Into<ElementId>, theme: &crate::ui::theme::OxydeTheme
 
 pub struct TabBar {
     id: ElementId,
-    start_children: Vec<AnyElement>,
     children: Vec<AnyElement>,
-    end_children: Vec<AnyElement>,
     scroll_state: crate::ui::workspace::TabStripState,
     on_new_tab: Option<Box<dyn Fn(&mut Window, &mut App) + 'static>>,
     drop_target_indicator: bool,
@@ -34,9 +32,7 @@ impl TabBar {
     pub fn new(id: impl Into<ElementId>) -> Self {
         Self {
             id: id.into(),
-            start_children: Vec::new(),
             children: Vec::new(),
-            end_children: Vec::new(),
             scroll_state: Default::default(),
             on_new_tab: None,
             drop_target_indicator: false,
@@ -65,18 +61,6 @@ impl TabBar {
 
     pub fn drop_target_indicator(mut self, show: bool) -> Self {
         self.drop_target_indicator = show;
-        self
-    }
-
-    #[allow(dead_code)]
-    pub fn start_child(mut self, child: impl IntoElement) -> Self {
-        self.start_children.push(child.into_any_element());
-        self
-    }
-
-    #[allow(dead_code)]
-    pub fn end_child(mut self, child: impl IntoElement) -> Self {
-        self.end_children.push(child.into_any_element());
         self
     }
 }
@@ -174,7 +158,6 @@ impl RenderOnce for TabBar {
                     .h(rems(0.0625))
                     .bg(theme.border),
             )
-            .child(h_flex().flex_none().children(self.start_children))
             .when(overflow, |d| {
                 d.child(scroll_button("tabs-left", "icons/arrow-left.svg", 1.0))
             })
@@ -257,6 +240,5 @@ impl RenderOnce for TabBar {
             })
             // Reserve a fixed button only while the tabs overflow.
             .children(fixed_button)
-            .child(h_flex().flex_none().children(self.end_children))
     }
 }

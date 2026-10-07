@@ -1,6 +1,4 @@
-use crate::models::{
-    CommandError, DriveInfo, QuickAccessItem, SessionManager, SnapRect, WinMenuItem,
-};
+use crate::models::{CommandError, DriveInfo, QuickAccessItem, SnapRect, WinMenuItem};
 use crate::utils::path_security::validate_path;
 use crate::WindowState;
 use log::info;
@@ -396,86 +394,6 @@ pub fn execute_native_menu_item(
         }
     }
     Ok(())
-}
-pub async fn get_mounted_images() -> Result<Vec<String>, CommandError> {
-    tokio::task::spawn_blocking(|| {
-        crate::platform::platform()
-            .mounted_disk_images()
-            .map(|images| images.into_iter().map(|image| image.image_path).collect())
-            .map_err(CommandError::SystemError)
-    })
-    .await
-    .map_err(|error| CommandError::SystemError(error.to_string()))?
-}
-
-pub async fn mount_disk_image(path: String) -> Result<(), CommandError> {
-    tokio::task::spawn_blocking(move || {
-        crate::platform::platform()
-            .mount_disk_image(&path)
-            .map(|_| ())
-            .map_err(CommandError::SystemError)
-    })
-    .await
-    .map_err(|error| CommandError::SystemError(error.to_string()))?
-}
-
-pub async fn unmount_disk_image(
-    session_manager: &SessionManager,
-    path: String,
-) -> Result<(), CommandError> {
-    let images = tokio::task::spawn_blocking(|| crate::platform::platform().mounted_disk_images())
-        .await
-        .map_err(|error| CommandError::SystemError(error.to_string()))?
-        .map_err(CommandError::SystemError)?;
-    let image = images
-        .into_iter()
-        .find(|image| {
-            image.image_path.eq_ignore_ascii_case(&path)
-                || image.roots.iter().any(|root| {
-                    root.trim_end_matches(['/', '\\'])
-                        .eq_ignore_ascii_case(path.trim_end_matches(['/', '\\']))
-                })
-        })
-        .ok_or_else(|| CommandError::SystemError("Image is not mounted".into()))?;
-    {
-        let mut session = session_manager
-            .0
-            .lock()
-            .map_err(|error| CommandError::SystemError(error.to_string()))?;
-        let clean_panel = |panel: &mut crate::models::session::PanelState| {
-            let affected = |path: &std::path::Path| {
-                image.roots.iter().any(|root| {
-                    path.to_string_lossy()
-                        .to_lowercase()
-                        .starts_with(&root.to_lowercase())
-                })
-            };
-            panel.tabs.retain(|tab| !affected(&tab.path));
-            if panel.tabs.is_empty() {
-                let id = uuid::Uuid::new_v4().to_string();
-                panel.tabs.push(crate::models::Tab {
-                    id: id.clone(),
-                    path: dirs::home_dir().unwrap_or_default(),
-                    back_stack: Vec::new(),
-                    forward_stack: Vec::new(),
-                    version: 0,
-                });
-                panel.active_tab_id = id;
-            } else if !panel.tabs.iter().any(|tab| tab.id == panel.active_tab_id) {
-                panel.active_tab_id = panel.tabs[0].id.clone();
-            }
-            panel.update_watcher();
-        };
-        clean_panel(&mut session.left_panel);
-        clean_panel(&mut session.right_panel);
-    }
-    tokio::task::spawn_blocking(move || {
-        crate::platform::platform()
-            .unmount_disk_image(&image.image_path)
-            .map_err(CommandError::SystemError)
-    })
-    .await
-    .map_err(|error| CommandError::SystemError(error.to_string()))?
 }
 
 pub fn oxide_sync_snap_rect(state: &WindowState, rect: SnapRect) {
@@ -898,13 +816,6 @@ mod cache_tests {
         let root = tempfile::tempdir().unwrap();
         std::fs::write(root.path().join("icons"), b"invalid directory").unwrap();
         assert!(clear_generated_cache(root.path()).is_err());
-    }
-}
-
-pub fn restart_app() {
-    if let Ok(current_exe) = std::env::current_exe() {
-        let _ = std::process::Command::new(current_exe).spawn();
-        std::process::exit(0);
     }
 }
 

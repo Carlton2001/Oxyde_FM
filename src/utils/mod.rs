@@ -19,24 +19,6 @@ pub mod hardware {
 }
 
 pub mod thumbnails {
-    pub fn get_thumbnail_raw(
-        path: String,
-    ) -> Result<image::RgbaImage, crate::models::CommandError> {
-        crate::platform::platform().thumbnail(path)
-    }
-
-    pub fn get_office_thumbnail_raw(
-        path: String,
-    ) -> Result<image::RgbaImage, crate::models::CommandError> {
-        crate::platform::platform().office_thumbnail(path)
-    }
-
-    pub fn get_pdf_thumbnail_raw(
-        path: String,
-    ) -> Result<image::RgbaImage, crate::models::CommandError> {
-        crate::platform::platform().pdf_thumbnail(path)
-    }
-
     pub fn stream_video_frames_sync<F>(
         path: String,
         on_frame: F,
@@ -45,10 +27,6 @@ pub mod thumbnails {
         F: FnMut(image::RgbaImage, std::time::Duration) -> bool + Send + 'static,
     {
         crate::platform::platform().video_frames(path, Box::new(on_frame))
-    }
-
-    pub fn get_office_text_preview(path: String) -> Result<String, crate::models::CommandError> {
-        crate::platform::platform().office_text_preview(path)
     }
 }
 

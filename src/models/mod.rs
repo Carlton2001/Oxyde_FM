@@ -3,7 +3,7 @@ pub mod file_entry;
 pub mod history;
 pub mod preferences;
 pub mod progress;
-pub mod session;
+pub mod sort;
 pub mod transaction;
 
 pub use error::CommandError;
@@ -17,7 +17,6 @@ pub use file_entry::{
 };
 pub use history::HistoryManager;
 pub use progress::ProgressEvent;
-pub use session::{SessionManager, SessionState, Tab};
 pub use transaction::{Transaction, TransactionDetails, TransactionType};
 
 pub mod config;

@@ -63,22 +63,6 @@ impl HistoryManager {
         }
     }
 
-    pub fn pop_undo(&self) -> Option<Transaction> {
-        if let Ok(mut state) = self.0.lock() {
-            state.undo_stack.pop()
-        } else {
-            None
-        }
-    }
-
-    pub fn pop_redo(&self) -> Option<Transaction> {
-        if let Ok(mut state) = self.0.lock() {
-            state.redo_stack.pop()
-        } else {
-            None
-        }
-    }
-
     pub fn last_undo(&self) -> Option<Transaction> {
         self.0.lock().ok()?.undo_stack.last().cloned()
     }
@@ -113,19 +97,6 @@ impl HistoryManager {
             cleanup_replacement_backups(&expired);
         }
         true
-    }
-
-    pub fn push_redo(&self, transaction: Transaction) {
-        if let Ok(mut state) = self.0.lock() {
-            state.redo_stack.push(transaction);
-        }
-    }
-
-    // For manual push back to undo if redo succeeds
-    pub fn push_undo_raw(&self, transaction: Transaction) {
-        if let Ok(mut state) = self.0.lock() {
-            state.undo_stack.push(transaction);
-        }
     }
 
     pub fn get_state(&self) -> HistoryState {

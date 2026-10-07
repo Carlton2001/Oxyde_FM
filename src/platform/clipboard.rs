@@ -215,47 +215,6 @@ pub fn set_clipboard_files(paths: Vec<String>, is_cut: bool) -> Result<(), Comma
     Ok(())
 }
 
-pub fn get_clipboard_text() -> Result<String, CommandError> {
-    unsafe {
-        if OpenClipboard(None).is_err() {
-            return Err(CommandError::SystemError(
-                "Failed to open clipboard".to_string(),
-            ));
-        }
-
-        let mut result = String::new();
-        if let Ok(handle) = GetClipboardData(CF_UNICODETEXT.0 as u32) {
-            if !handle.is_invalid() {
-                let ptr = GlobalLock(std::mem::transmute::<
-                    HANDLE,
-                    windows::Win32::Foundation::HGLOBAL,
-                >(handle));
-
-                if !ptr.is_null() {
-                    let mut len = 0;
-                    let wide_ptr = ptr as *const u16;
-                    while *wide_ptr.add(len) != 0 {
-                        len += 1;
-                    }
-
-                    let slice = std::slice::from_raw_parts(wide_ptr, len);
-                    if let Ok(s) = String::from_utf16(slice) {
-                        result = s;
-                    }
-
-                    let _ = GlobalUnlock(std::mem::transmute::<
-                        HANDLE,
-                        windows::Win32::Foundation::HGLOBAL,
-                    >(handle));
-                }
-            }
-        }
-
-        let _ = CloseClipboard();
-        Ok(result)
-    }
-}
-
 pub fn set_clipboard_text(text: String) -> Result<(), CommandError> {
     unsafe {
         OpenClipboard(None)

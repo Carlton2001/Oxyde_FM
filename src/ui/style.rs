@@ -158,11 +158,6 @@ pub fn h_flex() -> Div {
     div().flex().flex_row().items_center()
 }
 
-#[allow(dead_code)]
-pub fn v_flex() -> Div {
-    div().flex().flex_col()
-}
-
 #[cfg(test)]
 mod tests {
     use super::{grid_card_row_height, logical, row_height, DetailsColumnWidths, GridGeometry};

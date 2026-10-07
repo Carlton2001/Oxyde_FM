@@ -1,7 +1,6 @@
 use crate::models::CommandError;
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::sync::Mutex;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TrashDriveSettings {
     pub drive_path: String,
@@ -158,27 +157,10 @@ mod reset_tests {
     }
 }
 
-pub struct ConfigManager(pub Mutex<AppConfig>);
-
-impl Default for ConfigManager {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+/// Reads and atomically writes the configuration used by the GPUI workspace.
+pub struct ConfigManager;
 
 impl ConfigManager {
-    pub fn new() -> Self {
-        Self(Mutex::new(AppConfig::default()))
-    }
-
-    pub fn save(&self) -> Result<(), CommandError> {
-        let config = self
-            .0
-            .lock()
-            .map_err(|_| CommandError::SystemError("Failed to lock config".to_string()))?;
-        self.save_config(&config)
-    }
-
     pub fn config_path() -> Result<std::path::PathBuf, CommandError> {
         dirs::config_dir()
             .map(|dir| dir.join("oxyde").join("config.json"))
@@ -215,20 +197,6 @@ impl ConfigManager {
         temporary
             .persist(path)
             .map_err(|e| CommandError::IoError(e.to_string()))?;
-        Ok(())
-    }
-
-    pub fn save_config(&self, config: &AppConfig) -> Result<(), CommandError> {
-        Self::write_to_path(&Self::config_path()?, config)
-    }
-
-    pub fn load(&self) -> Result<(), CommandError> {
-        let loaded_config = Self::read_from_path(&Self::config_path()?)?;
-        let mut config = self
-            .0
-            .lock()
-            .map_err(|_| CommandError::SystemError("Failed to lock config".to_string()))?;
-        *config = loaded_config;
         Ok(())
     }
 }

@@ -34,50 +34,9 @@ pub struct DirBatchEvent {
     pub request_id: Option<u64>,
 }
 
-pub fn get_file_entry_from_metadata(
-    metadata: &fs::Metadata,
-    name: &str,
-    path: &std::path::Path,
-) -> FileEntry {
-    let modified = metadata
-        .modified()
-        .unwrap_or(SystemTime::UNIX_EPOCH)
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis() as u64;
-
-    let (is_hidden, is_system, is_reparse_point) =
-        crate::utils::get_file_attributes(metadata, name);
-    let is_readonly = metadata.permissions().readonly();
-    let is_dir = metadata.is_dir();
-    let is_symlink = metadata.file_type().is_symlink();
-    let is_junction = is_reparse_point && is_dir && !is_symlink;
-    let size = if is_dir { 0 } else { metadata.len() };
-
-    FileEntry {
-        name: name.to_string(),
-        path: path.to_string_lossy().to_string(),
-        is_dir,
-        is_hidden,
-        is_system,
-        is_symlink,
-        is_junction,
-        size,
-        modified,
-        is_readonly,
-        is_protected: false,
-        is_calculated: false,
-        folders_count: None,
-        files_count: None,
-        original_path: None,
-        network_details: None,
-        deleted_time: None,
-    }
-}
-
 pub async fn list_dir(
     path: String,
-    sort_config: Option<crate::models::session::SortConfig>,
+    sort_config: Option<crate::models::sort::SortConfig>,
     show_hidden: Option<bool>,
     show_system: Option<bool>,
     _force_refresh: Option<bool>,
@@ -166,7 +125,7 @@ pub fn is_network_server(path: &str) -> bool {
 
 fn list_dir_blocking(
     path: String,
-    sort_config: crate::models::session::SortConfig,
+    sort_config: crate::models::sort::SortConfig,
     show_hidden: bool,
     show_system: bool,
 ) -> Result<DirResponse, CommandError> {
@@ -229,9 +188,9 @@ fn list_dir_blocking(
     })
 }
 
-pub fn sort_file_entries(entries: &mut [FileEntry], config: &crate::models::session::SortConfig) {
-    use crate::models::session::SortDirection;
-    use crate::models::session::SortField;
+pub fn sort_file_entries(entries: &mut [FileEntry], config: &crate::models::sort::SortConfig) {
+    use crate::models::sort::SortDirection;
+    use crate::models::sort::SortField;
 
     entries.sort_unstable_by(|a, b| {
         // Folders-first by default.
@@ -747,72 +706,6 @@ pub fn resolve_shortcut_target(path: &str) -> Option<String> {
     get_shortcut_info(std::path::Path::new(path))
         .map(|info| info.target)
         .or_else(|| crate::platform::platform().resolve_shortcut(path))
-}
-
-pub async fn get_files_summary(paths: Vec<String>) -> Result<FileSummary, CommandError> {
-    let mut total_size = 0;
-    let mut files_count = 0;
-    let mut folders_count = 0;
-    let count = paths.len();
-
-    let mut common_parent: Option<String> = None;
-    let mut different_parents = false;
-
-    for (i, p) in paths.iter().enumerate() {
-        let pb = PathBuf::from(p);
-        let metadata = fs::metadata(&pb)?;
-
-        let parent = pb
-            .parent()
-            .map(|p| p.to_string_lossy().to_string())
-            .unwrap_or_default();
-
-        if i == 0 {
-            common_parent = Some(parent);
-        } else if let Some(ref cp) = common_parent {
-            if cp != &parent {
-                different_parents = true;
-            }
-        }
-
-        if pb.is_dir() {
-            folders_count += 1;
-            use walkdir::WalkDir;
-            for entry in WalkDir::new(&pb).into_iter().skip(1).filter_map(|e| e.ok()) {
-                if entry.file_type().is_file() {
-                    files_count += 1;
-                    total_size += entry.metadata().map(|m| m.len()).unwrap_or(0);
-                } else if entry.file_type().is_dir() {
-                    folders_count += 1;
-                }
-            }
-        } else {
-            files_count += 1;
-            total_size += metadata.len();
-        }
-    }
-
-    Ok(FileSummary {
-        count,
-        total_size,
-        files_count,
-        folders_count,
-        parent_path: if different_parents {
-            None
-        } else {
-            common_parent
-        },
-    })
-}
-
-pub async fn show_system_properties(path: String) -> Result<(), CommandError> {
-    let normalized_path = if path.starts_with("::{") || path.starts_with("?") {
-        path
-    } else {
-        validate_path(&path)?.to_string_lossy().into_owned()
-    };
-    crate::platform::platform().show_properties_dialog(&normalized_path);
-    Ok(())
 }
 
 pub async fn calculate_folder_size(path: String) -> Result<FolderSizeResult, CommandError> {

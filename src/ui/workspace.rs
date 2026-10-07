@@ -577,20 +577,6 @@ impl SavedLayoutNode {
 }
 
 impl LayoutNode {
-    #[allow(dead_code)]
-    pub fn is_pane(&self) -> bool {
-        matches!(self, LayoutNode::Pane(_))
-    }
-
-    #[allow(dead_code)]
-    pub fn as_pane_mut(&mut self) -> Option<&mut PaneState> {
-        if let LayoutNode::Pane(p) = self {
-            Some(p)
-        } else {
-            None
-        }
-    }
-
     pub fn find_pane_mut(&mut self, id: &str) -> Option<&mut PaneState> {
         match self {
             LayoutNode::Pane(p) if p.id == id => Some(p),
@@ -635,7 +621,6 @@ impl LayoutNode {
         }
     }
 
-    #[allow(dead_code)]
     pub fn visit_panes_mut<F>(&mut self, f: &mut F)
     where
         F: FnMut(&mut PaneState),
@@ -877,11 +862,6 @@ impl WorkspaceState {
         Some((state, sidebar_width))
     }
 
-    #[allow(dead_code)]
-    pub fn active_pane_id(&self) -> String {
-        self.active_pane_id.clone()
-    }
-
     pub fn find_pane_mut(&mut self, id: &str) -> Option<&mut PaneState> {
         self.layout.find_pane_mut(id)
     }
@@ -901,7 +881,6 @@ impl WorkspaceState {
         pane.tabs.iter_mut().find(|tab| tab.id == tab_id)
     }
 
-    #[allow(dead_code)]
     pub fn active_tab_mut(&mut self) -> Option<&mut TabState> {
         let id = self.active_pane_id.clone();
         self.find_pane_mut(&id).map(|p| p.active_tab_mut())
