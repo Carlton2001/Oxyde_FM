@@ -668,13 +668,13 @@ impl PreviewTask {
 
                     let path_clone = path.clone();
                     std::thread::spawn(move || {
-                        let _ = ::oxyde_lib::commands::thumbnails::stream_video_frames(
+                        let _ = ::oxyde_lib::platform::platform().video_frames(
                             path_clone,
-                            move |rgba, pts| {
+                            Box::new(move |rgba, pts| {
                                 let frame =
                                     Arc::new(RenderImage::new(vec![image::Frame::new(rgba)]));
                                 tx.blocking_send((frame, pts)).is_ok()
-                            },
+                            }),
                         );
                     });
 

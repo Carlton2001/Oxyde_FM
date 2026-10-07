@@ -25,7 +25,6 @@ pub struct TabBar {
     children: Vec<AnyElement>,
     scroll_state: crate::ui::workspace::TabStripState,
     on_new_tab: Option<Box<dyn Fn(&mut Window, &mut App) + 'static>>,
-    drop_target_indicator: bool,
 }
 
 impl TabBar {
@@ -35,7 +34,6 @@ impl TabBar {
             children: Vec::new(),
             scroll_state: Default::default(),
             on_new_tab: None,
-            drop_target_indicator: false,
         }
     }
 
@@ -59,10 +57,6 @@ impl TabBar {
         self
     }
 
-    pub fn drop_target_indicator(mut self, show: bool) -> Self {
-        self.drop_target_indicator = show;
-        self
-    }
 }
 
 impl ParentElement for TabBar {
@@ -194,23 +188,12 @@ impl RenderOnce for TabBar {
                             })
                             .children(self.children)
                             .children(inline_button)
-                            // Small gap for drop target at the end of tabs list
+                            // Trailing spacing in the scrollable strip.
                             .child(
                                 div()
-                                    .w(rems(0.25)) // Reduced from 8px
+                                    .w(rems(0.25))
                                     .flex_none()
-                                    .h_full()
-                                    .relative()
-                                    .child(
-                                        div()
-                                            .absolute()
-                                            .top_0()
-                                            .left_0()
-                                            .w(rems(0.125))
-                                            .h_full()
-                                            .bg(theme.accent)
-                                            .when(!self.drop_target_indicator, |s| s.opacity(0.0)),
-                                    ),
+                                    .h_full(),
                             ),
                     )
                     .child(

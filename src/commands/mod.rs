@@ -5,4 +5,3 @@ pub mod ops;
 pub mod search;
 pub mod sidebar;
 pub mod system;
-pub mod thumbnails;

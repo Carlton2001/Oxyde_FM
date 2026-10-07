@@ -147,10 +147,6 @@ impl Platform for LinuxPlatform {
             .find(|value| !value.is_empty())
             .and_then(|value| value.split(':').find(|locale| !locale.is_empty()).map(str::to_owned))
     }
-    fn name(&self) -> &'static str {
-        "linux"
-    }
-
     fn list_drives(&self, _skip_hardware_info: bool) -> Vec<DriveInfo> {
         // Systèmes de fichiers virtuels à ignorer
         const SKIP_FS: &[&str] = &[

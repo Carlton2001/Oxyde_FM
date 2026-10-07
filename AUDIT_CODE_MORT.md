@@ -286,3 +286,26 @@ Base : commit `b9bed49`. Ce lot provient d’une nouvelle recherche dans les sou
 - Retrait des types de bibliothèque `staticlib` et `cdylib` du manifeste. Aucun consommateur natif, export FFI ni script utilisant ces sorties n’a été identifié. Cargo conserve la bibliothèque Rust utilisée par le binaire, ce que confirme `cargo metadata`. L’annotation `allow(linker_messages)` liée aux sorties d’import/export est également retirée.
 
 Validation Windows : `cargo check --all-targets --offline` sans avertissement du projet ; `cargo test --all-targets --offline --quiet` avec 95 tests backend et 89 tests du binaire réussis (184 au total), aucun échec et deux tests natifs ignorés par défaut. Linux et les interactions du dialogue de corbeille n’ont pas été testés dans ce lot.
+
+### Lot 6 — listing, derniers relais et contrôles natifs
+
+Base : commit `4cff976`. Les appelants actuels ont été relus avant suppression ; ce lot complète la feuille de route par une nouvelle vérification du code.
+
+- Retrait du paramètre inutilisé `_force_refresh` de `list_dir`. Les appelants GPUI de navigation, de complétion et du menu de fil d’Ariane, ainsi que les tests, sont adaptés.
+- `list_dir` renvoie directement les entrées : aucun appelant ne lisait `DirResponse::summary`, `is_complete` ou `is_protected`. Le résumé calculé puis abandonné, `DirResponse` et `FileSummary` sont supprimés. Les erreurs, le tri et les filtres restent traités comme auparavant ; `FileEntry::is_protected`, utilisé pour les éléments individuels, est conservé.
+- Retrait du constructeur sans appelant `CommandError::new` et de `Platform::name` dans le trait et ses deux implémentations.
+- Retrait des deux relais de streaming vidéo dans `commands::thumbnails` et `utils::thumbnails`, puis de l’alias `models::Result` devenu inutilisé. L’infobulle appelle directement `Platform::video_frames` sur son thread existant, avec le même canal borné et les mêmes horodatages ; les moteurs natifs restent inchangés.
+- Ajout d’un test natif de conflit de restauration : un fichier temporaire est envoyé à la corbeille, puis un fichier est recréé au même emplacement. La restauration doit signaler le conflit, conserver le contenu du fichier présent et laisser l’original dans la corbeille. Le test retire ensuite uniquement son fichier bloquant et restaure sa fixture sous le nom d’origine, avant les assertions. Aucun fichier utilisateur n’est sélectionné.
+
+Validation Windows : `cargo check --all-targets --offline` sans avertissement du projet ; `cargo test --all-targets --offline --quiet` avec 95 tests backend et 89 tests du binaire réussis (184 au total), aucun échec et trois tests natifs ignorés par défaut. Le nouveau test `native_restore_conflict_preserves_existing_file_and_trash_item`, exécuté séparément avec `--ignored --exact`, a réussi. `cargo build --bin oxyde --offline` a également réussi.
+
+Contrôles visuels réalisés sur le binaire GPUI construit depuis cette branche : le dialogue des propriétés de corbeille charge les réglages natifs des lecteurs C, D et E ; la sélection du lecteur D affiche sa capacité, et le passage de Mo à pourcentage fonctionne. Le dialogue est fermé avec Annuler, sans sauvegarder de réglages natifs. L’agrandissement de la fenêtre et le retour à sa taille initiale fonctionnent. La fenêtre de test a ensuite été fermée.
+
+Deux validations restent ouvertes :
+
+- Le panneau Snap Layouts au survol du bouton Maximiser n’a pas été validé visuellement : l’outil de contrôle utilisé ne fournit pas de déplacement de souris sans clic. Le contrôle visuel ci-dessus porte sur Maximiser/Restaurer.
+- `cargo check --all-targets --target x86_64-unknown-linux-gnu --offline` ne peut pas aboutir : `accesskit_atspi_common v0.19.1` manque dans le cache et Cargo devrait la télécharger. Aucune compilation Linux réussie n’est revendiquée.
+
+### Correction signalée après le lot 6 — témoin d’insertion des onglets
+
+Lors d’un glissement entre panneaux vers la fin de la liste d’onglets, deux traits utilisaient le même index de dépôt : le bord droit du dernier onglet dans `layout.rs` et un second trait après le bouton Nouvel onglet dans `TabBar`. Le second rendu, son champ et son builder sont supprimés. Les marqueurs placés aux limites des onglets, les zones de dépôt et la géométrie de la barre restent conservés. `cargo check --all-targets --offline` a réussi sans avertissement du projet. La vérification visuelle est laissée à l’utilisateur, conformément à sa préférence ; Computer Use n’est pas relancé pour cette correction.

@@ -402,7 +402,6 @@ impl OxydeApp {
                     None,
                     Some(show_hidden),
                     Some(show_system),
-                    None,
                 )
                 .await;
                 let handle_for_subdirectory_check = handle.clone();
@@ -419,8 +418,8 @@ impl OxydeApp {
                             return;
                         }
                         match result {
-                            Ok(response) => {
-                                tab.files = response.entries;
+                            Ok(entries) => {
+                                tab.files = entries;
                                 tab.sort_files();
                                 tab.update_cache();
                                 tab.load_status = crate::ui::workspace::TabLoadStatus::Ready;

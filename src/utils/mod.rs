@@ -18,18 +18,6 @@ pub mod hardware {
     }
 }
 
-pub mod thumbnails {
-    pub fn stream_video_frames_sync<F>(
-        path: String,
-        on_frame: F,
-    ) -> Result<(), crate::models::CommandError>
-    where
-        F: FnMut(image::RgbaImage, std::time::Duration) -> bool + Send + 'static,
-    {
-        crate::platform::platform().video_frames(path, Box::new(on_frame))
-    }
-}
-
 use unicode_normalization::UnicodeNormalization;
 
 /// Removes accents from a string

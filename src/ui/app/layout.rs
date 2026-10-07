@@ -385,9 +385,6 @@ impl OxydeApp {
                 self.state.layout.visit_panes(&mut |_| pane_count += 1);
                 let can_close_tab = pane_count > 1 || tabs_count > 1;
                 let can_close_other_tabs = tabs_count > 1;
-                let is_drop_target_at_end = self.drop_target_pane.as_ref() == Some(&p_id)
-                    && self.drop_target_idx == Some(tabs_count);
-
                 let mut tab_bar = TabBar::new(SharedString::from(format!("tab-bar-{}", p_id)))
                     .scroll_state(pane.tab_strip.clone(), pane.active_tab().id.clone(), active_idx)
                     .on_new_tab({
@@ -398,8 +395,7 @@ impl OxydeApp {
                                 this.add_tab(&p_id_cap, "C:/".to_string(), true, cx);
                             });
                         }
-                    })
-                    .drop_target_indicator(is_drop_target_at_end);
+                    });
 
                 for (t_ix, tab_data) in pane.tabs.iter().enumerate() {
                     let is_tab_active = t_ix == active_idx;

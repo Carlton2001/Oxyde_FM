@@ -1670,6 +1670,44 @@ mod trash_restore_tests {
     use super::*;
 
     #[test]
+    #[ignore = "uses only a generated fixture to check a native Recycle Bin restore conflict"]
+    fn native_restore_conflict_preserves_existing_file_and_trash_item() {
+        let root = tempfile::tempdir().unwrap();
+        let file = root.path().join("Conflit école.txt");
+        std::fs::write(&file, b"original fixture").unwrap();
+        crate::platform::platform()
+            .shell_delete(std::slice::from_ref(&file), true)
+            .unwrap();
+        let entry = list_trash()
+            .unwrap()
+            .into_iter()
+            .find(|entry| PathBuf::from(&entry.original_path) == file)
+            .unwrap();
+        std::fs::write(&file, b"existing fixture").unwrap();
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        let result = runtime.block_on(restore_items(vec![entry.path.clone()]));
+        let existing = std::fs::read(&file).unwrap();
+        let still_in_trash = list_trash()
+            .unwrap()
+            .iter()
+            .any(|item| item.path == entry.path);
+
+        // Remove only the generated blocking file, then restore the fixture
+        // before assertions so an assertion failure does not leave it in trash.
+        let restored = if still_in_trash {
+            std::fs::remove_file(&file).unwrap();
+            runtime.block_on(restore_items(vec![entry.path]))
+        } else {
+            Ok(Vec::new())
+        };
+        assert!(result.is_err(), "a restore conflict must be reported");
+        assert_eq!(existing, b"existing fixture");
+        assert!(still_in_trash, "the original fixture must remain restorable");
+        assert_eq!(restored.unwrap(), vec![file.to_string_lossy().to_string()]);
+        assert_eq!(std::fs::read(&file).unwrap(), b"original fixture");
+    }
+
+    #[test]
     #[ignore = "sends only generated fixtures to the native Windows Recycle Bin and restores them"]
     fn native_restore_preserves_original_names() {
         let root = tempfile::tempdir().unwrap();

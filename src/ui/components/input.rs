@@ -552,13 +552,11 @@ impl TextInput {
                     None,
                     Some(true),
                     Some(true),
-                    None,
                 )
                 .await;
                 let mut paths = result
-                    .map(|listing| {
-                        listing
-                            .entries
+                    .map(|entries| {
+                        entries
                             .into_iter()
                             .filter(|entry| {
                                 entry.is_dir && completion_matches(&entry.name, &prefix)

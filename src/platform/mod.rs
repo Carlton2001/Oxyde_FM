@@ -44,7 +44,6 @@ pub trait Platform: Send + Sync {
     /// Load native icons on a background worker.
     fn file_icon(&self, path: String, large: bool) -> Result<image::RgbaImage, String>;
 
-    fn name(&self) -> &'static str;
     /// Current user's regional formatting locale.
     fn regional_locale(&self) -> Option<String>;
     /// Current user's interface language, independent of regional date formats.

@@ -56,10 +56,3 @@ impl From<windows::core::Error> for CommandError {
         CommandError::SystemError(err.to_string())
     }
 }
-
-// Helper for convenient error creation
-impl CommandError {
-    pub fn new(msg: impl Into<String>) -> Self {
-        CommandError::Other(msg.into())
-    }
-}

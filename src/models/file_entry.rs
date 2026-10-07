@@ -84,15 +84,6 @@ pub struct FileProperties {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FileSummary {
-    pub count: usize,
-    pub total_size: u64,
-    pub files_count: usize,
-    pub folders_count: usize,
-    pub parent_path: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FolderSizeResult {
     pub size: u64,
     pub folders_count: u64,

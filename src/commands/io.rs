@@ -1,7 +1,6 @@
-use crate::models::{CommandError, FileEntry, FileProperties, FileSummary, FolderSizeResult};
+use crate::models::{CommandError, FileEntry, FileProperties, FolderSizeResult};
 use crate::utils::path_security::validate_path;
 use log::info;
-use serde::Serialize;
 use std::fs;
 use std::path::PathBuf;
 use std::time::SystemTime;
@@ -15,21 +14,12 @@ use windows::Win32::UI::Shell::PropertiesSystem::{
     IPropertyStore, SHGetPropertyStoreFromParsingName, GPS_DEFAULT,
 };
 
-#[derive(Serialize)]
-pub struct DirResponse {
-    pub entries: Vec<FileEntry>,
-    pub summary: FileSummary,
-    pub is_complete: bool,
-    pub is_protected: bool,
-}
-
 pub async fn list_dir(
     path: String,
     sort_config: Option<crate::models::sort::SortConfig>,
     show_hidden: Option<bool>,
     show_system: Option<bool>,
-    _force_refresh: Option<bool>,
-) -> Result<DirResponse, CommandError> {
+) -> Result<Vec<FileEntry>, CommandError> {
     let show_hidden = show_hidden.unwrap_or(false);
     let show_system = show_system.unwrap_or(false);
     let sort_config = sort_config.unwrap_or_default();
@@ -60,18 +50,7 @@ pub async fn list_dir(
                 deleted_time: Some(t.deleted_time as i64),
             })
             .collect();
-        return Ok(DirResponse {
-            entries,
-            summary: FileSummary {
-                count: 0,
-                total_size: 0,
-                files_count: 0,
-                folders_count: 0,
-                parent_path: Some(path),
-            },
-            is_complete: true,
-            is_protected: false,
-        });
+        return Ok(entries);
     }
 
     #[cfg(target_os = "windows")]
@@ -88,13 +67,7 @@ pub async fn list_dir(
                 .await
                 .map_err(|error| CommandError::IoError(error.to_string()))?
                 .map_err(CommandError::SystemError)?;
-        let summary = calculate_summary(&entries, Some(path));
-        return Ok(DirResponse {
-            entries,
-            summary,
-            is_complete: true,
-            is_protected: false,
-        });
+        return Ok(entries);
     }
 
     tokio::task::spawn_blocking(move || {
@@ -117,7 +90,7 @@ fn list_dir_blocking(
     sort_config: crate::models::sort::SortConfig,
     show_hidden: bool,
     show_system: bool,
-) -> Result<DirResponse, CommandError> {
+) -> Result<Vec<FileEntry>, CommandError> {
     let path_buf = PathBuf::from(&path);
     if let Some((archive, internal)) = crate::utils::archive::split_virtual_path(&path) {
         if archive.is_file() {
@@ -126,13 +99,7 @@ fn list_dir_blocking(
                 internal,
             )?;
             sort_file_entries(&mut entries, &sort_config);
-            let summary = calculate_summary(&entries, Some(path));
-            return Ok(DirResponse {
-                entries,
-                summary,
-                is_complete: true,
-                is_protected: false,
-            });
+            return Ok(entries);
         }
     }
     let mut entries = Vec::new();
@@ -167,14 +134,7 @@ fn list_dir_blocking(
     }
 
     sort_file_entries(&mut entries, &sort_config);
-    let summary = calculate_summary(&entries, Some(path));
-
-    Ok(DirResponse {
-        entries,
-        summary,
-        is_complete: true,
-        is_protected: false,
-    })
+    Ok(entries)
 }
 
 pub fn sort_file_entries(entries: &mut [FileEntry], config: &crate::models::sort::SortConfig) {
@@ -235,29 +195,6 @@ pub fn sort_file_entries(entries: &mut [FileEntry], config: &crate::models::sort
             SortDirection::Desc => cmp.reverse(),
         }
     });
-}
-
-fn calculate_summary(entries: &[FileEntry], parent_path: Option<String>) -> FileSummary {
-    let mut total_size = 0;
-    let mut files_count = 0;
-    let mut folders_count = 0;
-
-    for e in entries.iter() {
-        if e.is_dir {
-            folders_count += 1;
-        } else {
-            files_count += 1;
-            total_size += e.size;
-        }
-    }
-
-    FileSummary {
-        count: entries.len(),
-        total_size,
-        files_count,
-        folders_count,
-        parent_path,
-    }
 }
 
 pub async fn rename_item_controlled(
@@ -791,7 +728,7 @@ mod directory_tests {
         let missing = root.path().join("missing").to_string_lossy().into_owned();
         let runtime = tokio::runtime::Runtime::new().unwrap();
         assert!(runtime
-            .block_on(list_dir(missing, None, None, None, None))
+            .block_on(list_dir(missing, None, None, None))
             .is_err());
     }
 
@@ -816,12 +753,11 @@ mod directory_tests {
                     None,
                     None,
                     None,
-                    None,
                 ))
                 .unwrap();
-            assert_eq!(root.entries.len(), 1);
+            assert_eq!(root.len(), 1);
             assert_eq!(
-                root.entries[0].path,
+                root[0].path,
                 archive.join("folder").to_string_lossy()
             );
             let nested = runtime
@@ -830,12 +766,11 @@ mod directory_tests {
                     None,
                     None,
                     None,
-                    None,
                 ))
                 .unwrap();
-            assert_eq!(nested.entries.len(), 1);
+            assert_eq!(nested.len(), 1);
             assert_eq!(
-                std::path::PathBuf::from(&nested.entries[0].path),
+                std::path::PathBuf::from(&nested[0].path),
                 archive.join("folder").join("nested").join("file.txt")
             );
         }

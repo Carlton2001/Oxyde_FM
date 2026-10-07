@@ -6,12 +6,11 @@ pub mod sort;
 pub mod transaction;
 
 pub use error::CommandError;
-pub type Result<T> = std::result::Result<T, CommandError>;
 
 pub use config::{AppConfig, ConfigManager};
 pub use file_entry::{
     get_file_entry_from_path, ConflictAction, ConflictEntry, ConflictResponse, DriveInfo,
-    FileEntry, FileProperties, FileSummary, FolderSizeResult, NetResource, QuickAccessItem,
+    FileEntry, FileProperties, FolderSizeResult, NetResource, QuickAccessItem,
     ShortcutInfo, SidebarNode, TrashEntry, WinMenuItem,
 };
 pub use history::HistoryManager;

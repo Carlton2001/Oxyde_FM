@@ -305,10 +305,6 @@ impl Platform for WindowsPlatform {
         };
         (length > 0).then(|| String::from_utf16_lossy(&buffer[..length as usize - 1]))
     }
-    fn name(&self) -> &'static str {
-        "windows"
-    }
-
     fn list_drives(&self, skip_hardware_info: bool) -> Vec<DriveInfo> {
         super::windows_drives::list_drives(skip_hardware_info)
     }
