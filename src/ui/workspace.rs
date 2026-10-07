@@ -1,3 +1,4 @@
+use crate::ui::date_groups::DateGroup;
 use crate::ui::i18n::Message;
 use gpui::{ScrollHandle, UniformListScrollHandle};
 use oxyde_lib::commands::system::{get_drives, get_quick_access_items};
@@ -132,45 +133,6 @@ impl SizeCategory {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum DateCategory {
-    Aujourdhui,
-    Hier,
-    CetteSemaine,
-    LaSemaineDerniere,
-    PlusAncien,
-}
-
-impl DateCategory {
-    pub fn message(&self) -> Message {
-        match self {
-            Self::Aujourdhui => Message::DateToday,
-            Self::Hier => Message::DateYesterday,
-            Self::CetteSemaine => Message::DateThisWeek,
-            Self::LaSemaineDerniere => Message::DateLastWeek,
-            Self::PlusAncien => Message::DateOlder,
-        }
-    }
-
-    pub fn matches(&self, modified_ms: u64) -> bool {
-        let now_ms = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or(std::time::Duration::from_secs(0))
-            .as_millis() as u64;
-        let elapsed_ms = now_ms.saturating_sub(modified_ms);
-        let hour_ms = 3600 * 1000;
-        let day_ms = 24 * hour_ms;
-
-        match self {
-            Self::Aujourdhui => elapsed_ms < day_ms,
-            Self::Hier => elapsed_ms >= day_ms && elapsed_ms < 2 * day_ms,
-            Self::CetteSemaine => elapsed_ms >= 2 * day_ms && elapsed_ms < 7 * day_ms,
-            Self::LaSemaineDerniere => elapsed_ms >= 7 * day_ms && elapsed_ms < 14 * day_ms,
-            Self::PlusAncien => elapsed_ms >= 14 * day_ms,
-        }
-    }
-}
-
 #[derive(Clone)]
 pub struct TabState {
     pub quick_search: Option<crate::ui::app::search::QuickSearchState>,
@@ -197,7 +159,7 @@ pub struct TabState {
     pub filter_name: String,
     pub filter_original_location: String,
     pub filter_sizes: std::collections::HashSet<SizeCategory>,
-    pub filter_dates: std::collections::HashSet<DateCategory>,
+    pub filter_dates: std::collections::HashSet<DateGroup>,
     pub selected_paths: std::collections::HashSet<String>,
     pub selection_anchor: Option<String>,
     pub keyboard_cursor: Option<String>,
@@ -286,6 +248,10 @@ impl TabState {
     }
 
     pub fn update_cache(&mut self) {
+        self.update_cache_on(chrono::Local::now().date_naive());
+    }
+
+    fn update_cache_on(&mut self, today: chrono::NaiveDate) {
         if !self.filter_types.is_empty()
             || !self.filter_name.is_empty()
             || !self.filter_original_location.is_empty()
@@ -324,7 +290,7 @@ impl TabState {
                     let matches_date = if self.filter_dates.is_empty() {
                         true
                     } else {
-                        self.filter_dates.iter().any(|cat| cat.matches(f.modified))
+                        self.filter_dates.contains(&DateGroup::for_timestamp(f.modified, today))
                     };
                     let matches_location = self.filter_original_location.is_empty() || f.original_path.as_deref()
                         .and_then(|path| std::path::Path::new(path).parent())
@@ -1289,6 +1255,133 @@ impl WorkspaceState {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn date_filter_keeps_previous_calendar_day_after_midnight() {
+        use chrono::{Local, TimeZone};
+        let now = Local
+            .with_ymd_and_hms(2026, 10, 7, 0, 10, 0)
+            .single()
+            .unwrap();
+        let modified = Local
+            .with_ymd_and_hms(2026, 10, 6, 23, 50, 0)
+            .single()
+            .unwrap();
+        let mut tab = super::TabState::new("date-filter".into(), "C:\\".into());
+        tab.files = vec![oxyde_lib::models::FileEntry {
+            name: "previous-day.txt".into(),
+            modified: modified.timestamp_millis() as u64,
+            ..Default::default()
+        }];
+        tab.filter_dates.insert(DateGroup::Today);
+        tab.update_cache_on(now.date_naive());
+        assert!(tab.filtered_files().is_empty());
+        tab.filter_dates = std::collections::HashSet::from([DateGroup::Yesterday]);
+        tab.update_cache_on(now.date_naive());
+        assert_eq!(tab.filtered_files()[0].name, "previous-day.txt");
+    }
+
+    #[test]
+    fn date_filters_counts_and_select_all_share_the_six_calendar_groups() {
+        use chrono::{Local, TimeZone};
+        let today = chrono::NaiveDate::from_ymd_opt(2026, 10, 28).unwrap();
+        let mut tab = super::TabState::new("date-filter".into(), "C:\\".into());
+        tab.files = [
+            (10, 29),
+            (10, 28),
+            (10, 27),
+            (10, 26),
+            (10, 25),
+            (10, 19),
+            (10, 18),
+            (10, 1),
+            (9, 30),
+        ]
+        .into_iter()
+        .map(|(month, day)| oxyde_lib::models::FileEntry {
+            name: format!("{month}-{day}.txt"),
+            modified: Local
+                .with_ymd_and_hms(2026, month, day, 12, 0, 0)
+                .single()
+                .unwrap()
+                .timestamp_millis() as u64,
+            ..Default::default()
+        })
+        .collect();
+        tab.files.push(oxyde_lib::models::FileEntry {
+            name: "invalid.txt".into(),
+            modified: u64::MAX,
+            ..Default::default()
+        });
+        let counts = crate::ui::date_groups::counts_by_date(&tab.files, today);
+        assert_eq!(counts.len(), DateGroup::ALL.len());
+        for (group, count) in [
+            (DateGroup::Today, 2),
+            (DateGroup::Yesterday, 1),
+            (DateGroup::ThisWeek, 1),
+            (DateGroup::LastWeek, 2),
+            (DateGroup::ThisMonth, 2),
+            (DateGroup::Older, 2),
+        ] {
+            assert_eq!(counts[&group], count);
+            tab.filter_dates = std::collections::HashSet::from([group]);
+            tab.update_cache_on(today);
+            assert_eq!(tab.filtered_files().len() as u64, count);
+            assert!(tab
+                .filtered_files()
+                .iter()
+                .all(|file| DateGroup::for_timestamp(file.modified, today) == group));
+        }
+        tab.filter_dates.extend(DateGroup::ALL);
+        tab.update_cache_on(today);
+        assert_eq!(
+            tab.filtered_files()
+                .iter()
+                .map(|file| &file.name)
+                .collect::<Vec<_>>(),
+            tab.files.iter().map(|file| &file.name).collect::<Vec<_>>()
+        );
+        tab.filter_dates =
+            std::collections::HashSet::from([DateGroup::Today, DateGroup::ThisMonth]);
+        tab.filter_name = "10-1.".into();
+        tab.update_cache_on(today);
+        assert_eq!(tab.filtered_files().len(), 1);
+        assert_eq!(tab.filtered_files()[0].name, "10-1.txt");
+    }
+
+    #[test]
+    fn monday_filter_uses_calendar_week_and_yesterday_precedence() {
+        use chrono::{Local, TimeZone};
+        let today = chrono::NaiveDate::from_ymd_opt(2026, 10, 5).unwrap();
+        let mut tab = super::TabState::new("date-filter".into(), "C:\\".into());
+        tab.files = [(10, 5), (10, 4), (10, 3), (9, 28), (9, 27)]
+            .into_iter()
+            .map(|(month, day)| oxyde_lib::models::FileEntry {
+                name: format!("{month}-{day}.txt"),
+                modified: Local
+                    .with_ymd_and_hms(2026, month, day, 12, 0, 0)
+                    .single()
+                    .unwrap()
+                    .timestamp_millis() as u64,
+                ..Default::default()
+            })
+            .collect();
+        tab.filter_dates.insert(DateGroup::ThisWeek);
+        tab.update_cache_on(today);
+        assert!(tab.filtered_files().is_empty());
+        tab.filter_dates = std::collections::HashSet::from([DateGroup::LastWeek]);
+        tab.update_cache_on(today);
+        assert_eq!(
+            tab.filtered_files()
+                .iter()
+                .map(|file| file.name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["10-3.txt", "9-28.txt"]
+        );
+        tab.filter_dates = std::collections::HashSet::from([DateGroup::Yesterday]);
+        tab.update_cache_on(today);
+        assert_eq!(tab.filtered_files()[0].name, "10-4.txt");
+    }
+
     #[test]
     fn trash_location_filter_matches_displayed_parent_and_combines_with_name() {
         let mut tab = super::TabState::new("trash".into(), "trash://".into());

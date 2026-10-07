@@ -3101,26 +3101,13 @@ impl Render for OxydeApp {
 
                             let (label, should_clear) =
                                 if let Some(p) = self.state.find_pane(&pid_cap) {
-                                    use crate::ui::workspace::DateCategory;
                                     let tab = p.active_tab();
-                                    let categories = [
-                                        DateCategory::Aujourdhui,
-                                        DateCategory::Hier,
-                                        DateCategory::CetteSemaine,
-                                        DateCategory::LaSemaineDerniere,
-                                        DateCategory::PlusAncien,
-                                    ];
-                                    let mut present = std::collections::HashSet::new();
-                                    for f in &tab.files {
-                                        for cat in &categories {
-                                            if cat.matches(f.modified) {
-                                                present.insert(*cat);
-                                                break;
-                                            }
-                                        }
-                                    }
-                                    let is_full = !present.is_empty()
-                                        && present.iter().all(|c| tab.filter_dates.contains(c));
+                                    let counts = crate::ui::date_groups::counts_by_date(
+                                        &tab.files,
+                                        chrono::Local::now().date_naive(),
+                                    );
+                                    let is_full = !counts.is_empty()
+                                        && counts.keys().all(|group| tab.filter_dates.contains(group));
                                     if is_full {
                                         (Message::DeselectAllChecks, true)
                                     } else {
@@ -3143,14 +3130,8 @@ impl Render for OxydeApp {
                                         this.clear_filter_dates(&pid_inner, cx);
                                     } else {
                                         if let Some(p) = this.state.find_pane_mut(&pid_inner) {
-                                            use crate::ui::workspace::DateCategory;
                                             let tab = p.active_tab_mut();
-                                            tab.filter_dates.insert(DateCategory::Aujourdhui);
-                                            tab.filter_dates.insert(DateCategory::Hier);
-                                            tab.filter_dates.insert(DateCategory::CetteSemaine);
-                                            tab.filter_dates
-                                                .insert(DateCategory::LaSemaineDerniere);
-                                            tab.filter_dates.insert(DateCategory::PlusAncien);
+                                            tab.filter_dates.extend(crate::ui::date_groups::DateGroup::ALL);
                                             tab.update_cache();
                                         }
                                     }

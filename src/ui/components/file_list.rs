@@ -2015,24 +2015,8 @@ fn render_headers(
     let date_filtered = if tab.filter_dates.is_empty() {
         false
     } else {
-        use crate::ui::workspace::DateCategory;
-        let categories = [
-            DateCategory::Aujourdhui,
-            DateCategory::Hier,
-            DateCategory::CetteSemaine,
-            DateCategory::LaSemaineDerniere,
-            DateCategory::PlusAncien,
-        ];
-        let mut present = std::collections::HashSet::new();
-        for f in &tab.files {
-            for cat in &categories {
-                if cat.matches(f.modified) {
-                    present.insert(*cat);
-                    break;
-                }
-            }
-        }
-        !present.iter().all(|c| tab.filter_dates.contains(c))
+        let counts = crate::ui::date_groups::counts_by_date(&tab.files, chrono::Local::now().date_naive());
+        !counts.keys().all(|group| tab.filter_dates.contains(group))
     };
 
     div()
@@ -2343,30 +2327,18 @@ pub fn get_date_filter_items(
     handle: Entity<OxydeApp>,
     pane_id: String,
     files: Vec<oxyde_lib::models::FileEntry>,
-    current_filters: std::collections::HashSet<crate::ui::workspace::DateCategory>,
+    current_filters: std::collections::HashSet<crate::ui::date_groups::DateGroup>,
     pos: Point<Pixels>,
 ) -> Vec<crate::ui::components::dropdown::DropdownItem> {
     use crate::ui::components::dropdown::{DropdownItem, IconName};
-    use crate::ui::workspace::DateCategory;
+    use crate::ui::date_groups::DateGroup;
     use std::rc::Rc;
 
-    let categories = [
-        DateCategory::Aujourdhui,
-        DateCategory::Hier,
-        DateCategory::CetteSemaine,
-        DateCategory::LaSemaineDerniere,
-        DateCategory::PlusAncien,
-    ];
-
-    let mut present_categories = std::collections::HashMap::<_, u64>::new();
-    for f in &files {
-        for cat in &categories {
-            if cat.matches(f.modified) {
-                *present_categories.entry(*cat).or_default() += 1;
-                break;
-            }
-        }
-    }
+    let categories = DateGroup::ALL;
+    let present_categories = crate::ui::date_groups::counts_by_date(
+        &files,
+        chrono::Local::now().date_naive(),
+    );
 
     let mut items = Vec::new();
 

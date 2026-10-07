@@ -1,7 +1,7 @@
 use crate::ui::i18n::Message;
 use chrono::{Datelike, Duration, Local, NaiveDate};
 use oxyde_lib::models::FileEntry;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum DateGroup {
@@ -49,12 +49,27 @@ impl DateGroup {
         }
     }
     pub fn for_timestamp(ms: u64, today: NaiveDate) -> Self {
+        Self::for_timestamp_in(ms, today, &Local)
+    }
+
+    fn for_timestamp_in<T: chrono::TimeZone>(ms: u64, today: NaiveDate, timezone: &T) -> Self {
         i64::try_from(ms)
             .ok()
             .and_then(chrono::DateTime::from_timestamp_millis)
-            .map(|date| Self::for_date(date.with_timezone(&Local).date_naive(), today))
+            .map(|date| Self::for_date(date.with_timezone(timezone).date_naive(), today))
             .unwrap_or(Self::Older)
     }
+}
+
+/// Counts the same exclusive calendar periods used for grouping and filtering.
+pub fn counts_by_date(files: &[FileEntry], today: NaiveDate) -> HashMap<DateGroup, u64> {
+    let mut counts = HashMap::new();
+    for file in files {
+        *counts
+            .entry(DateGroup::for_timestamp(file.modified, today))
+            .or_default() += 1;
+    }
+    counts
 }
 
 #[derive(Clone, Debug)]
@@ -165,6 +180,93 @@ mod tests {
             DateGroup::Yesterday
         );
         assert_eq!(DateGroup::for_timestamp(u64::MAX, today), DateGroup::Older);
+    }
+
+    #[test]
+    fn calendar_groups_keep_priority_across_month_and_year_boundaries() {
+        for (today, modified, expected) in [
+            (date(2027, 1, 1), date(2026, 12, 31), DateGroup::Yesterday),
+            (date(2027, 1, 1), date(2026, 12, 28), DateGroup::ThisWeek),
+            (date(2027, 1, 1), date(2026, 12, 27), DateGroup::LastWeek),
+            (date(2027, 1, 1), date(2026, 12, 20), DateGroup::Older),
+            (date(2026, 10, 1), date(2026, 9, 30), DateGroup::Yesterday),
+            (date(2026, 10, 1), date(2026, 9, 28), DateGroup::ThisWeek),
+            (date(2026, 10, 28), date(2026, 10, 18), DateGroup::ThisMonth),
+            (date(2026, 10, 28), date(2026, 10, 29), DateGroup::Today),
+        ] {
+            assert_eq!(DateGroup::for_date(modified, today), expected);
+        }
+    }
+
+    #[test]
+    fn local_calendar_day_wins_over_elapsed_hours_with_offset_changes() {
+        use chrono::{FixedOffset, TimeZone};
+        let winter = FixedOffset::east_opt(3600).unwrap();
+        let summer = FixedOffset::east_opt(7200).unwrap();
+        // A 23-hour day: yesterday is still yesterday before 24 hours elapse.
+        let now = summer
+            .with_ymd_and_hms(2026, 3, 30, 0, 1, 0)
+            .single()
+            .unwrap();
+        let modified = winter
+            .with_ymd_and_hms(2026, 3, 29, 0, 5, 0)
+            .single()
+            .unwrap();
+        assert!(now.signed_duration_since(modified).num_hours() < 24);
+        assert_eq!(
+            DateGroup::for_timestamp_in(
+                modified.timestamp_millis() as u64,
+                now.date_naive(),
+                &winter
+            ),
+            DateGroup::Yesterday
+        );
+        // A 25-hour day: today stays today after 24 hours have elapsed.
+        let now = winter
+            .with_ymd_and_hms(2026, 10, 25, 23, 30, 0)
+            .single()
+            .unwrap();
+        let modified = summer
+            .with_ymd_and_hms(2026, 10, 25, 0, 5, 0)
+            .single()
+            .unwrap();
+        assert!(now.signed_duration_since(modified).num_minutes() > 24 * 60);
+        assert_eq!(
+            DateGroup::for_timestamp_in(
+                modified.timestamp_millis() as u64,
+                now.date_naive(),
+                &summer
+            ),
+            DateGroup::Today
+        );
+    }
+
+    #[test]
+    fn timestamp_conversion_uses_the_local_date_and_rejects_invalid_values() {
+        use chrono::{FixedOffset, TimeZone};
+        let timezone = FixedOffset::east_opt(7200).unwrap();
+        let modified = chrono::Utc
+            .with_ymd_and_hms(2026, 10, 6, 22, 30, 0)
+            .single()
+            .unwrap();
+        let today = date(2026, 10, 7);
+        assert_eq!(
+            DateGroup::for_timestamp_in(modified.timestamp_millis() as u64, today, &timezone),
+            DateGroup::Today
+        );
+        assert_eq!(
+            DateGroup::for_timestamp_in(u64::MAX, today, &timezone),
+            DateGroup::Older
+        );
+        assert_eq!(
+            DateGroup::for_timestamp_in(i64::MAX as u64, today, &timezone),
+            DateGroup::Older
+        );
+        assert_eq!(
+            DateGroup::for_timestamp_in(0, today, &timezone),
+            DateGroup::Older
+        );
+        assert!(counts_by_date(&[], today).is_empty());
     }
 
     #[test]

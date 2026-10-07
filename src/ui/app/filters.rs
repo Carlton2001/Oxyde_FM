@@ -103,7 +103,7 @@ impl OxydeApp {
     pub fn update_filter_date(
         &mut self,
         pane_id: &str,
-        category: crate::ui::workspace::DateCategory,
+        category: crate::ui::date_groups::DateGroup,
         active: bool,
         cx: &mut Context<Self>,
     ) {

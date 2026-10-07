@@ -6,9 +6,11 @@ Priorités proposées : P1 pour un risque sur les opérations de fichiers à rep
 
 ## A01 — Filtres de date différents des groupes de date — P2
 
-**Constat établi dans le code.** `ui/workspace.rs:155` classe Aujourd'hui/Hier par fenêtres glissantes de 24 heures, et Cette semaine/La semaine dernière par intervalles de jours écoulés. `ui/date_groups.rs:35` utilise les dates locales et les limites des semaines calendaires.
+**Corrigé le 7 octobre 2026, après reproduction déterministe.** Un test à 00 h 10 avec un fichier modifié la veille à 23 h 50 échouait avant correction : le filtre Hier l'excluait, alors que le regroupement le classait dans Hier. Les fenêtres glissantes de 24 heures ont été retirées.
 
-À 00 h 10, un fichier modifié la veille à 23 h 50 correspond au filtre Aujourd'hui tout en appartenant au groupe Hier. Définir des règles communes, puis vérifier minuit, lundi, dates futures et changements d'heure. Aucun scénario interactif reproduit pendant cet audit.
+Le filtrage de `TabState`, les compteurs du menu, l'indicateur de filtre et Tout sélectionner utilisent désormais `DateGroup`, déjà employé par le regroupement. Les jours suivent le calendrier local, les semaines commencent le lundi, et la priorité des périodes reste Aujourd'hui, Hier, Cette semaine, La semaine dernière, Ce mois-ci, Plus ancien. Ce mois-ci est ajouté au filtre, avec les traductions existantes ; seules les périodes présentes dans le dossier sont proposées. Les dates futures restent dans Aujourd'hui, comme dans le regroupement existant ; les timestamps invalides rejoignent Plus ancien. Une date de référence unique est utilisée pendant chaque parcours du cache ou des compteurs.
+
+Validation : le test de minuit passe après correction. Les fixtures couvrent lundi, frontières de mois et d'année, jours de 23/25 heures avec décalages explicites, conversion du timestamp vers le jour local, dates futures/invalides, compteurs des six périodes, Tout sélectionner, ordre des fichiers et combinaison avec le filtre de nom. Les cas de décalage horaire ne valident pas la base de règles de fuseau du système. Aucun Computer Use ni Linux. Le rafraîchissement d'un filtre déjà ouvert lors d'un changement de jour reste à examiner en A15.
 
 ## A02 — Annuler/Rétablir peuvent démarrer plusieurs fois en parallèle — P1
 
@@ -96,18 +98,28 @@ Traiter les simplifications utiles dans des changements limités ; ne pas conver
 
 Concevoir un journal permettant de retrouver précisément les éléments remis à la corbeille, vérifier leurs noms et destinations, puis rejouer la restauration. Tester l'aller-retour sur des fichiers et dossiers temporaires, y compris en présence d'un conflit. A02 empêche déjà ce rejeu de créer une seconde transaction ; il ne répare pas les informations manquantes du journal. Aucun test de corbeille native exécuté dans ce lot.
 
+## A15 — Cache de filtrage lors d'un changement de jour — P2
+
+**Risque structurel établi, à reproduire sur une vue laissée ouverte.** `TabState::update_cache` mémorise les fichiers filtrés sans conserver la date de référence comme clé d'invalidation. Les groupes et compteurs relisent le jour local pendant leur calcul. Un onglet avec un filtre Date actif peut donc garder le résultat de la veille après minuit, jusqu'à une action ou un événement provoquant le recalcul du cache.
+
+Prévoir une invalidation lors d'un changement de jour local, sans recharger les fichiers ni recalculer continuellement le cache. Vérifier les onglets actifs et inactifs, la reprise après veille et un changement d'horloge ou de fuseau. A01 aligne les règles de calcul ; il ne rajoute pas de surveillance d'horloge à l'application.
+
 ## Validation et suite
 
 La compilation Windows actuelle passe sans avertissement du projet. Les observations ci-dessus sont issues de la lecture des sources et de Clippy ; aucun nouveau test de comportement ou benchmark n'a été exécuté pendant cet audit. Snap Layouts et le témoin de déplacement actuel sont confirmés par l'utilisateur. Les validations des lots précédents restent décrites dans [AUDIT_CODE_MORT.md](AUDIT_CODE_MORT.md).
 
-Après A02, poursuivre avec les corrections de comportement A01/A03/A04/A14 et les ressources natives A05/A06. Les optimisations demandent des mesures avant modification. Cet ordre est proposé, pas une liste de corrections déjà autorisées ou réalisées.
+Après A01/A02, poursuivre avec les corrections de comportement A03/A04/A14/A15 et les ressources natives A05/A06. Les optimisations demandent des mesures avant modification. Cet ordre est proposé, pas une liste de corrections déjà autorisées ou réalisées.
 
 ### État après les lots N01 à N16
 
-Le nettoyage retire les anciennes sérialisations, les estimations et plusieurs lectures natives dont les résultats étaient abandonnés. Ce nettoyage ne corrige pas les observations A01–A13. A02 est corrigé dans le lot suivant, décrit plus haut. Les références de lignes ci-dessus restent celles de `3cc7d14` ; utiliser les noms de fonctions pour retrouver leur nouvel emplacement.
+Le nettoyage retire les anciennes sérialisations, les estimations et plusieurs lectures natives dont les résultats étaient abandonnés. Ce nettoyage ne corrige pas les observations A01–A13. A01 et A02 sont corrigés dans les lots suivants, décrits plus haut. Les références de lignes ci-dessus restent celles de `3cc7d14` ; utiliser les noms de fonctions pour retrouver leur nouvel emplacement.
 
 Pour A04, `FileProperties::original_path` / `deleted_time` et leur collecte restent réservés. Pour A05, l'énumération de diagnostic du property store et les lectures de métadonnées d'appareil sans affichage disparaissent ; la récupération du nom convivial et son traitement COM restent actifs. Pour A10, les variantes de tri backend inaccessibles disparaissent, mais le tri naturel actif et les tris GPUI restent distincts. Pour A13, la branche de couleur identique des onglets disparaît avec N05 ; les autres suggestions ne font pas l'objet d'une correction générale.
 
 ### Validation du lot A02
 
 `cargo test --all-targets --offline` : 101 tests backend et 89 tests du binaire passent, soit 190 ; les trois tests natifs déjà ignorés restent ignorés. `cargo check --all-targets --offline` passe sans avertissement du projet, et `cargo build --bin oxyde --offline` réussit. Neuf tests de régression ont été ajoutés, et le test existant de déplacement de l'historique a été adapté à la réservation. Aucun Computer Use et aucune validation Linux.
+
+### Validation du lot A01
+
+`cargo test --bin oxyde --offline` : 95 tests passent, dont six nouveaux tests de régression. `cargo check --all-targets --offline` passe sans avertissement du projet, et `cargo build --bin oxyde --offline` réussit. Les validations portent sur les règles de calcul et les parcours de filtrage ; aucune validation visuelle interactive, aucun Computer Use ni Linux.
