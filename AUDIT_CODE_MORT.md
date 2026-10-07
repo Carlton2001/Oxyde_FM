@@ -107,6 +107,8 @@ La fonction n’est pas appelée au démarrage. Elle cherche les anciens répert
 
 **Décision nécessaire :** conserver une migration, l’abandonner explicitement ou distinguer les données encore compatibles. La fonction actuelle remplace certains fichiers existants et ignore des erreurs de déplacement avant de nettoyer l’ancien répertoire : la réactiver telle quelle demande une revue de sûreté.
 
+**Décision prise le 7 octobre 2026 :** supprimer cette ancienne implémentation. L’utilisateur prévoit de concevoir une nouvelle migration plus tard ; voir le lot 3.
+
 ### 3.2 Ancienne géométrie du bouton maximiser
 
 Références : `src/lib.rs:14`, `src/models/file_entry.rs:183`, `src/commands/system.rs:481`.
@@ -197,12 +199,42 @@ Les références ont été recherchées dans les sources Rust du dépôt, tests 
 - Suppression de l’élément `Icon`, de `v_flex`, de `LayoutNode::is_pane` / `as_pane_mut`, de l’accesseur `WorkspaceState::active_pane_id`, et des builders `TabBar::start_child` / `end_child` avec leurs emplacements toujours vides. Les méthodes UI effectivement utilisées restent présentes ; les annotations `allow(dead_code)` superflues sont retirées de `active_tab_mut` et `visit_panes_mut`.
 - Retrait des dépendances directes `hex`, `base64` et `time` après recherche d’usages et compilation ; le verrouillage des dépendances est actualisé par Cargo. Leurs usages transitifs éventuels restent dans `Cargo.lock`.
 
-### Hors de ce lot
+### Hors du lot 1
 
-Les chemins d’archives nécessitant une adaptation des fixtures et une revue de leur couverture restent à nettoyer séparément. La migration des données, le pont Snap Layouts, l’accent système et le presse-papiers spécifique à la corbeille restent en attente de décisions fonctionnelles. Les champs de configuration historiques sont conservés.
+Les chemins d’archives nécessitant une adaptation des fixtures et une revue de leur couverture sont traités dans le lot 2 ci-dessous, et l’ancienne migration dans le lot 3. Le pont Snap Layouts, l’accent système et le presse-papiers spécifique à la corbeille restent en attente de décisions fonctionnelles. Les champs de configuration historiques sont conservés.
 
-### Validation du lot
+### Validation du lot 1
 
 - `cargo check --all-targets --offline` : réussi sous Windows, sans avertissement du projet.
 - `cargo test --all-targets --offline` : 91 tests backend et 89 tests du binaire réussis ; aucun échec, un test de montage Windows ignoré. Aucun test existant n’a été supprimé ni modifié dans ce lot.
 - Linux et le comportement visuel de l’interface n’ont pas été validés dans ce lot.
+
+### Lot 2 — archives et fixtures utilisant les anciens parcours
+
+Base : commit `bb6f289`, sur la même branche. La recherche des références a été reprise dans le dépôt, tests inclus, et les entrées de compression/extraction ainsi que les mutations d’archives du gestionnaire ont été relues.
+
+- Retrait de `extract_archive`, `cancel_archive_operation`, `add_to_archive`, `compress_to_archive`, de leur `ArchiveState` et des helpers de compression/ajout propres à ces parcours. `extract_archive_with_checkpoint` et les lecteurs partagés ZIP, 7z, TAR et ISO restent actifs.
+- Les fixtures de listing et de renommage annulé dans `commands/io.rs`, ainsi que le test aller-retour 7z, produisent leurs archives avec `FileOperationManager::perform_compress`, le moteur utilisé par l’application.
+- Retrait de `create_archive_directory` après adaptation du test d’opérations d’archives vers `create_archive_directory_with_quality`, déjà appelée par GPUI.
+- **Candidat supplémentaire établi par revérification :** `remove_items_from_archive` / `remove_from_zip` n’avaient qu’un appelant, un test. Ils sont supprimés avec `TemporaryArchive`, désormais sans usage. Le test de suppression est déplacé vers `systems/file_ops.rs` et appelle `perform_delete`, qui utilise l’espace de travail d’archives actuel. Il vérifie ZIP, 7z, TAR et TAR.ZST, la suppression d’un fichier et d’une branche, la conservation d’une branche au préfixe voisin et de son contenu, ainsi que l’absence de fichiers temporaires résiduels.
+- Le test de non-écrasement est également déplacé vers le moteur actif et étendu aux quatre formats. Il vérifie le comportement actuel : création d’une archive valide sous un nom numéroté et conservation des octets du fichier existant. L’erreur renvoyée par l’ancienne façade n’était pas le comportement GPUI.
+- Retrait du wrapper d’extraction 7z limité aux tests ; les tests d’entrée malveillante et d’aller-retour passent désormais par `extract_archive_with_checkpoint`.
+- La validation a révélé une hypothèse incorrecte dans le test existant du watcher d’accès rapide, dont le code de production est inchangé. L’échec s’est reproduit isolément. Dans `notify` 8.2.0, `ReadDirectoryChangesWatcher::drop` envoie une demande d’arrêt sans attendre son traitement. Le test attend désormais, pendant cinq secondes au maximum, que le callback relâche sa référence à la révision ; il vérifie ensuite qu’une nouvelle écriture ne produit plus de notification. Aucun délai fixe supplémentaire ni changement du watcher de production n’est ajouté.
+
+Aucune visibilité supplémentaire n’est donnée aux moteurs pour les tests, et aucun algorithme du gestionnaire actif n’est modifié. Les capacités en attente de décision fonctionnelle et les champs de configuration historiques restent conservés.
+
+### Validation du lot 2
+
+- `cargo check --all-targets --offline` : réussi sous Windows, sans avertissement du projet.
+- `cargo test --all-targets --offline --quiet` : 91 tests backend et 89 tests du binaire réussis ; aucun échec, un test de montage Windows ignoré. Le nombre total de tests est conservé ; les deux tests retirés de `commands/archive.rs` sont adaptés dans `systems/file_ops.rs`.
+- Le premier passage backend a donné 90 réussites, un échec du test de watcher décrit ci-dessus et un test ignoré. Après synchronisation de ce test avec la libération du callback, le test isolé puis la suite complète ont réussi.
+- Linux n’a pas été compilé dans ce lot ; aucune vue UI n’a été modifiée.
+
+### Lot 3 — retrait de l’ancienne migration
+
+L’utilisateur a décidé de supprimer l’ancienne migration et d’en concevoir une nouvelle plus tard. La recherche des références dans le dépôt confirme que `run_migration` n’a aucun appelant ; seule la déclaration de module la raccordait à la compilation.
+
+- Suppression de `src/systems/migration.rs` et de `pub mod migration` dans `src/systems/mod.rs`.
+- La conception et le raccordement d’une nouvelle migration sont différés.
+
+Validation : `cargo check --all-targets --offline` réussi sous Windows, sans avertissement du projet. Aucun test spécifique n’existait pour ce module inutilisé ; les suites validées au lot 2 sont conservées et n’ont pas été relancées pour ce retrait sans appelant. Linux n’a pas été compilé.

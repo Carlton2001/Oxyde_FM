@@ -2657,6 +2657,95 @@ mod tests {
     }
 
     #[test]
+    fn removing_archive_items_keeps_other_entries_and_cleans_temporary_files() {
+        use crate::systems::archive_workspace::{mutation_operation, ArchiveWorkspace};
+
+        for extension in ["zip", "7z", "tar", "tar.zst"] {
+            let directory = tempfile::tempdir().unwrap();
+            let sources = tempfile::tempdir().unwrap();
+            std::fs::write(sources.path().join("keep.txt"), b"keep").unwrap();
+            std::fs::write(sources.path().join("remove.txt"), b"remove").unwrap();
+            std::fs::create_dir_all(sources.path().join("remove/nested")).unwrap();
+            std::fs::write(sources.path().join("remove/nested/file.txt"), b"remove").unwrap();
+            std::fs::create_dir(sources.path().join("remove-neighbor")).unwrap();
+            std::fs::write(sources.path().join("remove-neighbor/file.txt"), b"neighbor").unwrap();
+            let archive = directory.path().join(format!("sample.{extension}"));
+            FileOperationManager::perform_compress(
+                &mutation_operation("normal"),
+                vec![
+                    sources.path().join("keep.txt"),
+                    sources.path().join("remove.txt"),
+                    sources.path().join("remove"),
+                    sources.path().join("remove-neighbor"),
+                ],
+                Some(archive.clone()),
+            )
+            .unwrap();
+            let operation = Arc::new(Mutex::new(FileOperation::new(
+                FileOpType::Delete,
+                vec![],
+                None,
+                None,
+            )));
+            FileOperationManager::perform_delete(
+                &operation,
+                vec![archive.join("remove.txt"), archive.join("remove")],
+            )
+            .unwrap();
+
+            let workspace = ArchiveWorkspace::open(archive).unwrap();
+            assert_eq!(
+                std::fs::read(workspace.root().join("keep.txt")).unwrap(),
+                b"keep"
+            );
+            assert_eq!(
+                std::fs::read(workspace.root().join("remove-neighbor/file.txt")).unwrap(),
+                b"neighbor"
+            );
+            assert!(!workspace.root().join("remove.txt").exists());
+            assert!(!workspace.root().join("remove").exists());
+            assert_eq!(std::fs::read_dir(workspace.root()).unwrap().count(), 2);
+            drop(workspace);
+            assert_eq!(std::fs::read_dir(directory.path()).unwrap().count(), 1);
+        }
+    }
+
+    #[test]
+    fn compression_does_not_overwrite_an_existing_archive() {
+        use crate::systems::archive_workspace::{mutation_operation, ArchiveWorkspace};
+
+        for extension in ["zip", "7z", "tar", "tar.zst"] {
+            let directory = tempfile::tempdir().unwrap();
+            let sources = tempfile::tempdir().unwrap();
+            let source = sources.path().join("source.txt");
+            std::fs::write(&source, b"new payload").unwrap();
+            let requested = directory.path().join(format!("existing.{extension}"));
+            std::fs::write(&requested, b"original").unwrap();
+            let operation = mutation_operation("fast");
+            FileOperationManager::perform_compress(
+                &operation,
+                vec![source],
+                Some(requested.clone()),
+            )
+            .unwrap();
+
+            assert_eq!(std::fs::read(&requested).unwrap(), b"original");
+            let published = operation.lock().unwrap().destination.clone().unwrap();
+            assert_eq!(
+                published,
+                directory.path().join(format!("existing (1).{extension}"))
+            );
+            let workspace = ArchiveWorkspace::open(published).unwrap();
+            assert_eq!(
+                std::fs::read(workspace.root().join("source.txt")).unwrap(),
+                b"new payload"
+            );
+            drop(workspace);
+            assert_eq!(std::fs::read_dir(directory.path()).unwrap().count(), 2);
+        }
+    }
+
+    #[test]
     fn archive_file_operations_work_inside_and_between_all_created_formats() {
         for extension in ["zip", "7z", "tar", "tar.zst", "7Z"] {
             let directory = tempfile::tempdir().unwrap();
@@ -2678,7 +2767,8 @@ mod tests {
             )
             .unwrap();
             let folder = archive.join("nested");
-            crate::commands::archive::create_archive_directory(&folder).unwrap();
+            crate::commands::archive::create_archive_directory_with_quality(&folder, "normal")
+                .unwrap();
             let added = directory.path().join("added.txt");
             std::fs::write(&added, b"added").unwrap();
             FileOperationManager::perform_copy(

@@ -839,6 +839,8 @@ pub async fn set_shortcut_info(path: String, info: crate::models::ShortcutInfo) 
 #[cfg(test)]
 mod directory_tests {
     use super::*;
+    use crate::systems::archive_workspace::mutation_operation;
+    use crate::systems::file_ops::FileOperationManager;
 
     #[test]
     fn network_server_detection_keeps_share_paths_in_the_file_system() {
@@ -869,17 +871,12 @@ mod directory_tests {
         let runtime = tokio::runtime::Runtime::new().unwrap();
         for format in ["zip", "7z", "tar", "tar.zst"] {
             let archive = directory.path().join(format!("listing.{format}"));
-            runtime
-                .block_on(crate::commands::archive::compress_to_archive(
-                    vec![source.to_string_lossy().into_owned()],
-                    archive.to_string_lossy().into_owned(),
-                    format.into(),
-                    "normal".into(),
-                    &crate::commands::archive::ArchiveState(std::sync::atomic::AtomicBool::new(
-                        false,
-                    )),
-                ))
-                .unwrap();
+            FileOperationManager::perform_compress(
+                &mutation_operation("normal"),
+                vec![source.clone()],
+                Some(archive.clone()),
+            )
+            .unwrap();
             let root = runtime
                 .block_on(list_dir(
                     archive.to_string_lossy().into_owned(),
@@ -918,7 +915,12 @@ mod directory_tests {
         fs::write(&source, b"source").unwrap();
         let archive = directory.path().join("cancel.7z");
         let runtime = tokio::runtime::Runtime::new().unwrap();
-        runtime.block_on(crate::commands::archive::compress_to_archive(vec![source.to_string_lossy().into_owned()], archive.to_string_lossy().into_owned(), "7z".into(), "normal".into(), &crate::commands::archive::ArchiveState(std::sync::atomic::AtomicBool::new(false)))).unwrap();
+        FileOperationManager::perform_compress(
+            &mutation_operation("normal"),
+            vec![source],
+            Some(archive.clone()),
+        )
+        .unwrap();
         let original = fs::read(&archive).unwrap();
         let cancel = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
         assert!(runtime.block_on(rename_item_controlled(archive.join("file.txt").to_string_lossy().into_owned(), archive.join("renamed.txt").to_string_lossy().into_owned(), "normal".into(), cancel)).is_err());
