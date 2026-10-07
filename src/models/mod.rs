@@ -13,7 +13,7 @@ pub use config::{AppConfig, ConfigManager, TrashDriveSettings};
 pub use file_entry::{
     get_file_entry_from_path, ConflictAction, ConflictEntry, ConflictResponse, DriveInfo,
     FileEntry, FileProperties, FileSummary, FolderSizeResult, NetResource, QuickAccessItem,
-    ShortcutInfo, SidebarNode, SnapRect, TrashEntry, WinMenuItem,
+    ShortcutInfo, SidebarNode, TrashEntry, WinMenuItem,
 };
 pub use history::HistoryManager;
 pub use progress::ProgressEvent;

@@ -10,6 +10,10 @@ impl WindowsPlatform {
 }
 
 impl Platform for WindowsPlatform {
+    fn trash_original_path(&self, id: &std::path::Path) -> Option<std::path::PathBuf> {
+        super::windows_trash::original_path(id)
+    }
+
     fn peek_status(&self) -> Result<super::PeekStatus, String> { super::windows_peek::peek_status() }
     fn open_peek(&self, path: &str) -> Result<(), String> { super::windows_peek::open_peek(path) }
     fn shortcut_info(&self, path: &std::path::Path) -> Option<crate::models::ShortcutInfo> { super::windows_shortcuts::get_shortcut_info(path) }
@@ -349,58 +353,6 @@ impl Platform for WindowsPlatform {
 
     fn get_quick_access_items(&self) -> Vec<QuickAccessItem> {
         crate::commands::system::get_quick_access_items().unwrap_or_default()
-    }
-
-    fn get_accent_color(&self) -> String {
-        #[cfg(target_os = "windows")]
-        {
-            use windows::core::PCWSTR;
-            use windows::Win32::System::Registry::{
-                RegOpenKeyExW, RegQueryValueExW, HKEY, HKEY_CURRENT_USER, KEY_READ, REG_DWORD,
-                REG_VALUE_TYPE,
-            };
-
-            let subkey: Vec<u16> = "Software\\Microsoft\\Windows\\DWM\0"
-                .encode_utf16()
-                .collect();
-            let value_name: Vec<u16> = "AccentColor\0".encode_utf16().collect();
-            let mut hkey: HKEY = HKEY::default();
-
-            unsafe {
-                if RegOpenKeyExW(
-                    HKEY_CURRENT_USER,
-                    PCWSTR(subkey.as_ptr()),
-                    Some(0),
-                    KEY_READ,
-                    &mut hkey,
-                )
-                .is_ok()
-                {
-                    let mut color_type: REG_VALUE_TYPE = REG_VALUE_TYPE::default();
-                    let mut color_value: u32 = 0;
-                    let mut data_len: u32 = std::mem::size_of::<u32>() as u32;
-
-                    if RegQueryValueExW(
-                        hkey,
-                        PCWSTR(value_name.as_ptr()),
-                        None,
-                        Some(&mut color_type),
-                        Some(&mut color_value as *mut u32 as *mut u8),
-                        Some(&mut data_len),
-                    )
-                    .is_ok()
-                        && color_type == REG_DWORD
-                    {
-                        // AccentColor is in ABGR format (0xAABBGGRR)
-                        let r = (color_value & 0xFF) as u8;
-                        let g = ((color_value >> 8) & 0xFF) as u8;
-                        let b = ((color_value >> 16) & 0xFF) as u8;
-                        return format!("#{:02x}{:02x}{:02x}", r, g, b);
-                    }
-                }
-            }
-        }
-        "#0078d7".to_string() // Default Windows Blue
     }
 
     fn resolve_shortcut(&self, path: &str) -> Option<String> {

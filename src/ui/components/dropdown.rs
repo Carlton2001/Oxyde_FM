@@ -26,7 +26,6 @@ pub enum IconName {
     Square,
     FolderOpen,
     NativeFolder(String),
-    #[allow(dead_code)]
     HardDrive,
     Copy,
     Shield,
@@ -137,7 +136,6 @@ pub struct DropdownItem {
     pub on_hover: Option<Rc<dyn Fn(Point<Pixels>, bool, &mut App)>>,
 }
 
-#[allow(dead_code)]
 impl DropdownItem {
     pub fn separator() -> Self {
         Self::new("", |_, _| {}).icon(IconName::Separator)

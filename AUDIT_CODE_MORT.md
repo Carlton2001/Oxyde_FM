@@ -119,6 +119,8 @@ Références : `src/lib.rs:14`, `src/models/file_entry.rs:183`, `src/commands/sy
 
 **Orientation :** supprimer l’ancien pont si le comportement souhaité est assuré par GPUI ; sinon concevoir l’intégration via `Platform`.
 
+**Revérification du lot 4 :** le bouton actuel déclare `WindowControlArea::Max`, et GPUI Windows traduit cette zone en `HTMAXBUTTON` pour une fenêtre redimensionnable. L’ancien pont déconnecté est supprimé ; le comportement interactif des Snap Layouts n’a pas été testé manuellement.
+
 ### 3.3 Couleur d’accent du système
 
 Références : `src/commands/system.rs:14`, `Platform::get_accent_color` et ses implémentations Windows/Linux.
@@ -127,6 +129,8 @@ La commande n’a pas de consommateur actif identifié ; les implémentations na
 
 **Fonctionnalité potentiellement absente :** reprendre automatiquement la couleur d’accent du système. Les thèmes GPUI actuels utilisent leurs propres palettes.
 
+**Décision prise au lot 4 :** l’utilisateur demande la suppression de cet ancien support, y compris les méthodes de `Platform` et leurs implémentations Windows/Linux.
+
 ### 3.4 Presse-papiers spécifique à la corbeille
 
 Référence : `src/platform/clipboard.rs:303`, `set_clipboard_from_trash`.
@@ -134,6 +138,8 @@ Référence : `src/platform/clipboard.rs:303`, `set_clipboard_from_trash`.
 Aucun appelant identifié. GPUI utilise le transfert générique des chemins par `Platform::set_clipboard_files`.
 
 **Fonctionnalité potentiellement non portée :** transfert Shell spécifique des objets de la corbeille. Cela ne prouve pas que toute coupe depuis la corbeille échoue : les différences de nom d’origine, de format du presse-papiers et de destination doivent être vérifiées avant suppression.
+
+**Décision prise au lot 4 :** l’utilisateur demande la suppression de l’ancien transfert Shell déconnecté. Il demande également de vérifier, après ce lot, que le parcours GPUI actuel restaure les éléments avec leur nom d’origine.
 
 ## 4. Éléments UI et champs hérités
 
@@ -162,6 +168,8 @@ Référence : `src/models/config.rs`.
 | `first_launch` | Pas de lecture fonctionnelle GPUI identifiée | Probable ancien parcours de premier démarrage ; son contenu exact n’est pas établi par cet audit. |
 
 Ces champs restent lus et écrits par sérialisation. Ils sont **inactifs fonctionnellement**, et non nécessairement inutiles pour la compatibilité. Leur suppression demande de décider du traitement des anciens fichiers et de la conservation des options inconnues.
+
+**Traitement final au lot 4 :** les quatre champs quittent le modèle Rust. À la demande de l’utilisateur, la conservation des champs inconnus via `AppConfig::extra` est également supprimée. Les anciennes clés sont ignorées à la lecture et disparaissent à la prochaine sauvegarde ; les configurations neuves ne les ajoutent plus. Le workspace et les préférences de recherche de doublons disposent de champs explicites.
 
 ## 5. Dépendances candidates au nettoyage
 
@@ -238,3 +246,28 @@ L’utilisateur a décidé de supprimer l’ancienne migration et d’en concevo
 - La conception et le raccordement d’une nouvelle migration sont différés.
 
 Validation : `cargo check --all-targets --offline` réussi sous Windows, sans avertissement du projet. Aucun test spécifique n’existait pour ce module inutilisé ; les suites validées au lot 2 sont conservées et n’ont pas été relancées pour ce retrait sans appelant. Linux n’a pas été compilé.
+
+### Lot 4 — derniers ponts historiques, configuration et annotations
+
+Base : commit `2e959ab`. Les usages ont été revérifiés dans les sources, tests inclus. L’utilisateur a explicitement demandé la suppression de l’ancien support de l’accent système et du transfert Shell spécifique à la corbeille.
+
+- Retrait de `WindowState`, `SnapRect` et `oxide_sync_snap_rect`. Le bouton Maximiser actuel de `title_bar.rs` utilise déjà `WindowControlArea::Max` ; dans la dépendance GPUI au commit `33c9585`, `crates/gpui_windows/src/events.rs` traite cette zone via `HTMAXBUTTON`. Aucun appel ni lecteur de l’ancien rectangle n’a été trouvé.
+- Retrait de `get_accent_color` dans les commandes, le trait `Platform` et les deux implémentations natives.
+- Retrait de `set_clipboard_from_trash`, de `set_drop_effect_on_data_object` et de leurs imports devenus inutiles. Le presse-papiers générique reste actif.
+- Retrait de `font_size`, `layout`, `group_by_date` et `first_launch` d’`AppConfig` et de ses valeurs par défaut. L’utilisateur a ensuite demandé de supprimer également leur conservation comme options inconnues : `extra` et `serde(flatten)` sont retirés, les trois données actuelles `workspace_state`, `duplicate_search_options` et `duplicate_search_window_size` sont déclarées explicitement et les accès GPUI sont adaptés. Le test `unknown_options_are_discarded_without_losing_current_view_state` vérifie la disparition des anciennes clés et d’une clé inconnue quelconque à la sauvegarde, sans perte de ces trois données, après édition, rechargement et réinitialisation. Le regroupement actif des onglets et la disposition du workspace restent présents.
+- Retrait de toutes les annotations `allow(dead_code)` restantes. `HardDrive`, `DropdownItem`, `Tooltip::text` et `FileDragData::source_pane_id` ont des usages et restent présents. La compilation sans ces annotations a confirmé que les builders `Button::icon`, `selected` et `tooltip` étaient inutilisés ; ils sont retirés avec leurs champs et branches de rendu inactives. La variante `Primary` n’avait aucun constructeur appelé ; elle est retirée. Les trois boutons actifs utilisent `Subtle`, avec les mêmes couleurs, dimensions et interactions.
+
+Validation Windows : `cargo check --all-targets --offline` sans avertissement du projet ; `cargo test --all-targets --offline --quiet` avec 92 tests backend et 89 tests du binaire réussis, aucun échec et un test de montage ignoré. Linux et l’interface interactive n’ont pas été validés dans ce lot.
+
+### Vérification demandée après le lot 4 — noms restaurés depuis la corbeille
+
+La vue GPUI `execute_trash_action` transmet les identifiants des éléments à `commands::ops::restore_items`, aussi bien pour la sélection que pour Tout restaurer. Ce parcours a été testé dans la corbeille Windows réelle avec trois fichiers temporaires (texte avec espaces et accents, `.lnk`, `.url`) et un dossier avec contenu. Aucun élément utilisateur n’a été sélectionné.
+
+- Le premier passage a confirmé la restauration physique avec les noms et contenus attendus, puis échoué sur les métadonnées : le terminateur UTF-16 était inclus dans les noms et chemins Rust. Il provoquait également l’ajout d’une seconde extension aux raccourcis. La restauration native tronquait au terminateur, ce qui expliquait la différence entre les fichiers restaurés et les chemins renvoyés.
+- Correction de la lecture des fichiers `$I…` : retrait du terminateur et du padding ; distinction du format v1 (chemin à l’octet 24) et du format v2 (longueur à l’octet 24, chemin à l’octet 28). Les dispositions sont confirmées par la [documentation du projet recyclebinunit](https://github.com/danielmarschall/recyclebinunit/blob/master/FORMAT.md). L’ancienne fonction traitait les deux versions comme v2.
+- La lecture native est déplacée dans `platform/windows_trash.rs`, appelée via `Platform::trash_original_path`. Linux conserve le chemin fourni par la crate `trash`.
+- Trois tests de métadonnées couvrent les deux formats, les accents, une paire de surrogates, les extensions, les chemins UNC, les buffers tronqués, les versions inconnues et les chemins non absolus. Le test natif vérifie les noms affichés, les chemins d’origine et renvoyés, le contenu et l’absence de fichiers supplémentaires après restauration. Il reste ignoré par défaut car il utilise la corbeille réelle ; son exécution explicite a réussi après correction.
+
+Cette validation appelle le backend utilisé par GPUI ; elle ne simule pas les clics dans l’interface et ne couvre pas les conflits avec un fichier déjà présent à l’emplacement d’origine. Linux n’a pas été testé.
+
+Validation finale Windows : `cargo check --all-targets --offline` sans avertissement ; suite complète avec 95 tests backend et 89 tests du binaire réussis (184 au total), aucun échec, deux tests natifs ignorés par défaut. Le test `native_restore_preserves_original_names`, exécuté séparément avec `--ignored --exact`, a réussi.

@@ -231,7 +231,6 @@ pub fn drives_differ(src: &str, dst: &str) -> bool {
 #[derive(Clone)]
 pub struct FileDragData {
     pub paths: Vec<String>,
-    #[allow(dead_code)]
     pub source_pane_id: String,
 }
 
@@ -798,8 +797,8 @@ impl OxydeApp {
         cx: &mut Context<Self>,
     ) -> Self {
         let restored_workspace = config
-            .extra
-            .get(crate::ui::workspace::WORKSPACE_CONFIG_KEY)
+            .workspace_state
+            .as_ref()
             .cloned()
             .and_then(|value| {
                 match serde_json::from_value::<crate::ui::workspace::SavedWorkspace>(value) {
@@ -843,8 +842,8 @@ impl OxydeApp {
             grab_offset: 0.0,
             sidebar_width,
             sidebar_collapsed: config
-                .extra
-                .get(crate::ui::workspace::WORKSPACE_CONFIG_KEY)
+                .workspace_state
+                .as_ref()
                 .and_then(|value| value.get("sidebar_collapsed"))
                 .and_then(serde_json::Value::as_bool)
                 .unwrap_or(false),

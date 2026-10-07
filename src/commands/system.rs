@@ -1,16 +1,11 @@
-use crate::models::{CommandError, DriveInfo, QuickAccessItem, SnapRect, WinMenuItem};
+use crate::models::{CommandError, DriveInfo, QuickAccessItem, WinMenuItem};
 use crate::utils::path_security::validate_path;
-use crate::WindowState;
 use log::info;
 
 // app_ready removed
 
 pub fn get_drives(skip_hardware_info: Option<bool>) -> Vec<DriveInfo> {
     crate::platform::platform().list_drives(skip_hardware_info.unwrap_or(false))
-}
-
-pub fn get_accent_color() -> String {
-    crate::platform::platform().get_accent_color()
 }
 
 pub async fn open_item(path: String) -> Result<(), CommandError> {
@@ -394,11 +389,6 @@ pub fn execute_native_menu_item(
         }
     }
     Ok(())
-}
-
-pub fn oxide_sync_snap_rect(state: &WindowState, rect: SnapRect) {
-    let mut m = state.maximize_button_rect.lock().unwrap();
-    *m = Some(rect);
 }
 
 pub fn get_quick_access_items() -> Result<Vec<QuickAccessItem>, CommandError> {

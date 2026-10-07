@@ -10,6 +10,8 @@ impl LinuxPlatform {
 }
 
 impl Platform for LinuxPlatform {
+    fn trash_original_path(&self, _id: &std::path::Path) -> Option<std::path::PathBuf> { None }
+
     fn peek_status(&self) -> Result<super::PeekStatus, String> { Ok(super::PeekStatus::default()) }
     fn open_peek(&self, _path: &str) -> Result<(), String> { Err("Peek is only available on Windows".into()) }
     fn shortcut_info(&self, _path: &std::path::Path) -> Option<crate::models::ShortcutInfo> { None }
@@ -321,11 +323,6 @@ impl Platform for LinuxPlatform {
                 })
             })
             .collect()
-    }
-
-    fn get_accent_color(&self) -> String {
-        // TODO: lire depuis les settings GTK / KDE
-        "#0078d4".to_string()
     }
 
     fn resolve_shortcut(&self, path: &str) -> Option<String> {

@@ -205,10 +205,7 @@ impl OxydeApp {
         snapshot.sidebar_collapsed = self.sidebar_collapsed;
         match serde_json::to_value(snapshot) {
             Ok(snapshot) => {
-                self.config.extra.insert(
-                    crate::ui::workspace::WORKSPACE_CONFIG_KEY.to_string(),
-                    snapshot,
-                );
+                self.config.workspace_state = Some(snapshot);
                 self.save_preferences(cx);
             }
             Err(error) => log::warn!("Cannot serialize workspace state: {error:?}"),

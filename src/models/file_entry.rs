@@ -179,14 +179,6 @@ pub struct TrashEntry {
     pub modified: u64,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-pub struct SnapRect {
-    pub x: f64,
-    pub y: f64,
-    pub width: f64,
-    pub height: f64,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NetResource {
     #[serde(default)]

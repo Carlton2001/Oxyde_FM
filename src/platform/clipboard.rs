@@ -2,17 +2,16 @@
 
 use crate::models::CommandError;
 use crate::utils::path_security::validate_path;
-use log::{info, warn};
+use log::info;
 use std::ffi::OsStr;
 use std::os::windows::ffi::OsStrExt;
-use windows::core::PCWSTR;
 use windows::Win32::Foundation::HANDLE;
 use windows::Win32::System::DataExchange::{
     CloseClipboard, EmptyClipboard, GetClipboardData, OpenClipboard, SetClipboardData,
 };
 use windows::Win32::System::Memory::{GlobalAlloc, GlobalLock, GlobalUnlock, GMEM_MOVEABLE};
 use windows::Win32::System::Ole::{CF_HDROP, CF_UNICODETEXT};
-use windows::Win32::UI::Shell::{IShellItem, SHCreateItemFromParsingName, DROPFILES};
+use windows::Win32::UI::Shell::DROPFILES;
 
 // Custom format for Preferred DropEffect
 fn get_drop_effect_format() -> u32 {
@@ -253,181 +252,6 @@ pub fn set_clipboard_text(text: String) -> Result<(), CommandError> {
         })?;
 
         let _ = CloseClipboard();
-        Ok(())
-    }
-}
-
-/// Special cut operation for recycle bin items using Shell API
-/// Uses OleSetClipboard with IDataObject so files stay in trash until paste
-pub fn set_clipboard_from_trash(trash_paths: Vec<String>) -> Result<Vec<String>, CommandError> {
-    info!("Setting clipboard from trash: {:?}", trash_paths);
-    let validated_paths: Vec<String> = trash_paths
-        .iter()
-        .map(|p| validate_path(p).map(|pb: std::path::PathBuf| pb.to_string_lossy().to_string()))
-        .collect::<Result<Vec<String>, CommandError>>()?;
-
-    use windows::Win32::System::Com::{CoInitializeEx, CoUninitialize, COINIT_APARTMENTTHREADED};
-    use windows::Win32::System::Ole::OleSetClipboard;
-    use windows::Win32::UI::Shell::BHID_DataObject;
-
-    unsafe {
-        // Initialize COM
-        let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
-
-        // Create IShellItems from paths using our existing helper
-        let mut shell_items: Vec<IShellItem> = Vec::new();
-
-        for path in &validated_paths {
-            let wide_path: Vec<u16> = OsStr::new(path)
-                .encode_wide()
-                .chain(std::iter::once(0))
-                .collect();
-
-            if let Ok(item) = SHCreateItemFromParsingName(
-                PCWSTR(wide_path.as_ptr()),
-                None::<&windows::Win32::System::Com::IBindCtx>,
-            ) {
-                shell_items.push(item);
-            }
-        }
-
-        if shell_items.is_empty() {
-            CoUninitialize();
-            return Err(CommandError::SystemError(
-                "Failed to create shell items from trash paths".to_string(),
-            ));
-        }
-
-        // Create IShellItemArray from multiple items using PIDLs
-        // Use SHGetIDListFromObject to get PIDL from each IShellItem
-        use windows::Win32::UI::Shell::Common::ITEMIDLIST;
-        use windows::Win32::UI::Shell::{
-            ILFree, SHCreateShellItemArrayFromIDLists, SHGetIDListFromObject,
-        };
-
-        // Store the PIDLs returned by SHGetIDListFromObject
-        // SHGetIDListFromObject returns PIDLIST_ABSOLUTE
-        let mut pidl_holders = Vec::new();
-
-        for item in &shell_items {
-            if let Ok(pidl) = SHGetIDListFromObject(item) {
-                pidl_holders.push(pidl);
-            }
-        }
-
-        if pidl_holders.is_empty() {
-            CoUninitialize();
-            return Err(CommandError::SystemError(
-                "Failed to get PIDLs from shell items".to_string(),
-            ));
-        }
-
-        // Convert PIDLIST_ABSOLUTE to const ITEMIDLIST pointers for SHCreateShellItemArrayFromIDLists
-        // Use transmute since PIDLIST_ABSOLUTE wraps *mut ITEMIDLIST
-        let pidls: Vec<*const ITEMIDLIST> = pidl_holders
-            .iter()
-            .map(|p| std::mem::transmute::<_, *const ITEMIDLIST>(*p))
-            .collect();
-
-        // Create IShellItemArray from PIDLs
-        let item_array: windows::Win32::UI::Shell::IShellItemArray =
-            SHCreateShellItemArrayFromIDLists(&pidls).map_err(|e| {
-                // Free PIDLs on error
-                for pidl in &pidl_holders {
-                    ILFree(Some(*pidl));
-                }
-                CoUninitialize();
-                CommandError::SystemError(format!("Failed to create shell item array: {:?}", e))
-            })?;
-
-        // Free the PIDLs after use
-        for pidl in &pidl_holders {
-            ILFree(Some(*pidl));
-        }
-
-        // Get IDataObject from the shell item array
-        let data_object: Result<windows::Win32::System::Com::IDataObject, _> =
-            item_array.BindToHandler(None, &BHID_DataObject);
-
-        let data_obj = match data_object {
-            Ok(obj) => obj,
-            Err(e) => {
-                CoUninitialize();
-                return Err(CommandError::SystemError(format!(
-                    "Failed to get IDataObject: {:?}",
-                    e
-                )));
-            }
-        };
-
-        // Set CFSTR_PREFERREDDROPEFFECT to DROPEFFECT_MOVE (2) to indicate cut
-        if let Err(e) = set_drop_effect_on_data_object(&data_obj, 2) {
-            warn!("Could not set drop effect: {}", e);
-        }
-
-        // Use OleSetClipboard to put the data object on clipboard
-        let result = OleSetClipboard(&data_obj);
-        if result.is_ok() {
-            use windows::Win32::System::Ole::OleFlushClipboard;
-            let _ = OleFlushClipboard();
-        }
-
-        CoUninitialize();
-
-        match result {
-            Ok(_) => Ok(validated_paths),
-            Err(e) => Err(CommandError::SystemError(format!(
-                "OleSetClipboard failed: {:?}",
-                e
-            ))),
-        }
-    }
-}
-
-/// Helper to set CFSTR_PREFERREDDROPEFFECT on a data object
-fn set_drop_effect_on_data_object(
-    data_obj: &windows::Win32::System::Com::IDataObject,
-    effect: u32,
-) -> Result<(), String> {
-    use windows::core::PCSTR;
-    use windows::Win32::System::Com::{DVASPECT_CONTENT, FORMATETC, STGMEDIUM, TYMED_HGLOBAL};
-    use windows::Win32::System::DataExchange::RegisterClipboardFormatA;
-
-    unsafe {
-        let format = RegisterClipboardFormatA(PCSTR(c"Preferred DropEffect".as_ptr() as *const _));
-        if format == 0 {
-            return Err("Failed to register drop effect format".to_string());
-        }
-
-        // Allocate memory for the drop effect
-        let hglobal =
-            GlobalAlloc(GMEM_MOVEABLE, 4).map_err(|e| format!("GlobalAlloc failed: {:?}", e))?;
-
-        let ptr = GlobalLock(hglobal);
-        if ptr.is_null() {
-            return Err("GlobalLock failed".to_string());
-        }
-        *(ptr as *mut u32) = effect;
-        let _ = GlobalUnlock(hglobal);
-
-        let formatetc = FORMATETC {
-            cfFormat: format as u16,
-            ptd: std::ptr::null_mut(),
-            dwAspect: DVASPECT_CONTENT.0,
-            lindex: -1,
-            tymed: TYMED_HGLOBAL.0 as u32,
-        };
-
-        let stgmedium = STGMEDIUM {
-            tymed: TYMED_HGLOBAL.0 as u32,
-            u: windows::Win32::System::Com::STGMEDIUM_0 { hGlobal: hglobal },
-            pUnkForRelease: std::mem::ManuallyDrop::new(None),
-        };
-
-        data_obj
-            .SetData(&formatetc, &stgmedium, true)
-            .map_err(|e| format!("SetData failed: {:?}", e))?;
-
         Ok(())
     }
 }

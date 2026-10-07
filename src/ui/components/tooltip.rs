@@ -216,7 +216,6 @@ impl Tooltip {
         }
     }
     /// Crée un constructeur de tooltip simple affichant un texte.
-    #[allow(dead_code)]
     pub fn text(
         title: impl Into<SharedString>,
     ) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {

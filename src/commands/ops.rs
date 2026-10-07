@@ -85,45 +85,10 @@ struct RestorationPaths {
     corrected_path: PathBuf,
 }
 
-/// Windows stores the original path in the `$I…` sidecar of each `$R…` item.
-/// The Shell item name can be the opaque recycle-bin identifier, so the `trash`
-/// crate may otherwise use that identifier as the restored filename.
-#[cfg(target_os = "windows")]
-fn windows_original_path(item: &trash::TrashItem) -> Option<PathBuf> {
-    use std::os::windows::ffi::OsStringExt;
-
-    let id_path = PathBuf::from(&item.id);
-    let file_name = id_path.file_name()?.to_string_lossy();
-    if file_name.len() < 3 || !file_name[..2].eq_ignore_ascii_case("$R") {
-        return None;
-    }
-    let suffix = file_name.get(2..)?;
-
-    let metadata_path = id_path.with_file_name(format!("$I{suffix}"));
-    let bytes = std::fs::read(metadata_path).ok()?;
-    if bytes.len() < 28 {
-        return None;
-    }
-
-    let version = u64::from_le_bytes(bytes.get(..8)?.try_into().ok()?);
-    if version != 1 && version != 2 {
-        return None;
-    }
-    let char_count = u32::from_le_bytes(bytes.get(24..28)?.try_into().ok()?) as usize;
-    let path_bytes = bytes.get(28..28usize.checked_add(char_count.checked_mul(2)?)?)?;
-    let wide_path: Vec<u16> = path_bytes
-        .chunks_exact(2)
-        .map(|pair| u16::from_le_bytes([pair[0], pair[1]]))
-        .collect();
-    let path = PathBuf::from(std::ffi::OsString::from_wide(&wide_path));
-    path.is_absolute().then_some(path)
-}
-
 fn get_restoration_paths(item: &trash::TrashItem) -> RestorationPaths {
-    #[cfg(target_os = "windows")]
-    let crate_path = windows_original_path(item).unwrap_or_else(|| item.original_path());
-    #[cfg(not(target_os = "windows"))]
-    let crate_path = item.original_path();
+    let crate_path = crate::platform::platform()
+        .trash_original_path(std::path::Path::new(&item.id))
+        .unwrap_or_else(|| item.original_path());
     let mut corrected_path = crate_path.clone();
 
     let trash_path = PathBuf::from(&item.id);
@@ -1697,6 +1662,71 @@ fn perform_copy_with_progress(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+#[cfg(target_os = "windows")]
+mod trash_restore_tests {
+    use super::*;
+
+    #[test]
+    #[ignore = "sends only generated fixtures to the native Windows Recycle Bin and restores them"]
+    fn native_restore_preserves_original_names() {
+        let root = tempfile::tempdir().unwrap();
+        let files = [
+            root.path().join("Document école – version 2.txt"),
+            root.path().join("Raccourci école.lnk"),
+            root.path().join("Lien école.url"),
+        ];
+        for file in &files {
+            std::fs::write(file, b"restoration fixture").unwrap();
+        }
+        let folder = root.path().join("Dossier école");
+        std::fs::create_dir(&folder).unwrap();
+        std::fs::write(folder.join("contenu.txt"), b"nested fixture").unwrap();
+        let sources: Vec<_> = files.iter().cloned().chain([folder.clone()]).collect();
+        crate::platform::platform()
+            .shell_delete(&sources, true)
+            .unwrap();
+        let entries: Vec<_> = list_trash()
+            .unwrap()
+            .into_iter()
+            .filter(|entry| {
+                // Identify only this test's fixtures, even if a metadata path has a
+                // trailing terminator. Validate the unmodified names after restore.
+                PathBuf::from(entry.original_path.trim_end_matches('\0')).parent()
+                    == Some(root.path())
+            })
+            .collect();
+        let ids = entries.iter().map(|entry| entry.path.clone()).collect();
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        let restored = runtime.block_on(restore_items(ids)).unwrap();
+
+        for file in &files {
+            assert_eq!(std::fs::read(file).unwrap(), b"restoration fixture");
+        }
+        assert_eq!(
+            std::fs::read(folder.join("contenu.txt")).unwrap(),
+            b"nested fixture"
+        );
+        assert_eq!(entries.len(), sources.len());
+        for entry in &entries {
+            let expected = sources
+                .iter()
+                .find(|source| {
+                    **source == PathBuf::from(entry.original_path.trim_end_matches('\0'))
+                })
+                .unwrap();
+            assert_eq!(entry.name, expected.file_name().unwrap().to_string_lossy());
+            assert_eq!(PathBuf::from(&entry.original_path), *expected);
+        }
+        let mut restored: Vec<_> = restored.into_iter().map(PathBuf::from).collect();
+        let mut expected = sources;
+        restored.sort();
+        expected.sort();
+        assert_eq!(restored, expected);
+        assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 4);
+    }
 }
 
 #[cfg(test)]

@@ -5,8 +5,6 @@ use oxyde_lib::models::{DriveInfo, FileEntry, QuickAccessItem, SidebarNode};
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 
-pub const WORKSPACE_CONFIG_KEY: &str = "workspace_state";
-
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SavedWorkspace {
     pub layout: SavedLayoutNode,

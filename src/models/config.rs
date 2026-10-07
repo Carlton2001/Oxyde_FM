@@ -15,8 +15,6 @@ pub struct AppConfig {
     #[serde(default = "default_language")]
     pub language: String,
     #[serde(default)]
-    pub layout: String,
-    #[serde(default)]
     pub show_hidden: bool,
     #[serde(default)]
     pub show_system: bool,
@@ -32,9 +30,7 @@ pub struct AppConfig {
     pub seven_zip_quality: String,
     #[serde(default)]
     pub zstd_quality: String,
-    #[serde(default)]
-    pub font_size: u32,
-    /// GPUI reference in logical pixels per rem, independent of legacy font_size.
+    /// GPUI reference in logical pixels per rem.
     #[serde(default = "default_ui_rem_size")]
     pub ui_rem_size: u32,
     #[serde(default)]
@@ -53,16 +49,16 @@ pub struct AppConfig {
     #[serde(default)]
     pub operations_panel_position: Option<[f32; 2]>,
     #[serde(default)]
-    pub group_by_date: bool,
-    #[serde(default)]
     pub trash_drive_settings: Vec<TrashDriveSettings>,
     #[serde(default = "default_true")]
     pub confirm_delete: bool,
-    #[serde(default = "default_true")]
-    pub first_launch: bool,
-    /// Preserve options written by other versions when saving UI preferences.
-    #[serde(flatten)]
-    pub extra: std::collections::HashMap<String, serde_json::Value>,
+    /// Snapshots interpreted and validated by their GPUI views.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace_state: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub duplicate_search_options: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub duplicate_search_window_size: Option<serde_json::Value>,
 }
 
 fn default_theme() -> String {
@@ -83,7 +79,6 @@ impl Default for AppConfig {
         Self {
             theme: default_theme(),
             language: default_language(),
-            layout: "standard".to_string(),
             show_hidden: false,
             show_system: false,
             use_system_icons: false,
@@ -92,7 +87,6 @@ impl Default for AppConfig {
             zip_quality: "fast".to_string(),
             seven_zip_quality: "fast".to_string(),
             zstd_quality: "fast".to_string(),
-            font_size: 16,
             ui_rem_size: default_ui_rem_size(),
             search_limit: 3000,
             default_turbo_mode: true,
@@ -101,11 +95,11 @@ impl Default for AppConfig {
             sync_sidebar_with_path: true,
             show_network: true,
             operations_panel_position: None,
-            group_by_date: false,
             trash_drive_settings: Vec::new(),
             confirm_delete: true,
-            first_launch: true,
-            extra: Default::default(),
+            workspace_state: None,
+            duplicate_search_options: None,
+            duplicate_search_window_size: None,
         }
     }
 }
@@ -118,11 +112,19 @@ impl AppConfig {
         }
     }
 
-    /// Restore known preferences while retaining workspace and extension data.
+    /// Restore preferences while retaining workspace and duplicate-search state.
     pub fn reset_preferences(&mut self) {
-        let extra = std::mem::take(&mut self.extra);
+        let workspace_state = self.workspace_state.take();
+        let duplicate_search_options = self.duplicate_search_options.take();
+        let duplicate_search_window_size = self.duplicate_search_window_size.take();
         let operations_panel_position = self.operations_panel_position;
-        *self = Self { extra, operations_panel_position, ..Self::default() };
+        *self = Self {
+            workspace_state,
+            duplicate_search_options,
+            duplicate_search_window_size,
+            operations_panel_position,
+            ..Self::default()
+        };
     }
 }
 
@@ -131,7 +133,7 @@ mod reset_tests {
     use super::AppConfig;
 
     #[test]
-    fn reset_restores_defaults_and_preserves_workspace_and_unknown_options() {
+    fn reset_restores_defaults_and_preserves_workspace_and_search_state() {
         let mut config = AppConfig::default();
         config.theme = "light".into();
         config.language = "en".into();
@@ -140,10 +142,11 @@ mod reset_tests {
         config.zip_quality = "best".into();
         config.search_limit = 4500;
         config.default_turbo_mode = false;
-        config.extra.insert("workspace".into(), serde_json::json!({"tabs": ["C:/"]}));
-        config.extra.insert("unknown".into(), serde_json::json!(42));
+        config.workspace_state = Some(serde_json::json!({"tabs": ["C:/"]}));
+        config.duplicate_search_options = Some(serde_json::json!([true, false, true]));
+        config.duplicate_search_window_size = Some(serde_json::json!([900.0, 650.0]));
         config.operations_panel_position = Some([20.0, 30.0]);
-        let extra = config.extra.clone();
+        let previous = config.clone();
         config.reset_preferences();
         assert_eq!(config.theme, "dark");
         assert_eq!(config.language, "fr");
@@ -152,7 +155,9 @@ mod reset_tests {
         assert_eq!(config.zip_quality, "fast");
         assert_eq!(config.search_limit, 3000);
         assert!(config.default_turbo_mode);
-        assert_eq!(config.extra, extra);
+        assert_eq!(config.workspace_state, previous.workspace_state);
+        assert_eq!(config.duplicate_search_options, previous.duplicate_search_options);
+        assert_eq!(config.duplicate_search_window_size, previous.duplicate_search_window_size);
         assert_eq!(config.operations_panel_position, Some([20.0, 30.0]));
     }
 }
@@ -244,10 +249,57 @@ mod tests {
     }
 
     #[test]
+    fn unknown_options_are_discarded_without_losing_current_view_state() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.json");
+        let retired = serde_json::json!({
+            "font_size": 22,
+            "layout": "dual",
+            "group_by_date": true,
+            "first_launch": false,
+            "future_option": {"enabled": true},
+        });
+        let current = serde_json::json!({
+            "workspace_state": {"sidebar_collapsed": true, "layout": {"kind": "pane"}},
+            "duplicate_search_options": [true, false, true],
+            "duplicate_search_window_size": [900.0, 650.0],
+        });
+        let defaults = serde_json::to_value(AppConfig::default()).unwrap();
+        for (key, _) in retired.as_object().unwrap() {
+            assert!(defaults.get(key).is_none());
+        }
+        let mut input = retired.clone();
+        input.as_object_mut().unwrap().extend(current.as_object().unwrap().clone());
+        fs::write(&path, serde_json::to_vec(&input).unwrap()).unwrap();
+        let mut config = ConfigManager::read_from_path(&path).unwrap();
+        assert_eq!(config.ui_rem_size, 16);
+        config.ui_rem_size = 24;
+        config.theme = "light".into();
+
+        for reset in [false, true] {
+            if reset {
+                config.reset_preferences();
+            }
+            ConfigManager::write_to_path(&path, &config).unwrap();
+            let written: serde_json::Value =
+                serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+            for (key, _) in retired.as_object().unwrap() {
+                assert!(written.get(key).is_none());
+            }
+            for (key, value) in current.as_object().unwrap() {
+                assert_eq!(written.get(key), Some(value));
+            }
+            config = ConfigManager::read_from_path(&path).unwrap();
+            assert_eq!(config.ui_rem_size, if reset { 16 } else { 24 });
+            assert_eq!(config.theme, if reset { "dark" } else { "light" });
+        }
+    }
+
+    #[test]
     fn preferences_survive_reload_without_discarding_other_options() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("config.json");
-        fs::write(&path, r#"{"theme":"oxyde-dark","language":"fr","search_limit":123,"future_option":{"enabled":true}}"#).unwrap();
+        fs::write(&path, r#"{"theme":"oxyde-dark","language":"fr","search_limit":123,"duplicate_search_options":[false,true,true]}"#).unwrap();
         let mut config = ConfigManager::read_from_path(&path).unwrap();
         config.operations_panel_position = Some([42.5, 87.25]);
         config.ui_rem_size = 20;
@@ -279,7 +331,7 @@ mod tests {
             assert_eq!(config.date_format, "ISO");
             assert_eq!(config.show_network, theme == ThemeId::Light);
             assert_eq!(config.operations_panel_position, Some([42.5, 87.25]));
-            assert_eq!(config.extra["future_option"]["enabled"], true);
+            assert_eq!(config.duplicate_search_options, Some(serde_json::json!([false, true, true])));
         }
     }
 

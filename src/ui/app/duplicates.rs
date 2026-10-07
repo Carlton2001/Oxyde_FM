@@ -83,14 +83,14 @@ impl OxydeApp {
             .unwrap_or_default();
         let options = self
             .config
-            .extra
-            .get("duplicate_search_options")
+            .duplicate_search_options
+            .as_ref()
             .and_then(|v| serde_json::from_value::<[bool; 3]>(v.clone()).ok())
             .unwrap_or([false, true, true]);
         let dimensions = self
             .config
-            .extra
-            .get("duplicate_search_window_size")
+            .duplicate_search_window_size
+            .as_ref()
             .and_then(|v| serde_json::from_value::<[f32; 2]>(v.clone()).ok())
             .filter(|v| v.iter().all(|x| x.is_finite() && *x > 0.0))
             .unwrap_or([960.0, 700.0]);
@@ -206,10 +206,7 @@ impl DuplicateWindow {
                     .await;
                 let _ = this.update(cx, |this, cx| {
                     let _ = this.owner.update(cx, |owner, cx| {
-                        owner.config.extra.insert(
-                            "duplicate_search_window_size".into(),
-                            serde_json::json!(dimensions),
-                        );
+                        owner.config.duplicate_search_window_size = Some(serde_json::json!(dimensions));
                         owner.save_preferences(cx);
                     });
                 });
@@ -641,10 +638,7 @@ impl Render for DuplicateWindow {
                             this.options[index] = !this.options[index];
                             let options = this.options;
                             let _ = this.owner.update(cx, |owner, cx| {
-                                owner.config.extra.insert(
-                                    "duplicate_search_options".into(),
-                                    serde_json::json!(options),
-                                );
+                                owner.config.duplicate_search_options = Some(serde_json::json!(options));
                                 owner.save_preferences(cx);
                             });
                             cx.notify();

@@ -34,6 +34,8 @@ pub trait Platform: Send + Sync {
     fn recycle_bin_usage(&self) -> Result<(u64, u64), String>;
     fn recycle_bin_config(&self, path: String) -> Result<crate::commands::ops::TrashSystemConfig, String>;
     fn set_recycle_bin_config(&self, config: crate::commands::ops::TrashSystemConfig) -> Result<(), String>;
+    /// Read the original path from native trash metadata when the Shell name is opaque.
+    fn trash_original_path(&self, id: &std::path::Path) -> Option<std::path::PathBuf>;
 
     /// Final process exit, called only after application cleanup and runtime shutdown.
     /// Windows bypasses DLL detach callbacks that can hang in native graphics drivers.
@@ -128,9 +130,6 @@ pub trait Platform: Send + Sync {
     fn watch_quick_access_changes(&self, revision: std::sync::Arc<std::sync::atomic::AtomicU64>)
         -> Result<Option<Box<dyn Send>>, String>;
 
-    /// Couleur d'accent système (format hex "#rrggbb").
-    fn get_accent_color(&self) -> String;
-
     /// Résout un fichier de raccourci (.lnk sur Windows, .desktop sur Linux).
     /// Retourne le chemin cible, ou `None` si le fichier n'est pas un raccourci connu.
     fn resolve_shortcut(&self, path: &str) -> Option<String>;
@@ -185,6 +184,8 @@ mod windows_disk_images;
 mod windows_drives;
 #[cfg(target_os = "windows")]
 mod windows_impl;
+#[cfg(target_os = "windows")]
+mod windows_trash;
 
 #[cfg(not(target_os = "windows"))]
 use linux_impl::LinuxPlatform as CurrentPlatform;
