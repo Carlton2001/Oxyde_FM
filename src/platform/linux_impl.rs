@@ -12,6 +12,9 @@ impl LinuxPlatform {
 impl Platform for LinuxPlatform {
     fn trash_original_path(&self, _id: &std::path::Path) -> Option<std::path::PathBuf> { None }
 
+    fn trash_transfer_entries(&self, _paths: &[std::path::PathBuf]) -> Result<Vec<super::TrashTransferEntry>, String> { Ok(Vec::new()) }
+    fn detach_trash_metadata(&self, _entry: &super::TrashTransferEntry) -> Result<Option<(std::path::PathBuf, std::path::PathBuf)>, String> { Ok(None) }
+
     fn peek_status(&self) -> Result<super::PeekStatus, String> { Ok(super::PeekStatus::default()) }
     fn open_peek(&self, _path: &str) -> Result<(), String> { Err("Peek is only available on Windows".into()) }
     fn shortcut_info(&self, _path: &std::path::Path) -> Option<crate::models::ShortcutInfo> { None }

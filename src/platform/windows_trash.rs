@@ -13,6 +13,90 @@ pub(super) fn original_path(id: &Path) -> Option<PathBuf> {
     parse_original_path(&std::fs::read(metadata).ok()?)
 }
 
+pub(super) fn transfer_entries(
+    paths: &[PathBuf],
+) -> Result<Vec<super::TrashTransferEntry>, String> {
+    // Most transfers never touch the Recycle Bin: avoid a Shell enumeration.
+    let candidates: Vec<_> = paths
+        .iter()
+        .filter(|path| {
+            path.file_name().is_some_and(|name| {
+                name.to_string_lossy()
+                    .to_ascii_lowercase()
+                    .starts_with("$r")
+            }) && path
+                .parent()
+                .and_then(Path::parent)
+                .and_then(Path::file_name)
+                .is_some_and(|name| name.to_string_lossy().eq_ignore_ascii_case("$Recycle.bin"))
+        })
+        .collect();
+    if candidates.is_empty() {
+        return Ok(Vec::new());
+    }
+    let normalize = |path: &Path| {
+        path.to_string_lossy()
+            .replace('/', "\\")
+            .trim_start_matches("\\\\?\\")
+            .to_lowercase()
+    };
+    let items = trash::os_limited::list().map_err(|error| error.to_string())?;
+    candidates
+        .into_iter()
+        .map(|path| {
+            if !items
+                .iter()
+                .any(|item| normalize(Path::new(&item.id)) == normalize(path))
+            {
+                return Err(format!(
+                    "Trash entry is no longer available: {}",
+                    path.display()
+                ));
+            }
+            let original_path = original_path(path)
+                .ok_or_else(|| format!("Cannot read original trash name: {}", path.display()))?;
+            let name = path
+                .file_name()
+                .ok_or("Invalid trash filename")?
+                .to_string_lossy();
+            Ok(super::TrashTransferEntry {
+                path: path.clone(),
+                original_path,
+                metadata_path: path.with_file_name(format!("$I{}", &name[2..])),
+            })
+        })
+        .collect()
+}
+
+pub(super) fn detach_metadata(
+    entry: &super::TrashTransferEntry,
+) -> Result<Option<(PathBuf, PathBuf)>, String> {
+    if entry.path.try_exists().map_err(|error| error.to_string())? {
+        return Ok(None);
+    }
+    if original_path(&entry.path).as_ref() != Some(&entry.original_path) {
+        return Err(format!(
+            "Trash metadata changed during transfer: {}",
+            entry.path.display()
+        ));
+    }
+    let backup = entry
+        .metadata_path
+        .with_file_name(format!(".oxyde-trash-{}.tmp", uuid::Uuid::new_v4()));
+    // A hard link reserves a unique name on the source volume without overwriting.
+    std::fs::hard_link(&entry.metadata_path, &backup).map_err(|error| error.to_string())?;
+    let result = super::platform()
+        .set_hidden_attribute(&backup, true)
+        .and_then(|()| {
+            std::fs::remove_file(&entry.metadata_path).map_err(|error| error.to_string())
+        });
+    if let Err(error) = result {
+        let _ = std::fs::remove_file(&backup);
+        return Err(error);
+    }
+    Ok(Some((entry.metadata_path.clone(), backup)))
+}
+
 fn parse_original_path(bytes: &[u8]) -> Option<PathBuf> {
     let version = u64::from_le_bytes(bytes.get(..8)?.try_into().ok()?);
     let path_bytes = match version {

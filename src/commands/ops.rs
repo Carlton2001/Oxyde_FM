@@ -43,13 +43,17 @@ fn create_dir_all_tracked(
     created: &mut Vec<PathBuf>,
 ) -> std::io::Result<()> {
     let mut missing = Vec::new();
-    let mut current = PathBuf::new();
-    for component in path.components() {
-        current.push(component);
-        if !current.exists() {
-            missing.push(current.clone());
-        }
+    let mut current = path;
+    while !current.exists() {
+        missing.push(current.to_path_buf());
+        current = current.parent().ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "The filesystem root is unavailable",
+            )
+        })?;
     }
+    missing.reverse();
     for directory in missing {
         match std::fs::create_dir(&directory) {
             Ok(()) => created.push(directory),
@@ -365,11 +369,20 @@ fn check_conflicts_real(
     let mut conflicts = Vec::new();
     let target_base = validate_path(&target_dir)?;
 
+    let sources: Vec<_> = paths.iter().map(PathBuf::from).collect();
+    let trash_entries = crate::platform::platform()
+        .trash_transfer_entries(&sources)
+        .map_err(CommandError::TrashError)?;
     for path_str in paths {
         let source_path = validate_path(&path_str)?;
 
         // Conflict check
-        if let Some(file_name) = source_path.file_name() {
+        let display_path = trash_entries
+            .iter()
+            .find(|entry| entry.path == source_path)
+            .map(|entry| entry.original_path.as_path())
+            .unwrap_or(&source_path);
+        if let Some(file_name) = display_path.file_name() {
             let target_path = target_base.join(file_name);
             if target_path.exists() {
                 // Initial top-level conflict found
@@ -388,6 +401,7 @@ fn add_conflict_recursive(
 ) -> Result<(), CommandError> {
     let mut source_entry = get_file_entry_from_path(source_path)?;
     let mut target_entry = get_file_entry_from_path(target_path)?;
+    source_entry.name = target_entry.name.clone();
 
     if source_entry.is_dir {
         // Calculate size and item count for the folder itself
@@ -432,7 +446,7 @@ fn add_conflict_recursive(
 
         // Add the folder conflict itself
         conflicts.push(ConflictEntry {
-            name: source_path
+            name: target_path
                 .file_name()
                 .map(|n| n.to_string_lossy().to_string())
                 .unwrap_or_default(),
@@ -454,7 +468,7 @@ fn add_conflict_recursive(
     } else {
         // Individual file conflict
         conflicts.push(ConflictEntry {
-            name: source_path
+            name: target_path
                 .file_name()
                 .map(|n| n.to_string_lossy().to_string())
                 .unwrap_or_default(),
@@ -587,92 +601,15 @@ pub async fn restore_items(paths: Vec<String>) -> Result<Vec<String>, CommandErr
     Ok(restored_paths)
 }
 
-fn fast_trash(paths: Vec<PathBuf>) -> Result<(), CommandError> {
+/// Replay the same system deletion policy used by the operation queue.
+/// Recycle Bin capacity is decided by the OS, without a fixed size or item limit.
+fn recycle_history_paths(paths: Vec<PathBuf>) -> Result<(), CommandError> {
     if paths.is_empty() {
         return Ok(());
     }
-
-    #[cfg(target_os = "windows")]
-    {
-        use windows::core::PCWSTR;
-        use windows::Win32::Foundation::HWND;
-        use windows::Win32::UI::Shell::{
-            SHFileOperationW, FOF_ALLOWUNDO, FOF_NOCONFIRMATION, FOF_NOERRORUI, FOF_SILENT,
-            FO_DELETE, SHFILEOPSTRUCTW,
-        };
-
-        // Heuristic: Check size before calling Shell if single large file or small set
-        // to avoid triggering UAC for something that will fail anyway.
-        let mut total_size = 0;
-        let mut count = 0;
-        for p in &paths {
-            if let Ok(m) = std::fs::metadata(p) {
-                if m.is_file() {
-                    total_size += m.len();
-                } else {
-                    // Quick check for directories: if it's already > 4GB or we already counted 500 files, stop counting
-                    // and just assume it might be large.
-                    total_size += 1024 * 1024; // Dummy average for dir entry
-                }
-            }
-            count += 1;
-            if total_size > 4 * 1024 * 1024 * 1024 || count > 1000 {
-                return Err(CommandError::TrashFull(
-                    "Items potentially too large for Recycle Bin.".to_string(),
-                ));
-            }
-        }
-
-        // 4GB is a very safe "might be too large" threshold for default Recycle Bin settings on many drives.
-        if total_size > 4 * 1024 * 1024 * 1024 {
-            return Err(CommandError::TrashFull(
-                "Fichiers trop volumineux pour la corbeille.".to_string(),
-            ));
-        }
-
-        let mut buffer: Vec<u16> = Vec::new();
-        for src in paths {
-            let path_str = src.to_string_lossy().replace("/", "\\");
-            buffer.extend(path_str.encode_utf16());
-            buffer.push(0);
-        }
-        buffer.push(0);
-
-        let mut sh_op = SHFILEOPSTRUCTW {
-            hwnd: HWND(std::ptr::null_mut()),
-            wFunc: FO_DELETE,
-            pFrom: PCWSTR(buffer.as_ptr()),
-            pTo: PCWSTR(std::ptr::null()),
-            fFlags: (FOF_ALLOWUNDO.0 | FOF_NOCONFIRMATION.0 | FOF_NOERRORUI.0 | FOF_SILENT.0)
-                as u16,
-            fAnyOperationsAborted: Default::default(),
-            hNameMappings: std::ptr::null_mut(),
-            lpszProgressTitle: PCWSTR(std::ptr::null()),
-        };
-
-        unsafe {
-            let result = SHFileOperationW(&mut sh_op);
-            if result != 0 {
-                if result == 0x4C7 || result == 0x80070005u32 as i32 {
-                    // 0x4C7 = Aborted, 0x80070005 = Access Denied (often after UAC refuse)
-                    return Err(CommandError::TrashFull(
-                        "Opération corbeille impossible ou annulée.".to_string(),
-                    ));
-                }
-                return Err(CommandError::TrashError(format!(
-                    "Windows Shell Error (0x{:X}).",
-                    result
-                )));
-            }
-        }
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        trash::delete_all(paths).map_err(|e| CommandError::TrashError(e.to_string()))?;
-    }
-
-    Ok(())
+    crate::platform::platform()
+        .shell_delete(&paths, true)
+        .map_err(CommandError::TrashError)
 }
 
 /// Remove files created by a copy operation during Undo. These are verified against
@@ -809,6 +746,11 @@ pub async fn undo_last_action(
                 }
             }
             TransactionType::Move => {
+                for backup in tx.details.trash_metadata_backups.as_deref().unwrap_or_default() {
+                    if !PathBuf::from(backup).is_file() {
+                        return Err(CommandError::IoError(format!("Cannot undo trash transfer; metadata backup is missing: {backup}")));
+                    }
+                }
                 if tx.details.created_files.is_none()
                     || tx.details.created_dirs.is_none()
                     || tx.details.replaced_files.is_none()
@@ -993,7 +935,7 @@ pub async fn undo_last_action(
                     }
                 }
                 if !files_to_delete.is_empty() {
-                    fast_trash(files_to_delete)?;
+                    recycle_history_paths(files_to_delete)?;
                 }
             }
         }
@@ -1018,7 +960,7 @@ pub async fn redo_last_action(
         match tx.op_type {
             TransactionType::Delete => {
                 let paths: Vec<PathBuf> = tx.details.paths.iter().map(PathBuf::from).collect();
-                fast_trash(paths)?;
+                recycle_history_paths(paths)?;
             }
             TransactionType::Copy => {
                 if tx.details.copied_files.is_none()
@@ -1601,6 +1543,7 @@ mod copy_redo_tests {
                 replaced_files: Some(Vec::new()),
                 overwritten_files: Some(Vec::new()),
                 moved_files: None,
+                trash_metadata_backups: None,
                 moved_dirs: None,
                 copied_files: Some(vec![(
                     source.to_string_lossy().into_owned(),
@@ -1646,6 +1589,7 @@ mod copy_redo_tests {
                 )]),
                 overwritten_files: Some(Vec::new()),
                 moved_files: None,
+                trash_metadata_backups: None,
                 moved_dirs: None,
                 copied_files: Some(vec![(
                     source.to_string_lossy().into_owned(),
@@ -1684,6 +1628,7 @@ mod history_concurrency_tests {
                 replaced_files: None,
                 overwritten_files: None,
                 moved_files: None,
+                trash_metadata_backups: None,
                 moved_dirs: None,
                 copied_files: None,
                 copied_file_hashes: None,
@@ -1773,5 +1718,21 @@ mod history_concurrency_tests {
         assert_eq!(std::fs::read(&old).unwrap(), b"fixture content");
         assert!(history.get_state().undo_stack.is_empty());
         assert_eq!(history.get_state().redo_stack[0].id, tx.id);
+    }
+}
+
+#[cfg(test)]
+mod tracked_directory_tests {
+    #[test]
+    fn recreates_nested_directories_below_canonical_root_without_tracking_drive_prefix() {
+        let root = tempfile::tempdir().unwrap();
+        let canonical = std::fs::canonicalize(root.path()).unwrap();
+        let target = canonical.join("one/two");
+        let mut created = Vec::new();
+        super::create_dir_all_tracked(&target, &mut created).unwrap();
+        assert_eq!(created, vec![canonical.join("one"), target.clone()]);
+        assert!(target.is_dir());
+        super::create_dir_all_tracked(&target, &mut created).unwrap();
+        assert_eq!(created.len(), 2);
     }
 }

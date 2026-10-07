@@ -2107,6 +2107,7 @@ impl OxydeApp {
                                     replaced_files: None,
                                     overwritten_files: None,
                                     moved_files: None,
+                                    trash_metadata_backups: None,
                                     moved_dirs: None,
                                     copied_files: None,
                                     copied_file_hashes: None,

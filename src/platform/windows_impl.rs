@@ -14,6 +14,13 @@ impl Platform for WindowsPlatform {
         super::windows_trash::original_path(id)
     }
 
+    fn trash_transfer_entries(&self, paths: &[std::path::PathBuf]) -> Result<Vec<super::TrashTransferEntry>, String> {
+        super::windows_trash::transfer_entries(paths)
+    }
+    fn detach_trash_metadata(&self, entry: &super::TrashTransferEntry) -> Result<Option<(std::path::PathBuf, std::path::PathBuf)>, String> {
+        super::windows_trash::detach_metadata(entry)
+    }
+
     fn peek_status(&self) -> Result<super::PeekStatus, String> { super::windows_peek::peek_status() }
     fn open_peek(&self, path: &str) -> Result<(), String> { super::windows_peek::open_peek(path) }
     fn shortcut_info(&self, path: &std::path::Path) -> Option<crate::models::ShortcutInfo> { super::windows_shortcuts::get_shortcut_info(path) }
@@ -581,3 +588,193 @@ pub(super) fn write_recycle_bin_config(config: TrashSystemConfig) -> Result<(), 
 
 }
 use recycle_settings::{read_recycle_bin_config, write_recycle_bin_config};
+
+#[cfg(test)]
+mod deletion_history_tests {
+    use super::*;
+    use crate::models::{HistoryManager, Transaction, TransactionDetails, TransactionType};
+    use std::path::PathBuf;
+
+    struct Fixture {
+        root: tempfile::TempDir,
+        paths: Vec<PathBuf>,
+    }
+
+    impl Fixture {
+        fn new() -> Self {
+            let root = tempfile::tempdir().unwrap();
+            let drive = root.path().ancestors().last().unwrap();
+            let config = read_recycle_bin_config(drive.to_string_lossy().into_owned()).unwrap();
+            assert!(!config.nuke_on_delete, "test volume must recycle files");
+            Self {
+                root,
+                paths: Vec::new(),
+            }
+        }
+
+        fn verify_cycle(&self, verify: impl Fn()) {
+            let runtime = tokio::runtime::Runtime::new().unwrap();
+            let history = HistoryManager::new();
+            WindowsPlatform::new()
+                .shell_delete(&self.paths, true)
+                .unwrap();
+            assert!(self.paths.iter().all(|path| !path.exists()));
+            history.push(Transaction::new(
+                TransactionType::Delete,
+                TransactionDetails {
+                    paths: self
+                        .paths
+                        .iter()
+                        .map(|path| path.to_string_lossy().into_owned())
+                        .collect(),
+                    target_dir: None,
+                    old_path: None,
+                    new_path: None,
+                    created_files: None,
+                    created_dirs: None,
+                    replaced_files: None,
+                    overwritten_files: None,
+                    moved_files: None,
+                    trash_metadata_backups: None,
+                    moved_dirs: None,
+                    copied_files: None,
+                    copied_file_hashes: None,
+                },
+            ));
+            runtime.block_on(async {
+                crate::commands::ops::undo_last_action(&history)
+                    .await
+                    .unwrap();
+                verify();
+                assert_eq!(history.get_state().redo_stack.len(), 1);
+                crate::commands::ops::redo_last_action(&history)
+                    .await
+                    .unwrap();
+                assert!(self.paths.iter().all(|path| !path.exists()));
+                assert_eq!(history.get_state().undo_stack.len(), 1);
+                crate::commands::ops::undo_last_action(&history)
+                    .await
+                    .unwrap();
+                verify();
+            });
+        }
+    }
+
+    impl Drop for Fixture {
+        fn drop(&mut self) {
+            let Ok(entries) = crate::commands::ops::list_trash() else {
+                return;
+            };
+            let ids: Vec<_> = entries
+                .into_iter()
+                .filter(|entry| self.paths.contains(&PathBuf::from(&entry.original_path)))
+                .map(|entry| entry.path)
+                .collect();
+            if !ids.is_empty() {
+                let result = std::thread::spawn(move || {
+                    tokio::runtime::Runtime::new()
+                        .unwrap()
+                        .block_on(crate::commands::ops::restore_items(ids))
+                })
+                .join();
+                assert!(
+                    matches!(result, Ok(Ok(_))),
+                    "generated fixture cleanup failed: {result:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    #[ignore = "recycles/restores a generated sparse file larger than the former 4 GiB limit"]
+    fn native_delete_redo_above_old_size_limit() {
+        use std::io::{Read, Seek, SeekFrom, Write};
+        use std::os::windows::io::AsRawHandle;
+        use windows::core::PCWSTR;
+        use windows::Win32::Foundation::HANDLE;
+        use windows::Win32::System::Ioctl::FSCTL_SET_SPARSE;
+        use windows::Win32::System::IO::DeviceIoControl;
+        use windows::Win32::UI::Shell::{SHQueryRecycleBinW, SHQUERYRBINFO};
+
+        let mut fixture = Fixture::new();
+        let size = 4 * 1024 * 1024 * 1024 + 1_u64;
+        let drive = fixture.root.path().ancestors().last().unwrap();
+        let config = read_recycle_bin_config(drive.to_string_lossy().into_owned()).unwrap();
+        let wide: Vec<u16> = drive
+            .to_string_lossy()
+            .encode_utf16()
+            .chain(Some(0))
+            .collect();
+        let mut usage = SHQUERYRBINFO {
+            cbSize: std::mem::size_of::<SHQUERYRBINFO>() as u32,
+            ..Default::default()
+        };
+        unsafe {
+            SHQueryRecycleBinW(PCWSTR(wide.as_ptr()), &mut usage).unwrap();
+        }
+        // Leave ample headroom so this generated fixture cannot evict existing entries.
+        assert!(
+            config.max_size_mb * 1024 * 1024 > usage.i64Size.max(0) as u64 + 2 * size,
+            "test volume must have more than 8 GiB of Recycle Bin headroom"
+        );
+        let path = fixture
+            .root
+            .path()
+            .join("Fichier école supérieur à 4 Gio.bin");
+        fixture.paths.push(path.clone());
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)
+            .unwrap();
+        unsafe {
+            let mut returned = 0;
+            DeviceIoControl(
+                HANDLE(file.as_raw_handle()),
+                FSCTL_SET_SPARSE,
+                None,
+                0,
+                None,
+                0,
+                Some(&mut returned),
+                None,
+            )
+            .unwrap();
+        }
+        file.set_len(size).unwrap();
+        file.write_all(b"start").unwrap();
+        file.seek(SeekFrom::End(-3)).unwrap();
+        file.write_all(b"end").unwrap();
+        drop(file);
+        fixture.verify_cycle(|| {
+            let mut file = std::fs::File::open(&path).unwrap();
+            assert_eq!(file.metadata().unwrap().len(), size);
+            let mut start = [0; 5];
+            file.read_exact(&mut start).unwrap();
+            assert_eq!(&start, b"start");
+            file.seek(SeekFrom::End(-3)).unwrap();
+            let mut end = [0; 3];
+            file.read_exact(&mut end).unwrap();
+            assert_eq!(&end, b"end");
+        });
+    }
+
+    #[test]
+    #[ignore = "recycles/restores only 1001 generated files to exercise the former item limit"]
+    fn native_delete_redo_above_old_item_limit() {
+        let mut fixture = Fixture::new();
+        for index in 0..1001 {
+            let path = fixture
+                .root
+                .path()
+                .join(format!("Fichier école {index}.txt"));
+            std::fs::write(&path, index.to_string()).unwrap();
+            fixture.paths.push(path);
+        }
+        fixture.verify_cycle(|| {
+            for (index, path) in fixture.paths.iter().enumerate() {
+                assert_eq!(std::fs::read_to_string(path).unwrap(), index.to_string());
+            }
+        });
+    }
+}

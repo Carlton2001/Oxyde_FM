@@ -126,15 +126,49 @@ Validation : six fixtures déterministes couvrant minuit dans plusieurs panneaux
 
 ## A18 — Couper/Coller depuis la corbeille dans le parcours GPUI actuel — P1
 
-**Parcours de code établi, à reproduire séparément sur Windows.** `copy_files_to_clipboard` publie les chemins physiques sélectionnés, `execute_coller` les transmet au gestionnaire générique, et `perform_copy` construit la destination depuis `source.file_name()`. Ce parcours ne consulte ni le nom d'origine de la corbeille ni son fichier `$I`, et ne passe pas par `restore_items`. Le nom `$R…` et la cohérence des métadonnées de corbeille après déplacement sont donc à vérifier.
+**Corrigé le 7 octobre 2026 dans le parcours actif.** Une fixture native a reproduit le déplacement sous le nom `$R…` dans `FileOperationManager::perform_copy`, appelé par la file d'opérations utilisée par GPUI. La correction ne réintroduit pas l'ancienne commande `move_from_trash`.
 
-Reproduire Couper/Coller sur des fichiers et dossiers temporaires, depuis GPUI et avec l'Explorateur Windows, avant de choisir l'intégration native adaptée. Vérifier noms, conflits, métadonnées et comportement de l'historique. Ne pas réintroduire automatiquement `move_from_trash` : les défauts de cette ancienne API ne décrivaient pas les effets du gestionnaire actuel. Cette observation est consignée pour le lot suivant ; aucun scénario supplémentaire n'a été exécuté sur des fichiers utilisateur.
+La détection native vérifie l'appartenance à la corbeille et lit le nom original du fichier `$I`, par lot de sources et en arrière-plan. Le plan de copie/déplacement et les vérifications de conflits, y compris après attente dans la file, utilisent ce nom. Les clés de résolution et les chemins sources restent physiques. Deux éléments sélectionnés portant le même nom original sont refusés avant mutation et peuvent être transférés séparément.
+
+Un déplacement complet conserve ses métadonnées dans une sauvegarde cachée sur le volume source, ajoutée au journal Move existant. Annuler remet les métadonnées et les données à leur emplacement de corbeille ; Rétablir rejoue le même journal. Une sauvegarde manquante bloque Annuler avant mutation. Les éléments ignorés et les dossiers partiellement déplacés gardent leur `$I` actif. La finalisation traite aussi les éléments entièrement déplacés avant une erreur ou une annulation ultérieure. Les sauvegardes expirent avec l'historique. Les transferts vers une archive gardent leur politique actuelle sans historique et ne conservent pas de sauvegarde de métadonnées après publication.
+
+Le presse-papiers actif utilise désormais l'objet de données natif du dossier Corbeille pour ses éléments. Il publie l'identité Shell et l'intention Copier/Couper avec `OleSetClipboard`, puis rend les formats avec `OleFlushClipboard` sur un thread STA dédié. Les gardes libèrent les PIDL, les textes et les buffers en cas d'erreur ; les interfaces COM quittent leur portée avant la désinitialisation OLE. Les fichiers ordinaires utilisent toujours le parcours existant. Le format CF_HDROP conserve les chemins physiques nécessaires au collage dans Oxyde.
+
+La comparaison avec le projet Tauri local `Biluf_FM_Clean` confirme ses appelants : `src/actions/fileActions.ts:152` publiait un objet Shell pour Couper, et `:191` redirigeait le collage vers `move_from_trash`. GPUI avait perdu ce branchement. Le principe du presse-papiers est repris ; le détour Tauri par l'emplacement original, ses écrasements et ses sauvegardes temporaires communes ne sont pas repris.
+
+Les cycles natifs ont aussi révélé que `create_dir_all_tracked` tentait de créer le préfixe de lecteur d'un chemin Windows canonique `\\?\…` lors du redo de dossiers. Il remonte maintenant aux parents existants et ne suit que les dossiers réellement créés.
+
+Validation : fichiers Unicode, `.lnk`, `.url`, dossiers avec contenu et dossiers vides ; copie et déplacement par la file active ; conflits et déplacements partiels ; sauvegarde absente et conflit au redo ; deux cycles Annuler/Rétablir ; copie et déplacement dans une archive temporaire. Le consommateur natif `IFileOperation` vérifie les noms obtenus depuis des formats Shell rendus puis détachés de l'objet source, ainsi que les chemins physiques CF_HDROP. Aucun remplacement du presse-papiers utilisateur pendant les tests. La publication réelle et le collage interactif dans l'Explorateur restent à confirmer manuellement. Le test de cible de dépôt qui bloquait a été arrêté et n'est pas conservé ; ses fixtures identifiées ont été récupérées. Aucun Computer Use ni validation Linux.
+
+Références natives : [transfert Shell par presse-papiers](https://learn.microsoft.com/en-us/windows/win32/shell/dragdrop), [IFileOperation::MoveItems](https://learn.microsoft.com/en-us/windows/win32/api/shobjidl_core/nf-shobjidl_core-ifileoperation-moveitems).
+
+## A19 — Annuler/Rétablir un déplacement entre volumes — P1
+
+**Point de code établi, à reproduire séparément.** Le gestionnaire sait copier puis retirer la source lors d'un déplacement entre volumes, mais le journal Move utilise `std::fs::rename` pour Annuler/Rétablir et son rollback. Ces appels peuvent échouer avec `CrossesDevices`. Les scénarios A18 ont été validés sur un seul volume. Étudier un rejeu entre volumes avec publication exclusive, vérification du contenu et rollback avant de modifier ce parcours ; ne pas annoncer ce scénario comme validé.
+
+## A20 — Métadonnées de corbeille après un déplacement natif Shell — P2
+
+**Observation native, sans conclusion sur l'annulation de l'Explorateur.** Le consommateur Shell utilisé dans le test A18 conserve les noms et retire les données de la corbeille, mais les fichiers `$I` restent présents. L'absence de `$R` retire bien les éléments de l'énumération. Vérifier le comportement du collage réel et de l'historique Windows avant de modifier ou purger ces métadonnées ; aucune purge automatique de métadonnées utilisateur n'est ajoutée. Les sidecars capturés pour les fixtures du test sont nettoyés séparément.
+
+## A21 — Historique de suppression dans la référence Tauri — observation de comparaison
+
+L'utilisateur confirme que son application Tauri annule une suppression, puis que le redo disparaît après une première tentative sans erreur affichée. La lecture montre une branche Delete prévue pour supprimer à nouveau. La disparition sans message est compatible avec une erreur masquée suivie de la perte de la transaction ; la cause native de l'échec n'est pas établie. Le hook React `useFileOperations` n'affiche pas les erreurs de redo, et l'ancien backend retire la transaction de sa pile avant l'opération : un échec peut donc perdre l'entrée. Le journal GPUI utilise déjà la réservation A02, qui garde les entrées en cas d'échec.
+
+Un défaut distinct est établi pour l'ancienne transaction Restore de Tauri : `move_from_trash` enregistre `paths: vec![]`, puis le redo réutilise cette liste vide. Cette observation ne doit pas être confondue avec le refus de redo Delete signalé par l'utilisateur. Le projet Tauri est consulté en lecture seule. Le cycle Delete natif de GPUI réussit deux tours Supprimer → Annuler → Rétablir dans ce lot, avec les noms Unicode d'origine.
+
+## A22 — Plafond arbitraire du redo de suppression — P1
+
+**Corrigé le 7 octobre 2026, puis confirmé par le test utilisateur.** Le toast `TrashFull("Items potentially too large for Recycle Bin.")` venait de `fast_trash`, et non d'un refus de Windows. Cette ancienne fonction refusait plus de 4 Gio ou plus de 1 000 chemins ; la suppression initiale ne contenait pas ces limites. Les cycles natifs A18 précédents ne couvraient que de petits fichiers.
+
+Le rejeu Delete et l'annulation NewFolder utilisent désormais `Platform::shell_delete` avec la même politique que la file de suppression active. Le duplicata des appels natifs et ses estimations de taille sont retirés. La décision appartient au système ; une annulation native est également vérifiée par ce parcours commun. Le journal A02 conserve l'entrée si le système refuse réellement l'opération.
+
+Deux régressions natives ciblent les anciens seuils : un fichier creux de 4 Gio + 1 octet et 1 001 petits fichiers, avec Supprimer → Annuler → Rétablir → Annuler et contrôle du nom et du contenu. Les fixtures sont générées puis récupérées ; le test de grand fichier exige une marge de capacité avant mutation et ne change pas la configuration de corbeille. Les deux tests natifs exécutés explicitement passent. Le fichier de 4 Gio + 1 octet conserve sa taille et ses marqueurs de contenu ; les 1 001 fichiers conservent leurs noms et leur contenu après les deux restaurations.
 
 ## Validation et suite
 
 La compilation Windows actuelle passe sans avertissement du projet. Les observations ci-dessus sont issues de la lecture des sources et de Clippy ; aucun nouveau test de comportement ou benchmark n'a été exécuté pendant cet audit. Snap Layouts et le témoin de déplacement actuel sont confirmés par l'utilisateur. Les validations des lots précédents restent décrites dans [AUDIT_CODE_MORT.md](AUDIT_CODE_MORT.md).
 
-Après A01/A02/A03/A04 et A15, examiner le parcours actif A18 et les ressources natives A05/A06. Les optimisations demandent des mesures avant modification. Cet ordre est proposé, pas une liste de corrections déjà autorisées ou réalisées.
+Après A01/A02/A03/A04/A15 et le raccordement A18, examiner A05/A06, puis A19 ; conserver A20 pour la validation native interactive. Les optimisations demandent des mesures avant modification. Cet ordre est proposé, pas une liste de corrections déjà autorisées ou réalisées.
 
 ### État après les lots N01 à N16
 
@@ -167,3 +201,17 @@ Ces résultats valident l’API isolée testée dans `b8c7523`, sans prouver son
 ### Validation du retrait de la chaîne Restore et du lot A15
 
 `cargo test --all-targets --offline` : 104 tests backend et 108 tests du binaire passent, soit 212 ; les trois tests natifs antérieurs restent ignorés. Les huit tests du journal A14 isolé disparaissent avec sa chaîne, et six tests A15 sont ajoutés. Les tests des catalogues et de l'historique actif passent. `cargo check --all-targets --offline` passe sans avertissement du projet, et `cargo build --bin oxyde --offline` réussit. La vérification des appelants confirme que la tâche A15 est démarrée par `start_watcher_task`, appelé à l'initialisation de la fenêtre principale. Aucun Computer Use ni validation Linux, aucune modification du fuseau ou de l'horloge système.
+
+### Validation du lot A18
+
+`cargo test --all-targets --offline` : 106 tests backend et 108 tests du binaire passent, soit 214. Deux tests automatiques couvrent les dossiers canoniques et l'expiration des métadonnées. Sept scénarios natifs exécutés explicitement passent : les deux restaurations natives antérieures, le consommateur Shell, la file Copier/Déplacer, les conflits, les archives et deux cycles Delete Annuler/Rétablir. Cela représente 221 tests distincts validés. Les tests natifs restent ignorés par défaut car ils utilisent uniquement des fixtures générées envoyées à la vraie corbeille Windows.
+
+`cargo check --all-targets --offline` passe sans avertissement du projet et `cargo build --bin oxyde --offline` réussit. Aucun Computer Use, aucune validation Linux ; le presse-papiers utilisateur n'est pas remplacé par les tests.
+
+### Validation de la correction A22
+
+Les deux tests `native_delete_redo_above_old_size_limit` et `native_delete_redo_above_old_item_limit` passent avec `cargo test --lib --offline native_delete_redo_above_old_ -- --ignored --test-threads=1`. Ils utilisent uniquement des fixtures générées ; le grand fichier est creux et la capacité de la corbeille est vérifiée avant mutation. Les fichiers sont restaurés puis retirés avec leur dossier temporaire. Aucun Computer Use ni modification de la configuration système.
+
+`cargo test --all-targets --offline` : 106 tests backend et 108 tests du binaire passent (214), avec 10 tests natifs ignorés par défaut. Les deux régressions natives A22 passent séparément. `cargo check --all-targets --offline` passe sans avertissement du projet.
+
+Le lien du nouveau binaire est produit dans `target/debug/deps/oxyde.exe`, mais `cargo build --bin oxyde --offline` échoue ensuite à remplacer `target/debug/oxyde.exe` avec « Accès refusé ». Le nouveau binaire est copié sous `target/debug/oxyde-corrige.exe` pour permettre le test sans arrêter l’application ouverte. Le remplacement du nom habituel reste à refaire après fermeture.

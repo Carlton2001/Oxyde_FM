@@ -27,6 +27,14 @@ pub struct PeekStatus {
     pub activation_shortcut: Option<String>,
 }
 
+/// Native identity of a selected trash payload, resolved on a background worker.
+#[derive(Debug, Clone)]
+pub struct TrashTransferEntry {
+    pub path: std::path::PathBuf,
+    pub original_path: std::path::PathBuf,
+    pub metadata_path: std::path::PathBuf,
+}
+
 /// Abstraction des opérations spécifiques à l'OS.
 /// Toute fonctionnalité native (lecteurs, ouverture, raccourcis, etc.)
 /// doit passer par ce trait plutôt qu'appeler directement les API OS.
@@ -36,6 +44,11 @@ pub trait Platform: Send + Sync {
     fn set_recycle_bin_config(&self, config: crate::commands::ops::TrashSystemConfig) -> Result<(), String>;
     /// Read the original path from native trash metadata when the Shell name is opaque.
     fn trash_original_path(&self, id: &std::path::Path) -> Option<std::path::PathBuf>;
+
+    /// Recognizes actual trash entries; ordinary file paths are omitted.
+    fn trash_transfer_entries(&self, paths: &[std::path::PathBuf]) -> Result<Vec<TrashTransferEntry>, String>;
+    /// Retain metadata for Undo only when the entire payload has left the trash.
+    fn detach_trash_metadata(&self, entry: &TrashTransferEntry) -> Result<Option<(std::path::PathBuf, std::path::PathBuf)>, String>;
 
     /// Final process exit, called only after application cleanup and runtime shutdown.
     /// Windows bypasses DLL detach callbacks that can hang in native graphics drivers.
@@ -200,3 +213,6 @@ pub fn platform() -> &'static dyn Platform {
 mod windows_peek;
 #[cfg(target_os = "windows")]
 mod windows_shortcuts;
+
+#[cfg(target_os = "windows")]
+mod windows_trash_clipboard;

@@ -112,6 +112,14 @@ pub fn set_clipboard_files(paths: Vec<String>, is_cut: bool) -> Result<(), Comma
         .map(|p| validate_path(p).map(|pb: std::path::PathBuf| pb.to_string_lossy().to_string()))
         .collect::<Result<Vec<String>, CommandError>>()?;
 
+    let transfer_paths: Vec<_> = validated_paths.iter().map(std::path::PathBuf::from).collect();
+    let trash_entries = super::platform().trash_transfer_entries(&transfer_paths)
+        .map_err(CommandError::TrashError)?;
+    if !trash_entries.is_empty() {
+        return super::windows_trash_clipboard::set_files(transfer_paths, is_cut)
+            .map_err(CommandError::SystemError);
+    }
+
     unsafe {
         // Open clipboard
         OpenClipboard(None)

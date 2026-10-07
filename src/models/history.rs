@@ -2,6 +2,18 @@ use crate::models::transaction::Transaction;
 use std::sync::Mutex;
 
 fn cleanup_replacement_backups(transaction: &Transaction) {
+    for backup in transaction
+        .details
+        .trash_metadata_backups
+        .as_deref()
+        .unwrap_or_default()
+    {
+        if let Err(error) = std::fs::remove_file(backup) {
+            if error.kind() != std::io::ErrorKind::NotFound {
+                log::warn!("Cannot remove trash metadata backup {backup}: {error}");
+            }
+        }
+    }
     if let Some(backups) = &transaction.details.replaced_files {
         for (_, backup) in backups {
             let started = std::time::Instant::now();
@@ -219,6 +231,7 @@ mod tests {
                 replaced_files: None,
                 overwritten_files: None,
                 moved_files: None,
+                trash_metadata_backups: None,
                 moved_dirs: None,
                 copied_files: None,
                 copied_file_hashes: None,
@@ -385,5 +398,22 @@ mod tests {
         drop(history);
         assert!(!backup.exists());
         assert_eq!(std::fs::read(destination).unwrap(), b"new content");
+    }
+    #[test]
+    fn detached_trash_metadata_expires_on_clear_and_on_redo_invalidation() {
+        let root = tempfile::tempdir().unwrap();
+        let history = HistoryManager::new();
+        let backup = root.path().join("metadata.tmp");
+        std::fs::write(&backup, b"metadata fixture").unwrap();
+        let mut tx = transaction();
+        tx.details.trash_metadata_backups = Some(vec![backup.to_string_lossy().into_owned()]);
+        history.push(tx.clone());
+        history.begin_undo().unwrap().unwrap().complete();
+        history.push(transaction());
+        assert!(!backup.exists());
+        std::fs::write(&backup, b"metadata fixture").unwrap();
+        history.push(tx);
+        assert!(history.clear());
+        assert!(!backup.exists());
     }
 }
