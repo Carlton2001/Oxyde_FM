@@ -53,6 +53,29 @@ impl Platform for LinuxPlatform {
         if std::fs::symlink_metadata(path)?.is_dir() { std::fs::remove_dir_all(path) }
         else { std::fs::remove_file(path) }
     }
+    fn create_copy_staging(&self, _parent: &std::fs::File, path: &std::path::Path) -> std::io::Result<(std::fs::File, std::fs::File)> {
+        std::fs::create_dir(path)?;
+        let result = (|| {
+            let directory = std::fs::File::open(path)?;
+            let pin = std::fs::OpenOptions::new().read(true).write(true).create_new(true).open(path.join(".pin"))?;
+            Ok((directory, pin))
+        })();
+        if result.is_err() { let _ = std::fs::remove_dir(path); }
+        result
+    }
+    fn remove_copy_staging(&self, _directory: &std::fs::File, pin: std::fs::File, path: &std::path::Path) -> std::io::Result<()> {
+        drop(pin);
+        // Unix unlink does not require write permission on the file itself.
+        let result = match std::fs::remove_file(path.join("output")) {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(error) => Err(error),
+        };
+        let unpin = std::fs::remove_file(path.join(".pin"));
+        result?;
+        unpin?;
+        std::fs::remove_dir(path)
+    }
     fn lock_cache_file(&self, path: &std::path::Path) -> std::io::Result<std::fs::File> {
         let file = std::fs::OpenOptions::new().read(true).write(true).create(true).truncate(false).open(path)?;
         file.try_lock().map_err(std::io::Error::from)?;
@@ -98,6 +121,7 @@ impl Platform for LinuxPlatform {
         source: &std::path::Path,
         destination: &std::path::Path,
         _held_source: Option<&std::fs::File>,
+        _destination_parent: &std::fs::File,
         progress: &mut dyn FnMut(u64) -> std::io::Result<()>,
     ) -> std::io::Result<()> {
         use std::io::{Read, Write};

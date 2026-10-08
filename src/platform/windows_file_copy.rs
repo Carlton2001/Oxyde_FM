@@ -73,10 +73,18 @@ pub(super) fn copy(
     source: &Path,
     destination: &Path,
     held_source: Option<&std::fs::File>,
+    destination_parent: &std::fs::File,
     progress: &mut dyn FnMut(u64) -> io::Result<()>,
 ) -> io::Result<()> {
     let _source_parents = crate::systems::path_parents::HeldParents::new(source)?;
-    let _destination_parents = crate::systems::path_parents::HeldParents::new(destination)?;
+    // Staging already retains this directory with DELETE access. Reopening its
+    // parent chain without FILE_SHARE_DELETE would conflict with that handle.
+    let metadata = destination_parent.metadata()?;
+    if !metadata.is_dir() || super::platform().file_attributes(&metadata, "").2 {
+        return Err(io::Error::other(
+            "Copy destination parent is not an ordinary directory",
+        ));
+    }
     // Read access suffices for Copy. Deny source writes/deletion during the
     // native call without requiring DELETE access from the source's ACL.
     let source_guard = if held_source.is_none() {

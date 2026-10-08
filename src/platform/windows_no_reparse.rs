@@ -113,6 +113,27 @@ pub(super) fn open_relative(
     )
 }
 
+/// Exclusively create one child of an already retained directory.
+pub(super) fn create_relative(
+    parent: &File,
+    leaf: &OsStr,
+    directory: bool,
+    access: u32,
+    sharing: u32,
+    attributes: u32,
+) -> io::Result<File> {
+    open_name_with_attributes(
+        leaf_name(leaf)?,
+        parent.as_raw_handle(),
+        Some(directory),
+        access,
+        sharing,
+        2, // FILE_CREATE: never open or replace an existing object.
+        true,
+        attributes,
+    )
+}
+
 /// A single child of a retained parent; OPEN_REPARSE_POINT opens the link itself.
 pub(super) fn open_entry(
     parent: &File,
@@ -132,6 +153,27 @@ pub(super) fn open_entry(
 }
 
 fn open_name(
+    name: Vec<u16>,
+    root: *mut c_void,
+    directory: Option<bool>,
+    access: u32,
+    sharing: u32,
+    disposition: u32,
+    reject_reparse: bool,
+) -> io::Result<File> {
+    open_name_with_attributes(
+        name,
+        root,
+        directory,
+        access,
+        sharing,
+        disposition,
+        reject_reparse,
+        0x80,
+    )
+}
+
+fn open_name_with_attributes(
     mut name: Vec<u16>,
     root: *mut c_void,
     directory: Option<bool>,
@@ -139,6 +181,7 @@ fn open_name(
     sharing: u32,
     disposition: u32,
     reject_reparse: bool,
+    file_attributes: u32,
 ) -> io::Result<File> {
     if name.contains(&0) {
         return Err(io::Error::new(
@@ -189,7 +232,7 @@ fn open_name(
             &attributes,
             &mut status,
             std::ptr::null(),
-            0x80,
+            file_attributes,
             sharing,
             disposition,
             options,

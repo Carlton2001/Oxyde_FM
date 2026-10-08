@@ -5,16 +5,29 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 
 struct Staging {
-    _directory: tempfile::TempDir,
+    directory: std::fs::File,
+    pin: Option<std::fs::File>,
+    path: PathBuf,
     file: PathBuf,
+}
+impl Staging {
+    fn new(parents: &super::path_parents::HeldParents) -> io::Result<Self> {
+        let leaf = format!(".oxyde-copy-{}", uuid::Uuid::new_v4());
+        let path = parents.resolved_path(Path::new(&leaf))?;
+        let (directory, pin) = platform().create_copy_staging(parents.directory(), &path)?;
+        Ok(Self {
+            directory,
+            pin: Some(pin),
+            file: path.join("output"),
+            path,
+        })
+    }
 }
 impl Drop for Staging {
     fn drop(&mut self) {
-        if let Ok(metadata) = std::fs::metadata(&self.file) {
-            let mut permissions = metadata.permissions();
-            if permissions.readonly() {
-                permissions.set_readonly(false);
-                let _ = std::fs::set_permissions(&self.file, permissions);
+        if let Some(pin) = self.pin.take() {
+            if let Err(error) = platform().remove_copy_staging(&self.directory, pin, &self.path) {
+                log::warn!("Cannot clean copy staging {}: {error}", self.path.display());
             }
         }
     }
@@ -49,20 +62,15 @@ pub(super) fn copy_with_source(
     if replace {
         check_replacement(&destination)?;
     }
-    let directory = tempfile::Builder::new().prefix(".oxyde-copy-").tempdir_in(
-        destination
-            .parent()
-            .ok_or_else(|| io::Error::other("Copy destination has no parent"))?,
+    let staging = Staging::new(&destination_parents)?;
+    platform().copy_file_with_progress(
+        &source,
+        &staging.file,
+        held_source,
+        &staging.directory,
+        progress,
     )?;
-    platform()
-        .set_hidden_attribute(directory.path(), true)
-        .map_err(io::Error::other)?;
-    let staging = Staging {
-        file: directory.path().join("output"),
-        _directory: directory,
-    };
-    platform().copy_file_with_progress(&source, &staging.file, held_source, progress)?;
-    let mut output = platform().open_file_for_move(&staging.file)?;
+    let mut output = platform().open_operation_file(&staging.directory, &staging.file, true)?;
     let hash = hash(&mut output, progress)?;
     if replace {
         check_replacement(&destination)?;
@@ -145,6 +153,94 @@ mod tests {
     use super::*;
     use std::fs;
     use std::io::ErrorKind;
+
+    #[test]
+    fn staging_is_never_created_in_a_new_reparse_target() {
+        use crate::platform::windows_reparse_tests::{junction, Retarget};
+        let root = tempfile::tempdir().unwrap();
+        let source = root.path().join("source");
+        let selected = root.path().join("selected");
+        let outside = root.path().join("outside");
+        fs::write(&source, vec![0x42; 1024 * 1024]).unwrap();
+        fs::create_dir(&selected).unwrap();
+        fs::create_dir(&outside).unwrap();
+        fs::write(outside.join("witness"), b"outside witness").unwrap();
+        let template = root.path().join("template");
+        junction(&template, &outside);
+        let retarget = Retarget::new(&selected, &template);
+        let mut changed = false;
+        let mut foreign_staging = false;
+        let result = copy(&source, &selected.join("output"), false, &mut |bytes| {
+            if !changed {
+                retarget.apply();
+                changed = true;
+            }
+            foreign_staging |= fs::read_dir(&outside)?.any(|entry| {
+                entry
+                    .unwrap()
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with(".oxyde-copy-")
+            });
+            if bytes > 0 {
+                return Err(io::Error::new(ErrorKind::Interrupted, "test stop"));
+            }
+            Ok(())
+        });
+        retarget.clear();
+        assert!(result.is_err());
+        assert!(
+            !foreign_staging,
+            "copy preparation wrote outside the retained destination"
+        );
+        assert_eq!(
+            fs::read(outside.join("witness")).unwrap(),
+            b"outside witness"
+        );
+        assert_eq!(fs::read_dir(&selected).unwrap().count(), 0);
+        drop(retarget);
+        fs::remove_dir(template).unwrap();
+    }
+
+    #[test]
+    fn active_copy_staging_resists_retargeting_and_is_cleaned_after_cancellation() {
+        use crate::platform::windows_reparse_tests::{junction, Retarget};
+        let fixture = Fixture::new();
+        let outside = fixture.root.path().join("outside");
+        fs::create_dir(&outside).unwrap();
+        fs::write(outside.join("witness"), b"unchanged").unwrap();
+        let template = fixture.root.path().join("template");
+        junction(&template, &outside);
+        let mut checked = false;
+        let error = copy(&fixture.source, &fixture.destination, false, &mut |bytes| {
+            if bytes > 0 {
+                let staging = fs::read_dir(fixture.root.path())?
+                    .find_map(|entry| {
+                        let entry = entry.unwrap();
+                        entry
+                            .file_name()
+                            .to_string_lossy()
+                            .starts_with(".oxyde-copy-")
+                            .then(|| entry.path())
+                    })
+                    .unwrap();
+                assert!(fs::remove_file(staging.join(".pin")).is_err());
+                let retarget = Retarget::new(&staging, &template);
+                assert!(retarget.try_apply().is_err());
+                checked = true;
+                return Err(io::Error::new(ErrorKind::Interrupted, "test stop"));
+            }
+            Ok(())
+        })
+        .unwrap_err();
+        assert!(checked);
+        assert_eq!(error.kind(), ErrorKind::Interrupted);
+        assert_eq!(fs::read(outside.join("witness")).unwrap(), b"unchanged");
+        assert_eq!(fs::read_dir(&outside).unwrap().count(), 1);
+        fixture.no_staging();
+        assert!(!fixture.destination.exists());
+        fs::remove_dir(template).unwrap();
+    }
 
     #[test]
     fn copy_stays_in_the_selected_parent_after_junction_retargeting() {

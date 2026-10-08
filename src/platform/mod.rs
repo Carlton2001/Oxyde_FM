@@ -75,6 +75,10 @@ pub trait Platform: Send + Sync {
     /// Remove the selected object and its children by retained identities on Windows.
     /// Reparse entries are removed themselves; their targets are never traversed.
     fn remove_operation_tree(&self, parent: &std::fs::File, path: &std::path::Path, checkpoint: &mut dyn FnMut() -> std::io::Result<()>) -> std::io::Result<()>;
+    /// Exclusively create hidden copy staging and a retained non-deletable marker on Windows.
+    fn create_copy_staging(&self, parent: &std::fs::File, path: &std::path::Path) -> std::io::Result<(std::fs::File, std::fs::File)>;
+    /// Remove only staging output and marker, by identity on Windows. Unknown children are preserved.
+    fn remove_copy_staging(&self, directory: &std::fs::File, pin: std::fs::File, path: &std::path::Path) -> std::io::Result<()>;
     fn lock_cache_file(&self, path: &std::path::Path) -> std::io::Result<std::fs::File>;
     fn read_cache_file(&self, path: &std::path::Path) -> std::io::Result<std::fs::File>;
     fn open_cache_cleanup(&self, path: &std::path::Path, directory: bool) -> std::io::Result<std::fs::File>;
@@ -86,12 +90,14 @@ pub trait Platform: Send + Sync {
     /// Blocking copy with native metadata/streams where supported. The callback
     /// Reports main-stream bytes; only an absent destination is accepted.
     /// A supplied source handle must already hold the same source path/identity.
+    /// The destination parent handle must retain the same directory as the path.
     /// The callback may wait for pause or return an error to stop.
     fn copy_file_with_progress(
         &self,
         source: &std::path::Path,
         destination: &std::path::Path,
         held_source: Option<&std::fs::File>,
+        destination_parent: &std::fs::File,
         progress: &mut dyn FnMut(u64) -> std::io::Result<()>,
     ) -> std::io::Result<()>;
     /// Opens a regular file for a history move, keeping its identity stable.
@@ -317,6 +323,8 @@ mod windows_com;
 mod windows_file_moves;
 #[cfg(target_os = "windows")]
 mod windows_file_tree;
+#[cfg(target_os = "windows")]
+mod windows_copy_staging;
 #[cfg(all(test, target_os = "windows"))]
 pub(crate) mod windows_reparse_tests;
 #[cfg(target_os = "windows")]

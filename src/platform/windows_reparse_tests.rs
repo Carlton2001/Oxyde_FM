@@ -60,6 +60,9 @@ impl Retarget {
         Self { writer, data }
     }
     pub(crate) fn apply(&self) {
+        self.try_apply().unwrap();
+    }
+    pub(crate) fn try_apply(&self) -> windows::core::Result<()> {
         let mut size = 0;
         unsafe {
             DeviceIoControl(
@@ -73,7 +76,6 @@ impl Retarget {
                 None,
             )
         }
-        .unwrap();
     }
     pub(crate) fn clear(&self) {
         let mut header = [0u8; 8];
