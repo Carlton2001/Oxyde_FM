@@ -4,9 +4,9 @@ use std::os::windows::io::AsRawHandle;
 use std::path::Path;
 use windows::Win32::Foundation::{GENERIC_READ, HANDLE};
 use windows::Win32::Storage::FileSystem::{
-    FileDispositionInfo, SetFileInformationByHandle, DELETE, FILE_DISPOSITION_INFO,
-    FILE_READ_ATTRIBUTES, FILE_RENAME_INFO, FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE,
-    FILE_WRITE_ATTRIBUTES,
+    DELETE, FILE_BASIC_INFO, FILE_DISPOSITION_INFO, FILE_READ_ATTRIBUTES, FILE_RENAME_INFO,
+    FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE, FILE_WRITE_ATTRIBUTES, FileBasicInfo,
+    FileDispositionInfo, SetFileInformationByHandle,
 };
 
 #[repr(C)]
@@ -70,6 +70,60 @@ pub(super) fn track_directory(parent: &File, path: &Path) -> Result<File> {
         FILE_SHARE_READ.0 | FILE_SHARE_WRITE.0 | FILE_SHARE_DELETE.0,
         1,
     )
+}
+
+pub(super) fn create_journal_directory(parent: &File, path: &Path, hidden: bool) -> Result<File> {
+    let metadata = parent.metadata()?;
+    if !metadata.is_dir() || super::platform().file_attributes(&metadata, "").2 {
+        return Err(Error::other(
+            "Journal parent is no longer an ordinary directory",
+        ));
+    }
+    let leaf = path
+        .file_name()
+        .ok_or_else(|| Error::other("Directory has no file name"))?;
+    super::windows_no_reparse::create_relative(
+        parent,
+        leaf,
+        true,
+        FILE_READ_ATTRIBUTES.0 | FILE_WRITE_ATTRIBUTES.0,
+        FILE_SHARE_READ.0 | FILE_SHARE_WRITE.0 | FILE_SHARE_DELETE.0,
+        if hidden { 2 } else { 0x80 },
+    )
+}
+
+pub(super) fn restore_journal_directory(
+    directory: &File,
+    permissions: std::fs::Permissions,
+    hidden: bool,
+) -> Result<()> {
+    use std::os::windows::fs::MetadataExt;
+    let metadata = directory.metadata()?;
+    if !metadata.is_dir() || metadata.file_attributes() & 0x400 != 0 {
+        return Err(Error::other("Journal directory became a reparse object"));
+    }
+    // Zero timestamps leave them unchanged. Only restore the two attributes the
+    // journal recorded, on the exact object returned by exclusive creation.
+    let mut attributes = metadata.file_attributes() & !(1 | 2 | 0x80);
+    if permissions.readonly() {
+        attributes |= 1;
+    }
+    if hidden {
+        attributes |= 2;
+    }
+    let info = FILE_BASIC_INFO {
+        FileAttributes: attributes,
+        ..Default::default()
+    };
+    unsafe {
+        SetFileInformationByHandle(
+            HANDLE(directory.as_raw_handle()),
+            FileBasicInfo,
+            (&info as *const FILE_BASIC_INFO).cast(),
+            std::mem::size_of_val(&info) as u32,
+        )
+        .map_err(io_error)
+    }
 }
 
 pub(super) fn remove_empty_directory(

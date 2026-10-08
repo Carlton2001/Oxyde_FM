@@ -1,5 +1,6 @@
 //! Reversible Copy/Move Undo effects, retained until every filesystem phase succeeds.
-use super::history_move::{hash_file, move_file};
+use super::history_move::hash_file;
+use super::path_parents::HeldParents;
 use crate::models::{CommandError, TransactionDetails};
 use crate::platform::platform;
 use std::collections::{HashMap, HashSet};
@@ -8,20 +9,30 @@ use std::io::{self, ErrorKind};
 use std::path::{Path, PathBuf};
 
 trait UndoIo {
-    fn move_file(&self, from: &Path, to: &Path, hash: &str) -> io::Result<()>;
-    fn create_dir(&self, path: &Path) -> io::Result<()>;
-    fn remove_dir(&self, path: &Path) -> io::Result<()>;
+    fn move_file(
+        &self,
+        from: &Path,
+        to: &Path,
+        hash: &str,
+        parents: (&HeldParents, &HeldParents),
+    ) -> io::Result<()>;
+    fn before_create_dir(&self, _path: &Path) -> io::Result<()> {
+        Ok(())
+    }
+    fn before_remove_dir(&self, _path: &Path) -> io::Result<()> {
+        Ok(())
+    }
 }
 struct NativeIo;
 impl UndoIo for NativeIo {
-    fn move_file(&self, from: &Path, to: &Path, hash: &str) -> io::Result<()> {
-        move_file(from, to, Some(hash))
-    }
-    fn create_dir(&self, path: &Path) -> io::Result<()> {
-        fs::create_dir(path)
-    }
-    fn remove_dir(&self, path: &Path) -> io::Result<()> {
-        fs::remove_dir(path)
+    fn move_file(
+        &self,
+        from: &Path,
+        to: &Path,
+        hash: &str,
+        parents: (&HeldParents, &HeldParents),
+    ) -> io::Result<()> {
+        super::history_move::move_file_with_parents(from, to, hash, parents.0, parents.1)
     }
 }
 
@@ -123,7 +134,7 @@ impl Plan {
                             "Cannot undo move; original path exists: {}",
                             original.display()
                         ),
-                    ))
+                    ));
                 }
                 Err(error) if error.kind() == ErrorKind::NotFound => {}
                 Err(error) => return Err(error),
@@ -199,7 +210,8 @@ enum Effect {
 #[derive(Default)]
 struct Journal {
     effects: Vec<Effect>,
-    staging: Vec<PathBuf>,
+    staging: Vec<(PathBuf, fs::File)>,
+    directories: super::history_directories::Directories,
     discarded: Vec<(PathBuf, String)>,
     finished: bool,
 }
@@ -208,14 +220,8 @@ impl Journal {
         let mut missing = Vec::new();
         let mut current = path;
         loop {
-            match fs::symlink_metadata(current) {
-                Ok(metadata) if metadata.is_dir() => break,
-                Ok(_) => {
-                    return Err(io::Error::new(
-                        ErrorKind::NotADirectory,
-                        format!("Not a directory: {}", current.display()),
-                    ))
-                }
+            match self.directories.directory(current) {
+                Ok(_) => break,
                 Err(error) if error.kind() == ErrorKind::NotFound => {
                     missing.push(current.to_path_buf());
                     current = current.parent().ok_or_else(|| {
@@ -226,13 +232,21 @@ impl Journal {
             }
         }
         for path in missing.into_iter().rev() {
-            ops.create_dir(&path)?;
+            ops.before_create_dir(&path)?;
+            self.directories.create(&path, false)?;
             self.effects.push(Effect::CreatedDir(path));
         }
         Ok(())
     }
     fn transfer(&mut self, ops: &impl UndoIo, effect: FileMove) -> io::Result<()> {
-        ops.move_file(&effect.from, &effect.to, &effect.hash)?;
+        let source = self.directories.file_parents(&effect.from)?;
+        let destination = self.directories.file_parents(&effect.to)?;
+        ops.move_file(
+            &effect.from,
+            &effect.to,
+            &effect.hash,
+            (&source, &destination),
+        )?;
         self.effects.push(Effect::Move(effect));
         Ok(())
     }
@@ -243,28 +257,13 @@ impl Journal {
         hash: String,
         remove_dirs: &[PathBuf],
     ) -> io::Result<()> {
-        let mut parent = path
-            .parent()
-            .ok_or_else(|| io::Error::other("Output has no parent"))?;
-        while remove_dirs
-            .iter()
-            .any(|directory| parent.starts_with(directory))
-        {
-            parent = parent.parent().ok_or_else(|| {
-                io::Error::other("Cannot stage output outside removed directories")
-            })?;
-        }
+        let parent = staging_parent(&path, remove_dirs)?;
         // Once it can contain user data, this directory must not be recursively
         // deleted by RAII: a failed rollback retains it for recovery.
-        let directory = tempfile::Builder::new()
-            .prefix(".oxyde-undo-")
-            .tempdir_in(parent)?;
-        platform()
-            .set_hidden_attribute(directory.path(), true)
-            .map_err(io::Error::other)?;
-        let directory = directory.keep();
-        self.staging.push(directory.clone());
+        let directory = parent.join(format!(".oxyde-undo-{}", uuid::Uuid::new_v4()));
+        let pin = self.directories.stage(&directory)?;
         let saved = directory.join("output");
+        self.staging.push((directory, pin));
         self.transfer(
             ops,
             FileMove {
@@ -277,42 +276,26 @@ impl Journal {
         Ok(())
     }
     fn remove_dir(&mut self, ops: &impl UndoIo, path: &Path) -> io::Result<()> {
-        let metadata = match fs::symlink_metadata(path) {
-            Ok(metadata)
-                if metadata.is_dir()
-                    && !metadata.file_type().is_symlink()
-                    && !platform().file_attributes(&metadata, "").2 =>
-            {
-                metadata
-            }
-            Ok(_) => {
-                return Err(io::Error::new(
-                    ErrorKind::NotADirectory,
-                    format!("Cannot remove journal directory: {}", path.display()),
-                ))
-            }
-            Err(error) if error.kind() == ErrorKind::NotFound => return Ok(()),
-            Err(error) => return Err(error),
+        let Some(metadata) = self.directories.metadata(path)? else {
+            return Ok(());
         };
-        match ops.remove_dir(path) {
-            Ok(()) => self.effects.push(Effect::RemovedDir {
+        ops.before_remove_dir(path)?;
+        if matches!(
+            self.directories.remove(path)?,
+            super::history_directories::Removal::Deleted
+        ) {
+            self.effects.push(Effect::RemovedDir {
                 path: path.to_path_buf(),
                 permissions: metadata.permissions(),
                 hidden: platform().file_attributes(&metadata, "").0,
-            }),
-            Err(error)
-                if matches!(
-                    error.kind(),
-                    ErrorKind::NotFound | ErrorKind::DirectoryNotEmpty
-                ) => {}
-            Err(error) => return Err(error),
+            });
         }
         Ok(())
     }
     fn clean_empty_staging(&mut self) -> Vec<String> {
         let mut errors = Vec::new();
-        for path in self.staging.drain(..) {
-            if let Err(error) = fs::remove_dir(&path) {
+        for (path, pin) in self.staging.drain(..) {
+            if let Err(error) = self.directories.clean_stage(&path, pin) {
                 if error.kind() != ErrorKind::NotFound {
                     errors.push(format!("staging retained at {}: {error}", path.display()));
                 }
@@ -325,15 +308,26 @@ impl Journal {
         while let Some(effect) = self.effects.pop() {
             let (path, result) = match effect {
                 Effect::Move(effect) => {
-                    let result = move_file(&effect.to, &effect.from, Some(&effect.hash));
+                    let result = (|| {
+                        let source = self.directories.file_parents(&effect.to)?;
+                        let destination = self.directories.file_parents(&effect.from)?;
+                        NativeIo.move_file(
+                            &effect.to,
+                            &effect.from,
+                            &effect.hash,
+                            (&source, &destination),
+                        )
+                    })();
                     (effect.to, result)
                 }
                 Effect::CreatedDir(path) => {
-                    let result = fs::remove_dir(&path).or_else(|error| {
-                        if error.kind() == ErrorKind::NotFound {
-                            Ok(())
+                    let result = self.directories.remove(&path).and_then(|removed| {
+                        if matches!(removed, super::history_directories::Removal::NotEmpty) {
+                            Err(io::Error::other(
+                                "Created journal directory could not be removed",
+                            ))
                         } else {
-                            Err(error)
+                            Ok(())
                         }
                     });
                     (path, result)
@@ -344,11 +338,8 @@ impl Journal {
                     hidden,
                 } => {
                     let result = (|| {
-                        fs::create_dir(&path)?;
-                        fs::set_permissions(&path, permissions)?;
-                        platform()
-                            .set_hidden_attribute(&path, hidden)
-                            .map_err(io::Error::other)
+                        let directory = self.directories.create(&path, hidden)?;
+                        platform().restore_journal_directory(directory, &path, permissions, hidden)
                     })();
                     (path, result)
                 }
@@ -365,7 +356,9 @@ impl Journal {
         self.finished = true;
         self.effects.clear();
         for (path, expected) in self.discarded.drain(..) {
-            let result = super::file_copy::remove_verified_output(&path, &expected);
+            let result = self.directories.file_parents(&path).and_then(|parents| {
+                super::file_copy::remove_verified_output_with_parents(&path, &expected, &parents)
+            });
             if let Err(error) = result {
                 log::warn!(
                     "Undo completed; staged output retained at {}: {error}",
@@ -397,7 +390,23 @@ fn undo_with(ops: &impl UndoIo, details: &TransactionDetails) -> io::Result<()> 
     apply_plan(ops, Plan::new(details)?)
 }
 fn apply_plan(ops: &impl UndoIo, plan: Plan) -> io::Result<()> {
+    let mut paths = plan.source_dirs.clone();
+    paths.extend(
+        plan.files
+            .iter()
+            .filter_map(|effect| effect.to.parent().map(Path::to_path_buf)),
+    );
+    paths.extend(
+        plan.files
+            .iter()
+            .filter_map(|effect| effect.from.parent().map(Path::to_path_buf)),
+    );
+    for (path, _) in &plan.discard {
+        paths.push(staging_parent(path, &plan.remove_dirs)?.to_path_buf());
+    }
+    let directories = super::history_directories::Directories::prepare(&paths, &plan.remove_dirs)?;
     let mut journal = Journal::default();
+    journal.directories = directories;
     let result = (|| {
         for effect in plan.files {
             if let Some(parent) = effect.to.parent() {
@@ -429,6 +438,21 @@ fn apply_plan(ops: &impl UndoIo, plan: Plan) -> io::Result<()> {
     }
     journal.commit();
     Ok(())
+}
+
+fn staging_parent<'a>(path: &'a Path, remove_dirs: &[PathBuf]) -> io::Result<&'a Path> {
+    let mut parent = path
+        .parent()
+        .ok_or_else(|| io::Error::other("Output has no parent"))?;
+    while remove_dirs
+        .iter()
+        .any(|directory| parent.starts_with(directory))
+    {
+        parent = parent
+            .parent()
+            .ok_or_else(|| io::Error::other("Cannot stage output outside removed directories"))?;
+    }
+    Ok(parent)
 }
 
 #[cfg(test)]
@@ -508,15 +532,239 @@ mod tests {
         remove: F,
     }
     impl<F: Fn(&Path) -> io::Result<()>> UndoIo for FaultIo<F> {
-        fn move_file(&self, from: &Path, to: &Path, hash: &str) -> io::Result<()> {
-            NativeIo.move_file(from, to, hash)
+        fn move_file(
+            &self,
+            from: &Path,
+            to: &Path,
+            hash: &str,
+            parents: (&HeldParents, &HeldParents),
+        ) -> io::Result<()> {
+            NativeIo.move_file(from, to, hash, parents)
         }
-        fn create_dir(&self, path: &Path) -> io::Result<()> {
-            NativeIo.create_dir(path)
+        fn before_create_dir(&self, path: &Path) -> io::Result<()> {
+            NativeIo.before_create_dir(path)
         }
-        fn remove_dir(&self, path: &Path) -> io::Result<()> {
+        fn before_remove_dir(&self, path: &Path) -> io::Result<()> {
             (self.remove)(path)
         }
+    }
+
+    #[test]
+    fn copy_undo_preserves_a_directory_replaced_before_removal() {
+        let fixture = Fixture::new();
+        let selected = fixture.partial.parent().unwrap().to_path_buf();
+        let relocated = fixture.root.path().join("relocated");
+        let ops = FaultIo {
+            remove: |path: &Path| {
+                if path == selected {
+                    fs::rename(path, &relocated)?;
+                    fs::create_dir(path)?;
+                }
+                Ok(())
+            },
+        };
+        let result = apply_plan(&ops, Plan::copy(&fixture.details).unwrap());
+        assert!(selected.is_dir(), "undo deleted a replacement directory");
+        assert!(relocated.is_dir());
+        assert!(result.is_err());
+        assert_eq!(fs::read_dir(&selected).unwrap().count(), 0);
+        assert_eq!(
+            fs::read(relocated.join("moved.txt")).unwrap(),
+            b"moved content"
+        );
+        assert_eq!(
+            fs::read(relocated.join("partial.txt")).unwrap(),
+            b"partial content"
+        );
+        assert!(fixture.staging().is_empty());
+    }
+
+    #[test]
+    fn rollback_preserves_a_replacement_for_a_directory_created_by_undo() {
+        let fixture = Fixture::new();
+        let source = fixture.original.parent().unwrap().to_path_buf();
+        let relocated = fixture.root.path().join("relocated-source");
+        let ops = FaultIo {
+            remove: |_path: &Path| {
+                fs::rename(&source, &relocated)?;
+                fs::create_dir(&source)?;
+                Err(io::Error::other("injected source replacement"))
+            },
+        };
+        let error = undo_with(&ops, &fixture.details).unwrap_err().to_string();
+        assert!(error.contains("replacement was preserved"), "{error}");
+        assert!(source.is_dir());
+        assert_eq!(fs::read_dir(&source).unwrap().count(), 0);
+        assert_eq!(fs::read_dir(&relocated).unwrap().count(), 0);
+        assert_eq!(fs::read(&fixture.destination).unwrap(), b"moved content");
+        assert_eq!(fs::read(&fixture.partial).unwrap(), b"partial content");
+        assert!(fixture.staging().is_empty());
+    }
+
+    #[test]
+    fn undo_keeps_a_directory_absent_from_the_initial_capture() {
+        struct Arrival(PathBuf);
+        impl UndoIo for Arrival {
+            fn move_file(
+                &self,
+                from: &Path,
+                to: &Path,
+                hash: &str,
+                parents: (&HeldParents, &HeldParents),
+            ) -> io::Result<()> {
+                NativeIo.move_file(from, to, hash, parents)?;
+                if !self.0.exists() {
+                    fs::create_dir(&self.0)?;
+                }
+                Ok(())
+            }
+        }
+        let mut fixture = Fixture::new();
+        let arrival = fixture.root.path().join("new-empty");
+        fixture
+            .details
+            .created_dirs
+            .as_mut()
+            .unwrap()
+            .push(arrival.to_string_lossy().into_owned());
+        undo_with(&Arrival(arrival.clone()), &fixture.details).unwrap();
+        assert!(arrival.is_dir());
+        assert_eq!(fs::read(&fixture.original).unwrap(), b"moved content");
+        assert!(!fixture.destination.parent().unwrap().exists());
+        assert!(fixture.staging().is_empty());
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn copy_undo_retains_recovery_without_writing_through_a_new_junction() {
+        use crate::platform::windows_reparse_tests::{Retarget, junction};
+        let fixture = Fixture::new();
+        let selected = fixture.partial.parent().unwrap();
+        let outside = fixture.root.path().join("outside");
+        fs::create_dir(&outside).unwrap();
+        let template = fixture.root.path().join("template");
+        junction(&template, &outside);
+        let retarget = Retarget::new(selected, &template);
+        let ops = FaultIo {
+            remove: |path: &Path| {
+                if path == selected {
+                    retarget.apply();
+                }
+                Ok(())
+            },
+        };
+        let error = apply_plan(&ops, Plan::copy(&fixture.details).unwrap())
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("rollback incomplete"), "{error}");
+        assert!(error.contains("staging retained"), "{error}");
+        assert_eq!(fs::read_dir(&outside).unwrap().count(), 0);
+        let staging = fixture.staging();
+        assert_eq!(staging.len(), 2);
+        let mut contents: Vec<_> = staging
+            .iter()
+            .map(|path| fs::read(path.join("output")).unwrap())
+            .collect();
+        contents.sort();
+        assert_eq!(
+            contents,
+            vec![b"moved content".to_vec(), b"partial content".to_vec()]
+        );
+        for path in &staging {
+            assert!(error.contains(path.to_str().unwrap()), "{error}");
+        }
+        retarget.clear();
+        drop(retarget);
+        fs::remove_dir(template).unwrap();
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn undo_directory_creation_stays_in_the_initial_junction_parent() {
+        use crate::platform::windows_reparse_tests::{Retarget, junction};
+        struct RetargetIo(Retarget);
+        impl UndoIo for RetargetIo {
+            fn move_file(
+                &self,
+                from: &Path,
+                to: &Path,
+                hash: &str,
+                parents: (&HeldParents, &HeldParents),
+            ) -> io::Result<()> {
+                NativeIo.move_file(from, to, hash, parents)
+            }
+            fn before_create_dir(&self, _path: &Path) -> io::Result<()> {
+                self.0.apply();
+                Ok(())
+            }
+        }
+        let root = tempfile::tempdir().unwrap();
+        let chosen = root.path().join("chosen");
+        let outside = root.path().join("outside");
+        fs::create_dir(&chosen).unwrap();
+        fs::create_dir(&outside).unwrap();
+        let link = root.path().join("link");
+        let template = root.path().join("template");
+        junction(&link, &chosen);
+        junction(&template, &outside);
+        let ops = RetargetIo(Retarget::new(&link, &template));
+        apply_plan(
+            &ops,
+            Plan {
+                files: vec![],
+                discard: vec![],
+                source_dirs: vec![link.join("created")],
+                remove_dirs: vec![],
+            },
+        )
+        .unwrap();
+        assert!(chosen.join("created").is_dir());
+        assert!(!outside.join("created").exists());
+        drop(ops);
+        fs::remove_dir(&link).unwrap();
+        fs::remove_dir(&template).unwrap();
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn undo_directory_removal_stays_in_the_initial_junction_parent() {
+        use crate::platform::windows_reparse_tests::{Retarget, junction};
+        let root = tempfile::tempdir().unwrap();
+        let chosen = root.path().join("chosen");
+        let outside = root.path().join("outside");
+        fs::create_dir_all(chosen.join("empty")).unwrap();
+        fs::create_dir_all(outside.join("empty")).unwrap();
+        fs::write(outside.join("witness"), b"outside witness").unwrap();
+        let link = root.path().join("link");
+        let template = root.path().join("template");
+        junction(&link, &chosen);
+        junction(&template, &outside);
+        let retarget = Retarget::new(&link, &template);
+        let ops = FaultIo {
+            remove: |_path: &Path| {
+                retarget.apply();
+                Ok(())
+            },
+        };
+        apply_plan(
+            &ops,
+            Plan {
+                files: vec![],
+                discard: vec![],
+                source_dirs: vec![],
+                remove_dirs: vec![link.join("empty")],
+            },
+        )
+        .unwrap();
+        assert!(!chosen.join("empty").exists());
+        assert!(outside.join("empty").is_dir());
+        assert_eq!(
+            fs::read(outside.join("witness")).unwrap(),
+            b"outside witness"
+        );
+        drop(retarget);
+        fs::remove_dir(&link).unwrap();
+        fs::remove_dir(&template).unwrap();
     }
 
     #[test]
@@ -531,7 +779,7 @@ mod tests {
                         "injected final directory error",
                     ))
                 } else {
-                    fs::remove_dir(path)
+                    Ok(())
                 }
             },
         };
@@ -551,7 +799,7 @@ mod tests {
         let ops = FaultIo {
             remove: |path: &Path| {
                 assert_ne!(path, parent, "injected late panic");
-                fs::remove_dir(path)
+                Ok(())
             },
         };
         let result = std::panic::catch_unwind(|| undo_with(&ops, &fixture.details));
@@ -563,21 +811,27 @@ mod tests {
     fn source_directory_error_removes_only_parents_created_by_undo() {
         struct CreateError(PathBuf);
         impl UndoIo for CreateError {
-            fn move_file(&self, from: &Path, to: &Path, hash: &str) -> io::Result<()> {
-                NativeIo.move_file(from, to, hash)
+            fn move_file(
+                &self,
+                from: &Path,
+                to: &Path,
+                hash: &str,
+                parents: (&HeldParents, &HeldParents),
+            ) -> io::Result<()> {
+                NativeIo.move_file(from, to, hash, parents)
             }
-            fn create_dir(&self, path: &Path) -> io::Result<()> {
+            fn before_create_dir(&self, path: &Path) -> io::Result<()> {
                 if path == self.0 {
                     Err(io::Error::new(
                         ErrorKind::PermissionDenied,
                         "injected directory creation error",
                     ))
                 } else {
-                    fs::create_dir(path)
+                    Ok(())
                 }
             }
-            fn remove_dir(&self, path: &Path) -> io::Result<()> {
-                fs::remove_dir(path)
+            fn before_remove_dir(&self, _path: &Path) -> io::Result<()> {
+                Ok(())
             }
         }
         let mut fixture = Fixture::new();
@@ -606,7 +860,7 @@ mod tests {
                         "injected conflict",
                     ))
                 } else {
-                    fs::remove_dir(path)
+                    Ok(())
                 }
             },
         };
@@ -678,7 +932,7 @@ mod tests {
                             "injected Copy Undo directory error",
                         ))
                     } else {
-                        fs::remove_dir(path)
+                        Ok(())
                     }
                 },
             };

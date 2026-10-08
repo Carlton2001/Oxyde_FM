@@ -89,6 +89,41 @@ fn move_with(
 ) -> io::Result<()> {
     let source_parents = super::path_parents::HeldParents::new(source)?;
     let destination_parents = super::path_parents::HeldParents::new(destination)?;
+    move_bound(
+        ops,
+        source,
+        destination,
+        expected,
+        &source_parents,
+        &destination_parents,
+    )
+}
+
+pub(super) fn move_file_with_parents(
+    source: &Path,
+    destination: &Path,
+    expected: &str,
+    source_parents: &super::path_parents::HeldParents,
+    destination_parents: &super::path_parents::HeldParents,
+) -> io::Result<()> {
+    move_bound(
+        &NativeIo,
+        source,
+        destination,
+        Some(expected),
+        source_parents,
+        destination_parents,
+    )
+}
+
+fn move_bound(
+    ops: &impl MoveIo,
+    source: &Path,
+    destination: &Path,
+    expected: Option<&str>,
+    source_parents: &super::path_parents::HeldParents,
+    destination_parents: &super::path_parents::HeldParents,
+) -> io::Result<()> {
     let source = source_parents.resolved_path(source)?;
     let destination = destination_parents.resolved_path(destination)?;
     let mut original = source_parents.open_file(&source)?;
@@ -110,13 +145,13 @@ fn move_with(
             source.display()
         )));
     }
-    match ops.rename(&original, &source, &destination, &destination_parents) {
+    match ops.rename(&original, &source, &destination, destination_parents) {
         Ok(()) => return Ok(()),
         Err(error) if error.kind() == io::ErrorKind::CrossesDevices => {}
         Err(error) => return Err(error),
     }
 
-    let staging = super::file_copy::Staging::with_prefix(&destination_parents, ".oxyde-history-")?;
+    let staging = super::file_copy::Staging::with_prefix(destination_parents, ".oxyde-history-")?;
     let copied = ops.copy(&original, &source, &staging.file, &staging.directory)?;
     if copied != metadata.len() {
         return Err(io::Error::other("Incomplete history move copy"));
@@ -127,7 +162,7 @@ fn move_with(
             "History move copy failed content verification",
         ));
     }
-    ops.rename(&output, &staging.file, &destination, &destination_parents)?;
+    ops.rename(&output, &staging.file, &destination, destination_parents)?;
     if let Err(error) = ops.remove(&original, &source) {
         // The opened destination still belongs to this operation. On Windows
         // its handle prevents an external writer or path replacement here.

@@ -110,6 +110,14 @@ pub(super) fn copy_with_parents(
 /// Remove only a journal-verified output, including copied readonly files.
 pub(crate) fn remove_verified_output(path: &Path, expected: &str) -> io::Result<()> {
     let parents = super::path_parents::HeldParents::new(path)?;
+    remove_verified_output_with_parents(path, expected, &parents)
+}
+
+pub(super) fn remove_verified_output_with_parents(
+    path: &Path,
+    expected: &str,
+    parents: &super::path_parents::HeldParents,
+) -> io::Result<()> {
     let resolved = parents.resolved_path(path)?;
     let mut file = platform().open_copied_file(parents.directory(), &resolved)?;
     let metadata = file.metadata()?;

@@ -35,6 +35,12 @@ impl Platform for WindowsPlatform {
     fn track_operation_directory(&self, parent: &std::fs::File, path: &std::path::Path) -> std::io::Result<std::fs::File> {
         super::windows_file_moves::track_directory(parent, path)
     }
+    fn create_journal_directory(&self, parent: &std::fs::File, path: &std::path::Path, hidden: bool) -> std::io::Result<std::fs::File> {
+        super::windows_file_moves::create_journal_directory(parent, path, hidden)
+    }
+    fn restore_journal_directory(&self, directory: &std::fs::File, _path: &std::path::Path, permissions: std::fs::Permissions, hidden: bool) -> std::io::Result<()> {
+        super::windows_file_moves::restore_journal_directory(directory, permissions, hidden)
+    }
     fn remove_empty_operation_directory(&self, parent: &std::fs::File, path: &std::path::Path, expected: super::FileIdentity) -> std::io::Result<()> {
         super::windows_file_moves::remove_empty_directory(parent, path, expected)
     }

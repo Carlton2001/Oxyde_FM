@@ -49,6 +49,13 @@ impl Platform for LinuxPlatform {
     fn track_operation_directory(&self, _parent: &std::fs::File, path: &std::path::Path) -> std::io::Result<std::fs::File> {
         self.hold_archive_directory(path)
     }
+    fn create_journal_directory(&self, _parent: &std::fs::File, path: &std::path::Path, _hidden: bool) -> std::io::Result<std::fs::File> {
+        std::fs::create_dir(path)?;
+        self.hold_archive_directory(path)
+    }
+    fn restore_journal_directory(&self, directory: &std::fs::File, _path: &std::path::Path, permissions: std::fs::Permissions, _hidden: bool) -> std::io::Result<()> {
+        directory.set_permissions(permissions)
+    }
     fn remove_empty_operation_directory(&self, parent: &std::fs::File, path: &std::path::Path, expected: super::FileIdentity) -> std::io::Result<()> {
         let directory = self.track_operation_directory(parent, path)?;
         if self.file_identity(&directory)? != expected {

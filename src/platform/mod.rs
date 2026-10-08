@@ -73,6 +73,11 @@ pub trait Platform: Send + Sync {
     fn ensure_operation_directory(&self, parent: &std::fs::File, path: &std::path::Path) -> std::io::Result<(std::fs::File, bool)>;
     /// Track an ordinary source directory by identity, allowing subsequent child moves.
     fn track_operation_directory(&self, parent: &std::fs::File, path: &std::path::Path) -> std::io::Result<std::fs::File>;
+    /// Exclusively create a journal directory, retaining metadata access without
+    /// blocking child moves. Windows resolves only the child of the held parent.
+    fn create_journal_directory(&self, parent: &std::fs::File, path: &std::path::Path, hidden: bool) -> std::io::Result<std::fs::File>;
+    /// Restore readonly/hidden on the created object, rather than resolving its name.
+    fn restore_journal_directory(&self, directory: &std::fs::File, path: &std::path::Path, permissions: std::fs::Permissions, hidden: bool) -> std::io::Result<()>;
     /// On Windows reopen one child without reparse traversal, verify the retained
     /// identity, and delete by handle only if the kernel finds it empty.
     fn remove_empty_operation_directory(&self, parent: &std::fs::File, path: &std::path::Path, expected: FileIdentity) -> std::io::Result<()>;
