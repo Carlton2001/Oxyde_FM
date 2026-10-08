@@ -6,7 +6,7 @@ Priorités proposées : P1 pour un risque sur les opérations de fichiers à rep
 
 ## Tableau de suivi — 8 octobre 2026
 
-**20 points traités, 4 clos par retrait, 1 partiellement traité, 4 autres points de correction/optimisation à faire, 1 vérification manuelle distincte et 1 observation de référence.** « Traité » décrit la correction du code ; les validations manuelles encore ouvertes sont indiquées séparément. A11 est commité dans `00b6a30` et A12 dans `261cb8c` ; A24/A25 sont commités dans `db3c5ae` et A30/A31 dans `daa8f52`.
+**21 points traités, 4 clos par retrait, 1 partiellement traité, 3 autres points de correction/optimisation à faire, 1 vérification manuelle distincte et 1 observation de référence.** « Traité » décrit la correction du code ; les validations manuelles encore ouvertes sont indiquées séparément. A11 est commité dans `00b6a30` et A12 dans `261cb8c` ; A24/A25 sont commités dans `db3c5ae` et A30/A31 dans `daa8f52`.
 
 | Point | Sujet | État du code | Suite ou validation restante |
 | --- | --- | --- | --- |
@@ -18,7 +18,7 @@ Priorités proposées : P1 pour un risque sur les opérations de fichiers à rep
 | [A06](#a06--presse-papiers--allocations-et-erreurs-du-format-couper--p2) | Publication du presse-papiers | Traité | Publication réelle et collage de fichiers ordinaires à confirmer manuellement |
 | [A07](#a07--api-windows-encore-dans-les-commandes--p2) | Isolation des API Windows | Partiel | Déplacer les appels restants de corbeille et de sidebar vers Platform |
 | [A08](#a08--annulation-de-recherche-et-détection-ssd--p2) | Annulation de recherche / SSD | Traité | Lectures et attente du verrou annulables ; branche SSD inactive retirée |
-| [A09](#a09--calcul-des-tailles--tâches-et-pools-cumulés--p2) | Concurrence du calcul des tailles | À faire | Mesures, limite de concurrence et annulation |
+| [A09](#a09--calcul-des-tailles--tâches-et-pools-cumulés--p2) | Concurrence du calcul des tailles | Traité | Deux calculs actifs, pools partagés et parcours annulable ; mesure réalisée |
 | [A10](#a10--tri-et-normalisation-répétés--p2) | Tri et normalisation | À faire | Clarifier les règles, mesurer puis éviter les calculs répétés |
 | [A11](#a11--copie-de-lhistorique-pendant-le-rendu--p2) | État d'historique utilisé au rendu | Traité | Résumé sans allocation ; mesure sur un historique chargé pour quatre panneaux |
 | [A12](#a12--polling-et-notifications-sans-changement--p2) | Polling et notifications | Traité | Indicateur natif sans lecture des chemins ; notification Peek sur changement |
@@ -124,9 +124,13 @@ Limites : un appel système de lecture déjà bloqué, la création du lecteur Z
 
 ## A09 — Calcul des tailles : tâches et pools cumulés — P2
 
-**Organisation établie, coût à mesurer.** `ui/app/sizes.rs:26` crée un travail bloquant pour chaque chemin à calculer. `commands/io.rs:603` crée un pool jwalk par calcul, avec davantage de threads sur SSD. Le parcours ne reçoit pas de signal d'annulation interne ; abandonner la tâche GPUI ne garantit pas l'arrêt des travaux bloquants déjà lancés.
+**Corrigé le 8 octobre 2026.** GPUI garde au maximum deux requêtes en vol et applique les résultats progressivement. Un sémaphore partagé limite aussi les calculs physiques à deux, y compris ceux des propriétés. Les pools jwalk sont réutilisés : 16 threads SSD et 2 threads HDD/réseau, créés à la première utilisation, au lieu d'un pool par dossier. Les règles de liens, d'exclusion et de totalisation restent conservées.
 
-Mesurer un dossier contenant beaucoup de sous-dossiers, puis une navigation rapide entre dossiers. Envisager une limite globale de concurrence, un pool partagé et une annulation propagée. Garder les calculs hors du thread UI et préserver le cache et les mises à jour des résultats.
+Une garde signale l'abandon de la tâche GPUI aux requêtes du lot. Chaque requête possède aussi son propre signal d'abandon : supprimer un appelant async arrête son parcours sans annuler ses voisins. Le worker conserve son permis jusqu'à sa fin physique ; une navigation ne peut donc pas libérer artificiellement de nouveaux créneaux. L'attente du sémaphore contrôle l'annulation toutes les 25 ms en conservant sa position dans la file. Les callbacks jwalk contrôlent le signal avant les métadonnées et suppriment les descendants à parcourir ; aucun total partiel n'est retourné comme succès après annulation.
+
+Trois régressions couvrent l'annulation dans la file sans lancer le worker, l'abandon de l'appelant avec maintien du permis jusqu'à la fin du worker, et l'arrêt pendant le parcours sans publication de totaux partiels. Mesure reproductible : `cargo test --lib --offline profile_many_folder_scans -- --ignored --nocapture`. Quatre dossiers, 128 sous-dossiers et 2 048 fichiers donnent les mêmes totaux : environ 8,28 ms avec quatre pools de 16 threads contre 9,49 ms avec deux calculs sur un pool partagé. Ce petit cas ne montre pas de gain de vitesse ; il valide la réduction de 64 à 16 threads de parcours sur cette fixture. En production, les deux classes de stockage réunies créent au maximum 18 threads de pool.
+
+Limites : un appel système de lecture ou de métadonnées déjà bloqué ne peut pas être préempté. Les travaux Rayon déjà planifiés terminent leurs contrôles d'annulation dans les pools bornés. La fermeture du dialogue de propriétés ne détruit pas son calcul détaché actuel ; celui-ci bénéficie du plafond commun, sans garantie d'annulation à la fermeture. Aucune mesure de navigation interactive ou Linux n'est annoncée.
 
 ## A10 — Tri et normalisation répétés — P2
 
@@ -462,4 +466,8 @@ Quatre tests du transfert initial vérifient les verrous source/destination apr�
 
 ### Validation du point A08
 
-`cargo test --all-targets --offline` : 174 tests backend et 108 tests du binaire passent (282) ; 14 tests restent ignorés par défaut. `cargo check --all-targets --offline` passe sans avertissement du projet et le binaire est reconstruit. Le formatage est limité aux lecteurs modifiés et à leurs tests ; `git diff --check` passe. A08 est commité séparément après `261cb8c`. Aucun Computer Use ni validation Linux.
+`cargo test --all-targets --offline` : 174 tests backend et 108 tests du binaire passent (282) ; 14 tests restent ignorés par défaut. `cargo check --all-targets --offline` passe sans avertissement du projet et le binaire est reconstruit. Le formatage est limité aux lecteurs modifiés et à leurs tests ; `git diff --check` passe. A08 est commité séparément dans `a3b6853`. Aucun Computer Use ni validation Linux.
+
+### Validation du point A09
+
+`cargo test --all-targets --offline` : 177 tests backend et 108 tests du binaire passent (285) ; 15 tests sont ignorés par défaut. Le profil A09 exécuté séparément passe également. `cargo check --all-targets --offline` passe sans avertissement du projet et le binaire est reconstruit. Les nouveaux modules et les fonctions modifiées sont formatés ; `git diff --check` passe. Aucun Computer Use ni validation Linux.

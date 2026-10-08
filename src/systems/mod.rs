@@ -5,3 +5,5 @@ mod copied_source;
 pub(crate) mod history_move;
 pub(crate) mod history_file_undo;
 pub mod quick_access_watcher;
+
+pub(crate) mod folder_sizes;
