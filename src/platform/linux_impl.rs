@@ -10,6 +10,9 @@ impl LinuxPlatform {
 }
 
 impl Platform for LinuxPlatform {
+    fn system_executable(&self, _executable: super::SystemExecutable) -> std::io::Result<std::path::PathBuf> {
+        Err(std::io::Error::new(std::io::ErrorKind::Unsupported, "Windows system executable is unavailable on this platform"))
+    }
     fn hold_archive_directory(&self, path: &std::path::Path) -> std::io::Result<std::fs::File> {
         let metadata = std::fs::symlink_metadata(path)?;
         if !metadata.is_dir() || metadata.file_type().is_symlink() {

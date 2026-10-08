@@ -11,6 +11,9 @@ impl WindowsPlatform {
 }
 
 impl Platform for WindowsPlatform {
+    fn system_executable(&self, executable: super::SystemExecutable) -> std::io::Result<std::path::PathBuf> {
+        super::windows_executables::resolve(executable)
+    }
     fn hold_archive_directory(&self, path: &std::path::Path) -> std::io::Result<std::fs::File> {
         super::windows_archive_security::hold_directory(path)
     }
@@ -446,7 +449,7 @@ impl Platform for WindowsPlatform {
             };
             result?;
         } else {
-            std::process::Command::new("explorer")
+            std::process::Command::new(self.system_executable(super::SystemExecutable::Explorer).map_err(|error| error.to_string())?)
                 .arg(path)
                 .spawn()
                 .map_err(|e| e.to_string())?;
@@ -488,7 +491,8 @@ impl Platform for WindowsPlatform {
         // __network_vincinity__ → open "Réseau et Internet" in Windows Settings
         if path == "__network_vincinity__" {
             std::thread::spawn(|| {
-                let _ = std::process::Command::new("explorer.exe")
+                let Ok(explorer) = super::platform().system_executable(super::SystemExecutable::Explorer) else { return; };
+                let _ = std::process::Command::new(explorer)
                     .arg("ms-settings:network")
                     .spawn();
             });

@@ -35,10 +35,17 @@ pub struct TrashTransferEntry {
     pub metadata_path: std::path::PathBuf,
 }
 
+#[derive(Clone, Copy)]
+pub enum SystemExecutable {
+    PowerShell,
+    Explorer,
+}
+
 /// Abstraction des opérations spécifiques à l'OS.
 /// Toute fonctionnalité native (lecteurs, ouverture, raccourcis, etc.)
 /// doit passer par ce trait plutôt qu'appeler directement les API OS.
 pub trait Platform: Send + Sync {
+    fn system_executable(&self, executable: SystemExecutable) -> std::io::Result<std::path::PathBuf>;
     /// Holds an ordinary directory without following a reparse point. On Windows
     /// the handle denies deletion/renaming until it is dropped.
     fn hold_archive_directory(&self, path: &std::path::Path) -> std::io::Result<std::fs::File>;
@@ -266,6 +273,8 @@ mod windows_disk_images;
 mod windows_drives;
 #[cfg(target_os = "windows")]
 mod windows_impl;
+#[cfg(target_os = "windows")]
+mod windows_executables;
 #[cfg(target_os = "windows")]
 mod windows_archive_security;
 #[cfg(target_os = "windows")]

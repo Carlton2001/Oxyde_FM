@@ -83,7 +83,11 @@ pub(super) fn install_autoplay_handler(hwnd: HWND) -> Result<(), String> {
 // Paths are environment data, never interpolated into PowerShell source.
 // CREATE_NO_WINDOW also avoids flashing a console during background queries.
 fn run(script: &str, path: Option<&str>) -> Result<String, String> {
-    let mut command = Command::new("powershell.exe");
+    let mut command = Command::new(
+        super::platform()
+            .system_executable(super::SystemExecutable::PowerShell)
+            .map_err(|error| error.to_string())?,
+    );
     command.args(["-NoLogo", "-NoProfile", "-NonInteractive", "-Command"])
         .arg(format!(r#"$ErrorActionPreference = 'Stop'; [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new(); {ROOTS_FUNCTION}; {script}"#))
         .creation_flags(0x08000000);

@@ -96,17 +96,19 @@ fn invoke_menu_with(
 
 fn run_powershell(script: &str, path: &str) -> Result<(), CommandError> {
     use std::os::windows::process::CommandExt;
-    let output = std::process::Command::new("powershell")
-        .arg("-NoProfile")
-        .arg("-NonInteractive")
-        .arg("-Command")
-        .arg(script)
-        .env("OXYDE_SHELL_TARGET", path)
-        .creation_flags(0x08000000)
-        .output()
-        .map_err(|error| {
-            CommandError::SystemError(format!("PowerShell failed to start: {error}"))
-        })?;
+    let output = std::process::Command::new(
+        super::platform()
+            .system_executable(super::SystemExecutable::PowerShell)
+            .map_err(|error| CommandError::SystemError(error.to_string()))?,
+    )
+    .arg("-NoProfile")
+    .arg("-NonInteractive")
+    .arg("-Command")
+    .arg(script)
+    .env("OXYDE_SHELL_TARGET", path)
+    .creation_flags(0x08000000)
+    .output()
+    .map_err(|error| CommandError::SystemError(format!("PowerShell failed to start: {error}")))?;
     if output.status.success() {
         return Ok(());
     }

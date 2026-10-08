@@ -1,7 +1,8 @@
 //! Temporary filesystem views used to edit archives without touching the original.
-use crate::commands::archive::extract_archive_with_checkpoint;
+use crate::commands::archive::{extract_archive_with_limits, extract_zip_file_for_open};
 use crate::systems::file_ops::{FileOpType, FileOperation, FileOperationManager};
 use crate::utils::archive::{split_virtual_path, ArchiveFormat};
+use crate::utils::archive_limits::{ArchiveBudget, ArchiveLimits};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock, Mutex, MutexGuard, Weak};
@@ -83,26 +84,30 @@ pub(crate) struct ArchiveWorkspace {
 
 impl ArchiveWorkspace {
     pub fn open(archive: PathBuf) -> Result<Self, String> {
-        Self::open_with_checkpoint(archive, &|| Ok(()))
+        Self::open_with_checkpoint(archive, &|| Ok(()), ArchiveLimits::WORKSPACE)
     }
     pub fn open_for_operation(
         archive: PathBuf,
         op: &Arc<Mutex<FileOperation>>,
     ) -> Result<Self, String> {
-        Self::open_with_checkpoint(archive, &|| {
-            FileOperationManager::archive_checkpoint(op).map_err(std::io::Error::other)
-        })
+        Self::open_with_checkpoint(
+            archive,
+            &|| FileOperationManager::archive_checkpoint(op).map_err(std::io::Error::other),
+            ArchiveLimits::WORKSPACE,
+        )
     }
     fn open_with_checkpoint(
         archive: PathBuf,
         checkpoint: &dyn Fn() -> std::io::Result<()>,
+        limits: ArchiveLimits,
     ) -> Result<Self, String> {
         let metadata = std::fs::metadata(&archive).map_err(|e| e.to_string())?;
         let directory = tempfile::tempdir().map_err(|e| e.to_string())?;
-        extract_archive_with_checkpoint(
+        extract_archive_with_limits(
             archive.to_string_lossy().into_owned(),
             directory.path().to_string_lossy().into_owned(),
             checkpoint,
+            limits,
         )
         .map_err(|e| e.to_string())?;
         // Never follow archive-provided links when copying or rebuilding a workspace.
@@ -163,8 +168,13 @@ impl ArchiveWorkspace {
         op.lock().unwrap().destination = original_destination;
         op.lock().unwrap().compression_quality = original_quality;
         result?;
-        if let Some(data) = crate::platform::platform().read_file_provenance(&self.archive).map_err(|e| e.to_string())? {
-            crate::platform::platform().write_file_provenance(&destination, &data).map_err(|e| e.to_string())?;
+        if let Some(data) = crate::platform::platform()
+            .read_file_provenance(&self.archive)
+            .map_err(|e| e.to_string())?
+        {
+            crate::platform::platform()
+                .write_file_provenance(&destination, &data)
+                .map_err(|e| e.to_string())?;
         }
         FileOperationManager::archive_checkpoint(op)?;
         let metadata = std::fs::metadata(&self.archive).map_err(|e| e.to_string())?;
@@ -267,21 +277,48 @@ pub fn external_file(path: &Path) -> Result<PathBuf, String> {
     let Some((archive, internal)) = virtual_source(path) else {
         return Ok(path.to_path_buf());
     };
-    let workspace = ArchiveWorkspace::open(archive)?;
-    let source = workspace.path(&internal)?;
-    if !source.is_file() {
-        return Err("Archive item is not a file".into());
-    }
     let cache = std::env::temp_dir().join("oxyde-archive-open");
     std::fs::create_dir_all(&cache).map_err(|e| e.to_string())?;
     let directory = tempfile::tempdir_in(cache).map_err(|e| e.to_string())?;
-    let destination = directory
-        .path()
-        .join(source.file_name().ok_or("Invalid file name")?);
-    std::fs::copy(source, &destination).map_err(|e| e.to_string())?;
-    if let Some(data) = crate::platform::platform().read_file_provenance(&workspace.archive).map_err(|e| e.to_string())? {
-        crate::platform::platform().write_file_provenance(&destination, &data).map_err(|e| e.to_string())?;
-    }
+    let destination = if ArchiveFormat::from_path(&archive) == Some(ArchiveFormat::Zip) {
+        extract_zip_file_for_open(
+            &archive,
+            &internal,
+            directory.path(),
+            ArchiveLimits::OPEN_FILE,
+        )
+        .map_err(|e| e.to_string())?
+    } else {
+        let workspace =
+            ArchiveWorkspace::open_with_checkpoint(archive, &|| Ok(()), ArchiveLimits::OPEN_FILE)?;
+        let source = workspace.path(&internal)?;
+        if !source.is_file() {
+            return Err("Archive item is not a file".into());
+        }
+        let root = crate::utils::archive_security::ExtractionRoot::new(directory.path())
+            .map_err(|e| e.to_string())?;
+        let name = source
+            .file_name()
+            .and_then(|name| name.to_str())
+            .ok_or("Invalid file name")?;
+        let destination = root.destination(name, false).map_err(|e| e.to_string())?;
+        let mut input = std::fs::File::open(source).map_err(|e| e.to_string())?;
+        let mut output = crate::platform::platform()
+            .create_archive_file(&destination.path)
+            .map_err(|e| e.to_string())?;
+        ArchiveBudget::new(ArchiveLimits::OPEN_FILE)
+            .copy(&mut input, &mut output, &|| Ok(()))
+            .map_err(|e| e.to_string())?;
+        if let Some(data) = crate::platform::platform()
+            .read_file_provenance(&workspace.archive)
+            .map_err(|e| e.to_string())?
+        {
+            crate::platform::platform()
+                .write_file_provenance(&destination.path, &data)
+                .map_err(|e| e.to_string())?;
+        }
+        destination.path.clone()
+    };
     let _ = directory.keep();
     Ok(destination)
 }

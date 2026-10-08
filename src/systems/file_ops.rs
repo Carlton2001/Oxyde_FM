@@ -9,6 +9,7 @@ use tokio::sync::{Notify, Semaphore};
 use uuid::Uuid;
 
 use crate::platform::{platform, ThreadPriority};
+use crate::utils::archive_limits::{ArchiveBudget, ArchiveLimits};
 
 const SPEED_HISTORY_LIMIT: usize = 60;
 
@@ -712,8 +713,13 @@ impl FileOperationManager {
                             })
                             .collect(),
                     ),
-                    trash_metadata_backups: Some(locked.trash_metadata_backups.iter()
-                        .map(|path| path.to_string_lossy().into_owned()).collect()),
+                    trash_metadata_backups: Some(
+                        locked
+                            .trash_metadata_backups
+                            .iter()
+                            .map(|path| path.to_string_lossy().into_owned())
+                            .collect(),
+                    ),
                     moved_dirs: Some(
                         locked
                             .moved_dirs
@@ -939,7 +945,10 @@ impl FileOperationManager {
         created: &[PathBuf],
     ) -> Result<(), String> {
         let trash_entries = platform().trash_transfer_entries(&[source.to_path_buf()])?;
-        let display = trash_entries.first().map(|entry| entry.original_path.as_path()).unwrap_or(source);
+        let display = trash_entries
+            .first()
+            .map(|entry| entry.original_path.as_path())
+            .unwrap_or(source);
         let base = display.file_name().ok_or("Invalid source name")?;
         let mut directories = walkdir::WalkDir::new(source)
             .contents_first(true)
@@ -1422,14 +1431,14 @@ impl FileOperationManager {
                             .map_err(|e| format!("Failed to create {:?}: {e}", parent))?;
                     }
 
-                    let source_guard = if is_move {
-                        Some(
-                            super::copied_source::CopiedSource::open(src)
-                                .map_err(|error| format!("Cannot hold move source {:?}: {error}", src))?,
-                        )
-                    } else {
-                        None
-                    };
+                    let source_guard =
+                        if is_move {
+                            Some(super::copied_source::CopiedSource::open(src).map_err(
+                                |error| format!("Cannot hold move source {:?}: {error}", src),
+                            )?)
+                        } else {
+                            None
+                        };
                     let mut copied = 0;
                     let output = super::file_copy::copy_with_source(
                         src,
@@ -1437,10 +1446,13 @@ impl FileOperationManager {
                         *replace_existing,
                         source_guard.as_ref().map(|source| source.file()),
                         &mut |bytes| {
-                            processed_bytes.fetch_add(bytes.saturating_sub(copied), Ordering::Relaxed);
+                            processed_bytes
+                                .fetch_add(bytes.saturating_sub(copied), Ordering::Relaxed);
                             copied = bytes;
                             loop {
-                                if cancel.load(Ordering::Relaxed) || error_share.lock().unwrap().is_some() {
+                                if cancel.load(Ordering::Relaxed)
+                                    || error_share.lock().unwrap().is_some()
+                                {
                                     return Err(std::io::Error::new(
                                         std::io::ErrorKind::Interrupted,
                                         "Operation cancelled",
@@ -1464,7 +1476,9 @@ impl FileOperationManager {
                     )
                     .map_err(|error| {
                         let message = match error.kind() {
-                            std::io::ErrorKind::PermissionDenied => "error_access_denied".to_string(),
+                            std::io::ErrorKind::PermissionDenied => {
+                                "error_access_denied".to_string()
+                            }
                             std::io::ErrorKind::StorageFull => "error_disk_full".to_string(),
                             _ => format!("Cannot copy {:?} to {:?}: {error}", src, dest),
                         };
@@ -1488,7 +1502,9 @@ impl FileOperationManager {
                     if let Some(source) = source_guard {
                         source
                             .finish(output, &mut || loop {
-                                if cancel.load(Ordering::Relaxed) || error_share.lock().unwrap().is_some() {
+                                if cancel.load(Ordering::Relaxed)
+                                    || error_share.lock().unwrap().is_some()
+                                {
                                     return Err(std::io::Error::new(
                                         std::io::ErrorKind::Interrupted,
                                         "Operation cancelled",
@@ -1500,7 +1516,10 @@ impl FileOperationManager {
                                 std::thread::sleep(std::time::Duration::from_millis(100));
                             })
                             .map_err(|error| {
-                                let message = format!("Copied destination, but cannot remove {:?}: {error}", src);
+                                let message = format!(
+                                    "Copied destination, but cannot remove {:?}: {error}",
+                                    src
+                                );
                                 error_share.lock().unwrap().get_or_insert(message.clone());
                                 message
                             })?;
@@ -2292,6 +2311,17 @@ impl FileOperationManager {
         sources: Vec<PathBuf>,
         destination: Option<PathBuf>,
     ) -> Result<(), String> {
+        Self::perform_extract_with_limits(op, sources, destination, ArchiveLimits::EXTRACTION)
+    }
+
+    fn perform_extract_with_limits(
+        op: &Arc<Mutex<FileOperation>>,
+        sources: Vec<PathBuf>,
+        destination: Option<PathBuf>,
+        limits: ArchiveLimits,
+    ) -> Result<(), String> {
+        let budget = ArchiveBudget::new(limits);
+        let checkpoint = || Self::archive_checkpoint(op).map_err(std::io::Error::other);
         let source = sources.first().ok_or("Missing archive")?;
         let requested = destination.ok_or("Missing extraction destination")?;
         let mut target = Self::unique_archive_path(&requested);
@@ -2315,7 +2345,9 @@ impl FileOperationManager {
         let mut guard = PendingDirectory(target.clone());
         let extraction_root = crate::utils::archive_security::ExtractionRoot::new(&target)
             .map_err(|error| error.to_string())?;
-        let provenance = platform().read_file_provenance(source).map_err(|error| error.to_string())?;
+        let provenance = platform()
+            .read_file_provenance(source)
+            .map_err(|error| error.to_string())?;
         {
             let mut locked = op.lock().unwrap();
             locked.destination = Some(target.clone());
@@ -2331,12 +2363,21 @@ impl FileOperationManager {
         {
             let file = std::fs::File::open(source).map_err(|error| error.to_string())?;
             let mut archive = zip::ZipArchive::new(file).map_err(|error| error.to_string())?;
+            budget
+                .check_entry_count(archive.len())
+                .map_err(|error| error.to_string())?;
             let mut total_bytes = 0u64;
             for index in 0..archive.len() {
                 let entry = archive.by_index(index).map_err(|error| error.to_string())?;
-                crate::utils::archive_security::relative_archive_path(entry.name())
+                budget
+                    .checkpoint(&checkpoint)
                     .map_err(|error| error.to_string())?;
-                total_bytes = total_bytes.checked_add(entry.size()).ok_or("Archive size overflow")?;
+                budget
+                    .entry(entry.name(), if entry.is_dir() { 0 } else { entry.size() })
+                    .map_err(|error| error.to_string())?;
+                total_bytes = total_bytes
+                    .checked_add(entry.size())
+                    .ok_or("Archive size overflow")?;
             }
             {
                 let mut locked = op.lock().unwrap();
@@ -2345,7 +2386,9 @@ impl FileOperationManager {
             }
             let mut buffer = [0u8; 256 * 1024];
             for index in 0..archive.len() {
-                Self::archive_checkpoint(op)?;
+                budget
+                    .checkpoint(&checkpoint)
+                    .map_err(|error| error.to_string())?;
                 let mut entry = archive.by_index(index).map_err(|error| error.to_string())?;
                 if entry
                     .unix_mode()
@@ -2353,35 +2396,46 @@ impl FileOperationManager {
                 {
                     return Err("Archive contains a symbolic link".into());
                 }
-                let destination = extraction_root.destination(entry.name(), entry.is_dir())
+                let destination = extraction_root
+                    .destination(entry.name(), entry.is_dir())
                     .map_err(|error| error.to_string())?;
                 let output = &destination.path;
                 op.lock().unwrap().current_file = Some(output.to_string_lossy().into_owned());
                 if !entry.is_dir() {
-                    let mut file = platform().create_archive_file(output)
+                    let mut file = platform()
+                        .create_archive_file(output)
                         .map_err(|error| error.to_string())?;
                     loop {
-                        Self::archive_checkpoint(op)?;
+                        budget
+                            .checkpoint(&checkpoint)
+                            .map_err(|error| error.to_string())?;
                         let count = entry.read(&mut buffer).map_err(|error| error.to_string())?;
+                        budget.check_time().map_err(|error| error.to_string())?;
                         if count == 0 {
                             break;
                         }
+                        budget
+                            .charge_written(count)
+                            .map_err(|error| error.to_string())?;
                         file.write_all(&buffer[..count])
                             .map_err(|error| error.to_string())?;
                         Self::archive_progress(op, count as u64);
                     }
                     if let Some(data) = provenance.as_deref() {
-                        platform().write_file_provenance(output, data).map_err(|error| error.to_string())?;
+                        platform()
+                            .write_file_provenance(output, data)
+                            .map_err(|error| error.to_string())?;
                     }
                 }
                 op.lock().unwrap().processed_files += 1;
             }
         } else {
             Self::archive_checkpoint(op)?;
-            crate::commands::archive::extract_archive_with_checkpoint(
+            crate::commands::archive::extract_archive_with_limits(
                 source.to_string_lossy().into_owned(),
                 target.to_string_lossy().into_owned(),
-                &|| Self::archive_checkpoint(op).map_err(std::io::Error::other),
+                &checkpoint,
+                limits,
             )
             .map_err(|error| error.to_string())?;
             let mut locked = op.lock().unwrap();
@@ -2490,18 +2544,77 @@ impl FileOperationManager {
 #[cfg(test)]
 mod tests {
     #[test]
+    fn extraction_failure_cleans_output_for_all_formats() {
+        use super::*;
+        let temp = tempfile::tempdir().unwrap();
+        let source = temp.path().join("file.txt");
+        std::fs::write(&source, b"bounded test content").unwrap();
+        for extension in ["zip", "7z", "tar", "zst", "iso"] {
+            let archive = temp.path().join(format!("limited.{extension}"));
+            if extension == "iso" {
+                crate::commands::archive::test_iso_image(&archive);
+            } else {
+                FileOperationManager::perform_compress(
+                    &crate::systems::archive_workspace::mutation_operation("fast"),
+                    vec![source.clone()],
+                    Some(archive.clone()),
+                )
+                .unwrap();
+            }
+            for cancelled in [false, true] {
+                let output = temp.path().join(format!("output-{extension}-{cancelled}"));
+                let op = Arc::new(Mutex::new(FileOperation::new(
+                    FileOpType::Extract,
+                    vec![archive.clone()],
+                    Some(output.clone()),
+                    None,
+                )));
+                op.lock()
+                    .unwrap()
+                    .cancel_flag
+                    .store(cancelled, Ordering::Relaxed);
+                let limits = ArchiveLimits {
+                    max_bytes: 2,
+                    ..ArchiveLimits::EXTRACTION
+                };
+                assert!(FileOperationManager::perform_extract_with_limits(
+                    &op,
+                    vec![archive.clone()],
+                    Some(output.clone()),
+                    limits
+                )
+                .is_err());
+                assert!(!output.exists(), "partial output kept for {extension}");
+                assert!(archive.is_file());
+            }
+        }
+    }
+
+    #[test]
     fn zip_operations_reject_windows_escape_and_alternate_stream_names() {
         use super::*;
         for name in ["a/C:victim.txt", "a/../C:victim.txt", "file.txt:extra"] {
             let temp = tempfile::tempdir().unwrap();
             let archive = temp.path().join("unsafe.zip");
             let mut writer = zip::ZipWriter::new(std::fs::File::create(&archive).unwrap());
-            writer.start_file(name, zip::write::SimpleFileOptions::default()).unwrap();
+            writer
+                .start_file(name, zip::write::SimpleFileOptions::default())
+                .unwrap();
             writer.write_all(b"marker").unwrap();
             writer.finish().unwrap();
             let output = temp.path().join("output");
-            let op = Arc::new(Mutex::new(FileOperation::new(FileOpType::Extract, vec![archive.clone()], Some(output.clone()), None)));
-            assert!(FileOperationManager::perform_extract(&op, vec![archive], Some(output.clone())).is_err());
+            let op = Arc::new(Mutex::new(FileOperation::new(
+                FileOpType::Extract,
+                vec![archive.clone()],
+                Some(output.clone()),
+                None,
+            )));
+            assert!(FileOperationManager::perform_extract(
+                &op,
+                vec![archive],
+                Some(output.clone())
+            )
+            .is_err());
             assert!(!output.exists());
         }
     }
@@ -2513,15 +2626,28 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let archive = temp.path().join("marked.zip");
         let mut writer = zip::ZipWriter::new(std::fs::File::create(&archive).unwrap());
-        writer.start_file("file.txt", zip::write::SimpleFileOptions::default()).unwrap();
+        writer
+            .start_file("file.txt", zip::write::SimpleFileOptions::default())
+            .unwrap();
         writer.write_all(b"marker").unwrap();
         writer.finish().unwrap();
         let data = b"[ZoneTransfer]\r\nZoneId=3\r\n";
         platform().write_file_provenance(&archive, data).unwrap();
         let output = temp.path().join("output");
-        let op = Arc::new(Mutex::new(FileOperation::new(FileOpType::Extract, vec![archive.clone()], Some(output.clone()), None)));
+        let op = Arc::new(Mutex::new(FileOperation::new(
+            FileOpType::Extract,
+            vec![archive.clone()],
+            Some(output.clone()),
+            None,
+        )));
         FileOperationManager::perform_extract(&op, vec![archive], Some(output.clone())).unwrap();
-        assert_eq!(platform().read_file_provenance(&output.join("file.txt")).unwrap().as_deref(), Some(data.as_slice()));
+        assert_eq!(
+            platform()
+                .read_file_provenance(&output.join("file.txt"))
+                .unwrap()
+                .as_deref(),
+            Some(data.as_slice())
+        );
     }
     use super::*;
 

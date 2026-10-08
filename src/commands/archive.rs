@@ -1,6 +1,7 @@
 use crate::models::{CommandError, FileEntry};
 use crate::platform::platform;
 pub use crate::utils::archive::{is_archive, split_virtual_path, ArchiveFormat};
+use crate::utils::archive_limits::{ArchiveBudget, ArchiveLimits, BudgetReader};
 use crate::utils::archive_security::{relative_archive_path, ExtractionRoot};
 use crate::utils::path_security::validate_path;
 use bzip2::read::BzDecoder;
@@ -25,6 +26,62 @@ pub fn create_archive_directory_with_quality(
 
 pub fn prepare_archive_file_for_open(path: &Path) -> Result<PathBuf, CommandError> {
     crate::systems::archive_workspace::external_file(path).map_err(CommandError::ArchiveError)
+}
+
+/// ZIP supports random access: validate the index, then decode only the requested file.
+pub(crate) fn extract_zip_file_for_open(
+    archive_path: &Path,
+    internal: &str,
+    target: &Path,
+    limits: ArchiveLimits,
+) -> Result<PathBuf, CommandError> {
+    let requested = relative_archive_path(internal)?;
+    if requested.as_os_str().is_empty() {
+        return Err(CommandError::ArchiveError(
+            "Archive item is not a file".into(),
+        ));
+    }
+    let budget = ArchiveBudget::new(limits);
+    let mut archive = ZipArchive::new(File::open(archive_path)?)
+        .map_err(|e| CommandError::ArchiveError(e.to_string()))?;
+    budget.check_entry_count(archive.len())?;
+    let mut selected = None;
+    for index in 0..archive.len() {
+        budget.checkpoint(&|| Ok(()))?;
+        let entry = archive
+            .by_index(index)
+            .map_err(|e| CommandError::ArchiveError(e.to_string()))?;
+        budget.entry(entry.name(), 0)?;
+        if entry
+            .unix_mode()
+            .is_some_and(|mode| mode & 0o170000 == 0o120000)
+        {
+            return Err(CommandError::ArchiveError(
+                "Archive links are not supported".into(),
+            ));
+        }
+        if relative_archive_path(entry.name())? == requested {
+            if selected.is_some() || entry.is_dir() {
+                return Err(CommandError::ArchiveError("Ambiguous archive file".into()));
+            }
+            budget.declare_bytes(entry.size())?;
+            selected = Some(index);
+        }
+    }
+    let index =
+        selected.ok_or_else(|| CommandError::ArchiveError("Archive file not found".into()))?;
+    let provenance = platform().read_file_provenance(archive_path)?;
+    let root = ExtractionRoot::new(target)?;
+    let destination = root.destination(internal, false)?;
+    let mut output = platform().create_archive_file(&destination.path)?;
+    let mut entry = archive
+        .by_index(index)
+        .map_err(|e| CommandError::ArchiveError(e.to_string()))?;
+    budget.copy(&mut entry, &mut output, &|| Ok(()))?;
+    if let Some(data) = provenance.as_deref() {
+        platform().write_file_provenance(&destination.path, data)?;
+    }
+    Ok(destination.path.clone())
 }
 
 pub fn list_archive_contents(
@@ -54,6 +111,7 @@ pub fn list_archive_contents(
 }
 
 fn list_iso(path: &Path, internal_prefix: &str) -> Result<Vec<FileEntry>, CommandError> {
+    let budget = ArchiveBudget::new(ArchiveLimits::LISTING);
     let file = File::open(path).map_err(|e| CommandError::IoError(e.to_string()))?;
     let mut iso = iso9660_core::ISO9660::load(file)
         .map_err(|e| CommandError::ArchiveError(format!("{:?}", e)))?;
@@ -70,6 +128,7 @@ fn list_iso(path: &Path, internal_prefix: &str) -> Result<Vec<FileEntry>, Comman
         .map_err(|e| CommandError::ArchiveError(format!("{:?}", e)))?;
 
     loop {
+        budget.check_time()?;
         let record = entries_iter.next(&mut iso);
         let Some(rec) = record else {
             break;
@@ -89,6 +148,10 @@ fn list_iso(path: &Path, internal_prefix: &str) -> Result<Vec<FileEntry>, Comman
             continue;
         }
         safe_iso_component(&display_name)?;
+        budget.entry(
+            &format!("{internal_prefix}/{display_name}").trim_start_matches('/'),
+            0,
+        )?;
 
         let is_dir = matches!(rec, ISO9660Record::Directory(_));
         let size = match &rec {
@@ -128,9 +191,11 @@ fn virtual_entry_path(archive: &Path, internal: &str, name: &str) -> Result<Stri
 }
 
 fn list_zip(path: &Path, internal_prefix: &str) -> Result<Vec<FileEntry>, CommandError> {
+    let budget = ArchiveBudget::new(ArchiveLimits::LISTING);
     let file = File::open(path).map_err(|e| CommandError::IoError(e.to_string()))?;
     let mut archive =
         ZipArchive::new(file).map_err(|e| CommandError::ArchiveError(e.to_string()))?;
+    budget.check_entry_count(archive.len())?;
     let mut entries = Vec::new();
     let prefix = if internal_prefix.is_empty() {
         "".to_string()
@@ -145,7 +210,7 @@ fn list_zip(path: &Path, internal_prefix: &str) -> Result<Vec<FileEntry>, Comman
             .by_index(i)
             .map_err(|e| CommandError::ArchiveError(e.to_string()))?;
         let name = file.name().replace('\\', "/");
-        relative_archive_path(&name)?;
+        budget.entry(&name, 0)?;
 
         if name.starts_with(&prefix) && name != prefix {
             let relative = &name[prefix.len()..];
@@ -196,9 +261,11 @@ fn list_zip(path: &Path, internal_prefix: &str) -> Result<Vec<FileEntry>, Comman
 }
 
 fn list_seven_zip(path: &Path, internal_prefix: &str) -> Result<Vec<FileEntry>, CommandError> {
+    let budget = ArchiveBudget::new(ArchiveLimits::LISTING);
     let file = File::open(path).map_err(|e| CommandError::IoError(e.to_string()))?;
     let reader = sevenz_rust2::ArchiveReader::new(file, sevenz_rust2::Password::empty())
         .map_err(|e| CommandError::ArchiveError(e.to_string()))?;
+    budget.check_entry_count(reader.archive().files.len())?;
     let mut entries = Vec::new();
     let prefix = if internal_prefix.is_empty() {
         "".to_string()
@@ -210,7 +277,7 @@ fn list_seven_zip(path: &Path, internal_prefix: &str) -> Result<Vec<FileEntry>, 
     // Listing needs only the 7z header; do not decompress every file while navigating.
     for entry in &reader.archive().files {
         let name = entry.name().replace('\\', "/");
-        relative_archive_path(&name)?;
+        budget.entry(&name, 0)?;
         if name.starts_with(&prefix) && name != prefix {
             let relative = &name[prefix.len()..];
             let parts: Vec<&str> = relative
@@ -252,6 +319,7 @@ fn list_tar(
     internal_prefix: &str,
     format: ArchiveFormat,
 ) -> Result<Vec<FileEntry>, CommandError> {
+    let budget = ArchiveBudget::new(ArchiveLimits::LISTING);
     let file = File::open(path).map_err(|e| CommandError::IoError(e.to_string()))?;
     let reader: Box<dyn io::Read> = match format {
         ArchiveFormat::TarGz => Box::new(GzDecoder::new(file)),
@@ -263,7 +331,11 @@ fn list_tar(
         _ => Box::new(file),
     };
 
-    let mut archive = TarArchive::new(reader);
+    let mut archive = TarArchive::new(BudgetReader {
+        reader,
+        budget: &budget,
+        checkpoint: &|| Ok(()),
+    });
     let mut entries = Vec::new();
     let prefix = if internal_prefix.is_empty() {
         "".to_string()
@@ -281,7 +353,7 @@ fn list_tar(
             .path()
             .map_err(|e| CommandError::ArchiveError(e.to_string()))?;
         let name = path_field.to_string_lossy().replace('\\', "/");
-        relative_archive_path(&name)?;
+        budget.entry(&name, 0)?;
 
         if name.starts_with(&prefix) && name != prefix {
             let relative = &name[prefix.len()..];
@@ -322,23 +394,28 @@ fn list_tar(
     Ok(entries)
 }
 
-struct CheckedReader<'a, R> {
-    reader: R,
-    checkpoint: &'a dyn Fn() -> io::Result<()>,
-}
-impl<R: io::Read> io::Read for CheckedReader<'_, R> {
-    fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
-        (self.checkpoint)()?;
-        self.reader.read(buffer)
-    }
-}
-
+#[cfg(test)]
 pub(crate) fn extract_archive_with_checkpoint(
     archive_path: String,
     target_dir: String,
     checkpoint: &dyn Fn() -> io::Result<()>,
 ) -> Result<(), CommandError> {
-    checkpoint().map_err(|e| CommandError::IoError(e.to_string()))?;
+    extract_archive_with_limits(
+        archive_path,
+        target_dir,
+        checkpoint,
+        ArchiveLimits::EXTRACTION,
+    )
+}
+
+pub(crate) fn extract_archive_with_limits(
+    archive_path: String,
+    target_dir: String,
+    checkpoint: &dyn Fn() -> io::Result<()>,
+    limits: ArchiveLimits,
+) -> Result<(), CommandError> {
+    let budget = ArchiveBudget::new(limits);
+    budget.checkpoint(checkpoint)?;
     let path_buf = validate_path(&archive_path)?;
     let path = path_buf.as_path();
     let format = ArchiveFormat::from_path(path).ok_or(CommandError::ArchiveError(
@@ -360,8 +437,9 @@ pub(crate) fn extract_archive_with_checkpoint(
             let file = File::open(path).map_err(|e| CommandError::IoError(e.to_string()))?;
             let mut archive =
                 ZipArchive::new(file).map_err(|e| CommandError::ArchiveError(e.to_string()))?;
+            budget.check_entry_count(archive.len())?;
             for index in 0..archive.len() {
-                checkpoint().map_err(|e| CommandError::IoError(e.to_string()))?;
+                budget.checkpoint(checkpoint)?;
                 let mut entry = archive
                     .by_index(index)
                     .map_err(|e| CommandError::ArchiveError(e.to_string()))?;
@@ -373,16 +451,11 @@ pub(crate) fn extract_archive_with_checkpoint(
                         "Archive links are not supported".into(),
                     ));
                 }
+                budget.entry(entry.name(), if entry.is_dir() { 0 } else { entry.size() })?;
                 let destination = root.destination(entry.name(), entry.is_dir())?;
                 if !entry.is_dir() {
                     let mut output = platform().create_archive_file(&destination.path)?;
-                    io::copy(
-                        &mut CheckedReader {
-                            reader: &mut entry,
-                            checkpoint,
-                        },
-                        &mut output,
-                    )?;
+                    budget.copy(&mut entry, &mut output, checkpoint)?;
                     if let Some(data) = provenance.as_deref() {
                         platform().write_file_provenance(&destination.path, data)?;
                     }
@@ -392,10 +465,10 @@ pub(crate) fn extract_archive_with_checkpoint(
         ArchiveFormat::SevenZip => {
             decompress_seven_zip_with_checkpoint(
                 path,
-                target,
                 &root,
                 provenance.as_deref(),
                 checkpoint,
+                &budget,
             )?;
         }
         ArchiveFormat::Tar
@@ -413,10 +486,14 @@ pub(crate) fn extract_archive_with_checkpoint(
                 ),
                 _ => Box::new(file),
             };
-            let mut archive = TarArchive::new(CheckedReader { reader, checkpoint });
+            let mut archive = TarArchive::new(BudgetReader {
+                reader,
+                checkpoint,
+                budget: &budget,
+            });
             for entry in archive.entries()? {
                 let mut entry = entry?;
-                checkpoint()?;
+                budget.checkpoint(checkpoint)?;
                 let kind = entry.header().entry_type();
                 if !kind.is_file() && !kind.is_dir() {
                     return Err(CommandError::ArchiveError(
@@ -430,10 +507,11 @@ pub(crate) fn extract_archive_with_checkpoint(
                         CommandError::ArchiveError("Invalid archive entry encoding".into())
                     })?
                     .to_owned();
+                budget.entry(&name, if kind.is_file() { entry.size() } else { 0 })?;
                 let destination = root.destination(&name, kind.is_dir())?;
                 if kind.is_file() {
                     let mut output = platform().create_archive_file(&destination.path)?;
-                    io::copy(&mut entry, &mut output)?;
+                    budget.copy(&mut entry, &mut output, checkpoint)?;
                     if let Some(data) = provenance.as_deref() {
                         platform().write_file_provenance(&destination.path, data)?;
                     }
@@ -448,7 +526,13 @@ pub(crate) fn extract_archive_with_checkpoint(
             }
         }
         ArchiveFormat::Iso => {
-            extract_iso(&archive_path, &root, provenance.as_deref(), checkpoint)?;
+            extract_iso(
+                &archive_path,
+                &root,
+                provenance.as_deref(),
+                checkpoint,
+                &budget,
+            )?;
         }
         ArchiveFormat::Rar => {
             return Err(CommandError::ArchiveError(
@@ -461,32 +545,48 @@ pub(crate) fn extract_archive_with_checkpoint(
 
 fn decompress_seven_zip_with_checkpoint(
     path: &Path,
-    target: &Path,
     root: &ExtractionRoot,
     provenance: Option<&[u8]>,
     checkpoint: &dyn Fn() -> io::Result<()>,
+    budget: &ArchiveBudget,
 ) -> Result<(), CommandError> {
-    sevenz_rust2::decompress_file_with_extract_fn(path, target, |entry, reader, _| {
-        checkpoint()?;
-        let destination = root.destination(entry.name(), entry.is_directory())?;
-        if !entry.is_directory() {
-            let mut output = platform().create_archive_file(&destination.path)?;
-            io::copy(&mut CheckedReader { reader, checkpoint }, &mut output)?;
-            if let Some(data) = provenance {
-                platform().write_file_provenance(&destination.path, data)?;
+    let mut seven = sevenz_rust2::ArchiveReader::open(path, sevenz_rust2::Password::empty())
+        .map_err(|e| CommandError::ArchiveError(e.to_string()))?;
+    budget.check_entry_count(seven.archive().files.len())?;
+    for entry in &seven.archive().files {
+        budget.checkpoint(checkpoint)?;
+        budget.entry(
+            entry.name(),
+            if entry.is_directory() {
+                0
+            } else {
+                entry.size()
+            },
+        )?;
+    }
+    seven.set_thread_count(1);
+    seven
+        .for_each_entries(|entry, reader| {
+            budget.checkpoint(checkpoint)?;
+            let destination = root.destination(entry.name(), entry.is_directory())?;
+            if !entry.is_directory() {
+                let mut output = platform().create_archive_file(&destination.path)?;
+                budget.copy(reader, &mut output, checkpoint)?;
+                if let Some(data) = provenance {
+                    platform().write_file_provenance(&destination.path, data)?;
+                }
+                let mut times = fs::FileTimes::new();
+                if entry.has_last_modified_date {
+                    times = times.set_modified(entry.last_modified_date().into());
+                }
+                if entry.has_access_date {
+                    times = times.set_accessed(entry.access_date().into());
+                }
+                output.set_times(times)?;
             }
-            let mut times = fs::FileTimes::new();
-            if entry.has_last_modified_date {
-                times = times.set_modified(entry.last_modified_date().into());
-            }
-            if entry.has_access_date {
-                times = times.set_accessed(entry.access_date().into());
-            }
-            output.set_times(times)?;
-        }
-        Ok(true)
-    })
-    .map_err(|e| CommandError::ArchiveError(e.to_string()))
+            Ok(true)
+        })
+        .map_err(|e| CommandError::ArchiveError(e.to_string()))
 }
 
 #[cfg(test)]
@@ -516,12 +616,13 @@ fn extract_iso(
     root: &ExtractionRoot,
     provenance: Option<&[u8]>,
     checkpoint: &dyn Fn() -> io::Result<()>,
+    budget: &ArchiveBudget,
 ) -> Result<(), CommandError> {
     let file = File::open(archive_path).map_err(|e| CommandError::IoError(e.to_string()))?;
     let mut iso = iso9660_core::ISO9660::load(file)
         .map_err(|e| CommandError::ArchiveError(format!("{:?}", e)))?;
 
-    extract_iso_recursive(&mut iso, "/", root, provenance, checkpoint)
+    extract_iso_recursive(&mut iso, "/", root, provenance, checkpoint, budget)
 }
 
 fn extract_iso_recursive<T: iso9660_core::block_device::ISORead>(
@@ -530,6 +631,7 @@ fn extract_iso_recursive<T: iso9660_core::block_device::ISORead>(
     root: &ExtractionRoot,
     provenance: Option<&[u8]>,
     checkpoint: &dyn Fn() -> io::Result<()>,
+    budget: &ArchiveBudget,
 ) -> Result<(), CommandError> {
     let mut iter = iso
         .listdir(internal_path)
@@ -537,12 +639,24 @@ fn extract_iso_recursive<T: iso9660_core::block_device::ISORead>(
 
     let mut records = Vec::new();
     while let Some(record) = iter.next(iso) {
-        checkpoint()?;
+        budget.checkpoint(checkpoint)?;
+        let name = match &record {
+            ISO9660Record::Directory(d) => d.identifier(),
+            ISO9660Record::File(f) => f.identifier(),
+        };
+        if name == "." || name == ".." {
+            continue;
+        }
+        let display = safe_iso_component(name.split(';').next().unwrap_or(name))?;
+        budget.entry(
+            &format!("{}/{}", internal_path.trim_matches('/'), display).trim_start_matches('/'),
+            0,
+        )?;
         records.push(record);
     }
 
     for rec in records {
-        checkpoint()?;
+        budget.checkpoint(checkpoint)?;
         let name = match &rec {
             ISO9660Record::Directory(d) => d.identifier(),
             ISO9660Record::File(f) => f.identifier(),
@@ -565,18 +679,19 @@ fn extract_iso_recursive<T: iso9660_core::block_device::ISORead>(
 
         match rec {
             ISO9660Record::Directory(_) => {
-                extract_iso_recursive(iso, &new_internal, root, provenance, checkpoint)?;
+                extract_iso_recursive(iso, &new_internal, root, provenance, checkpoint, budget)?;
             }
             ISO9660Record::File(_) => {
                 let size = iso
                     .total_size(&new_internal)
                     .map_err(|e| CommandError::ArchiveError(format!("{:?}", e)))?;
+                budget.declare_bytes(size as u64)?;
                 let mut writer = platform().create_archive_file(&destination.path)?;
 
                 let mut offset = 0;
                 let mut buf = [0u8; 65536];
                 while offset < size {
-                    checkpoint()?;
+                    budget.checkpoint(checkpoint)?;
                     let to_read = std::cmp::min(buf.len(), size - offset);
                     let n = iso
                         .read(&new_internal, &mut buf[..to_read], offset)
@@ -586,6 +701,7 @@ fn extract_iso_recursive<T: iso9660_core::block_device::ISORead>(
                             "Unexpected end of ISO file".into(),
                         ));
                     }
+                    budget.charge_written(n)?;
                     use std::io::Write;
                     writer
                         .write_all(&buf[..n])
@@ -606,6 +722,155 @@ mod archive_tests {
     use super::*;
     use crate::systems::archive_workspace::mutation_operation;
     use crate::systems::file_ops::FileOperationManager;
+
+    #[test]
+    fn listings_refuse_paths_exceeding_the_shared_depth_limit() {
+        use std::io::Write;
+        let dir = tempfile::tempdir().unwrap();
+        let name = format!("{}file.txt", "a/".repeat(65));
+        for extension in ["zip", "7z", "tar", "zst"] {
+            let path = dir.path().join(format!("deep.{extension}"));
+            match extension {
+                "zip" => {
+                    let mut writer = zip::ZipWriter::new(File::create(&path).unwrap());
+                    writer
+                        .start_file(&name, zip::write::SimpleFileOptions::default())
+                        .unwrap();
+                    writer.write_all(b"safe").unwrap();
+                    writer.finish().unwrap();
+                }
+                "7z" => {
+                    let mut writer = sevenz_rust2::ArchiveWriter::create(&path).unwrap();
+                    writer
+                        .push_archive_entry(
+                            sevenz_rust2::ArchiveEntry::new_file(&name),
+                            Some(&b"safe"[..]),
+                        )
+                        .unwrap();
+                    writer.finish().unwrap();
+                }
+                _ => {
+                    let output: Box<dyn Write> = if extension == "zst" {
+                        Box::new(
+                            zstd::stream::write::Encoder::new(File::create(&path).unwrap(), 1)
+                                .unwrap()
+                                .auto_finish(),
+                        )
+                    } else {
+                        Box::new(File::create(&path).unwrap())
+                    };
+                    let mut builder = tar::Builder::new(output);
+                    let mut header = tar::Header::new_gnu();
+                    header.set_size(4);
+                    header.set_mode(0o644);
+                    header.set_cksum();
+                    builder
+                        .append_data(&mut header, &name, &b"safe"[..])
+                        .unwrap();
+                    builder.finish().unwrap();
+                }
+            }
+            assert!(
+                list_archive_contents(path.to_string_lossy().into_owned(), String::new()).is_err(),
+                "unbounded listing for {extension}"
+            );
+        }
+    }
+
+    #[test]
+    fn targeted_zip_open_does_not_extract_other_files() {
+        use std::io::Write;
+        let dir = tempfile::tempdir().unwrap();
+        let archive = dir.path().join("select.zip");
+        let mut writer = zip::ZipWriter::new(File::create(&archive).unwrap());
+        for (name, data) in [
+            ("selected.txt", &b"safe"[..]),
+            ("other.txt", &b"unselected and over the limit"[..]),
+        ] {
+            writer
+                .start_file(name, zip::write::SimpleFileOptions::default())
+                .unwrap();
+            writer.write_all(data).unwrap();
+        }
+        writer.finish().unwrap();
+        let output = tempfile::tempdir().unwrap();
+        let limits = ArchiveLimits {
+            max_bytes: 4,
+            ..ArchiveLimits::OPEN_FILE
+        };
+        let selected =
+            extract_zip_file_for_open(&archive, "selected.txt", output.path(), limits).unwrap();
+        assert_eq!(fs::read(selected).unwrap(), b"safe");
+        assert!(!output.path().join("other.txt").exists());
+        let second = tempfile::tempdir().unwrap();
+        assert!(extract_zip_file_for_open(&archive, "other.txt", second.path(), limits).is_err());
+        assert!(fs::read_dir(second.path()).unwrap().next().is_none());
+    }
+
+    #[test]
+    fn extraction_limits_apply_to_every_supported_decoder() {
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("file.txt");
+        fs::write(&source, b"bounded test content").unwrap();
+        let limits = ArchiveLimits {
+            max_bytes: 2,
+            ..ArchiveLimits::EXTRACTION
+        };
+        for extension in ["zip", "7z", "tar", "zst", "iso"] {
+            let archive = dir.path().join(format!("bounded.{extension}"));
+            if extension == "iso" {
+                test_iso_image(&archive);
+            } else {
+                FileOperationManager::perform_compress(
+                    &mutation_operation("fast"),
+                    vec![source.clone()],
+                    Some(archive.clone()),
+                )
+                .unwrap();
+            }
+            let output = tempfile::tempdir().unwrap();
+            let result = extract_archive_with_limits(
+                archive.to_string_lossy().into_owned(),
+                output.path().to_string_lossy().into_owned(),
+                &|| Ok(()),
+                limits,
+            );
+            assert!(result.is_err(), "unbounded {extension}");
+            assert_eq!(fs::metadata(&source).unwrap().len(), 20);
+        }
+    }
+
+    #[test]
+    fn zip_preflight_limits_counts_and_depth_and_rejects_ambiguous_selection() {
+        use std::io::Write;
+        let dir = tempfile::tempdir().unwrap();
+        let archive = dir.path().join("paths.zip");
+        let mut writer = zip::ZipWriter::new(File::create(&archive).unwrap());
+        for name in ["a/b/file.txt", "a\\b\\file.txt"] {
+            writer
+                .start_file(name, zip::write::SimpleFileOptions::default())
+                .unwrap();
+            writer.write_all(b"safe").unwrap();
+        }
+        writer.finish().unwrap();
+        for limits in [
+            ArchiveLimits {
+                max_depth: 2,
+                ..ArchiveLimits::OPEN_FILE
+            },
+            ArchiveLimits {
+                max_entries: 1,
+                ..ArchiveLimits::OPEN_FILE
+            },
+            ArchiveLimits::OPEN_FILE,
+        ] {
+            let output = tempfile::tempdir().unwrap();
+            assert!(
+                extract_zip_file_for_open(&archive, "a/b/file.txt", output.path(), limits).is_err()
+            );
+            assert!(fs::read_dir(output.path()).unwrap().next().is_none());
+        }
+    }
 
     #[test]
     fn zip_listing_and_workspace_reject_windows_paths_and_streams() {

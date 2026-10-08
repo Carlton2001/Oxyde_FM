@@ -172,10 +172,10 @@ Ces points ne sont pas présentés comme des exploitations démontrées pendant 
 | Point | Emplacements | Vérification ou durcissement proposé |
 | --- | --- | --- |
 | Changement concurrent de liens ou jonctions | Extraction dans `archive.rs`, publication et copie dans `file_ops.rs` et `file_copy.rs` | Tester le remplacement concurrent d'un parent entre contrôle et ouverture. Préférer des opérations liées à des handles et refuser les points de réanalyse lorsque le confinement est requis. |
-| Budgets globaux de décompression | `archive.rs`, `archive_workspace.rs`, `file_ops.rs` | Définir des limites de nombre d'entrées, taille totale, profondeur et temps de traitement, particulièrement pour l'ouverture d'un seul fichier qui extrait actuellement toute l'archive. Vérifier l'annulation avec des archives de test bornées. |
-| Résolution des exécutables Windows | `windows_disk_images.rs`, `windows_shell.rs`, `windows_impl.rs` | Remplacer les noms nus de PowerShell/Explorer par des chemins système fiables via `Platform`. Tester la résolution dans un environnement contrôlé. Ne pas supposer que Rust recherche automatiquement le répertoire courant : l'ordre de recherche dépend de son implémentation. |
+| Budgets globaux de décompression | `archive.rs`, `archive_workspace.rs`, `file_ops.rs`, `utils/archive_limits.rs` | Limites ajoutées dans le second lot décrit ci-dessous. Ouverture ciblée pour ZIP ; extraction complète plafonnée pour les autres formats. L'allocation interne des parseurs et leur interruption forcée restent à vérifier. |
+| Résolution des exécutables Windows | `windows_disk_images.rs`, `windows_shell.rs`, `windows_impl.rs`, `windows_executables.rs` | Les quatre appels à PowerShell/Explorer utilisent désormais des chemins système obtenus par API Windows via `Platform`. Les tests contrôlent le PATH, le répertoire courant et les variables de racine Windows. |
 | Parseurs et fournisseurs d'aperçu | `thumbnails.rs`, `icons.rs`, chargement d'images GPUI | Vérifier les limites et l'isolation des décodeurs et extensions Shell. Aucune corruption mémoire exploitable n'a été démontrée. |
-| Dépendances | `Cargo.lock` | Exécuter une analyse RustSec complète avec une base à jour et déterminer l'applicabilité à Windows. `cargo audit` n'était pas installé lors de la session ; les consultations ponctuelles ne remplacent pas ce contrôle. |
+| Dépendances | `Cargo.lock`, `security/RUSTSEC_WINDOWS.json` | Analyse RustSec effectuée avec filtres Windows x86_64 : zéro vulnérabilité publiée signalée, trois alertes de maintenance. `yoke-derive` retiré a été mis à jour vers `0.8.4`. Un script local et une CI reproduisent le contrôle ; les alertes de maintenance restent visibles. |
 
 Référence sur la résolution des exécutables : [Rust — Command, comportement propre à la plateforme](https://doc.rust-lang.org/std/process/struct.Command.html#platform-specific-behavior).
 
@@ -204,7 +204,7 @@ Les cinq points décrits ci-dessus ont fait l'objet de corrections dans la copie
 
 Les liens et fichiers spéciaux provenant de TAR sont désormais refusés lors de l'extraction. Les noms incompatibles avec les règles Windows et les entrées de fichier dupliquées ne sont plus acceptés. Une destination dont un ancêtre est un point de réanalyse est également refusée. Les archives ordinaires restent couvertes par les tests de parcours existants.
 
-La propagation conserve la provenance de l'archive ; elle n'ajoute pas une nouvelle intégration à `IAttachmentExecute`. Les politiques SmartScreen et des applications externes n'ont pas fait l'objet d'une validation interactive. Les limites de décompression globales, l'isolation des parseurs, la résolution des exécutables et l'analyse complète des dépendances restent des travaux distincts à vérifier. Le verrouillage des répertoires décrit ici est propre à Windows ; aucun confinement face aux changements concurrents de parents sous Linux n'est revendiqué.
+La propagation conserve la provenance de l'archive ; elle n'ajoute pas une nouvelle intégration à `IAttachmentExecute`. Les politiques SmartScreen et des applications externes n'ont pas fait l'objet d'une validation interactive. À cette étape du premier lot, les limites de décompression globales, l'isolation des parseurs, la résolution des exécutables et l'analyse complète des dépendances restaient des travaux distincts à vérifier. Le second lot ci-dessous actualise ces points. Le verrouillage des répertoires décrit ici est propre à Windows ; aucun confinement face aux changements concurrents de parents sous Linux n'est revendiqué.
 
 ### Validation des corrections
 
@@ -219,3 +219,77 @@ Résultats de validation finale sur Windows :
 - Aucun test ignoré n'a été activé. Aucune validation visuelle ni utilisation de Computer Use. Aucune validation d'exécution sous Linux.
 
 La compilation et les tests Windows ont été exécutés avec l'accès local nécessaire : l'environnement restreint refusait la résolution des ressources embarquées et l'ouverture de certains ancêtres. Les résultats finaux ci-dessus proviennent des exécutions complètes réussies, après résolution des échecs intermédiaires.
+
+
+## Second lot de durcissements — 8 octobre 2026
+
+Le premier lot a été commité sur `master` sous `c7ffecb` (`fix(security): confine archive extraction and bound previews`). Les changements suivants prolongent ce commit.
+
+### Budgets et ouverture ciblée
+
+`src/utils/archive_limits.rs` centralise les politiques suivantes :
+
+| Usage | Octets de fichiers | Entrées | Profondeur | Durée active coopérative |
+| --- | --- | --- | --- | --- |
+| Extraction explicite | 64 Gio | 100 000 | 64 composants | 30 minutes |
+| Espace temporaire pour mutation d'archive | 8 Gio | 100 000 | 64 composants | 30 minutes |
+| Ouverture externe d'un fichier | 256 Mio | 100 000 | 64 composants | 2 minutes |
+| Listing | 8 Gio de flux TAR, hors marge de métadonnées | 100 000 | 64 composants | 2 minutes |
+
+Les tailles annoncées sont vérifiées avant écriture et les octets réellement copiés sont comptabilisés séparément. Un dépassement renvoie une erreur avant d'écrire les octets excédentaires. Les additions sont contrôlées contre les débordements. Les boucles d'extraction vérifient l'annulation et le délai ; le temps passé dans les checkpoints de pause est exclu du délai. Pour TAR et ses variantes compressées, le flux décodé est lui aussi plafonné, avec une marge maximale de 4 Kio par entrée autorisée (390,625 Mio pour 100 000 entrées), afin de couvrir en-têtes, bourrage et métadonnées étendues, même pour des données sautées pendant un listing.
+
+ZIP et 7z contrôlent le nombre d'entrées après lecture de leur index. Les listings contrôlent les noms, la profondeur et le nombre d'entrées. ISO limite également le nombre de records collectés par l'extraction avant qu'ils soient traités récursivement.
+
+`commands/archive.rs::extract_zip_file_for_open` valide les noms de tout l'index ZIP puis ne décompresse que le fichier demandé. Les entrées non sélectionnées ne consomment pas le budget d'octets de sortie. Les sélections ambiguës après normalisation des séparateurs sont refusées. La provenance Internet reste propagée avant de rendre le chemin à l'appelant.
+
+`archive_workspace.rs::external_file` conserve une extraction complète pour 7z, TAR et ISO, plafonnée à 256 Mio pour cette action. Cela peut refuser l'ouverture d'un petit fichier contenu dans une archive plus grande ; une extraction ciblée de ces formats reste une amélioration possible. Les espaces de mutation utilisent le plafond de 8 Gio. Ces plafonds sont des constantes internes, pas des préférences utilisateur.
+
+`file_ops.rs::perform_extract_with_limits` applique le même budget aux ZIP du gestionnaire d'opérations et aux autres décodeurs. Son répertoire provisoire est supprimé après erreur ou annulation. Les espaces de travail et les tentatives d'ouverture utilisent des `TempDir` détruits sur erreur. Le cache conservé après une ouverture réussie ne dispose pas encore d'une politique globale d'expiration ou de taille.
+
+Ces limites ne constituent pas une sandbox mémoire. Les allocations internes lors du parsing initial des index, les dictionnaires des décodeurs et un appel natif bloqué ne sont pas interrompus de force. Les durées sont vérifiées aux points de contrôle et après lecture, pas par un processus superviseur. L'isolation des parseurs et fournisseurs d'aperçu reste à traiter séparément.
+
+### Exécutables Windows
+
+Le trait `Platform` expose `system_executable(SystemExecutable)`. `windows_executables.rs` utilise `GetSystemDirectoryW` pour Windows PowerShell et `GetSystemWindowsDirectoryW` pour Explorer, sans utiliser `PATH`, `SystemRoot` ou `WINDIR` comme source du chemin. Aucun repli vers un nom nu n'est effectué si la résolution échoue. Les appels de `windows_disk_images.rs`, `windows_shell.rs` et les deux appels Explorer de `windows_impl.rs` utilisent ces chemins. Linux retourne une erreur « unsupported » pour cette API propre aux outils Windows.
+
+Références : [GetSystemDirectoryW](https://learn.microsoft.com/en-us/windows/win32/api/sysinfoapi/nf-sysinfoapi-getsystemdirectoryw), [GetSystemWindowsDirectoryW](https://learn.microsoft.com/en-us/windows/win32/api/sysinfoapi/nf-sysinfoapi-getsystemwindowsdirectoryw).
+
+Les tests lancent une commande PowerShell fixe et inoffensive avec un `PATH` et un répertoire courant contenant un faux exécutable. Un processus de test Rust séparé vérifie également que des variables `PATH`, `SystemRoot` et `WINDIR` modifiées n'altèrent pas les chemins retournés. Cela ne garantit pas que PowerShell puisse fonctionner avec un environnement système incohérent : falsifier `SystemRoot` empêche son runtime .NET de démarrer sur la machine testée.
+
+### Analyse des dépendances
+
+`cargo-audit 0.22.2` a été installé sous `target/security-tools`. La commande `./scripts/audit-security.ps1` télécharge la base RustSec sous `target/security-advisory-db`, analyse `Cargo.lock` avec les filtres Windows et x86_64, conserve le JSON sous `target/security-audit-windows.json` et échoue pour une vulnérabilité publiée ou une version retirée de crates.io. Aucune advisory n'est ignorée. Les avertissements de maintenance restent affichés et n'arrêtent pas seuls la commande.
+
+Le résultat daté est conservé dans `security/RUSTSEC_WINDOWS.json`, avec la révision de la base et l'empreinte SHA-256 du verrou normalisé en LF. La base consultée contient 1 294 avis, à la révision `5701a6d2a6158d5d4a933df5141a0415c285075d`. L'analyse du verrou actuel ne signale aucune vulnérabilité publiée pour les filtres choisis. Elle ne prouve pas l'absence de vulnérabilités inconnues et ne constitue pas une revue du code des dépendances. Les filtres portent sur l'applicabilité des avis ; leur résultat ne remplace pas l'analyse du graphe Cargo propre à la cible.
+
+| Alerte restante | Dépendance Windows observée | Suite proposée |
+| --- | --- | --- |
+| [RUSTSEC-2024-0436](https://rustsec.org/advisories/RUSTSEC-2024-0436.html), `paste 1.0.15` non maintenu | `image` via `exr/pulp` et `ravif/rav1e`, dont GPUI dépend également | Étudier les versions ou les fonctionnalités amont qui suppriment cette macro ; aucune vulnérabilité exploitable n'est affirmée par cet avis de maintenance. |
+| [RUSTSEC-2026-0206](https://rustsec.org/advisories/RUSTSEC-2026-0206.html), `rustybuzz 0.20.1` non maintenu | `usvg/resvg` via GPUI | Planifier une mise à jour cohérente de la pile SVG/typographie et vérifier le rendu des langues et des SVG. |
+| [RUSTSEC-2026-0192](https://rustsec.org/advisories/RUSTSEC-2026-0192.html), `ttf-parser 0.25.1` non maintenu | GPUI directement, `fontdb` et `rustybuzz` | Même chantier de typographie ; un remplacement isolé incompatible avec les API amont n'est pas appliqué ici. |
+
+L'alerte initiale sur la version retirée `yoke-derive 0.8.3` a été résolue par une mise à jour ciblée vers `0.8.4`. Le reste du verrou et la révision GPUI n'ont pas été mis à jour. « Retirée » ne signifie pas automatiquement « vulnérable ».
+
+`.github/workflows/security.yml` reprend le script sur Windows lors des changements du verrou ou du contrôle, des pull requests concernées, d'un contrôle hebdomadaire et d'un déclenchement manuel. Permissions GitHub limitées à la lecture et checkout fixé à un commit officiel ; aucun push ni exécution distante de cette CI n'a été effectué pendant cette session.
+
+### Reproductions des contrôles du second lot
+
+- `cargo test --lib archive_limits --locked --offline` : petites limites injectées pour tester les octets réels, les tailles annoncées, les débordements, les entrées, la profondeur, le flux décodé, le délai et l'annulation.
+- `cargo test --lib targeted_zip_open --locked --offline` : ouverture d'un fichier de 4 octets dans un ZIP contenant un autre fichier dépassant le budget ; seule la sélection apparaît en sortie.
+- `cargo test --lib zip_preflight_limits --locked --offline` : limites d'entrées/profondeur et collision de noms après normalisation, sans fichier créé en sortie.
+- `cargo test --lib extraction_limits_apply --locked --offline` : plafonds réduits sur ZIP, 7z, TAR, Zstandard et ISO avec des fichiers témoins.
+- `cargo test --lib extraction_failure_cleans --locked --offline` : nettoyage du gestionnaire pour ces cinq formats, après dépassement et après annulation, avec conservation des archives sources.
+- `cargo test --lib windows_executables --locked --offline` : résolution native et lancement PowerShell contrôlé ; aucun lancement d'Explorer ni manipulation de l'interface.
+- `./scripts/audit-security.ps1` : analyse actuelle, résultat JSON et code de sortie du contrôle automatisé.
+
+
+### Validation finale du second lot
+
+- `cargo check --all-targets --locked --offline` : réussi, sans avertissement du projet.
+- `cargo test --all-targets --locked --offline -- --quiet` : 213 tests de bibliothèque et 112 tests d'interface réussis, soit 325 réussites ; 17 tests préexistants ignorés ; aucun échec. Le sous-processus de vérification des variables Windows a également réussi.
+- Les tests supplémentaires vérifient le refus des listings trop profonds pour ZIP, 7z, TAR et Zstandard, ainsi que l'arrêt d'une copie après un premier bloc effectivement écrit.
+- `./scripts/audit-security.ps1` : code de sortie 0, zéro vulnérabilité publiée signalée et trois avertissements de maintenance, aucune version retirée restante.
+- L'empreinte du verrou dans `security/RUSTSEC_WINDOWS.json` a été vérifiée contre le fichier actuel.
+- `git diff --check` : réussi. Pas de Computer Use, de push, de validation visuelle, ni d'exécution de la CI sur GitHub ou de tests sous Linux.
+
+Les risques restant ouverts concernent principalement les allocations et l'isolation internes des parseurs/fournisseurs d'aperçu, les courses sur les parents dans les autres opérations de fichiers, le remplacement cohérent des dépendances non maintenues et la gestion globale du cache temporaire. Les limites coopératives ajoutées ne clôturent pas ces sujets.
