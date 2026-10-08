@@ -1,3 +1,5 @@
+pub(crate) use super::archive_iso_open::extract_iso_file_for_open;
+pub(crate) use super::archive_seven_open::extract_seven_file_for_open;
 pub(crate) use super::archive_tar_open::extract_tar_file_for_open;
 use crate::models::{CommandError, FileEntry};
 use crate::platform::platform;
@@ -609,7 +611,7 @@ fn safe_seven_zip_destination(root: &Path, name: &str) -> io::Result<PathBuf> {
     Ok(ExtractionRoot::new(root)?.destination(name, false)?.path)
 }
 
-fn safe_iso_component(name: &str) -> Result<&str, CommandError> {
+pub(super) fn safe_iso_component(name: &str) -> Result<&str, CommandError> {
     relative_archive_path(name)?;
     if name.is_empty()
         || name == "."

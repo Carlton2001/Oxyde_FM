@@ -1,6 +1,7 @@
 //! Temporary filesystem views used to edit archives without touching the original.
 use crate::commands::archive::{
-    extract_open_archive_with_budget, extract_tar_file_for_open, extract_zip_file_for_open,
+    extract_iso_file_for_open, extract_open_archive_with_budget, extract_seven_file_for_open,
+    extract_tar_file_for_open, extract_zip_file_for_open,
 };
 use crate::systems::file_ops::{FileOpType, FileOperation, FileOperationManager};
 use crate::utils::archive::{split_virtual_path, ArchiveFormat};
@@ -386,6 +387,10 @@ fn prepare_selection_with_limits(
 ) -> Result<PathBuf, String> {
     Ok(if ArchiveFormat::from_path(&archive) == Some(ArchiveFormat::Zip) {
         extract_zip_file_for_open(&archive, internal, target, limits).map_err(|e| e.to_string())?
+    } else if ArchiveFormat::from_path(&archive) == Some(ArchiveFormat::Iso) {
+        extract_iso_file_for_open(&archive, internal, target, limits).map_err(|e| e.to_string())?
+    } else if ArchiveFormat::from_path(&archive) == Some(ArchiveFormat::SevenZip) {
+        extract_seven_file_for_open(&archive, internal, target, limits).map_err(|e| e.to_string())?
     } else if matches!(
         ArchiveFormat::from_path(&archive),
         Some(
@@ -458,6 +463,59 @@ pub fn export_file(path: &Path, folder: &Path) -> Result<PathBuf, crate::models:
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn targeted_seven_selection_bypasses_full_workspace_and_exports_without_overwriting() {
+        use sevenz_rust2::{ArchiveEntry, ArchiveWriter, SourceReader};
+        let fixture = tempfile::tempdir().unwrap();
+        for solid in [false, true] {
+            let archive = fixture.path().join(format!("selection-{solid}.7z"));
+            let mut writer = ArchiveWriter::create(&archive).unwrap();
+            if solid {
+                writer.push_archive_entries(
+                    vec![ArchiveEntry::new_file("selected.txt"), ArchiveEntry::new_file("other.txt")],
+                    vec![SourceReader::new(&b"safe"[..]), SourceReader::new(&b"unselected file exceeds four bytes"[..])],
+                ).unwrap();
+            } else {
+                writer.push_archive_entry(ArchiveEntry::new_file("selected.txt"), Some(&b"safe"[..])).unwrap();
+                writer.push_archive_entry(ArchiveEntry::new_file("other.txt"), Some(&b"unselected file exceeds four bytes"[..])).unwrap();
+            }
+            writer.finish().unwrap();
+            let limits = ArchiveLimits { max_bytes: 4, ..ArchiveLimits::OPEN_FILE };
+            let full = tempfile::tempdir().unwrap();
+            assert!(ArchiveWorkspace::open_in_directory(archive.clone(), &|| Ok(()), limits, full).is_err());
+            let target = tempfile::tempdir().unwrap();
+            let selected = prepare_selection_with_limits(archive.clone(), "selected.txt", target.path(), limits).unwrap();
+            assert_eq!(std::fs::read(selected).unwrap(), b"safe");
+            assert_eq!(std::fs::read_dir(target.path()).unwrap().count(), 1);
+            let output = tempfile::tempdir().unwrap();
+            std::fs::write(output.path().join("selected.txt"), b"foreign").unwrap();
+            let exported = export_file(&archive.join("selected.txt"), output.path()).unwrap();
+            assert_eq!(exported.file_name().unwrap(), "selected (1).txt");
+            assert_eq!(std::fs::read(exported).unwrap(), b"safe");
+            assert_eq!(std::fs::read(output.path().join("selected.txt")).unwrap(), b"foreign");
+        }
+    }
+
+    #[test]
+    fn targeted_iso_selection_bypasses_full_workspace_and_exports_without_overwriting() {
+        let fixture = tempfile::tempdir().unwrap();
+        let archive = fixture.path().join("disc.iso");
+        crate::commands::archive::test_iso_image(&archive);
+        let limits = ArchiveLimits { max_bytes: 4, ..ArchiveLimits::OPEN_FILE };
+        let full = tempfile::tempdir().unwrap();
+        assert!(ArchiveWorkspace::open_in_directory(archive.clone(), &|| Ok(()), limits, full).is_err());
+        let target = tempfile::tempdir().unwrap();
+        let selected = prepare_selection_with_limits(archive.clone(), "ROOT.TXT", target.path(), limits).unwrap();
+        assert_eq!(std::fs::read(selected).unwrap(), b"root");
+        assert_eq!(std::fs::read_dir(target.path()).unwrap().count(), 1);
+        let output = tempfile::tempdir().unwrap();
+        std::fs::write(output.path().join("ROOT.TXT"), b"foreign").unwrap();
+        let exported = export_file(&archive.join("ROOT.TXT"), output.path()).unwrap();
+        assert_eq!(exported.file_name().unwrap(), "ROOT (1).TXT");
+        assert_eq!(std::fs::read(exported).unwrap(), b"root");
+        assert_eq!(std::fs::read(output.path().join("ROOT.TXT")).unwrap(), b"foreign");
+    }
 
     #[test]
     fn targeted_tar_selection_bypasses_full_workspace_and_exports_without_overwriting() {
