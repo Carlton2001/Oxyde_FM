@@ -32,6 +32,12 @@ impl Platform for WindowsPlatform {
     fn ensure_operation_directory(&self, parent: &std::fs::File, path: &std::path::Path) -> std::io::Result<(std::fs::File, bool)> {
         super::windows_file_moves::ensure_directory(parent, path)
     }
+    fn track_operation_directory(&self, parent: &std::fs::File, path: &std::path::Path) -> std::io::Result<std::fs::File> {
+        super::windows_file_moves::track_directory(parent, path)
+    }
+    fn remove_empty_operation_directory(&self, parent: &std::fs::File, path: &std::path::Path, expected: super::FileIdentity) -> std::io::Result<()> {
+        super::windows_file_moves::remove_empty_directory(parent, path, expected)
+    }
     fn open_operation_file(&self, parent: &std::fs::File, path: &std::path::Path, read_contents: bool) -> std::io::Result<std::fs::File> {
         super::windows_file_moves::open_relative(parent, path, read_contents)
     }

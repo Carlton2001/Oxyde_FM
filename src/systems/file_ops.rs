@@ -1142,6 +1142,7 @@ impl FileOperationManager {
         // 2. Calculate size and build file list with resolution checks
         let mut files_to_process = Vec::new();
         let mut directories_to_create = Vec::new();
+        let mut source_directories = super::source_directories::SourceDirectories::default();
         let cancel_flag = op.lock().unwrap().cancel_flag.clone();
 
         for (src, canonical_src) in sources_to_copy.iter().zip(&canonical_sources) {
@@ -1194,6 +1195,11 @@ impl FileOperationManager {
                                 walker.skip_current_dir();
                                 continue;
                             }
+                        }
+                        if is_move {
+                            source_directories.capture(entry.path(), &dest_path).map_err(|error| {
+                                format!("Cannot prepare source directory {:?} for move: {error}", entry.path())
+                            })?;
                         }
                         directories_to_create.push(dest_path);
                         continue;
@@ -1583,43 +1589,18 @@ impl FileOperationManager {
         }
 
         if is_move {
-            let mut source_dirs = Vec::new();
-            for source in sources.iter().filter(|source| source.is_dir()) {
-                let name = source_name(source)?;
-                let dest_root = target_dir.join(name);
-                for entry in walkdir::WalkDir::new(source)
-                    .into_iter()
-                    .filter_map(Result::ok)
-                {
-                    if entry.file_type().is_dir() {
-                        if let Ok(relative) = entry.path().strip_prefix(source) {
-                            let relative = relative.to_path_buf();
-                            source_dirs.push((entry.into_path(), dest_root.join(relative)));
-                        }
+            source_directories.remove_empty(
+                &mut || {
+                    if cancel_flag.load(Ordering::Relaxed) {
+                        Err(std::io::Error::new(std::io::ErrorKind::Interrupted, "Operation cancelled"))
+                    } else {
+                        Ok(())
                     }
-                }
-            }
-            source_dirs.sort_by_key(|(path, _)| std::cmp::Reverse(path.components().count()));
-            for (directory, dest_directory) in source_dirs {
-                if cancel_flag.load(Ordering::Relaxed) {
-                    return Err("Operation cancelled".to_string());
-                }
-                match std::fs::remove_dir(&directory) {
-                    Ok(()) => op
-                        .lock()
-                        .unwrap()
-                        .moved_dirs
-                        .push((directory, dest_directory)),
-                    Err(error) if error.kind() == std::io::ErrorKind::DirectoryNotEmpty => {}
-                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-                    Err(error) => {
-                        return Err(format!(
-                            "Moved contents, but cannot remove {:?}: {error}",
-                            directory
-                        ));
-                    }
-                }
-            }
+                },
+                &mut |directory, destination| {
+                    op.lock().unwrap().moved_dirs.push((directory.to_path_buf(), destination.to_path_buf()));
+                },
+            ).map_err(|error| error.to_string())?;
         }
 
         Ok(())
@@ -3608,6 +3589,27 @@ mod tests {
 
         assert_eq!(std::fs::read(&source).unwrap(), b"source");
         assert_eq!(std::fs::read(destination).unwrap(), b"existing");
+    }
+
+    #[test]
+    #[cfg(target_os = "windows")]
+    fn directory_move_cleans_initial_directories_and_journals_empty_descendants() {
+        let root = tempfile::tempdir().unwrap();
+        let source = root.path().join("source");
+        let target = root.path().join("target");
+        std::fs::create_dir_all(source.join("nested/empty")).unwrap();
+        std::fs::create_dir(&target).unwrap();
+        std::fs::write(source.join("nested/data"), b"moved data").unwrap();
+        let op = operation();
+        FileOperationManager::perform_copy(&op, vec![source.clone()], Some(target.clone()), true, None).unwrap();
+        assert!(!source.exists());
+        assert_eq!(std::fs::read(target.join("source/nested/data")).unwrap(), b"moved data");
+        assert!(target.join("source/nested/empty").is_dir());
+        let moved = op.lock().unwrap().moved_dirs.clone();
+        assert_eq!(moved.len(), 3);
+        let resolved_target = std::fs::canonicalize(&target).unwrap();
+        assert_eq!(moved[0], (source.join("nested").join("empty"), resolved_target.join("source/nested/empty")));
+        assert_eq!(moved[2], (source, resolved_target.join("source")));
     }
 
     #[test]

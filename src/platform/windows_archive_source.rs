@@ -58,7 +58,7 @@ pub(super) fn identity(file: &File) -> io::Result<FileIdentity> {
             if id == 0 {
                 return Err(io::Error::new(
                     io::ErrorKind::Unsupported,
-                    "Filesystem did not provide a stable archive identity",
+                    "Filesystem did not provide a stable file identity",
                 ));
             }
             let mut value = [0u8; 16];

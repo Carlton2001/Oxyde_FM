@@ -41,7 +41,7 @@ pub enum SystemExecutable {
     Explorer,
 }
 
-/// Opaque identity of an opened file. Keep a handle alive while comparing it
+/// Opaque identity of an opened file or directory. Keep a handle alive while comparing it
 /// across an operation so a deleted file's identifier cannot be reused.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct FileIdentity {
@@ -71,6 +71,11 @@ pub trait Platform: Send + Sync {
     /// Ensure one ordinary child relative to the held parent on Windows. The
     /// boolean reports whether this native call created it, without an exists race.
     fn ensure_operation_directory(&self, parent: &std::fs::File, path: &std::path::Path) -> std::io::Result<(std::fs::File, bool)>;
+    /// Track an ordinary source directory by identity, allowing subsequent child moves.
+    fn track_operation_directory(&self, parent: &std::fs::File, path: &std::path::Path) -> std::io::Result<std::fs::File>;
+    /// On Windows reopen one child without reparse traversal, verify the retained
+    /// identity, and delete by handle only if the kernel finds it empty.
+    fn remove_empty_operation_directory(&self, parent: &std::fs::File, path: &std::path::Path, expected: FileIdentity) -> std::io::Result<()>;
     /// Open the basename relative to the retained parent, without following reparse objects.
     fn open_operation_file(&self, parent: &std::fs::File, path: &std::path::Path, read_contents: bool) -> std::io::Result<std::fs::File>;
     /// Hold a copied output for verification/publication and attribute-safe cleanup on Windows.

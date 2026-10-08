@@ -46,6 +46,17 @@ impl Platform for LinuxPlatform {
         };
         Ok((self.hold_archive_directory(path)?, created))
     }
+    fn track_operation_directory(&self, _parent: &std::fs::File, path: &std::path::Path) -> std::io::Result<std::fs::File> {
+        self.hold_archive_directory(path)
+    }
+    fn remove_empty_operation_directory(&self, parent: &std::fs::File, path: &std::path::Path, expected: super::FileIdentity) -> std::io::Result<()> {
+        let directory = self.track_operation_directory(parent, path)?;
+        if self.file_identity(&directory)? != expected {
+            return Err(std::io::Error::other("Source directory changed; its replacement was preserved"));
+        }
+        // This fallback is still path based; it does not claim Windows' atomic guarantees.
+        std::fs::remove_dir(path)
+    }
     fn open_operation_file(&self, _parent: &std::fs::File, path: &std::path::Path, _read_contents: bool) -> std::io::Result<std::fs::File> {
         if !std::fs::symlink_metadata(path)?.is_file() {
             return Err(std::io::Error::other("Operation source is not an ordinary file"));

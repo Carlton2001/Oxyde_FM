@@ -5,7 +5,7 @@ use std::path::Path;
 use windows::Win32::Foundation::{GENERIC_READ, HANDLE};
 use windows::Win32::Storage::FileSystem::{
     FileDispositionInfo, SetFileInformationByHandle, DELETE, FILE_DISPOSITION_INFO,
-    FILE_READ_ATTRIBUTES, FILE_RENAME_INFO, FILE_SHARE_READ, FILE_SHARE_WRITE,
+    FILE_READ_ATTRIBUTES, FILE_RENAME_INFO, FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE,
     FILE_WRITE_ATTRIBUTES,
 };
 
@@ -54,6 +54,48 @@ pub(super) fn ensure_directory(parent: &File, path: &Path) -> Result<(File, bool
         .file_name()
         .ok_or_else(|| Error::new(ErrorKind::InvalidInput, "Directory has no file name"))?;
     super::windows_no_reparse::ensure_directory_relative(parent, leaf)
+}
+
+pub(super) fn track_directory(parent: &File, path: &Path) -> Result<File> {
+    let leaf = path
+        .file_name()
+        .ok_or_else(|| Error::new(ErrorKind::InvalidInput, "Directory has no file name"))?;
+    // Metadata-only access permits the later DELETE open and ordinary file workers.
+    // Keep this handle alive to prevent reuse of its identity, not to freeze its name.
+    super::windows_no_reparse::open_relative(
+        parent,
+        leaf,
+        true,
+        FILE_READ_ATTRIBUTES.0,
+        FILE_SHARE_READ.0 | FILE_SHARE_WRITE.0 | FILE_SHARE_DELETE.0,
+        1,
+    )
+}
+
+pub(super) fn remove_empty_directory(
+    parent: &File,
+    path: &Path,
+    expected: super::FileIdentity,
+) -> Result<()> {
+    let leaf = path
+        .file_name()
+        .ok_or_else(|| Error::new(ErrorKind::InvalidInput, "Directory has no file name"))?;
+    let directory = super::windows_no_reparse::open_relative(
+        parent,
+        leaf,
+        true,
+        FILE_READ_ATTRIBUTES.0 | DELETE.0,
+        FILE_SHARE_READ.0 | FILE_SHARE_WRITE.0,
+        1,
+    )?;
+    if super::windows_archive_source::identity(&directory)? != expected {
+        return Err(Error::other(
+            "Source directory changed; its replacement was preserved",
+        ));
+    }
+    // No enumeration, permission changes, or recursive removal: Windows rejects
+    // nonempty directories, including children arriving just before this call.
+    remove(&directory)
 }
 
 pub(super) fn open_relative(parent: &File, path: &Path, read_contents: bool) -> Result<File> {

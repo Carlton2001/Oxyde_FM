@@ -3,6 +3,7 @@ pub mod file_ops;
 pub(crate) mod file_copy;
 mod copied_source;
 mod destination_tree;
+mod source_directories;
 pub(crate) mod history_move;
 pub(crate) mod history_file_undo;
 pub mod quick_access_watcher;
