@@ -1,5 +1,5 @@
 //! Temporary filesystem views used to edit archives without touching the original.
-use crate::commands::archive::{extract_archive_with_limits, extract_zip_file_for_open};
+use crate::commands::archive::{extract_open_archive_with_budget, extract_zip_file_for_open};
 use crate::systems::file_ops::{FileOpType, FileOperation, FileOperationManager};
 use crate::utils::archive::{split_virtual_path, ArchiveFormat};
 use crate::utils::archive_limits::{ArchiveBudget, ArchiveLimits};
@@ -80,6 +80,10 @@ pub(crate) struct ArchiveWorkspace {
     directory: tempfile::TempDir,
     length: u64,
     modified: Option<std::time::SystemTime>,
+    original_identity: crate::platform::FileIdentity,
+    original_hash: blake3::Hash,
+    // Keep the original object's identity alive without blocking later edits.
+    _original_file: std::fs::File,
     _parents: super::path_parents::HeldParents,
 }
 
@@ -112,13 +116,22 @@ impl ArchiveWorkspace {
         limits: ArchiveLimits,
         directory: tempfile::TempDir,
     ) -> Result<Self, String> {
+        let archive = crate::utils::path_security::validate_path(&archive.to_string_lossy()).map_err(|e| e.to_string())?;
         let parents = super::path_parents::HeldParents::new(&archive).map_err(|e| e.to_string())?;
-        let metadata = std::fs::metadata(&archive).map_err(|e| e.to_string())?;
-        extract_archive_with_limits(
-            archive.to_string_lossy().into_owned(),
-            directory.path().to_string_lossy().into_owned(),
+        let budget = ArchiveBudget::new(limits);
+        budget.checkpoint(checkpoint).map_err(|e| e.to_string())?;
+        let mut source = crate::platform::platform().open_archive_source(&archive, false).map_err(|e| e.to_string())?;
+        let metadata = source.metadata().map_err(|e| e.to_string())?;
+        let original_identity = crate::platform::platform().file_identity(&source).map_err(|e| e.to_string())?;
+        let original_hash = fingerprint(&mut source, checkpoint, &budget).map_err(|e| e.to_string())?;
+        use std::io::{Seek, SeekFrom};
+        source.seek(SeekFrom::Start(0)).map_err(|e| e.to_string())?;
+        extract_open_archive_with_budget(
+            &archive,
+            source.try_clone().map_err(|e| e.to_string())?,
+            &directory.path().to_string_lossy(),
             checkpoint,
-            limits,
+            &budget,
         )
         .map_err(|e| e.to_string())?;
         // Never follow archive-provided links when copying or rebuilding a workspace.
@@ -127,11 +140,24 @@ impl ArchiveWorkspace {
                 return Err("Archive links are not supported for file operations".into());
             }
         }
+        let original_file = crate::platform::platform().open_archive_source(&archive, true).map_err(|e| e.to_string())?;
+        // The decoder used the held source, even if a parent was retargeted.
+        if crate::platform::platform().file_identity(&original_file).map_err(|e| e.to_string())? != original_identity {
+            return Err(crate::models::error::ArchiveSourceConflict.to_string());
+        }
+        // Windows protects source data for the initial read. On other systems
+        // validate it again before accepting the temporary view.
+        if fingerprint(&mut source, checkpoint, &budget).map_err(|e| e.to_string())? != original_hash {
+            return Err(crate::models::error::ArchiveSourceConflict.to_string());
+        }
         Ok(Self {
             archive,
             directory,
             length: metadata.len(),
             modified: metadata.modified().ok(),
+            original_identity,
+            original_hash,
+            _original_file: original_file,
             _parents: parents,
         })
     }
@@ -180,6 +206,17 @@ impl ArchiveWorkspace {
         op.lock().unwrap().destination = original_destination;
         op.lock().unwrap().compression_quality = original_quality;
         result?;
+        FileOperationManager::archive_checkpoint(op)?;
+        let mut original = crate::platform::platform()
+            .open_file_for_move(&self.archive)
+            .map_err(|e| e.to_string())?;
+        let metadata = original.metadata().map_err(|e| e.to_string())?;
+        if !metadata.is_file() || crate::platform::platform().file_attributes(&metadata, "").2
+            || metadata.len() != self.length || metadata.modified().ok() != self.modified
+            || crate::platform::platform().file_identity(&original).map_err(|e| e.to_string())? != self.original_identity
+            || fingerprint(&mut original, &|| FileOperationManager::archive_checkpoint(op).map_err(std::io::Error::other), &ArchiveBudget::new(ArchiveLimits::WORKSPACE)).map_err(|e| e.to_string())? != self.original_hash {
+            return Err(crate::models::error::ArchiveSourceConflict.to_string());
+        }
         if let Some(data) = crate::platform::platform()
             .read_file_provenance(&self.archive)
             .map_err(|e| e.to_string())?
@@ -189,13 +226,6 @@ impl ArchiveWorkspace {
                 .map_err(|e| e.to_string())?;
         }
         FileOperationManager::archive_checkpoint(op)?;
-        let original = crate::platform::platform()
-            .open_file_for_move(&self.archive)
-            .map_err(|e| e.to_string())?;
-        let metadata = original.metadata().map_err(|e| e.to_string())?;
-        if metadata.len() != self.length || metadata.modified().ok() != self.modified {
-            return Err("Archive changed during the operation; original preserved".into());
-        }
         let backup = parent.join(format!(".oxyde-{}.archive-backup", uuid::Uuid::new_v4()));
         let rebuilt = crate::platform::platform()
             .open_file_for_move(&destination)
@@ -227,6 +257,26 @@ impl ArchiveWorkspace {
             );
         }
         Ok(())
+    }
+}
+
+/// Streaming, cancellable fingerprinting on the same opened file used for
+/// verification. Hashing never allocates proportionally to archive size.
+fn fingerprint(
+    file: &mut std::fs::File,
+    checkpoint: &dyn Fn() -> std::io::Result<()>,
+    budget: &ArchiveBudget,
+) -> std::io::Result<blake3::Hash> {
+    use std::io::{Read, Seek, SeekFrom};
+    file.seek(SeekFrom::Start(0))?;
+    let mut hasher = blake3::Hasher::new();
+    let mut buffer = [0u8; 64 * 1024];
+    loop {
+        budget.checkpoint(checkpoint)?;
+        let count = file.read(&mut buffer)?;
+        budget.check_time()?;
+        if count == 0 {return Ok(hasher.finalize());}
+        hasher.update(&buffer[..count]);
     }
 }
 
@@ -392,6 +442,106 @@ pub fn export_file(path: &Path, folder: &Path) -> Result<PathBuf, crate::models:
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn zip_bytes(contents: &[u8]) -> Vec<u8> {
+        use std::io::Write;
+        let mut zip = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+        zip.start_file("document.txt", zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored)).unwrap();
+        zip.write_all(contents).unwrap();
+        zip.finish().unwrap().into_inner()
+    }
+
+    #[test]
+    fn fingerprinting_is_cancellable_after_a_partial_read() {
+        use std::io::Seek;
+        let mut file = tempfile::tempfile().unwrap();
+        use std::io::Write;
+        file.write_all(&vec![42u8; 128 * 1024]).unwrap();
+        let calls = std::cell::Cell::new(0);
+        let error = fingerprint(&mut file, &|| {
+            calls.set(calls.get() + 1);
+            if calls.get() > 1 {Err(std::io::Error::new(std::io::ErrorKind::Interrupted, "cancelled"))} else {Ok(())}
+        }, &ArchiveBudget::new(ArchiveLimits::WORKSPACE)).unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::Interrupted);
+        assert_eq!(file.stream_position().unwrap(), 64 * 1024);
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn initial_archive_read_blocks_writers_and_replacement_until_the_view_is_ready() {
+        let base = tempfile::tempdir().unwrap();
+        let archive = base.path().join("archive.zip");
+        std::fs::write(&archive, zip_bytes(b"before")).unwrap();
+        let attempted = std::cell::Cell::new(false);
+        let workspace = ArchiveWorkspace::open_with_checkpoint(archive.clone(), &|| {
+            // The first checkpoint precedes opening the source. Test once the
+            // source is protected, during the first fingerprint read.
+            if !attempted.get() && std::fs::File::options().write(true).open(&archive).is_err() {
+                attempted.set(true);
+                assert!(std::fs::rename(&archive, base.path().join("redirected.zip")).is_err());
+            }
+            Ok(())
+        }, ArchiveLimits::WORKSPACE).unwrap();
+        assert!(attempted.get());
+        assert_eq!(std::fs::read(workspace.root().join("document.txt")).unwrap(), b"before");
+        std::fs::write(&archive, zip_bytes(b"edited")).unwrap();
+    }
+
+    #[test]
+    fn extraction_decodes_the_held_file_after_its_path_is_replaced() {
+        let base = tempfile::tempdir().unwrap();
+        let source = base.path().join("document.txt");
+        std::fs::write(&source, b"held source").unwrap();
+        for extension in ["zip", "7z", "tar", "tar.zst"] {
+            let archive = base.path().join(format!("archive.{extension}"));
+            FileOperationManager::perform_compress(&mutation_operation("fast"), vec![source.clone()], Some(archive.clone())).unwrap();
+            let file = crate::platform::platform().open_archive_source(&archive, true).unwrap();
+            std::fs::rename(&archive, base.path().join(format!("moved.{extension}"))).unwrap();
+            std::fs::write(&archive, b"replacement is not an archive").unwrap();
+            let target = base.path().join(format!("target-{extension}"));
+            extract_open_archive_with_budget(&archive, file, &target.to_string_lossy(), &|| Ok(()), &ArchiveBudget::new(ArchiveLimits::WORKSPACE)).unwrap();
+            assert_eq!(std::fs::read(target.join("document.txt")).unwrap(), b"held source");
+        }
+    }
+
+    #[test]
+    fn publication_preserves_content_edits_with_original_length_and_timestamp() {
+        let base = tempfile::tempdir().unwrap();
+        let archive = base.path().join("archive.zip");
+        let original = zip_bytes(b"before");
+        let edited = zip_bytes(b"edited");
+        assert_eq!(original.len(), edited.len());
+        std::fs::write(&archive, &original).unwrap();
+        let modified = std::fs::metadata(&archive).unwrap().modified().unwrap();
+        let workspace = ArchiveWorkspace::open(archive.clone()).unwrap();
+        std::fs::write(workspace.root().join("added.txt"), b"local addition").unwrap();
+        std::fs::write(&archive, &edited).unwrap();
+        std::fs::File::options().write(true).open(&archive).unwrap().set_modified(modified).unwrap();
+        let error = workspace.commit(&mutation_operation("fast")).unwrap_err();
+        assert!(error.contains("Archive changed"), "{error}");
+        assert_eq!(std::fs::read(&archive).unwrap(), edited);
+    }
+
+    #[test]
+    fn publication_preserves_replacement_with_identical_bytes_and_timestamp() {
+        let base = tempfile::tempdir().unwrap();
+        let archive = base.path().join("archive.zip");
+        let original = zip_bytes(b"before");
+        std::fs::write(&archive, &original).unwrap();
+        let modified = std::fs::metadata(&archive).unwrap().modified().unwrap();
+        let workspace = ArchiveWorkspace::open(archive.clone()).unwrap();
+        std::fs::write(workspace.root().join("added.txt"), b"local addition").unwrap();
+        let replacement = base.path().join("replacement.zip");
+        std::fs::write(&replacement, &original).unwrap();
+        std::fs::File::options().write(true).open(&replacement).unwrap().set_modified(modified).unwrap();
+        let moved_original = base.path().join("moved-original.zip");
+        std::fs::rename(&archive, &moved_original).unwrap();
+        std::fs::rename(&replacement, &archive).unwrap();
+        let error = workspace.commit(&mutation_operation("fast")).unwrap_err();
+        assert!(error.contains("Archive changed"), "{error}");
+        assert_eq!(std::fs::read(&archive).unwrap(), original);
+        assert_eq!(std::fs::read(&moved_original).unwrap(), original);
+    }
 
     #[test]
     fn explicit_export_preserves_existing_names_and_original_archives() {

@@ -11,6 +11,12 @@ impl WindowsPlatform {
 }
 
 impl Platform for WindowsPlatform {
+    fn open_archive_source(&self, path: &std::path::Path, allow_changes: bool) -> std::io::Result<std::fs::File> {
+        super::windows_archive_source::open(path, allow_changes)
+    }
+    fn file_identity(&self, file: &std::fs::File) -> std::io::Result<super::FileIdentity> {
+        super::windows_archive_source::identity(file)
+    }
     fn system_executable(&self, executable: super::SystemExecutable) -> std::io::Result<std::path::PathBuf> {
         super::windows_executables::resolve(executable)
     }

@@ -420,12 +420,24 @@ pub(crate) fn extract_archive_with_limits(
 ) -> Result<(), CommandError> {
     let budget = ArchiveBudget::new(limits);
     budget.checkpoint(checkpoint)?;
-    let path_buf = validate_path(&archive_path)?;
-    let path = path_buf.as_path();
+    let archive = validate_path(&archive_path)?;
+    let file = File::open(&archive)?;
+    extract_open_archive_with_budget(&archive, file, &target_dir, checkpoint, &budget)
+}
+
+/// Decode the opened source itself, without resolving its pathname again.
+pub(crate) fn extract_open_archive_with_budget(
+    path: &Path,
+    file: File,
+    target_dir: &str,
+    checkpoint: &dyn Fn() -> io::Result<()>,
+    budget: &ArchiveBudget,
+) -> Result<(), CommandError> {
+    budget.checkpoint(checkpoint)?;
     let format = ArchiveFormat::from_path(path).ok_or(CommandError::ArchiveError(
         "Unsupported archive format".to_string(),
     ))?;
-    let target_buf = validate_path(&target_dir)?;
+    let target_buf = validate_path(target_dir)?;
     let target = target_buf.as_path();
 
     info!("Extracting {:?} to {:?}", path, target);
@@ -438,7 +450,6 @@ pub(crate) fn extract_archive_with_limits(
 
     match format {
         ArchiveFormat::Zip => {
-            let file = File::open(path).map_err(|e| CommandError::IoError(e.to_string()))?;
             let mut archive =
                 ZipArchive::new(file).map_err(|e| CommandError::ArchiveError(e.to_string()))?;
             budget.check_entry_count(archive.len())?;
@@ -468,11 +479,11 @@ pub(crate) fn extract_archive_with_limits(
         }
         ArchiveFormat::SevenZip => {
             decompress_seven_zip_with_checkpoint(
-                path,
+                file,
                 &root,
                 provenance.as_deref(),
                 checkpoint,
-                &budget,
+                budget,
             )?;
         }
         ArchiveFormat::Tar
@@ -480,7 +491,6 @@ pub(crate) fn extract_archive_with_limits(
         | ArchiveFormat::TarXz
         | ArchiveFormat::TarZst
         | ArchiveFormat::TarBz2 => {
-            let file = File::open(path).map_err(|e| CommandError::IoError(e.to_string()))?;
             let reader: Box<dyn io::Read> = match format {
                 ArchiveFormat::TarGz => Box::new(GzDecoder::new(file)),
                 ArchiveFormat::TarXz => Box::new(XzDecoder::new(file)),
@@ -493,7 +503,7 @@ pub(crate) fn extract_archive_with_limits(
             let mut archive = TarArchive::new(BudgetReader {
                 reader,
                 checkpoint,
-                budget: &budget,
+                budget,
             });
             for entry in archive.entries()? {
                 let mut entry = entry?;
@@ -531,11 +541,11 @@ pub(crate) fn extract_archive_with_limits(
         }
         ArchiveFormat::Iso => {
             extract_iso(
-                &archive_path,
+                file,
                 &root,
                 provenance.as_deref(),
                 checkpoint,
-                &budget,
+                budget,
             )?;
         }
         ArchiveFormat::Rar => {
@@ -548,13 +558,13 @@ pub(crate) fn extract_archive_with_limits(
 }
 
 fn decompress_seven_zip_with_checkpoint(
-    path: &Path,
+    file: File,
     root: &ExtractionRoot,
     provenance: Option<&[u8]>,
     checkpoint: &dyn Fn() -> io::Result<()>,
     budget: &ArchiveBudget,
 ) -> Result<(), CommandError> {
-    let mut seven = sevenz_rust2::ArchiveReader::open(path, sevenz_rust2::Password::empty())
+    let mut seven = sevenz_rust2::ArchiveReader::new(file, sevenz_rust2::Password::empty())
         .map_err(|e| CommandError::ArchiveError(e.to_string()))?;
     budget.check_entry_count(seven.archive().files.len())?;
     for entry in &seven.archive().files {
@@ -616,13 +626,12 @@ fn safe_iso_component(name: &str) -> Result<&str, CommandError> {
 }
 
 fn extract_iso(
-    archive_path: &str,
+    file: File,
     root: &ExtractionRoot,
     provenance: Option<&[u8]>,
     checkpoint: &dyn Fn() -> io::Result<()>,
     budget: &ArchiveBudget,
 ) -> Result<(), CommandError> {
-    let file = File::open(archive_path).map_err(|e| CommandError::IoError(e.to_string()))?;
     let mut iso = iso9660_core::ISO9660::load(file)
         .map_err(|e| CommandError::ArchiveError(format!("{:?}", e)))?;
 

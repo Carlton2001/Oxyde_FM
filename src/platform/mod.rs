@@ -41,10 +41,23 @@ pub enum SystemExecutable {
     Explorer,
 }
 
+/// Opaque identity of an opened file. Keep a handle alive while comparing it
+/// across an operation so a deleted file's identifier cannot be reused.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FileIdentity {
+    volume: u64,
+    value: [u8; 16],
+    kind: u8,
+}
+
 /// Abstraction des opérations spécifiques à l'OS.
 /// Toute fonctionnalité native (lecteurs, ouverture, raccourcis, etc.)
 /// doit passer par ce trait plutôt qu'appeler directement les API OS.
 pub trait Platform: Send + Sync {
+    /// Snapshot mode denies source writes and replacement on Windows. Tracking
+    /// mode keeps the identity alive while permitting subsequent external edits.
+    fn open_archive_source(&self, path: &std::path::Path, allow_changes: bool) -> std::io::Result<std::fs::File>;
+    fn file_identity(&self, file: &std::fs::File) -> std::io::Result<FileIdentity>;
     fn system_executable(&self, executable: SystemExecutable) -> std::io::Result<std::path::PathBuf>;
     /// Holds an ordinary directory without following a reparse point. On Windows
     /// the handle denies deletion/renaming until it is dropped.
@@ -293,6 +306,8 @@ mod windows_no_reparse;
 mod windows_com;
 #[cfg(target_os = "windows")]
 mod windows_file_moves;
+#[cfg(target_os = "windows")]
+mod windows_archive_source;
 #[cfg(target_os = "windows")]
 mod windows_file_copy;
 #[cfg(target_os = "windows")]

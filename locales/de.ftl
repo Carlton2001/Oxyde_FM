@@ -839,3 +839,4 @@ archive-limit-entries = Verarbeitung angehalten: Das Archiv enthält mehr als { 
 archive-limit-depth = Verarbeitung angehalten: Ein Archivpfad überschreitet { $limit } Ebenen einschließlich des Dateinamens.
 archive-limit-time = Verarbeitung angehalten: Die maximale aktive Verarbeitungszeit von { $limit } Minuten wurde erreicht. Pausen zählen nicht mit.
 archive-limit-decoded = Verarbeitung angehalten: Die entpackten Daten einschließlich Headern überschreiten { $limit }.
+archive-source-changed = Das Archiv wurde während des Vorgangs geändert. Oxyde hat den Vorgang angehalten und das aktuelle Archiv beibehalten. Wiederholen Sie den Vorgang mit dieser Version.

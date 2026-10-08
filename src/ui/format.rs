@@ -96,6 +96,30 @@ fn format_datetime(date: NaiveDateTime, format: DateFormat) -> String {
 mod tests {
     use super::*;
     #[test]
+    fn archive_source_conflicts_are_translated_in_all_languages() {
+        for (language, expected) in [
+            (Language::French, "L’archive a changé"),
+            (Language::English, "The archive changed"),
+            (Language::German, "Das Archiv wurde"),
+            (Language::Spanish, "El archivo comprimido cambió"),
+            (Language::Italian, "L’archivio è cambiato"),
+        ] {
+            let i18n = crate::ui::i18n::I18n::for_language(language);
+            let detail = format!(
+                "Archive Error: {}",
+                oxyde_lib::models::error::ArchiveSourceConflict
+            );
+            let displayed = error_detail(&detail, &i18n);
+            assert!(displayed.starts_with(expected), "{displayed}");
+            assert!(!displayed.contains(oxyde_lib::models::error::ArchiveSourceConflict::MARKER));
+            let unrelated = format!(
+                "File missing: report {}.zip",
+                oxyde_lib::models::error::ArchiveSourceConflict::MARKER
+            );
+            assert_eq!(error_detail(&unrelated, &i18n), unrelated);
+        }
+    }
+    #[test]
     fn archive_failures_display_localized_thresholds_in_all_languages() {
         use oxyde_lib::models::error::{ArchiveLimitFailure, ArchiveLimitKind};
         for language in [
@@ -226,6 +250,9 @@ mod tests {
 pub fn error_detail(detail: &str, i18n: &crate::ui::i18n::I18n) -> String {
     use crate::ui::i18n::{FluentArgs, Message};
     use oxyde_lib::models::error::{ArchiveLimitFailure, ArchiveLimitKind};
+    if oxyde_lib::models::error::ArchiveSourceConflict::from_message(detail) {
+        return i18n.text(Message::ArchiveSourceChanged).to_string();
+    }
     let Some(failure) = ArchiveLimitFailure::from_message(detail) else {
         return detail.into();
     };

@@ -538,3 +538,4 @@ archive-limit-entries = Le traitement est arrêté : l’archive contient plus d
 archive-limit-depth = Le traitement est arrêté : un chemin de l’archive dépasse { $limit } niveaux, nom du fichier compris.
 archive-limit-time = Le traitement est arrêté : la durée maximale de { $limit } minutes a été atteinte. Les pauses ne sont pas comptées.
 archive-limit-decoded = Le traitement est arrêté : les données décompressées, en-têtes compris, dépassent { $limit }.
+archive-source-changed = L’archive a changé pendant l’opération. Oxyde a arrêté l’opération et conservé la version actuelle de l’archive. Relancez l’opération depuis cette version.

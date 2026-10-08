@@ -532,3 +532,4 @@ archive-limit-entries = Processing stopped: the archive contains more than { $li
 archive-limit-depth = Processing stopped: an archive path exceeds { $limit } levels, including the file name.
 archive-limit-time = Processing stopped: the maximum active processing time of { $limit } minutes was reached. Pauses do not count.
 archive-limit-decoded = Processing stopped: decompressed data, including headers, exceeds { $limit }.
+archive-source-changed = The archive changed during the operation. Oxyde stopped the operation and preserved the current archive. Retry the operation using this version.

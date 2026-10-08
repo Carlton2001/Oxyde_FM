@@ -387,6 +387,7 @@ pub enum Message {
     ArchiveLimitDepth,
     ArchiveLimitTime,
     ArchiveLimitDecoded,
+    ArchiveSourceChanged,
 
     NetworkMapDescription,
     NetworkMapHint,
@@ -831,6 +832,7 @@ impl Message {
             Self::ArchiveLimitDepth => "archive-limit-depth",
             Self::ArchiveLimitTime => "archive-limit-time",
             Self::ArchiveLimitDecoded => "archive-limit-decoded",
+            Self::ArchiveSourceChanged => "archive-source-changed",
 
             Self::NetworkMapDescription => "network-map-description",
             Self::NetworkMapHint => "network-map-hint",
@@ -1426,6 +1428,7 @@ mod tests {
                 Message::ArchiveLimitDepth,
                 Message::ArchiveLimitTime,
                 Message::ArchiveLimitDecoded,
+                Message::ArchiveSourceChanged,
 
                 Message::NetworkMapDescription,
                 Message::NetworkMapHint,

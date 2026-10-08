@@ -839,3 +839,4 @@ archive-limit-entries = Elaborazione interrotta: l’archivio contiene più di {
 archive-limit-depth = Elaborazione interrotta: un percorso dell’archivio supera { $limit } livelli, incluso il nome del file.
 archive-limit-time = Elaborazione interrotta: è stato raggiunto il tempo massimo di elaborazione attiva di { $limit } minuti. Le pause non vengono conteggiate.
 archive-limit-decoded = Elaborazione interrotta: i dati decompressi, comprese le intestazioni, superano { $limit }.
+archive-source-changed = L’archivio è cambiato durante l’operazione. Oxyde ha interrotto l’operazione e conservato la versione attuale dell’archivio. Ripeti l’operazione usando questa versione.

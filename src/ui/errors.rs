@@ -23,6 +23,9 @@ pub fn path_load_message(error: &CommandError) -> Message {
 
 /// Store a message key, so an error is translated in the current UI language.
 pub fn rename_message(error: &CommandError) -> Message {
+    if oxyde_lib::models::error::ArchiveSourceConflict::from_message(&error.to_string()) {
+        return Message::ArchiveSourceChanged;
+    }
     match error {
         CommandError::IoError(message)
             if message.to_ascii_lowercase().contains("already exists") =>
@@ -39,6 +42,15 @@ pub fn rename_message(error: &CommandError) -> Message {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn archive_rename_conflicts_explain_that_the_current_archive_was_preserved() {
+        assert_eq!(
+            rename_message(&CommandError::IoError(
+                oxyde_lib::models::error::ArchiveSourceConflict.to_string()
+            )),
+            Message::ArchiveSourceChanged
+        );
+    }
 
     #[test]
     fn archive_listing_limits_retain_the_threshold_in_the_tab() {

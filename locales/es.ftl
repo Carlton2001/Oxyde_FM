@@ -839,3 +839,4 @@ archive-limit-entries = Procesamiento detenido: el archivo comprimido contiene m
 archive-limit-depth = Procesamiento detenido: una ruta del archivo comprimido supera { $limit } niveles, incluido el nombre del archivo.
 archive-limit-time = Procesamiento detenido: se alcanzó el tiempo máximo de procesamiento activo de { $limit } minutos. Las pausas no cuentan.
 archive-limit-decoded = Procesamiento detenido: los datos descomprimidos, incluidas las cabeceras, superan { $limit }.
+archive-source-changed = El archivo comprimido cambió durante la operación. Oxyde detuvo la operación y conservó la versión actual del archivo. Repita la operación con esta versión.

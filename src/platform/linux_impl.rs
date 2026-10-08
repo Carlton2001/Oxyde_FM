@@ -10,6 +10,18 @@ impl LinuxPlatform {
 }
 
 impl Platform for LinuxPlatform {
+    fn open_archive_source(&self, path: &std::path::Path, _allow_changes: bool) -> std::io::Result<std::fs::File> {
+        let file = std::fs::File::open(path)?;
+        if !file.metadata()?.is_file() {return Err(std::io::Error::other("Archive source is not a regular file"));}
+        Ok(file)
+    }
+    fn file_identity(&self, file: &std::fs::File) -> std::io::Result<super::FileIdentity> {
+        use std::os::unix::fs::MetadataExt;
+        let metadata = file.metadata()?;
+        let mut value = [0u8; 16];
+        value[..8].copy_from_slice(&metadata.ino().to_le_bytes());
+        Ok(super::FileIdentity {volume: metadata.dev(), value, kind: 3})
+    }
     fn system_executable(&self, _executable: super::SystemExecutable) -> std::io::Result<std::path::PathBuf> {
         Err(std::io::Error::new(std::io::ErrorKind::Unsupported, "Windows system executable is unavailable on this platform"))
     }

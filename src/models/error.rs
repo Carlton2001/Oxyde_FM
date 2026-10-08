@@ -18,6 +18,23 @@ impl fmt::Display for ArchiveCacheIssue {
 }
 impl std::error::Error for ArchiveCacheIssue {}
 
+#[derive(Debug)]
+pub struct ArchiveSourceConflict;
+impl ArchiveSourceConflict {
+    pub const MARKER: &str = "[archive-source-conflict]";
+    const MESSAGE: &str =
+        "Archive changed during the operation; original preserved [archive-source-conflict]";
+    pub fn from_message(message: &str) -> bool {
+        message.contains(Self::MESSAGE)
+    }
+}
+impl fmt::Display for ArchiveSourceConflict {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(Self::MESSAGE)
+    }
+}
+impl std::error::Error for ArchiveSourceConflict {}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ArchiveLimitKind {
     Bytes,
