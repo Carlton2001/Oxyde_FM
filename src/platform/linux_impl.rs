@@ -38,6 +38,14 @@ impl Platform for LinuxPlatform {
     fn hold_resolved_operation_directory(&self, path: &std::path::Path) -> std::io::Result<std::fs::File> {
         self.hold_archive_directory(path)
     }
+    fn ensure_operation_directory(&self, _parent: &std::fs::File, path: &std::path::Path) -> std::io::Result<(std::fs::File, bool)> {
+        let created = match std::fs::create_dir(path) {
+            Ok(()) => true,
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => false,
+            Err(error) => return Err(error),
+        };
+        Ok((self.hold_archive_directory(path)?, created))
+    }
     fn open_operation_file(&self, _parent: &std::fs::File, path: &std::path::Path, _read_contents: bool) -> std::io::Result<std::fs::File> {
         if !std::fs::symlink_metadata(path)?.is_file() {
             return Err(std::io::Error::other("Operation source is not an ordinary file"));

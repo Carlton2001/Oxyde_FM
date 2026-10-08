@@ -44,6 +44,17 @@ pub(super) fn hold_parent(path: &Path) -> Result<File> {
     )
 }
 
+pub(super) fn ensure_directory(parent: &File, path: &Path) -> Result<(File, bool)> {
+    let metadata = parent.metadata()?;
+    if !metadata.is_dir() || super::platform().file_attributes(&metadata, "").2 {
+        return Err(Error::other("Operation directory changed during creation"));
+    }
+    let leaf = path
+        .file_name()
+        .ok_or_else(|| Error::new(ErrorKind::InvalidInput, "Directory has no file name"))?;
+    super::windows_no_reparse::ensure_directory_relative(parent, leaf)
+}
+
 pub(super) fn open_relative(parent: &File, path: &Path, read_contents: bool) -> Result<File> {
     let leaf = path
         .file_name()

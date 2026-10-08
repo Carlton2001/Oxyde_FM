@@ -68,6 +68,9 @@ pub trait Platform: Send + Sync {
     fn hold_operation_directory(&self, path: &std::path::Path) -> std::io::Result<std::fs::File>;
     /// Open a resolved ordinary parent, rejecting reparse traversal atomically on Windows.
     fn hold_resolved_operation_directory(&self, path: &std::path::Path) -> std::io::Result<std::fs::File>;
+    /// Ensure one ordinary child relative to the held parent on Windows. The
+    /// boolean reports whether this native call created it, without an exists race.
+    fn ensure_operation_directory(&self, parent: &std::fs::File, path: &std::path::Path) -> std::io::Result<(std::fs::File, bool)>;
     /// Open the basename relative to the retained parent, without following reparse objects.
     fn open_operation_file(&self, parent: &std::fs::File, path: &std::path::Path, read_contents: bool) -> std::io::Result<std::fs::File>;
     /// Rename by source identity into the retained destination parent on Windows.

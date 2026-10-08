@@ -41,6 +41,29 @@ impl HeldParents {
         &self.directory
     }
 
+    pub(crate) fn resolved_directory(&self) -> &Path {
+        &self.resolved
+    }
+
+    pub(super) fn with_bound_directory(
+        &self,
+        directory: File,
+        mut ancestors: Vec<File>,
+        resolved: PathBuf,
+    ) -> io::Result<Self> {
+        let mut handles = self
+            ._handles
+            .iter()
+            .map(File::try_clone)
+            .collect::<io::Result<Vec<_>>>()?;
+        handles.append(&mut ancestors);
+        Ok(Self {
+            _handles: handles,
+            directory,
+            resolved,
+        })
+    }
+
     pub(crate) fn resolved_path(&self, path: &Path) -> io::Result<PathBuf> {
         let name = path
             .file_name()
@@ -75,14 +98,31 @@ impl HeldParents {
 }
 
 /// Fast regular-file move. Parent binding and source opening precede the checkpoint.
+#[cfg(test)]
 pub(crate) fn move_file(
     source: &Path,
     destination: &Path,
     replace: bool,
     checkpoint: &mut dyn FnMut() -> io::Result<()>,
 ) -> io::Result<u64> {
-    let source_parents = HeldParents::new(source)?;
     let destination_parents = HeldParents::new(destination)?;
+    move_file_with_parents(
+        source,
+        destination,
+        replace,
+        destination_parents,
+        checkpoint,
+    )
+}
+
+pub(super) fn move_file_with_parents(
+    source: &Path,
+    destination: &Path,
+    replace: bool,
+    destination_parents: HeldParents,
+    checkpoint: &mut dyn FnMut() -> io::Result<()>,
+) -> io::Result<u64> {
+    let source_parents = HeldParents::new(source)?;
     let file = source_parents.open_mutation(source)?;
     let metadata = file.metadata()?;
     if !metadata.is_file() {

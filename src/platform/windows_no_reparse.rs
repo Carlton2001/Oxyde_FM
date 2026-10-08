@@ -132,6 +132,20 @@ pub(super) fn create_relative(
         true,
         attributes,
     )
+    .map(|(file, _created)| file)
+}
+
+pub(super) fn ensure_directory_relative(parent: &File, leaf: &OsStr) -> io::Result<(File, bool)> {
+    open_name_with_attributes(
+        leaf_name(leaf)?,
+        parent.as_raw_handle(),
+        Some(true),
+        windows::Win32::Foundation::GENERIC_READ.0,
+        3, // FILE_SHARE_READ | FILE_SHARE_WRITE; deny parent replacement.
+        3, // FILE_OPEN_IF; return whether this call actually created the child.
+        true,
+        0x80,
+    )
 }
 
 /// A single child of a retained parent; OPEN_REPARSE_POINT opens the link itself.
@@ -171,6 +185,7 @@ fn open_name(
         reject_reparse,
         0x80,
     )
+    .map(|(file, _created)| file)
 }
 
 fn open_name_with_attributes(
@@ -182,7 +197,7 @@ fn open_name_with_attributes(
     disposition: u32,
     reject_reparse: bool,
     file_attributes: u32,
-) -> io::Result<File> {
+) -> io::Result<(File, bool)> {
     if name.contains(&0) {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -251,5 +266,5 @@ fn open_name_with_attributes(
     if reject_reparse && file.metadata()?.file_attributes() & 0x400 != 0 {
         return Err(io::Error::other("Native lookup refuses a reparse object"));
     }
-    Ok(file)
+    Ok((file, status.information == 2)) // FILE_CREATED, from this native call.
 }

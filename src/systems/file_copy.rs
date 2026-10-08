@@ -54,9 +54,27 @@ pub(super) fn copy_with_source(
     held_source: Option<&std::fs::File>,
     progress: &mut dyn FnMut(u64) -> io::Result<()>,
 ) -> io::Result<CopiedFile> {
+    let destination_parents = super::path_parents::HeldParents::new(destination)?;
+    copy_with_parents(
+        source,
+        destination,
+        replace,
+        held_source,
+        destination_parents,
+        progress,
+    )
+}
+
+pub(super) fn copy_with_parents(
+    source: &Path,
+    destination: &Path,
+    replace: bool,
+    held_source: Option<&std::fs::File>,
+    destination_parents: super::path_parents::HeldParents,
+    progress: &mut dyn FnMut(u64) -> io::Result<()>,
+) -> io::Result<CopiedFile> {
     let source_parents = super::path_parents::HeldParents::new(source)?;
     let source = source_parents.resolved_path(source)?;
-    let destination_parents = super::path_parents::HeldParents::new(destination)?;
     let destination = destination_parents.resolved_path(destination)?;
     progress(0)?;
     if replace {

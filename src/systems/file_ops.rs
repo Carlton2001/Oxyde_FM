@@ -1089,11 +1089,9 @@ impl FileOperationManager {
         }
         let target_dir = destination.ok_or("No destination provided for copy/move".to_string())?;
 
-        let target_dir = std::fs::canonicalize(&target_dir)
-            .map_err(|e| format!("Cannot resolve destination {:?}: {e}", target_dir))?;
-        if !target_dir.is_dir() {
-            return Err(format!("Destination is not a directory: {:?}", target_dir));
-        }
+        let destination_tree = Arc::new(super::destination_tree::DestinationTree::new(&target_dir)
+            .map_err(|e| format!("Cannot hold destination {:?}: {e}", target_dir))?);
+        let target_dir = destination_tree.path().to_path_buf();
         let mut canonical_sources = Vec::with_capacity(sources.len());
         for source in &sources {
             let source_metadata = std::fs::symlink_metadata(source)
@@ -1292,12 +1290,10 @@ impl FileOperationManager {
             if cancel_flag.load(Ordering::Relaxed) {
                 break;
             }
-            let is_new = !directory.exists();
-            std::fs::create_dir_all(directory)
+            destination_tree.ensure_directory(directory, &mut || {
+                Self::archive_checkpoint(op).map_err(std::io::Error::other)
+            }, &mut |created| op.lock().unwrap().created_dirs.push(created.to_path_buf()))
                 .map_err(|e| format!("Cannot create directory {:?}: {e}", directory))?;
-            if is_new {
-                op.lock().unwrap().created_dirs.push(directory.clone());
-            }
         }
         // A rename preserves the file itself and does not read its contents.
         // Let the filesystem determine volume boundaries (including mount points),
@@ -1306,7 +1302,11 @@ impl FileOperationManager {
             let mut remaining = Vec::new();
             for (source, destination, replace_existing) in files_to_process {
                 Self::archive_checkpoint(op)?;
-                match super::path_parents::move_file(&source, &destination, replace_existing, &mut || {
+                let destination_parents = destination_tree.file_parents(&destination, &mut || {
+                    Self::archive_checkpoint(op).map_err(std::io::Error::other)
+                }, &mut |created| op.lock().unwrap().created_dirs.push(created.to_path_buf()))
+                    .map_err(|e| format!("Cannot hold destination {:?}: {e}", destination))?;
+                match super::path_parents::move_file_with_parents(&source, &destination, replace_existing, destination_parents, &mut || {
                     Self::archive_checkpoint(op).map_err(std::io::Error::other)
                 }) {
                     Ok(size) => {
@@ -1363,6 +1363,7 @@ impl FileOperationManager {
             let idx = current_index.clone();
             let error_share = error_captured.clone();
             let operation = op.clone();
+            let destination_tree = destination_tree.clone();
 
             let handle = std::thread::spawn(move || {
                 let _priority_guard = RestoreNormalPriority;
@@ -1410,10 +1411,10 @@ impl FileOperationManager {
                     operation.lock().unwrap().current_file =
                         Some(src.to_string_lossy().into_owned());
 
-                    if let Some(parent) = dest.parent() {
-                        std::fs::create_dir_all(parent)
-                            .map_err(|e| format!("Failed to create {:?}: {e}", parent))?;
-                    }
+                    let destination_parents = destination_tree.file_parents(dest, &mut || {
+                        Self::archive_checkpoint(&operation).map_err(std::io::Error::other)
+                    }, &mut |created| operation.lock().unwrap().created_dirs.push(created.to_path_buf()))
+                        .map_err(|e| format!("Cannot hold destination {:?}: {e}", dest))?;
 
                     let source_guard =
                         if is_move {
@@ -1424,11 +1425,12 @@ impl FileOperationManager {
                             None
                         };
                     let mut copied = 0;
-                    let output = super::file_copy::copy_with_source(
+                    let output = super::file_copy::copy_with_parents(
                         src,
                         dest,
                         *replace_existing,
                         source_guard.as_ref().map(|source| source.file()),
+                        destination_parents,
                         &mut |bytes| {
                             processed_bytes
                                 .fetch_add(bytes.saturating_sub(copied), Ordering::Relaxed);
@@ -3558,6 +3560,29 @@ mod tests {
         let locked = op.lock().unwrap();
         assert_eq!(locked.total_files, 1);
         assert_eq!(locked.processed_files, 1);
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn directory_copy_refuses_a_nested_destination_junction_before_creation() {
+        let root = tempfile::tempdir().unwrap();
+        let source = root.path().join("source");
+        let target = root.path().join("target");
+        let outside = root.path().join("outside");
+        std::fs::create_dir_all(source.join("nested/empty")).unwrap();
+        std::fs::create_dir(&target).unwrap();
+        std::fs::create_dir(&outside).unwrap();
+        std::fs::write(outside.join("witness"), b"outside witness").unwrap();
+        crate::platform::windows_reparse_tests::junction(&target.join("source"), &outside);
+        let op = operation();
+        let result = FileOperationManager::perform_copy(&op, vec![source.clone()], Some(target.clone()), false, None);
+        let created_outside = outside.join("nested").exists();
+        std::fs::remove_dir(target.join("source")).unwrap();
+        assert!(result.is_err(), "directory creation accepted a nested destination junction");
+        assert!(!created_outside, "directory creation escaped into a junction target");
+        assert_eq!(std::fs::read(outside.join("witness")).unwrap(), b"outside witness");
+        assert!(source.join("nested/empty").is_dir());
+        assert!(op.lock().unwrap().created_dirs.is_empty());
     }
 
     #[test]

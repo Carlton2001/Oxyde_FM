@@ -29,6 +29,9 @@ impl Platform for WindowsPlatform {
     fn hold_resolved_operation_directory(&self, path: &std::path::Path) -> std::io::Result<std::fs::File> {
         super::windows_file_moves::hold_parent(path)
     }
+    fn ensure_operation_directory(&self, parent: &std::fs::File, path: &std::path::Path) -> std::io::Result<(std::fs::File, bool)> {
+        super::windows_file_moves::ensure_directory(parent, path)
+    }
     fn open_operation_file(&self, parent: &std::fs::File, path: &std::path::Path, read_contents: bool) -> std::io::Result<std::fs::File> {
         super::windows_file_moves::open_relative(parent, path, read_contents)
     }
