@@ -4,7 +4,6 @@ use crate::utils::archive::{is_archive, ArchiveFormat};
 use crate::utils::hardware::get_physical_disk_id;
 use dashmap::DashMap;
 use glob::Pattern;
-use iso9660_core::iso9660entry::{ISO9660Record, IsISO9660Record};
 use once_cell::sync::Lazy;
 use regex::{Regex, RegexBuilder};
 use std::fs::File;
@@ -633,17 +632,39 @@ fn search_in_archive(
             }
         }
         ArchiveFormat::Iso => {
-            if let Ok(file) = File::open(archive_path) {
-                if let Ok(mut iso) = iso9660_core::ISO9660::load(file) {
-                    search_in_iso(
-                        &mut iso,
-                        "/",
-                        params,
-                        cancellation,
-                        archive_path,
-                        &mut results,
-                    );
+            let checkpoint = || {
+                if cancellation.load(Ordering::Relaxed) {
+                    Err(std::io::Error::new(
+                        std::io::ErrorKind::Interrupted,
+                        "cancelled",
+                    ))
+                } else {
+                    Ok(())
                 }
+            };
+            match super::archive_iso_open::indexed_files(archive_path, &checkpoint) {
+                Ok(entries) => {
+                    for entry in entries {
+                        if checkpoint().is_err() {
+                            break;
+                        }
+                        if !params.pattern.matches(&entry.name) {
+                            continue;
+                        }
+                        if !entry.is_dir
+                            && (params.min_size.is_some_and(|min| entry.size < min)
+                                || params.max_size.is_some_and(|max| entry.size > max))
+                        {
+                            continue;
+                        }
+                        // ISO dates remain unavailable, as in the previous reader.
+                        results.push(entry);
+                    }
+                }
+                Err(error) if !cancellation.load(Ordering::Relaxed) => {
+                    log::warn!("ISO search skipped {}: {error}", archive_path.display());
+                }
+                Err(_) => {}
             }
         }
         _ => {}
@@ -652,94 +673,67 @@ fn search_in_archive(
     results
 }
 
-fn search_in_iso(
-    iso: &mut iso9660_core::ISO9660<File>,
-    internal_path: &str,
-    params: &SearchParams,
-    cancellation: &Arc<AtomicBool>,
-    archive_path: &std::path::Path,
-    results: &mut Vec<FileEntry>,
-) {
-    if cancellation.load(Ordering::Relaxed) {
-        return;
+#[cfg(test)]
+mod iso_search_tests {
+    use super::*;
+
+    fn params() -> SearchParams {
+        SearchParams {
+            pattern: SearchPattern::Literal(String::new(), false, false),
+            min_size: None,
+            max_size: None,
+            min_date: None,
+            max_date: None,
+        }
     }
 
-    let mut iter = match iso.listdir(internal_path) {
-        Ok(it) => it,
-        Err(_) => return,
-    };
-
-    let mut records = Vec::new();
-    while let Some(rec) = iter.next(iso) {
-        records.push(rec);
+    #[test]
+    fn iso_search_keeps_nested_paths_size_filters_and_cancellation() {
+        let temp = tempfile::tempdir().unwrap();
+        let image = temp.path().join("disc.img");
+        crate::commands::archive::test_iso_image(&image);
+        let cancellation = Arc::new(AtomicBool::new(false));
+        let mut params = params();
+        let results = search_in_archive(&image, &params, &cancellation);
+        assert_eq!(results.len(), 3);
+        assert!(results
+            .iter()
+            .any(|entry| entry.is_dir && entry.name == "DOCS"));
+        params.min_size = Some(5);
+        params.max_size = Some(11);
+        params.pattern = SearchPattern::Literal("readme".into(), false, false);
+        let results = search_in_archive(&image, &params, &cancellation);
+        assert_eq!(results.len(), 1);
+        assert_eq!(
+            std::path::Path::new(&results[0].path),
+            image.join("DOCS/README.TXT")
+        );
+        assert_eq!(results[0].size, 11);
+        cancellation.store(true, Ordering::Relaxed);
+        assert!(search_in_archive(&image, &params, &cancellation).is_empty());
     }
 
-    for rec in records {
-        if cancellation.load(Ordering::Relaxed) {
-            break;
-        }
-
-        let name = match &rec {
-            ISO9660Record::Directory(d) => d.identifier(),
-            ISO9660Record::File(f) => f.identifier(),
-        };
-        if name == "." || name == ".." {
-            continue;
-        }
-
-        let display_name = name.split(';').next().unwrap_or(name);
-        let new_internal = if internal_path == "/" {
-            format!("/{}", display_name)
-        } else {
-            format!("{}/{}", internal_path.trim_end_matches('/'), display_name)
-        };
-
-        if params.pattern.matches(display_name) {
-            let is_dir = matches!(rec, ISO9660Record::Directory(_));
-            let size = match &rec {
-                ISO9660Record::File(f) => f.data_length() as u64,
-                _ => 0,
-            };
-
-            // Filters
-            if !is_dir {
-                if let Some(min) = params.min_size {
-                    if size < min {
-                        continue;
-                    }
+    #[test]
+    fn iso_search_rejects_malformed_identifiers_incomplete_records_and_cycles() {
+        let temp = tempfile::tempdir().unwrap();
+        let image = temp.path().join("invalid.iso");
+        for variant in 0..3 {
+            crate::commands::archive::test_iso_image(&image);
+            let mut bytes = std::fs::read(&image).unwrap();
+            let directory = 20 * 2048 + 2 * 34;
+            let file = directory + bytes[directory] as usize;
+            match variant {
+                0 => bytes[file + 32] = 255,
+                1 => bytes[file] = 20,
+                2 => {
+                    bytes[directory + 2..directory + 6].copy_from_slice(&20u32.to_le_bytes());
+                    bytes[directory + 6..directory + 10].copy_from_slice(&20u32.to_be_bytes());
                 }
-                if let Some(max) = params.max_size {
-                    if size > max {
-                        continue;
-                    }
-                }
+                _ => unreachable!(),
             }
-
-            // Note: date filtering is skipped for ISO as we don't parse it yet from this crate
-
-            results.push(FileEntry {
-                name: display_name.to_string(),
-                path: format!(
-                    "{}\\{}",
-                    archive_path.to_string_lossy(),
-                    new_internal.trim_start_matches('/').replace('/', "\\")
-                ),
-                is_dir,
-                size,
-                folders_count: None,
-                files_count: None,
-                ..FileEntry::default()
-            });
-        }
-
-        if matches!(&rec, ISO9660Record::Directory(_)) {
-            search_in_iso(
-                iso,
-                &new_internal,
-                params,
-                cancellation,
-                archive_path,
-                results,
+            std::fs::write(&image, bytes).unwrap();
+            assert!(
+                search_in_archive(&image, &params(), &Arc::new(AtomicBool::new(false))).is_empty()
             );
         }
     }

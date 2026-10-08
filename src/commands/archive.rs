@@ -1,4 +1,5 @@
 pub(crate) use super::archive_iso_open::extract_iso_file_for_open;
+use super::archive_iso_open::{extract_iso, list_iso};
 pub(crate) use super::archive_seven_open::extract_seven_file_for_open;
 pub(crate) use super::archive_tar_open::extract_tar_file_for_open;
 use crate::models::{CommandError, FileEntry};
@@ -9,7 +10,6 @@ use crate::utils::archive_security::{relative_archive_path, ExtractionRoot};
 use crate::utils::path_security::validate_path;
 use bzip2::read::BzDecoder;
 use flate2::read::GzDecoder;
-use iso9660_core::iso9660entry::{ISO9660Record, IsISO9660Record};
 use log::info;
 use std::collections::HashSet;
 use std::fs::{self, File};
@@ -115,79 +115,6 @@ pub fn list_archive_contents(
             "Rar navigation not supported yet. Please extract it first.".to_string(),
         )),
     }
-}
-
-fn list_iso(path: &Path, internal_prefix: &str) -> Result<Vec<FileEntry>, CommandError> {
-    let budget = ArchiveBudget::new(ArchiveLimits::LISTING);
-    let file = File::open(path).map_err(|e| CommandError::IoError(e.to_string()))?;
-    let mut iso = iso9660_core::ISO9660::load(file)
-        .map_err(|e| CommandError::ArchiveError(format!("{:?}", e)))?;
-
-    let internal_path = if internal_prefix.is_empty() {
-        "/"
-    } else {
-        internal_prefix
-    };
-    let mut results = Vec::new();
-
-    let mut entries_iter = iso
-        .listdir(internal_path)
-        .map_err(|e| CommandError::ArchiveError(format!("{:?}", e)))?;
-
-    loop {
-        budget.check_time()?;
-        let record = entries_iter.next(&mut iso);
-        let Some(rec) = record else {
-            break;
-        };
-
-        let name = match &rec {
-            ISO9660Record::Directory(d) => d.identifier(),
-            ISO9660Record::File(f) => f.identifier(),
-        };
-
-        if name == "." || name == ".." {
-            continue;
-        }
-
-        let display_name = name.split(';').next().unwrap_or(name).to_string();
-        if display_name.is_empty() {
-            continue;
-        }
-        safe_iso_component(&display_name)?;
-        budget.entry(
-            &format!("{internal_prefix}/{display_name}").trim_start_matches('/'),
-            0,
-        )?;
-
-        let is_dir = matches!(rec, ISO9660Record::Directory(_));
-        let size = match &rec {
-            ISO9660Record::File(f) => f.data_length() as u64,
-            _ => 0,
-        };
-
-        let full_virtual_path = virtual_entry_path(path, internal_prefix, &display_name)?;
-
-        results.push(FileEntry {
-            name: display_name,
-            path: full_virtual_path,
-            is_dir,
-            is_hidden: false,
-            is_system: false,
-            is_symlink: false,
-            is_junction: false,
-            size,
-            is_calculated: false,
-            folders_count: None,
-            files_count: None,
-            modified: 0,
-            original_path: None,
-            network_details: None,
-            deleted_time: None,
-        });
-    }
-
-    Ok(results)
 }
 
 fn virtual_entry_path(archive: &Path, internal: &str, name: &str) -> Result<String, CommandError> {
@@ -628,111 +555,6 @@ pub(super) fn safe_iso_component(name: &str) -> Result<&str, CommandError> {
     Ok(name)
 }
 
-fn extract_iso(
-    file: File,
-    root: &ExtractionRoot,
-    provenance: Option<&[u8]>,
-    checkpoint: &dyn Fn() -> io::Result<()>,
-    budget: &ArchiveBudget,
-) -> Result<(), CommandError> {
-    let mut iso = iso9660_core::ISO9660::load(file)
-        .map_err(|e| CommandError::ArchiveError(format!("{:?}", e)))?;
-
-    extract_iso_recursive(&mut iso, "/", root, provenance, checkpoint, budget)
-}
-
-fn extract_iso_recursive<T: iso9660_core::block_device::ISORead>(
-    iso: &mut iso9660_core::ISO9660<T>,
-    internal_path: &str,
-    root: &ExtractionRoot,
-    provenance: Option<&[u8]>,
-    checkpoint: &dyn Fn() -> io::Result<()>,
-    budget: &ArchiveBudget,
-) -> Result<(), CommandError> {
-    let mut iter = iso
-        .listdir(internal_path)
-        .map_err(|e| CommandError::ArchiveError(format!("{:?}", e)))?;
-
-    let mut records = Vec::new();
-    while let Some(record) = iter.next(iso) {
-        budget.checkpoint(checkpoint)?;
-        let name = match &record {
-            ISO9660Record::Directory(d) => d.identifier(),
-            ISO9660Record::File(f) => f.identifier(),
-        };
-        if name == "." || name == ".." {
-            continue;
-        }
-        let display = safe_iso_component(name.split(';').next().unwrap_or(name))?;
-        budget.entry(
-            &format!("{}/{}", internal_path.trim_matches('/'), display).trim_start_matches('/'),
-            0,
-        )?;
-        records.push(record);
-    }
-
-    for rec in records {
-        budget.checkpoint(checkpoint)?;
-        let name = match &rec {
-            ISO9660Record::Directory(d) => d.identifier(),
-            ISO9660Record::File(f) => f.identifier(),
-        };
-
-        if name == "." || name == ".." {
-            continue;
-        }
-
-        let display_name = safe_iso_component(name.split(';').next().unwrap_or(name))?;
-        let new_internal = if internal_path == "/" {
-            format!("/{}", display_name)
-        } else {
-            format!("{}/{}", internal_path.trim_end_matches('/'), display_name)
-        };
-
-        let relative_path = new_internal.trim_start_matches('/');
-        let destination =
-            root.destination(relative_path, matches!(rec, ISO9660Record::Directory(_)))?;
-
-        match rec {
-            ISO9660Record::Directory(_) => {
-                extract_iso_recursive(iso, &new_internal, root, provenance, checkpoint, budget)?;
-            }
-            ISO9660Record::File(_) => {
-                let size = iso
-                    .total_size(&new_internal)
-                    .map_err(|e| CommandError::ArchiveError(format!("{:?}", e)))?;
-                budget.declare_bytes(size as u64)?;
-                let mut writer = platform().create_archive_file(&destination.path)?;
-
-                let mut offset = 0;
-                let mut buf = [0u8; 65536];
-                while offset < size {
-                    budget.checkpoint(checkpoint)?;
-                    let to_read = std::cmp::min(buf.len(), size - offset);
-                    let n = iso
-                        .read(&new_internal, &mut buf[..to_read], offset)
-                        .map_err(|e| CommandError::ArchiveError(format!("{:?}", e)))?;
-                    if n == 0 {
-                        return Err(CommandError::ArchiveError(
-                            "Unexpected end of ISO file".into(),
-                        ));
-                    }
-                    budget.charge_written(n)?;
-                    use std::io::Write;
-                    writer
-                        .write_all(&buf[..n])
-                        .map_err(|e| CommandError::IoError(e.to_string()))?;
-                    offset += n;
-                }
-                if let Some(data) = provenance {
-                    platform().write_file_provenance(&destination.path, data)?;
-                }
-            }
-        }
-    }
-    Ok(())
-}
-
 #[cfg(test)]
 mod archive_tests {
     use super::*;
@@ -1155,6 +977,49 @@ pub(crate) fn test_iso_image(path: &Path) {
 #[cfg(test)]
 mod disk_image_tests {
     use super::*;
+    fn malformed_iso_rejected_without_panic(record_byte: usize, value: u8) {
+        let temp = tempfile::tempdir().unwrap();
+        let image = temp.path().join("invalid.iso");
+        test_iso_image(&image);
+        let mut bytes = fs::read(&image).unwrap();
+        let mut offset = 20 * 2048;
+        for _ in 0..3 {
+            offset += bytes[offset] as usize;
+        }
+        bytes[offset + record_byte] = value;
+        fs::write(&image, bytes).unwrap();
+        let output = temp.path().join("output");
+        fs::create_dir(&output).unwrap();
+        let listing = std::panic::catch_unwind(|| {
+            list_archive_contents(image.to_string_lossy().into_owned(), String::new())
+        });
+        let extraction = std::panic::catch_unwind(|| {
+            extract_archive_with_checkpoint(
+                image.to_string_lossy().into_owned(),
+                output.to_string_lossy().into_owned(),
+                &|| Ok(()),
+            )
+        });
+        assert!(listing.is_ok(), "listing panicked on a malformed ISO");
+        assert!(extraction.is_ok(), "extraction panicked on a malformed ISO");
+        assert!(listing.unwrap().is_err(), "invalid ISO listing succeeded");
+        assert!(
+            extraction.unwrap().is_err(),
+            "incomplete ISO extraction succeeded"
+        );
+        assert!(fs::read_dir(output).unwrap().next().is_none());
+    }
+
+    #[test]
+    fn iso_invalid_identifier_returns_error_instead_of_panicking() {
+        malformed_iso_rejected_without_panic(32, 255);
+    }
+
+    #[test]
+    fn iso_invalid_record_is_not_a_successful_end_of_directory() {
+        malformed_iso_rejected_without_panic(0, 20);
+    }
+
     #[test]
     fn iso_navigation_extraction_and_cancellation() {
         let temp = tempfile::tempdir().unwrap();

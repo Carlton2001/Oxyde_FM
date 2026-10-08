@@ -1,6 +1,6 @@
-//! Bounded ISO directory traversal followed by reads of the selected extents only.
+//! Bounded ISO indexing shared by navigation, search and extraction.
 use super::archive::safe_iso_component;
-use crate::models::CommandError;
+use crate::models::{CommandError, FileEntry};
 use crate::platform::platform;
 use crate::systems::path_parents::HeldParents;
 use crate::utils::archive_limits::{ArchiveBudget, ArchiveLimits, BudgetReader};
@@ -56,6 +56,36 @@ struct Record {
     extent: Extent,
     directory: bool,
     final_extent: bool,
+}
+
+struct Entry {
+    path: PathBuf,
+    directory: bool,
+    extents: Vec<Extent>,
+}
+
+impl Entry {
+    fn size(&self) -> io::Result<u64> {
+        self.extents.iter().try_fold(0u64, |size, extent| {
+            size.checked_add(extent.length)
+                .ok_or_else(|| invalid("Invalid ISO file size"))
+        })
+    }
+
+    fn file_entry(&self, archive: &Path) -> io::Result<FileEntry> {
+        Ok(FileEntry {
+            name: self
+                .path
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .into_owned(),
+            path: archive.join(&self.path).to_string_lossy().into_owned(),
+            is_dir: self.directory,
+            size: self.size()?,
+            ..FileEntry::default()
+        })
+    }
 }
 
 fn both_u32(bytes: &[u8]) -> io::Result<u32> {
@@ -123,12 +153,12 @@ fn root_record(image: &mut Image<'_>) -> io::Result<(u64, Record)> {
     }
 }
 
-fn select(image: &mut Image<'_>, requested: &Path) -> Result<Vec<Extent>, CommandError> {
+fn index(image: &mut Image<'_>) -> Result<Vec<Entry>, CommandError> {
     let (block_size, root) = root_record(image)?;
     let mut directories = vec![(PathBuf::new(), root.extent)];
     let mut visited = HashSet::new();
     let mut paths = HashSet::new();
-    let mut selected = Vec::new();
+    let mut entries: Vec<Entry> = Vec::new();
     while let Some((parent, directory)) = directories.pop() {
         image.budget.checkpoint(image.checkpoint)?;
         image.check_range(directory.offset, directory.length)?;
@@ -137,7 +167,7 @@ fn select(image: &mut Image<'_>, requested: &Path) -> Result<Vec<Extent>, Comman
         }
         let end = directory.offset + directory.length;
         let mut position = directory.offset;
-        let mut continuation: Option<Vec<u8>> = None;
+        let mut continuation: Option<(Vec<u8>, usize)> = None;
         while position < end {
             let mut bytes = [0u8; 255];
             image.read_at(position, &mut bytes[..1])?;
@@ -182,35 +212,136 @@ fn select(image: &mut Image<'_>, requested: &Path) -> Result<Vec<Extent>, Comman
                 .ok_or_else(|| invalid("Invalid ISO entry encoding"))?;
             image.budget.entry(relative, 0)?;
             image.check_range(entry.extent.offset, entry.extent.length)?;
-            if let Some(previous) = &continuation {
+            if let Some((previous, _)) = &continuation {
                 if previous != &entry.raw_name || entry.directory {
                     return Err(invalid("Invalid ISO multi-extent continuation").into());
                 }
             } else if !paths.insert(path.clone()) {
                 return Err(invalid("Ambiguous ISO archive file").into());
             }
-            continuation = (!entry.final_extent).then(|| entry.raw_name.clone());
             if entry.directory {
                 if !entry.final_extent {
                     return Err(invalid("Multi-extent ISO directories are not supported").into());
                 }
-                if path == requested {
-                    return Err(invalid("Archive item is not a file").into());
-                }
-                directories.push((path, entry.extent));
-            } else if path == requested {
-                image.budget.declare_bytes(entry.extent.length)?;
-                selected.push(entry.extent);
+                directories.push((path.clone(), entry.extent));
             }
+            let entry_index = if let Some((_, entry_index)) = &continuation {
+                entries[*entry_index].extents.push(entry.extent);
+                *entry_index
+            } else {
+                let entry_index = entries.len();
+                entries.push(Entry {
+                    path,
+                    directory: entry.directory,
+                    extents: if entry.directory {
+                        Vec::new()
+                    } else {
+                        vec![entry.extent]
+                    },
+                });
+                entry_index
+            };
+            continuation = (!entry.final_extent).then(|| (entry.raw_name, entry_index));
         }
         if continuation.is_some() {
             return Err(invalid("Incomplete ISO multi-extent file").into());
         }
     }
-    if selected.is_empty() {
-        return Err(invalid("Archive file not found").into());
+    Ok(entries)
+}
+
+fn image<'a>(
+    file: File,
+    budget: &'a ArchiveBudget,
+    checkpoint: &'a dyn Fn() -> io::Result<()>,
+) -> io::Result<Image<'a>> {
+    Ok(Image {
+        length: file.metadata()?.len(),
+        file,
+        budget,
+        checkpoint,
+    })
+}
+
+fn copy_extents(image: &mut Image<'_>, extents: &[Extent], output: &mut File) -> io::Result<()> {
+    let mut buffer = [0u8; 64 * 1024];
+    for extent in extents {
+        let mut offset = 0;
+        while offset < extent.length {
+            let count = (extent.length - offset).min(buffer.len() as u64) as usize;
+            image.read_at(extent.offset + offset, &mut buffer[..count])?;
+            image.budget.charge_written(count)?;
+            output.write_all(&buffer[..count])?;
+            offset += count as u64;
+        }
     }
-    Ok(selected)
+    Ok(())
+}
+
+pub(super) fn indexed_files(
+    archive: &Path,
+    checkpoint: &dyn Fn() -> io::Result<()>,
+) -> Result<Vec<FileEntry>, CommandError> {
+    let parents = HeldParents::new(archive)?;
+    let source = parents.resolved_path(archive)?;
+    let budget = ArchiveBudget::new(ArchiveLimits::LISTING);
+    let mut image = image(
+        platform().open_archive_source(&source, false)?,
+        &budget,
+        checkpoint,
+    )?;
+    index(&mut image)?
+        .iter()
+        .map(|entry| {
+            budget.checkpoint(checkpoint)?;
+            Ok(entry.file_entry(archive)?)
+        })
+        .collect()
+}
+
+pub(super) fn list_iso(archive: &Path, internal: &str) -> Result<Vec<FileEntry>, CommandError> {
+    let requested = relative_archive_path(internal)?;
+    let entries = indexed_files(archive, &|| Ok(()))?;
+    if !requested.as_os_str().is_empty()
+        && !entries
+            .iter()
+            .any(|entry| entry.is_dir && Path::new(&entry.path) == archive.join(&requested))
+    {
+        return Err(invalid("Archive directory not found").into());
+    }
+    let directory = archive.join(requested);
+    Ok(entries
+        .into_iter()
+        .filter(|entry| Path::new(&entry.path).parent() == Some(directory.as_path()))
+        .collect())
+}
+
+pub(super) fn extract_iso(
+    file: File,
+    root: &ExtractionRoot,
+    provenance: Option<&[u8]>,
+    checkpoint: &dyn Fn() -> io::Result<()>,
+    budget: &ArchiveBudget,
+) -> Result<(), CommandError> {
+    let mut image = image(file, budget, checkpoint)?;
+    let entries = index(&mut image)?;
+    // Validate the complete index and aggregate size before creating any entry.
+    for entry in &entries {
+        budget.checkpoint(checkpoint)?;
+        budget.declare_bytes(entry.size()?)?;
+    }
+    for entry in entries {
+        budget.checkpoint(checkpoint)?;
+        let destination = root.destination(entry.path.to_str().unwrap(), entry.directory)?;
+        if !entry.directory {
+            let mut output = platform().create_archive_file(&destination.path)?;
+            copy_extents(&mut image, &entry.extents, &mut output)?;
+            if let Some(data) = provenance {
+                platform().write_file_provenance(&destination.path, data)?;
+            }
+        }
+    }
+    Ok(())
 }
 
 pub(crate) fn extract_iso_file_for_open(
@@ -237,13 +368,15 @@ fn extract_with_checkpoint(
     let archive = parents.resolved_path(archive)?;
     let file = platform().open_archive_source(&archive, false)?;
     let budget = ArchiveBudget::new(limits);
-    let mut image = Image {
-        length: file.metadata()?.len(),
-        file,
-        budget: &budget,
-        checkpoint,
-    };
-    let selected = select(&mut image, &requested)?;
+    let mut image = image(file, &budget, checkpoint)?;
+    let selected = index(&mut image)?
+        .into_iter()
+        .find(|entry| entry.path == requested)
+        .ok_or_else(|| invalid("Archive file not found"))?;
+    if selected.directory {
+        return Err(invalid("Archive item is not a file").into());
+    }
+    budget.declare_bytes(selected.size()?)?;
     budget.checkpoint(checkpoint)?;
     let provenance = platform().read_file_provenance(&archive)?;
     let root = ExtractionRoot::new(target)?;
@@ -253,17 +386,7 @@ fn extract_with_checkpoint(
         .ok_or_else(|| invalid("Archive item is not a file"))?;
     let destination = root.destination(basename, false)?;
     let mut output = platform().create_archive_file(&destination.path)?;
-    let mut buffer = [0u8; 64 * 1024];
-    for extent in selected {
-        let mut offset = 0;
-        while offset < extent.length {
-            let count = (extent.length - offset).min(buffer.len() as u64) as usize;
-            image.read_at(extent.offset + offset, &mut buffer[..count])?;
-            budget.charge_written(count)?;
-            output.write_all(&buffer[..count])?;
-            offset += count as u64;
-        }
-    }
+    copy_extents(&mut image, &selected.extents, &mut output)?;
     if let Some(data) = provenance {
         platform().write_file_provenance(&destination.path, &data)?;
     }
@@ -300,6 +423,21 @@ mod tests {
         let archive = folder.path().join("disc.iso");
         test_iso_image(&archive);
         (folder, archive)
+    }
+
+    fn assert_invalid_all_routes(archive: &Path) {
+        assert!(list_iso(archive, "").is_err());
+        let full = tempfile::tempdir().unwrap();
+        let budget = ArchiveBudget::new(ArchiveLimits::EXTRACTION);
+        assert!(extract_iso(
+            File::open(archive).unwrap(),
+            &ExtractionRoot::new(full.path()).unwrap(),
+            None,
+            &|| Ok(()),
+            &budget,
+        )
+        .is_err());
+        assert_eq!(fs::read_dir(full.path()).unwrap().count(), 0);
     }
 
     #[test]
@@ -366,6 +504,7 @@ mod tests {
                 extract_iso_file_for_open(&archive, "ROOT.TXT", target.path(), limits()).is_err()
             );
             assert_eq!(fs::read_dir(target.path()).unwrap().count(), 0);
+            assert_invalid_all_routes(&archive);
         }
     }
 
@@ -398,6 +537,7 @@ mod tests {
                 "variant {variant}"
             );
             assert_eq!(fs::read_dir(target.path()).unwrap().count(), 0);
+            assert_invalid_all_routes(&archive);
         }
     }
 
@@ -426,6 +566,31 @@ mod tests {
         )
         .unwrap();
         assert_eq!(fs::read(output).unwrap(), b"roottail");
+        let listed = list_iso(&archive, "").unwrap();
+        assert_eq!(listed.len(), 2);
+        assert_eq!(
+            listed
+                .iter()
+                .find(|entry| entry.name == "ROOT.TXT")
+                .unwrap()
+                .size,
+            8
+        );
+        let full = tempfile::tempdir().unwrap();
+        let budget = ArchiveBudget::new(ArchiveLimits::EXTRACTION);
+        extract_iso(
+            File::open(&archive).unwrap(),
+            &ExtractionRoot::new(full.path()).unwrap(),
+            None,
+            &|| Ok(()),
+            &budget,
+        )
+        .unwrap();
+        assert_eq!(fs::read(full.path().join("ROOT.TXT")).unwrap(), b"roottail");
+        assert_eq!(
+            fs::read(full.path().join("DOCS/README.TXT")).unwrap(),
+            b"ISO content"
+        );
         let refused = tempfile::tempdir().unwrap();
         let error =
             extract_iso_file_for_open(&archive, "ROOT.TXT", refused.path(), limits()).unwrap_err();
@@ -482,6 +647,102 @@ mod tests {
         .unwrap_err();
         assert!(error.to_string().contains("cancelled"));
         assert_eq!(fs::read_dir(target.path()).unwrap().count(), 0);
+    }
+
+    #[test]
+    fn full_iso_preflight_keeps_limit_errors_structured_and_creates_no_entries() {
+        let (_folder, archive) = fixture();
+        for (allowance, kind) in [
+            (
+                ArchiveLimits {
+                    max_bytes: 14,
+                    ..ArchiveLimits::EXTRACTION
+                },
+                ArchiveLimitKind::Bytes,
+            ),
+            (
+                ArchiveLimits {
+                    max_entries: 2,
+                    ..ArchiveLimits::EXTRACTION
+                },
+                ArchiveLimitKind::Entries,
+            ),
+            (
+                ArchiveLimits {
+                    max_depth: 1,
+                    ..ArchiveLimits::EXTRACTION
+                },
+                ArchiveLimitKind::Depth,
+            ),
+            (
+                ArchiveLimits {
+                    max_duration: std::time::Duration::ZERO,
+                    ..ArchiveLimits::EXTRACTION
+                },
+                ArchiveLimitKind::Seconds,
+            ),
+        ] {
+            let target = tempfile::tempdir().unwrap();
+            let budget = ArchiveBudget::new(allowance);
+            let error = extract_iso(
+                File::open(&archive).unwrap(),
+                &ExtractionRoot::new(target.path()).unwrap(),
+                None,
+                &|| Ok(()),
+                &budget,
+            )
+            .unwrap_err();
+            assert_eq!(
+                ArchiveLimitFailure::from_message(&error.to_string())
+                    .unwrap()
+                    .kind,
+                kind
+            );
+            assert_eq!(fs::read_dir(target.path()).unwrap().count(), 0);
+        }
+    }
+
+    #[test]
+    fn full_iso_extracts_the_opened_source_and_preserves_provenance_and_existing_files() {
+        let (folder, archive) = fixture();
+        let source = File::open(&archive).unwrap();
+        fs::rename(&archive, folder.path().join("original.iso")).unwrap();
+        fs::write(&archive, b"replacement must not be read").unwrap();
+        let target = tempfile::tempdir().unwrap();
+        let budget = ArchiveBudget::new(ArchiveLimits::EXTRACTION);
+        let provenance = b"[ZoneTransfer]\r\nZoneId=3\r\n";
+        extract_iso(
+            source,
+            &ExtractionRoot::new(target.path()).unwrap(),
+            Some(provenance),
+            &|| Ok(()),
+            &budget,
+        )
+        .unwrap();
+        assert_eq!(fs::read(target.path().join("ROOT.TXT")).unwrap(), b"root");
+        assert_eq!(
+            fs::read(target.path().join("DOCS/README.TXT")).unwrap(),
+            b"ISO content"
+        );
+        #[cfg(target_os = "windows")]
+        assert_eq!(
+            platform()
+                .read_file_provenance(&target.path().join("DOCS/README.TXT"))
+                .unwrap()
+                .as_deref(),
+            Some(provenance.as_slice())
+        );
+        let budget = ArchiveBudget::new(ArchiveLimits::EXTRACTION);
+        assert!(extract_iso(
+            File::open(folder.path().join("original.iso")).unwrap(),
+            &ExtractionRoot::new(target.path()).unwrap(),
+            None,
+            &|| Ok(()),
+            &budget,
+        )
+        .is_err());
+        assert_eq!(fs::read(target.path().join("ROOT.TXT")).unwrap(), b"root");
+        assert_eq!(fs::read(&archive).unwrap(), b"replacement must not be read");
     }
 
     #[test]

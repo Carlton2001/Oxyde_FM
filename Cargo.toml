@@ -46,7 +46,6 @@ chrono = { version = "0.4.43", features = ["serde"] }
 percent-encoding = "2.3.1"
 regex = "1.10"
 unicode-normalization = "0.1.23"
-iso9660_core = { version = "0.1.0", features = ["std"] }
 blake3 = "1.8.3"
 rayon = "1.11.0"
 dashmap = "6.1.0"
