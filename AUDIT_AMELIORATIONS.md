@@ -214,17 +214,35 @@ Contrats natifs : [GetClipboardData](https://learn.microsoft.com/en-us/windows/w
 
 ## A27 — Phases d'Undo Move après le transfert des fichiers — P1
 
-**Points de code établis pendant A19, sans reproduction native dédiée.** Dans `commands/ops.rs::undo_last_action`, la liste des fichiers transférés sort de portée avant les phases de création/suppression de dossiers et de restauration des remplacements. Une erreur ultérieure conserve l'entrée d'historique, mais ne rejoue pas nécessairement ces fichiers en sens inverse. Les destinations de fichiers déjà absentes sont également ignorées. Examiner un journal de rollback couvrant toutes ces phases, avec erreurs injectées et reprises, avant de déclarer l'Undo Move entièrement transactionnel. A19 traite les erreurs pendant le transfert des fichiers et les rollback déjà raccordés du redo.
+**Corrigé.** Une fixture reproduit l'échec de création d'un dossier après restauration d'un fichier : avant correction, le fichier reste à la source malgré l'échec d'Annuler et la conservation de l'entrée d'historique. Un dossier source remplacé par un fichier était aussi accepté, et une destination déjà absente ignorée.
+
+`systems/history_move_undo.rs` valide les fichiers et leur contenu avant mutation, puis conserve le journal des transferts, des parents créés et des dossiers retirés jusqu'à la fin. Les sorties copiées dont la source n'a pas été supprimée sont mises en attente dans un dossier caché du volume de destination, hors des dossiers à retirer. Elles ne sont purgées qu'après réussite des phases réversibles. Une erreur ou un unwind rejoue les effets en sens inverse, y compris avec le transfert entre volumes A19. Les fichiers extérieurs et les dossiers devenus non vides sont préservés ; l'historique reste réessayable après un rollback réussi.
+
+Si un conflit extérieur empêche le rollback, les données restent à leur emplacement courant ou en attente et l'erreur indique les chemins concernés. Aucun nettoyage récursif des dossiers d'attente ne peut supprimer ces données. Une purge finale impossible conserve la sortie en attente avec un avertissement dans les logs ; elle ne transforme pas un Undo déjà terminé en échec après une suppression irréversible.
+
+Limites : ce journal en mémoire ne garantit pas une transaction de système de fichiers face à un crash, une coupure ou toute mutation extérieure concurrente. Les dossiers recréés retrouvent leurs permissions de base et leur attribut caché ; leur identité, leurs dates et leurs ACL spécifiques ne sont pas restaurées. Le contenu principal est vérifié par hash, avec les limites des flux alternatifs décrites dans A19. A28 reste distinct pour la copie initiale.
+
+La chaîne de sauvegardes de remplacements évoquée initialement est inactive et retirée après vérification de ses producteurs (A29).
 
 ## A28 — Métadonnées et flux natifs absents de la copie initiale — P1
 
 **Point de code établi pendant A19, sans reproduction native dédiée de la file initiale.** Le worker de `systems/file_ops.rs::perform_copy` crée un fichier de destination et copie le contenu principal via `Read`/`Write`. Il ne recopie pas les flux NTFS, dates ou attributs de la source. Cela concerne Copier et les déplacements initiaux qui nécessitent une copie ; les déplacements sur un volume par renommage conservent leur identité. Le journal ne peut pas restaurer des données absentes de la copie initiale. Étudier une copie native avec conservation des métadonnées, progression et annulation, en gardant les politiques de conflits et de fichiers partiels. Le transfert A19 utilise déjà la copie native, mais ne corrige pas ce worker initial.
 
+## A29 — Ancien journal de sauvegardes de remplacement — code mort retiré
+
+`replaced_files` n'était alimenté par aucun parcours de production : les deux constructeurs l'initialisaient vide et seuls des tests synthétiques créaient des sauvegardes. Le champ, sa propagation dans l'historique, les restaurations et la suppression des sauvegardes sont retirés. Les tests de réservation et de nettoyage portent désormais sur les sauvegardes de métadonnées de corbeille réellement produites.
+
+Les écrasements actifs restent suivis par `overwritten_files` : une copie ayant écrasé un fichier bloque Annuler, et le redo de remplacement demande une nouvelle résolution de conflit. Aucune sauvegarde des anciens contenus n'est ajoutée.
+
+## A30 — Annuler une copie peut laisser une suppression partielle — P1
+
+**Point de code établi pendant A27, sans nouvelle reproduction dédiée.** Le parcours Copy d'`undo_last_action` vérifie les sorties, puis `remove_undo_copy_files` les supprime l'une après l'autre avant le retrait des dossiers. Une erreur sur un fichier ultérieur ou un dossier conserve l'entrée d'historique alors que les premières sorties sont déjà supprimées ; la reprise peut alors échouer sur une sortie absente. La réservation A02 ne rend pas ces effets réversibles. Examiner une mise en attente des sorties et des erreurs injectées dans un lot distinct, comme pour les phases Move A27. Ce parcours Copy reste inchangé dans A27, hors retrait de la branche de sauvegardes inactive A29.
+
 ## Validation et suite
 
 La compilation Windows actuelle passe sans avertissement du projet. Les observations ci-dessus sont issues de la lecture des sources et de Clippy ; aucun nouveau test de comportement ou benchmark n'a été exécuté pendant cet audit. Snap Layouts et le témoin de déplacement actuel sont confirmés par l'utilisateur. Les validations des lots précédents restent décrites dans [AUDIT_CODE_MORT.md](AUDIT_CODE_MORT.md).
 
-Après A01/A02/A03/A04/A06/A15/A23 et le raccordement A18, A05 et A19 étant traités, examiner A27/A28 ; conserver A20 pour la validation native interactive. Les optimisations demandent des mesures avant modification. Cet ordre est proposé, pas une liste de corrections déjà autorisées ou réalisées.
+Après A01/A02/A03/A04/A05/A06/A15/A19/A23/A27, le raccordement A18 et le retrait A29, examiner A28 et A30 ; conserver A20 pour la validation native interactive. Les optimisations demandent des mesures avant modification. Cet ordre est proposé, pas une liste de corrections déjà autorisées ou réalisées.
 
 ### État après les lots N01 à N16
 
@@ -304,4 +322,12 @@ La fixture native de la file active échoue avant correction avec l'erreur Windo
 
 `cargo check --all-targets --offline` passe sans avertissement du projet. Les deux nouveaux modules sont formatés et `git diff --check` passe. Les appelants GPUI Annuler/Rétablir exécutent toujours les commandes dans `spawn_blocking` ; les copies et hashes restent en arrière-plan. Aucun Computer Use ni validation Linux, aucune modification de volume, de montage ou de configuration système. Les interfaces de plateforme sont maintenues ; les garanties de verrouillage testées sont celles de Windows.
 
-`cargo build --bin oxyde --offline` réussit ; `target/debug/oxyde.exe` est reconstruit. Ce lot A19 reste non commité, après le commit COM/Shell `f0c39fe`.
+`cargo build --bin oxyde --offline` réussit ; `target/debug/oxyde.exe` est reconstruit. Le lot A19 est commité dans `c2f92b5`, après le commit COM/Shell `f0c39fe`.
+
+### Validation du lot A27 et du retrait A29
+
+Les trois régressions des commandes couvrent l'échec tardif de création d'un dossier, le remplacement d'un dossier par un fichier extérieur et une destination absente, avec conservation de l'historique et reprise. Sept tests du nouveau journal couvrent la création partielle des parents, la suppression d'un dossier suivie d'un échec, la restauration d'une sortie mise en attente, un unwind, un conflit de rollback avec rétention des données, une sortie modifiée ou sans hash et la préservation du contenu extérieur. Le test de copie de remplacement synthétique sans producteur actif est retiré ; les tests de réservation et de nettoyage des sauvegardes restent conservés sur les métadonnées de corbeille.
+
+`cargo test --all-targets --offline` : 145 tests backend et 108 tests du binaire passent, soit 253 ; les 12 tests natifs restent ignorés par défaut. La fixture native de la file active entre C: et D: passe après ajout d'un échec tardif d'Undo : les fichiers reviennent à destination, le fichier extérieur est préservé et l'Undo peut être réessayé avant deux cycles Annuler/Rétablir. Le test natif de flux NTFS et date de modification passe aussi. Le scénario actif de corbeille est vérifié séparément. Tous utilisent des fixtures générées.
+
+Ces trois scénarios natifs portent le total à 256 tests distincts validés pour ce lot. `cargo check --all-targets --offline` passe sans avertissement du projet, et `cargo build --bin oxyde --offline` reconstruit `target/debug/oxyde.exe`. Le nouveau module est formaté et `git diff --check` passe. Les commandes GPUI restent exécutées dans `spawn_blocking`. Aucun Computer Use, aucune validation Linux. A27/A29 restent non commités après `c2f92b5` ; A30 est seulement consigné pour la suite.

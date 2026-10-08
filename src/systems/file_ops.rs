@@ -89,7 +89,6 @@ pub struct FileOperation {
     pub resolutions: Option<HashMap<String, ConflictAction>>,
     pub created_files: Vec<PathBuf>,
     pub created_dirs: Vec<PathBuf>,
-    pub replaced_files: Vec<(PathBuf, PathBuf)>,
     pub overwritten_files: Vec<PathBuf>,
     pub moved_files: Vec<(PathBuf, PathBuf)>,
     trash_metadata_backups: Vec<PathBuf>,
@@ -143,7 +142,6 @@ impl FileOperation {
             resolutions: None,
             created_files: Vec::new(),
             created_dirs: Vec::new(),
-            replaced_files: Vec::new(),
             overwritten_files: Vec::new(),
             moved_files: Vec::new(),
             trash_metadata_backups: Vec::new(),
@@ -189,7 +187,6 @@ impl FileOperation {
             resolutions,
             created_files: Vec::new(),
             created_dirs: Vec::new(),
-            replaced_files: Vec::new(),
             overwritten_files: Vec::new(),
             moved_files: Vec::new(),
             trash_metadata_backups: Vec::new(),
@@ -626,7 +623,6 @@ impl FileOperationManager {
         // so Undo never guesses from the original top-level paths.
         let has_effects = !locked.created_files.is_empty()
             || !locked.created_dirs.is_empty()
-            || !locked.replaced_files.is_empty()
             || !locked.overwritten_files.is_empty()
             || !locked.moved_files.is_empty()
             || !locked.moved_dirs.is_empty()
@@ -655,7 +651,6 @@ impl FileOperationManager {
                 FileOpType::Copy => {
                     !locked.created_files.is_empty()
                         || !locked.created_dirs.is_empty()
-                        || !locked.replaced_files.is_empty()
                         // Keep an overwrite-only copy as an undo-history
                         // barrier so Undo cannot accidentally target an older action.
                         || !locked.overwritten_files.is_empty()
@@ -663,7 +658,6 @@ impl FileOperationManager {
                 FileOpType::Move => {
                     !locked.created_files.is_empty()
                         || !locked.created_dirs.is_empty()
-                        || !locked.replaced_files.is_empty()
                         || !locked.moved_files.is_empty()
                         || !locked.moved_dirs.is_empty()
                 }
@@ -697,18 +691,6 @@ impl FileOperationManager {
                             .created_dirs
                             .iter()
                             .map(|p| p.to_string_lossy().into_owned())
-                            .collect(),
-                    ),
-                    replaced_files: Some(
-                        locked
-                            .replaced_files
-                            .iter()
-                            .map(|(p, b)| {
-                                (
-                                    p.to_string_lossy().into_owned(),
-                                    b.to_string_lossy().into_owned(),
-                                )
-                            })
                             .collect(),
                     ),
                     overwritten_files: Some(
@@ -945,7 +927,6 @@ impl FileOperationManager {
         let mut locked = op.lock().unwrap();
         locked.created_files.clear();
         locked.created_dirs.clear();
-        locked.replaced_files.clear();
         locked.overwritten_files.clear();
         locked.copied_files.clear();
         locked.copied_file_hashes.clear();
@@ -3513,7 +3494,6 @@ mod tests {
 
         assert_eq!(std::fs::read(&destination).unwrap(), b"new contents");
         let operation = op.lock().unwrap();
-        assert!(operation.replaced_files.is_empty());
         assert_eq!(
             operation.overwritten_files,
             vec![std::fs::canonicalize(&destination).unwrap()]
@@ -3759,6 +3739,27 @@ mod tests {
             .await
             .unwrap();
             assert!(!source.exists());
+            // A27: the files have already crossed volumes when this original
+            // empty directory is recreated. Its replacement by a foreign file
+            // must roll back the whole Undo and keep the history retryable.
+            let blocker = source.join("nested/empty");
+            std::fs::create_dir_all(blocker.parent().unwrap()).unwrap();
+            std::fs::write(&blocker, b"foreign directory blocker").unwrap();
+            let error = crate::commands::ops::undo_last_action(&history)
+                .await
+                .unwrap_err();
+            assert!(error.to_string().contains("Not a directory"), "{error}");
+            assert_eq!(history.get_state().undo_stack.len(), 1);
+            assert!(history.get_state().redo_stack.is_empty());
+            assert_eq!(std::fs::read(&blocker).unwrap(), b"foreign directory blocker");
+            assert!(!source.join("nested/file.txt").exists());
+            assert!(!source.join("shortcut.url").exists());
+            assert_eq!(
+                std::fs::read(destination.join("nested/file.txt")).unwrap(),
+                b"nested fixture"
+            );
+            assert!(destination.join("nested/empty").is_dir());
+            std::fs::remove_file(blocker).unwrap();
             for cycle in 0..2 {
                 crate::commands::ops::undo_last_action(&history)
                     .await

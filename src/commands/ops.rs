@@ -649,7 +649,6 @@ pub async fn undo_last_action(
             TransactionType::Copy => {
                 if tx.details.created_files.is_none()
                     || tx.details.created_dirs.is_none()
-                    || tx.details.replaced_files.is_none()
                     || tx.details.copied_file_hashes.is_none()
                 {
                     return Err(CommandError::Other(
@@ -672,14 +671,6 @@ pub async fn undo_last_action(
                     .unwrap_or_default()
                     .iter()
                     .map(String::as_str)
-                    .chain(
-                        tx.details
-                            .replaced_files
-                            .as_deref()
-                            .unwrap_or_default()
-                            .iter()
-                            .map(|(path, _)| path.as_str()),
-                    )
                     .collect();
                 for (path, expected) in &expected_hashes {
                     if !undoable_files.contains(path) {
@@ -693,17 +684,6 @@ pub async fn undo_last_action(
                         )));
                     }
                 }
-                if let Some(replaced) = &tx.details.replaced_files {
-                    if let Some((_, missing_backup)) = replaced
-                        .iter()
-                        .find(|(_, backup)| !PathBuf::from(backup).exists())
-                    {
-                        return Err(CommandError::IoError(format!(
-                            "Cannot restore replacement backup: {}",
-                            missing_backup
-                        )));
-                    }
-                }
                 if let Some(created) = &tx.details.created_files {
                     if let Some(missing) = created.iter().find(|path| !PathBuf::from(path).exists())
                     {
@@ -714,19 +694,6 @@ pub async fn undo_last_action(
                     let files_to_delete: Vec<PathBuf> = created.iter().map(PathBuf::from).collect();
                     if !files_to_delete.is_empty() {
                         remove_undo_copy_files(files_to_delete)?;
-                    }
-                }
-                if let Some(replaced) = &tx.details.replaced_files {
-                    for (destination, backup) in replaced.iter().rev() {
-                        let destination = PathBuf::from(destination);
-                        let backup = PathBuf::from(backup);
-                        if backup.exists() {
-                            if destination.exists() {
-                                remove_undo_copy_files(vec![destination.clone()])?;
-                            }
-                            std::fs::rename(&backup, &destination)
-                                .map_err(|e| CommandError::IoError(e.to_string()))?;
-                        }
                     }
                 }
                 if let Some(created_dirs) = &tx.details.created_dirs {
@@ -747,167 +714,7 @@ pub async fn undo_last_action(
                 }
             }
             TransactionType::Move => {
-                for backup in tx.details.trash_metadata_backups.as_deref().unwrap_or_default() {
-                    if !PathBuf::from(backup).is_file() {
-                        return Err(CommandError::IoError(format!("Cannot undo trash transfer; metadata backup is missing: {backup}")));
-                    }
-                }
-                if tx.details.created_files.is_none()
-                    || tx.details.created_dirs.is_none()
-                    || tx.details.replaced_files.is_none()
-                    || tx.details.moved_files.is_none()
-                    || tx.details.moved_dirs.is_none()
-                    || tx.details.copied_file_hashes.is_none()
-                {
-                    return Err(CommandError::Other(
-                        "This move predates the effect journal and cannot be undone safely"
-                            .to_string(),
-                    ));
-                }
-                let expected_hashes: HashMap<_, _> = tx
-                    .details
-                    .copied_file_hashes
-                    .as_deref()
-                    .unwrap_or_default()
-                    .iter()
-                    .map(|(path, hash)| (path.as_str(), hash.as_str()))
-                    .collect();
-                if let Some(replaced) = &tx.details.replaced_files {
-                    if let Some((_, missing_backup)) = replaced
-                        .iter()
-                        .find(|(_, backup)| !PathBuf::from(backup).exists())
-                    {
-                        return Err(CommandError::IoError(format!(
-                            "Cannot restore replacement backup: {}",
-                            missing_backup
-                        )));
-                    }
-                }
-                if let Some(moved) = &tx.details.moved_files {
-                    for (source, destination) in moved.iter().rev() {
-                        let source = PathBuf::from(source);
-                        let destination = PathBuf::from(destination);
-                        if destination.exists() {
-                            if source.exists() {
-                                return Err(CommandError::IoError(format!(
-                                    "Cannot undo move because the original path now exists: {}",
-                                    source.display()
-                                )));
-                            }
-                            if let Some(expected) =
-                                expected_hashes.get(destination.to_string_lossy().as_ref())
-                            {
-                                if hash_file(&destination)? != **expected {
-                                    return Err(CommandError::Other(format!(
-                                        "Cannot undo move because the destination changed since the operation: {}",
-                                        destination.display()
-                                    )));
-                                }
-                            }
-                        }
-                    }
-                }
-                if let Some(moved) = &tx.details.moved_files {
-                    let mut completed = Vec::new();
-                    let mut created_source_dirs = Vec::new();
-                    for (source, destination) in moved.iter().rev() {
-                        let source = PathBuf::from(source);
-                        let destination = PathBuf::from(destination);
-                        if !destination.exists() {
-                            continue;
-                        }
-                        if let Some(parent) = source.parent() {
-                            if let Err(error) =
-                                create_dir_all_tracked(parent, &mut created_source_dirs)
-                            {
-                                let rollback_errors = rollback_moved_paths(&completed);
-                                let cleanup_errors = remove_empty_dirs(&created_source_dirs);
-                                return Err(CommandError::IoError(format!(
-                                    "{error}; move rollback errors: {}; source directory cleanup errors: {}",
-                                    rollback_errors.join(", "),
-                                    cleanup_errors.join(", "),
-                                )));
-                            }
-                        }
-                        let expected = expected_hashes
-                            .get(destination.to_string_lossy().as_ref())
-                            .copied();
-                        if let Err(error) = move_history_file(&destination, &source, expected) {
-                            let rollback_errors = rollback_moved_paths(&completed);
-                            let cleanup_errors = remove_empty_dirs(&created_source_dirs);
-                            return Err(CommandError::IoError(format!(
-                                "{error}; move rollback errors: {}; source directory cleanup errors: {}",
-                                rollback_errors.join(", "),
-                                cleanup_errors.join(", "),
-                            )));
-                        }
-                        completed.push((destination, source));
-                    }
-                }
-                if let Some(moved_dirs) = &tx.details.moved_dirs {
-                    for (source, destination) in moved_dirs {
-                        let source = PathBuf::from(source);
-                        let destination = PathBuf::from(destination);
-                        if !source.exists() {
-                            std::fs::create_dir_all(&source)
-                                .map_err(|e| CommandError::IoError(e.to_string()))?;
-                        }
-                        let was_created = tx.details.created_dirs.as_ref().is_some_and(|created| {
-                            created
-                                .iter()
-                                .any(|path| PathBuf::from(path) == destination)
-                        });
-                        if was_created && destination.exists() {
-                            match std::fs::remove_dir(&destination) {
-                                Ok(()) => {}
-                                Err(error)
-                                    if error.kind() == std::io::ErrorKind::DirectoryNotEmpty => {}
-                                Err(error) => {
-                                    return Err(CommandError::IoError(error.to_string()));
-                                }
-                            }
-                        }
-                    }
-                }
-                if let Some(created) = &tx.details.created_files {
-                    let files_to_delete: Vec<PathBuf> = created
-                        .iter()
-                        .map(PathBuf::from)
-                        .filter(|path| path.exists())
-                        .collect();
-                    if !files_to_delete.is_empty() {
-                        remove_undo_copy_files(files_to_delete)?;
-                    }
-                }
-                if let Some(replaced) = &tx.details.replaced_files {
-                    for (destination, backup) in replaced.iter().rev() {
-                        let destination = PathBuf::from(destination);
-                        let backup = PathBuf::from(backup);
-                        if backup.exists() {
-                            if destination.exists() {
-                                remove_undo_copy_files(vec![destination.clone()])?;
-                            }
-                            std::fs::rename(&backup, &destination)
-                                .map_err(|e| CommandError::IoError(e.to_string()))?;
-                        }
-                    }
-                }
-                if let Some(created_dirs) = &tx.details.created_dirs {
-                    for directory in created_dirs.iter().rev().map(PathBuf::from) {
-                        match std::fs::remove_dir(&directory) {
-                            Ok(()) => {}
-                            Err(error)
-                                if matches!(
-                                    error.kind(),
-                                    std::io::ErrorKind::DirectoryNotEmpty
-                                        | std::io::ErrorKind::NotFound
-                                ) => {}
-                            Err(error) => {
-                                return Err(CommandError::IoError(error.to_string()));
-                            }
-                        }
-                    }
-                }
+                crate::systems::history_move_undo::undo(&tx.details)?;
             }
             TransactionType::Delete => {
                 restore_items(tx.details.paths.clone()).await?;
@@ -972,14 +779,9 @@ pub async fn redo_last_action(
                 }
                 if tx
                     .details
-                    .replaced_files
+                    .overwritten_files
                     .as_ref()
                     .is_some_and(|files| !files.is_empty())
-                    || tx
-                        .details
-                        .overwritten_files
-                        .as_ref()
-                        .is_some_and(|files| !files.is_empty())
                 {
                     return Err(CommandError::Other(
                         "Redo for replacement operations requires a new conflict resolution"
@@ -1078,14 +880,9 @@ pub async fn redo_last_action(
                 }
                 if tx
                     .details
-                    .replaced_files
+                    .overwritten_files
                     .as_ref()
                     .is_some_and(|files| !files.is_empty())
-                    || tx
-                        .details
-                        .overwritten_files
-                        .as_ref()
-                        .is_some_and(|files| !files.is_empty())
                 {
                     return Err(CommandError::Other(
                         "Redo for replacement operations requires a new conflict resolution"
@@ -1544,7 +1341,6 @@ mod copy_redo_tests {
                 new_path: None,
                 created_files: Some(vec![destination.to_string_lossy().into_owned()]),
                 created_dirs: Some(Vec::new()),
-                replaced_files: Some(Vec::new()),
                 overwritten_files: Some(Vec::new()),
                 moved_files: None,
                 trash_metadata_backups: None,
@@ -1566,51 +1362,6 @@ mod copy_redo_tests {
         assert!(history.get_state().undo_stack.is_empty());
         assert_eq!(history.get_state().redo_stack.len(), 1);
     }
-
-    #[test]
-    fn undo_replacement_restores_the_hidden_backup() {
-        let temp = tempfile::tempdir().unwrap();
-        let source = temp.path().join("source.txt");
-        let destination = temp.path().join("destination.txt");
-        let backup = temp.path().join(".oxyde-previous.bak");
-        std::fs::write(&source, b"new content").unwrap();
-        std::fs::write(&destination, b"new content").unwrap();
-        std::fs::write(&backup, b"old content").unwrap();
-        let hash = blake3::hash(b"new content").to_hex().to_string();
-        let history = HistoryManager::new();
-        history.push(Transaction::new(
-            TransactionType::Copy,
-            TransactionDetails {
-                paths: vec![source.to_string_lossy().into_owned()],
-                target_dir: Some(temp.path().to_string_lossy().into_owned()),
-                old_path: None,
-                new_path: None,
-                created_files: Some(Vec::new()),
-                created_dirs: Some(Vec::new()),
-                replaced_files: Some(vec![(
-                    destination.to_string_lossy().into_owned(),
-                    backup.to_string_lossy().into_owned(),
-                )]),
-                overwritten_files: Some(Vec::new()),
-                moved_files: None,
-                trash_metadata_backups: None,
-                moved_dirs: None,
-                copied_files: Some(vec![(
-                    source.to_string_lossy().into_owned(),
-                    destination.to_string_lossy().into_owned(),
-                )]),
-                copied_file_hashes: Some(vec![(destination.to_string_lossy().into_owned(), hash)]),
-            },
-        ));
-        let runtime = tokio::runtime::Builder::new_current_thread()
-            .build()
-            .unwrap();
-
-        runtime.block_on(undo_last_action(&history)).unwrap();
-
-        assert_eq!(std::fs::read(destination).unwrap(), b"old content");
-        assert!(!backup.exists());
-    }
 }
 
 #[cfg(test)]
@@ -1629,7 +1380,6 @@ mod history_concurrency_tests {
                 new_path: Some(new.to_string_lossy().into_owned()),
                 created_files: None,
                 created_dirs: None,
-                replaced_files: None,
                 overwritten_files: None,
                 moved_files: None,
                 trash_metadata_backups: None,
@@ -1738,5 +1488,101 @@ mod tracked_directory_tests {
         assert!(target.is_dir());
         super::create_dir_all_tracked(&target, &mut created).unwrap();
         assert_eq!(created.len(), 2);
+    }
+}
+
+#[cfg(test)]
+mod move_undo_rollback_tests {
+    use super::*;
+    use crate::models::TransactionDetails;
+
+    fn details(source: &std::path::Path, destination: &std::path::Path) -> TransactionDetails {
+        TransactionDetails {
+            paths: vec![],
+            target_dir: None,
+            old_path: None,
+            new_path: None,
+            created_files: Some(vec![]),
+            created_dirs: Some(vec![]),
+            overwritten_files: Some(vec![]),
+            moved_files: Some(vec![(
+                source.to_string_lossy().into_owned(),
+                destination.to_string_lossy().into_owned(),
+            )]),
+            trash_metadata_backups: None,
+            moved_dirs: Some(vec![]),
+            copied_files: Some(vec![]),
+            copied_file_hashes: Some(vec![(
+                destination.to_string_lossy().into_owned(),
+                blake3::hash(b"moving file").to_hex().to_string(),
+            )]),
+        }
+    }
+
+    fn check_directory_failure(child_of_blocker: bool) {
+        let root = tempfile::tempdir().unwrap();
+        let source = root.path().join("source/file.txt");
+        let destination = root.path().join("destination.txt");
+        std::fs::write(&destination, b"moving file").unwrap();
+        let blocker = root.path().join("directory-blocker");
+        std::fs::write(&blocker, b"external file").unwrap();
+        let mut journal = details(&source, &destination);
+        let directory = if child_of_blocker {
+            blocker.join("child")
+        } else {
+            blocker.clone()
+        };
+        journal.moved_dirs = Some(vec![(
+            directory.to_string_lossy().into_owned(),
+            root.path()
+                .join("old-directory")
+                .to_string_lossy()
+                .into_owned(),
+        )]);
+        let history = HistoryManager::new();
+        history.push(Transaction::new(TransactionType::Move, journal));
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .build()
+            .unwrap();
+        assert!(runtime.block_on(undo_last_action(&history)).is_err());
+        assert_eq!(std::fs::read(&destination).unwrap(), b"moving file");
+        assert!(!source.exists());
+        assert_eq!(std::fs::read(&blocker).unwrap(), b"external file");
+        assert_eq!(history.get_state().undo_stack.len(), 1);
+        assert!(history.get_state().redo_stack.is_empty());
+        std::fs::remove_file(blocker).unwrap();
+        runtime.block_on(undo_last_action(&history)).unwrap();
+        assert_eq!(std::fs::read(source).unwrap(), b"moving file");
+        assert!(!destination.exists());
+        assert!(history.get_state().undo_stack.is_empty());
+    }
+
+    #[test]
+    fn directory_failure_keeps_files_and_history_for_retry() {
+        check_directory_failure(true);
+    }
+
+    #[test]
+    fn source_directory_cannot_be_replaced_by_a_file() {
+        check_directory_failure(false);
+    }
+
+    #[test]
+    fn missing_destination_is_refused_before_history_changes() {
+        let root = tempfile::tempdir().unwrap();
+        let source = root.path().join("source.txt");
+        let destination = root.path().join("missing.txt");
+        let history = HistoryManager::new();
+        history.push(Transaction::new(
+            TransactionType::Move,
+            details(&source, &destination),
+        ));
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .build()
+            .unwrap();
+        assert!(runtime.block_on(undo_last_action(&history)).is_err());
+        assert_eq!(history.get_state().undo_stack.len(), 1);
+        assert!(history.get_state().redo_stack.is_empty());
+        assert!(!source.exists());
     }
 }

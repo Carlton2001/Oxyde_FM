@@ -2104,7 +2104,6 @@ impl OxydeApp {
                                     new_path: None,
                                     created_files: None,
                                     created_dirs: None,
-                                    replaced_files: None,
                                     overwritten_files: None,
                                     moved_files: None,
                                     trash_metadata_backups: None,

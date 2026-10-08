@@ -15,7 +15,6 @@ pub struct TransactionDetails {
     pub new_path: Option<String>,
     pub created_files: Option<Vec<String>>,
     pub created_dirs: Option<Vec<String>>,
-    pub replaced_files: Option<Vec<(String, String)>>,
     pub overwritten_files: Option<Vec<String>>,
     pub moved_files: Option<Vec<(String, String)>>,
     pub trash_metadata_backups: Option<Vec<String>>,

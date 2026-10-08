@@ -1,7 +1,7 @@
 use crate::models::transaction::Transaction;
 use std::sync::Mutex;
 
-fn cleanup_replacement_backups(transaction: &Transaction) {
+fn cleanup_metadata_backups(transaction: &Transaction) {
     for backup in transaction
         .details
         .trash_metadata_backups
@@ -12,21 +12,6 @@ fn cleanup_replacement_backups(transaction: &Transaction) {
             if error.kind() != std::io::ErrorKind::NotFound {
                 log::warn!("Cannot remove trash metadata backup {backup}: {error}");
             }
-        }
-    }
-    if let Some(backups) = &transaction.details.replaced_files {
-        for (_, backup) in backups {
-            let started = std::time::Instant::now();
-            log::info!("history backup removal started: {backup}");
-            if let Err(error) = std::fs::remove_file(backup) {
-                if error.kind() != std::io::ErrorKind::NotFound {
-                    log::warn!("Cannot remove replacement backup {backup}: {error}");
-                }
-            }
-            log::info!(
-                "history backup removal finished after {:?}: {backup}",
-                started.elapsed()
-            );
         }
     }
 }
@@ -108,7 +93,7 @@ impl Drop for HistoryOperation<'_> {
             data.active = false;
         }
         for transaction in expired {
-            cleanup_replacement_backups(&transaction);
+            cleanup_metadata_backups(&transaction);
         }
     }
 }
@@ -131,7 +116,7 @@ impl Drop for HistoryManager {
             .chain(data.history.redo_stack.iter())
             .chain(data.pending.iter())
         {
-            cleanup_replacement_backups(transaction);
+            cleanup_metadata_backups(transaction);
         }
     }
 }
@@ -152,7 +137,7 @@ impl HistoryManager {
             }
         }
         for transaction in expired {
-            cleanup_replacement_backups(&transaction);
+            cleanup_metadata_backups(&transaction);
         }
     }
 
@@ -207,7 +192,7 @@ impl HistoryManager {
             expired
         };
         for transaction in expired {
-            cleanup_replacement_backups(&transaction);
+            cleanup_metadata_backups(&transaction);
         }
         true
     }
@@ -228,7 +213,6 @@ mod tests {
                 new_path: None,
                 created_files: None,
                 created_dirs: None,
-                replaced_files: None,
                 overwritten_files: None,
                 moved_files: None,
                 trash_metadata_backups: None,
@@ -358,14 +342,11 @@ mod tests {
     #[test]
     fn clear_during_action_preserves_backups_until_completion() {
         let temp = tempfile::tempdir().unwrap();
-        let backup = temp.path().join("replacement.bak");
+        let backup = temp.path().join("metadata.bak");
         std::fs::write(&backup, b"original content").unwrap();
         let history = HistoryManager::new();
         let mut tx = transaction();
-        tx.details.replaced_files = Some(vec![(
-            "destination".into(),
-            backup.to_string_lossy().into_owned(),
-        )]);
+        tx.details.trash_metadata_backups = Some(vec![backup.to_string_lossy().into_owned()]);
         history.push(tx);
         let selected = history.begin_undo().unwrap().unwrap();
         history.push(transaction());
@@ -379,19 +360,16 @@ mod tests {
     }
 
     #[test]
-    fn replacement_backup_is_removed_when_history_is_dropped() {
+    fn metadata_backup_is_removed_when_history_is_dropped() {
         let temp = tempfile::tempdir().unwrap();
         let destination = temp.path().join("destination.txt");
-        let backup = temp.path().join(".oxyde-replacement.bak");
+        let backup = temp.path().join(".oxyde-metadata.bak");
         std::fs::write(&destination, b"new content").unwrap();
         std::fs::write(&backup, b"old content").unwrap();
 
         let history = HistoryManager::new();
         let mut tx = transaction();
-        tx.details.replaced_files = Some(vec![(
-            destination.to_string_lossy().into_owned(),
-            backup.to_string_lossy().into_owned(),
-        )]);
+        tx.details.trash_metadata_backups = Some(vec![backup.to_string_lossy().into_owned()]);
         history.push(tx);
         assert!(backup.exists());
 

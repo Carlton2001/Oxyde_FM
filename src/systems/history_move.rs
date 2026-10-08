@@ -51,6 +51,10 @@ fn hash(file: &mut File) -> io::Result<String> {
     Ok(hasher.finalize().to_hex().to_string())
 }
 
+pub(super) fn hash_file(path: &Path) -> io::Result<String> {
+    hash(&mut File::open(path)?)
+}
+
 pub(crate) fn move_file(
     source: &Path,
     destination: &Path,
