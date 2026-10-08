@@ -48,6 +48,11 @@ impl Platform for LinuxPlatform {
         if replace { self.replace_open_file(file, source, destination) }
         else { self.rename_open_file_exclusive(file, source, destination) }
     }
+    fn remove_operation_tree(&self, _parent: &std::fs::File, path: &std::path::Path, checkpoint: &mut dyn FnMut() -> std::io::Result<()>) -> std::io::Result<()> {
+        checkpoint()?;
+        if std::fs::symlink_metadata(path)?.is_dir() { std::fs::remove_dir_all(path) }
+        else { std::fs::remove_file(path) }
+    }
     fn lock_cache_file(&self, path: &std::path::Path) -> std::io::Result<std::fs::File> {
         let file = std::fs::OpenOptions::new().read(true).write(true).create(true).truncate(false).open(path)?;
         file.try_lock().map_err(std::io::Error::from)?;

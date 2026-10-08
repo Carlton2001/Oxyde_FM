@@ -72,6 +72,9 @@ pub trait Platform: Send + Sync {
     fn open_operation_file(&self, parent: &std::fs::File, path: &std::path::Path, read_contents: bool) -> std::io::Result<std::fs::File>;
     /// Rename by source identity into the retained destination parent on Windows.
     fn rename_operation_file(&self, file: &std::fs::File, source: &std::path::Path, parent: &std::fs::File, destination: &std::path::Path, replace: bool) -> std::io::Result<()>;
+    /// Remove the selected object and its children by retained identities on Windows.
+    /// Reparse entries are removed themselves; their targets are never traversed.
+    fn remove_operation_tree(&self, parent: &std::fs::File, path: &std::path::Path, checkpoint: &mut dyn FnMut() -> std::io::Result<()>) -> std::io::Result<()>;
     fn lock_cache_file(&self, path: &std::path::Path) -> std::io::Result<std::fs::File>;
     fn read_cache_file(&self, path: &std::path::Path) -> std::io::Result<std::fs::File>;
     fn open_cache_cleanup(&self, path: &std::path::Path, directory: bool) -> std::io::Result<std::fs::File>;
@@ -312,6 +315,8 @@ mod windows_no_reparse;
 mod windows_com;
 #[cfg(target_os = "windows")]
 mod windows_file_moves;
+#[cfg(target_os = "windows")]
+mod windows_file_tree;
 #[cfg(all(test, target_os = "windows"))]
 pub(crate) mod windows_reparse_tests;
 #[cfg(target_os = "windows")]

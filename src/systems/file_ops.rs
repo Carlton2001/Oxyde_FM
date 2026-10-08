@@ -1791,9 +1791,28 @@ impl FileOperationManager {
                         std::thread::sleep(std::time::Duration::from_millis(100));
                     }
 
-                    let res = super::path_parents::remove(src, &mut || Ok(()));
+                    let res = super::path_parents::remove(src, &mut || {
+                        while pause.load(Ordering::Relaxed) {
+                            if cancel.load(Ordering::Relaxed) {
+                                return Err(std::io::Error::new(std::io::ErrorKind::Interrupted, "Operation cancelled"));
+                            }
+                            std::thread::sleep(std::time::Duration::from_millis(50));
+                        }
+                        if cancel.load(Ordering::Relaxed) {
+                            return Err(std::io::Error::new(std::io::ErrorKind::Interrupted, "Operation cancelled"));
+                        }
+                        let is_turbo = turbo.load(Ordering::Relaxed);
+                        if is_turbo == is_in_background_mode {
+                            platform().set_thread_priority(if is_turbo { ThreadPriority::High } else { ThreadPriority::Background });
+                            is_in_background_mode = !is_turbo;
+                        }
+                        Ok(())
+                    });
 
                     if let Err(e) = res {
+                        if e.kind() == std::io::ErrorKind::Interrupted && cancel.load(Ordering::Relaxed) {
+                            return Ok(());
+                        }
                         if e.kind() != std::io::ErrorKind::NotFound {
                             let key = match e.kind() {
                                 std::io::ErrorKind::PermissionDenied => "error_access_denied",
@@ -1855,6 +1874,9 @@ impl FileOperationManager {
                 }
             }
         }
+
+        // A small deletion can finish before the first periodic progress update.
+        op.lock().unwrap().processed_files = processed_files_atomic.load(Ordering::Relaxed);
 
         // Check if any error was captured
         if let Some(e) = error_captured.lock().unwrap().clone() {
@@ -3516,6 +3538,26 @@ mod tests {
         assert_eq!(locked.moved_files.len(), 1);
         assert!(locked.copied_files.is_empty());
         assert!(locked.copied_file_hashes.is_empty());
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn real_directory_delete_preserves_junction_targets_and_reports_completion() {
+        let root = tempfile::tempdir().unwrap();
+        let selected = root.path().join("selected");
+        let outside = root.path().join("outside");
+        std::fs::create_dir_all(selected.join("nested")).unwrap();
+        std::fs::create_dir(&outside).unwrap();
+        std::fs::write(selected.join("nested/content"), b"selected").unwrap();
+        std::fs::write(outside.join("witness"), b"outside witness").unwrap();
+        crate::platform::windows_reparse_tests::junction(&selected.join("link"), &outside);
+        let op = Arc::new(Mutex::new(FileOperation::new(FileOpType::Delete, vec![selected.clone()], None, None)));
+        FileOperationManager::perform_delete(&op, vec![selected.clone()]).unwrap();
+        assert!(!selected.exists());
+        assert_eq!(std::fs::read(outside.join("witness")).unwrap(), b"outside witness");
+        let locked = op.lock().unwrap();
+        assert_eq!(locked.total_files, 1);
+        assert_eq!(locked.processed_files, 1);
     }
 
     #[test]

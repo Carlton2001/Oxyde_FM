@@ -71,10 +71,11 @@ pub(super) fn open(
     open_name(
         name,
         std::ptr::null_mut(),
-        directory,
+        Some(directory),
         access,
         sharing,
         disposition,
+        true,
     )
 }
 
@@ -104,20 +105,40 @@ pub(super) fn open_relative(
     open_name(
         leaf_name(leaf)?,
         parent.as_raw_handle(),
-        directory,
+        Some(directory),
         access,
         sharing,
         disposition,
+        true,
+    )
+}
+
+/// A single child of a retained parent; OPEN_REPARSE_POINT opens the link itself.
+pub(super) fn open_entry(
+    parent: &File,
+    leaf: &OsStr,
+    access: u32,
+    sharing: u32,
+) -> io::Result<File> {
+    open_name(
+        leaf_name(leaf)?,
+        parent.as_raw_handle(),
+        None,
+        access,
+        sharing,
+        1,
+        false,
     )
 }
 
 fn open_name(
     mut name: Vec<u16>,
     root: *mut c_void,
-    directory: bool,
+    directory: Option<bool>,
     access: u32,
     sharing: u32,
     disposition: u32,
+    reject_reparse: bool,
 ) -> io::Result<File> {
     if name.contains(&0) {
         return Err(io::Error::new(
@@ -141,7 +162,7 @@ fn open_name(
         root,
         name: &mut unicode,
         // OBJ_CASE_INSENSITIVE | OBJ_DONT_REPARSE, checked during native lookup.
-        attributes: 0x40 | 0x1000,
+        attributes: 0x40 | if reject_reparse { 0x1000 } else { 0 },
         security: std::ptr::null_mut(),
         qos: std::ptr::null_mut(),
     };
@@ -152,7 +173,13 @@ fn open_name(
     let mut handle = std::ptr::null_mut();
     // FILE_SYNCHRONOUS_IO_NONALERT | FILE_OPEN_FOR_BACKUP_INTENT |
     // FILE_OPEN_REPARSE_POINT | FILE_DIRECTORY_FILE / FILE_NON_DIRECTORY_FILE.
-    let options = 0x20 | 0x200000 | if directory { 0x4000 | 1 } else { 0x40 };
+    let options = 0x20
+        | 0x200000
+        | match directory {
+            Some(true) => 0x4000 | 1,
+            Some(false) => 0x40,
+            None => 0x4000,
+        };
     // All pointers refer to live, correctly aligned buffers. Synchronous access
     // returns an owned handle; only successful NTSTATUS transfers ownership.
     let result = unsafe {
@@ -178,7 +205,7 @@ fn open_name(
     let file = unsafe { File::from_raw_handle(handle) };
     // OPEN_REPARSE_POINT can return a final reparse object without following it.
     // Refuse that object too, including directories opened with FILE_OPEN_IF.
-    if file.metadata()?.file_attributes() & 0x400 != 0 {
+    if reject_reparse && file.metadata()?.file_attributes() & 0x400 != 0 {
         return Err(io::Error::other("Native lookup refuses a reparse object"));
     }
     Ok(file)
