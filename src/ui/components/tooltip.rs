@@ -624,11 +624,39 @@ impl Render for Tooltip {
     }
 }
 
+fn send_video_frame<T>(
+    sender: &tokio::sync::mpsc::Sender<T>,
+    mut frame: T,
+    cancelled: &std::sync::atomic::AtomicBool,
+) -> bool {
+    loop {
+        if cancelled.load(std::sync::atomic::Ordering::Relaxed) {
+            return false;
+        }
+        match sender.try_send(frame) {
+            Ok(()) => return true,
+            Err(tokio::sync::mpsc::error::TrySendError::Closed(_)) => return false,
+            Err(tokio::sync::mpsc::error::TrySendError::Full(value)) => {
+                frame = value;
+                std::thread::sleep(Duration::from_millis(10));
+            }
+        }
+    }
+}
+
+struct CancelVideoPreview(Arc<std::sync::atomic::AtomicBool>);
+impl Drop for CancelVideoPreview {
+    fn drop(&mut self) {
+        self.0.store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
 #[derive(Clone)]
 pub struct PreviewTask {
     data: Option<PreviewData>,
     media_asset: Option<SharedString>,
     original_image: Option<std::path::PathBuf>,
+    _video_cancellation: Option<Arc<CancelVideoPreview>>,
 }
 
 impl PreviewTask {
@@ -647,6 +675,7 @@ impl PreviewTask {
                 data: None,
                 media_asset: None,
                 original_image: Some(path.into()),
+                _video_cancellation: None,
             };
         }
         if preview_type == PreviewType::Pdf {
@@ -654,8 +683,12 @@ impl PreviewTask {
                 data: None,
                 media_asset: Some(path.into()),
                 original_image: None,
+                _video_cancellation: None,
             };
         }
+        let cancellation = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let video_cancellation = (preview_type == PreviewType::Video)
+            .then(|| Arc::new(CancelVideoPreview(cancellation.clone())));
         cx.spawn(move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
             let mut cx = cx.clone();
             async move {
@@ -668,14 +701,21 @@ impl PreviewTask {
 
                     let path_clone = path.clone();
                     std::thread::spawn(move || {
-                        let _ = ::oxyde_lib::platform::platform().video_frames(
+                        let receiver = tx.clone();
+                        let send_cancellation = cancellation.clone();
+                        let result = ::oxyde_lib::platform::platform().video_frames(
                             path_clone,
                             Box::new(move |rgba, pts| {
-                                let frame =
-                                    Arc::new(RenderImage::new(vec![image::Frame::new(rgba)]));
-                                tx.blocking_send((frame, pts)).is_ok()
+                                let frame = Arc::new(RenderImage::new(vec![image::Frame::new(rgba)]));
+                                send_video_frame(&tx, (frame, pts), &send_cancellation)
+                            }),
+                            Box::new(move || {
+                                cancellation.load(std::sync::atomic::Ordering::Relaxed) || receiver.is_closed()
                             }),
                         );
+                        if let Err(error) = result {
+                            log::warn!("Could not stream tooltip video preview: {error}");
+                        }
                     });
 
                     // PTS-based playback: sleep until wall-clock time matches the frame's
@@ -832,6 +872,7 @@ impl PreviewTask {
             data: None,
             media_asset: None,
             original_image: None,
+            _video_cancellation: video_cancellation,
         }
     }
 }
@@ -892,5 +933,37 @@ impl Render for PreviewTask {
                 .text_color(theme.text_muted)
                 .child(cx.i18n().text(Message::PreviewLoading))
         }
+    }
+}
+
+#[cfg(test)]
+mod video_cancellation_tests {
+    use super::{send_video_frame, CancelVideoPreview};
+    use std::{sync::Arc, time::Duration};
+    #[test]
+    fn a_full_frame_queue_can_be_cancelled_without_a_consumer() {
+        let (sender, _receiver) = tokio::sync::mpsc::channel(1);
+        sender.try_send(1).unwrap();
+        let signal = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let worker_signal = signal.clone();
+        let (done, result) = std::sync::mpsc::channel();
+        let worker = std::thread::spawn(move || {
+            done.send(send_video_frame(&sender, 2, &worker_signal))
+                .unwrap();
+        });
+        std::thread::sleep(Duration::from_millis(20));
+        signal.store(true, std::sync::atomic::Ordering::Relaxed);
+        assert!(!result.recv_timeout(Duration::from_secs(1)).unwrap());
+        worker.join().unwrap();
+    }
+    #[test]
+    fn final_preview_owner_cancels_without_receiving_any_frame() {
+        let signal = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let owner = Arc::new(CancelVideoPreview(signal.clone()));
+        let clone = owner.clone();
+        drop(owner);
+        assert!(!signal.load(std::sync::atomic::Ordering::Relaxed));
+        drop(clone);
+        assert!(signal.load(std::sync::atomic::Ordering::Relaxed));
     }
 }

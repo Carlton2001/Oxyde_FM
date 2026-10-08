@@ -6,7 +6,7 @@ Priorités proposées : P1 pour un risque sur les opérations de fichiers à rep
 
 ## Tableau de suivi — 8 octobre 2026
 
-**23 points traités, 4 clos par retrait, 2 points de correction/optimisation à faire, 1 vérification manuelle distincte et 1 observation de référence.** « Traité » décrit la correction du code ; les validations manuelles encore ouvertes sont indiquées séparément. A11 est commité dans `00b6a30` et A12 dans `261cb8c` ; A24/A25 sont commités dans `db3c5ae` et A30/A31 dans `daa8f52`.
+**24 points traités, 4 clos par retrait, 1 point de correction/optimisation à faire, 1 vérification manuelle distincte et 1 observation de référence.** « Traité » décrit la correction du code ; les validations manuelles encore ouvertes sont indiquées séparément. A11 est commité dans `00b6a30` et A12 dans `261cb8c` ; A24/A25 sont commités dans `db3c5ae` et A30/A31 dans `daa8f52`.
 
 | Point | Sujet | État du code | Suite ou validation restante |
 | --- | --- | --- | --- |
@@ -35,7 +35,7 @@ Priorités proposées : P1 pour un risque sur les opérations de fichiers à rep
 | [A23](#a23--lecture-non-bornée-des-buffers-de-presse-papiers--p2) | Lecture des buffers de presse-papiers | Traité | Contrôles automatiques réalisés |
 | [A24](#a24--erreurs-de-menus-et-dépinglage-shell-ignorées--p2) | Erreurs de commandes Shell | Traité | Réponses simulées ; épinglage réel et extensions installées à confirmer manuellement |
 | [A25](#a25--lecture-de-verbes-shell-hors-du-buffer-si-terminateur-absent--p2) | Bornes des noms de commandes Shell | Traité | Réponses tronquées et erreurs testées |
-| [A26](#a26--échecs-du-lecteur-vidéo-masqués--p2) | Erreurs et annulation du lecteur vidéo | À faire | Reproduction et propagation des erreurs |
+| [A26](#a26--échecs-du-lecteur-vidéo-masqués--p2) | Erreurs et annulation du lecteur vidéo | Traité | Erreurs propagées, annulation sans image et buffers bornés ; lecture interactive à confirmer |
 | [A27](#a27--phases-dundo-move-après-le-transfert-des-fichiers--p1) | Phases tardives d'Undo Move | Traité | Rollback testé ; limites de crash détaillées dans l'entrée |
 | [A28](#a28--métadonnées-et-flux-natifs-absents-de-la-copie-initiale--p1) | Copies natives et métadonnées | Traité | Flux/attributs Windows validés ; benchmark et SMB hors validation |
 | [A29](#a29--ancien-journal-de-sauvegardes-de-remplacement--code-mort-retiré) | Ancien journal de remplacements | Clos par retrait | Aucun producteur de production ; écrasements actifs non annulables |
@@ -288,7 +288,17 @@ Contrat natif : [GetCommandString](https://learn.microsoft.com/en-us/windows/win
 
 ## A26 — Échecs du lecteur vidéo masqués — P2
 
-**Points de code établis, sans reproduction native.** `platform/thumbnails.rs::stream_video_frames_sync` abandonne la boucle sur certains échecs de création/type puis retourne `Ok(())`. Une erreur de lecture termine seulement la boucle interne : le lecteur est relancé après 200 ms. Si aucune image n'arrive, le callback ne peut pas signaler l'arrêt. Examiner la propagation des erreurs et l'annulation indépendante des images dans un lot distinct ; A05 équilibre seulement les ressources COM/Media Foundation.
+**Corrigé le 8 octobre 2026.** Les erreurs de création, configuration, sélection de flux, lecture, type de média, timestamp et conversion sont propagées. Le flag d'erreur natif est traité explicitement. Seule une fin normale après au moins une image relance le lecteur ; un flux vide retourne une erreur au lieu de recommencer indéfiniment. Le consommateur GPUI journalise maintenant le diagnostic et conserve le comportement visuel existant en cas d'échec.
+
+Une annulation indépendante du callback d'image est fournie au lecteur. La destruction du dernier propriétaire de l'aperçu signale l'arrêt même si aucune image n'est arrivée. Le contrôleur vérifie ce signal avant/après les lectures, avant une nouvelle ouverture et toutes les 10 ms pendant la pause de reprise. La file bornée de quatre images conserve son contrôle de flux, mais son envoi vérifie aussi l'annulation lorsque la file est pleine : un consommateur retenu par sa temporisation ne peut plus bloquer indéfiniment le producteur après destruction de l'aperçu.
+
+Deux défauts de conversion relevés pendant cette relecture sont traités dans ce point : la longueur valide du buffer n'était pas vérifiée avant la lecture des pixels, et les dimensions/stride étaient repris du type source avant négociation RGB32. Le parcours utilise maintenant le type de sortie courant, l'actualise après un changement signalé, contrôle dimensions/stride et longueur avant tout accès, puis interpole sur une tranche bornée. Le stride signé et son padding sont respectés ; le verrou natif est libéré aussi sur erreur. Les timestamps utilisent secondes/reste pour éviter un débordement de la multiplication en nanosecondes, et les timestamps négatifs de preroll rejoignent le début de la boucle.
+
+Onze régressions couvrent les erreurs d'ouverture/lecture sans redémarrage, le flux vide, les gaps sans image, l'annulation entre lecture et publication, la reprise normale et le refus du callback, l'arrêt pendant la pause, les dimensions invalides, buffers tronqués/paddés et stride négatif, les timestamps longs, la disparition du dernier propriétaire et la file pleine. Un fichier vidéo absent reproduit une erreur avec les API Media Foundation réelles. Un media type et un buffer natifs vérifient aussi le refus du format NV12, la conversion RGB32 et le refus d’une longueur valide tronquée. Les autres réponses de lecteur sont injectées ; aucun rendu GPUI, codec matériel ou fichier vidéo utilisateur n'est validé ici.
+
+Limites : une ouverture/lecture native synchrone déjà bloquée ne peut pas être préemptée par ces checkpoints. La temporisation de présentation GPUI déjà commencée finit selon son délai actuel, tandis que le producteur peut s'arrêter indépendamment. Les gardes COM/Media Foundation A05 et la sortie finale documentée dans `SHUTDOWN_DIAGNOSTICS.md` sont conservées. Lecture et orientation de vidéos réelles restent à confirmer manuellement.
+
+Contrats natifs : [ReadSample](https://learn.microsoft.com/en-us/windows/win32/api/mfreadwrite/nf-mfreadwrite-imfsourcereader-readsample), [Lock](https://learn.microsoft.com/en-us/windows/win32/api/mfobjects/nf-mfobjects-imfmediabuffer-lock), [MF_MT_DEFAULT_STRIDE](https://learn.microsoft.com/en-us/windows/win32/medfound/mf-mt-default-stride-attribute).
 
 ## A27 — Phases d'Undo Move après le transfert des fichiers — P1
 
@@ -485,3 +495,7 @@ Quatre tests du transfert initial vérifient les verrous source/destination apr�
 ### Validation du point A10
 
 `cargo test --all-targets --offline` : 178 tests backend et 110 tests du binaire passent (288) ; 17 tests sont ignorés par défaut. Le profil A10 exécuté explicitement passe. `cargo check --all-targets --offline` passe sans avertissement du projet et le binaire est reconstruit. Formatage des blocs modifiés et `git diff --check` validés. Aucun Computer Use ni validation Linux.
+
+### Validation du point A26
+
+`cargo test --all-targets --offline` : 187 tests backend et 112 tests du binaire passent (299) ; 17 tests restent ignorés par défaut. `cargo check --all-targets --offline` passe sans avertissement du projet et le binaire est reconstruit. Formatage ciblé et `git diff --check` validés. Aucun Computer Use ni validation Linux.

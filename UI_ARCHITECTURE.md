@@ -236,3 +236,7 @@ Copier, Couper/Coller et les déplacements internes conservent les chemins physi
 ### Tri et filtres des listes
 
 Les dossiers restent en tête en ordre ascendant et descendant. GPUI prépare une clé par entrée pour le tri choisi : noms et extensions en minuscules Unicode, sans retrait d’accents ni ordre numérique naturel, noms en départage et égalités stables. Le tri naturel du backend reste distinct pour ses consommateurs. Les filtres de nom et d’emplacement préparent leur texte une fois par parcours ; ils conservent leur recherche de sous-chaîne insensible à la casse et sensible aux accents.
+
+### Cycle de vie de l’aperçu vidéo
+
+Le lecteur vidéo reçoit un signal d’annulation indépendant des images. La destruction du dernier propriétaire de l’aperçu le déclenche ; lectures, reprise et envoi dans la file bornée le contrôlent sur le worker. Une erreur native est propagée et journalisée, sans nouveau toast. Seule une fin normale après une image relance la lecture ; les flux vides et les buffers tronqués sont refusés. Le type RGB32 de sortie, son stride signé et la longueur valide du buffer guident la conversion. Les opérations natives déjà bloquées restent soumises à leur propre délai.

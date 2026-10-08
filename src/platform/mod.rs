@@ -147,8 +147,9 @@ pub trait Platform: Send + Sync {
         &self,
         path: String,
         on_frame: Box<dyn FnMut(image::RgbaImage, std::time::Duration) -> bool + Send>,
+        cancelled: Box<dyn Fn() -> bool + Send>,
     ) -> Result<(), crate::models::CommandError> {
-        thumbnails::stream_video_frames_sync(path, on_frame)
+        thumbnails::stream_video_frames_sync(path, on_frame, cancelled)
     }
 
     fn office_text_preview(&self, path: String) -> Result<String, crate::models::CommandError> {
