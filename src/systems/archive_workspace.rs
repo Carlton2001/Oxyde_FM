@@ -388,10 +388,15 @@ fn prepare_selection_with_limits(
         extract_zip_file_for_open(&archive, internal, target, limits).map_err(|e| e.to_string())?
     } else if matches!(
         ArchiveFormat::from_path(&archive),
-        Some(ArchiveFormat::Tar | ArchiveFormat::TarZst)
+        Some(
+            ArchiveFormat::Tar
+                | ArchiveFormat::TarGz
+                | ArchiveFormat::TarXz
+                | ArchiveFormat::TarBz2
+                | ArchiveFormat::TarZst
+        )
     ) {
-        extract_tar_file_for_open(&archive, internal, target, limits)
-            .map_err(|e| e.to_string())?
+        extract_tar_file_for_open(&archive, internal, target, limits).map_err(|e| e.to_string())?
     } else {
         let directory = tempfile::Builder::new().prefix(".oxyde-work-").tempdir_in(target).map_err(|e| e.to_string())?;
         let workspace = ArchiveWorkspace::open_in_directory(archive, &|| Ok(()), limits, directory)?;
@@ -461,14 +466,45 @@ mod tests {
         let other = fixture.path().join("other.txt");
         std::fs::write(&selected, b"safe").unwrap();
         std::fs::write(&other, b"unselected file exceeds four bytes").unwrap();
-        let limits = ArchiveLimits { max_bytes: 4, max_entries: 4, ..ArchiveLimits::OPEN_FILE };
-        for extension in ["tar", "tar.zst"] {
+        let limits = ArchiveLimits {
+            max_bytes: 4,
+            max_entries: 4,
+            ..ArchiveLimits::OPEN_FILE
+        };
+        let plain_archive = fixture.path().join("source.tar");
+        FileOperationManager::perform_compress(
+            &mutation_operation("fast"),
+            vec![selected.clone(), other.clone()],
+            Some(plain_archive.clone()),
+        ).unwrap();
+        let plain_bytes = std::fs::read(&plain_archive).unwrap();
+        for extension in ["tar", "tar.zst", "tar.gz", "tar.xz", "tar.bz2", "tgz", "txz", "tbz2"] {
             let archive = fixture.path().join(format!("selection.{extension}"));
-            FileOperationManager::perform_compress(&mutation_operation("fast"), vec![selected.clone(), other.clone()], Some(archive.clone())).unwrap();
+            let mut reader: Box<dyn std::io::Read + '_> = match ArchiveFormat::from_path(&archive).unwrap() {
+                ArchiveFormat::Tar => Box::new(&plain_bytes[..]),
+                ArchiveFormat::TarGz => Box::new(flate2::read::GzEncoder::new(
+                    &plain_bytes[..], flate2::Compression::fast(),
+                )),
+                ArchiveFormat::TarXz => Box::new(xz2::read::XzEncoder::new(&plain_bytes[..], 1)),
+                ArchiveFormat::TarBz2 => Box::new(bzip2::read::BzEncoder::new(
+                    &plain_bytes[..], bzip2::Compression::fast(),
+                )),
+                ArchiveFormat::TarZst => Box::new(std::io::Cursor::new(
+                    zstd::stream::encode_all(&plain_bytes[..], 1).unwrap(),
+                )),
+                _ => unreachable!(),
+            };
+            let mut contents = Vec::new();
+            reader.read_to_end(&mut contents).unwrap();
+            std::fs::write(&archive, contents).unwrap();
             let full = tempfile::tempdir().unwrap();
-            assert!(ArchiveWorkspace::open_in_directory(archive.clone(), &|| Ok(()), limits, full).is_err());
+            assert!(ArchiveWorkspace::open_in_directory(
+                archive.clone(), &|| Ok(()), limits, full,
+            ).is_err());
             let target = tempfile::tempdir().unwrap();
-            let result = prepare_selection_with_limits(archive.clone(), "selected.txt", target.path(), limits).unwrap();
+            let result = prepare_selection_with_limits(
+                archive.clone(), "selected.txt", target.path(), limits,
+            ).unwrap();
             assert_eq!(std::fs::read(&result).unwrap(), b"safe");
             assert_eq!(std::fs::read_dir(target.path()).unwrap().count(), 1);
             let output = tempfile::tempdir().unwrap();

@@ -178,6 +178,21 @@ pub(crate) fn extract_tar_file_for_open(
     extract_with_checkpoint(archive_path, internal, target, limits, &|| Ok(()))
 }
 
+fn compressed_reader(source: File, format: &ArchiveFormat) -> io::Result<Box<dyn Read>> {
+    Ok(match format {
+        ArchiveFormat::TarGz => Box::new(flate2::read::GzDecoder::new(source)),
+        ArchiveFormat::TarXz => Box::new(xz2::read::XzDecoder::new(source)),
+        ArchiveFormat::TarBz2 => Box::new(bzip2::read::BzDecoder::new(source)),
+        ArchiveFormat::TarZst => Box::new(zstd::stream::read::Decoder::new(source)?),
+        _ => {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Unsupported compressed TAR format",
+            ))
+        }
+    })
+}
+
 fn extract_with_checkpoint(
     archive_path: &Path,
     internal: &str,
@@ -189,17 +204,25 @@ fn extract_with_checkpoint(
     if requested.as_os_str().is_empty() {
         return Err(archive_error("Archive item is not a file"));
     }
-    let format = ArchiveFormat::from_path(archive_path);
-    if !matches!(format, Some(ArchiveFormat::Tar | ArchiveFormat::TarZst)) {
-        return Err(archive_error("Unsupported targeted TAR format"));
-    }
+    let format = ArchiveFormat::from_path(archive_path)
+        .filter(|format| {
+            matches!(
+                format,
+                ArchiveFormat::Tar
+                    | ArchiveFormat::TarGz
+                    | ArchiveFormat::TarXz
+                    | ArchiveFormat::TarBz2
+                    | ArchiveFormat::TarZst
+            )
+        })
+        .ok_or_else(|| archive_error("Unsupported targeted TAR format"))?;
     let parents = HeldParents::new(archive_path)?;
     let archive_path = parents.resolved_path(archive_path)?;
     // Both passes use this object. Windows refuses incompatible writers/replacement.
     let mut source = platform().open_archive_source(&archive_path, false)?;
     let length = source.metadata()?.len();
     let budget = ArchiveBudget::new(limits);
-    let selected = if format == Some(ArchiveFormat::Tar) {
+    let selected = if format == ArchiveFormat::Tar {
         let mut archive = tar::Archive::new(SeekReader {
             inner: BudgetReader {
                 reader: source.try_clone()?,
@@ -210,7 +233,7 @@ fn extract_with_checkpoint(
         });
         preflight(archive.entries_with_seek()?, &requested, &budget)?
     } else {
-        let decoder = zstd::stream::read::Decoder::new(source.try_clone()?)?;
+        let decoder = compressed_reader(source.try_clone()?, &format)?;
         let mut archive = tar::Archive::new(BudgetReader {
             reader: decoder,
             budget: &budget,
@@ -222,7 +245,7 @@ fn extract_with_checkpoint(
     source.seek(SeekFrom::Start(0))?;
     let provenance = platform().read_file_provenance(&archive_path)?;
     let root = ExtractionRoot::new(target)?;
-    if format == Some(ArchiveFormat::Tar) {
+    if format == ArchiveFormat::Tar {
         let mut archive = tar::Archive::new(SeekReader {
             inner: BudgetReader {
                 reader: source,
@@ -245,7 +268,7 @@ fn extract_with_checkpoint(
         // Written/declared bytes still belong to the single requested-file budget.
         let decoded = ArchiveBudget::new(limits);
         let decoded_checkpoint = || budget.checkpoint(checkpoint);
-        let decoder = zstd::stream::read::Decoder::new(source)?;
+        let decoder = compressed_reader(source, &format)?;
         let mut archive = tar::Archive::new(BudgetReader {
             reader: decoder,
             budget: &decoded,
@@ -268,6 +291,8 @@ mod tests {
     use super::*;
     use crate::models::error::{ArchiveLimitFailure, ArchiveLimitKind};
 
+    const TAR_EXTENSIONS: [&str; 5] = ["tar", "tar.zst", "tar.gz", "tar.xz", "tar.bz2"];
+
     fn tar_bytes(entries: &[(&str, tar::EntryType, &[u8])]) -> Vec<u8> {
         let mut builder = tar::Builder::new(Vec::new());
         for (name, kind, data) in entries {
@@ -287,10 +312,26 @@ mod tests {
 
     fn write_archive(folder: &Path, extension: &str, bytes: &[u8]) -> PathBuf {
         let path = folder.join(format!("selection.{extension}"));
-        let contents = if extension == "tar" {
-            bytes.to_vec()
-        } else {
-            zstd::stream::encode_all(bytes, 1).unwrap()
+        let contents = match ArchiveFormat::from_path(&path).unwrap() {
+            ArchiveFormat::Tar => bytes.to_vec(),
+            ArchiveFormat::TarZst => zstd::stream::encode_all(bytes, 1).unwrap(),
+            format => {
+                let mut reader: Box<dyn Read + '_> = match format {
+                    ArchiveFormat::TarGz => Box::new(flate2::read::GzEncoder::new(
+                        bytes,
+                        flate2::Compression::fast(),
+                    )),
+                    ArchiveFormat::TarXz => Box::new(xz2::read::XzEncoder::new(bytes, 1)),
+                    ArchiveFormat::TarBz2 => Box::new(bzip2::read::BzEncoder::new(
+                        bytes,
+                        bzip2::Compression::fast(),
+                    )),
+                    _ => panic!("Unsupported fixture format"),
+                };
+                let mut contents = Vec::new();
+                reader.read_to_end(&mut contents).unwrap();
+                contents
+            }
         };
         fs::write(&path, contents).unwrap();
         path
@@ -305,8 +346,54 @@ mod tests {
     }
 
     #[test]
+    fn targeted_tar_open_accepts_compressed_aliases_without_extracting_neighbors() {
+        let bytes = tar_bytes(&[
+            ("selected.txt", tar::EntryType::Regular, b"safe"),
+            (
+                "other.txt",
+                tar::EntryType::Regular,
+                b"over the selection limit",
+            ),
+        ]);
+        for extension in ["tgz", "txz", "tbz2", "tzst", "TAR.GZ", "TAR.XZ", "TAR.BZ2"] {
+            let fixture = tempfile::tempdir().unwrap();
+            let archive = write_archive(fixture.path(), extension, &bytes);
+            let target = tempfile::tempdir().unwrap();
+            let output =
+                extract_tar_file_for_open(&archive, "selected.txt", target.path(), limits())
+                    .unwrap();
+            assert_eq!(fs::read(output).unwrap(), b"safe");
+            assert_eq!(fs::read_dir(target.path()).unwrap().count(), 1);
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn targeted_tar_open_preserves_internet_provenance_for_every_codec() {
+        let bytes = tar_bytes(&[("selected.txt", tar::EntryType::Regular, b"safe")]);
+        let provenance =
+            b"[ZoneTransfer]\r\nZoneId=3\r\nHostUrl=https://example.invalid/archive\r\n";
+        for extension in TAR_EXTENSIONS {
+            let fixture = tempfile::tempdir().unwrap();
+            let archive = write_archive(fixture.path(), extension, &bytes);
+            platform()
+                .write_file_provenance(&archive, provenance)
+                .unwrap();
+            let target = tempfile::tempdir().unwrap();
+            let output =
+                extract_tar_file_for_open(&archive, "selected.txt", target.path(), limits())
+                    .unwrap();
+            assert_eq!(
+                platform().read_file_provenance(&output).unwrap().as_deref(),
+                Some(&provenance[..])
+            );
+            assert_eq!(fs::read(output).unwrap(), b"safe");
+        }
+    }
+
+    #[test]
     fn targeted_tar_open_writes_only_the_selected_unicode_member_before_or_after_other_data() {
-        for extension in ["tar", "tar.zst"] {
+        for extension in TAR_EXTENSIONS {
             for reverse in [false, true] {
                 let folder = tempfile::tempdir().unwrap();
                 let mut entries = vec![
@@ -353,7 +440,7 @@ mod tests {
 
     #[test]
     fn targeted_tar_open_rejects_late_unsafe_names_and_special_entries_without_output() {
-        for extension in ["tar", "tar.zst"] {
+        for extension in TAR_EXTENSIONS {
             for (name, kind) in [
                 ("../outside", tar::EntryType::Regular),
                 ("file:stream", tar::EntryType::Regular),
@@ -385,7 +472,7 @@ mod tests {
 
     #[test]
     fn targeted_tar_open_rejects_ambiguous_absent_and_directory_selections() {
-        for extension in ["tar", "tar.zst"] {
+        for extension in TAR_EXTENSIONS {
             for entries in [
                 vec![
                     ("a/b.txt", tar::EntryType::Regular, &b"safe"[..]),
@@ -412,7 +499,7 @@ mod tests {
             ("selected.txt", tar::EntryType::Regular, b"safe"),
             ("a/b/c", tar::EntryType::Regular, b""),
         ]);
-        for extension in ["tar", "tar.zst"] {
+        for extension in TAR_EXTENSIONS {
             let folder = tempfile::tempdir().unwrap();
             let archive = write_archive(folder.path(), extension, &bytes);
             for (limits, kind) in [
@@ -454,7 +541,7 @@ mod tests {
     }
 
     #[test]
-    fn targeted_tar_open_skips_plain_payload_but_bounds_the_zstd_decoded_stream() {
+    fn targeted_tar_open_skips_plain_payload_but_bounds_compressed_decoded_streams() {
         let large = vec![0; 16 * 1024];
         let bytes = tar_bytes(&[
             ("selected.txt", tar::EntryType::Regular, b"safe"),
@@ -462,7 +549,6 @@ mod tests {
         ]);
         let folder = tempfile::tempdir().unwrap();
         let plain = write_archive(folder.path(), "tar", &bytes);
-        let compressed = write_archive(folder.path(), "tar.zst", &bytes);
         let tiny = ArchiveLimits {
             max_entries: 2,
             ..limits()
@@ -475,13 +561,17 @@ mod tests {
             .unwrap(),
             b"safe"
         );
-        let refused = tempfile::tempdir().unwrap();
-        let error = extract_tar_file_for_open(&compressed, "selected.txt", refused.path(), tiny)
-            .unwrap_err();
-        let failure = ArchiveLimitFailure::from_message(&error.to_string()).unwrap();
-        assert_eq!(failure.kind, ArchiveLimitKind::Decoded);
-        assert_eq!(failure.limit, 4 + 2 * 4096);
-        assert_eq!(fs::read_dir(refused.path()).unwrap().count(), 0);
+        for extension in &TAR_EXTENSIONS[1..] {
+            let compressed = write_archive(folder.path(), extension, &bytes);
+            let refused = tempfile::tempdir().unwrap();
+            let error =
+                extract_tar_file_for_open(&compressed, "selected.txt", refused.path(), tiny)
+                    .unwrap_err();
+            let failure = ArchiveLimitFailure::from_message(&error.to_string()).unwrap();
+            assert_eq!(failure.kind, ArchiveLimitKind::Decoded, "{extension}");
+            assert_eq!(failure.limit, 4 + 2 * 4096);
+            assert_eq!(fs::read_dir(refused.path()).unwrap().count(), 0);
+        }
     }
 
     #[test]
@@ -492,7 +582,7 @@ mod tests {
             ("large.txt", tar::EntryType::Regular, &large),
         ]);
         bytes.truncate(1536 + 3);
-        for extension in ["tar", "tar.zst"] {
+        for extension in TAR_EXTENSIONS {
             let folder = tempfile::tempdir().unwrap();
             let archive = write_archive(folder.path(), extension, &bytes);
             let target = tempfile::tempdir().unwrap();
@@ -505,8 +595,49 @@ mod tests {
     }
 
     #[test]
+    fn targeted_tar_open_refuses_truncated_compressed_streams_before_creating_output() {
+        let mut state = 1u32;
+        let large: Vec<u8> = (0..64 * 1024)
+            .map(|_| {
+                state ^= state << 13;
+                state ^= state >> 17;
+                state ^= state << 5;
+                state as u8
+            })
+            .collect();
+        let bytes = tar_bytes(&[
+            ("selected.txt", tar::EntryType::Regular, b"safe"),
+            ("large.txt", tar::EntryType::Regular, &large),
+        ]);
+        // Enough decoded allowance to reach the broken stream, rather than
+        // accidentally testing only the decoded-byte ceiling again.
+        let allowance = ArchiveLimits {
+            max_entries: 32,
+            ..limits()
+        };
+        for extension in &TAR_EXTENSIONS[1..] {
+            for header_only in [false, true] {
+                let fixture = tempfile::tempdir().unwrap();
+                let archive = write_archive(fixture.path(), extension, &bytes);
+                let mut compressed = fs::read(&archive).unwrap();
+                compressed.truncate(if header_only { 8 } else { compressed.len() / 2 });
+                fs::write(&archive, compressed).unwrap();
+                let target = tempfile::tempdir().unwrap();
+                let error =
+                    extract_tar_file_for_open(&archive, "selected.txt", target.path(), allowance)
+                        .unwrap_err();
+                assert!(
+                    ArchiveLimitFailure::from_message(&error.to_string()).is_none(),
+                    "{extension}: {error}"
+                );
+                assert_eq!(fs::read_dir(target.path()).unwrap().count(), 0);
+            }
+        }
+    }
+
+    #[test]
     fn targeted_tar_open_never_overwrites_an_existing_destination() {
-        for extension in ["tar", "tar.zst"] {
+        for extension in TAR_EXTENSIONS {
             let folder = tempfile::tempdir().unwrap();
             let archive = write_archive(
                 folder.path(),
@@ -581,7 +712,7 @@ mod tests {
     fn targeted_tar_open_keeps_the_source_object_after_parent_junction_retargeting() {
         use crate::platform::windows_reparse_tests::{junction, Retarget};
         use std::cell::Cell;
-        for extension in ["tar", "tar.zst"] {
+        for extension in TAR_EXTENSIONS {
             let folder = tempfile::tempdir().unwrap();
             let chosen = folder.path().join("chosen");
             let outside = folder.path().join("outside");
@@ -641,7 +772,7 @@ mod tests {
     fn targeted_tar_open_refuses_a_new_destination_junction_without_touching_its_target() {
         use crate::platform::windows_reparse_tests::{junction, Retarget};
         use std::cell::Cell;
-        for extension in ["tar", "tar.zst"] {
+        for extension in TAR_EXTENSIONS {
             let folder = tempfile::tempdir().unwrap();
             let archive = write_archive(
                 folder.path(),
