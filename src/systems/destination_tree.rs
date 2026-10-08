@@ -28,6 +28,52 @@ impl DestinationTree {
         self.root.resolved_directory()
     }
 
+    pub fn check_all(&self, checkpoint: &mut dyn FnMut() -> io::Result<()>) -> io::Result<()> {
+        checkpoint()?;
+        ordinary(self.root.directory())?;
+        let directories = self.directories.lock().unwrap();
+        for (path, directory) in directories.iter() {
+            checkpoint()?;
+            ordinary(directory).map_err(|error| {
+                io::Error::new(
+                    error.kind(),
+                    format!("Copy destination directory {:?} changed: {error}", path),
+                )
+            })?;
+        }
+        Ok(())
+    }
+
+    /// Check only the already retained destination: never recreate a missing child.
+    pub fn check_directory(
+        &self,
+        path: &Path,
+        checkpoint: &mut dyn FnMut() -> io::Result<()>,
+    ) -> io::Result<()> {
+        let relative = path
+            .strip_prefix(self.path())
+            .map_err(|_| io::Error::other("Directory is outside the retained copy destination"))?;
+        checkpoint()?;
+        ordinary(self.root.directory())?;
+        let mut resolved = self.path().to_path_buf();
+        for component in relative.components() {
+            let Component::Normal(name) = component else {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "Copy destination contains a non-normal component",
+                ));
+            };
+            checkpoint()?;
+            resolved.push(name);
+            let directories = self.directories.lock().unwrap();
+            let directory = directories
+                .get(&resolved)
+                .ok_or_else(|| io::Error::other("Copy destination directory was not retained"))?;
+            ordinary(directory)?;
+        }
+        Ok(())
+    }
+
     pub fn ensure_directory(
         &self,
         path: &Path,

@@ -1,8 +1,12 @@
 //! Keep copied archive-transfer sources alive through publication and native deletion.
-use super::{copied_source::CopiedSource, file_copy::CopiedFile};
+use super::{
+    copied_source::CopiedSource, destination_tree::DestinationTree, file_copy::CopiedFile,
+    source_directories::SourceDirectories,
+};
 use std::{
     io,
     path::{Path, PathBuf},
+    sync::Arc,
 };
 
 struct Entry {
@@ -15,9 +19,41 @@ struct Entry {
 pub(super) struct ArchiveMoveSources {
     entries: Vec<Entry>,
     verified: bool,
+    directories: SourceDirectories,
+    destination: Option<Arc<DestinationTree>>,
 }
 
 impl ArchiveMoveSources {
+    pub fn retain_directories(
+        &mut self,
+        directories: SourceDirectories,
+        destination: Arc<DestinationTree>,
+    ) {
+        self.directories = directories;
+        self.destination = Some(destination);
+    }
+
+    pub fn remove_directories_matching(
+        &mut self,
+        matches: &dyn Fn(&Path) -> bool,
+        checkpoint: &mut dyn FnMut() -> io::Result<()>,
+        removed: &mut dyn FnMut(&Path, &Path),
+    ) -> io::Result<()> {
+        if !self.verified {
+            return Err(io::Error::other(
+                "Archive move source has not been verified",
+            ));
+        }
+        let Some(destination) = &self.destination else {
+            return Ok(());
+        };
+        self.directories.remove_matching(
+            matches,
+            checkpoint,
+            &mut |path, checkpoint| destination.check_directory(path, checkpoint),
+            removed,
+        )
+    }
     pub fn record(&mut self, path: PathBuf, source: CopiedSource, output: CopiedFile) {
         self.verified = false;
         self.entries.push(Entry {
@@ -29,6 +65,9 @@ impl ArchiveMoveSources {
 
     pub fn verify_all(&mut self, checkpoint: &mut dyn FnMut() -> io::Result<()>) -> io::Result<()> {
         self.verified = false;
+        if let Some(destination) = &self.destination {
+            destination.check_all(checkpoint)?;
+        }
         // Verify the entire batch before any source deletion. Windows denies data
         // writes/replacement throughout verification, publication and removal.
         for entry in &mut self.entries {

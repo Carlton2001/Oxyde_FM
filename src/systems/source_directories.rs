@@ -59,14 +59,38 @@ impl SourceDirectories {
         checkpoint: &mut dyn FnMut() -> io::Result<()>,
         removed: &mut dyn FnMut(&Path, &Path),
     ) -> io::Result<()> {
+        self.remove_matching(&|_| true, checkpoint, &mut |_, _| Ok(()), removed)
+    }
+
+    pub fn remove_matching(
+        &mut self,
+        matches: &dyn Fn(&Path) -> bool,
+        checkpoint: &mut dyn FnMut() -> io::Result<()>,
+        before_remove: &mut dyn FnMut(&Path, &mut dyn FnMut() -> io::Result<()>) -> io::Result<()>,
+        removed: &mut dyn FnMut(&Path, &Path),
+    ) -> io::Result<()> {
         self.entries
             .sort_by_key(|entry| std::cmp::Reverse(entry.path.components().count()));
         // Shared directory references must disappear bottom-up, including those
         // held by the lookup table, before the containing directory can be deleted.
         self.directories.clear();
         self.roots.clear();
-        for entry in self.entries {
+        let entries = std::mem::take(&mut self.entries);
+        for entry in entries {
+            if !matches(&entry.path) {
+                self.entries.push(entry);
+                continue;
+            }
             checkpoint()?;
+            before_remove(&entry.destination, checkpoint).map_err(|error| {
+                io::Error::new(
+                    error.kind(),
+                    format!(
+                        "Cannot validate copied directory {:?} before source cleanup: {error}",
+                        entry.destination
+                    ),
+                )
+            })?;
             match platform().remove_empty_operation_directory(
                 &entry.parent,
                 &entry.path,
@@ -98,6 +122,46 @@ impl SourceDirectories {
 mod tests {
     use super::*;
     use crate::platform::windows_reparse_tests::{junction, Retarget};
+
+    #[test]
+    fn source_directory_cleanup_separates_groups_and_drops_descendant_handles() {
+        let root = tempfile::tempdir().unwrap();
+        let staged = root.path().join("staged");
+        let real = root.path().join("real");
+        std::fs::create_dir_all(staged.join("nested/empty")).unwrap();
+        std::fs::create_dir_all(real.join("nested/empty")).unwrap();
+        let mut directories = SourceDirectories::default();
+        for source in [&staged, &real] {
+            for suffix in ["", "nested", "nested/empty"] {
+                let path = source.join(suffix);
+                directories
+                    .capture(&path, &root.path().join("destination").join(suffix))
+                    .unwrap();
+            }
+        }
+        let mut removed = Vec::new();
+        directories
+            .remove_matching(
+                &|path| path.starts_with(&staged),
+                &mut || Ok(()),
+                &mut |_, _| Ok(()),
+                &mut |source, _| removed.push(source.to_path_buf()),
+            )
+            .unwrap();
+        assert!(!staged.exists());
+        assert!(real.join("nested/empty").is_dir());
+        assert_eq!(removed.len(), 3);
+        directories
+            .remove_matching(
+                &|path| path.starts_with(&real),
+                &mut || Ok(()),
+                &mut |_, _| Ok(()),
+                &mut |source, _| removed.push(source.to_path_buf()),
+            )
+            .unwrap();
+        assert!(!real.exists());
+        assert_eq!(removed.len(), 6);
+    }
 
     #[test]
     fn source_directory_cleanup_preserves_a_replacement_identity() {
