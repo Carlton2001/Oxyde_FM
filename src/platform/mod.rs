@@ -39,10 +39,25 @@ pub struct TrashTransferEntry {
 /// Toute fonctionnalité native (lecteurs, ouverture, raccourcis, etc.)
 /// doit passer par ce trait plutôt qu'appeler directement les API OS.
 pub trait Platform: Send + Sync {
+    /// Blocking copy with native metadata/streams where supported. The callback
+    /// may wait for pause or return an error to stop; only an absent destination is accepted.
+    fn copy_file_with_progress(
+        &self,
+        source: &std::path::Path,
+        destination: &std::path::Path,
+        progress: &mut dyn FnMut(u64) -> std::io::Result<()>,
+    ) -> std::io::Result<()>;
     /// Opens a regular file for a history move, keeping its identity stable.
     fn open_file_for_move(&self, path: &std::path::Path) -> std::io::Result<std::fs::File>;
     /// Renames the opened file without replacing an existing destination.
     fn rename_open_file_exclusive(
+        &self,
+        file: &std::fs::File,
+        source: &std::path::Path,
+        destination: &std::path::Path,
+    ) -> std::io::Result<()>;
+    /// Publishes a completed copy over an explicitly accepted existing target.
+    fn replace_open_file(
         &self,
         file: &std::fs::File,
         source: &std::path::Path,
@@ -232,6 +247,8 @@ mod windows_impl;
 mod windows_com;
 #[cfg(target_os = "windows")]
 mod windows_file_moves;
+#[cfg(target_os = "windows")]
+mod windows_file_copy;
 #[cfg(target_os = "windows")]
 mod windows_shell;
 #[cfg(target_os = "windows")]

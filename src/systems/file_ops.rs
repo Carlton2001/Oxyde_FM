@@ -1422,115 +1422,53 @@ impl FileOperationManager {
                             .map_err(|e| format!("Failed to create {:?}: {e}", parent))?;
                     }
 
-                    let mut file_in = std::fs::File::open(src).map_err(|e| {
-                        let key = match e.kind() {
-                            std::io::ErrorKind::PermissionDenied => "error_access_denied",
-                            std::io::ErrorKind::StorageFull => "error_disk_full",
-                            _ => return format!("Failed to open {:?}: {}", src, e),
-                        }
-                        .to_string();
-                        let mut share = error_share.lock().unwrap();
-                        if share.is_none() {
-                            *share = Some(key.clone());
-                        }
-                        key
-                    })?;
-
-                    if *replace_existing {
-                        let metadata = std::fs::symlink_metadata(dest)
-                            .map_err(|e| format!("Cannot inspect {:?}: {e}", dest))?;
-                        if !metadata.file_type().is_file() {
-                            return Err(format!("Destination is not a regular file: {:?}", dest));
-                        }
-                    }
-                    // Copy directly into the destination. A newly created partial
-                    // file is removed on ordinary errors; an overwritten file cannot
-                    // be restored without keeping another full copy on disk.
-                    let mut partial_guard = None;
-                    let mut file_out = if *replace_existing {
-                        std::fs::OpenOptions::new()
-                            .write(true)
-                            .truncate(true)
-                            .open(dest)
-                    } else {
-                        std::fs::OpenOptions::new()
-                            .write(true)
-                            .create_new(true)
-                            .open(dest)
-                    }
-                    .map_err(|e| format!("Failed to open {:?}: {e}", dest))?;
-                    if *replace_existing {
-                        operation
-                            .lock()
-                            .unwrap()
-                            .overwritten_files
-                            .push(dest.clone());
-                    } else {
-                        partial_guard = Some(PendingFile(dest.clone()));
-                    }
-
-                    let buffer_size = 1024 * 1024;
-                    let mut buffer = vec![0u8; buffer_size];
-                    let mut content_hasher = blake3::Hasher::new();
-
-                    loop {
-                        if cancel.load(Ordering::Relaxed) {
-                            return Ok(());
-                        }
-                        if error_share.lock().unwrap().is_some() {
-                            return Ok(());
-                        }
-
-                        while pause.load(Ordering::Relaxed) {
+                    let mut copied = 0;
+                    let hash = super::file_copy::copy(src, dest, *replace_existing, &mut |bytes| {
+                        processed_bytes.fetch_add(bytes.saturating_sub(copied), Ordering::Relaxed);
+                        copied = bytes;
+                        loop {
+                            if cancel.load(Ordering::Relaxed) || error_share.lock().unwrap().is_some() {
+                                return Err(std::io::Error::new(
+                                    std::io::ErrorKind::Interrupted,
+                                    "Operation cancelled",
+                                ));
+                            }
+                            let fast = turbo.load(Ordering::Relaxed);
+                            if fast && is_in_background_mode {
+                                platform().set_thread_priority(ThreadPriority::Normal);
+                                is_in_background_mode = false;
+                            } else if !fast && !is_in_background_mode {
+                                platform().set_thread_priority(ThreadPriority::Background);
+                                is_in_background_mode = true;
+                            }
+                            if !pause.load(Ordering::Relaxed) {
+                                break;
+                            }
                             std::thread::sleep(std::time::Duration::from_millis(100));
-                            if cancel.load(Ordering::Relaxed) {
-                                return Ok(());
-                            }
                         }
-
-                        let n = match file_in.read(&mut buffer) {
-                            Ok(0) => break,
-                            Ok(n) => n,
-                            Err(e) => {
-                                let msg = format!("Read error on {:?}: {}", src, e);
-                                let mut share = error_share.lock().unwrap();
-                                if share.is_none() {
-                                    *share = Some(msg.clone());
-                                }
-                                return Err(msg);
-                            }
+                        Ok(())
+                    })
+                    .map_err(|error| {
+                        let message = match error.kind() {
+                            std::io::ErrorKind::PermissionDenied => "error_access_denied".to_string(),
+                            std::io::ErrorKind::StorageFull => "error_disk_full".to_string(),
+                            _ => format!("Cannot copy {:?} to {:?}: {error}", src, dest),
                         };
-
-                        if let Err(e) = file_out.write_all(&buffer[..n]) {
-                            let msg = format!("Write error on {:?}: {}", dest, e);
-                            let mut share = error_share.lock().unwrap();
-                            if share.is_none() {
-                                *share = Some(msg.clone());
-                            }
-                            return Err(msg);
+                        let mut shared = error_share.lock().unwrap();
+                        if shared.is_none() {
+                            *shared = Some(message.clone());
                         }
-                        content_hasher.update(&buffer[..n]);
-                        processed_bytes.fetch_add(n as u64, Ordering::Relaxed);
+                        message
+                    })?;
+                    let mut journal = operation.lock().unwrap();
+                    if *replace_existing {
+                        journal.overwritten_files.push(dest.clone());
+                    } else {
+                        journal.created_files.push(dest.clone());
                     }
-
-                    file_out
-                        .sync_all()
-                        .map_err(|e| format!("Failed to flush {:?}: {e}", dest))?;
-                    drop(file_out);
-                    if let Some(guard) = partial_guard.as_mut() {
-                        guard.0 = PathBuf::new();
-                        operation.lock().unwrap().created_files.push(dest.clone());
-                    }
-                    operation
-                        .lock()
-                        .unwrap()
-                        .copied_files
-                        .push((src.clone(), dest.clone()));
-                    operation
-                        .lock()
-                        .unwrap()
-                        .copied_file_hashes
-                        .push((dest.clone(), content_hasher.finalize().to_hex().to_string()));
+                    journal.copied_files.push((src.clone(), dest.clone()));
+                    journal.copied_file_hashes.push((dest.clone(), hash));
+                    drop(journal);
 
                     processed_files.fetch_add(1, Ordering::Relaxed);
                 }
@@ -3467,7 +3405,7 @@ mod tests {
     }
 
     #[test]
-    fn explicit_replace_writes_directly_without_a_backup() {
+    fn explicit_replace_preserves_overwrite_policy_without_a_backup() {
         let temp = tempfile::tempdir().unwrap();
         let source_dir = temp.path().join("source");
         let target_dir = temp.path().join("target");
@@ -3507,6 +3445,116 @@ mod tests {
         );
     }
 
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn native_initial_copy_preserves_streams_attributes_and_modified_time() {
+        let root = tempfile::tempdir().unwrap();
+        let source = root.path().join("source.txt");
+        let target_dir = root.path().join("target");
+        std::fs::create_dir(&target_dir).unwrap();
+        std::fs::write(&source, b"main content").unwrap();
+        std::fs::write(
+            source.with_file_name("source.txt:oxyde-test"),
+            b"alternate content",
+        )
+        .unwrap();
+        let modified = std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_700_000_000);
+        std::fs::File::options()
+            .write(true)
+            .open(&source)
+            .unwrap()
+            .set_times(std::fs::FileTimes::new().set_modified(modified))
+            .unwrap();
+        platform().set_hidden_attribute(&source, true).unwrap();
+        FileOperationManager::perform_copy(
+            &operation(),
+            vec![source],
+            Some(target_dir.clone()),
+            false,
+            None,
+        )
+        .unwrap();
+        let destination = target_dir.join("source.txt");
+        assert_eq!(std::fs::read(&destination).unwrap(), b"main content");
+        assert_eq!(
+            std::fs::read(target_dir.join("source.txt:oxyde-test")).unwrap(),
+            b"alternate content"
+        );
+        let metadata = std::fs::metadata(&destination).unwrap();
+        assert_eq!(metadata.modified().unwrap(), modified);
+        assert!(platform().file_attributes(&metadata, "source.txt").0);
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn native_readonly_copy_history_preserves_streams_on_redo() {
+        struct WritablePaths(Vec<PathBuf>);
+        impl Drop for WritablePaths {
+            fn drop(&mut self) {
+                for path in &self.0 {
+                    if let Ok(metadata) = std::fs::metadata(path) {
+                        let mut permissions = metadata.permissions();
+                        permissions.set_readonly(false);
+                        std::fs::set_permissions(path, permissions).unwrap();
+                    }
+                }
+            }
+        }
+        let root = tempfile::tempdir().unwrap();
+        let source = root.path().join("source.txt");
+        let target_dir = root.path().join("target");
+        std::fs::create_dir(&target_dir).unwrap();
+        let target = target_dir.join("source.txt");
+        let _cleanup = WritablePaths(vec![source.clone(), target.clone()]);
+        std::fs::write(&source, b"readonly main").unwrap();
+        std::fs::write(root.path().join("source.txt:extra"), b"readonly stream").unwrap();
+        let modified = std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_700_000_000);
+        std::fs::File::options()
+            .write(true)
+            .open(&source)
+            .unwrap()
+            .set_times(std::fs::FileTimes::new().set_modified(modified))
+            .unwrap();
+        let mut permissions = std::fs::metadata(&source).unwrap().permissions();
+        permissions.set_readonly(true);
+        std::fs::set_permissions(&source, permissions).unwrap();
+        let history = Arc::new(HistoryManager::new());
+        let op = Arc::new(Mutex::new(FileOperation::new(
+            FileOpType::Copy,
+            vec![source.clone()],
+            Some(target_dir.clone()),
+            None,
+        )));
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        runtime.block_on(async {
+            FileOperationManager::execute_operation(history.clone(), op.clone()).await;
+            assert_eq!(op.lock().unwrap().status, OpStatus::Completed);
+            for _ in 0..2 {
+                let metadata = std::fs::metadata(&target).unwrap();
+                assert!(metadata.permissions().readonly());
+                assert_eq!(metadata.modified().unwrap(), modified);
+                assert_eq!(
+                    std::fs::read(target_dir.join("source.txt:extra")).unwrap(),
+                    b"readonly stream"
+                );
+                crate::commands::ops::undo_last_action(&history)
+                    .await
+                    .unwrap();
+                assert!(!target.exists());
+                assert!(std::fs::metadata(&source).unwrap().permissions().readonly());
+                crate::commands::ops::redo_last_action(&history)
+                    .await
+                    .unwrap();
+            }
+            crate::commands::ops::undo_last_action(&history)
+                .await
+                .unwrap();
+            assert_eq!(std::fs::read_dir(&target_dir).unwrap().count(), 0);
+        });
+    }
     #[test]
     fn overwrite_only_copy_is_recorded_as_non_undoable_history_entry() {
         let runtime = tokio::runtime::Builder::new_multi_thread()
@@ -3703,6 +3751,14 @@ mod tests {
         let source = first.path().join("Données 日本語 🦀");
         std::fs::create_dir_all(source.join("nested/empty")).unwrap();
         std::fs::write(source.join("nested/file.txt"), b"nested fixture").unwrap();
+        std::fs::write(source.join("nested/file.txt:extra"), b"initial move stream").unwrap();
+        let modified = std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_700_000_000);
+        std::fs::File::options()
+            .write(true)
+            .open(source.join("nested/file.txt"))
+            .unwrap()
+            .set_times(std::fs::FileTimes::new().set_modified(modified))
+            .unwrap();
         std::fs::write(
             source.join("shortcut.url"),
             b"[InternetShortcut]\nURL=https://example.org\n",
@@ -3739,6 +3795,17 @@ mod tests {
             .await
             .unwrap();
             assert!(!source.exists());
+            assert_eq!(
+                std::fs::read(destination.join("nested/file.txt:extra")).unwrap(),
+                b"initial move stream"
+            );
+            assert_eq!(
+                std::fs::metadata(destination.join("nested/file.txt"))
+                    .unwrap()
+                    .modified()
+                    .unwrap(),
+                modified
+            );
             // A27: the files have already crossed volumes when this original
             // empty directory is recreated. Its replacement by a foreign file
             // must roll back the whole Undo and keep the history retryable.
@@ -3751,7 +3818,10 @@ mod tests {
             assert!(error.to_string().contains("Not a directory"), "{error}");
             assert_eq!(history.get_state().undo_stack.len(), 1);
             assert!(history.get_state().redo_stack.is_empty());
-            assert_eq!(std::fs::read(&blocker).unwrap(), b"foreign directory blocker");
+            assert_eq!(
+                std::fs::read(&blocker).unwrap(),
+                b"foreign directory blocker"
+            );
             assert!(!source.join("nested/file.txt").exists());
             assert!(!source.join("shortcut.url").exists());
             assert_eq!(
@@ -3769,6 +3839,17 @@ mod tests {
                     b"nested fixture"
                 );
                 assert!(source.join("nested/empty").is_dir());
+                assert_eq!(
+                    std::fs::read(source.join("nested/file.txt:extra")).unwrap(),
+                    b"initial move stream"
+                );
+                assert_eq!(
+                    std::fs::metadata(source.join("nested/file.txt"))
+                        .unwrap()
+                        .modified()
+                        .unwrap(),
+                    modified
+                );
                 assert!(source.join("shortcut.url").is_file());
                 assert!(!destination.exists());
                 if cycle == 0 {
@@ -3810,11 +3891,21 @@ mod tests {
                     b"nested fixture"
                 );
                 assert!(destination.join("nested/empty").is_dir());
+                assert_eq!(
+                    std::fs::read(destination.join("nested/file.txt:extra")).unwrap(),
+                    b"initial move stream"
+                );
+                assert_eq!(
+                    std::fs::metadata(destination.join("nested/file.txt"))
+                        .unwrap()
+                        .modified()
+                        .unwrap(),
+                    modified
+                );
                 assert!(destination.join("shortcut.url").is_file());
             }
         });
     }
-
     #[test]
     fn move_merge_keeps_skipped_source_files() {
         let temp = tempfile::tempdir().unwrap();

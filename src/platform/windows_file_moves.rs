@@ -24,6 +24,12 @@ pub(super) fn open(path: &Path) -> Result<File> {
 }
 
 pub(super) fn rename(file: &File, destination: &Path) -> Result<()> {
+    rename_with(file, destination, false)
+}
+pub(super) fn replace(file: &File, destination: &Path) -> Result<()> {
+    rename_with(file, destination, true)
+}
+fn rename_with(file: &File, destination: &Path, replace: bool) -> Result<()> {
     if !destination.is_absolute() {
         return Err(Error::new(
             ErrorKind::InvalidInput,
@@ -51,7 +57,7 @@ pub(super) fn rename(file: &File, destination: &Path) -> Result<()> {
     let mut storage = vec![0usize; size.div_ceil(std::mem::size_of::<usize>())];
     unsafe {
         let info = storage.as_mut_ptr().cast::<FILE_RENAME_INFO>();
-        (*info).Anonymous.ReplaceIfExists = false;
+        (*info).Anonymous.ReplaceIfExists = replace;
         (*info).RootDirectory = HANDLE::default();
         (*info).FileNameLength = name_bytes;
         std::ptr::copy_nonoverlapping(

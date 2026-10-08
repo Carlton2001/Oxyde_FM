@@ -616,9 +616,18 @@ fn recycle_history_paths(paths: Vec<PathBuf>) -> Result<(), CommandError> {
 /// Remove files created by a copy operation during Undo. These are verified against
 /// the operation journal immediately before this call, so routing them through the
 /// Windows Recycle Bin is unnecessary and can fail for otherwise valid paths.
-fn remove_undo_copy_files(paths: Vec<PathBuf>) -> Result<(), CommandError> {
+fn remove_undo_copy_files(
+    paths: Vec<PathBuf>,
+    hashes: &HashMap<&str, &str>,
+) -> Result<(), CommandError> {
     for path in paths {
-        std::fs::remove_file(&path).map_err(|error| {
+        let expected = hashes.get(path.to_string_lossy().as_ref()).ok_or_else(|| {
+            CommandError::IoError(format!(
+                "Cannot remove unverified copied file {}",
+                path.display()
+            ))
+        })?;
+        crate::systems::file_copy::remove_verified_output(&path, expected).map_err(|error| {
             CommandError::IoError(format!(
                 "Cannot remove copied file {}: {error}",
                 path.display()
@@ -693,7 +702,7 @@ pub async fn undo_last_action(
                     }
                     let files_to_delete: Vec<PathBuf> = created.iter().map(PathBuf::from).collect();
                     if !files_to_delete.is_empty() {
-                        remove_undo_copy_files(files_to_delete)?;
+                        remove_undo_copy_files(files_to_delete, &expected_hashes)?;
                     }
                 }
                 if let Some(created_dirs) = &tx.details.created_dirs {
@@ -1070,117 +1079,47 @@ fn perform_copy_with_progress(
     files: Vec<(PathBuf, PathBuf)>,
     cancel_flag: Arc<AtomicBool>,
 ) -> Result<(), CommandError> {
-    use std::fs;
-    use std::io::{Read, Write};
-
-    struct PendingFile(Option<PathBuf>);
-    impl Drop for PendingFile {
-        fn drop(&mut self) {
-            if let Some(path) = self.0.take() {
-                let _ = fs::remove_file(path);
-            }
-        }
-    }
-
-    let mut published = Vec::new();
-    for (source, dest) in &files {
-        if cancel_flag.load(Ordering::Relaxed) {
-            for path in published.iter().rev() {
-                let _ = fs::remove_file(path);
-            }
-            return Err(CommandError::Other("Redo copy was cancelled".to_string()));
-        }
-
-        if source.is_dir() {
-            continue;
-        }
-
-        if dest.exists() {
-            for path in published.iter().rev() {
-                let _ = fs::remove_file(path);
-            }
-            return Err(CommandError::IoError(format!(
-                "Cannot redo copy; destination already exists: {}",
-                dest.display()
-            )));
-        }
-
+    let mut published: Vec<(PathBuf, String)> = Vec::new();
+    for (source, destination) in files {
         let result = (|| {
-            if let Some(parent) = dest.parent() {
-                if !parent.exists() {
-                    fs::create_dir_all(parent).map_err(|e| CommandError::IoError(e.to_string()))?;
-                }
+            if let Some(parent) = destination.parent() {
+                std::fs::create_dir_all(parent)?;
             }
-            let mut file_in =
-                fs::File::open(source).map_err(|e| CommandError::IoError(e.to_string()))?;
-            let mut temporary = None;
-            let mut file_out = None;
-            for _ in 0..8 {
-                let candidate =
-                    dest.with_extension(format!("oxyde-redo-{}.tmp", uuid::Uuid::new_v4()));
-                match fs::OpenOptions::new()
-                    .write(true)
-                    .create_new(true)
-                    .open(&candidate)
-                {
-                    Ok(file) => {
-                        temporary = Some(PendingFile(Some(candidate)));
-                        file_out = Some(file);
-                        break;
-                    }
-                    Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
-                    Err(error) => return Err(CommandError::IoError(error.to_string())),
-                }
-            }
-            let mut temporary = temporary.ok_or_else(|| {
-                CommandError::IoError("Could not allocate a temporary redo file".to_string())
-            })?;
-            let mut file_out = file_out.take().expect("temporary file handle is allocated");
-            let mut buffer = [0u8; 81920];
-            loop {
+            crate::systems::file_copy::copy(&source, &destination, false, &mut |_| {
                 if cancel_flag.load(Ordering::Relaxed) {
-                    return Err(CommandError::Other("Redo copy was cancelled".to_string()));
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::Interrupted,
+                        "Redo copy was cancelled",
+                    ));
                 }
-                let count = file_in
-                    .read(&mut buffer)
-                    .map_err(|e| CommandError::IoError(e.to_string()))?;
-                if count == 0 {
-                    break;
-                }
-                file_out
-                    .write_all(&buffer[..count])
-                    .map_err(|e| CommandError::IoError(e.to_string()))?;
-            }
-            file_out
-                .sync_all()
-                .map_err(|e| CommandError::IoError(e.to_string()))?;
-            drop(file_out);
-            if dest.exists() {
-                return Err(CommandError::IoError(format!(
-                    "Cannot redo copy; destination already exists: {}",
-                    dest.display()
-                )));
-            }
-            fs::rename(
-                temporary.0.as_ref().expect("temporary path is allocated"),
-                dest,
-            )
-            .map_err(|e| CommandError::IoError(e.to_string()))?;
-            temporary.0 = None;
-            Ok(())
+                Ok(())
+            })
         })();
-        if let Err(error) = result {
-            for path in published.iter().rev() {
-                let _ = fs::remove_file(path);
+        match result {
+            Ok(hash) => published.push((destination, hash)),
+            Err(error) => {
+                let rollback_errors: Vec<_> = published
+                    .iter()
+                    .rev()
+                    .filter_map(|(path, hash)| {
+                        crate::systems::file_copy::remove_verified_output(path, hash)
+                            .err()
+                            .map(|error| format!("{}: {error}", path.display()))
+                    })
+                    .collect();
+                return Err(CommandError::IoError(if rollback_errors.is_empty() {
+                    error.to_string()
+                } else {
+                    format!(
+                        "{error}; redo copy rollback incomplete: {}",
+                        rollback_errors.join("; ")
+                    )
+                }));
             }
-            return Err(error);
         }
-        published.push(dest.clone());
     }
-
     Ok(())
 }
-
 #[cfg(test)]
 #[cfg(target_os = "windows")]
 mod trash_restore_tests {

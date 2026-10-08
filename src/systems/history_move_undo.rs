@@ -322,13 +322,7 @@ impl Journal {
         self.finished = true;
         self.effects.clear();
         for (path, expected) in self.discarded.drain(..) {
-            let result = (|| {
-                let file = platform().open_file_for_move(&path)?;
-                if hash_file(&path)? != expected {
-                    return Err(io::Error::other("Staged output changed"));
-                }
-                platform().remove_open_file(&file, &path)
-            })();
+            let result = super::file_copy::remove_verified_output(&path, &expected);
             if let Err(error) = result {
                 log::warn!(
                     "Undo completed; staged output retained at {}: {error}",

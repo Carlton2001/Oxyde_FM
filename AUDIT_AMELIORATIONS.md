@@ -226,7 +226,19 @@ La chaîne de sauvegardes de remplacements évoquée initialement est inactive e
 
 ## A28 — Métadonnées et flux natifs absents de la copie initiale — P1
 
-**Point de code établi pendant A19, sans reproduction native dédiée de la file initiale.** Le worker de `systems/file_ops.rs::perform_copy` crée un fichier de destination et copie le contenu principal via `Read`/`Write`. Il ne recopie pas les flux NTFS, dates ou attributs de la source. Cela concerne Copier et les déplacements initiaux qui nécessitent une copie ; les déplacements sur un volume par renommage conservent leur identité. Le journal ne peut pas restaurer des données absentes de la copie initiale. Étudier une copie native avec conservation des métadonnées, progression et annulation, en gardant les politiques de conflits et de fichiers partiels. Le transfert A19 utilise déjà la copie native, mais ne corrige pas ce worker initial.
+**Corrigé après reproduction native.** Une fixture de `perform_copy` perdait le flux NTFS alternatif, bien que le contenu principal soit copié. Le worker utilise désormais `Platform::copy_file_with_progress` et `windows_file_copy.rs` (`CopyFileExW`). La source est ouverte en lecture, avec refus des writers et des remplacements de son chemin pendant l'appel natif. Les callbacks conservent pause, annulation et adaptation de priorité ; une erreur ou panique de callback arrête l'appel sans laisser un unwind traverser l'ABI Windows. Les streams terminés sont flushés avant l'application des métadonnées finales. Les fichiers symboliques/points de réanalyse sont refusés.
+
+`systems/file_copy.rs` prépare chaque sortie dans un dossier caché du volume de destination. Le hash du contenu principal est calculé sur la copie, avec checkpoints d'annulation/pause, puis la copie complète est publiée par son handle. Pour une nouvelle destination, la publication est exclusive : un fichier apparu entre-temps est conservé. Pour un remplacement accepté, la cible existante et modifiable est revérifiée puis remplacée au moment de la publication ; elle reste intacte en cas d'annulation de la copie. Le test d'une copie native directe avec arrêt d'écrasement supprimait la cible sur cette machine : cette approche est donc abandonnée au profit de la publication différée.
+
+Les remplacements restent suivis par `overwritten_files`, et leur annulation reste bloquée. Aucune sauvegarde de l'ancien contenu n'est créée. Contrairement à l'ancien écrasement direct, préparer le nouveau fichier exige temporairement son espace disque supplémentaire, tout en gardant l'ancienne cible. Le remplacement change l'identité du fichier cible ; les autres liens physiques vers l'ancien fichier restent associés à l'ancien contenu.
+
+Rétablir une copie utilise le même transfert : les flux et attributs ne disparaissent plus au premier redo. Les sorties vérifiées en lecture seule sont retirées via leur handle, après contrôle du hash ; seul l'attribut de la sortie possédée est rendu modifiable, avec tentative de restauration en cas d'échec. Ce helper sert aussi au rollback du redo et à la purge finale A27. Le défaut de suppression partielle d'Annuler Copy A30 reste à traiter.
+
+Validation Windows : contenu principal, flux NTFS alternatif, date de modification, attributs caché et lecture seule, fichier vide, deux cycles Copier/Annuler/Rétablir, publication concurrente refusée, annulation avant publication d'un remplacement, panique de callback et checkpoint de pause avec refus d'un writer sur la source. La fixture de la file active entre volumes vérifie aussi les flux et la date de modification de la copie initiale, puis les cycles et rollback A19/A27.
+
+Limites : pas de benchmark, de validation Linux/SMB/EFS, de garantie contre un crash ou de conservation générale des ACL, de l'identité et des métadonnées des dossiers. Le hash exige une lecture supplémentaire du fichier copié et couvre le contenu principal ; progression et totaux en octets restent ceux du flux principal. L'adaptateur Linux conserve l'interface et les checkpoints, sans revendication de validation native. Le verrou de la source ne couvre pas la phase ultérieure de suppression initiale d'un déplacement (A31).
+
+Référence primaire : [Microsoft — CopyFileExW](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-copyfileexw).
 
 ## A29 — Ancien journal de sauvegardes de remplacement — code mort retiré
 
@@ -238,11 +250,15 @@ Les écrasements actifs restent suivis par `overwritten_files` : une copie ayant
 
 **Point de code établi pendant A27, sans nouvelle reproduction dédiée.** Le parcours Copy d'`undo_last_action` vérifie les sorties, puis `remove_undo_copy_files` les supprime l'une après l'autre avant le retrait des dossiers. Une erreur sur un fichier ultérieur ou un dossier conserve l'entrée d'historique alors que les premières sorties sont déjà supprimées ; la reprise peut alors échouer sur une sortie absente. La réservation A02 ne rend pas ces effets réversibles. Examiner une mise en attente des sorties et des erreurs injectées dans un lot distinct, comme pour les phases Move A27. Ce parcours Copy reste inchangé dans A27, hors retrait de la branche de sauvegardes inactive A29.
 
+## A31 — Source supprimée après la copie initiale sans nouvelle vérification — P1
+
+**Point de code établi pendant A28, sans reproduction dédiée.** Après l'attente des workers, `perform_copy_real` supprime les sources des déplacements entre volumes par `std::fs::remove_file`. La source n'est alors plus verrouillée et son contenu/identité ne sont pas comparés à la sortie journalisée. Une modification ou un remplacement extérieur après la copie peut ainsi être supprimé. Le verrou A28 couvre seulement la copie native ; le transfert d'historique A19 a un autre parcours. Examiner une suppression liée à l'identité ouverte ou un transfert initial vérifié, avec mutation injectée entre copie et suppression. Ce point reste distinct de la conservation des flux A28.
+
 ## Validation et suite
 
 La compilation Windows actuelle passe sans avertissement du projet. Les observations ci-dessus sont issues de la lecture des sources et de Clippy ; aucun nouveau test de comportement ou benchmark n'a été exécuté pendant cet audit. Snap Layouts et le témoin de déplacement actuel sont confirmés par l'utilisateur. Les validations des lots précédents restent décrites dans [AUDIT_CODE_MORT.md](AUDIT_CODE_MORT.md).
 
-Après A01/A02/A03/A04/A05/A06/A15/A19/A23/A27, le raccordement A18 et le retrait A29, examiner A28 et A30 ; conserver A20 pour la validation native interactive. Les optimisations demandent des mesures avant modification. Cet ordre est proposé, pas une liste de corrections déjà autorisées ou réalisées.
+Après A01/A02/A03/A04/A05/A06/A15/A19/A23/A27, le raccordement A18 et le retrait A29, A28 étant traité, examiner A30 et A31 ; conserver A20 pour la validation native interactive. Les optimisations demandent des mesures avant modification. Cet ordre est proposé, pas une liste de corrections déjà autorisées ou réalisées.
 
 ### État après les lots N01 à N16
 
@@ -330,4 +346,14 @@ Les trois régressions des commandes couvrent l'échec tardif de création d'un 
 
 `cargo test --all-targets --offline` : 145 tests backend et 108 tests du binaire passent, soit 253 ; les 12 tests natifs restent ignorés par défaut. La fixture native de la file active entre C: et D: passe après ajout d'un échec tardif d'Undo : les fichiers reviennent à destination, le fichier extérieur est préservé et l'Undo peut être réessayé avant deux cycles Annuler/Rétablir. Le test natif de flux NTFS et date de modification passe aussi. Le scénario actif de corbeille est vérifié séparément. Tous utilisent des fixtures générées.
 
-Ces trois scénarios natifs portent le total à 256 tests distincts validés pour ce lot. `cargo check --all-targets --offline` passe sans avertissement du projet, et `cargo build --bin oxyde --offline` reconstruit `target/debug/oxyde.exe`. Le nouveau module est formaté et `git diff --check` passe. Les commandes GPUI restent exécutées dans `spawn_blocking`. Aucun Computer Use, aucune validation Linux. A27/A29 restent non commités après `c2f92b5` ; A30 est seulement consigné pour la suite.
+Ces trois scénarios natifs portent le total à 256 tests distincts validés pour ce lot. `cargo check --all-targets --offline` passe sans avertissement du projet, et `cargo build --bin oxyde --offline` reconstruit `target/debug/oxyde.exe`. Le nouveau module est formaté et `git diff --check` passe. Les commandes GPUI restent exécutées dans `spawn_blocking`. Aucun Computer Use, aucune validation Linux. A27/A29 sont commités dans `28e128c` ; A30 est seulement consigné pour la suite.
+
+### Validation du lot A28
+
+`cargo test --all-targets --offline` : 154 tests backend et 108 tests du binaire passent, soit 262 ; les 12 tests natifs ignorés restent ignorés dans cette invocation. Neuf nouvelles régressions sont incluses. Les deux tests natifs entre C: et D: et le scénario actif de corbeille sont exécutés explicitement et passent, soit 265 tests distincts validés. Ces fixtures sont entièrement générées ; aucun fichier utilisateur, presse-papiers ou paramètre système n'est modifié.
+
+La fixture native de copie initiale échoue avant correction sur le flux alternatif absent. Après correction, le contenu principal, le flux, la date de modification et l'attribut caché sont conservés. Une deuxième fixture de la file active vérifie les fichiers en lecture seule, leurs flux et dates sur deux cycles Annuler/Rétablir. Les sept tests du nouveau helper couvrent annulation native, annulation de remplacement avec ancien contenu préservé, panique du callback, conflit de publication avec nettoyage d'une copie en lecture seule, remplacement caché, copie vide en lecture seule et pause d'un callback avec refus d'un writer sur la source. Les régressions existantes des conflits, écrasements et rollback de redo passent aussi.
+
+`cargo check --all-targets --offline` passe sans avertissement du projet. Les nouveaux modules et les helpers modifiés sont formatés ; `git diff --check` passe. Les transferts et hashes restent dans les workers de copie ou le `spawn_blocking` GPUI de l'historique. Aucun Computer Use ni validation Linux. Le nouveau lot A28 reste non commité après `28e128c` ; A30 et A31 sont consignés pour la suite.
+
+`cargo build --bin oxyde --offline` réussit ; `target/debug/oxyde.exe` est reconstruit avec A28.

@@ -10,6 +10,43 @@ impl LinuxPlatform {
 }
 
 impl Platform for LinuxPlatform {
+    fn replace_open_file(
+        &self,
+        _file: &std::fs::File,
+        source: &std::path::Path,
+        destination: &std::path::Path,
+    ) -> std::io::Result<()> {
+        std::fs::rename(source, destination)
+    }
+    fn copy_file_with_progress(
+        &self,
+        source: &std::path::Path,
+        destination: &std::path::Path,
+        progress: &mut dyn FnMut(u64) -> std::io::Result<()>,
+    ) -> std::io::Result<()> {
+        use std::io::{Read, Write};
+        let mut input = std::fs::File::open(source)?;
+        let metadata = input.metadata()?;
+        let mut output = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(destination)?;
+        let mut buffer = vec![0_u8; 1024 * 1024];
+        let mut copied = 0;
+        loop {
+            progress(copied)?;
+            let count = input.read(&mut buffer)?;
+            if count == 0 {
+                break;
+            }
+            output.write_all(&buffer[..count])?;
+            copied += count as u64;
+        }
+        output.sync_all()?;
+        output.set_permissions(metadata.permissions())?;
+        output.set_times(std::fs::FileTimes::new().set_modified(metadata.modified()?))?;
+        Ok(())
+    }
     fn open_file_for_move(&self, path: &std::path::Path) -> std::io::Result<std::fs::File> {
         std::fs::File::open(path)
     }
