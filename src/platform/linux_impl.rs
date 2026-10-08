@@ -71,6 +71,26 @@ impl Platform for LinuxPlatform {
     ) -> std::io::Result<()> {
         std::fs::remove_file(path)
     }
+    fn list_trash_items(&self) -> Result<Vec<trash::TrashItem>, String> {
+        trash::os_limited::list().map_err(|error| error.to_string())
+    }
+    fn restore_trash_items(&self, items: Vec<trash::TrashItem>) -> Result<(), String> {
+        trash::os_limited::restore_all(items).map_err(|error| error.to_string())
+    }
+    fn purge_trash_items(&self, items: Vec<trash::TrashItem>) -> Result<(), String> {
+        trash::os_limited::purge_all(items).map_err(|error| error.to_string())
+    }
+    fn empty_trash(&self) -> Result<(), String> {
+        self.purge_trash_items(self.list_trash_items()?)
+    }
+    fn bulk_expand_excluded(&self, _path: &str, name: &str) -> bool {
+        // Preserve the previous shared exclusions; Windows drive rules stay native.
+        matches!(
+            name.to_ascii_lowercase().as_str(),
+            "$recycle.bin" | "system volume information"
+        )
+    }
+
     fn trash_original_path(&self, _id: &std::path::Path) -> Option<std::path::PathBuf> { None }
 
     fn trash_transfer_entries(&self, _paths: &[std::path::PathBuf]) -> Result<Vec<super::TrashTransferEntry>, String> { Ok(Vec::new()) }

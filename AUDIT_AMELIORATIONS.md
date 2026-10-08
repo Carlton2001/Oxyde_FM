@@ -6,7 +6,7 @@ Priorités proposées : P1 pour un risque sur les opérations de fichiers à rep
 
 ## Tableau de suivi — 8 octobre 2026
 
-**21 points traités, 4 clos par retrait, 1 partiellement traité, 3 autres points de correction/optimisation à faire, 1 vérification manuelle distincte et 1 observation de référence.** « Traité » décrit la correction du code ; les validations manuelles encore ouvertes sont indiquées séparément. A11 est commité dans `00b6a30` et A12 dans `261cb8c` ; A24/A25 sont commités dans `db3c5ae` et A30/A31 dans `daa8f52`.
+**22 points traités, 4 clos par retrait, 3 points de correction/optimisation à faire, 1 vérification manuelle distincte et 1 observation de référence.** « Traité » décrit la correction du code ; les validations manuelles encore ouvertes sont indiquées séparément. A11 est commité dans `00b6a30` et A12 dans `261cb8c` ; A24/A25 sont commités dans `db3c5ae` et A30/A31 dans `daa8f52`.
 
 | Point | Sujet | État du code | Suite ou validation restante |
 | --- | --- | --- | --- |
@@ -16,7 +16,7 @@ Priorités proposées : P1 pour un risque sur les opérations de fichiers à rep
 | [A04](#a04--propriétés-dun-élément-de-corbeille--nom-et-emplacement-physiques--p2) | Propriétés des éléments de corbeille | Traité | Présentation testée ; contrôle visuel manuel non réalisé |
 | [A05](#a05--durée-de-vie-des-ressources-comshell--p2) | Ressources COM/Shell | Traité | Extensions Shell, réseau et aperçus réels à confirmer manuellement |
 | [A06](#a06--presse-papiers--allocations-et-erreurs-du-format-couper--p2) | Publication du presse-papiers | Traité | Publication réelle et collage de fichiers ordinaires à confirmer manuellement |
-| [A07](#a07--api-windows-encore-dans-les-commandes--p2) | Isolation des API Windows | Partiel | Déplacer les appels restants de corbeille et de sidebar vers Platform |
+| [A07](#a07--api-windows-encore-dans-les-commandes--p2) | Isolation des API Windows | Traité | Commandes de corbeille et exclusions de sidebar via Platform ; tests Windows ciblés |
 | [A08](#a08--annulation-de-recherche-et-détection-ssd--p2) | Annulation de recherche / SSD | Traité | Lectures et attente du verrou annulables ; branche SSD inactive retirée |
 | [A09](#a09--calcul-des-tailles--tâches-et-pools-cumulés--p2) | Concurrence du calcul des tailles | Traité | Deux calculs actifs, pools partagés et parcours annulable ; mesure réalisée |
 | [A10](#a10--tri-et-normalisation-répétés--p2) | Tri et normalisation | À faire | Clarifier les règles, mesurer puis éviter les calculs répétés |
@@ -108,9 +108,11 @@ Contrats natifs : [SetClipboardData](https://learn.microsoft.com/en-us/windows/w
 
 ## A07 — API Windows encore dans les commandes — P2
 
-**Partiellement traité le 8 octobre 2026 avec A05.** Les menus natifs, l'énumération/épinglage de l'accès rapide et le nom convivial des propriétés virtuelles passent maintenant par `Platform`, avec leurs implémentations dans des modules Windows privés. Les wrappers publics sans autre appelant des menus dans `commands/system.rs` sont retirés ; la plateforme ne redélègue plus à ces commandes pour ces traitements. Les résultats et replis existants restent conservés, hormis les échecs d'initialisation COM désormais équilibrés.
+**Terminé le 8 octobre 2026, après le déplacement partiel avec A05.** Les menus, l'accès rapide et les propriétés virtuelles avaient déjà été isolés. Les commandes de corbeille passent désormais aussi par `Platform` pour l'énumération, la restauration, la purge et le vidage. Les usages de `trash::os_limited` et les appels Windows correspondants disparaissent des commandes. Le filtrage des branches système pour Développer tout passe par la plateforme ; les règles Windows restent inchangées et leurs chemins sont testés sans dépendre du lecteur système de la machine.
 
-Restent notamment les appels natifs de vidage/suppression permanente de corbeille dans `commands/ops.rs`, les usages de `trash::os_limited` dans les commandes et les détails de filtrage Windows dans `commands/sidebar.rs`. Déplacer ces responsabilités dans un lot distinct, en revalidant leurs appelants et erreurs. Linux reste hors validation ; ses conditions de compilation et interfaces sont conservées.
+La purge réutilise la suppression Shell permanente déjà contrôlée par `Platform` : le résultat de `SHFileOperationW`, précédemment ignoré dans la commande, et son indicateur d'abandon sont maintenant propagés. La sélection reste limitée aux identifiants présents dans l'énumération de corbeille. Le parcours de restauration conserve ses corrections de noms, ses conflits et les métadonnées originales. Les appelants GPUI relus exécutent déjà ces commandes sur des workers ; ce déplacement ne les ramène pas sur le thread UI.
+
+Validation : exclusions système/lecteurs voisins et noms voisins testés automatiquement ; restauration native des noms Unicode, `.lnk`, `.url` et dossiers, refus d'un conflit sans écrasement, puis purge d'un seul élément généré en conservant son voisin et un fichier ordinaire passé par erreur dans la sélection. Le test ne vide jamais la corbeille utilisateur. Le vidage complet conserve le même appel natif et ses flags ; il n'est pas exécuté ici. L'implémentation Linux reprend les opérations du crate déjà utilisées ; sa validation reste différée.
 
 ## A08 — Annulation de recherche et détection SSD — P2
 
@@ -471,3 +473,7 @@ Quatre tests du transfert initial vérifient les verrous source/destination apr�
 ### Validation du point A09
 
 `cargo test --all-targets --offline` : 177 tests backend et 108 tests du binaire passent (285) ; 15 tests sont ignorés par défaut. Le profil A09 exécuté séparément passe également. `cargo check --all-targets --offline` passe sans avertissement du projet et le binaire est reconstruit. Les nouveaux modules et les fonctions modifiées sont formatés ; `git diff --check` passe. Aucun Computer Use ni validation Linux.
+
+### Validation du point A07
+
+`cargo test --all-targets --offline` : 178 tests backend et 108 tests du binaire passent (286) ; 16 tests sont ignorés par défaut. Trois tests natifs de restauration/purge sont exécutés séparément et passent. `cargo check --all-targets --offline` passe sans avertissement du projet ; le binaire est reconstruit. Aucun appel direct `windows::` ou `trash::os_limited` ne reste dans les commandes. Formatage ciblé et `git diff --check` validés. Aucun Computer Use ni validation Linux.

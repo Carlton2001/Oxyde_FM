@@ -72,6 +72,14 @@ pub trait Platform: Send + Sync {
         file: &std::fs::File,
         path: &std::path::Path,
     ) -> std::io::Result<()>;
+    /// Blocking native trash operations; callers must run them on a worker.
+    fn list_trash_items(&self) -> Result<Vec<trash::TrashItem>, String>;
+    fn restore_trash_items(&self, items: Vec<trash::TrashItem>) -> Result<(), String>;
+    fn purge_trash_items(&self, items: Vec<trash::TrashItem>) -> Result<(), String>;
+    fn empty_trash(&self) -> Result<(), String>;
+    /// Prevent recursive sidebar expansion into OS-managed branches.
+    fn bulk_expand_excluded(&self, path: &str, name: &str) -> bool;
+
     fn recycle_bin_usage(&self) -> Result<(u64, u64), String>;
     fn recycle_bin_config(&self, path: String) -> Result<crate::commands::ops::TrashSystemConfig, String>;
     fn set_recycle_bin_config(&self, config: crate::commands::ops::TrashSystemConfig) -> Result<(), String>;

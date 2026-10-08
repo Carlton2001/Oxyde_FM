@@ -154,30 +154,5 @@ fn get_subtree_nodes_blocking(
 }
 
 fn is_bulk_expand_excluded(path: &str, name: &str) -> bool {
-    let name = name.to_ascii_lowercase();
-    if matches!(name.as_str(), "$recycle.bin" | "system volume information") {
-        return true;
-    }
-
-    // Avoid recursively opening OS-managed branches on the Windows system drive.
-    let system_root = std::env::var_os("SystemRoot").map(std::path::PathBuf::from);
-    let Some(system_drive_root) =
-        system_root.and_then(|root| root.parent().map(|parent| parent.to_path_buf()))
-    else {
-        return false;
-    };
-    let Some(parent) = std::path::Path::new(path).parent() else {
-        return false;
-    };
-    if !parent
-        .as_os_str()
-        .to_string_lossy()
-        .eq_ignore_ascii_case(&system_drive_root.as_os_str().to_string_lossy())
-    {
-        return false;
-    }
-    matches!(
-        name.as_str(),
-        "windows" | "program files" | "program files (x86)" | "programdata"
-    )
+    crate::platform::platform().bulk_expand_excluded(path, name)
 }

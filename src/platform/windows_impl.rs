@@ -46,6 +46,40 @@ impl Platform for WindowsPlatform {
     ) -> std::io::Result<()> {
         super::windows_file_moves::replace(file, destination)
     }
+    fn list_trash_items(&self) -> Result<Vec<trash::TrashItem>, String> {
+        trash::os_limited::list().map_err(|error| error.to_string())
+    }
+    fn restore_trash_items(&self, items: Vec<trash::TrashItem>) -> Result<(), String> {
+        trash::os_limited::restore_all(items).map_err(|error| error.to_string())
+    }
+    fn purge_trash_items(&self, items: Vec<trash::TrashItem>) -> Result<(), String> {
+        let paths: Vec<_> = items
+            .into_iter()
+            .map(|item| std::path::PathBuf::from(item.id))
+            .collect();
+        self.shell_delete(&paths, false)
+    }
+    fn empty_trash(&self) -> Result<(), String> {
+        use windows::core::PCWSTR;
+        use windows::Win32::Foundation::HWND;
+        use windows::Win32::UI::Shell::{
+            SHEmptyRecycleBinW, SHERB_NOCONFIRMATION, SHERB_NOPROGRESSUI, SHERB_NOSOUND,
+        };
+        unsafe {
+            SHEmptyRecycleBinW(
+                Some(HWND::default()),
+                PCWSTR::default(),
+                SHERB_NOCONFIRMATION | SHERB_NOPROGRESSUI | SHERB_NOSOUND,
+            )
+            .map_err(|error| format!("Failed to empty recycle bin: {error}"))
+        }
+    }
+    fn bulk_expand_excluded(&self, path: &str, name: &str) -> bool {
+        let system_root = std::env::var_os("SystemRoot").map(std::path::PathBuf::from);
+        let drive = system_root.and_then(|root| root.parent().map(|parent| parent.to_path_buf()));
+        bulk_expand_excluded(path, name, drive.as_deref())
+    }
+
     fn trash_original_path(&self, id: &std::path::Path) -> Option<std::path::PathBuf> {
         super::windows_trash::original_path(id)
     }
@@ -828,5 +862,75 @@ mod deletion_history_tests {
                 assert_eq!(std::fs::read_to_string(path).unwrap(), index.to_string());
             }
         });
+    }
+}
+
+fn bulk_expand_excluded(
+    path: &str,
+    name: &str,
+    system_drive_root: Option<&std::path::Path>,
+) -> bool {
+    let name = name.to_ascii_lowercase();
+    if matches!(name.as_str(), "$recycle.bin" | "system volume information") {
+        return true;
+    }
+
+    // Avoid recursively opening OS-managed branches on the Windows system drive.
+    let Some(system_drive_root) = system_drive_root else {
+        return false;
+    };
+    let Some(parent) = std::path::Path::new(path).parent() else {
+        return false;
+    };
+    if !parent
+        .as_os_str()
+        .to_string_lossy()
+        .eq_ignore_ascii_case(&system_drive_root.as_os_str().to_string_lossy())
+    {
+        return false;
+    }
+    matches!(
+        name.as_str(),
+        "windows" | "program files" | "program files (x86)" | "programdata"
+    )
+}
+
+#[cfg(test)]
+mod bulk_expand_tests {
+    use super::bulk_expand_excluded;
+    use std::path::Path;
+    #[test]
+    fn protected_branches_are_limited_to_the_system_drive() {
+        let drive = Some(Path::new(r"C:\"));
+        assert!(bulk_expand_excluded(
+            r"D:\$Recycle.bin",
+            "$RECYCLE.BIN",
+            drive
+        ));
+        assert!(bulk_expand_excluded(
+            r"D:\System Volume Information",
+            "System Volume Information",
+            None
+        ));
+        for name in [
+            "Windows",
+            "Program Files",
+            "Program Files (x86)",
+            "ProgramData",
+        ] {
+            assert!(bulk_expand_excluded(&format!(r"c:\{name}"), name, drive));
+            assert!(!bulk_expand_excluded(&format!(r"D:\{name}"), name, drive));
+            assert!(!bulk_expand_excluded(
+                &format!(r"C:\Users\{name}"),
+                name,
+                drive
+            ));
+            assert!(!bulk_expand_excluded(&format!(r"C:\{name}"), name, None));
+        }
+        assert!(!bulk_expand_excluded(
+            r"C:\Windows-old",
+            "Windows-old",
+            drive
+        ));
     }
 }

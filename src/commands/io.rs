@@ -272,7 +272,7 @@ pub fn get_file_properties(path: String) -> Result<FileProperties, CommandError>
     // Check if this is a trash item and populate trash metadata
     let (original_path, deleted_time) = if path.to_lowercase().contains("$recycle.bin") {
         // Try to get trash metadata
-        if let Ok(trash_items) = trash::os_limited::list() {
+        if let Ok(trash_items) = crate::platform::platform().list_trash_items() {
             let normalize = |p: &std::path::Path| -> String {
                 p.to_string_lossy()
                     .to_lowercase()

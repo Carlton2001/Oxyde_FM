@@ -140,7 +140,7 @@ fn item_with_correct_restore_name(item: &trash::TrashItem) -> trash::TrashItem {
 /// List all items in the Windows Recycle Bin
 pub fn list_trash() -> Result<Vec<TrashEntry>, CommandError> {
     let trash_items =
-        trash::os_limited::list().map_err(|e| CommandError::TrashError(e.to_string()))?;
+        crate::platform::platform().list_trash_items().map_err(|e| CommandError::TrashError(e.to_string()))?;
 
     let mut entries: Vec<TrashEntry> = trash_items
         .into_iter()
@@ -217,39 +217,18 @@ pub fn list_trash() -> Result<Vec<TrashEntry>, CommandError> {
 pub async fn empty_trash() -> Result<(), CommandError> {
     info!("Emptying recycle bin...");
 
-    #[cfg(target_os = "windows")]
-    {
-        use windows::core::PCWSTR;
-        use windows::Win32::Foundation::HWND;
-        use windows::Win32::UI::Shell::{
-            SHEmptyRecycleBinW, SHERB_NOCONFIRMATION, SHERB_NOPROGRESSUI, SHERB_NOSOUND,
-        };
-
-        unsafe {
-            SHEmptyRecycleBinW(
-                Some(HWND::default()),
-                PCWSTR::default(),
-                SHERB_NOCONFIRMATION | SHERB_NOPROGRESSUI | SHERB_NOSOUND,
-            )
-            .map_err(|e| CommandError::TrashError(format!("Failed to empty recycle bin: {}", e)))?;
-        }
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        trash::os_limited::purge_all(
-            trash::os_limited::list().map_err(|e| CommandError::TrashError(e.to_string()))?,
-        )
-        .map_err(|e| CommandError::TrashError(e.to_string()))?;
-    }
+    crate::platform::platform()
+        .empty_trash()
+        .map_err(CommandError::TrashError)?;
 
     Ok(())
 }
 
 /// Permanently delete specific items from the Recycle Bin
 pub async fn purge_recycle_bin(paths: Vec<String>) -> Result<(), CommandError> {
-    let trash_items =
-        trash::os_limited::list().map_err(|e| CommandError::TrashError(e.to_string()))?;
+    let trash_items = crate::platform::platform()
+        .list_trash_items()
+        .map_err(|e| CommandError::TrashError(e.to_string()))?;
 
     let normalize = |p: &std::path::Path| -> String {
         p.to_string_lossy()
@@ -276,46 +255,9 @@ pub async fn purge_recycle_bin(paths: Vec<String>) -> Result<(), CommandError> {
     }
 
     if !items_to_purge.is_empty() {
-        #[cfg(target_os = "windows")]
-        {
-            use windows::core::PCWSTR;
-            use windows::Win32::Foundation::HWND;
-            use windows::Win32::UI::Shell::{
-                SHFileOperationW, FOF_NOCONFIRMATION, FOF_NOERRORUI, FOF_SILENT, FO_DELETE,
-                SHFILEOPSTRUCTW,
-            };
-
-            let mut buffer: Vec<u16> = Vec::new();
-            for item in &items_to_purge {
-                let path_str = PathBuf::from(item.id.clone())
-                    .to_string_lossy()
-                    .replace("/", "\\");
-                buffer.extend(path_str.encode_utf16());
-                buffer.push(0);
-            }
-            buffer.push(0);
-
-            let mut sh_op = SHFILEOPSTRUCTW {
-                hwnd: HWND(std::ptr::null_mut()),
-                wFunc: FO_DELETE,
-                pFrom: PCWSTR(buffer.as_ptr()),
-                pTo: PCWSTR(std::ptr::null()),
-                fFlags: (FOF_NOCONFIRMATION.0 | FOF_NOERRORUI.0 | FOF_SILENT.0) as u16,
-                fAnyOperationsAborted: Default::default(),
-                hNameMappings: std::ptr::null_mut(),
-                lpszProgressTitle: PCWSTR(std::ptr::null()),
-            };
-
-            unsafe {
-                let _ = SHFileOperationW(&mut sh_op);
-            }
-        }
-
-        #[cfg(not(target_os = "windows"))]
-        {
-            trash::os_limited::purge_all(items_to_purge)
-                .map_err(|e| CommandError::TrashError(e.to_string()))?;
-        }
+        crate::platform::platform()
+            .purge_trash_items(items_to_purge)
+            .map_err(CommandError::TrashError)?;
     }
 
     Ok(())
@@ -494,7 +436,7 @@ pub async fn get_total_recycle_bin_usage() -> Result<(u64, u64), CommandError> {
 pub async fn restore_items(paths: Vec<String>) -> Result<Vec<String>, CommandError> {
     info!("Restoring items: {:?}", paths);
     let trash_items =
-        trash::os_limited::list().map_err(|e| CommandError::TrashError(e.to_string()))?;
+        crate::platform::platform().list_trash_items().map_err(|e| CommandError::TrashError(e.to_string()))?;
 
     let mut restoration_tasks = Vec::new();
     let mut restored_paths = Vec::new();
@@ -562,7 +504,7 @@ pub async fn restore_items(paths: Vec<String>) -> Result<Vec<String>, CommandErr
         let original_path = original_trash_path(&item);
         let original_path_str = original_path.to_string_lossy().to_string();
 
-        trash::os_limited::restore_all(vec![item.clone()])
+        crate::platform::platform().restore_trash_items(vec![item.clone()])
             .map_err(|e| CommandError::TrashError(e.to_string()))?;
         restored_paths.push(original_path_str);
 
@@ -1036,6 +978,51 @@ fn perform_copy_with_progress(
 #[cfg(target_os = "windows")]
 mod trash_restore_tests {
     use super::*;
+
+    #[test]
+    #[ignore = "purges only one generated fixture and restores its generated sibling"]
+    fn native_purge_only_removes_selected_trash_payload() {
+        let root = tempfile::tempdir().unwrap();
+        let selected = root.path().join("Supprimer école.txt");
+        let sibling = root.path().join("Garder école.txt");
+        let ordinary = root.path().join("Hors corbeille.txt");
+        for path in [&selected, &sibling, &ordinary] {
+            std::fs::write(path, b"purge fixture").unwrap();
+        }
+        crate::platform::platform()
+            .shell_delete(&[selected.clone(), sibling.clone()], true)
+            .unwrap();
+        let entries = list_trash().unwrap();
+        let selected_entry = entries
+            .iter()
+            .find(|entry| PathBuf::from(&entry.original_path) == selected)
+            .unwrap();
+        let sibling_entry = entries
+            .iter()
+            .find(|entry| PathBuf::from(&entry.original_path) == sibling)
+            .unwrap();
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        let purged = runtime.block_on(purge_recycle_bin(vec![
+            selected_entry.path.clone(),
+            ordinary.to_string_lossy().into_owned(),
+        ]));
+        let selected_still_present = PathBuf::from(&selected_entry.path).exists();
+        let sibling_still_present = PathBuf::from(&sibling_entry.path).exists();
+        // Restore generated survivors before assertions, without touching user entries.
+        let remaining: Vec<_> = [selected_entry, sibling_entry]
+            .into_iter()
+            .filter(|entry| PathBuf::from(&entry.path).exists())
+            .map(|entry| entry.path.clone())
+            .collect();
+        let restored = runtime.block_on(restore_items(remaining));
+        purged.unwrap();
+        restored.unwrap();
+        assert!(!selected_still_present);
+        assert!(sibling_still_present);
+        assert!(!selected.exists());
+        assert_eq!(std::fs::read(sibling).unwrap(), b"purge fixture");
+        assert_eq!(std::fs::read(ordinary).unwrap(), b"purge fixture");
+    }
 
     #[test]
     #[ignore = "uses only a generated fixture to check a native Recycle Bin restore conflict"]
