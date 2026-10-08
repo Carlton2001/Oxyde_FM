@@ -131,6 +131,10 @@ fn parse_drop_effect(bytes: &[u8]) -> Result<bool, CommandError> {
     Ok(u32::from_le_bytes(effect.try_into().unwrap()) == 2)
 }
 
+pub(super) fn has_file_format() -> bool {
+    unsafe { IsClipboardFormatAvailable(CF_HDROP.0 as u32) }.is_ok()
+}
+
 pub fn get_clipboard_files() -> Result<(Vec<String>, bool), CommandError> {
     if unsafe { OpenClipboard(None) }.is_err() {
         return Ok((Vec::new(), false));

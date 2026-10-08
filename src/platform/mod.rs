@@ -19,7 +19,7 @@ pub struct MountedDiskImage {
     pub roots: Vec<String>,
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct PeekStatus {
     pub installed: bool,
     pub enabled: bool,
@@ -205,6 +205,10 @@ pub trait Platform: Send + Sync {
 
     /// Reads file paths and their copy/move intent from the native clipboard.
     fn get_clipboard_files(&self) -> Result<(Vec<String>, bool), String>;
+
+    /// Checks whether the supported file-transfer format is advertised, without
+    /// opening or reading the clipboard. Paste must still validate its payload.
+    fn clipboard_has_file_format(&self) -> bool;
 
     /// Builds a plain-data snapshot of an OS context menu for a file or folder.
     fn native_context_menu_items(

@@ -90,8 +90,10 @@ impl OxydeApp {
                     if let Ok(Ok(status)) = status {
                         if this
                             .update(cx, |this, cx| {
-                                this.peek_status = status;
-                                cx.notify();
+                                if this.peek_status != status {
+                                    this.peek_status = status;
+                                    cx.notify();
+                                }
                             })
                             .is_err()
                         {

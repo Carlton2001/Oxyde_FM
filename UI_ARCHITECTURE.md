@@ -87,6 +87,10 @@ Le panneau des paramètres reprend deux colonnes : Apparence et Fichiers à gauc
 
 ## Réactivité et validation
 
+Les barres de navigation consultent le résumé `HistoryManager::summary` pour les boutons Annuler/Rétablir et leurs infobulles. Ce snapshot ne copie que les types d'opération et le blocage d'une copie ayant écrasé un fichier ; les journaux et chemins de tout l'historique ne sont pas clonés pendant le rendu. Le snapshot détaillé reste disponible uniquement aux tests.
+
+La disponibilité de Coller est vérifiée en arrière-plan toutes les 500 ms par `Platform::clipboard_has_file_format`. Sous Windows, ce contrôle annonce CF_HDROP sans ouvrir ou décoder le presse-papiers ; le lecteur complet valide les chemins et l'effet Copier/Couper au moment du collage. La présence du format peut donc afficher Coller pour un contenu qui sera ensuite refusé ou ignoré par le lecteur. Les mises à jour de l'indicateur ne notifient GPUI que si sa disponibilité change.
+
 L’édition du chemin dans la breadcrumb propose jusqu’à douze dossiers correspondant au préfixe saisi, dans un menu flottant sous le champ. La recherche attend 150 ms après la dernière modification et utilise la lecture de dossiers asynchrone ; les réponses obsolètes sont ignorées. Les flèches haut/bas sélectionnent une suggestion, Tab ou le clic gauche complète le chemin en gardant l’édition active, et Entrée ou le bouton interne valide la navigation. Échap ferme d’abord les suggestions, puis l’édition. Les chemins virtuels ne proposent pas de complétion.
 
 ### Recherche rapide
@@ -219,7 +223,7 @@ Les cartes de conflit avec une ombre utilisent un fond opaque : la teinte d’ac
 
 ### Peek, raccourcis et accès rapide
 
-Sous Windows, le menu d’un fichier propose Ouvrir avec PowerToys Peek, désactivé si Peek n’est pas installé ou activé. Le raccourci configuré dans PowerToys et Espace lorsque cette option est activée agissent sur un seul fichier sélectionné, uniquement avec le focus de la liste. Les réglages PowerToys sont relus en arrière-plan ; aucune préférence système n’est modifiée.
+Sous Windows, le menu d’un fichier propose Ouvrir avec PowerToys Peek, désactivé si Peek n’est pas installé ou activé. Le raccourci configuré dans PowerToys et Espace lorsque cette option est activée agissent sur un seul fichier sélectionné, uniquement avec le focus de la liste. Les réglages PowerToys sont relus en arrière-plan ; une réponse identique ne provoque pas de notification GPUI. Aucune préférence système n’est modifiée.
 
 Les propriétés des fichiers .lnk reprennent les onglets Général / Raccourci de Tauri. Raccourci propose Cible, Arguments, Démarrer dans, Commentaire et Exécuter (normale, agrandie, réduite). Le menu Exécuter flotte sous son champ sans changer la hauteur de la modale. Les modifications restent locales jusqu’à OK ; Annuler les abandonne. La sauvegarde travaille en arrière-plan, conserve les autres métadonnées du raccourci et laisse la modale ouverte en cas d’erreur. Les API COM passent par Platform.
 

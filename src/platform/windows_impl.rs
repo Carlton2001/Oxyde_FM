@@ -333,6 +333,10 @@ impl Platform for WindowsPlatform {
         super::clipboard::get_clipboard_files().map_err(|error| format!("{error:?}"))
     }
 
+    fn clipboard_has_file_format(&self) -> bool {
+        super::clipboard::has_file_format()
+    }
+
     fn regional_locale(&self) -> Option<String> {
         let mut buffer = [0u16; 85];
         let length = unsafe { windows::Win32::Globalization::GetUserDefaultLocaleName(&mut buffer) };

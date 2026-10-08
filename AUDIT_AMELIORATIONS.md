@@ -6,7 +6,7 @@ Priorités proposées : P1 pour un risque sur les opérations de fichiers à rep
 
 ## Tableau de suivi — 8 octobre 2026
 
-**17 points traités, 4 clos par retrait, 1 partiellement traité, 7 autres points de correction/optimisation à faire, 1 vérification manuelle distincte et 1 observation de référence.** « Traité » décrit la correction du code ; les validations manuelles encore ouvertes sont indiquées séparément. A24/A25 appartiennent au lot courant, non commité ; A30/A31 sont commités dans `daa8f52`.
+**19 points traités, 4 clos par retrait, 1 partiellement traité, 5 autres points de correction/optimisation à faire, 1 vérification manuelle distincte et 1 observation de référence.** « Traité » décrit la correction du code ; les validations manuelles encore ouvertes sont indiquées séparément. A11 est commité dans `00b6a30` et A12 dans le commit suivant ; A24/A25 sont commités dans `db3c5ae` et A30/A31 dans `daa8f52`.
 
 | Point | Sujet | État du code | Suite ou validation restante |
 | --- | --- | --- | --- |
@@ -20,8 +20,8 @@ Priorités proposées : P1 pour un risque sur les opérations de fichiers à rep
 | [A08](#a08--annulation-de-recherche-et-détection-ssd--p2) | Annulation de recherche / SSD | À faire | Annulation des lecteurs texte/Office ; décision sur le paramètre SSD inactif |
 | [A09](#a09--calcul-des-tailles--tâches-et-pools-cumulés--p2) | Concurrence du calcul des tailles | À faire | Mesures, limite de concurrence et annulation |
 | [A10](#a10--tri-et-normalisation-répétés--p2) | Tri et normalisation | À faire | Clarifier les règles, mesurer puis éviter les calculs répétés |
-| [A11](#a11--copie-de-lhistorique-pendant-le-rendu--p2) | État d'historique utilisé au rendu | À faire | Résumé léger et mesure avec plusieurs panneaux |
-| [A12](#a12--polling-et-notifications-sans-changement--p2) | Polling et notifications | À faire | Notifications sur changement ; lecture du presse-papiers à examiner |
+| [A11](#a11--copie-de-lhistorique-pendant-le-rendu--p2) | État d'historique utilisé au rendu | Traité | Résumé sans allocation ; mesure sur un historique chargé pour quatre panneaux |
+| [A12](#a12--polling-et-notifications-sans-changement--p2) | Polling et notifications | Traité | Indicateur natif sans lecture des chemins ; notification Peek sur changement |
 | [A13](#a13--suggestions-clippy-et-simplifications-locales--p3) | Simplifications locales | À faire | Revalider les diagnostics utiles après les corrections |
 | [A14](#a14--rétablir-une-restauration-déplacée-depuis-la-corbeille--p2) | Ancienne API Restore | Clos par retrait | Aucun appelant de production ; parcours actif traité en A18 |
 | [A15](#a15--cache-de-filtrage-lors-dun-changement-de-jour--p2) | Cache lors du changement de jour | Traité | Contrôles automatiques réalisés |
@@ -33,8 +33,8 @@ Priorités proposées : P1 pour un risque sur les opérations de fichiers à rep
 | [A21](#a21--historique-de-suppression-dans-la-référence-tauri--observation-de-comparaison) | Historique de la référence Tauri | Référence | Aucune modification du projet Tauri prévue |
 | [A22](#a22--plafond-arbitraire-du-redo-de-suppression--p1) | Seuils du redo de suppression | Traité | Tests natifs et confirmation utilisateur réalisés |
 | [A23](#a23--lecture-non-bornée-des-buffers-de-presse-papiers--p2) | Lecture des buffers de presse-papiers | Traité | Contrôles automatiques réalisés |
-| [A24](#a24--erreurs-de-menus-et-dépinglage-shell-ignorées--p2) | Erreurs de commandes Shell | Traité dans le lot courant | Réponses simulées ; épinglage réel et extensions installées à confirmer manuellement |
-| [A25](#a25--lecture-de-verbes-shell-hors-du-buffer-si-terminateur-absent--p2) | Bornes des noms de commandes Shell | Traité dans le lot courant | Réponses tronquées et erreurs testées |
+| [A24](#a24--erreurs-de-menus-et-dépinglage-shell-ignorées--p2) | Erreurs de commandes Shell | Traité | Réponses simulées ; épinglage réel et extensions installées à confirmer manuellement |
+| [A25](#a25--lecture-de-verbes-shell-hors-du-buffer-si-terminateur-absent--p2) | Bornes des noms de commandes Shell | Traité | Réponses tronquées et erreurs testées |
 | [A26](#a26--échecs-du-lecteur-vidéo-masqués--p2) | Erreurs et annulation du lecteur vidéo | À faire | Reproduction et propagation des erreurs |
 | [A27](#a27--phases-dundo-move-après-le-transfert-des-fichiers--p1) | Phases tardives d'Undo Move | Traité | Rollback testé ; limites de crash détaillées dans l'entrée |
 | [A28](#a28--métadonnées-et-flux-natifs-absents-de-la-copie-initiale--p1) | Copies natives et métadonnées | Traité | Flux/attributs Windows validés ; benchmark et SMB hors validation |
@@ -132,15 +132,23 @@ Clarifier les règles attendues pour noms numériques, accents, dossiers et ordr
 
 ## A11 — Copie de l'historique pendant le rendu — P2
 
-**Coût structurel établi, impact non mesuré.** `ui/components/top_bar.rs:121` appelle `HistoryManager::get_state`, qui clone les piles de transactions et leurs détails (`models/history.rs:102`). Le rendu peut être répété pour chaque panneau, alors que les boutons n'ont besoin que d'un résumé de l'état et des transactions disponibles.
+**Corrigé le 8 octobre 2026, avec mesure du coût de préparation.** `HistoryManager::summary` lit sous un seul verrou le type de la dernière action de chaque pile et le blocage d'Annuler en cas d'écrasement. Ce résumé se copie sans allocation ni clonage de chemins/journaux. `top_bar` l'utilise pour la visibilité des boutons et les infobulles traduites ; les règles d'activation et l'état d'exécution A02 restent conservés. Le snapshot détaillé `get_state` et son clonage sont maintenant réservés aux tests ; aucune autre chaîne de production ne les utilisait.
 
-Exposer un petit état de présentation plutôt que recopier les chemins et journaux de fichiers de tout l'historique. Mesurer le rendu avec un historique chargé et plusieurs panneaux ; conserver un accès de test à l'état détaillé si nécessaire.
+Deux tests couvrent les cinq types d'opération, l'écrasement de Copy, les cycles Annuler/Rétablir, l'historique vide, les entrées différées pendant une réservation et le nettoyage différé. Ils vérifient les informations réellement consommées par les boutons sans modifier le protocole de réservation.
+
+Mesure reproductible : `cargo test --lib --offline profile_history_summary_for_multiple_panes -- --ignored --nocapture`. La fixture comporte 100 transactions de 128 fichiers, avec chemins, sorties, paires de copie et hashes. Pour 50 préparations sur quatre panneaux (200 lectures), le profil dev optimisé de cette machine mesure 1,2435 s de clonage complet contre environ 2 µs de résumé, dont la taille actuelle est de 3 octets. Les chemins restent fictifs et aucune opération de fichiers n'est exécutée. La durée minuscule du résumé est indicative ; aucun seuil de temps n'est imposé au test. Cette mesure isole la préparation des données d'historique et ne prédit pas le gain de temps du rendu GPUI complet.
 
 ## A12 — Polling et notifications sans changement — P2
 
-**Parcours établis, fréquence utile à mesurer.** `ui/app/shell_features.rs` réévalue régulièrement Peek et notifie l'interface après chaque résultat, même identique. La surveillance du presse-papiers (`ui/app/mod.rs:2268`) lit périodiquement ses chemins pour déduire la disponibilité du collage.
+**Corrigé le 8 octobre 2026 après relecture des usages actifs.** Les réponses Peek sont comparées sur les quatre propriétés utiles (installation, activation, Espace et raccourci) avant de modifier l'état et de notifier GPUI. Un résultat identique ne provoque plus de notification Peek. La cadence de lecture des préférences et la surveillance d'Accès rapide restent conservées ; cette dernière comparait déjà ses résultats avant notification.
 
-Notifier uniquement lors d'un changement pertinent. Examiner un indicateur natif de présence de fichiers ou de changement du presse-papiers pour éviter la lecture répétée complète, en gardant les formats nécessaires aux actions actuelles. Comparer coûts et réactivité avant remplacement du polling.
+Le watcher utilise `Platform::clipboard_has_file_format`, implémenté sous Windows par `IsClipboardFormatAvailable(CF_HDROP)`. Une vérification ne fait plus `OpenClipboard`, `GetClipboardData`, verrouillage/décodage du payload ni allocation des chemins. Elle ne déclenche pas leur rendu différé. La vérification reste sur un worker toutes les 500 ms et le booléen affiché ne notifie que sur changement, comme auparavant. Le coût de ce parcours ne dépend plus du nombre de chemins ; aucune mesure de latence d'un collage réel ou de rendu de fenêtre n'est revendiquée.
+
+Copier/Couper et Coller continuent à utiliser les lecteurs/publications existants. Le collage relit et valide les chemins et l'effet au moment de l'action, y compris les formats rendus par le Shell pour la corbeille. L'indicateur annonce la présence du format supporté, pas la validité de son contenu : un payload vide ou mal formé peut faire apparaître Coller, puis être ignoré ou refusé par le lecteur A23. Un presse-papiers temporairement ouvert par un autre processus ne masque plus le bouton du seul fait que la lecture échoue. L'adaptateur Linux retourne false, comme son ancienne lecture de fichiers non implémentée.
+
+Les tests existants des préférences Peek, des buffers CF_HDROP et de l'effet Copier/Couper passent dans la suite complète. Le contrôle de la notification conditionnelle est une revue du handler ; aucun rendu GPUI simulé ni accès au presse-papiers utilisateur n'est ajouté pour ces vérifications. L'affichage de Coller et les changements PowerToys dans la session interactive restent à confirmer manuellement.
+
+Contrat natif : [Microsoft — IsClipboardFormatAvailable](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-isclipboardformatavailable), prévu notamment pour activer ou désactiver l'action Coller selon le format disponible.
 
 ## A13 — Suggestions Clippy et simplifications locales — P3
 
@@ -440,4 +448,10 @@ Quatre tests du transfert initial vérifient les verrous source/destination apr�
 
 `cargo test --all-targets --offline` : 169 tests backend et 108 tests du binaire passent, soit 277 ; les 13 tests natifs ignorés restent ignorés. Les sept nouvelles régressions A24/A25 sont incluses. Les tests du script lancent uniquement un PowerShell caché avec une fabrique Shell simulée ; aucun accès aux épingles utilisateur. Les réponses HRESULT et buffers sont injectées aux frontières des appels ; la destruction du menu utilise l'API native réelle.
 
-`cargo check --all-targets --offline` passe sans avertissement du projet. Le module Shell est formaté et `git diff --check` passe. `cargo build --bin oxyde --offline` reconstruit `target/debug/oxyde.exe`. Aucun Computer Use, aucune validation Linux et aucun changement d'interface. Le lot A24/A25 et le tableau de suivi restent non commités après `daa8f52`.
+`cargo check --all-targets --offline` passe sans avertissement du projet. Le module Shell est formaté et `git diff --check` passe. `cargo build --bin oxyde --offline` reconstruit `target/debug/oxyde.exe`. Aucun Computer Use, aucune validation Linux et aucun changement d'interface. Le lot A24/A25 et le tableau de suivi sont commités dans `db3c5ae`, après `daa8f52`.
+
+### Validation du lot A11/A12
+
+`cargo test --all-targets --offline` : 171 tests backend et 108 tests du binaire passent, soit 279. Les deux nouveaux tests du résumé sont inclus ; 14 tests restent ignorés par défaut (les 13 scénarios natifs précédents et la nouvelle mesure en mémoire). Cette mesure est exécutée séparément et passe, soit 280 tests distincts validés dans le lot. Ses résultats et sa portée sont indiqués en A11.
+
+`cargo check --all-targets --offline` passe sans avertissement du projet. Le modèle modifié est formaté ; les changements des handlers et de Platform restent limités aux blocs concernés. `git diff --check` passe et `cargo build --bin oxyde --offline` reconstruit `target/debug/oxyde.exe`. Les calculs et appels système restent en arrière-plan ; aucun Computer Use, aucune validation Linux, aucune modification des données du presse-papiers ou des préférences PowerToys. L'apparence, les traductions et les curseurs sont conservés. A11 est commité dans `00b6a30`, après `db3c5ae` ; A12 et le suivi documentaire sont commités séparément dans le commit suivant.
