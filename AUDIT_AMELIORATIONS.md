@@ -6,16 +6,16 @@ Priorités proposées : P1 pour un risque sur les opérations de fichiers à rep
 
 ## Tableau de suivi — 8 octobre 2026
 
-**25 points traités, 4 clos par retrait, aucun point de code Windows restant dans cette série, 1 vérification manuelle distincte, 1 observation de référence et 1 point Linux différé.** « Traité » décrit la correction du code ; les validations manuelles encore ouvertes sont indiquées séparément. A11 est commité dans `00b6a30` et A12 dans `261cb8c` ; A24/A25 sont commités dans `db3c5ae` et A30/A31 dans `daa8f52`.
+**25 points traités, 4 clos par retrait, 1 vérification manuelle confirmée, 1 observation de référence et 1 point Linux différé. Aucun lot Windows restant dans cette série.** « Traité » décrit la correction du code ; la confirmation utilisateur des essais manuels est consignée ci-dessous. A11 est commité dans `00b6a30` et A12 dans `261cb8c` ; A24/A25 sont commités dans `db3c5ae` et A30/A31 dans `daa8f52`.
 
 | Point | Sujet | État du code | Suite ou validation restante |
 | --- | --- | --- | --- |
 | [A01](#a01--filtres-de-date-différents-des-groupes-de-date--p2) | Filtres de date | Traité | Contrôles automatiques réalisés |
-| [A02](#a02--annulerrétablir-peuvent-démarrer-plusieurs-fois-en-parallèle--p1) | Concurrence Annuler/Rétablir | Traité | Interaction GPUI non testée automatiquement ; coordination des opérations indépendantes hors garantie |
-| [A03](#a03--marqueur-donglet-potentiellement-périmé-sur-la-zone-libre--p2) | Cible de déplacement des onglets | Traité | Calculs validés ; rendu de cette correction non vérifié automatiquement |
-| [A04](#a04--propriétés-dun-élément-de-corbeille--nom-et-emplacement-physiques--p2) | Propriétés des éléments de corbeille | Traité | Présentation testée ; contrôle visuel manuel non réalisé |
-| [A05](#a05--durée-de-vie-des-ressources-comshell--p2) | Ressources COM/Shell | Traité | Extensions Shell, réseau et aperçus réels à confirmer manuellement |
-| [A06](#a06--presse-papiers--allocations-et-erreurs-du-format-couper--p2) | Publication du presse-papiers | Traité | Publication réelle et collage de fichiers ordinaires à confirmer manuellement |
+| [A02](#a02--annulerrétablir-peuvent-démarrer-plusieurs-fois-en-parallèle--p1) | Concurrence Annuler/Rétablir | Traité | Annuler/Rétablir avec clics rapides confirmé par l’utilisateur ; coordination des opérations indépendantes hors garantie |
+| [A03](#a03--marqueur-donglet-potentiellement-périmé-sur-la-zone-libre--p2) | Cible de déplacement des onglets | Traité | Calculs testés et déplacement des onglets confirmé par l’utilisateur |
+| [A04](#a04--propriétés-dun-élément-de-corbeille--nom-et-emplacement-physiques--p2) | Propriétés des éléments de corbeille | Traité | Présentation testée et propriétés des éléments de corbeille confirmées par l’utilisateur |
+| [A05](#a05--durée-de-vie-des-ressources-comshell--p2) | Ressources COM/Shell | Traité | Menus Shell et aperçus vidéo confirmés par l’utilisateur ; limites techniques conservées |
+| [A06](#a06--presse-papiers--allocations-et-erreurs-du-format-couper--p2) | Publication du presse-papiers | Traité | Copier/coller ordinaire confirmé par l’utilisateur |
 | [A07](#a07--api-windows-encore-dans-les-commandes--p2) | Isolation des API Windows | Traité | Commandes de corbeille et exclusions de sidebar via Platform ; tests Windows ciblés |
 | [A08](#a08--annulation-de-recherche-et-détection-ssd--p2) | Annulation de recherche / SSD | Traité | Lectures et attente du verrou annulables ; branche SSD inactive retirée |
 | [A09](#a09--calcul-des-tailles--tâches-et-pools-cumulés--p2) | Concurrence du calcul des tailles | Traité | Deux calculs actifs, pools partagés et parcours annulable ; mesure réalisée |
@@ -27,21 +27,27 @@ Priorités proposées : P1 pour un risque sur les opérations de fichiers à rep
 | [A15](#a15--cache-de-filtrage-lors-dun-changement-de-jour--p2) | Cache lors du changement de jour | Traité | Contrôles automatiques réalisés |
 | [A16](#a16--conflits-et-espace-temporaire-du-déplacement-initial-depuis-la-corbeille--p1) | Conflits de l'ancienne API Restore | Clos par retrait | Parcours inutilisé supprimé |
 | [A17](#a17--énumérations-de-corbeille-lors-du-rejeu-des-restaurations--p2) | Énumérations de l'ancien journal | Clos par retrait | Journal inutilisé supprimé |
-| [A18](#a18--coupercoller-depuis-la-corbeille-dans-le-parcours-gpui-actuel--p1) | Transferts actifs de corbeille | Traité | Collage interactif dans l'Explorateur Windows à confirmer manuellement |
+| [A18](#a18--coupercoller-depuis-la-corbeille-dans-le-parcours-gpui-actuel--p1) | Transferts actifs de corbeille | Traité | Collage et Annuler/Rétablir dans l’Explorateur Windows confirmés par l’utilisateur |
 | [A19](#a19--annulerrétablir-un-déplacement-entre-volumes--p1) | Historique entre volumes | Traité | Scénarios natifs C:/D: validés ; SMB hors validation |
-| [A20](#a20--métadonnées-de-corbeille-après-un-déplacement-natif-shell--p2) | Métadonnées après collage Shell | Vérification manuelle à faire | Vérifier le collage réel et l'historique Windows avant toute purge |
+| [A20](#a20--métadonnées-de-corbeille-après-un-déplacement-natif-shell--p2) | Métadonnées après collage Shell | Validé manuellement | Collage et historique Windows confirmés ; aucune purge automatique des métadonnées ajoutée |
 | [A21](#a21--historique-de-suppression-dans-la-référence-tauri--observation-de-comparaison) | Historique de la référence Tauri | Référence | Aucune modification du projet Tauri prévue |
 | [A22](#a22--plafond-arbitraire-du-redo-de-suppression--p1) | Seuils du redo de suppression | Traité | Tests natifs et confirmation utilisateur réalisés |
 | [A23](#a23--lecture-non-bornée-des-buffers-de-presse-papiers--p2) | Lecture des buffers de presse-papiers | Traité | Contrôles automatiques réalisés |
-| [A24](#a24--erreurs-de-menus-et-dépinglage-shell-ignorées--p2) | Erreurs de commandes Shell | Traité | Réponses simulées ; épinglage réel et extensions installées à confirmer manuellement |
+| [A24](#a24--erreurs-de-menus-et-dépinglage-shell-ignorées--p2) | Erreurs de commandes Shell | Traité | Réponses simulées testées ; menus Shell et épingler/désépingler confirmés par l’utilisateur |
 | [A25](#a25--lecture-de-verbes-shell-hors-du-buffer-si-terminateur-absent--p2) | Bornes des noms de commandes Shell | Traité | Réponses tronquées et erreurs testées |
-| [A26](#a26--échecs-du-lecteur-vidéo-masqués--p2) | Erreurs et annulation du lecteur vidéo | Traité | Erreurs propagées, annulation sans image et buffers bornés ; lecture interactive à confirmer |
+| [A26](#a26--échecs-du-lecteur-vidéo-masqués--p2) | Erreurs et annulation du lecteur vidéo | Traité | Tests automatiques et confirmation utilisateur de la lecture, de l’orientation et de l’arrêt de l’aperçu |
 | [A27](#a27--phases-dundo-move-après-le-transfert-des-fichiers--p1) | Phases tardives d'Undo Move | Traité | Rollback testé ; limites de crash détaillées dans l'entrée |
 | [A28](#a28--métadonnées-et-flux-natifs-absents-de-la-copie-initiale--p1) | Copies natives et métadonnées | Traité | Flux/attributs Windows validés ; benchmark et SMB hors validation |
 | [A29](#a29--ancien-journal-de-sauvegardes-de-remplacement--code-mort-retiré) | Ancien journal de remplacements | Clos par retrait | Aucun producteur de production ; écrasements actifs non annulables |
 | [A30](#a30--annuler-une-copie-peut-laisser-une-suppression-partielle--p1) | Phases tardives d'Undo Copy | Traité | Rollback et reprise testés |
 | [A31](#a31--source-supprimée-après-la-copie-initiale-sans-nouvelle-vérification--p1) | Suppression de la source après copie | Traité | Identité/verrous et déplacement partiel validés sous Windows |
 | [A32](#a32--permissions-de-nettoyage-sur-unix--p2-différé-linux) | Permissions de nettoyage Unix | Différé — Linux | Conserver les bits de droits lors de la reprise du support Linux |
+
+### Confirmation utilisateur — 8 octobre 2026
+
+L’utilisateur confirme que tous les essais manuels proposés sont vérifiés et OK : Couper/Coller depuis la corbeille vers l’Explorateur Windows avec noms d’origine et Annuler/Rétablir, lecture/orientation/arrêt des aperçus vidéo, copier/coller ordinaire, épingler/désépingler l’accès rapide, menus contextuels Shell, propriétés des éléments de corbeille, Annuler/Rétablir avec clics rapides et déplacement des onglets après la dernière correction. Les validations interactives correspondantes et A20 sont closes sur cette confirmation. Les paragraphes de validation des lots ci-dessous décrivent leurs résultats au moment de leur réalisation ; les mentions historiques « à confirmer » sont complétées par cette confirmation.
+
+Cette confirmation ne constitue pas une mesure de fuite mémoire, une validation SMB/Linux ou une extension des garanties de concurrence, de crash et de performances. Les limites techniques documentées restent conservées ; aucun nouveau lot Windows n’en découle ici.
 
 La validation Linux reste différée à la demande de l'utilisateur. Aucun Computer Use n'est prévu. Les limites et les validations ci-dessus ne constituent pas toutes de nouveaux lots : plusieurs sont des contrôles manuels ou des garanties explicitement hors portée.
 
@@ -235,7 +241,7 @@ Contrats natifs : [FILE_RENAME_INFO](https://learn.microsoft.com/en-us/windows/w
 
 ## A20 — Métadonnées de corbeille après un déplacement natif Shell — P2
 
-**Observation native, sans conclusion sur l'annulation de l'Explorateur.** Le consommateur Shell utilisé dans le test A18 conserve les noms et retire les données de la corbeille, mais les fichiers `$I` restent présents. L'absence de `$R` retire bien les éléments de l'énumération. Vérifier le comportement du collage réel et de l'historique Windows avant de modifier ou purger ces métadonnées ; aucune purge automatique de métadonnées utilisateur n'est ajoutée. Les sidecars capturés pour les fixtures du test sont nettoyés séparément.
+**Validation interactive confirmée par l’utilisateur le 8 octobre 2026.** Le consommateur Shell utilisé dans le test A18 conserve les noms et retire les données de la corbeille, mais les fichiers `$I` restent présents. L'absence de `$R` retire bien les éléments de l'énumération. Le collage réel et Annuler/Rétablir dans l’Explorateur Windows sont confirmés OK par l’utilisateur. Cette vérification clôt A20 pour le fonctionnement interactif ; elle ne justifie pas de modifier ou purger automatiquement les métadonnées résiduelles. Aucune purge automatique de métadonnées utilisateur n’est ajoutée. Les sidecars capturés pour les fixtures du test sont nettoyés séparément.
 
 ## A21 — Historique de suppression dans la référence Tauri — observation de comparaison
 
@@ -363,7 +369,7 @@ Le rétablissement des permissions est présent après certains échecs, mais le
 
 La compilation Windows actuelle passe sans avertissement du projet. L’audit initial du 7 octobre provenait de la lecture des sources et de Clippy, sans nouveau test de comportement ou benchmark à cette étape. Les validations ajoutées ensuite sont détaillées par point et par lot ci-dessous. Snap Layouts et le témoin de déplacement actuel sont confirmés par l'utilisateur. Les validations des lots précédents restent décrites dans [AUDIT_CODE_MORT.md](AUDIT_CODE_MORT.md).
 
-Les points de code Windows de cette série sont traités ou clos par retrait, avec un commit par point pour la dernière série automatique. A20 et les validations interactives indiquées au tableau restent à confirmer manuellement. A32 est conservé pour la reprise du support Linux, différée à la demande de l’utilisateur. Les mesures et leurs limites figurent dans les points d’optimisation concernés.
+Les points de code Windows de cette série sont traités ou clos par retrait, avec un commit par point pour la dernière série automatique. A20 et les validations interactives proposées sont confirmés OK par l’utilisateur le 8 octobre 2026. A32 est conservé pour la reprise du support Linux, différée à la demande de l’utilisateur. Les mesures et leurs limites figurent dans les points d’optimisation concernés.
 
 ### État après les lots N01 à N16
 
