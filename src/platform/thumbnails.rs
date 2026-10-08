@@ -560,7 +560,7 @@ fn shell_thumbnail_raw(path: &str) -> Result<RgbaImage, CommandError> {
     unsafe {
         let _com = super::windows_com::ComApartment::sta_or_existing()
             .map_err(|error| CommandError::SystemError(error.to_string()))?;
-        let res = (|| -> Result<RgbaImage, CommandError> {
+        (|| -> Result<RgbaImage, CommandError> {
             let wide_path = windows::core::HSTRING::from(path);
             let factory: IShellItemImageFactory =
                 SHCreateItemFromParsingName(PCWSTR(wide_path.as_ptr()), None)?;
@@ -596,8 +596,7 @@ fn shell_thumbnail_raw(path: &str) -> Result<RgbaImage, CommandError> {
             let _ = DeleteObject(HGDIOBJ(hbitmap.0));
             RgbaImage::from_raw(bmp.bmWidth as u32, bmp.bmHeight as u32, pixels)
                 .ok_or_else(|| CommandError::Other("Invalid bitmap".to_string()))
-        })();
-        res
+        })()
     }
 }
 

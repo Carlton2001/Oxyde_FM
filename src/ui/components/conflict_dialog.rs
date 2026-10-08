@@ -554,7 +554,7 @@ pub(crate) fn render_conflict_dialog(
     let sidebar_width = pending.dialog.sidebar_width.min((width - 20.0).max(10.0));
     let sidebar_drag = handle.clone();
     let corner_drag = handle.clone();
-    let rows = visible(&pending);
+    let rows = visible(pending);
     let current = &pending.conflicts[pending.dialog.selected];
     let mut comparison = div()
         .flex()

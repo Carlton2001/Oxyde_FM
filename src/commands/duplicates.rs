@@ -171,7 +171,7 @@ pub async fn find_duplicates(
                 return;
             }
 
-            let is_target_ssd = is_ssd(&root_path);
+            let is_target_ssd = is_ssd(root_path);
             let num_threads = if is_target_ssd { 16 } else { 2 };
 
             for entry in WalkDir::new(root_path)

@@ -267,8 +267,8 @@ impl Tooltip {
                     location: None,
                     network: None,
                     ext: ext.clone(),
-                    size: size.clone(),
-                    date: date.clone(),
+                    size,
+                    date,
                 }),
                 preview_view: None,
             })
@@ -290,8 +290,8 @@ impl Tooltip {
                 name.clone(),
                 path_clone.clone(),
                 ext.clone(),
-                size.clone(),
-                date.clone(),
+                size,
+                date,
                 cx,
             )
             .into()

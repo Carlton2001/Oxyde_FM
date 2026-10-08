@@ -121,13 +121,10 @@ impl OxydeApp {
             .await;
             let scan = this
                 .update(cx, |this, cx| {
-                    let Some(dialog) = this
+                    let dialog = this
                         .properties_dialog
                         .as_mut()
-                        .filter(|dialog| dialog.revision == revision)
-                    else {
-                        return None;
-                    };
+                        .filter(|dialog| dialog.revision == revision)?;
                     let scan = match result {
                         Ok(Ok(properties)) => {
                             let scan = (properties.is_dir && dialog.drive.is_none())

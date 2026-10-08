@@ -75,8 +75,8 @@ impl OxydeApp {
                                     tab.files.iter_mut().find(|file| file.path == path)
                                 {
                                     file.size = size.size;
-                                    file.files_count = Some(size.files_count as u64);
-                                    file.folders_count = Some(size.folders_count as u64);
+                                    file.files_count = Some(size.files_count);
+                                    file.folders_count = Some(size.folders_count);
                                     file.is_calculated = true;
                                 }
                                 tab.sort_files();

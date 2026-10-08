@@ -418,7 +418,7 @@ impl TextInput {
 
     pub fn paste_from_clipboard(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(text) = cx.read_from_clipboard().and_then(|item| item.text()) {
-            let text = text.replace('\r', " ").replace('\n', " ");
+            let text = text.replace(['\r', '\n'], " ");
             self.replace_text_in_range(None, &text, window, cx);
         }
     }

@@ -140,7 +140,7 @@ fn item_with_correct_restore_name(item: &trash::TrashItem) -> trash::TrashItem {
 /// List all items in the Windows Recycle Bin
 pub fn list_trash() -> Result<Vec<TrashEntry>, CommandError> {
     let trash_items =
-        crate::platform::platform().list_trash_items().map_err(|e| CommandError::TrashError(e.to_string()))?;
+        crate::platform::platform().list_trash_items().map_err(CommandError::TrashError)?;
 
     let mut entries: Vec<TrashEntry> = trash_items
         .into_iter()
@@ -228,7 +228,7 @@ pub async fn empty_trash() -> Result<(), CommandError> {
 pub async fn purge_recycle_bin(paths: Vec<String>) -> Result<(), CommandError> {
     let trash_items = crate::platform::platform()
         .list_trash_items()
-        .map_err(|e| CommandError::TrashError(e.to_string()))?;
+        .map_err(CommandError::TrashError)?;
 
     let normalize = |p: &std::path::Path| -> String {
         p.to_string_lossy()
@@ -436,7 +436,7 @@ pub async fn get_total_recycle_bin_usage() -> Result<(u64, u64), CommandError> {
 pub async fn restore_items(paths: Vec<String>) -> Result<Vec<String>, CommandError> {
     info!("Restoring items: {:?}", paths);
     let trash_items =
-        crate::platform::platform().list_trash_items().map_err(|e| CommandError::TrashError(e.to_string()))?;
+        crate::platform::platform().list_trash_items().map_err(CommandError::TrashError)?;
 
     let mut restoration_tasks = Vec::new();
     let mut restored_paths = Vec::new();
@@ -505,7 +505,7 @@ pub async fn restore_items(paths: Vec<String>) -> Result<Vec<String>, CommandErr
         let original_path_str = original_path.to_string_lossy().to_string();
 
         crate::platform::platform().restore_trash_items(vec![item.clone()])
-            .map_err(|e| CommandError::TrashError(e.to_string()))?;
+            .map_err(CommandError::TrashError)?;
         restored_paths.push(original_path_str);
 
         // Check if we restored by ID (from Trash View) or by Original Path (Undo)

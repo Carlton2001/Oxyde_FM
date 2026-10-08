@@ -38,13 +38,10 @@ fn get_sidebar_nodes_blocking(path: String) -> Result<Vec<SidebarNode>, CommandE
         let mut node_has_subdirs = false;
 
         let node_path = entry.path();
-        match fs::read_dir(&node_path) {
-            Ok(sub_entries) => {
-                node_has_subdirs = sub_entries
-                    .filter_map(|e| e.ok())
-                    .any(|sub_entry| sub_entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false));
-            }
-            Err(_) => {}
+        if let Ok(sub_entries) = fs::read_dir(&node_path) {
+            node_has_subdirs = sub_entries
+                .filter_map(|e| e.ok())
+                .any(|sub_entry| sub_entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false));
         }
 
         nodes.push(SidebarNode {
@@ -115,13 +112,10 @@ fn get_subtree_nodes_blocking(
             let mut node_has_subdirs = false;
 
             if !is_reparse_point {
-                match fs::read_dir(&node_path) {
-                    Ok(sub_entries) => {
-                        node_has_subdirs = sub_entries
-                            .filter_map(|e| e.ok())
-                            .any(|se| se.file_type().map(|ft| ft.is_dir()).unwrap_or(false));
-                    }
-                    Err(_) => {}
+                if let Ok(sub_entries) = fs::read_dir(&node_path) {
+                    node_has_subdirs = sub_entries
+                        .filter_map(|e| e.ok())
+                        .any(|se| se.file_type().map(|ft| ft.is_dir()).unwrap_or(false));
                 }
             }
 

@@ -6,7 +6,7 @@ Priorités proposées : P1 pour un risque sur les opérations de fichiers à rep
 
 ## Tableau de suivi — 8 octobre 2026
 
-**24 points traités, 4 clos par retrait, 1 point de correction/optimisation à faire, 1 vérification manuelle distincte et 1 observation de référence.** « Traité » décrit la correction du code ; les validations manuelles encore ouvertes sont indiquées séparément. A11 est commité dans `00b6a30` et A12 dans `261cb8c` ; A24/A25 sont commités dans `db3c5ae` et A30/A31 dans `daa8f52`.
+**25 points traités, 4 clos par retrait, aucun point de code Windows restant dans cette série, 1 vérification manuelle distincte, 1 observation de référence et 1 point Linux différé.** « Traité » décrit la correction du code ; les validations manuelles encore ouvertes sont indiquées séparément. A11 est commité dans `00b6a30` et A12 dans `261cb8c` ; A24/A25 sont commités dans `db3c5ae` et A30/A31 dans `daa8f52`.
 
 | Point | Sujet | État du code | Suite ou validation restante |
 | --- | --- | --- | --- |
@@ -22,7 +22,7 @@ Priorités proposées : P1 pour un risque sur les opérations de fichiers à rep
 | [A10](#a10--tri-et-normalisation-répétés--p2) | Tri et normalisation | Traité | Clés préparées, règles conservées sur sept colonnes ; mesure réalisée |
 | [A11](#a11--copie-de-lhistorique-pendant-le-rendu--p2) | État d'historique utilisé au rendu | Traité | Résumé sans allocation ; mesure sur un historique chargé pour quatre panneaux |
 | [A12](#a12--polling-et-notifications-sans-changement--p2) | Polling et notifications | Traité | Indicateur natif sans lecture des chemins ; notification Peek sur changement |
-| [A13](#a13--suggestions-clippy-et-simplifications-locales--p3) | Simplifications locales | À faire | Revalider les diagnostics utiles après les corrections |
+| [A13](#a13--suggestions-clippy-et-simplifications-locales--p3) | Simplifications locales | Traité | 17 diagnostics actifs simplifiés ; suggestions de style/tests conservées et risque Unix consigné en A32 |
 | [A14](#a14--rétablir-une-restauration-déplacée-depuis-la-corbeille--p2) | Ancienne API Restore | Clos par retrait | Aucun appelant de production ; parcours actif traité en A18 |
 | [A15](#a15--cache-de-filtrage-lors-dun-changement-de-jour--p2) | Cache lors du changement de jour | Traité | Contrôles automatiques réalisés |
 | [A16](#a16--conflits-et-espace-temporaire-du-déplacement-initial-depuis-la-corbeille--p1) | Conflits de l'ancienne API Restore | Clos par retrait | Parcours inutilisé supprimé |
@@ -41,6 +41,7 @@ Priorités proposées : P1 pour un risque sur les opérations de fichiers à rep
 | [A29](#a29--ancien-journal-de-sauvegardes-de-remplacement--code-mort-retiré) | Ancien journal de remplacements | Clos par retrait | Aucun producteur de production ; écrasements actifs non annulables |
 | [A30](#a30--annuler-une-copie-peut-laisser-une-suppression-partielle--p1) | Phases tardives d'Undo Copy | Traité | Rollback et reprise testés |
 | [A31](#a31--source-supprimée-après-la-copie-initiale-sans-nouvelle-vérification--p1) | Suppression de la source après copie | Traité | Identité/verrous et déplacement partiel validés sous Windows |
+| [A32](#a32--permissions-de-nettoyage-sur-unix--p2-différé-linux) | Permissions de nettoyage Unix | Différé — Linux | Conserver les bits de droits lors de la reprise du support Linux |
 
 La validation Linux reste différée à la demande de l'utilisateur. Aucun Computer Use n'est prévu. Les limites et les validations ci-dessus ne constituent pas toutes de nouveaux lots : plusieurs sont des contrôles manuels ou des garanties explicitement hors portée.
 
@@ -166,11 +167,11 @@ Contrat natif : [Microsoft — IsClipboardFormatAvailable](https://learn.microso
 
 ## A13 — Suggestions Clippy et simplifications locales — P3
 
-`cargo clippy --all-targets --offline --message-format=json` termine avec succès. Ses diagnostics comprennent des doublons entre cibles et des suggestions concernant uniquement les tests ; ils ne signalent pas tous du code mort ni des défauts.
+**Traité le 8 octobre 2026 après les corrections fonctionnelles.** Les diagnostics Clippy sont relus et dédupliqués entre les cibles : 52 occurrences distinctes avant ce point, 35 après. Les 17 retirées concernent le code actif : deux emprunts inutiles, six clones de valeurs Copy, deux casts identiques, un remplacement de CR/LF en deux passes, un local redondant, deux matches à une seule branche utile, deux variables retournées immédiatement et un retour Option simplifié. Le traitement conserve les règles de filtre, de tri et d'interface. Les wrappers de corbeille déplacés en A07 transmettent aussi leur String d'erreur directement au lieu de le recopier via `to_string`.
 
-Exemples à revoir après les retraits : emprunts inutiles dans `commands/duplicates.rs` et `conflict_dialog.rs`, copies clonées dans `file_list.rs` et `tooltip.rs`, comparaisons avec allocation dans `commands/ops.rs`, casts superflus dans `ui/app/sizes.rs`, remplacement de caractères dans `input.rs`, organisation de modules de tests. La branche de couleur identique des onglets est déjà recensée en N05.
+La relecture n'a retrouvé aucune comparaison allouant un `PathBuf` uniquement pour comparer dans les parcours de production signalés par Clippy : les sept diagnostics actuels concernent des fixtures de tests. Les 35 diagnostics conservés se répartissent en 10 usages de permissions (dont le risque Unix consigné en A32), 7 comparaisons possédées de tests, 5 suggestions `is_multiple_of`, 5 placements de modules de tests, 4 suggestions `as_chunks`, 2 initialisations de fixtures, 1 handle synthétique et 1 référence de fixture clonée. Aucun allow global ni nouveau seuil de Clippy n'est ajouté. Les remaniements de tests ou substitutions stylistiques sans intérêt fonctionnel sont volontairement laissés tels quels ; `cargo check` reste sans avertissement du projet.
 
-Traiter les simplifications utiles dans des changements limités ; ne pas convertir automatiquement tous les diagnostics ni modifier les tests uniquement pour satisfaire une règle stylistique.
+Validation : suite automatique existante, `cargo check`, Clippy JSON relu après modifications, build et vérification du diff. Aucune nouvelle fixture miroir de ces simplifications locales. La sortie finale et les gardes COM restent conservées.
 
 ## A14 — Rétablir une restauration déplacée depuis la corbeille — P2
 
@@ -352,11 +353,17 @@ Validation native : tentative de writer, suppression et renommage de la source a
 
 Limites : garanties de partage de fichiers validées sous Windows, pas sous Linux/SMB/EFS. Le hash porte sur le contenu principal et n'ajoute pas une certification des flux alternatifs ou de leurs mutations concurrentes. Le journal ne garantit pas l'atomicité face à un crash, une coupure ou une fin de processus forcée. Les droits et attributs de la source ne sont pas modifiés pour forcer sa suppression.
 
+## A32 — Permissions de nettoyage sur Unix — P2, différé Linux
+
+**Observation consignée le 8 octobre 2026, sans modification Linux.** Les parcours partagés de staging/rollback (`systems/file_copy.rs` et `systems/history_move.rs`) utilisent `Permissions::set_readonly(false)` avant nettoyage ou ouverture en écriture. Sous Windows, cette opération enlève l'attribut readonly. Sous Unix, elle ajoute les droits d'écriture au propriétaire, au groupe et aux autres : [contrat Rust de set_readonly](https://doc.rust-lang.org/std/fs/struct.Permissions.html#method.set_readonly).
+
+Le rétablissement des permissions est présent après certains échecs, mais le nettoyage de la copie publiée dans `history_move` ne les rétablit pas si sa suppression échoue. Un fichier survivant pourrait donc conserver des droits élargis sous Unix. Les dossiers temporaires privés réduisent l'exposition du staging, sans résoudre tous les chemins de rollback publiés. Reprendre ce point avec Linux : adapter via Platform seulement les droits nécessaires, préserver les autres bits et tester les chemins d'erreur et permissions après rollback. Cette conséquence provient de la lecture du code et du contrat standard ; aucune reproduction Linux ou altération des droits de fichiers utilisateur n'est réalisée ici.
+
 ## Validation et suite
 
-La compilation Windows actuelle passe sans avertissement du projet. Les observations ci-dessus sont issues de la lecture des sources et de Clippy ; aucun nouveau test de comportement ou benchmark n'a été exécuté pendant cet audit. Snap Layouts et le témoin de déplacement actuel sont confirmés par l'utilisateur. Les validations des lots précédents restent décrites dans [AUDIT_CODE_MORT.md](AUDIT_CODE_MORT.md).
+La compilation Windows actuelle passe sans avertissement du projet. L’audit initial du 7 octobre provenait de la lecture des sources et de Clippy, sans nouveau test de comportement ou benchmark à cette étape. Les validations ajoutées ensuite sont détaillées par point et par lot ci-dessous. Snap Layouts et le témoin de déplacement actuel sont confirmés par l'utilisateur. Les validations des lots précédents restent décrites dans [AUDIT_CODE_MORT.md](AUDIT_CODE_MORT.md).
 
-A30 et A31 complètent les corrections de cette série sur les transferts et leur historique. Les autres observations restent à examiner dans leurs lots distincts ; conserver A20 pour la validation native interactive. Les optimisations demandent des mesures avant modification. Cet ordre est proposé, pas une liste de corrections déjà autorisées ou réalisées.
+Les points de code Windows de cette série sont traités ou clos par retrait, avec un commit par point pour la dernière série automatique. A20 et les validations interactives indiquées au tableau restent à confirmer manuellement. A32 est conservé pour la reprise du support Linux, différée à la demande de l’utilisateur. Les mesures et leurs limites figurent dans les points d’optimisation concernés.
 
 ### État après les lots N01 à N16
 
@@ -499,3 +506,7 @@ Quatre tests du transfert initial vérifient les verrous source/destination apr�
 ### Validation du point A26
 
 `cargo test --all-targets --offline` : 187 tests backend et 112 tests du binaire passent (299) ; 17 tests restent ignorés par défaut. `cargo check --all-targets --offline` passe sans avertissement du projet et le binaire est reconstruit. Formatage ciblé et `git diff --check` validés. Aucun Computer Use ni validation Linux.
+
+### Validation du point A13
+
+`cargo test --all-targets --offline` : 187 tests backend et 112 tests du binaire passent (299) ; 17 tests restent ignorés par défaut. `cargo check --all-targets --offline` passe sans avertissement du projet, Clippy termine avec succès et le binaire est reconstruit. Le comptage JSON dédupliqué passe de 52 à 35 diagnostics, tous les diagnostics conservés étant explicités dans A13. `git diff --check` passe. Aucun Computer Use ni validation Linux.

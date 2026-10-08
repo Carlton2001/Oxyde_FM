@@ -387,7 +387,7 @@ pub fn render_file_list(
                                                 .when(show_tooltips && file.original_path.is_some(), |d| d.tooltip(Tooltip::for_trash(file.clone(), ext_tt.clone(), show_media_previews)))
                                                 .when(show_tooltips && network_entry(file), |d| d.tooltip(Tooltip::for_network(file.clone())))
                                                 .when(show_tooltips && search_results, |d| d.tooltip(Tooltip::for_search_result(file.clone(), ext_tt.clone(), show_media_previews)))
-                                                .when(show_tooltips && file.original_path.is_none() && !search_results && !network_entry(file) && show_media_previews, |d| d.tooltip(Tooltip::for_file_full(file_name_tt.clone(), path_tt, ext_tt.clone(), size_tt.clone(), date_tt.clone())))
+                                                .when(show_tooltips && file.original_path.is_none() && !search_results && !network_entry(file) && show_media_previews, |d| d.tooltip(Tooltip::for_file_full(file_name_tt.clone(), path_tt, ext_tt.clone(), size_tt, date_tt)))
                                                 .when(show_tooltips && file.original_path.is_none() && !search_results && !network_entry(file) && !show_media_previews, |d| d.tooltip(Tooltip::for_file_no_preview(file_name_tt, ext_tt, size_tt, date_tt)))
                                                 .on_mouse_down(MouseButton::Left, {
                                                     let p = path.clone();
@@ -1190,7 +1190,6 @@ fn render_grid_file_list(
                 let editing_path = editing_path.clone();
                 let editing_view = editing_view.clone();
                 let rename_error = rename_error.clone();
-                let show_grid_thumbnails = show_grid_thumbnails;
                 let folder_subdirectory_flags = folder_subdirectory_flags.clone();
                 move |range: std::ops::Range<usize>, cx: &mut App| {
                     range
