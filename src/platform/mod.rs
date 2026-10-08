@@ -73,6 +73,10 @@ pub trait Platform: Send + Sync {
     fn ensure_operation_directory(&self, parent: &std::fs::File, path: &std::path::Path) -> std::io::Result<(std::fs::File, bool)>;
     /// Open the basename relative to the retained parent, without following reparse objects.
     fn open_operation_file(&self, parent: &std::fs::File, path: &std::path::Path, read_contents: bool) -> std::io::Result<std::fs::File>;
+    /// Hold a copied output for verification/publication and attribute-safe cleanup on Windows.
+    fn open_copied_file(&self, parent: &std::fs::File, path: &std::path::Path) -> std::io::Result<std::fs::File>;
+    /// Delete the held copy, clearing readonly only by handle and for a single link on Windows.
+    fn remove_copied_file(&self, file: &std::fs::File, path: &std::path::Path) -> std::io::Result<()>;
     /// Rename by source identity into the retained destination parent on Windows.
     fn rename_operation_file(&self, file: &std::fs::File, source: &std::path::Path, parent: &std::fs::File, destination: &std::path::Path, replace: bool) -> std::io::Result<()>;
     /// Remove the selected object and its children by retained identities on Windows.

@@ -5,9 +5,9 @@ use std::path::Path;
 use windows::core::PCWSTR;
 use windows::Win32::Foundation::HANDLE;
 use windows::Win32::Storage::FileSystem::{
-    CopyFileExW, FlushFileBuffers, COPYPROGRESSROUTINE_PROGRESS, COPY_FILE_FAIL_IF_EXISTS,
-    FILE_FLAG_OPEN_REPARSE_POINT, FILE_SHARE_READ, LPPROGRESS_ROUTINE_CALLBACK_REASON,
-    PROGRESS_CONTINUE, PROGRESS_STOP,
+    CopyFileExW, FlushFileBuffers, COPYPROGRESSROUTINE_PROGRESS, COPY_FILE_COPY_SYMLINK,
+    COPY_FILE_FAIL_IF_EXISTS, FILE_FLAG_OPEN_REPARSE_POINT, FILE_SHARE_READ,
+    LPPROGRESS_ROUTINE_CALLBACK_REASON, PROGRESS_CONTINUE, PROGRESS_STOP,
 };
 
 fn io_error(error: windows::core::Error) -> io::Error {
@@ -131,7 +131,10 @@ pub(super) fn copy(
             Some(callback),
             Some((&mut context as *mut Context<'_>).cast()),
             None,
-            COPY_FILE_FAIL_IF_EXISTS,
+            // Also reject a pre-existing dangling destination symlink, rather
+            // than creating its target. A newly substituted source symlink is
+            // copied itself and then rejected by the output's native lookup.
+            COPY_FILE_FAIL_IF_EXISTS | COPY_FILE_COPY_SYMLINK,
         )
     }
     .map_err(io_error);

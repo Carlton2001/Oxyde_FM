@@ -4,15 +4,21 @@ use std::io;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
-struct Staging {
-    directory: std::fs::File,
+pub(super) struct Staging {
+    pub directory: std::fs::File,
     pin: Option<std::fs::File>,
     path: PathBuf,
-    file: PathBuf,
+    pub file: PathBuf,
 }
 impl Staging {
     fn new(parents: &super::path_parents::HeldParents) -> io::Result<Self> {
-        let leaf = format!(".oxyde-copy-{}", uuid::Uuid::new_v4());
+        Self::with_prefix(parents, ".oxyde-copy-")
+    }
+    pub fn with_prefix(
+        parents: &super::path_parents::HeldParents,
+        prefix: &str,
+    ) -> io::Result<Self> {
+        let leaf = format!("{prefix}{}", uuid::Uuid::new_v4());
         let path = parents.resolved_path(Path::new(&leaf))?;
         let (directory, pin) = platform().create_copy_staging(parents.directory(), &path)?;
         Ok(Self {
@@ -103,8 +109,9 @@ pub(super) fn copy_with_parents(
 
 /// Remove only a journal-verified output, including copied readonly files.
 pub(crate) fn remove_verified_output(path: &Path, expected: &str) -> io::Result<()> {
-    let _parents = super::path_parents::HeldParents::new(path)?;
-    let mut file = platform().open_file_for_move(path)?;
+    let parents = super::path_parents::HeldParents::new(path)?;
+    let resolved = parents.resolved_path(path)?;
+    let mut file = platform().open_copied_file(parents.directory(), &resolved)?;
     let metadata = file.metadata()?;
     if !metadata.is_file()
         || platform().file_attributes(&metadata, "").2
@@ -115,17 +122,7 @@ pub(crate) fn remove_verified_output(path: &Path, expected: &str) -> io::Result<
             path.display()
         )));
     }
-    let original = metadata.permissions();
-    if original.readonly() {
-        let mut writable = original.clone();
-        writable.set_readonly(false);
-        std::fs::set_permissions(path, writable)?;
-    }
-    let result = platform().remove_open_file(&file, path);
-    if result.is_err() && original.readonly() {
-        std::fs::set_permissions(path, original)?;
-    }
-    result
+    platform().remove_copied_file(&file, &resolved)
 }
 
 fn check_replacement(path: &Path) -> io::Result<()> {
@@ -171,6 +168,30 @@ mod tests {
     use super::*;
     use std::fs;
     use std::io::ErrorKind;
+
+    #[test]
+    fn verified_copy_cleanup_preserves_readonly_foreign_hardlink_attributes() {
+        let root = tempfile::tempdir().unwrap();
+        let witness = root.path().join("foreign-witness");
+        let output = root.path().join("copied-output");
+        fs::write(&witness, b"same verified data").unwrap();
+        fs::hard_link(&witness, &output).unwrap();
+        let mut permissions = fs::metadata(&witness).unwrap().permissions();
+        permissions.set_readonly(true);
+        fs::set_permissions(&witness, permissions.clone()).unwrap();
+        let expected = blake3::hash(b"same verified data").to_hex().to_string();
+        let result = remove_verified_output(&output, &expected);
+        let preserved = fs::metadata(&witness).unwrap().permissions().readonly();
+        permissions.set_readonly(false);
+        fs::set_permissions(&witness, permissions).unwrap();
+        assert!(
+            preserved,
+            "verified copy cleanup changed the foreign hardlink attributes"
+        );
+        assert!(result.is_err());
+        assert_eq!(fs::read(&witness).unwrap(), b"same verified data");
+        assert_eq!(fs::read(&output).unwrap(), b"same verified data");
+    }
 
     #[test]
     fn staging_is_never_created_in_a_new_reparse_target() {

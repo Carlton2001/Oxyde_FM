@@ -1,39 +1,50 @@
 //! Verified history moves; copy only when the filesystem reports a volume boundary.
 use crate::platform::platform;
-use std::fs::{self, File};
+use std::fs::File;
 use std::io::{self, Read, Seek, SeekFrom};
 use std::path::Path;
 
 trait MoveIo {
-    fn rename(&self, file: &File, source: &Path, destination: &Path) -> io::Result<()>;
-    fn copy(&self, source: &Path, destination: &Path) -> io::Result<u64>;
+    fn rename(
+        &self,
+        file: &File,
+        source: &Path,
+        destination: &Path,
+        parents: &super::path_parents::HeldParents,
+    ) -> io::Result<()>;
+    fn copy(
+        &self,
+        file: &File,
+        source: &Path,
+        destination: &Path,
+        parent: &File,
+    ) -> io::Result<u64>;
     fn remove(&self, file: &File, path: &Path) -> io::Result<()>;
 }
 struct NativeIo;
 impl MoveIo for NativeIo {
-    fn rename(&self, file: &File, source: &Path, destination: &Path) -> io::Result<()> {
-        platform().rename_open_file_exclusive(file, source, destination)
+    fn rename(
+        &self,
+        file: &File,
+        source: &Path,
+        destination: &Path,
+        parents: &super::path_parents::HeldParents,
+    ) -> io::Result<()> {
+        parents.rename(file, source, destination, false)
     }
-    fn copy(&self, source: &Path, destination: &Path) -> io::Result<u64> {
-        fs::copy(source, destination)
+    fn copy(
+        &self,
+        file: &File,
+        source: &Path,
+        destination: &Path,
+        parent: &File,
+    ) -> io::Result<u64> {
+        platform()
+            .copy_file_with_progress(source, destination, Some(file), parent, &mut |_| Ok(()))?;
+        Ok(file.metadata()?.len())
     }
     fn remove(&self, file: &File, path: &Path) -> io::Result<()> {
         platform().remove_open_file(file, path)
-    }
-}
-
-struct StagingFile(tempfile::TempPath);
-impl Drop for StagingFile {
-    fn drop(&mut self) {
-        // CopyFile also preserves readonly attributes. Only this generated
-        // temporary path is made writable for cleanup, never the source.
-        if let Ok(metadata) = fs::metadata(&self.0) {
-            let mut permissions = metadata.permissions();
-            if permissions.readonly() {
-                permissions.set_readonly(false);
-                let _ = fs::set_permissions(&self.0, permissions);
-            }
-        }
     }
 }
 
@@ -76,14 +87,11 @@ fn move_with(
     destination: &Path,
     expected: Option<&str>,
 ) -> io::Result<()> {
-    let _source_parents = super::path_parents::HeldParents::new(source)?;
-    let _destination_parents = super::path_parents::HeldParents::new(destination)?;
-    if fs::symlink_metadata(source)?.file_type().is_symlink() {
-        return Err(io::Error::other(
-            "History moves cannot follow symbolic links",
-        ));
-    }
-    let mut original = platform().open_file_for_move(source)?;
+    let source_parents = super::path_parents::HeldParents::new(source)?;
+    let destination_parents = super::path_parents::HeldParents::new(destination)?;
+    let source = source_parents.resolved_path(source)?;
+    let destination = destination_parents.resolved_path(destination)?;
+    let mut original = source_parents.open_file(&source)?;
     let metadata = original.metadata()?;
     let name = source
         .file_name()
@@ -102,64 +110,28 @@ fn move_with(
             source.display()
         )));
     }
-    match ops.rename(&original, source, destination) {
+    match ops.rename(&original, &source, &destination, &destination_parents) {
         Ok(()) => return Ok(()),
         Err(error) if error.kind() == io::ErrorKind::CrossesDevices => {}
         Err(error) => return Err(error),
     }
 
-    let parent = destination.parent().ok_or_else(|| {
-        io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "Move destination has no parent",
-        )
-    })?;
-    // CopyFile refuses an existing hidden destination. Hide the containing
-    // staging directory instead; the copied file retains the source attributes.
-    let staging_dir = tempfile::Builder::new()
-        .prefix(".oxyde-history-")
-        .tempdir_in(parent)?;
-    platform()
-        .set_hidden_attribute(staging_dir.path(), true)
-        .map_err(io::Error::other)?;
-    let staging = StagingFile(
-        tempfile::Builder::new()
-            .tempfile_in(staging_dir.path())?
-            .into_temp_path(),
-    );
-    let copied = ops.copy(source, &staging.0)?;
+    let staging = super::file_copy::Staging::with_prefix(&destination_parents, ".oxyde-history-")?;
+    let copied = ops.copy(&original, &source, &staging.file, &staging.directory)?;
     if copied != metadata.len() {
         return Err(io::Error::other("Incomplete history move copy"));
     }
-    let copied_permissions = fs::metadata(&staging.0)?.permissions();
-    if copied_permissions.readonly() {
-        let mut writable = copied_permissions.clone();
-        writable.set_readonly(false);
-        fs::set_permissions(&staging.0, writable)?;
-    }
-    {
-        let output = File::options().read(true).write(true).open(&staging.0)?;
-        output.sync_all()?;
-        output.set_permissions(copied_permissions)?;
-    }
-    let mut output = platform().open_file_for_move(&staging.0)?;
+    let mut output = platform().open_copied_file(&staging.directory, &staging.file)?;
     if hash(&mut output)? != original_hash || hash(&mut original)? != original_hash {
         return Err(io::Error::other(
             "History move copy failed content verification",
         ));
     }
-    ops.rename(&output, &staging.0, destination)?;
-    if let Err(error) = ops.remove(&original, source) {
+    ops.rename(&output, &staging.file, &destination, &destination_parents)?;
+    if let Err(error) = ops.remove(&original, &source) {
         // The opened destination still belongs to this operation. On Windows
         // its handle prevents an external writer or path replacement here.
-        let cleanup = (|| {
-            let mut permissions = output.metadata()?.permissions();
-            if permissions.readonly() {
-                permissions.set_readonly(false);
-                fs::set_permissions(destination, permissions)?;
-            }
-            platform().remove_open_file(&output, destination)
-        })();
+        let cleanup = platform().remove_copied_file(&output, &destination);
         return match cleanup {
             Ok(()) => Err(error),
             Err(cleanup) => Err(io::Error::other(format!(
@@ -175,6 +147,7 @@ fn move_with(
 mod tests {
     use super::*;
     use std::cell::Cell;
+    use std::fs;
     use std::path::PathBuf;
 
     #[derive(Clone, Copy)]
@@ -192,9 +165,15 @@ mod tests {
         fault: Fault,
     }
     impl MoveIo for ForcedCopy {
-        fn rename(&self, file: &File, source: &Path, destination: &Path) -> io::Result<()> {
+        fn rename(
+            &self,
+            file: &File,
+            source: &Path,
+            destination: &Path,
+            parents: &super::super::path_parents::HeldParents,
+        ) -> io::Result<()> {
             self.attempts.set(self.attempts.get() + 1);
-            if source == self.source {
+            if self.attempts.get() == 1 {
                 return Err(io::Error::new(
                     io::ErrorKind::CrossesDevices,
                     "injected volume boundary",
@@ -203,9 +182,15 @@ mod tests {
             if matches!(self.fault, Fault::Conflict) {
                 fs::write(&self.destination, b"external file")?;
             }
-            NativeIo.rename(file, source, destination)
+            NativeIo.rename(file, source, destination, parents)
         }
-        fn copy(&self, source: &Path, destination: &Path) -> io::Result<u64> {
+        fn copy(
+            &self,
+            file: &File,
+            source: &Path,
+            destination: &Path,
+            parent: &File,
+        ) -> io::Result<u64> {
             #[cfg(target_os = "windows")]
             assert!(
                 platform()
@@ -219,7 +204,7 @@ mod tests {
                 fs::write(destination, b"partial copy")?;
                 return Err(io::Error::other("injected write failure"));
             }
-            let count = NativeIo.copy(source, destination)?;
+            let count = NativeIo.copy(file, source, destination, parent)?;
             if matches!(self.fault, Fault::Corrupt) {
                 let content = vec![b'x'; count as usize];
                 fs::write(destination, content)?;
@@ -252,6 +237,341 @@ mod tests {
             .file_name()
             .to_string_lossy()
             .starts_with(".oxyde-history-")));
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn history_move_keeps_the_initial_destination_after_junction_retargeting() {
+        use crate::platform::windows_reparse_tests::{junction, Retarget};
+        struct RetargetingIo {
+            retarget: Retarget,
+        }
+        impl MoveIo for RetargetingIo {
+            fn rename(
+                &self,
+                file: &File,
+                source: &Path,
+                destination: &Path,
+                parents: &super::super::path_parents::HeldParents,
+            ) -> io::Result<()> {
+                self.retarget.apply();
+                NativeIo.rename(file, source, destination, parents)
+            }
+            fn copy(
+                &self,
+                file: &File,
+                source: &Path,
+                destination: &Path,
+                parent: &File,
+            ) -> io::Result<u64> {
+                NativeIo.copy(file, source, destination, parent)
+            }
+            fn remove(&self, file: &File, path: &Path) -> io::Result<()> {
+                NativeIo.remove(file, path)
+            }
+        }
+        let root = tempfile::tempdir().unwrap();
+        let selected = root.path().join("selected");
+        let outside = root.path().join("outside");
+        let source = root.path().join("source");
+        fs::create_dir(&selected).unwrap();
+        fs::create_dir(&outside).unwrap();
+        fs::write(&source, b"selected data").unwrap();
+        fs::write(outside.join("witness"), b"outside witness").unwrap();
+        let link = root.path().join("link");
+        let template = root.path().join("template");
+        junction(&link, &selected);
+        junction(&template, &outside);
+        let ops = RetargetingIo {
+            retarget: Retarget::new(&link, &template),
+        };
+        move_with(&ops, &source, &link.join("output"), None).unwrap();
+        let stayed = selected.join("output").is_file();
+        assert_eq!(
+            fs::read(outside.join("witness")).unwrap(),
+            b"outside witness"
+        );
+        drop(ops);
+        fs::remove_dir(link).unwrap();
+        fs::remove_dir(template).unwrap();
+        assert!(
+            stayed,
+            "history move followed the retargeted destination junction"
+        );
+        assert!(!outside.join("output").exists());
+        assert!(!source.exists());
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn history_copy_keeps_initial_source_and_destination_after_retargeting() {
+        use crate::platform::windows_reparse_tests::{junction, Retarget};
+        struct RetargetingCopy {
+            source: Retarget,
+            destination: Retarget,
+            calls: Cell<usize>,
+        }
+        impl MoveIo for RetargetingCopy {
+            fn rename(
+                &self,
+                file: &File,
+                source: &Path,
+                destination: &Path,
+                parents: &super::super::path_parents::HeldParents,
+            ) -> io::Result<()> {
+                self.calls.set(self.calls.get() + 1);
+                if self.calls.get() == 1 {
+                    self.source.apply();
+                    self.destination.apply();
+                    return Err(io::Error::new(
+                        io::ErrorKind::CrossesDevices,
+                        "test volume boundary",
+                    ));
+                }
+                NativeIo.rename(file, source, destination, parents)
+            }
+            fn copy(
+                &self,
+                file: &File,
+                source: &Path,
+                destination: &Path,
+                parent: &File,
+            ) -> io::Result<u64> {
+                NativeIo.copy(file, source, destination, parent)
+            }
+            fn remove(&self, file: &File, path: &Path) -> io::Result<()> {
+                NativeIo.remove(file, path)
+            }
+        }
+        let root = tempfile::tempdir().unwrap();
+        let source_parent = root.path().join("source-parent");
+        let selected = root.path().join("selected");
+        let outside = root.path().join("outside");
+        for directory in [&source_parent, &selected, &outside] {
+            fs::create_dir(directory).unwrap();
+        }
+        fs::write(source_parent.join("input"), b"selected data").unwrap();
+        fs::write(outside.join("input"), b"foreign source").unwrap();
+        fs::write(outside.join("output"), b"foreign destination").unwrap();
+        let source_link = root.path().join("source-link");
+        let destination_link = root.path().join("destination-link");
+        let template = root.path().join("template");
+        junction(&source_link, &source_parent);
+        junction(&destination_link, &selected);
+        junction(&template, &outside);
+        let ops = RetargetingCopy {
+            source: Retarget::new(&source_link, &template),
+            destination: Retarget::new(&destination_link, &template),
+            calls: Cell::new(0),
+        };
+        move_with(
+            &ops,
+            &source_link.join("input"),
+            &destination_link.join("output"),
+            None,
+        )
+        .unwrap();
+        assert_eq!(fs::read(selected.join("output")).unwrap(), b"selected data");
+        assert!(!source_parent.join("input").exists());
+        assert_eq!(fs::read(outside.join("input")).unwrap(), b"foreign source");
+        assert_eq!(
+            fs::read(outside.join("output")).unwrap(),
+            b"foreign destination"
+        );
+        assert_eq!(fs::read_dir(&outside).unwrap().count(), 2);
+        assert_no_staging(&selected);
+        drop(ops);
+        for link in [source_link, destination_link, template] {
+            fs::remove_dir(link).unwrap();
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn history_copy_refuses_a_new_destination_reparse_before_staging() {
+        use crate::platform::windows_reparse_tests::{junction, Retarget};
+        struct RedirectBeforeCopy {
+            retarget: Retarget,
+            copied: Cell<bool>,
+        }
+        impl MoveIo for RedirectBeforeCopy {
+            fn rename(
+                &self,
+                _file: &File,
+                _source: &Path,
+                _destination: &Path,
+                _parents: &super::super::path_parents::HeldParents,
+            ) -> io::Result<()> {
+                self.retarget.apply();
+                Err(io::Error::new(
+                    io::ErrorKind::CrossesDevices,
+                    "test volume boundary",
+                ))
+            }
+            fn copy(
+                &self,
+                _file: &File,
+                _source: &Path,
+                _destination: &Path,
+                _parent: &File,
+            ) -> io::Result<u64> {
+                self.copied.set(true);
+                Err(io::Error::other("test stop before data"))
+            }
+            fn remove(&self, file: &File, path: &Path) -> io::Result<()> {
+                NativeIo.remove(file, path)
+            }
+        }
+        let root = tempfile::tempdir().unwrap();
+        let source = root.path().join("source");
+        let selected = root.path().join("selected");
+        let outside = root.path().join("outside");
+        fs::write(&source, b"selected data").unwrap();
+        fs::create_dir(&selected).unwrap();
+        fs::create_dir(&outside).unwrap();
+        fs::write(outside.join("witness"), b"unchanged").unwrap();
+        let template = root.path().join("template");
+        junction(&template, &outside);
+        let ops = RedirectBeforeCopy {
+            retarget: Retarget::new(&selected, &template),
+            copied: Cell::new(false),
+        };
+        let result = move_with(&ops, &source, &selected.join("output"), None);
+        ops.retarget.clear();
+        assert!(result.is_err());
+        assert!(!ops.copied.get());
+        assert_eq!(fs::read(&source).unwrap(), b"selected data");
+        assert_eq!(fs::read(outside.join("witness")).unwrap(), b"unchanged");
+        assert_eq!(fs::read_dir(&outside).unwrap().count(), 1);
+        assert_eq!(fs::read_dir(&selected).unwrap().count(), 0);
+        drop(ops);
+        fs::remove_dir(template).unwrap();
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn history_readonly_cleanup_uses_the_published_identity_after_retargeting() {
+        use crate::platform::windows_reparse_tests::{junction, Retarget};
+        struct RedirectOnRemove {
+            retarget: Retarget,
+            calls: Cell<usize>,
+        }
+        impl MoveIo for RedirectOnRemove {
+            fn rename(
+                &self,
+                file: &File,
+                source: &Path,
+                destination: &Path,
+                parents: &super::super::path_parents::HeldParents,
+            ) -> io::Result<()> {
+                self.calls.set(self.calls.get() + 1);
+                if self.calls.get() == 1 {
+                    return Err(io::Error::new(
+                        io::ErrorKind::CrossesDevices,
+                        "test volume boundary",
+                    ));
+                }
+                NativeIo.rename(file, source, destination, parents)
+            }
+            fn copy(
+                &self,
+                file: &File,
+                source: &Path,
+                destination: &Path,
+                parent: &File,
+            ) -> io::Result<u64> {
+                NativeIo.copy(file, source, destination, parent)
+            }
+            fn remove(&self, _file: &File, _path: &Path) -> io::Result<()> {
+                self.retarget.apply();
+                Err(io::Error::new(
+                    io::ErrorKind::PermissionDenied,
+                    "test source deletion refused",
+                ))
+            }
+        }
+        let root = tempfile::tempdir().unwrap();
+        let selected = root.path().join("selected");
+        let outside = root.path().join("outside");
+        fs::create_dir(&selected).unwrap();
+        fs::create_dir(&outside).unwrap();
+        let source = root.path().join("source");
+        let foreign = outside.join("output");
+        fs::write(&source, b"selected data").unwrap();
+        fs::write(&foreign, b"foreign data").unwrap();
+        for path in [&source, &foreign] {
+            let mut permissions = fs::metadata(path).unwrap().permissions();
+            permissions.set_readonly(true);
+            fs::set_permissions(path, permissions).unwrap();
+        }
+        let link = root.path().join("link");
+        let template = root.path().join("template");
+        junction(&link, &selected);
+        junction(&template, &outside);
+        let ops = RedirectOnRemove {
+            retarget: Retarget::new(&link, &template),
+            calls: Cell::new(0),
+        };
+        let error = move_with(&ops, &source, &link.join("output"), None).unwrap_err();
+        let preserved_attributes = fs::metadata(&source).unwrap().permissions().readonly()
+            && fs::metadata(&foreign).unwrap().permissions().readonly();
+        for path in [&source, &foreign] {
+            let mut permissions = fs::metadata(path).unwrap().permissions();
+            permissions.set_readonly(false);
+            fs::set_permissions(path, permissions).unwrap();
+        }
+        assert_eq!(error.to_string(), "test source deletion refused");
+        assert!(preserved_attributes);
+        assert_eq!(fs::read(&source).unwrap(), b"selected data");
+        assert_eq!(fs::read(&foreign).unwrap(), b"foreign data");
+        assert!(!selected.join("output").exists());
+        assert_no_staging(&selected);
+        drop(ops);
+        fs::remove_dir(link).unwrap();
+        fs::remove_dir(template).unwrap();
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn forced_history_copy_preserves_streams_hidden_attribute_and_modified_time() {
+        let root = tempfile::tempdir().unwrap();
+        let ops = fixture(root.path(), Fault::None);
+        fs::write(
+            ops.source.with_file_name("source.txt:extra"),
+            b"alternate stream",
+        )
+        .unwrap();
+        fs::write(
+            ops.source.with_file_name("source.txt:Zone.Identifier"),
+            b"[ZoneTransfer]\r\nZoneId=3\r\n",
+        )
+        .unwrap();
+        platform().set_hidden_attribute(&ops.source, true).unwrap();
+        let modified = std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_700_000_000);
+        File::options()
+            .write(true)
+            .open(&ops.source)
+            .unwrap()
+            .set_times(std::fs::FileTimes::new().set_modified(modified))
+            .unwrap();
+        move_with(&ops, &ops.source, &ops.destination, None).unwrap();
+        assert!(!ops.source.exists());
+        assert_eq!(
+            fs::read(ops.destination.with_file_name("destination.txt:extra")).unwrap(),
+            b"alternate stream"
+        );
+        assert_eq!(
+            fs::read(
+                ops.destination
+                    .with_file_name("destination.txt:Zone.Identifier")
+            )
+            .unwrap(),
+            b"[ZoneTransfer]\r\nZoneId=3\r\n"
+        );
+        let metadata = fs::metadata(&ops.destination).unwrap();
+        assert_eq!(metadata.modified().unwrap(), modified);
+        assert!(platform().file_attributes(&metadata, "").0);
+        assert_no_staging(root.path());
     }
 
     #[test]

@@ -67,36 +67,11 @@ pub(super) fn remove(directory: &File, pin: File) -> io::Result<()> {
         DELETE.0 | FILE_READ_ATTRIBUTES.0 | FILE_WRITE_ATTRIBUTES.0,
         FILE_SHARE_READ.0 | FILE_SHARE_WRITE.0,
     );
-    let result = (|| match output {
-        Ok(output) => {
-            let metadata = output.metadata()?;
-            // Never change permissions on a substituted link or a directory.
-            if metadata.is_file()
-                && metadata.file_attributes() & 0x400 == 0
-                && metadata.permissions().readonly()
-            {
-                let mut information = BY_HANDLE_FILE_INFORMATION::default();
-                unsafe {
-                    GetFileInformationByHandle(HANDLE(output.as_raw_handle()), &mut information)
-                }
-                .map_err(|error| {
-                    io::Error::from_raw_os_error((error.code().0 as u32 & 0xffff) as i32)
-                })?;
-                // Attributes are shared by hard links. Refuse to alter another name.
-                if information.nNumberOfLinks != 1 {
-                    return Err(io::Error::other(
-                        "Readonly staging output has multiple links",
-                    ));
-                }
-                let mut permissions = metadata.permissions();
-                permissions.set_readonly(false);
-                output.set_permissions(permissions)?;
-            }
-            super::windows_file_moves::remove(&output)
-        }
+    let result = match output {
+        Ok(output) => remove_output(&output),
         Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
         Err(error) => Err(error),
-    })();
+    };
     // Drop the pin before deleting the directory, including failure paths.
     let unpin = super::windows_file_moves::remove(&pin);
     drop(pin);
@@ -106,11 +81,77 @@ pub(super) fn remove(directory: &File, pin: File) -> io::Result<()> {
     super::windows_file_moves::remove(directory)
 }
 
+pub(super) fn remove_output(output: &File) -> io::Result<()> {
+    let metadata = output.metadata()?;
+    let original = metadata.permissions();
+    // Never change attributes on a substituted link or a directory.
+    let clear_readonly =
+        metadata.is_file() && metadata.file_attributes() & 0x400 == 0 && original.readonly();
+    if clear_readonly {
+        let mut information = BY_HANDLE_FILE_INFORMATION::default();
+        unsafe { GetFileInformationByHandle(HANDLE(output.as_raw_handle()), &mut information) }
+            .map_err(|error| {
+                io::Error::from_raw_os_error((error.code().0 as u32 & 0xffff) as i32)
+            })?;
+        // Attributes are shared by hard links; do not alter another name.
+        if information.nNumberOfLinks != 1 {
+            return Err(io::Error::other(
+                "Readonly copied output has multiple links",
+            ));
+        }
+        let mut permissions = original.clone();
+        permissions.set_readonly(false);
+        output.set_permissions(permissions)?;
+    }
+    let result = super::windows_file_moves::remove(output);
+    if let Err(error) = result {
+        if clear_readonly {
+            output.set_permissions(original).map_err(|restore| {
+                io::Error::other(format!(
+                    "{error}; cannot restore copy attributes: {restore}"
+                ))
+            })?;
+        }
+        return Err(error);
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::platform::windows_reparse_tests::{junction, Retarget};
     use std::fs;
+
+    #[test]
+    fn refused_output_deletion_restores_readonly_on_the_same_handle() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("output");
+        fs::write(&path, b"unchanged").unwrap();
+        let mut permissions = fs::metadata(&path).unwrap().permissions();
+        permissions.set_readonly(true);
+        fs::set_permissions(&path, permissions.clone()).unwrap();
+        let parent = super::super::windows_file_moves::hold_parent(root.path()).unwrap();
+        // Deliberately omit DELETE to exercise an OS refusal after attribute
+        // clearing, without substituting the implementation under test.
+        let file = super::super::windows_no_reparse::open_relative(
+            &parent,
+            OsStr::new("output"),
+            false,
+            GENERIC_READ.0 | FILE_WRITE_ATTRIBUTES.0,
+            FILE_SHARE_READ.0,
+            1,
+        )
+        .unwrap();
+        let error = remove_output(&file).unwrap_err();
+        let restored = file.metadata().unwrap().permissions().readonly();
+        drop(file);
+        permissions.set_readonly(false);
+        fs::set_permissions(&path, permissions).unwrap();
+        assert_eq!(error.kind(), io::ErrorKind::PermissionDenied);
+        assert!(restored);
+        assert_eq!(fs::read(&path).unwrap(), b"unchanged");
+    }
 
     #[test]
     fn relative_creation_never_uses_a_retargeted_parent() {

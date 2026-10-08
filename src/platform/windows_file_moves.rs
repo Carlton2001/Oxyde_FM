@@ -6,6 +6,7 @@ use windows::Win32::Foundation::{GENERIC_READ, HANDLE};
 use windows::Win32::Storage::FileSystem::{
     FileDispositionInfo, SetFileInformationByHandle, DELETE, FILE_DISPOSITION_INFO,
     FILE_READ_ATTRIBUTES, FILE_RENAME_INFO, FILE_SHARE_READ, FILE_SHARE_WRITE,
+    FILE_WRITE_ATTRIBUTES,
 };
 
 #[repr(C)]
@@ -68,6 +69,20 @@ pub(super) fn open_relative(parent: &File, path: &Path, read_contents: bool) -> 
         } else {
             FILE_READ_ATTRIBUTES.0
         }) | DELETE.0,
+        FILE_SHARE_READ.0,
+        1,
+    )
+}
+
+pub(super) fn open_copied_relative(parent: &File, path: &Path) -> Result<File> {
+    let leaf = path
+        .file_name()
+        .ok_or_else(|| Error::new(ErrorKind::InvalidInput, "Copy has no file name"))?;
+    super::windows_no_reparse::open_relative(
+        parent,
+        leaf,
+        false,
+        GENERIC_READ.0 | DELETE.0 | FILE_WRITE_ATTRIBUTES.0,
         FILE_SHARE_READ.0,
         1,
     )

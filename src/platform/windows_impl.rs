@@ -35,6 +35,12 @@ impl Platform for WindowsPlatform {
     fn open_operation_file(&self, parent: &std::fs::File, path: &std::path::Path, read_contents: bool) -> std::io::Result<std::fs::File> {
         super::windows_file_moves::open_relative(parent, path, read_contents)
     }
+    fn open_copied_file(&self, parent: &std::fs::File, path: &std::path::Path) -> std::io::Result<std::fs::File> {
+        super::windows_file_moves::open_copied_relative(parent, path)
+    }
+    fn remove_copied_file(&self, file: &std::fs::File, _path: &std::path::Path) -> std::io::Result<()> {
+        super::windows_copy_staging::remove_output(file)
+    }
     fn rename_operation_file(&self, file: &std::fs::File, _source: &std::path::Path, parent: &std::fs::File, destination: &std::path::Path, replace: bool) -> std::io::Result<()> {
         super::windows_file_moves::rename_relative(file, parent, destination, replace)
     }

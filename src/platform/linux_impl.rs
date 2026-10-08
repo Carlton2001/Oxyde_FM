@@ -52,6 +52,12 @@ impl Platform for LinuxPlatform {
         }
         self.open_file_for_move(path)
     }
+    fn open_copied_file(&self, parent: &std::fs::File, path: &std::path::Path) -> std::io::Result<std::fs::File> {
+        self.open_operation_file(parent, path, true)
+    }
+    fn remove_copied_file(&self, _file: &std::fs::File, path: &std::path::Path) -> std::io::Result<()> {
+        std::fs::remove_file(path)
+    }
     fn rename_operation_file(&self, file: &std::fs::File, source: &std::path::Path, _parent: &std::fs::File, destination: &std::path::Path, replace: bool) -> std::io::Result<()> {
         if replace { self.replace_open_file(file, source, destination) }
         else { self.rename_open_file_exclusive(file, source, destination) }
