@@ -500,59 +500,6 @@ fn search_in_archive(
                 }
             }
         }
-        ArchiveFormat::SevenZip => {
-            if let Ok(file) = File::open(archive_path) {
-                if let Ok(mut reader) =
-                    sevenz_rust2::ArchiveReader::new(file, sevenz_rust2::Password::empty())
-                {
-                    let _ = reader.for_each_entries(|entry, _| {
-                        if cancellation.load(Ordering::Relaxed) {
-                            return Ok(false);
-                        }
-                        let name_with_path = entry.name().replace('\\', "/");
-                        let last_part = name_with_path.split('/').next_back().unwrap_or("");
-                        if last_part.is_empty() {
-                            return Ok(true);
-                        }
-
-                        if params.pattern.matches(last_part) {
-                            let is_dir = entry.is_directory();
-                            let size = entry.size();
-
-                            if !is_dir {
-                                if let Some(min) = params.min_size {
-                                    if size < min {
-                                        return Ok(true);
-                                    }
-                                }
-                                if let Some(max) = params.max_size {
-                                    if size > max {
-                                        return Ok(true);
-                                    }
-                                }
-                            }
-
-                            results.push(FileEntry {
-                                name: last_part.to_string(),
-                                path: format!(
-                                    "{}\\{}",
-                                    archive_path.to_string_lossy(),
-                                    name_with_path.replace('/', "\\")
-                                ),
-                                is_dir,
-                                is_hidden: false,
-                                size,
-                                modified: 0,
-                                folders_count: None,
-                                files_count: None,
-                                ..FileEntry::default()
-                            });
-                        }
-                        Ok(true)
-                    });
-                }
-            }
-        }
         ArchiveFormat::Tar
         | ArchiveFormat::TarGz
         | ArchiveFormat::TarXz
@@ -631,7 +578,7 @@ fn search_in_archive(
                 }
             }
         }
-        ArchiveFormat::Iso => {
+        ArchiveFormat::Iso | ArchiveFormat::SevenZip => {
             let checkpoint = || {
                 if cancellation.load(Ordering::Relaxed) {
                     Err(std::io::Error::new(
@@ -642,7 +589,13 @@ fn search_in_archive(
                     Ok(())
                 }
             };
-            match super::archive_iso_open::indexed_files(archive_path, &checkpoint) {
+            let index = match format {
+                ArchiveFormat::SevenZip => {
+                    super::archive_seven_open::indexed_files(archive_path, &checkpoint)
+                }
+                _ => super::archive_iso_open::indexed_files(archive_path, &checkpoint),
+            };
+            match index {
                 Ok(entries) => {
                     for entry in entries {
                         if checkpoint().is_err() {
@@ -657,12 +610,12 @@ fn search_in_archive(
                         {
                             continue;
                         }
-                        // ISO dates remain unavailable, as in the previous reader.
+                        // ISO and 7z dates remain unavailable, as in the previous readers.
                         results.push(entry);
                     }
                 }
                 Err(error) if !cancellation.load(Ordering::Relaxed) => {
-                    log::warn!("ISO search skipped {}: {error}", archive_path.display());
+                    log::warn!("Archive search skipped {}: {error}", archive_path.display());
                 }
                 Err(_) => {}
             }
@@ -674,7 +627,7 @@ fn search_in_archive(
 }
 
 #[cfg(test)]
-mod iso_search_tests {
+mod archive_search_tests {
     use super::*;
 
     fn params() -> SearchParams {
@@ -685,6 +638,49 @@ mod iso_search_tests {
             min_date: None,
             max_date: None,
         }
+    }
+
+    #[test]
+    fn seven_search_lists_header_names_without_constructing_a_content_decoder() {
+        let temp = tempfile::tempdir().unwrap();
+        let archive = temp.path().join("unsupported-codec.7z");
+        super::super::archive_seven_open::block_crc_fixture_with_method(&archive, false, 0x7f);
+        let mut reader = sevenz_rust2::ArchiveReader::new(
+            File::open(&archive).unwrap(),
+            sevenz_rust2::Password::empty(),
+        )
+        .unwrap();
+        assert_eq!(reader.archive().files.len(), 2);
+        assert!(reader.for_each_entries(|_, _| Ok(true)).is_err());
+        let results = search_in_archive(&archive, &params(), &Arc::new(AtomicBool::new(false)));
+        assert_eq!(results.len(), 2, "name search depends on a content decoder");
+        assert_eq!(results[0].name, "selected.txt");
+        assert_eq!(results[1].name, "tail.txt");
+    }
+
+    #[test]
+    fn seven_search_preserves_size_filters_and_cancellation() {
+        let temp = tempfile::tempdir().unwrap();
+        let archive = temp.path().join("filters.7z");
+        super::super::archive_seven_open::block_crc_fixture_with_method(&archive, false, 0);
+        let cancellation = Arc::new(AtomicBool::new(false));
+        let mut params = params();
+        params.pattern = SearchPattern::Literal("SELECTED".into(), false, false);
+        params.min_size = Some(4);
+        params.max_size = Some(4);
+        let results = search_in_archive(&archive, &params, &cancellation);
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].size, 4);
+        assert_eq!(
+            std::path::Path::new(&results[0].path),
+            archive.join("selected.txt")
+        );
+        params.min_size = Some(5);
+        params.max_size = None;
+        assert!(search_in_archive(&archive, &params, &cancellation).is_empty());
+        params.min_size = None;
+        cancellation.store(true, Ordering::Relaxed);
+        assert!(search_in_archive(&archive, &params, &cancellation).is_empty());
     }
 
     #[test]

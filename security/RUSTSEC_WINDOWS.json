@@ -5,7 +5,7 @@
     "last-updated": "2026-10-08T13:59:15+02:00"
   },
   "lockfile": {
-    "dependency-count": 792
+    "dependency-count": 791
   },
   "settings": {
     "target_arch": [
@@ -196,10 +196,10 @@
     ]
   },
   "oxyde-audit": {
-    "date": "2026-10-08",
+    "date": "2026-10-09",
     "cargo-audit-version": "0.22.2",
-    "base-commit": "c7ffecb",
-    "lockfile-sha256-lf": "3d1e89c88f0aa27a441e7029fd4f5e244609a5d5ec0b6798d81d9cfb70b44c6f",
-    "scope": "RustSec advisory applicability filter: Windows x86_64; no advisory ignored"
+    "base-commit": "b8165f9",
+    "lockfile-sha256-lf": "b2de519ffb1a8337a9d6c7ae7c1ffdc3dfe3049be81264741a3b3f3a916cd9a3",
+    "scope": "RustSec advisory applicability filter: Windows x86_64; no advisory ignored; existing local database, no network fetch"
   }
 }

@@ -10,7 +10,7 @@ La priorité est de sécuriser les chemins d'archives : les essais ont confirmé
 
 ## Avancement des six chantiers annoncés
 
-État actualisé au dix-huitième lot. Ces six points sont des chantiers de tailles différentes, et non six étapes presque achevées. Les lots de concurrence Windows détaillés ci-dessous appartiennent principalement au premier point ; leur nombre ne constitue pas un pourcentage d’achèvement de l’audit.
+État actualisé au dix-neuvième lot. Ces six points sont des chantiers de tailles différentes, et non six étapes presque achevées. Les lots de concurrence Windows détaillés ci-dessous appartiennent principalement au premier point ; leur nombre ne constitue pas un pourcentage d’achèvement de l’audit.
 
 | Point annoncé dans la conversation | État et limite actuelle |
 | --- | --- |
@@ -21,7 +21,7 @@ La priorité est de sécuriser les chemins d'archives : les essais ont confirmé
 | 5. Dépendances non maintenues | Analyse Windows effectuée et version retirée corrigée. Les trois alertes de maintenance consignées dans le second lot restent ouvertes ; elles ne sont pas assimilées à trois vulnérabilités confirmées. |
 | 6. Validation finale des messages et du sélecteur | Tests automatisés des traductions, seuils et états réalisés. Vérification visuelle et essai interactif du sélecteur non effectués, conformément à la consigne de ne pas utiliser Computer Use. Les commits sont identifiés dans chaque lot. |
 
-**Borne du dix-huitième lot :** les lots ISO et 7z ciblés ont été commités sous `70565bd`. Ce nouveau lot remplace aussi le lecteur ISO de navigation, recherche et extraction complète, après reproduction d’une panique et d’un listing incomplet annoncé comme réussi. L’index ISO entier est désormais validé avant résultat ou écriture de contenu, avec parcours borné et erreurs explicites. Le lot reste non commité. L’extraction complète et le listing 7z, la concurrence générale, l’isolation des décodeurs et les trois alertes de maintenance ne sont pas déclarés validés par cette correction. La vérification visuelle reste un essai manuel à organiser.
+**Borne du dix-neuvième lot :** le lecteur ISO commun du lot 18 est commité sous `b8165f9`. Le nouveau lot fait utiliser l’index seul à la recherche 7z, partage les contrôles de noms/types avec la navigation, conserve les causes structurées des limites en extraction complète et rend l’annulation définitive pendant les lectures d’en-tête. Les deux défauts reproduits de recherche et de propagation des erreurs sont corrigés dans les scénarios testés. Le lot reste non commité. L’isolation et les allocations internes des parseurs, la concurrence générale, les trois alertes de maintenance et la vérification visuelle restent des chantiers ouverts ; les parcours 7z ne sont pas déclarés intégralement certifiés.
 
 ## 1. Bloquer les sorties du dossier d'extraction
 
@@ -833,7 +833,7 @@ La source est ouverte une fois via `Platform::open_archive_source`, avec conserv
 
 **Plafonds conservés :** 256 Mio écrits pour le fichier demandé, 100 000 entrées, profondeur de 64 composants et 120 secondes coopératives. Les contenus nécessaires du bloc partagent le plafond applicatif de lecture de 678 035 456 octets avec ces réglages. Les fichiers précédents, ou suivants nécessaires au CRC de bloc, peuvent donc encore provoquer un refus structuré de lecture ou de temps même pour une petite sélection. Ces plafonds ne sont pas relevés.
 
-La conversion des erreurs distingue maintenant les variantes I/O de `sevenz_rust2::Error`, dont le `Display` appelle `Debug`. Le texte de la cause I/O est conservé directement : les marqueurs `ArchiveLimitFailure` de taille de lecture et d’échéance restent reconnaissables par l’interface, avec leur seuil. Cette conversion est propre au nouveau chemin ciblé ; les conversions du listing et de l’extraction complète ne sont pas annoncées corrigées.
+La conversion des erreurs distingue maintenant les variantes I/O de `sevenz_rust2::Error`, dont le `Display` appelle `Debug`. Le texte de la cause I/O est conservé directement : les marqueurs `ArchiveLimitFailure` de taille de lecture et d’échéance restent reconnaissables par l’interface, avec leur seuil. À la fin de ce lot, cette conversion était propre au nouveau chemin ciblé ; les conversions du listing et de l’extraction complète n’étaient pas annoncées corrigées. Le dix-neuvième lot ci-dessous partage la conversion des causes I/O et les contrôles de lecture avec ces parcours.
 
 ### Reproductions bornées
 
@@ -895,7 +895,50 @@ Un premier passage après remplacement a réussi 17 tests ISO, avec un test de m
 
 Les limitations ISO du lot 16 restent applicables : noms Joliet/Rock Ridge non ajoutés, entrelacement, volumes multiples et dossiers multi-extents refusés, absence de certification générale de toutes les métadonnées et données de démarrage. Le parcours borné ne constitue pas une isolation dans un autre processus. Les tables de chemins restent liées au nombre de records, à la profondeur et à la longueur des composants ; il n’existe pas de quota distinct sur la mémoire réellement allouée. L’index partagé conserve davantage de métadonnées que l’ancien listing limité au dossier courant. Les cas volumineux restent donc à mesurer au chantier 3, sans garantie nouvelle contre toute saturation mémoire. Une erreur I/O ou une annulation après début de copie peut encore laisser une extraction explicite partielle ; il n’existe pas de transaction globale. L’ouverture complète conserve les règles de partage de sa source fournies par son appelant et n’acquiert pas les garanties supplémentaires propres à l’ouverture ciblée. Linux et tous les fournisseurs de volumes n’ont pas été éprouvés.
 
-Les chantiers 1, 3, 5 et l’essai visuel du point 6 restent ouverts selon le tableau initial. Aucun changement d’interface, Computer Use, test ignoré activé ni push. Ce dix-huitième lot reste non commité après le commit `70565bd` des lots 16 et 17.
+Les chantiers 1, 3, 5 et l’essai visuel du point 6 restent ouverts selon le tableau initial. Aucun changement d’interface, Computer Use, test ignoré activé ni push. Ce dix-huitième lot a été commité sous `b8165f9` (`fix(security): share bounded ISO parsing across archive readers`).
 
 
 **Validation finale du dix-huitième lot :** `cargo check --all-targets --offline` réussi sans avertissement du projet après retrait de la dépendance et actualisation du verrou ; contrôle final avec `--locked` également réussi. `cargo test --all-targets --locked --offline --quiet` : 346 tests de bibliothèque et 116 tests d’interface réussis, soit 462 réussites, 17 tests préexistants ignorés et aucun échec. `git diff --check` réussi ; les six fichiers modifiés vérifiés en UTF-8 strict. Les deux régressions avaient échoué avant correction puis réussi après remplacement du lecteur.
+
+
+## Dix-neuvième lot — métadonnées 7z et propagation des contrôles — 9 octobre 2026
+
+### Défauts reproduits et conditions
+
+Base examinée avant correction : `master`, `b8165f9`. Deux régressions ont été exécutées avant les changements du lecteur, sans prendre les validations précédentes comme preuve de sécurité.
+
+| Constat | Emplacements | Condition et reproduction |
+| --- | --- | --- |
+| Recherche par nom dépendante d’un décodeur de contenu | `src/commands/search.rs::search_in_archive`, branche 7z ; `sevenz-rust2 0.23.0`, `src/reader.rs::ArchiveReader::for_each_entries` et `BlockDecoder::for_each_entries` | Le lecteur construit un décodeur de contenu avant le callback, alors que celui de la recherche ne lit pas les contenus. Une fixture possède un index accepté avec deux noms et un identifiant de méthode inconnu `0x7f`. Le décodeur échoue, son erreur est ignorée par la recherche et celle-ci retourne zéro résultat au lieu des deux noms. `seven_search_lists_header_names_without_constructing_a_content_decoder` reproduit cet écart. C’est un défaut d’usage et un traitement inutile de données de contenu ; aucune saturation mémoire ou corruption exploitable n’est démontrée par cette fixture. |
+| Cause structurée de limite perdue en extraction complète | `src/commands/archive.rs::decompress_seven_zip_with_checkpoint` ; conversion finale par `Error::to_string` | Le `Display` de la bibliothèque utilise `Debug`, qui perd le marqueur textuel d’une cause `ArchiveLimitFailure`. Le test `seven_full_extract_preserves_typed_io_limits_from_decoder_callbacks` crée un fichier de quatre octets et fait expirer un budget injecté dès que la sortie existe, dans le callback de copie. L’extraction échoue, mais l’interface ne peut plus reconnaître le type et le seuil de l’erreur. Ce défaut de propagation n’est pas un contournement démontré du plafond. |
+
+Commande de reproduction : `cargo test --lib --locked --offline seven_ -- --nocapture`. Premier passage : 14 réussites et deux échecs, avec « name search depends on a content decoder » (zéro résultat contre deux attendus) et « 7z erased the structured deadline error ». Les fixtures restent dans leurs dossiers temporaires ; aucune application externe n’est lancée.
+
+### Correction et effet pour l’utilisateur
+
+`src/commands/archive_seven_open.rs::indexed_files` ouvre la source native une fois après résolution/conservation des parents, lit `Archive::read` et vérifie toutes les entrées avant de rendre les métadonnées. La recherche utilise désormais ces noms et tailles, sans construire de décodeur de contenu. Une méthode de contenu inconnue ne masque donc plus les noms lisibles ; ouvrir ou extraire ce contenu reste susceptible d’échouer normalement. Un en-tête 7z encodé peut lui-même nécessiter son décodeur, ce que ce lot ne supprime pas. Les filtres de nom et taille, chemins imbriqués et annulation sont conservés ; les dates ISO/7z restent non utilisées pour filtrer ces entrées, comme auparavant.
+
+`src/commands/archive.rs::list_seven_zip` utilise le même lecteur de métadonnées. Il conserve les dossiers implicites et explicites, fichiers vides, noms Unicode et tailles ; les séparateurs des préfixes internes sont normalisés. Une entrée de dossier racine `.` est comptée puis ignorée pour l’affichage. Une entrée de fichier sans nom est refusée.
+
+`validate_entry_type` partage le refus des entrées de suppression, points de réanalyse et modes POSIX de liens/types spéciaux entre métadonnées, ouverture ciblée et extraction complète. L’extraction effectue ce contrôle lors de sa validation d’index, avant de créer un enfant dans la destination. C’est un durcissement de cohérence : les anciennes sorties n’installaient pas automatiquement les attributs de liens, et aucune création de lien native exploitable n’est affirmée ici.
+
+L’extraction complète utilise `checked_reader` sur le `File` déjà fourni par son appelant. Les lectures et positionnements contrôlent annulation et durée, y compris pendant le chargement de l’en-tête. La conversion `archive_error`, déjà utilisée dans l’ouverture ciblée, conserve désormais les causes I/O des erreurs du décodeur complet. Les marqueurs et seuils sont reconnus par les messages de limites existants, sans nouveau texte d’interface ni changement de plafond : listing/recherche limités à 100 000 entrées, profondeur de 64 et 120 secondes coopératives ; extraction explicite à 64 Gio et 30 minutes, workspace à 8 Gio.
+
+**Annulation et réessais internes :** pendant ce lot, le test `seven_metadata_keeps_limit_and_cancellation_errors_structured` a montré qu’une erreur `Interrupted` émise une fois au troisième point de contrôle était réessayée par une lecture exacte interne, puis que le listing réussissait indûment. Les annulations du checkpoint sont maintenant enveloppées dans une erreur terminale pour ces lectures, avec leur texte original ; les erreurs transitoires du `File::read` lui-même ne sont pas transformées. Le test exige maintenant une erreur au troisième contrôle exactement. Les erreurs de délai gardent leur nature et leurs marqueurs.
+
+### Validation et limites
+
+Cinq nouveaux tests couvrent les deux régressions, seuils de nombre/profondeur/durée, annulation pendant l’en-tête, dossiers et noms Unicode, fichiers vides, navigation imbriquée avec antislash, filtres de taille et arrêt de recherche. Le test préexistant d’entrées spéciales est étendu à la navigation, au lecteur de métadonnées et à l’extraction complète : trois attributs spéciaux en blocs solides ou indépendants, puis une entrée de suppression, sont refusés avec destination vide. Un passage intermédiaire avait 17 réussites et l’échec de l’annulation réessayée ; après correction, les 19 tests ciblés passent.
+
+Les allocations et le décodage internes de l’en-tête précèdent encore le contrôle applicatif du nombre d’entrées. Les échéances restent coopératives, sans arrêt forcé d’un appel système ou de calculs internes ; l’isolation des parseurs reste le chantier 3. Les métadonnées ne vérifient pas les CRC des contenus et ne prouvent pas leur lisibilité. Le parcours complet de la bibliothèque, ses layouts de blocs et garanties d’intégrité ne sont pas entièrement réécrits ou certifiés par ce lot. Un échec tardif peut encore laisser une sortie partielle. La recherche journalise les erreurs d’index et ignore l’archive concernée ; un avertissement visible dédié reste un durcissement d’usage distinct. Les garanties des sources/destinations et limites de fournisseurs de volumes restent celles des lots précédents. Aucun Computer Use, changement d’interface, activation de test ignoré ni push.
+
+### Rapport de dépendances resynchronisé
+
+Le retrait de `iso9660_core` au lot 18 avait changé le verrou sans actualiser l’empreinte du rapport enregistré. `security/RUSTSEC_WINDOWS.json` est régénéré avec `target/security-tools/bin/cargo-audit.exe audit --no-fetch --db target/security-advisory-db --target-os windows --target-arch x86_64 --deny yanked --json`. Le contrôle sort avec le code zéro : 791 packages dans le verrou, zéro vulnérabilité publiée correspondante dans cette base et les trois mêmes alertes de maintenance. Le rapport enregistre l’empreinte SHA-256 du verrou normalisé en LF et la base `b8165f9`.
+
+La révision locale propre de la base est vérifiée par Git : `5701a6d2a6158d5d4a933df5141a0415c285075d`, datée du 8 octobre 2026 à 13:59:15 +02:00, avec 1 294 avis. Aucune récupération réseau n’est effectuée ; cette actualisation du verrou n’affirme pas que la base locale contient les avis ultérieurs à sa date. Les trois alertes de maintenance restent ouvertes au chantier 5 et ne sont pas assimilées à trois exploitations confirmées.
+
+Ce dix-neuvième lot reste non commité après le commit `b8165f9` du lot ISO.
+
+
+**Validation finale du dix-neuvième lot :** `cargo check --all-targets --locked --offline` réussi sans avertissement du projet ; `cargo test --all-targets --locked --offline --quiet` : 351 tests de bibliothèque et 116 tests d’interface réussis, soit 467 réussites, 17 tests préexistants ignorés et aucun échec. Les 19 tests 7z ciblés passent également séparément. `git diff --check` réussi ; les cinq fichiers modifiés vérifiés en UTF-8 strict, avec empreinte normalisée du verrou vérifiée contre le rapport RustSec resynchronisé. Le contrôle RustSec local sort avec le code zéro, en conservant explicitement la date de sa base et ses trois alertes de maintenance.

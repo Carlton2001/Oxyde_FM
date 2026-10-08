@@ -195,23 +195,24 @@ fn list_zip(path: &Path, internal_prefix: &str) -> Result<Vec<FileEntry>, Comman
 }
 
 fn list_seven_zip(path: &Path, internal_prefix: &str) -> Result<Vec<FileEntry>, CommandError> {
-    let budget = ArchiveBudget::new(ArchiveLimits::LISTING);
-    let file = File::open(path).map_err(|e| CommandError::IoError(e.to_string()))?;
-    let reader = sevenz_rust2::ArchiveReader::new(file, sevenz_rust2::Password::empty())
-        .map_err(|e| CommandError::ArchiveError(e.to_string()))?;
-    budget.check_entry_count(reader.archive().files.len())?;
     let mut entries = Vec::new();
-    let prefix = if internal_prefix.is_empty() {
+    let normalized = relative_archive_path(internal_prefix)?
+        .to_string_lossy()
+        .replace('\\', "/");
+    let prefix = if normalized.is_empty() {
         "".to_string()
     } else {
-        format!("{}/", internal_prefix.trim_end_matches('/'))
+        format!("{normalized}/")
     };
     let mut seen: HashSet<String> = HashSet::new();
 
     // Listing needs only the 7z header; do not decompress every file while navigating.
-    for entry in &reader.archive().files {
-        let name = entry.name().replace('\\', "/");
-        budget.entry(&name, 0)?;
+    for entry in super::archive_seven_open::indexed_files(path, &|| Ok(()))? {
+        let name = Path::new(&entry.path)
+            .strip_prefix(path)
+            .map_err(|_| CommandError::ArchiveError("Invalid archive entry path".into()))?
+            .to_string_lossy()
+            .replace('\\', "/");
         if name.starts_with(&prefix) && name != prefix {
             let relative = &name[prefix.len()..];
             let parts: Vec<&str> = relative
@@ -222,7 +223,7 @@ fn list_seven_zip(path: &Path, internal_prefix: &str) -> Result<Vec<FileEntry>, 
                 let entry_name = parts[0].to_string();
                 if !seen.contains(&entry_name) {
                     seen.insert(entry_name.clone());
-                    let is_dir = entry.is_directory() || parts.len() > 1;
+                    let is_dir = entry.is_dir || parts.len() > 1;
                     entries.push(FileEntry {
                         name: entry_name.clone(),
                         path: virtual_entry_path(path, internal_prefix, &entry_name)?,
@@ -231,7 +232,7 @@ fn list_seven_zip(path: &Path, internal_prefix: &str) -> Result<Vec<FileEntry>, 
                         is_system: false,
                         is_symlink: false,
                         is_junction: false,
-                        size: if is_dir { 0 } else { entry.size() },
+                        size: if is_dir { 0 } else { entry.size },
                         is_calculated: false,
                         folders_count: None,
                         files_count: None,
@@ -494,11 +495,11 @@ fn decompress_seven_zip_with_checkpoint(
     checkpoint: &dyn Fn() -> io::Result<()>,
     budget: &ArchiveBudget,
 ) -> Result<(), CommandError> {
-    let mut seven = sevenz_rust2::ArchiveReader::new(file, sevenz_rust2::Password::empty())
-        .map_err(|e| CommandError::ArchiveError(e.to_string()))?;
+    let mut seven = super::archive_seven_open::checked_reader(file, budget, checkpoint)?;
     budget.check_entry_count(seven.archive().files.len())?;
     for entry in &seven.archive().files {
         budget.checkpoint(checkpoint)?;
+        super::archive_seven_open::validate_entry_type(entry)?;
         budget.entry(
             entry.name(),
             if entry.is_directory() {
@@ -530,7 +531,7 @@ fn decompress_seven_zip_with_checkpoint(
             }
             Ok(true)
         })
-        .map_err(|e| CommandError::ArchiveError(e.to_string()))
+        .map_err(super::archive_seven_open::archive_error)
 }
 
 #[cfg(test)]
@@ -560,6 +561,42 @@ mod archive_tests {
     use super::*;
     use crate::systems::archive_workspace::mutation_operation;
     use crate::systems::file_ops::FileOperationManager;
+
+    #[test]
+    fn seven_full_extract_preserves_typed_io_limits_from_decoder_callbacks() {
+        use crate::models::error::{ArchiveLimitFailure, ArchiveLimitKind};
+        let temp = tempfile::tempdir().unwrap();
+        let archive = temp.path().join("deadline.7z");
+        let mut writer = sevenz_rust2::ArchiveWriter::create(&archive).unwrap();
+        writer
+            .push_archive_entry(
+                sevenz_rust2::ArchiveEntry::new_file("safe.txt"),
+                Some(&b"safe"[..]),
+            )
+            .unwrap();
+        writer.finish().unwrap();
+        let target = tempfile::tempdir().unwrap();
+        let expired = ArchiveBudget::new(ArchiveLimits {
+            max_duration: std::time::Duration::ZERO,
+            ..ArchiveLimits::EXTRACTION
+        });
+        let error = extract_archive_with_checkpoint(
+            archive.to_string_lossy().into_owned(),
+            target.path().to_string_lossy().into_owned(),
+            &|| {
+                if target.path().join("safe.txt").exists() {
+                    expired.check_time()
+                } else {
+                    Ok(())
+                }
+            },
+        )
+        .unwrap_err();
+        let failure = ArchiveLimitFailure::from_message(&error.to_string())
+            .expect("7z erased the structured deadline error");
+        assert_eq!(failure.kind, ArchiveLimitKind::Seconds);
+        assert_eq!(failure.limit, 0);
+    }
 
     #[test]
     fn listings_refuse_paths_exceeding_the_shared_depth_limit() {

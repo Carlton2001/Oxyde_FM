@@ -1,19 +1,22 @@
-//! Validate the 7z index and decode only the selected file's compression block.
-use crate::models::CommandError;
+//! Shared 7z metadata checks and targeted decoding of the selected compression block.
+use crate::models::{CommandError, FileEntry};
 use crate::platform::platform;
 use crate::systems::path_parents::HeldParents;
 use crate::utils::archive_limits::{ArchiveBudget, ArchiveLimits, BudgetReader};
 use crate::utils::archive_security::{relative_archive_path, ExtractionRoot};
-use sevenz_rust2::{Archive, ArchiveEntry, BlockDecoder, Password};
+use sevenz_rust2::{Archive, ArchiveEntry, ArchiveReader, BlockDecoder, Password};
 use std::fs::{self, File};
 use std::io::{self, Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
+
+#[cfg(test)]
+pub(crate) use tests::block_crc_fixture_with_method;
 
 fn invalid(message: &str) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message)
 }
 
-fn archive_error(error: sevenz_rust2::Error) -> CommandError {
+pub(super) fn archive_error(error: sevenz_rust2::Error) -> CommandError {
     // sevenz's Display delegates to Debug, which erases the Display marker of
     // typed IO causes such as ArchiveLimitFailure. Keep their original text.
     CommandError::ArchiveError(match error {
@@ -32,14 +35,107 @@ fn archive_error(error: sevenz_rust2::Error) -> CommandError {
     })
 }
 
-struct CheckedSource<'a> {
+pub(super) struct CheckedSource<'a> {
     file: File,
     budget: &'a ArchiveBudget,
     checkpoint: &'a dyn Fn() -> io::Result<()>,
 }
+
+impl CheckedSource<'_> {
+    fn check(&self) -> io::Result<()> {
+        self.budget.checkpoint(self.checkpoint).map_err(|error| {
+            // read_exact retries Interrupted; a cooperative cancellation must
+            // be terminal instead of being retried inside the header parser.
+            if error.kind() == io::ErrorKind::Interrupted {
+                io::Error::other(error)
+            } else {
+                error
+            }
+        })
+    }
+}
+
+pub(super) fn checked_reader<'a>(
+    file: File,
+    budget: &'a ArchiveBudget,
+    checkpoint: &'a dyn Fn() -> io::Result<()>,
+) -> Result<ArchiveReader<CheckedSource<'a>>, CommandError> {
+    ArchiveReader::new(
+        CheckedSource {
+            file,
+            budget,
+            checkpoint,
+        },
+        Password::empty(),
+    )
+    .map_err(archive_error)
+}
+
+pub(super) fn validate_entry_type(entry: &ArchiveEntry) -> io::Result<()> {
+    let mode = (entry.windows_attributes >> 16) & 0o170000;
+    if entry.is_anti_item
+        || (entry.has_windows_attributes
+            && (entry.windows_attributes & 0x400 != 0 || !matches!(mode, 0 | 0o100000 | 0o040000)))
+    {
+        return Err(invalid("Archive links and special files are not supported"));
+    }
+    Ok(())
+}
+
+/// Names and sizes come from the header, without constructing content decoders.
+pub(super) fn indexed_files(
+    archive_path: &Path,
+    checkpoint: &dyn Fn() -> io::Result<()>,
+) -> Result<Vec<FileEntry>, CommandError> {
+    indexed_with_limits(archive_path, ArchiveLimits::LISTING, checkpoint)
+}
+
+fn indexed_with_limits(
+    archive_path: &Path,
+    limits: ArchiveLimits,
+    checkpoint: &dyn Fn() -> io::Result<()>,
+) -> Result<Vec<FileEntry>, CommandError> {
+    let parents = HeldParents::new(archive_path)?;
+    let resolved = parents.resolved_path(archive_path)?;
+    let budget = ArchiveBudget::new(limits);
+    let mut source = CheckedSource {
+        file: platform().open_archive_source(&resolved, false)?,
+        budget: &budget,
+        checkpoint,
+    };
+    let archive = Archive::read(&mut source, &Password::empty()).map_err(archive_error)?;
+    budget.check_entry_count(archive.files.len())?;
+    let mut entries = Vec::new();
+    for entry in &archive.files {
+        budget.checkpoint(checkpoint)?;
+        budget.entry(entry.name(), 0)?;
+        validate_entry_type(entry)?;
+        let relative = relative_archive_path(entry.name())?;
+        if relative.as_os_str().is_empty() && entry.is_directory() {
+            continue;
+        }
+        let name = relative
+            .file_name()
+            .ok_or_else(|| invalid("Invalid empty archive entry name"))?
+            .to_string_lossy()
+            .into_owned();
+        entries.push(FileEntry {
+            name,
+            path: archive_path.join(relative).to_string_lossy().into_owned(),
+            is_dir: entry.is_directory(),
+            size: if entry.is_directory() {
+                0
+            } else {
+                entry.size()
+            },
+            ..FileEntry::default()
+        });
+    }
+    Ok(entries)
+}
 impl Read for CheckedSource<'_> {
     fn read(&mut self, bytes: &mut [u8]) -> io::Result<usize> {
-        self.budget.checkpoint(self.checkpoint)?;
+        self.check()?;
         let count = self.file.read(bytes)?;
         self.budget.check_time()?;
         Ok(count)
@@ -47,7 +143,7 @@ impl Read for CheckedSource<'_> {
 }
 impl Seek for CheckedSource<'_> {
     fn seek(&mut self, position: SeekFrom) -> io::Result<u64> {
-        self.budget.checkpoint(self.checkpoint)?;
+        self.check()?;
         let position = self.file.seek(position)?;
         self.budget.check_time()?;
         Ok(position)
@@ -66,14 +162,7 @@ fn selection(
         budget.checkpoint(checkpoint)?;
         budget.entry(entry.name(), 0)?;
         // These entries describe updates/links, not an ordinary file to open.
-        let mode = (entry.windows_attributes >> 16) & 0o170000;
-        if entry.is_anti_item
-            || (entry.has_windows_attributes
-                && (entry.windows_attributes & 0x400 != 0
-                    || !matches!(mode, 0 | 0o100000 | 0o040000)))
-        {
-            return Err(invalid("Archive links and special files are not supported").into());
-        }
+        validate_entry_type(entry)?;
         if relative_archive_path(entry.name())? == requested {
             if selected.is_some() || entry.is_directory() {
                 return Err(invalid("Ambiguous archive file").into());
@@ -227,6 +316,10 @@ mod tests {
     // A wire-format fixture with a block CRC and no individual file CRCs.
     // ArchiveWriter normally emits file CRCs, so it cannot cover this variant.
     fn block_crc_fixture(path: &Path, corrupt_tail: bool) {
+        block_crc_fixture_with_method(path, corrupt_tail, 0);
+    }
+
+    pub(crate) fn block_crc_fixture_with_method(path: &Path, corrupt_tail: bool, method: u8) {
         fn crc32(bytes: &[u8]) -> u32 {
             let mut crc = u32::MAX;
             for byte in bytes {
@@ -242,7 +335,7 @@ mod tests {
         let mut header = vec![
             1, 4, // Header and MainStreamsInfo.
             6, 0, 1, 9, 8, 0, // One COPY pack stream of eight bytes.
-            7, 11, 1, 0, 1, 1, 0, 12, 8, 10, 1, // One block, with a CRC.
+            7, 11, 1, 0, 1, 1, method, 12, 8, 10, 1, // One block, with a CRC.
         ];
         header.extend(crc32(content).to_le_bytes());
         header.extend([0, 8, 13, 2, 9, 4, 10, 0, 0, 0, 0]); // Two sub-streams, neither with a CRC.
@@ -342,6 +435,134 @@ mod tests {
             solid,
             EncoderMethod::COPY,
         );
+    }
+
+    #[test]
+    fn seven_metadata_keeps_limit_and_cancellation_errors_structured() {
+        let temp = tempfile::tempdir().unwrap();
+        let archive = temp.path().join("metadata.7z");
+        write_archive(
+            &archive,
+            &[("a/b/c", b"safe"), ("other.txt", b"safe")],
+            false,
+        );
+        for (allowance, kind) in [
+            (
+                ArchiveLimits {
+                    max_entries: 1,
+                    ..ArchiveLimits::LISTING
+                },
+                ArchiveLimitKind::Entries,
+            ),
+            (
+                ArchiveLimits {
+                    max_depth: 2,
+                    ..ArchiveLimits::LISTING
+                },
+                ArchiveLimitKind::Depth,
+            ),
+            (
+                ArchiveLimits {
+                    max_duration: std::time::Duration::ZERO,
+                    ..ArchiveLimits::LISTING
+                },
+                ArchiveLimitKind::Seconds,
+            ),
+        ] {
+            let error = indexed_with_limits(&archive, allowance, &|| Ok(())).unwrap_err();
+            assert_eq!(
+                ArchiveLimitFailure::from_message(&error.to_string())
+                    .unwrap()
+                    .kind,
+                kind
+            );
+        }
+        let checkpoints = std::cell::Cell::new(0);
+        let error = indexed_files(&archive, &|| {
+            let count = checkpoints.get() + 1;
+            checkpoints.set(count);
+            if count == 3 {
+                Err(io::Error::new(
+                    io::ErrorKind::Interrupted,
+                    "cancelled during header read",
+                ))
+            } else {
+                Ok(())
+            }
+        })
+        .unwrap_err();
+        assert_eq!(checkpoints.get(), 3);
+        assert!(error.to_string().contains("cancelled during header read"));
+    }
+
+    #[test]
+    fn seven_metadata_and_listing_preserve_folders_empty_files_and_unicode_names() {
+        let temp = tempfile::tempdir().unwrap();
+        let archive = temp.path().join("metadata.7z");
+        let mut empty = ArchiveEntry::new_file("folder/empty.txt");
+        empty.has_stream = false;
+        write_entries(
+            &archive,
+            vec![
+                (ArchiveEntry::new_directory("."), Vec::new()),
+                (ArchiveEntry::new_directory("folder"), Vec::new()),
+                (empty, Vec::new()),
+                (
+                    ArchiveEntry::new_file("folder/inner/école.txt"),
+                    b"hello".to_vec(),
+                ),
+                (ArchiveEntry::new_file("small.txt"), b"safe".to_vec()),
+            ],
+            false,
+            EncoderMethod::COPY,
+        );
+        let indexed = indexed_files(&archive, &|| Ok(())).unwrap();
+        assert_eq!(indexed.len(), 4);
+        assert!(indexed
+            .iter()
+            .any(|entry| entry.is_dir && entry.name == "folder"));
+        assert!(indexed
+            .iter()
+            .any(|entry| !entry.is_dir && entry.name == "empty.txt" && entry.size == 0));
+        let list = |internal: &str| {
+            crate::commands::archive::list_archive_contents(
+                archive.to_string_lossy().into_owned(),
+                internal.into(),
+            )
+            .unwrap()
+        };
+        assert_eq!(list("").len(), 2);
+        let folder = list("folder");
+        assert_eq!(folder.len(), 2);
+        assert!(folder
+            .iter()
+            .any(|entry| entry.is_dir && entry.name == "inner"));
+        let nested = list("folder\\inner");
+        assert_eq!(nested.len(), 1);
+        assert_eq!(nested[0].size, 5);
+        assert_eq!(nested[0].name, "école.txt");
+        assert_eq!(
+            Path::new(&nested[0].path),
+            archive.join("folder/inner/école.txt")
+        );
+    }
+
+    fn reject_metadata_and_full_extraction(archive: &Path) {
+        assert!(indexed_files(archive, &|| Ok(())).is_err());
+        assert!(crate::commands::archive::list_archive_contents(
+            archive.to_string_lossy().into_owned(),
+            String::new(),
+        )
+        .is_err());
+        let target = tempfile::tempdir().unwrap();
+        assert!(crate::commands::archive::extract_archive_with_limits(
+            archive.to_string_lossy().into_owned(),
+            target.path().to_string_lossy().into_owned(),
+            &|| Ok(()),
+            ArchiveLimits::EXTRACTION,
+        )
+        .is_err());
+        assert_eq!(fs::read_dir(target.path()).unwrap().count(), 0);
     }
 
     #[test]
@@ -489,6 +710,7 @@ mod tests {
                 )
                 .is_err());
                 assert_eq!(fs::read_dir(target.path()).unwrap().count(), 0);
+                reject_metadata_and_full_extraction(&archive);
             }
         }
         let fixture = tempfile::tempdir().unwrap();
@@ -510,6 +732,7 @@ mod tests {
             extract_seven_file_for_open(&archive, "selected.txt", target.path(), limits()).is_err()
         );
         assert_eq!(fs::read_dir(target.path()).unwrap().count(), 0);
+        reject_metadata_and_full_extraction(&archive);
     }
 
     #[test]
