@@ -4,6 +4,46 @@ Audit du 7 octobre 2026, base `3cc7d14`, branche `codex/nettoyage-code-mort`. Ce
 
 Priorités proposées : P1 pour un risque sur les opérations de fichiers à reproduire en premier, P2 pour les comportements et coûts à examiner ensuite, P3 pour l'entretien. Une chaîne de code établie n'est pas une reproduction utilisateur ; les limites sont indiquées pour chaque entrée.
 
+## Tableau de suivi — 8 octobre 2026
+
+**17 points traités, 4 clos par retrait, 1 partiellement traité, 7 autres points de correction/optimisation à faire, 1 vérification manuelle distincte et 1 observation de référence.** « Traité » décrit la correction du code ; les validations manuelles encore ouvertes sont indiquées séparément. A24/A25 appartiennent au lot courant, non commité ; A30/A31 sont commités dans `daa8f52`.
+
+| Point | Sujet | État du code | Suite ou validation restante |
+| --- | --- | --- | --- |
+| [A01](#a01--filtres-de-date-différents-des-groupes-de-date--p2) | Filtres de date | Traité | Contrôles automatiques réalisés |
+| [A02](#a02--annulerrétablir-peuvent-démarrer-plusieurs-fois-en-parallèle--p1) | Concurrence Annuler/Rétablir | Traité | Interaction GPUI non testée automatiquement ; coordination des opérations indépendantes hors garantie |
+| [A03](#a03--marqueur-donglet-potentiellement-périmé-sur-la-zone-libre--p2) | Cible de déplacement des onglets | Traité | Calculs validés ; rendu de cette correction non vérifié automatiquement |
+| [A04](#a04--propriétés-dun-élément-de-corbeille--nom-et-emplacement-physiques--p2) | Propriétés des éléments de corbeille | Traité | Présentation testée ; contrôle visuel manuel non réalisé |
+| [A05](#a05--durée-de-vie-des-ressources-comshell--p2) | Ressources COM/Shell | Traité | Extensions Shell, réseau et aperçus réels à confirmer manuellement |
+| [A06](#a06--presse-papiers--allocations-et-erreurs-du-format-couper--p2) | Publication du presse-papiers | Traité | Publication réelle et collage de fichiers ordinaires à confirmer manuellement |
+| [A07](#a07--api-windows-encore-dans-les-commandes--p2) | Isolation des API Windows | Partiel | Déplacer les appels restants de corbeille et de sidebar vers Platform |
+| [A08](#a08--annulation-de-recherche-et-détection-ssd--p2) | Annulation de recherche / SSD | À faire | Annulation des lecteurs texte/Office ; décision sur le paramètre SSD inactif |
+| [A09](#a09--calcul-des-tailles--tâches-et-pools-cumulés--p2) | Concurrence du calcul des tailles | À faire | Mesures, limite de concurrence et annulation |
+| [A10](#a10--tri-et-normalisation-répétés--p2) | Tri et normalisation | À faire | Clarifier les règles, mesurer puis éviter les calculs répétés |
+| [A11](#a11--copie-de-lhistorique-pendant-le-rendu--p2) | État d'historique utilisé au rendu | À faire | Résumé léger et mesure avec plusieurs panneaux |
+| [A12](#a12--polling-et-notifications-sans-changement--p2) | Polling et notifications | À faire | Notifications sur changement ; lecture du presse-papiers à examiner |
+| [A13](#a13--suggestions-clippy-et-simplifications-locales--p3) | Simplifications locales | À faire | Revalider les diagnostics utiles après les corrections |
+| [A14](#a14--rétablir-une-restauration-déplacée-depuis-la-corbeille--p2) | Ancienne API Restore | Clos par retrait | Aucun appelant de production ; parcours actif traité en A18 |
+| [A15](#a15--cache-de-filtrage-lors-dun-changement-de-jour--p2) | Cache lors du changement de jour | Traité | Contrôles automatiques réalisés |
+| [A16](#a16--conflits-et-espace-temporaire-du-déplacement-initial-depuis-la-corbeille--p1) | Conflits de l'ancienne API Restore | Clos par retrait | Parcours inutilisé supprimé |
+| [A17](#a17--énumérations-de-corbeille-lors-du-rejeu-des-restaurations--p2) | Énumérations de l'ancien journal | Clos par retrait | Journal inutilisé supprimé |
+| [A18](#a18--coupercoller-depuis-la-corbeille-dans-le-parcours-gpui-actuel--p1) | Transferts actifs de corbeille | Traité | Collage interactif dans l'Explorateur Windows à confirmer manuellement |
+| [A19](#a19--annulerrétablir-un-déplacement-entre-volumes--p1) | Historique entre volumes | Traité | Scénarios natifs C:/D: validés ; SMB hors validation |
+| [A20](#a20--métadonnées-de-corbeille-après-un-déplacement-natif-shell--p2) | Métadonnées après collage Shell | Vérification manuelle à faire | Vérifier le collage réel et l'historique Windows avant toute purge |
+| [A21](#a21--historique-de-suppression-dans-la-référence-tauri--observation-de-comparaison) | Historique de la référence Tauri | Référence | Aucune modification du projet Tauri prévue |
+| [A22](#a22--plafond-arbitraire-du-redo-de-suppression--p1) | Seuils du redo de suppression | Traité | Tests natifs et confirmation utilisateur réalisés |
+| [A23](#a23--lecture-non-bornée-des-buffers-de-presse-papiers--p2) | Lecture des buffers de presse-papiers | Traité | Contrôles automatiques réalisés |
+| [A24](#a24--erreurs-de-menus-et-dépinglage-shell-ignorées--p2) | Erreurs de commandes Shell | Traité dans le lot courant | Réponses simulées ; épinglage réel et extensions installées à confirmer manuellement |
+| [A25](#a25--lecture-de-verbes-shell-hors-du-buffer-si-terminateur-absent--p2) | Bornes des noms de commandes Shell | Traité dans le lot courant | Réponses tronquées et erreurs testées |
+| [A26](#a26--échecs-du-lecteur-vidéo-masqués--p2) | Erreurs et annulation du lecteur vidéo | À faire | Reproduction et propagation des erreurs |
+| [A27](#a27--phases-dundo-move-après-le-transfert-des-fichiers--p1) | Phases tardives d'Undo Move | Traité | Rollback testé ; limites de crash détaillées dans l'entrée |
+| [A28](#a28--métadonnées-et-flux-natifs-absents-de-la-copie-initiale--p1) | Copies natives et métadonnées | Traité | Flux/attributs Windows validés ; benchmark et SMB hors validation |
+| [A29](#a29--ancien-journal-de-sauvegardes-de-remplacement--code-mort-retiré) | Ancien journal de remplacements | Clos par retrait | Aucun producteur de production ; écrasements actifs non annulables |
+| [A30](#a30--annuler-une-copie-peut-laisser-une-suppression-partielle--p1) | Phases tardives d'Undo Copy | Traité | Rollback et reprise testés |
+| [A31](#a31--source-supprimée-après-la-copie-initiale-sans-nouvelle-vérification--p1) | Suppression de la source après copie | Traité | Identité/verrous et déplacement partiel validés sous Windows |
+
+La validation Linux reste différée à la demande de l'utilisateur. Aucun Computer Use n'est prévu. Les limites et les validations ci-dessus ne constituent pas toutes de nouveaux lots : plusieurs sont des contrôles manuels ou des garanties explicitement hors portée.
+
 ## A01 — Filtres de date différents des groupes de date — P2
 
 **Corrigé le 7 octobre 2026, après reproduction déterministe.** Un test à 00 h 10 avec un fichier modifié la veille à 23 h 50 échouait avant correction : le filtre Hier l'excluait, alors que le regroupement le classait dans Hier. Les fenêtres glissantes de 24 heures ont été retirées.
@@ -202,11 +242,27 @@ Contrats natifs : [GetClipboardData](https://learn.microsoft.com/en-us/windows/w
 
 ## A24 — Erreurs de menus et d'épinglage Shell ignorées — P2
 
-**Points de code établis pendant A05, sans reproduction utilisateur.** Les fonctions actives de `platform/windows_shell.rs` ignorent le résultat de `QueryContextMenu` ; `execute_native_menu_item` ignore aussi celui de `InvokeCommand`. Le repli PowerShell de désépinglage d'un chemin absent retourne une réussite sans vérifier le résultat du processus. Une erreur native peut donc être présentée comme une réussite. Propager les erreurs utiles et distinguer une commande absente d'un échec d'exécution dans un lot dédié ; ne pas modifier les épingles utilisateur pour les tests.
+**Corrigé le 8 octobre 2026 dans les parcours actifs, après relecture et injections d'erreurs.** Les trois appels `QueryContextMenu` passent par une garde de menu commune et propagent les HRESULT d'échec. Les HRESULT de réussite non nuls, qui contiennent le nombre de commandes, restent acceptés. Le menu créé est détruit même si sa population échoue. L'exécution propage aussi `InvokeCommand` et refuse les identifiants hors de la plage réservée avant de les convertir en offset.
+
+Le repli PowerShell est utilisé si aucune commande correspondante n'est trouvée, ou pour désépingler un chemin impossible à résoudre. Un échec d'invocation native est retourné directement : une seconde commande n'est plus lancée après une action pouvant déjà avoir produit des effets. Le processus caché retourne ses erreurs de démarrage et son statut d'échec, avec un diagnostic borné ; les exceptions COM du script deviennent des erreurs du processus. Un espace Shell indisponible est refusé. Désépingler un élément déjà absent reste une réussite sans invocation.
+
+Deux défauts liés ont été découverts et traités dans ce lot : les recherches de libellés pouvaient prendre « Unpin » pour « Pin », et leur prétendue suppression d'accents n'en retirait pas. Le repli natif sépare maintenant les deux intentions après normalisation des accents. Le script fait aussi cette distinction. Ses alias canoniques Home/Quick Access existants restent conservés lorsqu'aucun libellé connu n'est disponible. Le chemin est transmis uniquement dans l'environnement du processus enfant, et jamais interpolé dans le script : apostrophes droites ou typographiques et caractères Unicode restent des données.
+
+Validation : libellés anglais, français et allemands dans les deux sens, erreurs HRESULT, offset zéro et limite haute, identifiants refusés, destruction native du menu après population refusée. Les fixtures PowerShell remplacent la fabrique COM par des objets simulés dans le processus enfant ; elles couvrent verbes accentués, alias canoniques, chemins directs et indirects, élément déjà absent, namespace manquant, exceptions avec diagnostic Unicode et statut non nul. Aucun objet `Shell.Application` réel, aucune épingle utilisateur modifiée.
+
+Limites : les extensions installées et l'épinglage réel restent à confirmer manuellement. Un retour COM réussi ne garantit pas l'achèvement de tous les effets asynchrones du Shell ; aucune déduction d'état d'épinglage à partir de la seule présence dans Accès rapide n'est ajoutée. Les messages d'initialisation des sous-menus restent ceux de l'implémentation existante. GPUI journalise déjà les erreurs d'action native dans les logs ; ce lot ne crée pas de nouveau toast ou autre changement d'interface.
+
+Contrats natifs : [QueryContextMenu](https://learn.microsoft.com/en-us/windows/win32/api/shobjidl_core/nf-shobjidl_core-icontextmenu-querycontextmenu), [InvokeCommand](https://learn.microsoft.com/en-us/windows/win32/api/shobjidl_core/nf-shobjidl_core-icontextmenu-invokecommand).
 
 ## A25 — Lecture de verbes Shell hors du buffer si terminateur absent — P2
 
-**Point de code établi, sans crash reproduit.** Les trois lectures `GetCommandString` de `platform/windows_shell.rs` convertissent un tableau de 128 octets via `CStr::from_ptr`. Si une extension remplit le tableau sans terminateur, la conversion cherche au-delà de la mémoire disponible. Borne explicite et politique de refus à introduire séparément, avec fixture de réponse tronquée ; les conversions restent inchangées dans A05.
+**Corrigé le 8 octobre 2026, sans crash utilisateur reproduit.** Les trois lectures sont remplacées par un accès commun `canonical_verb`, dont le décodage utilise uniquement le buffer de 128 octets. `CStr::from_bytes_until_nul` refuse une réponse sans terminateur ; aucun pointeur n'est parcouru au-delà de cette plage. Une réponse vide ou un échec `GetCommandString` ne produit pas de verbe. Le décodage avec remplacement des octets invalides conserve la politique précédente.
+
+Dans la liste des menus, le verbe est lu une seule fois par entrée puis partagé entre filtrage et présentation. En l'absence de verbe exploitable, l'entrée conserve sa présentation existante et la recherche d'épinglage peut utiliser son libellé. Les identifiants de séparateur/sous-menu hors plage ne sont pas envoyés à `GetCommandString`.
+
+Les fixtures couvrent un buffer entièrement rempli sans terminateur, un terminateur au dernier octet, une erreur après écriture d'un nom valide, une réponse vide et des octets non valides. Elles vérifient le décodage du buffer fourni au callback natif ; elles ne certifient pas qu'une extension tierce respecte elle-même sa limite d'écriture.
+
+Contrat natif : [GetCommandString](https://learn.microsoft.com/en-us/windows/win32/api/shobjidl_core/nf-shobjidl_core-icontextmenu-getcommandstring).
 
 ## A26 — Échecs du lecteur vidéo masqués — P2
 
@@ -376,6 +432,12 @@ Quatre tests du transfert initial vérifient les verrous source/destination apr�
 
 `cargo test --all-targets --offline` : 162 tests backend et 108 tests du binaire passent, soit 270 ; 13 tests natifs restent ignorés par défaut. Les huit nouvelles régressions automatiques A30/A31 sont incluses. Les six scénarios natifs exécutés séparément portent le total à 276 tests distincts validés dans ce lot.
 
-`cargo check --all-targets --offline` passe sans avertissement du projet. Les nouveaux modules et les blocs modifiés sont formatés ; `git diff --check` passe. Les opérations restent exécutées dans les workers ou le `spawn_blocking` GPUI existant. Aucun Computer Use ni validation Linux. A30/A31 sont traités dans le lot suivant le commit A28 `e07d842`.
+`cargo check --all-targets --offline` passe sans avertissement du projet. Les nouveaux modules et les blocs modifiés sont formatés ; `git diff --check` passe. Les opérations restent exécutées dans les workers ou le `spawn_blocking` GPUI existant. Aucun Computer Use ni validation Linux. A30/A31 sont commités dans `daa8f52`, après le commit A28 `e07d842`.
 
 `cargo build --bin oxyde --offline` réussit ; `target/debug/oxyde.exe` est reconstruit avec A30/A31.
+
+### Validation du lot A24/A25
+
+`cargo test --all-targets --offline` : 169 tests backend et 108 tests du binaire passent, soit 277 ; les 13 tests natifs ignorés restent ignorés. Les sept nouvelles régressions A24/A25 sont incluses. Les tests du script lancent uniquement un PowerShell caché avec une fabrique Shell simulée ; aucun accès aux épingles utilisateur. Les réponses HRESULT et buffers sont injectées aux frontières des appels ; la destruction du menu utilise l'API native réelle.
+
+`cargo check --all-targets --offline` passe sans avertissement du projet. Le module Shell est formaté et `git diff --check` passe. `cargo build --bin oxyde --offline` reconstruit `target/debug/oxyde.exe`. Aucun Computer Use, aucune validation Linux et aucun changement d'interface. Le lot A24/A25 et le tableau de suivi restent non commités après `daa8f52`.

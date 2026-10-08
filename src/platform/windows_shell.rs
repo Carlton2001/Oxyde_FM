@@ -11,19 +11,175 @@ use super::windows_com::{take_string, ComApartment, TaskMemory};
 use crate::models::{CommandError, QuickAccessItem, WinMenuItem};
 use crate::utils::path_security::validate_path;
 
+fn read_verb_with(read: impl FnOnce(&mut [u8]) -> windows::core::Result<()>) -> Option<String> {
+    let mut buffer = [0u8; 128];
+    read(&mut buffer).ok()?;
+    let verb = std::ffi::CStr::from_bytes_until_nul(&buffer)
+        .ok()?
+        .to_string_lossy();
+    (!verb.is_empty()).then(|| verb.into_owned())
+}
+
+fn canonical_verb(
+    context_menu: &windows::Win32::UI::Shell::IContextMenu,
+    id: u32,
+) -> Option<String> {
+    if !(1..=0x7FFF).contains(&id) {
+        return None;
+    }
+    read_verb_with(|buffer| unsafe {
+        context_menu.GetCommandString(
+            (id - 1) as usize,
+            windows::Win32::UI::Shell::GCS_VERBA,
+            None,
+            windows::core::PSTR(buffer.as_mut_ptr()),
+            buffer.len() as u32,
+        )
+    })
+}
+
+fn localized_pin_label(label: &str, is_unpin: bool) -> bool {
+    let clean: String = crate::utils::remove_accents(&label.to_lowercase())
+        .chars()
+        .filter(|character| !matches!(character, '&' | '\'' | '’'))
+        .collect();
+    let unpin = ["desepingl", "unpin", "retirer", "detacher", "losen"]
+        .iter()
+        .any(|word| clean.contains(word));
+    let pin = ["epingl", "pin", "attach", "anheft"]
+        .iter()
+        .any(|word| clean.contains(word));
+    let target = ["acces", "accueil", "favori", "quick", "home", "schnell"]
+        .iter()
+        .any(|word| clean.contains(word));
+    target && if is_unpin { unpin } else { pin && !unpin }
+}
+
+fn query_menu_with(
+    query: impl FnOnce(windows::Win32::UI::WindowsAndMessaging::HMENU) -> windows::core::HRESULT,
+) -> Result<PopupMenuGuard, CommandError> {
+    let menu = PopupMenuGuard(unsafe {
+        windows::Win32::UI::WindowsAndMessaging::CreatePopupMenu()
+            .map_err(|error| CommandError::SystemError(error.to_string()))?
+    });
+    query(menu.0)
+        .ok()
+        .map_err(|error| CommandError::SystemError(format!("QueryContextMenu failed: {error}")))?;
+    Ok(menu)
+}
+
+fn query_menu(
+    context_menu: &windows::Win32::UI::Shell::IContextMenu,
+    flags: u32,
+) -> Result<PopupMenuGuard, CommandError> {
+    query_menu_with(|menu| unsafe { context_menu.QueryContextMenu(menu, 0, 1, 0x7FFF, flags) })
+}
+
+fn invoke_menu_with(
+    id: u32,
+    hwnd: windows::Win32::Foundation::HWND,
+    invoke: impl FnOnce(&windows::Win32::UI::Shell::CMINVOKECOMMANDINFO) -> windows::core::Result<()>,
+) -> Result<(), CommandError> {
+    if !(1..=0x7FFF).contains(&id) {
+        return Err(CommandError::SystemError("Invalid Shell command ID".into()));
+    }
+    let info = windows::Win32::UI::Shell::CMINVOKECOMMANDINFO {
+        cbSize: std::mem::size_of::<windows::Win32::UI::Shell::CMINVOKECOMMANDINFO>() as u32,
+        hwnd,
+        lpVerb: windows::core::PCSTR((id - 1) as *const u8),
+        nShow: windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL.0,
+        ..Default::default()
+    };
+    invoke(&info)
+        .map_err(|error| CommandError::SystemError(format!("InvokeCommand failed: {error}")))
+}
+
+fn run_powershell(script: &str, path: &str) -> Result<(), CommandError> {
+    use std::os::windows::process::CommandExt;
+    let output = std::process::Command::new("powershell")
+        .arg("-NoProfile")
+        .arg("-NonInteractive")
+        .arg("-Command")
+        .arg(script)
+        .env("OXYDE_SHELL_TARGET", path)
+        .creation_flags(0x08000000)
+        .output()
+        .map_err(|error| {
+            CommandError::SystemError(format!("PowerShell failed to start: {error}"))
+        })?;
+    if output.status.success() {
+        return Ok(());
+    }
+    let message: String = String::from_utf8_lossy(&output.stderr)
+        .trim()
+        .chars()
+        .take(2048)
+        .collect();
+    Err(CommandError::SystemError(format!(
+        "PowerShell failed ({}): {message}",
+        output.status
+    )))
+}
+
+fn pin_fallback_script(is_unpin: bool) -> String {
+    let source = if is_unpin {
+        r#"$qa = $sh.Namespace('shell:::{679f85cb-0220-4080-b29b-5540cc05aab6}')
+    if (-not $qa) { throw 'Quick Access is unavailable' }
+    $item = $qa.Items() | Where-Object { $_.Path -eq $target -or $_.GetFolder.Self.Path -eq $target } | Select-Object -First 1
+    if (-not $item) { exit 0 }"#
+    } else {
+        r#"$folder = $sh.Namespace($target)
+    if (-not $folder) { throw 'Target folder is unavailable' }
+    $item = $folder.Self"#
+    };
+    let (pattern, excluded, canonical) = if is_unpin {
+        (
+            "unpin|desepingler|retirer|detacher|losen",
+            "^$",
+            "$item.InvokeVerb('unpinfromhome'); $item.InvokeVerb('unpinfromquickaccess')",
+        )
+    } else {
+        (
+            "pin|epingler|attacher|anheft",
+            "unpin|desepingler|retirer|detacher|losen",
+            "$item.InvokeVerb('pintohome'); $item.InvokeVerb('pintofavorites')",
+        )
+    };
+    // The child environment carries the literal path, including Unicode and
+    // quotes; it is never interpolated into PowerShell source code.
+    format!(
+        r#"$ErrorActionPreference = 'Stop'
+[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
+try {{
+    $target = [Environment]::GetEnvironmentVariable('OXYDE_SHELL_TARGET')
+    $sh = New-Object -ComObject Shell.Application
+    {source}
+    $verb = $item.Verbs() | Where-Object {{
+        $name = $_.Name.Replace('&', '').Normalize([Text.NormalizationForm]::FormD)
+        $name = -join ($name.ToCharArray() | Where-Object {{ [Globalization.CharUnicodeInfo]::GetUnicodeCategory($_) -ne [Globalization.UnicodeCategory]::NonSpacingMark }})
+        $name -match '{pattern}' -and $name -notmatch '{excluded}'
+    }} | Select-Object -First 1
+    if ($verb) {{ $verb.DoIt() }} else {{ {canonical} }}
+}} catch {{
+    [Console]::Error.WriteLine($_.Exception.Message)
+    exit 1
+}}"#
+    )
+}
+
 pub(super) fn get_native_context_menu_items(
     path: String,
     is_background: bool,
 ) -> Result<Vec<WinMenuItem>, CommandError> {
-    use windows::core::{Interface, PCWSTR, PSTR};
+    use windows::core::{Interface, PCWSTR};
     use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
     use windows::Win32::UI::Shell::{
         IContextMenu, IContextMenu2, IContextMenu3, IShellFolder, SHBindToParent,
-        SHParseDisplayName, CMF_CANRENAME, CMF_EXPLORE, CMF_NORMAL, GCS_VERBA,
+        SHParseDisplayName, CMF_CANRENAME, CMF_EXPLORE, CMF_NORMAL,
     };
     use windows::Win32::UI::WindowsAndMessaging::{
-        CreatePopupMenu, GetMenuItemCount, GetMenuItemID, GetMenuStringW, GetSubMenu,
-        MF_BYPOSITION, WM_INITMENUPOPUP,
+        GetMenuItemCount, GetMenuItemID, GetMenuStringW, GetSubMenu, MF_BYPOSITION,
+        WM_INITMENUPOPUP,
     };
 
     let pb = validate_path(&path)?;
@@ -60,15 +216,8 @@ pub(super) fn get_native_context_menu_items(
                 .map_err(|e| CommandError::SystemError(format!("GetUIObjectOf failed: {}", e)))?
         };
 
-        let hmenu = CreatePopupMenu().map_err(|e| CommandError::SystemError(e.to_string()))?;
-        let _menu = PopupMenuGuard(hmenu);
-        let _ = context_menu.QueryContextMenu(
-            hmenu,
-            0,
-            1,
-            0x7FFF,
-            CMF_NORMAL | CMF_EXPLORE | CMF_CANRENAME,
-        );
+        let menu = query_menu(&context_menu, CMF_NORMAL | CMF_EXPLORE | CMF_CANRENAME)?;
+        let hmenu = menu.0;
 
         let cm2: Option<IContextMenu2> = context_menu.cast().ok();
         let cm3: Option<IContextMenu3> = context_menu.cast().ok();
@@ -120,7 +269,7 @@ pub(super) fn get_native_context_menu_items(
                     // Clean up & in labels (e.g. "&Open" -> "Open")
                     label = label.replace("&", "");
 
-                    if label.is_empty() || label == "-" || label.is_empty() {
+                    if label.is_empty() || label == "-" {
                         continue;
                     }
 
@@ -128,21 +277,10 @@ pub(super) fn get_native_context_menu_items(
                         label.to_lowercase().contains("nouveau") || label.to_lowercase() == "new";
 
                     // Filter standard verbs
-                    if (1..=0x7FFF).contains(&id) && !is_new_menu {
-                        let mut verb_buf = [0u8; 128];
-                        if context_menu
-                            .GetCommandString(
-                                (id - 1) as usize,
-                                GCS_VERBA,
-                                None,
-                                PSTR(verb_buf.as_mut_ptr()),
-                                verb_buf.len() as u32,
-                            )
-                            .is_ok()
-                        {
-                            let verb = std::ffi::CStr::from_ptr(verb_buf.as_ptr() as *const i8)
-                                .to_string_lossy()
-                                .to_lowercase();
+                    let verb = canonical_verb(context_menu, id);
+                    if !is_new_menu {
+                        if let Some(verb) = &verb {
+                            let verb = verb.to_lowercase();
                             if forbidden_verbs.iter().any(|&v| verb.contains(v)) {
                                 // If it's a submenu, we generally want to keep it (like "New" or context extensions)
                                 // unless it's one of the explicitly forbidden actions
@@ -155,25 +293,8 @@ pub(super) fn get_native_context_menu_items(
 
                     // Attempt to extract the verb
                     let mut item_verb: Option<String> = is_new_menu.then(|| "new".to_string());
-                    if (1..=0x7FFF).contains(&id) {
-                        let mut verb_buf = [0u8; 128];
-                        if context_menu
-                            .GetCommandString(
-                                (id - 1) as usize,
-                                GCS_VERBA,
-                                None,
-                                PSTR(verb_buf.as_mut_ptr()),
-                                verb_buf.len() as u32,
-                            )
-                            .is_ok()
-                        {
-                            let v = std::ffi::CStr::from_ptr(verb_buf.as_ptr() as *const i8)
-                                .to_string_lossy()
-                                .to_string();
-                            if !v.is_empty() {
-                                item_verb = Some(v);
-                            }
-                        }
+                    if let Some(verb) = verb {
+                        item_verb = Some(verb);
                     }
 
                     let children = if !submenu.is_invalid() {
@@ -205,13 +326,16 @@ pub(super) fn execute_native_menu_item(
     id: i32,
     is_background: bool,
 ) -> Result<(), CommandError> {
-    use windows::core::{Interface, PCSTR, PCWSTR};
+    use windows::core::{Interface, PCWSTR};
     use windows::Win32::Foundation::HWND;
     use windows::Win32::UI::Shell::{
         IContextMenu, IContextMenu2, IContextMenu3, IShellFolder, SHBindToParent,
-        SHParseDisplayName, CMF_CANRENAME, CMF_EXPLORE, CMF_NORMAL, CMINVOKECOMMANDINFO,
+        SHParseDisplayName, CMF_CANRENAME, CMF_EXPLORE, CMF_NORMAL,
     };
-    use windows::Win32::UI::WindowsAndMessaging::{CreatePopupMenu, SW_SHOWNORMAL};
+
+    if !(1..=0x7FFF).contains(&id) {
+        return Err(CommandError::SystemError("Invalid Shell command ID".into()));
+    }
 
     let pb = validate_path(&path)?;
     let path_norm = pb.to_string_lossy().replace("/", "\\");
@@ -248,15 +372,8 @@ pub(super) fn execute_native_menu_item(
         };
 
         // We MUST call QueryContextMenu before InvokeCommand so the extension knows what IDs we are talking about
-        let hmenu = CreatePopupMenu().map_err(|e| CommandError::SystemError(e.to_string()))?;
-        let _menu = PopupMenuGuard(hmenu);
-        let _ = context_menu.QueryContextMenu(
-            hmenu,
-            0,
-            1,
-            0x7FFF,
-            CMF_NORMAL | CMF_EXPLORE | CMF_CANRENAME,
-        );
+        let menu = query_menu(&context_menu, CMF_NORMAL | CMF_EXPLORE | CMF_CANRENAME)?;
+        let hmenu = menu.0;
 
         // CRITICAL: For submenus like "New", we must initialize them so the extension populates the IDs
         let cm2: Option<IContextMenu2> = context_menu.cast().ok();
@@ -293,17 +410,9 @@ pub(super) fn execute_native_menu_item(
         }
         init_all_submenus(hmenu, cm2.as_ref(), cm3.as_ref());
 
-        if id > 0 {
-            let info = CMINVOKECOMMANDINFO {
-                cbSize: std::mem::size_of::<CMINVOKECOMMANDINFO>() as u32,
-                hwnd: main_hwnd,
-                lpVerb: PCSTR((id - 1) as *mut u8),
-                nShow: SW_SHOWNORMAL.0,
-                ..Default::default()
-            };
-
-            let _ = context_menu.InvokeCommand(&info);
-        }
+        invoke_menu_with(id as u32, main_hwnd, |info| {
+            context_menu.InvokeCommand(info)
+        })?;
     }
     Ok(())
 }
@@ -405,15 +514,13 @@ pub(super) fn execute_shell_verb_by_canonical_name(
     path: &str,
     target_verbs: &[&str],
 ) -> Result<(), CommandError> {
-    use windows::core::{PCSTR, PCWSTR, PSTR};
+    use windows::core::PCWSTR;
     use windows::Win32::Foundation::HWND;
     use windows::Win32::UI::Shell::{
         IContextMenu, IShellFolder, SHBindToParent, SHParseDisplayName, CMF_NORMAL,
-        CMINVOKECOMMANDINFO, GCS_VERBA,
     };
     use windows::Win32::UI::WindowsAndMessaging::{
-        CreatePopupMenu, GetMenuItemCount, GetMenuItemID, GetMenuStringW, MF_BYPOSITION,
-        SW_SHOWNORMAL,
+        GetMenuItemCount, GetMenuItemID, GetMenuStringW, MF_BYPOSITION,
     };
 
     let pb = validate_path(path)?;
@@ -431,29 +538,8 @@ pub(super) fn execute_shell_verb_by_canonical_name(
         if let Err(e) = SHParseDisplayName(PCWSTR(path_u16.as_ptr()), None, &mut pidl_full, 0, None)
         {
             if is_unpin {
-                // FALLBACK for missing paths (e.g. disconnected network drives)
-                use std::os::windows::process::CommandExt;
-                let p_safe = path_norm.replace("'", "''");
-                let script = format!(
-                    "$sh = New-Object -ComObject Shell.Application; \
-                     $qa = $sh.Namespace('shell:::{{679f85cb-0220-4080-b29b-5540cc05aab6}}'); \
-                     if ($qa) {{ \
-                         $target = '{}'; \
-                         $item = $qa.Items() | Where-Object {{ $_.Path -eq $target -or $_.GetFolder.Self.Path -eq $target }}; \
-                         if ($item) {{ \
-                             $verbs = $item.Verbs() | Where-Object {{ $_.Name.Replace('&','') -match 'unpin|desepingler|retirer|detacher|losen' }}; \
-                             if ($verbs) {{ foreach ($v in $verbs) {{ $v.DoIt(); break; }} }} \
-                             else {{ $item.InvokeVerb('unpinfromhome'); $item.InvokeVerb('unpinfromquickaccess'); }} \
-                         }} \
-                     }}", p_safe
-                );
-                let _ = std::process::Command::new("powershell")
-                    .arg("-NoProfile")
-                    .arg("-Command")
-                    .arg(script)
-                    .creation_flags(0x08000000)
-                    .output();
-                return Ok(());
+                // Report process/COM failures instead of discarding the fallback result.
+                return run_powershell(&pin_fallback_script(true), &path_norm);
             }
             return Err(CommandError::SystemError(format!(
                 "SHParseDisplayName failed: {}",
@@ -471,31 +557,18 @@ pub(super) fn execute_shell_verb_by_canonical_name(
             .GetUIObjectOf(HWND(std::ptr::null_mut()), &pidl_relative_slice, None)
             .map_err(|e| CommandError::SystemError(format!("GetUIObjectOf failed: {}", e)))?;
 
-        let hmenu = CreatePopupMenu().map_err(|e| CommandError::SystemError(e.to_string()))?;
-        let _menu = PopupMenuGuard(hmenu);
-        let _ = context_menu.QueryContextMenu(hmenu, 0, 1, 0x7FFF, CMF_NORMAL);
+        let menu = query_menu(&context_menu, CMF_NORMAL)?;
+        let hmenu = menu.0;
 
         let count = GetMenuItemCount(Some(hmenu));
         let mut target_id: Option<u32> = None;
 
         for i in 0..count {
             let id = GetMenuItemID(hmenu, i);
-            if id != u32::MAX && id > 0 {
+            if (1..=0x7FFF).contains(&id) {
                 // 1. Try canonical verb lookup first
-                let mut verb_buf = [0u8; 128];
-                if context_menu
-                    .GetCommandString(
-                        (id - 1) as usize,
-                        GCS_VERBA,
-                        None,
-                        PSTR(verb_buf.as_mut_ptr()),
-                        verb_buf.len() as u32,
-                    )
-                    .is_ok()
-                {
-                    let verb = std::ffi::CStr::from_ptr(verb_buf.as_ptr() as *const i8)
-                        .to_string_lossy()
-                        .to_lowercase();
+                if let Some(verb) = canonical_verb(&context_menu, id) {
+                    let verb = verb.to_lowercase();
                     if target_verbs.iter().any(|&v| verb == v) {
                         target_id = Some(id);
                         break;
@@ -506,123 +579,220 @@ pub(super) fn execute_shell_verb_by_canonical_name(
                 let mut label_buf = [0u16; 256];
                 let len = GetMenuStringW(hmenu, i as u32, Some(&mut label_buf), MF_BYPOSITION);
                 if len > 0 {
-                    let label = String::from_utf16_lossy(&label_buf[..len as usize]).to_lowercase();
-                    // Clean symbols & accents for better matching
-                    let clean = label.replace("&", "").replace("'", "").replace("’", "");
-
-                    if is_unpin {
-                        // Match "Désépingler", "Unpin", "Retirer" AND ("Accès", "Accueil", "Favori", "Quick", "Home")
-                        let has_unpin_core = clean.contains("desepingl")
-                            || clean.contains("unpin")
-                            || clean.contains("retirer")
-                            || clean.contains("detacher")
-                            || clean.contains("lösen")
-                            || clean.contains("epingl"); // some systems use "épingler" for toggle
-                        let has_target_core = clean.contains("acces")
-                            || clean.contains("accueil")
-                            || clean.contains("favori")
-                            || clean.contains("quick")
-                            || clean.contains("home")
-                            || clean.contains("schnell");
-
-                        if has_unpin_core && has_target_core {
-                            target_id = Some(id);
-                            break;
-                        }
-                    } else {
-                        // Match "Épingler", "Pin", "Attacher" AND ("Accès", "Accueil", "Favori", "Quick", "Home")
-                        let has_pin_core = clean.contains("epingl")
-                            || clean.contains("pin")
-                            || clean.contains("attach")
-                            || clean.contains("anheft");
-                        let has_target_core = clean.contains("acces")
-                            || clean.contains("accueil")
-                            || clean.contains("favori")
-                            || clean.contains("quick")
-                            || clean.contains("home")
-                            || clean.contains("schnell");
-
-                        if has_pin_core && has_target_core {
-                            target_id = Some(id);
-                            break;
-                        }
+                    let label = String::from_utf16_lossy(&label_buf[..len as usize]);
+                    if localized_pin_label(&label, is_unpin) {
+                        target_id = Some(id);
+                        break;
                     }
                 }
             }
         }
 
-        let mut result = if let Some(id) = target_id {
-            let ici = CMINVOKECOMMANDINFO {
-                cbSize: std::mem::size_of::<CMINVOKECOMMANDINFO>() as u32,
-                fMask: 0,
-                hwnd: HWND(std::ptr::null_mut()),
-                lpVerb: PCSTR((id - 1) as *mut u8),
-                nShow: SW_SHOWNORMAL.0,
-                ..Default::default()
-            };
-            context_menu
-                .InvokeCommand(&ici)
-                .map_err(|e| CommandError::SystemError(format!("InvokeCommand failed: {}", e)))
+        if let Some(id) = target_id {
+            // An invocation failure may already have produced effects. Do not
+            // launch a second command through PowerShell after that failure.
+            invoke_menu_with(id, HWND::default(), |info| context_menu.InvokeCommand(info))
         } else {
-            Err(CommandError::SystemError(
-                "No matching verb found".to_string(),
-            ))
-        };
-
-        // 3. ULTIMATE RECOURSE: PowerShell Script
-        if result.is_err() {
-            use std::os::windows::process::CommandExt;
-
-            let p_safe = path_norm.replace("'", "''");
-            let script = if is_unpin {
-                format!(
-                    "$sh = New-Object -ComObject Shell.Application; \
-                     $qa = $sh.Namespace('shell:::{{679f85cb-0220-4080-b29b-5540cc05aab6}}'); \
-                     if ($qa) {{ \
-                         $target = '{}'; \
-                         $item = $qa.Items() | Where-Object {{ $_.Path -eq $target -or $_.GetFolder.Self.Path -eq $target }}; \
-                         if ($item) {{ \
-                             $verbs = $item.Verbs() | Where-Object {{ $_.Name.Replace('&','') -match 'unpin|desepingler|retirer|detacher|losen' }}; \
-                             if ($verbs) {{ foreach ($v in $verbs) {{ $v.DoIt(); break; }} }} \
-                             else {{ $item.InvokeVerb('unpinfromhome'); $item.InvokeVerb('unpinfromquickaccess'); }} \
-                         }} \
-                     }}", p_safe
-                )
-            } else {
-                format!(
-                    "$sh = New-Object -ComObject Shell.Application; \
-                     $folder = $sh.Namespace('{}'); \
-                     if ($folder) {{ \
-                         $item = $folder.Self; \
-                         $verbs = $item.Verbs() | Where-Object {{ $_.Name.Replace('&','') -match 'pin|epingler|attacher|anheft' }}; \
-                         if ($verbs) {{ foreach ($v in $verbs) {{ $v.DoIt(); break; }} }} \
-                         else {{ $item.InvokeVerb('pintohome'); $item.InvokeVerb('pintofavorites'); }} \
-                     }}", p_safe
-                )
-            };
-
-            let output = std::process::Command::new("powershell")
-                .arg("-NoProfile")
-                .arg("-Command")
-                .arg(script)
-                .creation_flags(0x08000000)
-                .output();
-
-            if let Ok(out) = output {
-                if out.status.success() {
-                    result = Ok(());
-                }
-            }
+            run_powershell(&pin_fallback_script(is_unpin), &path_norm)
         }
-
-        result
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::PopupMenuGuard;
+    use super::*;
+    use windows::core::{Error, HRESULT};
+    use windows::Win32::Foundation::{E_ACCESSDENIED, E_FAIL, HWND};
     use windows::Win32::UI::WindowsAndMessaging::{CreatePopupMenu, IsMenu};
+
+    #[test]
+    fn localized_labels_distinguish_pin_from_unpin_and_preserve_accents() {
+        for (pin, unpin) in [
+            ("&Pin to Quick access", "Unpin from Quick access"),
+            (
+                "É&pingler à l’accès rapide",
+                "Désépingler de l’accès rapide",
+            ),
+            ("An Schnellzugriff anheften", "Von Schnellzugriff lösen"),
+        ] {
+            assert!(localized_pin_label(pin, false), "{pin}");
+            assert!(!localized_pin_label(pin, true), "{pin}");
+            assert!(localized_pin_label(unpin, true), "{unpin}");
+            assert!(!localized_pin_label(unpin, false), "{unpin}");
+        }
+        for label in [
+            "Open",
+            "Attach to archive",
+            "Remove shortcut",
+            "Quick access",
+        ] {
+            assert!(!localized_pin_label(label, false));
+            assert!(!localized_pin_label(label, true));
+        }
+    }
+
+    #[test]
+    fn canonical_verb_refuses_unterminated_or_failed_response() {
+        assert!(read_verb_with(|buffer| {
+            buffer.fill(b'x');
+            Ok(())
+        })
+        .is_none());
+        assert!(read_verb_with(|buffer| {
+            buffer[..5].copy_from_slice(b"open\0");
+            Err(Error::from_hresult(E_FAIL))
+        })
+        .is_none());
+        assert!(read_verb_with(|_| Ok(())).is_none());
+    }
+
+    #[test]
+    fn canonical_verb_accepts_last_byte_terminator_and_keeps_lossy_decoding() {
+        let mut calls = 0;
+        let verb = read_verb_with(|buffer| {
+            calls += 1;
+            buffer.fill(b'x');
+            buffer[127] = 0;
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!(calls, 1);
+        assert_eq!(verb.len(), 127);
+        assert_eq!(
+            read_verb_with(|buffer| {
+                buffer[..7].copy_from_slice(b"verb\xff\0x");
+                Ok(())
+            })
+            .unwrap(),
+            "verb\u{fffd}"
+        );
+    }
+
+    #[test]
+    fn failed_query_destroys_menu_and_accepts_successful_command_count() {
+        let mut handle = Default::default();
+        let result = query_menu_with(|menu| {
+            handle = menu;
+            E_ACCESSDENIED
+        });
+        let error = result.err().unwrap().to_string();
+        assert!(error.contains("QueryContextMenu failed") && error.contains("80070005"));
+        assert!(!unsafe { IsMenu(handle) }.as_bool());
+        let menu = query_menu_with(|_| HRESULT(7)).unwrap();
+        let handle = menu.0;
+        assert!(unsafe { IsMenu(handle) }.as_bool());
+        drop(menu);
+        assert!(!unsafe { IsMenu(handle) }.as_bool());
+    }
+
+    #[test]
+    fn invocation_propagates_failure_and_refuses_invalid_offsets() {
+        let mut called = false;
+        let error = invoke_menu_with(1, HWND::default(), |info| {
+            called = true;
+            assert_eq!(info.lpVerb.0 as usize, 0);
+            Err(Error::from_hresult(E_ACCESSDENIED))
+        })
+        .unwrap_err()
+        .to_string();
+        assert!(called);
+        assert!(error.contains("InvokeCommand failed") && error.contains("80070005"));
+        invoke_menu_with(0x7FFF, HWND::default(), |info| {
+            assert_eq!(info.lpVerb.0 as usize, 0x7FFE);
+            Ok(())
+        })
+        .unwrap();
+        for id in [0, 0x8000, u32::MAX] {
+            assert!(
+                invoke_menu_with(id, HWND::default(), |_| panic!("invalid command invoked"))
+                    .is_err()
+            );
+        }
+    }
+
+    fn fake_shell_prefix(pinned: bool, mode: &str) -> String {
+        // Replace the COM factory in this child process. No Shell.Application
+        // instance or user Quick Access state is accessed.
+        format!(
+            r#"$global:pinned = ${pinned}
+$global:mode = '{mode}'
+$global:calls = 0
+$global:item = [pscustomobject]@{{ Path = [Environment]::GetEnvironmentVariable('OXYDE_SHELL_TARGET') }}
+$global:item | Add-Member NoteProperty GetFolder ([pscustomobject]@{{ Self = [pscustomobject]@{{ Path = $global:item.Path }} }})
+if ($global:mode -eq 'proxy') {{ $global:item.Path = '::{{Quick Access proxy}}' }}
+$global:verb = [pscustomobject]@{{ Name = "&Désépingler de l’accès rapide" }}
+if (-not $global:pinned) {{ $global:verb.Name = "É&pingler à l’accès rapide" }}
+$global:verb | Add-Member ScriptMethod DoIt {{
+    $global:calls++
+    if ($global:calls -ne 1) {{ throw 'duplicate invocation' }}
+    if ($global:mode -eq 'throws') {{ throw 'injected Shell error' }}
+    if ($global:mode -eq 'unicode-error') {{ throw 'Erreur simulée 日本語' }}
+    $global:pinned = -not $global:pinned
+}}
+$global:item | Add-Member ScriptMethod Verbs {{
+    if ($global:mode -ne 'canonical') {{ return $global:verb }}
+}}
+$global:item | Add-Member ScriptMethod InvokeVerb {{
+    param($name)
+    if ($global:mode -ne 'canonical') {{ throw 'unexpected canonical fallback' }}
+    if ($name -notin @('unpinfromhome', 'unpinfromquickaccess')) {{ throw 'incorrect command' }}
+}}
+$global:qa = [pscustomobject]@{{}}
+$global:qa | Add-Member ScriptMethod Items {{
+    if ($global:pinned) {{ return $global:item }}
+}}
+$global:folder = [pscustomobject]@{{ Self = $global:item }}
+$global:shell = [pscustomobject]@{{}}
+$global:shell | Add-Member ScriptMethod Namespace {{
+    param($path)
+    if ($global:mode -eq 'missing') {{ return $null }}
+    if ($path.StartsWith('shell:::')) {{ return $global:qa }}
+    if ($path -eq $global:item.Path) {{ return $global:folder }}
+    throw 'incorrect literal path'
+}}
+function New-Object {{ param($ComObject) return $global:shell }}
+"#
+        )
+    }
+
+    #[test]
+    fn powershell_fallback_handles_localized_verbs_and_literal_paths_without_user_shell() {
+        for (pinned, unpin, mode) in [
+            (false, false, "works"),
+            (true, true, "works"),
+            (true, true, "canonical"),
+            (true, true, "proxy"),
+            (false, true, "throws"), // already absent; must not invoke
+        ] {
+            let script = fake_shell_prefix(pinned, mode) + &pin_fallback_script(unpin);
+            run_powershell(&script, "C:\\Oxyde 日本語 test's ’; throw 'path injected'").unwrap();
+        }
+    }
+
+    #[test]
+    fn powershell_fallback_reports_process_and_shell_errors() {
+        for (mode, message) in [
+            ("throws", "injected Shell error"),
+            ("unicode-error", "Erreur simulée 日本語"),
+            ("missing", "Quick Access is unavailable"),
+        ] {
+            let script = fake_shell_prefix(true, mode) + &pin_fallback_script(true);
+            let error = run_powershell(&script, "C:\\fixture")
+                .unwrap_err()
+                .to_string();
+            assert!(error.contains(message), "{error}");
+        }
+        let error = run_powershell(
+            "[Console]::Error.WriteLine('injected process error'); exit 7",
+            "",
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(
+            error.contains("exit code: 7") && error.contains("injected process error"),
+            "{error}"
+        );
+    }
 
     #[test]
     fn native_popup_menu_is_destroyed_on_error_and_unwind() {
