@@ -7,3 +7,6 @@ pub(crate) mod history_file_undo;
 pub mod quick_access_watcher;
 
 pub(crate) mod folder_sizes;
+
+pub(crate) mod path_parents;
+pub(crate) mod archive_open_cache;

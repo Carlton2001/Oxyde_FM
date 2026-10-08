@@ -827,3 +827,15 @@ shortcut-minimized = Minimizada
 shortcut-maximized = Maximizada
 shortcut-saving = Guardando…
 shortcut-invalid-target = El destino no puede estar vacío y los campos deben ser válidos.
+
+# Archive cache recovery and resource limits
+archive-cache-full = No se puede abrir { $detail }. Oxyde no puede liberar suficiente espacio: hay copias en uso, modificadas o recién abiertas. Cierre los documentos que no utilice y vuelva a intentarlo, o extraiga este archivo a una carpeta de su elección.
+archive-cache-busy = No se puede abrir { $detail }. Todavía se está preparando la apertura de otro archivo comprimido. Inténtelo de nuevo en un momento, o extraiga este archivo a una carpeta de su elección.
+archive-cache-unavailable = No se puede abrir { $detail }. Oxyde no pudo preparar la copia temporal. Puede extraer este archivo a una carpeta de su elección.
+archive-cache-extract = Extraer y abrir…
+archive-cache-exported = Archivo extraído: { $detail }
+archive-limit-bytes = Procesamiento detenido: el tamaño total descomprimido supera el límite de { $limit } para esta acción. No se toma en cuenta el tamaño comprimido del archivo.
+archive-limit-entries = Procesamiento detenido: el archivo comprimido contiene más de { $limit } archivos y carpetas.
+archive-limit-depth = Procesamiento detenido: una ruta del archivo comprimido supera { $limit } niveles, incluido el nombre del archivo.
+archive-limit-time = Procesamiento detenido: se alcanzó el tiempo máximo de procesamiento activo de { $limit } minutos. Las pausas no cuentan.
+archive-limit-decoded = Procesamiento detenido: los datos descomprimidos, incluidas las cabeceras, superan { $limit }.

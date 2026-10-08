@@ -96,6 +96,55 @@ fn format_datetime(date: NaiveDateTime, format: DateFormat) -> String {
 mod tests {
     use super::*;
     #[test]
+    fn archive_failures_display_localized_thresholds_in_all_languages() {
+        use oxyde_lib::models::error::{ArchiveLimitFailure, ArchiveLimitKind};
+        for language in [
+            Language::French,
+            Language::English,
+            Language::German,
+            Language::Spanish,
+            Language::Italian,
+        ] {
+            let i18n = crate::ui::i18n::I18n::for_language(language);
+            for (kind, limit, expected) in [
+                (
+                    ArchiveLimitKind::Bytes,
+                    256 * 1024 * 1024,
+                    format_size(256 * 1024 * 1024, false, true, language),
+                ),
+                (
+                    ArchiveLimitKind::Entries,
+                    100_000,
+                    format_number(100_000, language),
+                ),
+                (ArchiveLimitKind::Depth, 64, "64".into()),
+                (ArchiveLimitKind::Seconds, 120, "2".into()),
+                (
+                    ArchiveLimitKind::Decoded,
+                    8 * 1024 * 1024 * 1024,
+                    format_size(8 * 1024 * 1024 * 1024, false, true, language),
+                ),
+            ] {
+                let wrapped = format!("Archive Error: {}", ArchiveLimitFailure { kind, limit });
+                let displayed = error_detail(&wrapped, &i18n);
+                assert!(displayed.contains(&expected), "{displayed}");
+                assert!(
+                    !displayed.contains("Archive Error")
+                        && !displayed.contains("Archive limit exceeded"),
+                    "{displayed}"
+                );
+                assert!(
+                    !displayed.contains("[archive-limit-") && !displayed.contains("{$"),
+                    "{displayed}"
+                );
+            }
+            assert_eq!(
+                error_detail("Unrelated IO error", &i18n),
+                "Unrelated IO error"
+            );
+        }
+    }
+    #[test]
     fn numbers_sizes_and_boundaries_follow_language() {
         assert_eq!(
             format_number(u64::MAX, Language::English),
@@ -171,4 +220,30 @@ mod tests {
             );
         }
     }
+}
+
+/// Resolve archive limits at render time, including stored operation failures.
+pub fn error_detail(detail: &str, i18n: &crate::ui::i18n::I18n) -> String {
+    use crate::ui::i18n::{FluentArgs, Message};
+    use oxyde_lib::models::error::{ArchiveLimitFailure, ArchiveLimitKind};
+    let Some(failure) = ArchiveLimitFailure::from_message(detail) else {
+        return detail.into();
+    };
+    let message = match failure.kind {
+        ArchiveLimitKind::Bytes => Message::ArchiveLimitBytes,
+        ArchiveLimitKind::Entries => Message::ArchiveLimitEntries,
+        ArchiveLimitKind::Depth => Message::ArchiveLimitDepth,
+        ArchiveLimitKind::Seconds => Message::ArchiveLimitTime,
+        ArchiveLimitKind::Decoded => Message::ArchiveLimitDecoded,
+    };
+    let limit = match failure.kind {
+        ArchiveLimitKind::Bytes | ArchiveLimitKind::Decoded => {
+            format_size(failure.limit, false, true, i18n.language())
+        }
+        ArchiveLimitKind::Seconds => format_number(failure.limit.div_ceil(60), i18n.language()),
+        _ => format_number(failure.limit, i18n.language()),
+    };
+    let mut args = FluentArgs::new();
+    args.set("limit", limit);
+    i18n.text_with_args(message, &args).to_string()
 }

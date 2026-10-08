@@ -431,9 +431,7 @@ impl OxydeApp {
                             Err(error) => {
                                 tab.files.clear();
                                 tab.cached_filtered_files.clear();
-                                tab.load_status = crate::ui::workspace::TabLoadStatus::Error(
-                                    crate::ui::errors::path_load_message(&error),
-                                );
+                                tab.load_status = crate::ui::errors::path_load_status(&error);
                                 log::warn!("Cannot list {}: {error:?}", path);
                             }
                         }

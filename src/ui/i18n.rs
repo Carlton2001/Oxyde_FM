@@ -377,6 +377,17 @@ pub enum Message {
     NetworkForceAction,
     NetworkDriveFailed,
     OpenItemFailed,
+    ArchiveCacheFull,
+    ArchiveCacheBusy,
+    ArchiveCacheUnavailable,
+    ArchiveCacheExtract,
+    ArchiveCacheExported,
+    ArchiveLimitBytes,
+    ArchiveLimitEntries,
+    ArchiveLimitDepth,
+    ArchiveLimitTime,
+    ArchiveLimitDecoded,
+
     NetworkMapDescription,
     NetworkMapHint,
     NetworkDisconnectDescription,
@@ -810,6 +821,17 @@ impl Message {
             Self::NetworkForceAction => "network-force-action",
             Self::NetworkDriveFailed => "network-drive-failed",
             Self::OpenItemFailed => "open-item-failed",
+            Self::ArchiveCacheFull => "archive-cache-full",
+            Self::ArchiveCacheBusy => "archive-cache-busy",
+            Self::ArchiveCacheUnavailable => "archive-cache-unavailable",
+            Self::ArchiveCacheExtract => "archive-cache-extract",
+            Self::ArchiveCacheExported => "archive-cache-exported",
+            Self::ArchiveLimitBytes => "archive-limit-bytes",
+            Self::ArchiveLimitEntries => "archive-limit-entries",
+            Self::ArchiveLimitDepth => "archive-limit-depth",
+            Self::ArchiveLimitTime => "archive-limit-time",
+            Self::ArchiveLimitDecoded => "archive-limit-decoded",
+
             Self::NetworkMapDescription => "network-map-description",
             Self::NetworkMapHint => "network-map-hint",
             Self::NetworkDisconnectDescription => "network-disconnect-description",
@@ -1394,6 +1416,17 @@ mod tests {
                 Message::NetworkForceAction,
                 Message::NetworkDriveFailed,
                 Message::OpenItemFailed,
+                Message::ArchiveCacheFull,
+                Message::ArchiveCacheBusy,
+                Message::ArchiveCacheUnavailable,
+                Message::ArchiveCacheExtract,
+                Message::ArchiveCacheExported,
+                Message::ArchiveLimitBytes,
+                Message::ArchiveLimitEntries,
+                Message::ArchiveLimitDepth,
+                Message::ArchiveLimitTime,
+                Message::ArchiveLimitDecoded,
+
                 Message::NetworkMapDescription,
                 Message::NetworkMapHint,
                 Message::NetworkDisconnectDescription,
@@ -1510,6 +1543,7 @@ mod tests {
             args.set("seconds", "10");
             args.set("duration", "1.2 s");
             args.set("speed", "42 Mo/s");
+            args.set("limit", "256 Mo");
             for message in messages {
                 let pattern = i18n
                     .active

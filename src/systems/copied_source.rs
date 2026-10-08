@@ -8,9 +8,11 @@ use std::path::{Path, PathBuf};
 pub(super) struct CopiedSource {
     file: File,
     path: PathBuf,
+    _parents: super::path_parents::HeldParents,
 }
 impl CopiedSource {
     pub fn open(path: &Path) -> io::Result<Self> {
+        let parents = super::path_parents::HeldParents::new(path)?;
         let file = platform().open_file_for_move(path)?;
         let metadata = file.metadata()?;
         if !metadata.is_file() || platform().file_attributes(&metadata, "").2 {
@@ -19,6 +21,7 @@ impl CopiedSource {
         Ok(Self {
             file,
             path: path.into(),
+            _parents: parents,
         })
     }
     pub fn file(&self) -> &File {
@@ -95,6 +98,7 @@ mod tests {
         let output = CopiedFile {
             file: platform().open_file_for_move(&destination).unwrap(),
             hash,
+            _parents: super::super::path_parents::HeldParents::new(&destination).unwrap(),
         };
         let error = held.finish(output, &mut || Ok(())).unwrap_err();
         assert!(error.to_string().contains("source changed"));

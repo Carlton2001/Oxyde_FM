@@ -1009,7 +1009,7 @@ fn render_operation_card(
         );
     }
     if let OpStatus::Error(error) = &operation.status {
-        body = body.child(div().text_color(theme.error).child(error.clone()));
+        body = body.child(div().text_color(theme.error).child(crate::ui::format::error_detail(error, cx.i18n())));
     }
     if let Some(percentage) = percentage.filter(|_| !compact_summary) {
         body = body.child(

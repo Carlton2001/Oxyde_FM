@@ -17,6 +17,21 @@ impl Platform for WindowsPlatform {
     fn hold_archive_directory(&self, path: &std::path::Path) -> std::io::Result<std::fs::File> {
         super::windows_archive_security::hold_directory(path)
     }
+    fn hold_operation_directory(&self, path: &std::path::Path) -> std::io::Result<std::fs::File> {
+        super::windows_archive_security::hold_operation_directory(path)
+    }
+    fn lock_cache_file(&self, path: &std::path::Path) -> std::io::Result<std::fs::File> {
+        super::windows_cache::lock_file(path)
+    }
+    fn read_cache_file(&self, path: &std::path::Path) -> std::io::Result<std::fs::File> {
+        super::windows_cache::read_file(path)
+    }
+    fn open_cache_cleanup(&self, path: &std::path::Path, directory: bool) -> std::io::Result<std::fs::File> {
+        super::windows_cache::open_cleanup(path, directory)
+    }
+    fn ensure_archive_directory(&self, path: &std::path::Path) -> std::io::Result<std::fs::File> {
+        super::windows_archive_security::ensure_directory(path)
+    }
     fn create_archive_file(&self, path: &std::path::Path) -> std::io::Result<std::fs::File> {
         super::windows_archive_security::create_file(path)
     }

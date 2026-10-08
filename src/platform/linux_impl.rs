@@ -20,6 +20,32 @@ impl Platform for LinuxPlatform {
         }
         std::fs::File::open(path)
     }
+    fn hold_operation_directory(&self, path: &std::path::Path) -> std::io::Result<std::fs::File> {
+        std::fs::File::open(path)
+    }
+    fn lock_cache_file(&self, path: &std::path::Path) -> std::io::Result<std::fs::File> {
+        let file = std::fs::OpenOptions::new().read(true).write(true).create(true).truncate(false).open(path)?;
+        file.try_lock().map_err(std::io::Error::from)?;
+        Ok(file)
+    }
+    fn read_cache_file(&self, path: &std::path::Path) -> std::io::Result<std::fs::File> {
+        if !std::fs::symlink_metadata(path)?.is_file() {
+            return Err(std::io::Error::other("Cache marker is not an ordinary file"));
+        }
+        std::fs::File::open(path)
+    }
+    fn open_cache_cleanup(&self, _path: &std::path::Path, _directory: bool) -> std::io::Result<std::fs::File> {
+        // Unix flock cannot prove that external readers have closed a file.
+        Err(std::io::Error::new(std::io::ErrorKind::Unsupported, "Safe cache eviction requires Windows sharing checks"))
+    }
+    fn ensure_archive_directory(&self, path: &std::path::Path) -> std::io::Result<std::fs::File> {
+        match std::fs::create_dir(path) {
+            Ok(()) => {},
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {},
+            Err(error) => return Err(error),
+        }
+        self.hold_archive_directory(path)
+    }
     fn create_archive_file(&self, path: &std::path::Path) -> std::io::Result<std::fs::File> {
         std::fs::OpenOptions::new().write(true).create_new(true).open(path)
     }

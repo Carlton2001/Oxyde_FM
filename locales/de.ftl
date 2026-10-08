@@ -827,3 +827,15 @@ shortcut-minimized = Minimiert
 shortcut-maximized = Maximiert
 shortcut-saving = Wird gespeichert…
 shortcut-invalid-target = Das Ziel darf nicht leer sein und die Felder müssen gültig sein.
+
+# Archive cache recovery and resource limits
+archive-cache-full = { $detail } kann nicht geöffnet werden. Oxyde kann nicht genügend Platz freigeben: Kopien werden noch verwendet, wurden geändert oder gerade geöffnet. Schließen Sie ungenutzte Dokumente und versuchen Sie es erneut, oder entpacken Sie diese Datei in einen Ordner Ihrer Wahl.
+archive-cache-busy = { $detail } kann nicht geöffnet werden. Ein anderes Archiv wird noch zum Öffnen vorbereitet. Versuchen Sie es gleich erneut, oder entpacken Sie diese Datei in einen Ordner Ihrer Wahl.
+archive-cache-unavailable = { $detail } kann nicht geöffnet werden. Oxyde konnte die temporäre Kopie nicht vorbereiten. Sie können diese Datei in einen Ordner Ihrer Wahl entpacken.
+archive-cache-extract = Entpacken und öffnen…
+archive-cache-exported = Datei entpackt: { $detail }
+archive-limit-bytes = Verarbeitung angehalten: Die gesamte entpackte Größe überschreitet die Grenze von { $limit } für diese Aktion. Die komprimierte Archivgröße wird nicht zugrunde gelegt.
+archive-limit-entries = Verarbeitung angehalten: Das Archiv enthält mehr als { $limit } Dateien und Ordner.
+archive-limit-depth = Verarbeitung angehalten: Ein Archivpfad überschreitet { $limit } Ebenen einschließlich des Dateinamens.
+archive-limit-time = Verarbeitung angehalten: Die maximale aktive Verarbeitungszeit von { $limit } Minuten wurde erreicht. Pausen zählen nicht mit.
+archive-limit-decoded = Verarbeitung angehalten: Die entpackten Daten einschließlich Headern überschreiten { $limit }.

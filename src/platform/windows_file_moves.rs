@@ -36,6 +36,7 @@ fn rename_with(file: &File, destination: &Path, replace: bool) -> Result<()> {
             "Move destination must be absolute",
         ));
     }
+    let _parents = crate::systems::path_parents::HeldParents::new(destination)?;
     let name: Vec<u16> = destination.as_os_str().encode_wide().collect();
     if name.contains(&0) {
         return Err(Error::new(

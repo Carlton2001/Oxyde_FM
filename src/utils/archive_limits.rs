@@ -1,5 +1,6 @@
 //! Cooperative resource limits shared by archive extraction paths.
 use super::archive_security::relative_archive_path;
+use crate::models::error::{ArchiveLimitFailure, ArchiveLimitKind};
 use std::cell::Cell;
 use std::io::{self, Read, Write};
 use std::time::{Duration, Instant};
@@ -44,10 +45,10 @@ pub(crate) struct ArchiveBudget {
     decoded: Cell<u64>,
 }
 
-fn exceeded(resource: &str) -> io::Error {
+fn exceeded(kind: ArchiveLimitKind, limit: u64) -> io::Error {
     io::Error::new(
         io::ErrorKind::InvalidData,
-        format!("Archive limit exceeded: {resource}"),
+        ArchiveLimitFailure { kind, limit },
     )
 }
 
@@ -84,7 +85,10 @@ impl ArchiveBudget {
         {
             return Err(io::Error::new(
                 io::ErrorKind::TimedOut,
-                "Archive processing time limit exceeded",
+                ArchiveLimitFailure {
+                    kind: ArchiveLimitKind::Seconds,
+                    limit: self.limits.max_duration.as_secs(),
+                },
             ));
         }
         Ok(())
@@ -92,7 +96,10 @@ impl ArchiveBudget {
 
     pub fn check_entry_count(&self, count: usize) -> io::Result<()> {
         if count > self.limits.max_entries {
-            return Err(exceeded("entry count"));
+            return Err(exceeded(
+                ArchiveLimitKind::Entries,
+                self.limits.max_entries as u64,
+            ));
         }
         Ok(())
     }
@@ -101,13 +108,15 @@ impl ArchiveBudget {
         self.check_time()?;
         let path = relative_archive_path(name)?;
         if path.components().count() > self.limits.max_depth {
-            return Err(exceeded("path depth"));
+            return Err(exceeded(
+                ArchiveLimitKind::Depth,
+                self.limits.max_depth as u64,
+            ));
         }
-        let count = self
-            .entries
-            .get()
-            .checked_add(1)
-            .ok_or_else(|| exceeded("entry count"))?;
+        let count =
+            self.entries.get().checked_add(1).ok_or_else(|| {
+                exceeded(ArchiveLimitKind::Entries, self.limits.max_entries as u64)
+            })?;
         self.check_entry_count(count)?;
         self.declare_bytes(size)?;
         self.entries.set(count);
@@ -119,9 +128,9 @@ impl ArchiveBudget {
             .declared
             .get()
             .checked_add(size)
-            .ok_or_else(|| exceeded("declared bytes"))?;
+            .ok_or_else(|| exceeded(ArchiveLimitKind::Bytes, self.limits.max_bytes))?;
         if total > self.limits.max_bytes {
-            return Err(exceeded("declared bytes"));
+            return Err(exceeded(ArchiveLimitKind::Bytes, self.limits.max_bytes));
         }
         self.declared.set(total);
         Ok(())
@@ -133,9 +142,9 @@ impl ArchiveBudget {
             .written
             .get()
             .checked_add(count as u64)
-            .ok_or_else(|| exceeded("extracted bytes"))?;
+            .ok_or_else(|| exceeded(ArchiveLimitKind::Bytes, self.limits.max_bytes))?;
         if total > self.limits.max_bytes {
-            return Err(exceeded("extracted bytes"));
+            return Err(exceeded(ArchiveLimitKind::Bytes, self.limits.max_bytes));
         }
         self.written.set(total);
         Ok(())
@@ -193,7 +202,10 @@ impl<R: Read> Read for BudgetReader<'_, R> {
         let count = self.reader.read(&mut buffer[..length])?;
         self.budget.check_time()?;
         if count as u64 > remaining {
-            return Err(exceeded("decoded stream bytes"));
+            return Err(exceeded(
+                ArchiveLimitKind::Decoded,
+                self.budget.decoded_limit(),
+            ));
         }
         self.budget
             .decoded
@@ -212,6 +224,60 @@ mod tests {
             max_depth: 2,
             ..ArchiveLimits::EXTRACTION
         }
+    }
+    #[test]
+    fn failures_preserve_the_resource_and_threshold_through_wrapped_errors() {
+        let budget = ArchiveBudget::new(limits());
+        let errors = [
+            (
+                budget.entry("a/b/c", 0).unwrap_err(),
+                ArchiveLimitKind::Depth,
+                2,
+            ),
+            (
+                budget.check_entry_count(3).unwrap_err(),
+                ArchiveLimitKind::Entries,
+                2,
+            ),
+            (
+                budget.declare_bytes(9).unwrap_err(),
+                ArchiveLimitKind::Bytes,
+                8,
+            ),
+        ];
+        for (error, kind, limit) in errors {
+            let wrapped = format!("Archive Error: decoder failed: {error}");
+            assert_eq!(
+                ArchiveLimitFailure::from_message(&wrapped),
+                Some(ArchiveLimitFailure { kind, limit })
+            );
+        }
+        let expired = ArchiveBudget::new(ArchiveLimits {
+            max_duration: Duration::ZERO,
+            ..limits()
+        });
+        let error = expired.check_time().unwrap_err();
+        assert_eq!(
+            ArchiveLimitFailure::from_message(&error.to_string()),
+            Some(ArchiveLimitFailure {
+                kind: ArchiveLimitKind::Seconds,
+                limit: 0
+            })
+        );
+        let mut reader = BudgetReader {
+            reader: io::repeat(0),
+            budget: &budget,
+            checkpoint: &|| Ok(()),
+        };
+        let error = reader.read_to_end(&mut Vec::new()).unwrap_err();
+        assert_eq!(
+            ArchiveLimitFailure::from_message(&error.to_string()),
+            Some(ArchiveLimitFailure {
+                kind: ArchiveLimitKind::Decoded,
+                limit: 8 + 2 * 4096
+            })
+        );
+        assert!(ArchiveLimitFailure::from_message("Unexpected end of archive").is_none());
     }
     #[test]
     fn enforces_counts_depth_and_declared_total() {

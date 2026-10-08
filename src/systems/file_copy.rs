@@ -31,6 +31,7 @@ pub(crate) fn copy(
 pub(super) struct CopiedFile {
     pub file: std::fs::File,
     pub hash: String,
+    pub(super) _parents: super::path_parents::HeldParents,
 }
 
 pub(super) fn copy_with_source(
@@ -40,6 +41,8 @@ pub(super) fn copy_with_source(
     held_source: Option<&std::fs::File>,
     progress: &mut dyn FnMut(u64) -> io::Result<()>,
 ) -> io::Result<CopiedFile> {
+    let _source_parents = super::path_parents::HeldParents::new(source)?;
+    let destination_parents = super::path_parents::HeldParents::new(destination)?;
     progress(0)?;
     if replace {
         check_replacement(destination)?;
@@ -65,11 +68,16 @@ pub(super) fn copy_with_source(
     } else {
         platform().rename_open_file_exclusive(&output, &staging.file, destination)?;
     }
-    Ok(CopiedFile { file: output, hash })
+    Ok(CopiedFile {
+        file: output,
+        hash,
+        _parents: destination_parents,
+    })
 }
 
 /// Remove only a journal-verified output, including copied readonly files.
 pub(crate) fn remove_verified_output(path: &Path, expected: &str) -> io::Result<()> {
+    let _parents = super::path_parents::HeldParents::new(path)?;
     let file = platform().open_file_for_move(path)?;
     let metadata = file.metadata()?;
     if !metadata.is_file()
@@ -171,6 +179,31 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn copy_keeps_source_and_publication_parents_fixed_during_progress() {
+        let root = tempfile::tempdir().unwrap();
+        let source_parent = root.path().join("source-parent");
+        let target_parent = root.path().join("target-parent");
+        fs::create_dir(&source_parent).unwrap();
+        fs::create_dir(&target_parent).unwrap();
+        let source = source_parent.join("file");
+        let destination = target_parent.join("file");
+        fs::write(&source, vec![0x42; 256 * 1024]).unwrap();
+        let mut checked = false;
+        copy(&source, &destination, false, &mut |bytes| {
+            if bytes > 0 && !checked {
+                assert!(fs::rename(&source_parent, root.path().join("replaced-source")).is_err());
+                assert!(fs::rename(&target_parent, root.path().join("replaced-target")).is_err());
+                checked = true;
+            }
+            Ok(())
+        })
+        .unwrap();
+        assert!(checked);
+        assert_eq!(fs::read(&source).unwrap(), fs::read(&destination).unwrap());
+        fs::rename(&target_parent, root.path().join("released-target")).unwrap();
     }
 
     #[test]

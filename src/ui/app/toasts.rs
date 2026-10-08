@@ -15,6 +15,7 @@ pub(crate) struct Toast {
     pub detail: String,
     pub count: usize,
     created: std::time::Instant,
+    archive_source: Option<String>,
 }
 
 impl OxydeApp {
@@ -78,6 +79,7 @@ impl OxydeApp {
             detail,
             count,
             created: std::time::Instant::now(),
+            archive_source: None,
         });
         // Bound the overlay when many independent actions finish together.
         if self.toasts.len() > 5 {
@@ -93,8 +95,105 @@ impl OxydeApp {
                 }))
                 .await;
             let _ = this.update(cx, |this, cx| {
-                this.toasts.retain(|toast| toast.id != id);
+                this.toasts.retain(|toast| {
+                    toast.id != id
+                        || toast.archive_source.is_some()
+                        || oxyde_lib::models::error::ArchiveLimitFailure::from_message(
+                            &toast.detail,
+                        )
+                        .is_some()
+                });
                 cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    pub(crate) fn archive_cache_failed(
+        &mut self,
+        issue: oxyde_lib::models::error::ArchiveCacheIssue,
+        source: String,
+        cx: &mut Context<Self>,
+    ) {
+        use oxyde_lib::models::error::ArchiveCacheIssue;
+        let message = match issue {
+            ArchiveCacheIssue::Full => Message::ArchiveCacheFull,
+            ArchiveCacheIssue::Busy => Message::ArchiveCacheBusy,
+            ArchiveCacheIssue::Unavailable => Message::ArchiveCacheUnavailable,
+        };
+        let name = std::path::Path::new(&source)
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .into_owned();
+        self.toast(ToastKind::Error, message, name, 0, cx);
+        if let Some(toast) = self.toasts.last_mut() {
+            toast.archive_source = Some(source);
+        }
+    }
+
+    fn extract_archive_to_folder(&mut self, source: String, toast_id: u64, cx: &mut Context<Self>) {
+        let prompt = cx.prompt_for_paths(PathPromptOptions {
+            files: false,
+            directories: true,
+            multiple: false,
+            prompt: Some(cx.i18n().text(Message::ArchiveCacheExtract)),
+        });
+        cx.spawn(async move |this, cx| {
+            let folder = match prompt.await {
+                Ok(Ok(Some(paths))) => match paths.into_iter().next() {
+                    Some(path) => path,
+                    None => return,
+                },
+                Ok(Ok(None)) => return,
+                result => {
+                    let detail = format!("{result:?}");
+                    let _ = this.update(cx, |this, cx| {
+                        this.toast(ToastKind::Error, Message::OpenItemFailed, detail, 0, cx)
+                    });
+                    return;
+                }
+            };
+            let _ = this.update(cx, |this, cx| {
+                this.toasts.retain(|toast| toast.id != toast_id);
+                cx.notify();
+            });
+            let result = tokio::task::spawn_blocking(move || {
+                let path = oxyde_lib::commands::archive::extract_archive_file_to(
+                    std::path::Path::new(&source),
+                    &folder,
+                )?;
+                let opened = oxyde_lib::platform::platform().open_item(&path.to_string_lossy());
+                Ok::<_, oxyde_lib::models::CommandError>((path, opened))
+            })
+            .await;
+            let _ = this.update(cx, |this, cx| match result {
+                Ok(Ok((path, opened))) => {
+                    this.toast(
+                        ToastKind::Success,
+                        Message::ArchiveCacheExported,
+                        path.to_string_lossy().into_owned(),
+                        0,
+                        cx,
+                    );
+                    if let Err(error) = opened {
+                        this.toast(ToastKind::Error, Message::OpenItemFailed, error, 0, cx);
+                    }
+                }
+                Ok(Err(error)) => this.toast(
+                    ToastKind::Error,
+                    Message::OpenItemFailed,
+                    error.to_string(),
+                    0,
+                    cx,
+                ),
+                Err(error) => this.toast(
+                    ToastKind::Error,
+                    Message::OpenItemFailed,
+                    error.to_string(),
+                    0,
+                    cx,
+                ),
             });
         })
         .detach();
@@ -115,8 +214,17 @@ impl OxydeApp {
             .children(self.toasts.iter().map(|toast| {
                 let id = toast.id;
                 let close = handle.clone();
+                let export = handle.clone();
+                let source = toast.archive_source.clone();
                 let mut args = FluentArgs::new();
-                args.set("detail", toast.detail.clone());
+                args.set(
+                    "detail",
+                    if toast.kind == ToastKind::Error {
+                        crate::ui::format::error_detail(&toast.detail, cx.i18n())
+                    } else {
+                        toast.detail.clone()
+                    },
+                );
                 args.set("count", toast.count);
                 args.set(
                     "number",
@@ -129,7 +237,10 @@ impl OxydeApp {
                 };
                 div()
                     .id(("toast", id))
-                    .max_w(rem_pixels(rems(24.0)).min(window.viewport_size().width - rem_pixels(rems(2.0))))
+                    .max_w(
+                        rem_pixels(rems(24.0))
+                            .min(window.viewport_size().width - rem_pixels(rems(2.0))),
+                    )
                     .px(rems(1.0))
                     .py(rems(0.75))
                     .rounded(rems(0.5))
@@ -153,7 +264,33 @@ impl OxydeApp {
                     .child(
                         div()
                             .min_w_0()
-                            .child(cx.i18n().text_with_args(toast.message, &args)),
+                            .flex()
+                            .flex_col()
+                            .gap(rems(0.5))
+                            .child(cx.i18n().text_with_args(toast.message, &args))
+                            .when_some(source, |column, source| {
+                                column.child(
+                                    div()
+                                        .id(("archive-cache-export", id))
+                                        .px(rems(0.5))
+                                        .py(rems(0.375))
+                                        .rounded(rems(0.25))
+                                        .border(rems(0.0625))
+                                        .border_color(theme.border)
+                                        .bg(theme.surface)
+                                        .hover(|style| style.bg(theme.control_hover))
+                                        .child(cx.i18n().text(Message::ArchiveCacheExtract))
+                                        .on_click(move |_, _, cx| {
+                                            export.update(cx, |this, cx| {
+                                                this.extract_archive_to_folder(
+                                                    source.clone(),
+                                                    id,
+                                                    cx,
+                                                )
+                                            });
+                                        }),
+                                )
+                            }),
                     )
                     .child(
                         div()

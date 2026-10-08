@@ -1306,6 +1306,8 @@ impl FileOperationManager {
             let mut remaining = Vec::new();
             for (source, destination, replace_existing) in files_to_process {
                 Self::archive_checkpoint(op)?;
+                let _source_parents = super::path_parents::HeldParents::new(&source).map_err(|e| e.to_string())?;
+                let _destination_parents = super::path_parents::HeldParents::new(&destination).map_err(|e| e.to_string())?;
                 if replace_existing {
                     let metadata = std::fs::symlink_metadata(&destination)
                         .map_err(|error| format!("Cannot inspect {:?}: {error}", destination))?;
@@ -1807,11 +1809,7 @@ impl FileOperationManager {
                         std::thread::sleep(std::time::Duration::from_millis(100));
                     }
 
-                    let res = if src.is_dir() {
-                        std::fs::remove_dir_all(src)
-                    } else {
-                        std::fs::remove_file(src)
-                    };
+                    let res = super::path_parents::remove(src, &mut || Ok(()));
 
                     if let Err(e) = res {
                         if e.kind() != std::io::ErrorKind::NotFound {

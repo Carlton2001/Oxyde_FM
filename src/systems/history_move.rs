@@ -76,6 +76,8 @@ fn move_with(
     destination: &Path,
     expected: Option<&str>,
 ) -> io::Result<()> {
+    let _source_parents = super::path_parents::HeldParents::new(source)?;
+    let _destination_parents = super::path_parents::HeldParents::new(destination)?;
     if fs::symlink_metadata(source)?.file_type().is_symlink() {
         return Err(io::Error::other(
             "History moves cannot follow symbolic links",

@@ -1566,18 +1566,20 @@ impl OxydeApp {
     /// Shell handlers may pump Windows messages. Never invoke them while GPUI
     /// holds the App/Entity borrow for a mouse or keyboard callback.
     pub(crate) fn open_external_item(&mut self, path: String, cx: &mut Context<Self>) {
+        let source = path.clone();
         cx.spawn(async move |this, cx| {
             let result = tokio::task::spawn_blocking(move || {
-                let path = oxyde_lib::commands::archive::prepare_archive_file_for_open(
-                    std::path::Path::new(&path),
-                )
-                .map_err(|e| e.to_string())?;
+                let path = oxyde_lib::commands::archive::prepare_archive_file_for_open(std::path::Path::new(&path))?;
                 oxyde_lib::platform::platform().open_item(&path.to_string_lossy())
-            })
-            .await;
+                    .map_err(oxyde_lib::models::CommandError::SystemError)
+            }).await;
             let error = match result {
                 Ok(Ok(())) => return,
-                Ok(Err(error)) => error,
+                Ok(Err(oxyde_lib::models::CommandError::ArchiveCache(issue))) => {
+                    let _ = this.update(cx, |this, cx| this.archive_cache_failed(issue, source, cx));
+                    return;
+                }
+                Ok(Err(error)) => error.to_string(),
                 Err(error) => error.to_string(),
             };
             let _ = this.update(cx, |this, cx| {
@@ -3875,7 +3877,7 @@ impl Render for OxydeApp {
 
         if let Some((key, detail)) = self.file_operation_notice.clone() {
             let mut args = FluentArgs::new();
-            args.set("detail", detail);
+            args.set("detail", crate::ui::format::error_detail(&detail, cx.i18n()));
             let message = cx.i18n().text_with_args(key, &args);
             let close_handle = handle.clone();
             let theme = *cx.theme();

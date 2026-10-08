@@ -49,6 +49,14 @@ pub trait Platform: Send + Sync {
     /// Holds an ordinary directory without following a reparse point. On Windows
     /// the handle denies deletion/renaming until it is dropped.
     fn hold_archive_directory(&self, path: &std::path::Path) -> std::io::Result<std::fs::File>;
+    /// On Windows deny parent renames. Existing reparse directories also deny
+    /// data writers, but attribute-only reparse mutation remains possible.
+    /// Ordinary directories allow write sharing for native child renames.
+    fn hold_operation_directory(&self, path: &std::path::Path) -> std::io::Result<std::fs::File>;
+    fn lock_cache_file(&self, path: &std::path::Path) -> std::io::Result<std::fs::File>;
+    fn read_cache_file(&self, path: &std::path::Path) -> std::io::Result<std::fs::File>;
+    fn open_cache_cleanup(&self, path: &std::path::Path, directory: bool) -> std::io::Result<std::fs::File>;
+    fn ensure_archive_directory(&self, path: &std::path::Path) -> std::io::Result<std::fs::File>;
     fn create_archive_file(&self, path: &std::path::Path) -> std::io::Result<std::fs::File>;
     /// Read/write bounded native Internet provenance; unsupported platforms use None.
     fn read_file_provenance(&self, path: &std::path::Path) -> std::io::Result<Option<Vec<u8>>>;
@@ -277,6 +285,10 @@ mod windows_impl;
 mod windows_executables;
 #[cfg(target_os = "windows")]
 mod windows_archive_security;
+#[cfg(target_os = "windows")]
+mod windows_cache;
+#[cfg(target_os = "windows")]
+mod windows_no_reparse;
 #[cfg(target_os = "windows")]
 mod windows_com;
 #[cfg(target_os = "windows")]

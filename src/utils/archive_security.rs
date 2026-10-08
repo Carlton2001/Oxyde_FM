@@ -1,6 +1,6 @@
 //! Archive names are untrusted data, not native filesystem paths.
 use crate::platform::platform;
-use std::fs::{self, File};
+use std::fs::File;
 use std::io;
 use std::path::{Path, PathBuf};
 
@@ -56,7 +56,7 @@ fn unsafe_name(name: &str) -> io::Error {
     )
 }
 
-/// Holds the canonical root and its ancestors against replacement on Windows.
+/// Holds the absolute root and its ancestors against replacement on Windows.
 pub struct ExtractionRoot {
     path: PathBuf,
     _ancestors: Vec<File>,
@@ -79,7 +79,7 @@ impl ExtractionRoot {
         for ancestor in root.ancestors().collect::<Vec<_>>().into_iter().rev() {
             ancestors.push(platform().hold_archive_directory(ancestor)?);
         }
-        let path = fs::canonicalize(root)?;
+        let path = std::path::absolute(root)?;
         Ok(Self {
             path,
             _ancestors: ancestors,
@@ -100,13 +100,9 @@ impl ExtractionRoot {
         let mut current = self.path.clone();
         for component in directories.components() {
             current.push(component);
-            match fs::create_dir(&current) {
-                Ok(()) => {}
-                Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
-                Err(error) => return Err(error),
-            }
-            // The previous parent remains held while this child is opened.
-            parents.push(platform().hold_archive_directory(&current)?);
+            // Native Windows lookup refuses every reparse component atomically;
+            // share flags alone do not block attribute-only reparse mutation.
+            parents.push(platform().ensure_archive_directory(&current)?);
         }
         Ok(ExtractionDestination {
             path: self.path.join(relative),
@@ -118,6 +114,7 @@ impl ExtractionRoot {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
 
     #[test]
     fn rejects_windows_prefixes_streams_devices_and_ambiguous_components() {

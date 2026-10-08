@@ -827,3 +827,15 @@ shortcut-minimized = Ridotta a icona
 shortcut-maximized = Ingrandita
 shortcut-saving = Salvataggio…
 shortcut-invalid-target = La destinazione non può essere vuota e i campi devono essere validi.
+
+# Archive cache recovery and resource limits
+archive-cache-full = Impossibile aprire { $detail }. Oxyde non può liberare abbastanza spazio: alcune copie sono ancora in uso, sono state modificate o sono appena state aperte. Chiudi i documenti inutilizzati e riprova, oppure estrai questo file in una cartella a tua scelta.
+archive-cache-busy = Impossibile aprire { $detail }. È ancora in corso la preparazione dell’apertura di un altro archivio. Riprova tra poco, oppure estrai questo file in una cartella a tua scelta.
+archive-cache-unavailable = Impossibile aprire { $detail }. Oxyde non ha potuto preparare la copia temporanea. Puoi estrarre questo file in una cartella a tua scelta.
+archive-cache-extract = Estrai e apri…
+archive-cache-exported = File estratto: { $detail }
+archive-limit-bytes = Elaborazione interrotta: la dimensione totale decompressa supera il limite di { $limit } per questa azione. Non viene considerata la dimensione compressa dell’archivio.
+archive-limit-entries = Elaborazione interrotta: l’archivio contiene più di { $limit } file e cartelle.
+archive-limit-depth = Elaborazione interrotta: un percorso dell’archivio supera { $limit } livelli, incluso il nome del file.
+archive-limit-time = Elaborazione interrotta: è stato raggiunto il tempo massimo di elaborazione attiva di { $limit } minuti. Le pause non vengono conteggiate.
+archive-limit-decoded = Elaborazione interrotta: i dati decompressi, comprese le intestazioni, superano { $limit }.

@@ -80,6 +80,7 @@ pub(crate) struct ArchiveWorkspace {
     directory: tempfile::TempDir,
     length: u64,
     modified: Option<std::time::SystemTime>,
+    _parents: super::path_parents::HeldParents,
 }
 
 impl ArchiveWorkspace {
@@ -101,8 +102,18 @@ impl ArchiveWorkspace {
         checkpoint: &dyn Fn() -> std::io::Result<()>,
         limits: ArchiveLimits,
     ) -> Result<Self, String> {
-        let metadata = std::fs::metadata(&archive).map_err(|e| e.to_string())?;
         let directory = tempfile::tempdir().map_err(|e| e.to_string())?;
+        Self::open_in_directory(archive, checkpoint, limits, directory)
+    }
+
+    fn open_in_directory(
+        archive: PathBuf,
+        checkpoint: &dyn Fn() -> std::io::Result<()>,
+        limits: ArchiveLimits,
+        directory: tempfile::TempDir,
+    ) -> Result<Self, String> {
+        let parents = super::path_parents::HeldParents::new(&archive).map_err(|e| e.to_string())?;
+        let metadata = std::fs::metadata(&archive).map_err(|e| e.to_string())?;
         extract_archive_with_limits(
             archive.to_string_lossy().into_owned(),
             directory.path().to_string_lossy().into_owned(),
@@ -121,6 +132,7 @@ impl ArchiveWorkspace {
             directory,
             length: metadata.len(),
             modified: metadata.modified().ok(),
+            _parents: parents,
         })
     }
 
@@ -177,14 +189,30 @@ impl ArchiveWorkspace {
                 .map_err(|e| e.to_string())?;
         }
         FileOperationManager::archive_checkpoint(op)?;
-        let metadata = std::fs::metadata(&self.archive).map_err(|e| e.to_string())?;
+        let original = crate::platform::platform()
+            .open_file_for_move(&self.archive)
+            .map_err(|e| e.to_string())?;
+        let metadata = original.metadata().map_err(|e| e.to_string())?;
         if metadata.len() != self.length || metadata.modified().ok() != self.modified {
             return Err("Archive changed during the operation; original preserved".into());
         }
         let backup = parent.join(format!(".oxyde-{}.archive-backup", uuid::Uuid::new_v4()));
-        std::fs::rename(&self.archive, &backup).map_err(|e| e.to_string())?;
-        if let Err(error) = std::fs::rename(&destination, &self.archive) {
-            return match std::fs::rename(&backup, &self.archive) {
+        let rebuilt = crate::platform::platform()
+            .open_file_for_move(&destination)
+            .map_err(|e| e.to_string())?;
+        crate::platform::platform()
+            .rename_open_file_exclusive(&original, &self.archive, &backup)
+            .map_err(|e| e.to_string())?;
+        if let Err(error) = crate::platform::platform().rename_open_file_exclusive(
+            &rebuilt,
+            &destination,
+            &self.archive,
+        ) {
+            return match crate::platform::platform().rename_open_file_exclusive(
+                &original,
+                &backup,
+                &self.archive,
+            ) {
                 Ok(()) => Err(error.to_string()),
                 Err(restore) => Err(format!(
                     "{error}; original kept at {}: {restore}",
@@ -192,7 +220,12 @@ impl ArchiveWorkspace {
                 )),
             };
         }
-        let _ = std::fs::remove_file(backup);
+        if let Err(error) = crate::platform::platform().remove_open_file(&original, &backup) {
+            log::warn!(
+                "Archive updated, original backup retained at {}: {error}",
+                backup.display()
+            );
+        }
         Ok(())
     }
 }
@@ -273,29 +306,39 @@ pub fn create_directory(path: &Path, quality: &str) -> Result<(), std::io::Error
 
 /// Opens a file from an archive using a cache that survives the shell launch.
 /// A new extraction gets its own directory; applications can keep files open.
-pub fn external_file(path: &Path) -> Result<PathBuf, String> {
-    let Some((archive, internal)) = virtual_source(path) else {
-        return Ok(path.to_path_buf());
-    };
-    let cache = std::env::temp_dir().join("oxyde-archive-open");
-    std::fs::create_dir_all(&cache).map_err(|e| e.to_string())?;
-    let directory = tempfile::tempdir_in(cache).map_err(|e| e.to_string())?;
-    let destination = if ArchiveFormat::from_path(&archive) == Some(ArchiveFormat::Zip) {
+pub fn external_file(path: &Path) -> Result<PathBuf, crate::models::CommandError> {
+    let Some((archive, internal)) = virtual_source(path) else { return Ok(path.to_path_buf()); };
+    let cache = super::archive_open_cache::CacheEntry::new()?;
+    let destination = prepare_selection(archive, &internal, cache.payload()).map_err(crate::models::CommandError::ArchiveError)?;
+    cache.finish(destination).map_err(|error| {
+        log::warn!("Archive cache admission failed: {error}");
+        let issue = if error.kind() == std::io::ErrorKind::WouldBlock {
+            crate::models::error::ArchiveCacheIssue::Busy
+        } else {
+            error.get_ref().and_then(|e| e.downcast_ref::<crate::models::error::ArchiveCacheIssue>()).copied()
+                .unwrap_or(crate::models::error::ArchiveCacheIssue::Unavailable)
+        };
+        crate::models::CommandError::ArchiveCache(issue)
+    })
+}
+
+fn prepare_selection(archive: PathBuf, internal: &str, target: &Path) -> Result<PathBuf, String> {
+    Ok(if ArchiveFormat::from_path(&archive) == Some(ArchiveFormat::Zip) {
         extract_zip_file_for_open(
             &archive,
             &internal,
-            directory.path(),
+            target,
             ArchiveLimits::OPEN_FILE,
         )
         .map_err(|e| e.to_string())?
     } else {
-        let workspace =
-            ArchiveWorkspace::open_with_checkpoint(archive, &|| Ok(()), ArchiveLimits::OPEN_FILE)?;
+        let directory = tempfile::Builder::new().prefix(".oxyde-work-").tempdir_in(target).map_err(|e| e.to_string())?;
+        let workspace = ArchiveWorkspace::open_in_directory(archive, &|| Ok(()), ArchiveLimits::OPEN_FILE, directory)?;
         let source = workspace.path(&internal)?;
         if !source.is_file() {
             return Err("Archive item is not a file".into());
         }
-        let root = crate::utils::archive_security::ExtractionRoot::new(directory.path())
+        let root = crate::utils::archive_security::ExtractionRoot::new(target)
             .map_err(|e| e.to_string())?;
         let name = source
             .file_name()
@@ -318,14 +361,84 @@ pub fn external_file(path: &Path) -> Result<PathBuf, String> {
                 .map_err(|e| e.to_string())?;
         }
         destination.path.clone()
-    };
-    let _ = directory.keep();
-    Ok(destination)
+    })
+}
+
+/// Explicit fallback chosen in Oxyde: publish a permanent copy without using
+/// the managed cache or overwriting an existing destination.
+pub fn export_file(path: &Path, folder: &Path) -> Result<PathBuf, crate::models::CommandError> {
+    use crate::models::CommandError;
+    let (archive, internal) = virtual_source(path).ok_or_else(|| CommandError::ArchiveError("Archive file not found".into()))?;
+    let _folder_guard = super::path_parents::HeldParents::new(&folder.join(".oxyde-extract"))?;
+    let staging = tempfile::Builder::new().prefix(".oxyde-extract-").tempdir_in(folder)?;
+    let selected = prepare_selection(archive, &internal, staging.path()).map_err(CommandError::ArchiveError)?;
+    let name = selected.file_name().ok_or_else(|| CommandError::PathError("File has no name".into()))?;
+    let stem = selected.file_stem().unwrap_or(name).to_string_lossy();
+    for index in 0..1000 {
+        let destination = if index == 0 { folder.join(name) } else {
+            let mut name = format!("{stem} ({index})");
+            if let Some(extension) = selected.extension() { name.push('.'); name.push_str(&extension.to_string_lossy()); }
+            folder.join(name)
+        };
+        match super::file_copy::copy(&selected, &destination, false, &mut |_| Ok(())) {
+            Ok(_) => return Ok(destination),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(error.into()),
+        }
+    }
+    Err(CommandError::PathError("No unused destination name was available".into()))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn explicit_export_preserves_existing_names_and_original_archives() {
+        let base = tempfile::tempdir().unwrap();
+        let source = base.path().join("document.txt");
+        std::fs::write(&source, b"archive contents").unwrap();
+        let folder = base.path().join("chosen-folder");
+        std::fs::create_dir(&folder).unwrap();
+        std::fs::write(folder.join("document.txt"), b"existing document").unwrap();
+        for extension in ["zip", "tar.zst"] {
+            let archive = base.path().join(format!("archive.{extension}"));
+            FileOperationManager::perform_compress(&mutation_operation("fast"), vec![source.clone()], Some(archive.clone())).unwrap();
+            let original = std::fs::read(&archive).unwrap();
+            #[cfg(target_os = "windows")]
+            crate::platform::platform().write_file_provenance(&archive, b"[ZoneTransfer]\r\nZoneId=3\r\n").unwrap();
+            let virtual_path = archive.join("document.txt");
+            let exported = export_file(&virtual_path, &folder).unwrap();
+            assert_eq!(exported.parent(), Some(folder.as_path()));
+            assert_ne!(exported, folder.join("document.txt"));
+            assert_eq!(std::fs::read(&exported).unwrap(), b"archive contents");
+            assert_eq!(std::fs::read(folder.join("document.txt")).unwrap(), b"existing document");
+            assert_eq!(std::fs::read(&archive).unwrap(), original);
+            assert!(std::fs::read_dir(&folder).unwrap().all(|entry| entry.unwrap().file_type().unwrap().is_file()));
+            #[cfg(target_os = "windows")]
+            assert_eq!(crate::platform::platform().read_file_provenance(&exported).unwrap().unwrap(), b"[ZoneTransfer]\r\nZoneId=3\r\n");
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn archive_parent_remains_fixed_until_workspace_publication_finishes() {
+        let base = tempfile::tempdir().unwrap();
+        let parent = base.path().join("parent");
+        std::fs::create_dir(&parent).unwrap();
+        let source = base.path().join("file.txt");
+        std::fs::write(&source, b"safe").unwrap();
+        let archive = parent.join("archive.zip");
+        FileOperationManager::perform_compress(&mutation_operation("fast"), vec![source], Some(archive.clone())).unwrap();
+        let workspace = ArchiveWorkspace::open(archive.clone()).unwrap();
+        assert!(std::fs::rename(&parent, base.path().join("replaced")).is_err());
+        std::fs::write(workspace.root().join("added.txt"), b"added").unwrap();
+        workspace.commit(&mutation_operation("fast")).unwrap();
+        drop(workspace);
+        let listing = crate::commands::archive::list_archive_contents(archive.to_string_lossy().into_owned(), String::new()).unwrap();
+        assert!(listing.iter().any(|entry| entry.name == "added.txt"));
+        std::fs::rename(parent, base.path().join("released")).unwrap();
+    }
 
     #[test]
     fn mutation_locks_are_shared_only_for_the_same_archive() {

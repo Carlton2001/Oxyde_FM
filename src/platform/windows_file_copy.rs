@@ -75,6 +75,8 @@ pub(super) fn copy(
     held_source: Option<&std::fs::File>,
     progress: &mut dyn FnMut(u64) -> io::Result<()>,
 ) -> io::Result<()> {
+    let _source_parents = crate::systems::path_parents::HeldParents::new(source)?;
+    let _destination_parents = crate::systems::path_parents::HeldParents::new(destination)?;
     // Read access suffices for Copy. Deny source writes/deletion during the
     // native call without requiring DELETE access from the source's ACL.
     let source_guard = if held_source.is_none() {

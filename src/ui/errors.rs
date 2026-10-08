@@ -1,6 +1,16 @@
 use crate::ui::i18n::Message;
 use oxyde_lib::models::CommandError;
 
+pub fn path_load_status(error: &CommandError) -> crate::ui::workspace::TabLoadStatus {
+    if let Some(failure) =
+        oxyde_lib::models::error::ArchiveLimitFailure::from_message(&error.to_string())
+    {
+        crate::ui::workspace::TabLoadStatus::ArchiveLimit(failure)
+    } else {
+        crate::ui::workspace::TabLoadStatus::Error(path_load_message(error))
+    }
+}
+
 /// Maps backend failures to concise UI message keys.
 /// Technical details remain available in logs instead of leaking OS error strings to users.
 pub fn path_load_message(error: &CommandError) -> Message {
@@ -29,6 +39,23 @@ pub fn rename_message(error: &CommandError) -> Message {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn archive_listing_limits_retain_the_threshold_in_the_tab() {
+        use oxyde_lib::models::error::{ArchiveLimitFailure, ArchiveLimitKind};
+        let failure = ArchiveLimitFailure {
+            kind: ArchiveLimitKind::Entries,
+            limit: 100_000,
+        };
+        let error = CommandError::ArchiveError(format!("Decoder failed: {failure}"));
+        assert!(
+            matches!(path_load_status(&error), crate::ui::workspace::TabLoadStatus::ArchiveLimit(actual) if actual == failure)
+        );
+        assert!(matches!(
+            path_load_status(&CommandError::AccessDenied("private".into())),
+            crate::ui::workspace::TabLoadStatus::Error(Message::PathAccessDenied)
+        ));
+    }
 
     #[test]
     fn path_errors_map_to_translation_keys_without_operating_system_details() {

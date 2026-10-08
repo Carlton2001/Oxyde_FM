@@ -25,7 +25,11 @@ pub fn create_archive_directory_with_quality(
 }
 
 pub fn prepare_archive_file_for_open(path: &Path) -> Result<PathBuf, CommandError> {
-    crate::systems::archive_workspace::external_file(path).map_err(CommandError::ArchiveError)
+    crate::systems::archive_workspace::external_file(path)
+}
+
+pub fn extract_archive_file_to(path: &Path, folder: &Path) -> Result<PathBuf, CommandError> {
+    crate::systems::archive_workspace::export_file(path, folder)
 }
 
 /// ZIP supports random access: validate the index, then decode only the requested file.
