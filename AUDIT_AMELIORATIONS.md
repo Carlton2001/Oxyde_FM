@@ -6,7 +6,7 @@ Priorités proposées : P1 pour un risque sur les opérations de fichiers à rep
 
 ## Tableau de suivi — 8 octobre 2026
 
-**22 points traités, 4 clos par retrait, 3 points de correction/optimisation à faire, 1 vérification manuelle distincte et 1 observation de référence.** « Traité » décrit la correction du code ; les validations manuelles encore ouvertes sont indiquées séparément. A11 est commité dans `00b6a30` et A12 dans `261cb8c` ; A24/A25 sont commités dans `db3c5ae` et A30/A31 dans `daa8f52`.
+**23 points traités, 4 clos par retrait, 2 points de correction/optimisation à faire, 1 vérification manuelle distincte et 1 observation de référence.** « Traité » décrit la correction du code ; les validations manuelles encore ouvertes sont indiquées séparément. A11 est commité dans `00b6a30` et A12 dans `261cb8c` ; A24/A25 sont commités dans `db3c5ae` et A30/A31 dans `daa8f52`.
 
 | Point | Sujet | État du code | Suite ou validation restante |
 | --- | --- | --- | --- |
@@ -19,7 +19,7 @@ Priorités proposées : P1 pour un risque sur les opérations de fichiers à rep
 | [A07](#a07--api-windows-encore-dans-les-commandes--p2) | Isolation des API Windows | Traité | Commandes de corbeille et exclusions de sidebar via Platform ; tests Windows ciblés |
 | [A08](#a08--annulation-de-recherche-et-détection-ssd--p2) | Annulation de recherche / SSD | Traité | Lectures et attente du verrou annulables ; branche SSD inactive retirée |
 | [A09](#a09--calcul-des-tailles--tâches-et-pools-cumulés--p2) | Concurrence du calcul des tailles | Traité | Deux calculs actifs, pools partagés et parcours annulable ; mesure réalisée |
-| [A10](#a10--tri-et-normalisation-répétés--p2) | Tri et normalisation | À faire | Clarifier les règles, mesurer puis éviter les calculs répétés |
+| [A10](#a10--tri-et-normalisation-répétés--p2) | Tri et normalisation | Traité | Clés préparées, règles conservées sur sept colonnes ; mesure réalisée |
 | [A11](#a11--copie-de-lhistorique-pendant-le-rendu--p2) | État d'historique utilisé au rendu | Traité | Résumé sans allocation ; mesure sur un historique chargé pour quatre panneaux |
 | [A12](#a12--polling-et-notifications-sans-changement--p2) | Polling et notifications | Traité | Indicateur natif sans lecture des chemins ; notification Peek sur changement |
 | [A13](#a13--suggestions-clippy-et-simplifications-locales--p3) | Simplifications locales | À faire | Revalider les diagnostics utiles après les corrections |
@@ -136,9 +136,13 @@ Limites : un appel système de lecture ou de métadonnées déjà bloqué ne peu
 
 ## A10 — Tri et normalisation répétés — P2
 
-**Calculs répétés établis, gain à mesurer.** `commands/io.rs:140` trie par nom naturel ; `ui/workspace.rs` retrie les listes et normalise les noms dans les comparateurs/filtres. La complétion effectue également son propre tri. Les règles de comparaison ne sont pas toutes identiques.
+**Corrigé le 8 octobre 2026 après relecture des règles actives.** GPUI trie les noms lexicalement après conversion Unicode en minuscules, sans retrait d'accents ni interprétation numérique. Les dossiers restent avant les fichiers, même en descendant ; la direction porte sur la colonne choisie puis sur le nom de départage. Les égalités restent stables. Le type utilise l'extension en minuscules, l'emplacement d'origine son parent en minuscules, l'emplacement courant l'ordre des `Path`, et la date de suppression l'ordre des `Option<i64>`.
 
-Clarifier les règles attendues pour noms numériques, accents, dossiers et ordre descendant avant factorisation. Préparer les clés normalisées une fois par entrée/filtre, et éviter les tris répétés lorsqu'un consommateur partage réellement le même ordre. Le tri backend reste utile au fil d'Ariane et ne doit pas être supprimé aveuglément.
+`sort_by_cached_key` prépare désormais chaque clé une fois par entrée, au lieu de recréer noms, extensions et parents à chaque comparaison. Les filtres de nom et d'emplacement préparent également leur propre texte en minuscules une fois par passage. Les noms des fichiers restent normalisés une fois par fichier lors du filtrage, sans cache persistant à invalider. Le tri naturel sans allocation du backend reste conservé : il sert notamment au fil d'Ariane et diffère du tri GPUI. La complétion utilisait déjà des clés préparées ; aucun tri utile n'est retiré sous prétexte de doublon.
+
+Une comparaison avec le comparateur antérieur vérifie les sept colonnes dans les deux directions, sur 300 entrées mêlant nombres, accents, casse, dossiers, extensions et métadonnées absentes, plus des noms égaux à chemins distincts. Un autre test conserve les règles Unicode des filtres et la distinction entre `école` et `ecole`.
+
+Mesure reproductible : `cargo test --bin oxyde --offline profile_prepared_name_sort -- --ignored --nocapture`. Cinq tris de 20 000 entrées prennent ici environ 116,60 ms avec le comparateur antérieur contre 23,67 ms avec les clés préparées. Le clonage d'entrée est exclu des deux chronomètres et les sorties sont identiques. Ce profil mesure le tri par nom, pas l'ensemble du chargement GPUI ni un gain garanti sur toutes les colonnes. La préparation consomme temporairement une clé par entrée ; elle réduit les allocations répétées sans rendre le tri asynchrone.
 
 ## A11 — Copie de l'historique pendant le rendu — P2
 
@@ -477,3 +481,7 @@ Quatre tests du transfert initial vérifient les verrous source/destination apr�
 ### Validation du point A07
 
 `cargo test --all-targets --offline` : 178 tests backend et 108 tests du binaire passent (286) ; 16 tests sont ignorés par défaut. Trois tests natifs de restauration/purge sont exécutés séparément et passent. `cargo check --all-targets --offline` passe sans avertissement du projet ; le binaire est reconstruit. Aucun appel direct `windows::` ou `trash::os_limited` ne reste dans les commandes. Formatage ciblé et `git diff --check` validés. Aucun Computer Use ni validation Linux.
+
+### Validation du point A10
+
+`cargo test --all-targets --offline` : 178 tests backend et 110 tests du binaire passent (288) ; 17 tests sont ignorés par défaut. Le profil A10 exécuté explicitement passe. `cargo check --all-targets --offline` passe sans avertissement du projet et le binaire est reconstruit. Formatage des blocs modifiés et `git diff --check` validés. Aucun Computer Use ni validation Linux.
