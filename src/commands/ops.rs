@@ -5,7 +5,6 @@ use crate::models::{
 use crate::systems::history_move::move_file as move_history_file;
 use crate::utils::path_security::validate_path;
 use log::{info, warn};
-use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -613,29 +612,6 @@ fn recycle_history_paths(paths: Vec<PathBuf>) -> Result<(), CommandError> {
         .map_err(CommandError::TrashError)
 }
 
-/// Remove files created by a copy operation during Undo. These are verified against
-/// the operation journal immediately before this call, so routing them through the
-/// Windows Recycle Bin is unnecessary and can fail for otherwise valid paths.
-fn remove_undo_copy_files(
-    paths: Vec<PathBuf>,
-    hashes: &HashMap<&str, &str>,
-) -> Result<(), CommandError> {
-    for path in paths {
-        let expected = hashes.get(path.to_string_lossy().as_ref()).ok_or_else(|| {
-            CommandError::IoError(format!(
-                "Cannot remove unverified copied file {}",
-                path.display()
-            ))
-        })?;
-        crate::systems::file_copy::remove_verified_output(&path, expected).map_err(|error| {
-            CommandError::IoError(format!(
-                "Cannot remove copied file {}: {error}",
-                path.display()
-            ))
-        })?;
-    }
-    Ok(())
-}
 pub async fn undo_last_action(
     history: &HistoryManager,
 ) -> Result<Option<Transaction>, CommandError> {
@@ -656,74 +632,10 @@ pub async fn undo_last_action(
         }
         match tx.op_type {
             TransactionType::Copy => {
-                if tx.details.created_files.is_none()
-                    || tx.details.created_dirs.is_none()
-                    || tx.details.copied_file_hashes.is_none()
-                {
-                    return Err(CommandError::Other(
-                        "This copy predates the effect journal and cannot be undone safely"
-                            .to_string(),
-                    ));
-                }
-                let expected_hashes: HashMap<_, _> = tx
-                    .details
-                    .copied_file_hashes
-                    .as_deref()
-                    .unwrap_or_default()
-                    .iter()
-                    .map(|(path, hash)| (path.as_str(), hash.as_str()))
-                    .collect();
-                let undoable_files: std::collections::HashSet<_> = tx
-                    .details
-                    .created_files
-                    .as_deref()
-                    .unwrap_or_default()
-                    .iter()
-                    .map(String::as_str)
-                    .collect();
-                for (path, expected) in &expected_hashes {
-                    if !undoable_files.contains(path) {
-                        continue;
-                    }
-                    let path = PathBuf::from(path);
-                    if path.exists() && hash_file(&path)? != *expected {
-                        return Err(CommandError::Other(format!(
-                            "Cannot undo copy because the destination changed since the operation: {}",
-                            path.display()
-                        )));
-                    }
-                }
-                if let Some(created) = &tx.details.created_files {
-                    if let Some(missing) = created.iter().find(|path| !PathBuf::from(path).exists())
-                    {
-                        return Err(CommandError::Other(format!(
-                            "Cannot undo copy because the copied file is missing: {missing}"
-                        )));
-                    }
-                    let files_to_delete: Vec<PathBuf> = created.iter().map(PathBuf::from).collect();
-                    if !files_to_delete.is_empty() {
-                        remove_undo_copy_files(files_to_delete, &expected_hashes)?;
-                    }
-                }
-                if let Some(created_dirs) = &tx.details.created_dirs {
-                    for directory in created_dirs.iter().rev().map(PathBuf::from) {
-                        match std::fs::remove_dir(&directory) {
-                            Ok(()) => {}
-                            Err(error)
-                                if matches!(
-                                    error.kind(),
-                                    std::io::ErrorKind::DirectoryNotEmpty
-                                        | std::io::ErrorKind::NotFound
-                                ) => {}
-                            Err(error) => {
-                                return Err(CommandError::IoError(error.to_string()));
-                            }
-                        }
-                    }
-                }
+                crate::systems::history_file_undo::undo_copy(&tx.details)?;
             }
             TransactionType::Move => {
-                crate::systems::history_move_undo::undo(&tx.details)?;
+                crate::systems::history_file_undo::undo(&tx.details)?;
             }
             TransactionType::Delete => {
                 restore_items(tx.details.paths.clone()).await?;
@@ -1230,6 +1142,52 @@ mod copy_redo_tests {
     use crate::models::HistoryManager;
     use std::sync::atomic::AtomicBool;
     use std::sync::Arc;
+
+    #[test]
+    fn undo_copy_directory_error_preserves_outputs_and_allows_retry() {
+        let root = tempfile::tempdir().unwrap();
+        let source = root.path().join("source.txt");
+        let destination = root.path().join("copy.txt");
+        let blocker = root.path().join("directory");
+        std::fs::write(&source, b"copied content").unwrap();
+        std::fs::write(&destination, b"copied content").unwrap();
+        std::fs::write(&blocker, b"foreign content").unwrap();
+        let name = |path: &std::path::Path| path.to_string_lossy().into_owned();
+        let history = HistoryManager::new();
+        history.push(Transaction::new(
+            TransactionType::Copy,
+            TransactionDetails {
+                paths: vec![name(&source)],
+                target_dir: None,
+                old_path: None,
+                new_path: None,
+                created_files: Some(vec![name(&destination)]),
+                created_dirs: Some(vec![name(&blocker)]),
+                overwritten_files: Some(vec![]),
+                moved_files: None,
+                trash_metadata_backups: None,
+                moved_dirs: None,
+                copied_files: Some(vec![(name(&source), name(&destination))]),
+                copied_file_hashes: Some(vec![(
+                    name(&destination),
+                    blake3::hash(b"copied content").to_hex().to_string(),
+                )]),
+            },
+        ));
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .build()
+            .unwrap();
+        assert!(runtime.block_on(undo_last_action(&history)).is_err());
+        assert_eq!(std::fs::read(&destination).unwrap(), b"copied content");
+        assert_eq!(std::fs::read(&blocker).unwrap(), b"foreign content");
+        assert_eq!(history.get_state().undo_stack.len(), 1);
+        assert!(history.get_state().redo_stack.is_empty());
+        std::fs::remove_file(blocker).unwrap();
+        runtime.block_on(undo_last_action(&history)).unwrap();
+        assert!(!destination.exists());
+        assert_eq!(std::fs::read(source).unwrap(), b"copied content");
+        assert_eq!(history.get_state().redo_stack.len(), 1);
+    }
 
     #[test]
     fn redo_copy_rolls_back_new_files_when_a_later_destination_conflicts() {

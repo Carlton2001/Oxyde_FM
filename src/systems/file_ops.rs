@@ -1422,32 +1422,46 @@ impl FileOperationManager {
                             .map_err(|e| format!("Failed to create {:?}: {e}", parent))?;
                     }
 
+                    let source_guard = if is_move {
+                        Some(
+                            super::copied_source::CopiedSource::open(src)
+                                .map_err(|error| format!("Cannot hold move source {:?}: {error}", src))?,
+                        )
+                    } else {
+                        None
+                    };
                     let mut copied = 0;
-                    let hash = super::file_copy::copy(src, dest, *replace_existing, &mut |bytes| {
-                        processed_bytes.fetch_add(bytes.saturating_sub(copied), Ordering::Relaxed);
-                        copied = bytes;
-                        loop {
-                            if cancel.load(Ordering::Relaxed) || error_share.lock().unwrap().is_some() {
-                                return Err(std::io::Error::new(
-                                    std::io::ErrorKind::Interrupted,
-                                    "Operation cancelled",
-                                ));
+                    let output = super::file_copy::copy_with_source(
+                        src,
+                        dest,
+                        *replace_existing,
+                        source_guard.as_ref().map(|source| source.file()),
+                        &mut |bytes| {
+                            processed_bytes.fetch_add(bytes.saturating_sub(copied), Ordering::Relaxed);
+                            copied = bytes;
+                            loop {
+                                if cancel.load(Ordering::Relaxed) || error_share.lock().unwrap().is_some() {
+                                    return Err(std::io::Error::new(
+                                        std::io::ErrorKind::Interrupted,
+                                        "Operation cancelled",
+                                    ));
+                                }
+                                let fast = turbo.load(Ordering::Relaxed);
+                                if fast && is_in_background_mode {
+                                    platform().set_thread_priority(ThreadPriority::Normal);
+                                    is_in_background_mode = false;
+                                } else if !fast && !is_in_background_mode {
+                                    platform().set_thread_priority(ThreadPriority::Background);
+                                    is_in_background_mode = true;
+                                }
+                                if !pause.load(Ordering::Relaxed) {
+                                    break;
+                                }
+                                std::thread::sleep(std::time::Duration::from_millis(100));
                             }
-                            let fast = turbo.load(Ordering::Relaxed);
-                            if fast && is_in_background_mode {
-                                platform().set_thread_priority(ThreadPriority::Normal);
-                                is_in_background_mode = false;
-                            } else if !fast && !is_in_background_mode {
-                                platform().set_thread_priority(ThreadPriority::Background);
-                                is_in_background_mode = true;
-                            }
-                            if !pause.load(Ordering::Relaxed) {
-                                break;
-                            }
-                            std::thread::sleep(std::time::Duration::from_millis(100));
-                        }
-                        Ok(())
-                    })
+                            Ok(())
+                        },
+                    )
                     .map_err(|error| {
                         let message = match error.kind() {
                             std::io::ErrorKind::PermissionDenied => "error_access_denied".to_string(),
@@ -1467,8 +1481,35 @@ impl FileOperationManager {
                         journal.created_files.push(dest.clone());
                     }
                     journal.copied_files.push((src.clone(), dest.clone()));
-                    journal.copied_file_hashes.push((dest.clone(), hash));
+                    journal
+                        .copied_file_hashes
+                        .push((dest.clone(), output.hash.clone()));
                     drop(journal);
+                    if let Some(source) = source_guard {
+                        source
+                            .finish(output, &mut || loop {
+                                if cancel.load(Ordering::Relaxed) || error_share.lock().unwrap().is_some() {
+                                    return Err(std::io::Error::new(
+                                        std::io::ErrorKind::Interrupted,
+                                        "Operation cancelled",
+                                    ));
+                                }
+                                if !pause.load(Ordering::Relaxed) {
+                                    return Ok(());
+                                }
+                                std::thread::sleep(std::time::Duration::from_millis(100));
+                            })
+                            .map_err(|error| {
+                                let message = format!("Copied destination, but cannot remove {:?}: {error}", src);
+                                error_share.lock().unwrap().get_or_insert(message.clone());
+                                message
+                            })?;
+                        operation
+                            .lock()
+                            .unwrap()
+                            .moved_files
+                            .push((src.clone(), dest.clone()));
+                    }
 
                     processed_files.fetch_add(1, Ordering::Relaxed);
                 }
@@ -1537,18 +1578,6 @@ impl FileOperationManager {
         }
 
         if is_move {
-            for (source, destination, _) in files_to_process_arc.iter() {
-                if cancel_flag.load(Ordering::Relaxed) {
-                    return Err("Operation cancelled".to_string());
-                }
-                std::fs::remove_file(source).map_err(|e| {
-                    format!("Copied destination, but cannot remove {:?}: {e}", source)
-                })?;
-                op.lock()
-                    .unwrap()
-                    .moved_files
-                    .push((source.clone(), destination.clone()));
-            }
             let mut source_dirs = Vec::new();
             for source in sources.iter().filter(|source| source.is_dir()) {
                 let name = source_name(source)?;
@@ -3906,6 +3935,77 @@ mod tests {
             }
         });
     }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    #[ignore = "requires OXYDE_TEST_SECOND_VOLUME; checks partial initial Move using generated fixtures"]
+    fn native_cross_volume_refused_source_delete_can_be_undone() {
+        struct WritablePaths(Vec<PathBuf>);
+        impl Drop for WritablePaths {
+            fn drop(&mut self) {
+                for path in &self.0 {
+                    if let Ok(metadata) = std::fs::metadata(path) {
+                        let mut permissions = metadata.permissions();
+                        permissions.set_readonly(false);
+                        std::fs::set_permissions(path, permissions).unwrap();
+                    }
+                }
+            }
+        }
+        let second_root = PathBuf::from(
+            std::env::var_os("OXYDE_TEST_SECOND_VOLUME").expect("set a writable second volume"),
+        );
+        assert!(second_root.is_absolute() && second_root.is_dir());
+        let first = tempfile::tempdir().unwrap();
+        let second = tempfile::Builder::new()
+            .prefix("oxyde-a31-")
+            .tempdir_in(second_root)
+            .unwrap();
+        let regular = first.path().join("regular.txt");
+        let readonly = first.path().join("readonly.txt");
+        let target = second.path().join("readonly.txt");
+        let _cleanup = WritablePaths(vec![readonly.clone(), target.clone()]);
+        std::fs::write(&regular, b"regular move").unwrap();
+        std::fs::write(&readonly, b"readonly move").unwrap();
+        assert_eq!(
+            std::fs::rename(&regular, second.path().join("probe"))
+                .unwrap_err()
+                .kind(),
+            std::io::ErrorKind::CrossesDevices
+        );
+        let mut permissions = std::fs::metadata(&readonly).unwrap().permissions();
+        permissions.set_readonly(true);
+        std::fs::set_permissions(&readonly, permissions).unwrap();
+        let history = Arc::new(HistoryManager::new());
+        let op = Arc::new(Mutex::new(FileOperation::new(
+            FileOpType::Move,
+            vec![regular.clone(), readonly.clone()],
+            Some(second.path().into()),
+            None,
+        )));
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        runtime.block_on(async {
+            FileOperationManager::execute_operation(history.clone(), op.clone()).await;
+            let state = op.lock().unwrap().clone();
+            assert!(matches!(state.status, OpStatus::Error(ref message) if message.contains("cannot remove")), "{:?}", state.status);
+            assert_eq!(state.moved_files.len(), 1);
+            assert!(!regular.exists());
+            assert_eq!(std::fs::read(&readonly).unwrap(), b"readonly move");
+            assert_eq!(std::fs::read(&target).unwrap(), b"readonly move");
+            assert!(std::fs::metadata(&readonly).unwrap().permissions().readonly());
+            assert_eq!(history.get_state().undo_stack.len(), 1);
+            crate::commands::ops::undo_last_action(&history).await.unwrap();
+            assert_eq!(std::fs::read(&regular).unwrap(), b"regular move");
+            assert_eq!(std::fs::read(&readonly).unwrap(), b"readonly move");
+            assert!(std::fs::metadata(&readonly).unwrap().permissions().readonly());
+            assert_eq!(std::fs::read_dir(second.path()).unwrap().count(), 0);
+            assert_eq!(history.get_state().redo_stack.len(), 1);
+        });
+    }
+
     #[test]
     fn move_merge_keeps_skipped_source_files() {
         let temp = tempfile::tempdir().unwrap();

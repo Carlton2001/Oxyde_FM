@@ -40,11 +40,14 @@ pub struct TrashTransferEntry {
 /// doit passer par ce trait plutôt qu'appeler directement les API OS.
 pub trait Platform: Send + Sync {
     /// Blocking copy with native metadata/streams where supported. The callback
-    /// may wait for pause or return an error to stop; only an absent destination is accepted.
+    /// Reports main-stream bytes; only an absent destination is accepted.
+    /// A supplied source handle must already hold the same source path/identity.
+    /// The callback may wait for pause or return an error to stop.
     fn copy_file_with_progress(
         &self,
         source: &std::path::Path,
         destination: &std::path::Path,
+        held_source: Option<&std::fs::File>,
         progress: &mut dyn FnMut(u64) -> std::io::Result<()>,
     ) -> std::io::Result<()>;
     /// Opens a regular file for a history move, keeping its identity stable.

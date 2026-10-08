@@ -22,6 +22,7 @@ impl Platform for LinuxPlatform {
         &self,
         source: &std::path::Path,
         destination: &std::path::Path,
+        _held_source: Option<&std::fs::File>,
         progress: &mut dyn FnMut(u64) -> std::io::Result<()>,
     ) -> std::io::Result<()> {
         use std::io::{Read, Write};

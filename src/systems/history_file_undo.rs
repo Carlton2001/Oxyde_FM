@@ -1,4 +1,4 @@
-//! Reversible Move Undo effects, retained until every filesystem phase succeeds.
+//! Reversible Copy/Move Undo effects, retained until every filesystem phase succeeds.
 use super::history_move::{hash_file, move_file};
 use crate::models::{CommandError, TransactionDetails};
 use crate::platform::platform;
@@ -57,6 +57,36 @@ fn verified_file(path: &Path, expected: Option<&String>) -> io::Result<String> {
     Ok(hash)
 }
 impl Plan {
+    fn copy(details: &TransactionDetails) -> io::Result<Self> {
+        let (Some(created), Some(created_dirs), Some(hashes)) = (
+            &details.created_files,
+            &details.created_dirs,
+            &details.copied_file_hashes,
+        ) else {
+            return Err(io::Error::other(
+                "This copy predates the effect journal and cannot be undone safely",
+            ));
+        };
+        if details
+            .overwritten_files
+            .as_ref()
+            .is_some_and(|files| !files.is_empty())
+        {
+            return Err(io::Error::other(
+                "This copy overwrote existing files and cannot be undone",
+            ));
+        }
+        let hashes: HashMap<_, _> = hashes
+            .iter()
+            .map(|(path, hash)| (PathBuf::from(path), hash))
+            .collect();
+        Ok(Self {
+            files: vec![],
+            source_dirs: vec![],
+            discard: verified_outputs(created, &hashes, &HashSet::new())?,
+            remove_dirs: sorted_directories(created_dirs),
+        })
+    }
     fn new(details: &TransactionDetails) -> io::Result<Self> {
         let (Some(moved), Some(created), Some(created_dirs), Some(moved_dirs), Some(hashes)) = (
             &details.moved_files,
@@ -106,21 +136,7 @@ impl Plan {
                 hash,
             });
         }
-        let mut discard = Vec::new();
-        let mut seen = HashSet::new();
-        for path in created.iter().map(PathBuf::from) {
-            if moved_targets.contains(&path) || !seen.insert(path.clone()) {
-                continue;
-            }
-            let expected = hashes.get(&path).copied().ok_or_else(|| {
-                io::Error::other(format!(
-                    "Cannot undo unverified move output: {}",
-                    path.display()
-                ))
-            })?;
-            let hash = verified_file(&path, Some(expected))?;
-            discard.push((path, hash));
-        }
+        let discard = verified_outputs(created, &hashes, &moved_targets)?;
         let mut source_dirs: Vec<_> = moved_dirs
             .iter()
             .map(|(source, _)| PathBuf::from(source))
@@ -128,13 +144,7 @@ impl Plan {
             .into_iter()
             .collect();
         source_dirs.sort_by_key(|path| path.components().count());
-        let mut remove_dirs: Vec<_> = created_dirs
-            .iter()
-            .map(PathBuf::from)
-            .collect::<HashSet<_>>()
-            .into_iter()
-            .collect();
-        remove_dirs.sort_by_key(|path| std::cmp::Reverse(path.components().count()));
+        let remove_dirs = sorted_directories(created_dirs);
         Ok(Self {
             files,
             discard,
@@ -142,6 +152,39 @@ impl Plan {
             remove_dirs,
         })
     }
+}
+
+fn verified_outputs(
+    created: &[String],
+    hashes: &HashMap<PathBuf, &String>,
+    excluded: &HashSet<PathBuf>,
+) -> io::Result<Vec<(PathBuf, String)>> {
+    let mut outputs = Vec::new();
+    let mut seen = HashSet::new();
+    for path in created.iter().map(PathBuf::from) {
+        if excluded.contains(&path) || !seen.insert(path.clone()) {
+            continue;
+        }
+        let expected = hashes.get(&path).copied().ok_or_else(|| {
+            io::Error::other(format!(
+                "Cannot undo unverified copy/move output: {}",
+                path.display()
+            ))
+        })?;
+        let hash = verified_file(&path, Some(expected))?;
+        outputs.push((path, hash));
+    }
+    Ok(outputs)
+}
+fn sorted_directories(paths: &[String]) -> Vec<PathBuf> {
+    let mut paths: Vec<_> = paths
+        .iter()
+        .map(PathBuf::from)
+        .collect::<HashSet<_>>()
+        .into_iter()
+        .collect();
+    paths.sort_by_key(|path| std::cmp::Reverse(path.components().count()));
+    paths
 }
 
 enum Effect {
@@ -339,7 +382,7 @@ impl Drop for Journal {
     fn drop(&mut self) {
         if !self.finished {
             for error in self.rollback() {
-                log::error!("Undo Move unwind rollback: {error}");
+                log::error!("Undo file effects unwind rollback: {error}");
             }
         }
     }
@@ -347,8 +390,13 @@ impl Drop for Journal {
 pub(crate) fn undo(details: &TransactionDetails) -> Result<(), CommandError> {
     undo_with(&NativeIo, details).map_err(CommandError::from)
 }
+pub(crate) fn undo_copy(details: &TransactionDetails) -> Result<(), CommandError> {
+    apply_plan(&NativeIo, Plan::copy(details)?).map_err(CommandError::from)
+}
 fn undo_with(ops: &impl UndoIo, details: &TransactionDetails) -> io::Result<()> {
-    let plan = Plan::new(details)?;
+    apply_plan(ops, Plan::new(details)?)
+}
+fn apply_plan(ops: &impl UndoIo, plan: Plan) -> io::Result<()> {
     let mut journal = Journal::default();
     let result = (|| {
         for effect in plan.files {
@@ -599,7 +647,7 @@ mod tests {
         let mut fixture = Fixture::new();
         fixture.details.copied_file_hashes.as_mut().unwrap().pop();
         let error = undo_with(&NativeIo, &fixture.details).unwrap_err();
-        assert!(error.to_string().contains("unverified move output"));
+        assert!(error.to_string().contains("unverified copy/move output"));
         fixture.unchanged();
     }
 
@@ -611,6 +659,72 @@ mod tests {
         undo_with(&NativeIo, &fixture.details).unwrap();
         assert_eq!(fs::read(&fixture.original).unwrap(), b"moved content");
         assert_eq!(fs::read(&foreign).unwrap(), b"foreign content");
+        assert!(!fixture.destination.exists());
+        assert!(!fixture.partial.exists());
+        assert!(fixture.staging().is_empty());
+    }
+
+    #[test]
+    fn copy_directory_error_and_unwind_restore_all_staged_outputs() {
+        for panic in [false, true] {
+            let fixture = Fixture::new();
+            let parent = fixture.root.path().join("destination");
+            let ops = FaultIo {
+                remove: |path: &Path| {
+                    if path == parent {
+                        assert!(!panic, "injected Copy Undo panic");
+                        Err(io::Error::new(
+                            ErrorKind::PermissionDenied,
+                            "injected Copy Undo directory error",
+                        ))
+                    } else {
+                        fs::remove_dir(path)
+                    }
+                },
+            };
+            let result = std::panic::catch_unwind(|| {
+                apply_plan(&ops, Plan::copy(&fixture.details).unwrap())
+            });
+            if panic {
+                assert!(result.is_err());
+            } else {
+                assert_eq!(
+                    result.unwrap().unwrap_err().to_string(),
+                    "injected Copy Undo directory error"
+                );
+            }
+            fixture.unchanged();
+            apply_plan(&NativeIo, Plan::copy(&fixture.details).unwrap()).unwrap();
+            assert!(!parent.exists());
+            assert!(fixture.staging().is_empty());
+        }
+    }
+
+    #[test]
+    fn copy_missing_output_is_refused_before_staging_other_files() {
+        let fixture = Fixture::new();
+        fs::remove_file(&fixture.partial).unwrap();
+        assert_eq!(
+            Plan::copy(&fixture.details).err().unwrap().kind(),
+            ErrorKind::NotFound
+        );
+        assert_eq!(fs::read(&fixture.destination).unwrap(), b"moved content");
+        assert!(fixture.staging().is_empty());
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn copy_writer_on_second_output_rolls_back_first_staged_file() {
+        let fixture = Fixture::new();
+        let writer = fs::File::options()
+            .write(true)
+            .open(&fixture.partial)
+            .unwrap();
+        let error = apply_plan(&NativeIo, Plan::copy(&fixture.details).unwrap()).unwrap_err();
+        assert_eq!(error.raw_os_error(), Some(32));
+        fixture.unchanged();
+        drop(writer);
+        apply_plan(&NativeIo, Plan::copy(&fixture.details).unwrap()).unwrap();
         assert!(!fixture.destination.exists());
         assert!(!fixture.partial.exists());
         assert!(fixture.staging().is_empty());

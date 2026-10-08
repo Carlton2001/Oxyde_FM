@@ -72,16 +72,26 @@ fn wide(path: &Path) -> io::Result<Vec<u16>> {
 pub(super) fn copy(
     source: &Path,
     destination: &Path,
+    held_source: Option<&std::fs::File>,
     progress: &mut dyn FnMut(u64) -> io::Result<()>,
 ) -> io::Result<()> {
     // Read access suffices for Copy. Deny source writes/deletion during the
     // native call without requiring DELETE access from the source's ACL.
-    let source_guard = OpenOptions::new()
-        .read(true)
-        .share_mode(FILE_SHARE_READ.0)
-        .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT.0)
-        .open(source)?;
-    let metadata = source_guard.metadata()?;
+    let source_guard = if held_source.is_none() {
+        Some(
+            OpenOptions::new()
+                .read(true)
+                .share_mode(FILE_SHARE_READ.0)
+                .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT.0)
+                .open(source)?,
+        )
+    } else {
+        None
+    };
+    let source_file = held_source
+        .or(source_guard.as_ref())
+        .expect("copy source is held");
+    let metadata = source_file.metadata()?;
     if !metadata.is_file() || super::platform().file_attributes(&metadata, "").2 {
         return Err(io::Error::new(
             ErrorKind::InvalidInput,

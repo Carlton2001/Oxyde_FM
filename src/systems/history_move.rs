@@ -37,11 +37,18 @@ impl Drop for StagingFile {
     }
 }
 
-fn hash(file: &mut File) -> io::Result<String> {
+pub(super) fn hash(file: &mut File) -> io::Result<String> {
+    hash_with(file, &mut || Ok(()))
+}
+pub(super) fn hash_with(
+    file: &mut File,
+    checkpoint: &mut dyn FnMut() -> io::Result<()>,
+) -> io::Result<String> {
     file.seek(SeekFrom::Start(0))?;
     let mut hasher = blake3::Hasher::new();
     let mut buffer = [0u8; 128 * 1024];
     loop {
+        checkpoint()?;
         let size = file.read(&mut buffer)?;
         if size == 0 {
             break;

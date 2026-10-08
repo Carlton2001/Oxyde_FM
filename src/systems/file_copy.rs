@@ -25,6 +25,21 @@ pub(crate) fn copy(
     replace: bool,
     progress: &mut dyn FnMut(u64) -> io::Result<()>,
 ) -> io::Result<String> {
+    copy_with_source(source, destination, replace, None, progress).map(|output| output.hash)
+}
+
+pub(super) struct CopiedFile {
+    pub file: std::fs::File,
+    pub hash: String,
+}
+
+pub(super) fn copy_with_source(
+    source: &Path,
+    destination: &Path,
+    replace: bool,
+    held_source: Option<&std::fs::File>,
+    progress: &mut dyn FnMut(u64) -> io::Result<()>,
+) -> io::Result<CopiedFile> {
     progress(0)?;
     if replace {
         check_replacement(destination)?;
@@ -41,7 +56,7 @@ pub(crate) fn copy(
         file: directory.path().join("output"),
         _directory: directory,
     };
-    platform().copy_file_with_progress(source, &staging.file, progress)?;
+    platform().copy_file_with_progress(source, &staging.file, held_source, progress)?;
     let output = platform().open_file_for_move(&staging.file)?;
     let hash = hash(&staging.file, progress)?;
     if replace {
@@ -50,7 +65,7 @@ pub(crate) fn copy(
     } else {
         platform().rename_open_file_exclusive(&output, &staging.file, destination)?;
     }
-    Ok(hash)
+    Ok(CopiedFile { file: output, hash })
 }
 
 /// Remove only a journal-verified output, including copied readonly files.

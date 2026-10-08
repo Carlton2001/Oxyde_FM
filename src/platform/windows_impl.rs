@@ -15,9 +15,10 @@ impl Platform for WindowsPlatform {
         &self,
         source: &std::path::Path,
         destination: &std::path::Path,
+        held_source: Option<&std::fs::File>,
         progress: &mut dyn FnMut(u64) -> std::io::Result<()>,
     ) -> std::io::Result<()> {
-        super::windows_file_copy::copy(source, destination, progress)
+        super::windows_file_copy::copy(source, destination, held_source, progress)
     }
     fn open_file_for_move(&self, path: &std::path::Path) -> std::io::Result<std::fs::File> {
         super::windows_file_moves::open(path)
