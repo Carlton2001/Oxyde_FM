@@ -1,3 +1,4 @@
+pub(crate) use super::archive_tar_open::extract_tar_file_for_open;
 use crate::models::{CommandError, FileEntry};
 use crate::platform::platform;
 pub use crate::utils::archive::{is_archive, split_virtual_path, ArchiveFormat};

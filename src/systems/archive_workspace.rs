@@ -1,5 +1,7 @@
 //! Temporary filesystem views used to edit archives without touching the original.
-use crate::commands::archive::{extract_open_archive_with_budget, extract_zip_file_for_open};
+use crate::commands::archive::{
+    extract_open_archive_with_budget, extract_tar_file_for_open, extract_zip_file_for_open,
+};
 use crate::systems::file_ops::{FileOpType, FileOperation, FileOperationManager};
 use crate::utils::archive::{split_virtual_path, ArchiveFormat};
 use crate::utils::archive_limits::{ArchiveBudget, ArchiveLimits};
@@ -373,17 +375,26 @@ pub fn external_file(path: &Path) -> Result<PathBuf, crate::models::CommandError
 }
 
 fn prepare_selection(archive: PathBuf, internal: &str, target: &Path) -> Result<PathBuf, String> {
+    prepare_selection_with_limits(archive, internal, target, ArchiveLimits::OPEN_FILE)
+}
+
+fn prepare_selection_with_limits(
+    archive: PathBuf,
+    internal: &str,
+    target: &Path,
+    limits: ArchiveLimits,
+) -> Result<PathBuf, String> {
     Ok(if ArchiveFormat::from_path(&archive) == Some(ArchiveFormat::Zip) {
-        extract_zip_file_for_open(
-            &archive,
-            &internal,
-            target,
-            ArchiveLimits::OPEN_FILE,
-        )
-        .map_err(|e| e.to_string())?
+        extract_zip_file_for_open(&archive, internal, target, limits).map_err(|e| e.to_string())?
+    } else if matches!(
+        ArchiveFormat::from_path(&archive),
+        Some(ArchiveFormat::Tar | ArchiveFormat::TarZst)
+    ) {
+        extract_tar_file_for_open(&archive, internal, target, limits)
+            .map_err(|e| e.to_string())?
     } else {
         let directory = tempfile::Builder::new().prefix(".oxyde-work-").tempdir_in(target).map_err(|e| e.to_string())?;
-        let workspace = ArchiveWorkspace::open_in_directory(archive, &|| Ok(()), ArchiveLimits::OPEN_FILE, directory)?;
+        let workspace = ArchiveWorkspace::open_in_directory(archive, &|| Ok(()), limits, directory)?;
         let source = workspace.path(&internal)?;
         if !source.is_file() {
             return Err("Archive item is not a file".into());
@@ -399,7 +410,7 @@ fn prepare_selection(archive: PathBuf, internal: &str, target: &Path) -> Result<
         let mut output = crate::platform::platform()
             .create_archive_file(&destination.path)
             .map_err(|e| e.to_string())?;
-        ArchiveBudget::new(ArchiveLimits::OPEN_FILE)
+        ArchiveBudget::new(limits)
             .copy(&mut input, &mut output, &|| Ok(()))
             .map_err(|e| e.to_string())?;
         if let Some(data) = crate::platform::platform()
@@ -442,6 +453,33 @@ pub fn export_file(path: &Path, folder: &Path) -> Result<PathBuf, crate::models:
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn targeted_tar_selection_bypasses_full_workspace_and_exports_without_overwriting() {
+        let fixture = tempfile::tempdir().unwrap();
+        let selected = fixture.path().join("selected.txt");
+        let other = fixture.path().join("other.txt");
+        std::fs::write(&selected, b"safe").unwrap();
+        std::fs::write(&other, b"unselected file exceeds four bytes").unwrap();
+        let limits = ArchiveLimits { max_bytes: 4, max_entries: 4, ..ArchiveLimits::OPEN_FILE };
+        for extension in ["tar", "tar.zst"] {
+            let archive = fixture.path().join(format!("selection.{extension}"));
+            FileOperationManager::perform_compress(&mutation_operation("fast"), vec![selected.clone(), other.clone()], Some(archive.clone())).unwrap();
+            let full = tempfile::tempdir().unwrap();
+            assert!(ArchiveWorkspace::open_in_directory(archive.clone(), &|| Ok(()), limits, full).is_err());
+            let target = tempfile::tempdir().unwrap();
+            let result = prepare_selection_with_limits(archive.clone(), "selected.txt", target.path(), limits).unwrap();
+            assert_eq!(std::fs::read(&result).unwrap(), b"safe");
+            assert_eq!(std::fs::read_dir(target.path()).unwrap().count(), 1);
+            let output = tempfile::tempdir().unwrap();
+            std::fs::write(output.path().join("selected.txt"), b"foreign content").unwrap();
+            let permanent = export_file(&archive.join("selected.txt"), output.path()).unwrap();
+            assert_eq!(permanent.file_name().unwrap(), "selected (1).txt");
+            assert_eq!(std::fs::read(permanent).unwrap(), b"safe");
+            assert_eq!(std::fs::read(output.path().join("selected.txt")).unwrap(), b"foreign content");
+            assert_eq!(std::fs::read_dir(output.path()).unwrap().count(), 2);
+        }
+    }
 
     fn zip_bytes(contents: &[u8]) -> Vec<u8> {
         use std::io::Write;
