@@ -39,6 +39,21 @@ pub struct TrashTransferEntry {
 /// Toute fonctionnalité native (lecteurs, ouverture, raccourcis, etc.)
 /// doit passer par ce trait plutôt qu'appeler directement les API OS.
 pub trait Platform: Send + Sync {
+    /// Opens a regular file for a history move, keeping its identity stable.
+    fn open_file_for_move(&self, path: &std::path::Path) -> std::io::Result<std::fs::File>;
+    /// Renames the opened file without replacing an existing destination.
+    fn rename_open_file_exclusive(
+        &self,
+        file: &std::fs::File,
+        source: &std::path::Path,
+        destination: &std::path::Path,
+    ) -> std::io::Result<()>;
+    /// Removes the opened source after a verified copy has been published.
+    fn remove_open_file(
+        &self,
+        file: &std::fs::File,
+        path: &std::path::Path,
+    ) -> std::io::Result<()>;
     fn recycle_bin_usage(&self) -> Result<(u64, u64), String>;
     fn recycle_bin_config(&self, path: String) -> Result<crate::commands::ops::TrashSystemConfig, String>;
     fn set_recycle_bin_config(&self, config: crate::commands::ops::TrashSystemConfig) -> Result<(), String>;
@@ -215,6 +230,8 @@ mod windows_drives;
 mod windows_impl;
 #[cfg(target_os = "windows")]
 mod windows_com;
+#[cfg(target_os = "windows")]
+mod windows_file_moves;
 #[cfg(target_os = "windows")]
 mod windows_shell;
 #[cfg(target_os = "windows")]

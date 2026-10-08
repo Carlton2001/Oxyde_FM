@@ -11,6 +11,24 @@ impl WindowsPlatform {
 }
 
 impl Platform for WindowsPlatform {
+    fn open_file_for_move(&self, path: &std::path::Path) -> std::io::Result<std::fs::File> {
+        super::windows_file_moves::open(path)
+    }
+    fn rename_open_file_exclusive(
+        &self,
+        file: &std::fs::File,
+        _source: &std::path::Path,
+        destination: &std::path::Path,
+    ) -> std::io::Result<()> {
+        super::windows_file_moves::rename(file, destination)
+    }
+    fn remove_open_file(
+        &self,
+        file: &std::fs::File,
+        _path: &std::path::Path,
+    ) -> std::io::Result<()> {
+        super::windows_file_moves::remove(file)
+    }
     fn trash_original_path(&self, id: &std::path::Path) -> Option<std::path::PathBuf> {
         super::windows_trash::original_path(id)
     }

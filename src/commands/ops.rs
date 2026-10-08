@@ -2,16 +2,17 @@ use crate::models::{
     get_file_entry_from_path, CommandError, ConflictEntry, HistoryManager,
     Transaction, TransactionType, TrashEntry,
 };
+use crate::systems::history_move::move_file as move_history_file;
 use crate::utils::path_security::validate_path;
 use log::{info, warn};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-fn rollback_renamed_paths(completed: &[(PathBuf, PathBuf)]) -> Vec<String> {
+fn rollback_moved_paths(completed: &[(PathBuf, PathBuf)]) -> Vec<String> {
     let mut errors = Vec::new();
     for (source, destination) in completed.iter().rev() {
-        if let Err(error) = std::fs::rename(destination, source) {
+        if let Err(error) = move_history_file(destination, source, None) {
             errors.push(format!(
                 "{} → {}: {error}",
                 destination.display(),
@@ -815,17 +816,11 @@ pub async fn undo_last_action(
                         if !destination.exists() {
                             continue;
                         }
-                        if source.exists() {
-                            return Err(CommandError::IoError(format!(
-                                "Cannot undo move because the original path now exists: {}",
-                                source.display()
-                            )));
-                        }
                         if let Some(parent) = source.parent() {
                             if let Err(error) =
                                 create_dir_all_tracked(parent, &mut created_source_dirs)
                             {
-                                let rollback_errors = rollback_renamed_paths(&completed);
+                                let rollback_errors = rollback_moved_paths(&completed);
                                 let cleanup_errors = remove_empty_dirs(&created_source_dirs);
                                 return Err(CommandError::IoError(format!(
                                     "{error}; move rollback errors: {}; source directory cleanup errors: {}",
@@ -834,8 +829,11 @@ pub async fn undo_last_action(
                                 )));
                             }
                         }
-                        if let Err(error) = std::fs::rename(&destination, &source) {
-                            let rollback_errors = rollback_renamed_paths(&completed);
+                        let expected = expected_hashes
+                            .get(destination.to_string_lossy().as_ref())
+                            .copied();
+                        if let Err(error) = move_history_file(&destination, &source, expected) {
+                            let rollback_errors = rollback_moved_paths(&completed);
                             let cleanup_errors = remove_empty_dirs(&created_source_dirs);
                             return Err(CommandError::IoError(format!(
                                 "{error}; move rollback errors: {}; source directory cleanup errors: {}",
@@ -1162,7 +1160,7 @@ pub async fn redo_last_action(
                     if let Some(parent) = destination.parent() {
                         if !parent.exists() {
                             if let Err(error) = create_dir_all_tracked(parent, &mut made_dirs) {
-                                let rollback_errors = rollback_renamed_paths(&completed);
+                                let rollback_errors = rollback_moved_paths(&completed);
                                 let cleanup_errors = remove_empty_dirs(&made_dirs);
                                 return Err(CommandError::IoError(format!(
                                     "{error}; rollback errors: {}{}",
@@ -1179,8 +1177,14 @@ pub async fn redo_last_action(
                             }
                         }
                     }
-                    if let Err(error) = std::fs::rename(&source, &destination) {
-                        let rollback_errors = rollback_renamed_paths(&completed);
+                    let expected = tx.details.copied_file_hashes
+                        .as_deref()
+                        .unwrap_or_default()
+                        .iter()
+                        .find(|(path, _)| path == &destination.to_string_lossy())
+                        .map(|(_, hash)| hash.as_str());
+                    if let Err(error) = move_history_file(&source, &destination, expected) {
+                        let rollback_errors = rollback_moved_paths(&completed);
                         let cleanup_errors = remove_empty_dirs(&made_dirs);
                         return Err(CommandError::IoError(format!(
                             "{error}; rollback errors: {}{}",
@@ -1205,7 +1209,7 @@ pub async fn redo_last_action(
                             std::path::Path::new(&destination),
                             &mut made_dirs,
                         ) {
-                            let rollback_errors = rollback_renamed_paths(&completed);
+                            let rollback_errors = rollback_moved_paths(&completed);
                             let cleanup_errors = remove_empty_dirs(&made_dirs);
                             return Err(CommandError::IoError(format!(
                                 "{error}; move rollback errors: {}; directory cleanup errors: {}",
@@ -1225,7 +1229,7 @@ pub async fn redo_last_action(
                                 for removed in removed_sources.iter().rev() {
                                     let _ = std::fs::create_dir_all(removed);
                                 }
-                                let rollback_errors = rollback_renamed_paths(&completed);
+                                let rollback_errors = rollback_moved_paths(&completed);
                                 let cleanup_errors = remove_empty_dirs(&made_dirs);
                                 return Err(CommandError::IoError(format!(
                                     "{error}; move rollback errors: {}; directory cleanup errors: {}",

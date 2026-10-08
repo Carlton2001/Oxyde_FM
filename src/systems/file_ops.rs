@@ -3696,6 +3696,124 @@ mod tests {
         });
     }
 
+    #[cfg(target_os = "windows")]
+    #[test]
+    #[ignore = "requires OXYDE_TEST_SECOND_VOLUME; moves only generated fixtures between two volumes"]
+    fn native_cross_volume_move_history_roundtrip() {
+        let second_root = PathBuf::from(
+            std::env::var_os("OXYDE_TEST_SECOND_VOLUME")
+                .expect("set OXYDE_TEST_SECOND_VOLUME to a writable second volume"),
+        );
+        assert!(second_root.is_absolute() && second_root.is_dir());
+        let first = tempfile::tempdir().unwrap();
+        let second = tempfile::Builder::new()
+            .prefix("oxyde-a19-")
+            .tempdir_in(second_root)
+            .unwrap();
+        let probe = first.path().join("volume-probe");
+        std::fs::write(&probe, b"probe").unwrap();
+        assert_eq!(
+            std::fs::rename(&probe, second.path().join("volume-probe"))
+                .unwrap_err()
+                .kind(),
+            std::io::ErrorKind::CrossesDevices
+        );
+        std::fs::remove_file(probe).unwrap();
+
+        let source = first.path().join("Données 日本語 🦀");
+        std::fs::create_dir_all(source.join("nested/empty")).unwrap();
+        std::fs::write(source.join("nested/file.txt"), b"nested fixture").unwrap();
+        std::fs::write(
+            source.join("shortcut.url"),
+            b"[InternetShortcut]\nURL=https://example.org\n",
+        )
+        .unwrap();
+        let destination = second.path().join(source.file_name().unwrap());
+        let history = Arc::new(HistoryManager::new());
+        let manager = FileOperationManager::new();
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        runtime.block_on(async {
+            let id = manager.queue_operation_on(
+                &tokio::runtime::Handle::current(),
+                history.clone(),
+                FileOperation::new(
+                    FileOpType::Move,
+                    vec![source.clone()],
+                    Some(second.path().into()),
+                    None,
+                ),
+            );
+            tokio::time::timeout(std::time::Duration::from_secs(15), async {
+                loop {
+                    let status = manager.get_operation(&id).unwrap().status;
+                    if FileOperationManager::is_final(&status) {
+                        assert_eq!(status, OpStatus::Completed);
+                        break;
+                    }
+                    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+                }
+            })
+            .await
+            .unwrap();
+            assert!(!source.exists());
+            for cycle in 0..2 {
+                crate::commands::ops::undo_last_action(&history)
+                    .await
+                    .unwrap();
+                assert_eq!(
+                    std::fs::read(source.join("nested/file.txt")).unwrap(),
+                    b"nested fixture"
+                );
+                assert!(source.join("nested/empty").is_dir());
+                assert!(source.join("shortcut.url").is_file());
+                assert!(!destination.exists());
+                if cycle == 0 {
+                    // Preflight can read this file, but the second move cannot
+                    // acquire its exclusive handle. The first moved file must
+                    // roll back across volumes before history can be retried.
+                    let state = history.get_state();
+                    let moved = state
+                        .redo_stack
+                        .last()
+                        .unwrap()
+                        .details
+                        .moved_files
+                        .as_ref()
+                        .unwrap();
+                    assert!(moved.len() >= 2);
+                    let writer = std::fs::File::options()
+                        .write(true)
+                        .open(&moved[1].0)
+                        .unwrap();
+                    assert!(crate::commands::ops::redo_last_action(&history)
+                        .await
+                        .is_err());
+                    assert_eq!(history.get_state().redo_stack.len(), 1);
+                    assert!(history.get_state().undo_stack.is_empty());
+                    for (original, target) in moved {
+                        assert!(std::path::Path::new(original).is_file());
+                        assert!(!std::path::Path::new(target).exists());
+                    }
+                    assert!(!destination.exists());
+                    drop(writer);
+                }
+                crate::commands::ops::redo_last_action(&history)
+                    .await
+                    .unwrap();
+                assert!(!source.exists());
+                assert_eq!(
+                    std::fs::read(destination.join("nested/file.txt")).unwrap(),
+                    b"nested fixture"
+                );
+                assert!(destination.join("nested/empty").is_dir());
+                assert!(destination.join("shortcut.url").is_file());
+            }
+        });
+    }
+
     #[test]
     fn move_merge_keeps_skipped_source_files() {
         let temp = tempfile::tempdir().unwrap();

@@ -10,6 +10,29 @@ impl LinuxPlatform {
 }
 
 impl Platform for LinuxPlatform {
+    fn open_file_for_move(&self, path: &std::path::Path) -> std::io::Result<std::fs::File> {
+        std::fs::File::open(path)
+    }
+    fn rename_open_file_exclusive(
+        &self,
+        _file: &std::fs::File,
+        source: &std::path::Path,
+        destination: &std::path::Path,
+    ) -> std::io::Result<()> {
+        std::fs::hard_link(source, destination)?;
+        if let Err(error) = std::fs::remove_file(source) {
+            let _ = std::fs::remove_file(destination);
+            return Err(error);
+        }
+        Ok(())
+    }
+    fn remove_open_file(
+        &self,
+        _file: &std::fs::File,
+        path: &std::path::Path,
+    ) -> std::io::Result<()> {
+        std::fs::remove_file(path)
+    }
     fn trash_original_path(&self, _id: &std::path::Path) -> Option<std::path::PathBuf> { None }
 
     fn trash_transfer_entries(&self, _paths: &[std::path::PathBuf]) -> Result<Vec<super::TrashTransferEntry>, String> { Ok(Vec::new()) }
