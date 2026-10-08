@@ -843,14 +843,13 @@ impl PreviewTask {
                         let content = cx
                             .background_executor()
                             .spawn(async move {
-                                std::fs::read_to_string(path).map_err(|error| {
+                                ::oxyde_lib::utils::preview::read_text_preview(std::path::Path::new(&path)).map_err(|error| {
                                     ::oxyde_lib::models::CommandError::IoError(error.to_string())
                                 })
                             })
                             .await;
                         if let Ok(content) = content {
-                            let snippet = content.lines().take(15).collect::<Vec<_>>().join("\n");
-                            Some(PreviewData::Text(snippet))
+                            Some(PreviewData::Text(content))
                         } else {
                             None
                         }

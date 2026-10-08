@@ -1,5 +1,7 @@
 use crate::models::{CommandError, FileEntry};
+use crate::platform::platform;
 pub use crate::utils::archive::{is_archive, split_virtual_path, ArchiveFormat};
+use crate::utils::archive_security::{relative_archive_path, ExtractionRoot};
 use crate::utils::path_security::validate_path;
 use bzip2::read::BzDecoder;
 use flate2::read::GzDecoder;
@@ -31,6 +33,7 @@ pub fn list_archive_contents(
 ) -> Result<Vec<FileEntry>, CommandError> {
     let path_buf = validate_path(&archive_path)?;
     let path = path_buf.as_path();
+    relative_archive_path(&internal_path)?;
     let format = ArchiveFormat::from_path(path).ok_or(CommandError::ArchiveError(
         "Unsupported archive format".to_string(),
     ))?;
@@ -85,6 +88,7 @@ fn list_iso(path: &Path, internal_prefix: &str) -> Result<Vec<FileEntry>, Comman
         if display_name.is_empty() {
             continue;
         }
+        safe_iso_component(&display_name)?;
 
         let is_dir = matches!(rec, ISO9660Record::Directory(_));
         let size = match &rec {
@@ -92,7 +96,7 @@ fn list_iso(path: &Path, internal_prefix: &str) -> Result<Vec<FileEntry>, Comman
             _ => 0,
         };
 
-        let full_virtual_path = virtual_entry_path(path, internal_prefix, &display_name);
+        let full_virtual_path = virtual_entry_path(path, internal_prefix, &display_name)?;
 
         results.push(FileEntry {
             name: display_name,
@@ -116,14 +120,11 @@ fn list_iso(path: &Path, internal_prefix: &str) -> Result<Vec<FileEntry>, Comman
     Ok(results)
 }
 
-fn virtual_entry_path(archive: &Path, internal: &str, name: &str) -> String {
+fn virtual_entry_path(archive: &Path, internal: &str, name: &str) -> Result<String, CommandError> {
     let mut path = archive.to_path_buf();
-    let normalized = internal.replace('\\', "/");
-    for component in normalized.split('/').filter(|part| !part.is_empty()) {
-        path.push(component);
-    }
-    path.push(name);
-    path.to_string_lossy().into_owned()
+    path.push(relative_archive_path(internal)?);
+    path.push(relative_archive_path(name)?);
+    Ok(path.to_string_lossy().into_owned())
 }
 
 fn list_zip(path: &Path, internal_prefix: &str) -> Result<Vec<FileEntry>, CommandError> {
@@ -144,6 +145,7 @@ fn list_zip(path: &Path, internal_prefix: &str) -> Result<Vec<FileEntry>, Comman
             .by_index(i)
             .map_err(|e| CommandError::ArchiveError(e.to_string()))?;
         let name = file.name().replace('\\', "/");
+        relative_archive_path(&name)?;
 
         if name.starts_with(&prefix) && name != prefix {
             let relative = &name[prefix.len()..];
@@ -162,7 +164,7 @@ fn list_zip(path: &Path, internal_prefix: &str) -> Result<Vec<FileEntry>, Comman
             seen.insert(entry_name.clone());
 
             let is_dir = file.is_dir() || parts.len() > 1;
-            let full_virtual_path = virtual_entry_path(path, internal_prefix, &entry_name);
+            let full_virtual_path = virtual_entry_path(path, internal_prefix, &entry_name)?;
 
             entries.push(FileEntry {
                 name: entry_name,
@@ -208,6 +210,7 @@ fn list_seven_zip(path: &Path, internal_prefix: &str) -> Result<Vec<FileEntry>, 
     // Listing needs only the 7z header; do not decompress every file while navigating.
     for entry in &reader.archive().files {
         let name = entry.name().replace('\\', "/");
+        relative_archive_path(&name)?;
         if name.starts_with(&prefix) && name != prefix {
             let relative = &name[prefix.len()..];
             let parts: Vec<&str> = relative
@@ -221,7 +224,7 @@ fn list_seven_zip(path: &Path, internal_prefix: &str) -> Result<Vec<FileEntry>, 
                     let is_dir = entry.is_directory() || parts.len() > 1;
                     entries.push(FileEntry {
                         name: entry_name.clone(),
-                        path: virtual_entry_path(path, internal_prefix, &entry_name),
+                        path: virtual_entry_path(path, internal_prefix, &entry_name)?,
                         is_dir,
                         is_hidden: false,
                         is_system: false,
@@ -278,6 +281,7 @@ fn list_tar(
             .path()
             .map_err(|e| CommandError::ArchiveError(e.to_string()))?;
         let name = path_field.to_string_lossy().replace('\\', "/");
+        relative_archive_path(&name)?;
 
         if name.starts_with(&prefix) && name != prefix {
             let relative = &name[prefix.len()..];
@@ -297,7 +301,7 @@ fn list_tar(
 
             let is_dir = entry.header().entry_type().is_dir() || parts.len() > 1;
             entries.push(FileEntry {
-                path: virtual_entry_path(path, internal_prefix, &entry_name),
+                path: virtual_entry_path(path, internal_prefix, &entry_name)?,
                 name: entry_name,
                 is_dir,
                 is_hidden: false,
@@ -348,6 +352,8 @@ pub(crate) fn extract_archive_with_checkpoint(
     if !target.exists() {
         fs::create_dir_all(target).map_err(|e| CommandError::IoError(e.to_string()))?;
     }
+    let root = ExtractionRoot::new(target)?;
+    let provenance = platform().read_file_provenance(path)?;
 
     match format {
         ArchiveFormat::Zip => {
@@ -359,17 +365,17 @@ pub(crate) fn extract_archive_with_checkpoint(
                 let mut entry = archive
                     .by_index(index)
                     .map_err(|e| CommandError::ArchiveError(e.to_string()))?;
-                let relative = entry
-                    .enclosed_name()
-                    .ok_or_else(|| CommandError::ArchiveError("Unsafe ZIP entry path".into()))?;
-                let destination = target.join(relative);
-                if entry.is_dir() {
-                    fs::create_dir_all(&destination)?;
-                } else {
-                    if let Some(parent) = destination.parent() {
-                        fs::create_dir_all(parent)?;
-                    }
-                    let mut output = File::create(destination)?;
+                if entry
+                    .unix_mode()
+                    .is_some_and(|mode| mode & 0o170000 == 0o120000)
+                {
+                    return Err(CommandError::ArchiveError(
+                        "Archive links are not supported".into(),
+                    ));
+                }
+                let destination = root.destination(entry.name(), entry.is_dir())?;
+                if !entry.is_dir() {
+                    let mut output = platform().create_archive_file(&destination.path)?;
                     io::copy(
                         &mut CheckedReader {
                             reader: &mut entry,
@@ -377,11 +383,20 @@ pub(crate) fn extract_archive_with_checkpoint(
                         },
                         &mut output,
                     )?;
+                    if let Some(data) = provenance.as_deref() {
+                        platform().write_file_provenance(&destination.path, data)?;
+                    }
                 }
             }
         }
         ArchiveFormat::SevenZip => {
-            decompress_seven_zip_with_checkpoint(path, target, checkpoint)?;
+            decompress_seven_zip_with_checkpoint(
+                path,
+                target,
+                &root,
+                provenance.as_deref(),
+                checkpoint,
+            )?;
         }
         ArchiveFormat::Tar
         | ArchiveFormat::TarGz
@@ -399,12 +414,41 @@ pub(crate) fn extract_archive_with_checkpoint(
                 _ => Box::new(file),
             };
             let mut archive = TarArchive::new(CheckedReader { reader, checkpoint });
-            archive
-                .unpack(target)
-                .map_err(|e| CommandError::ArchiveError(e.to_string()))?;
+            for entry in archive.entries()? {
+                let mut entry = entry?;
+                checkpoint()?;
+                let kind = entry.header().entry_type();
+                if !kind.is_file() && !kind.is_dir() {
+                    return Err(CommandError::ArchiveError(
+                        "Archive links and special files are not supported".into(),
+                    ));
+                }
+                let name = entry
+                    .path()?
+                    .to_str()
+                    .ok_or_else(|| {
+                        CommandError::ArchiveError("Invalid archive entry encoding".into())
+                    })?
+                    .to_owned();
+                let destination = root.destination(&name, kind.is_dir())?;
+                if kind.is_file() {
+                    let mut output = platform().create_archive_file(&destination.path)?;
+                    io::copy(&mut entry, &mut output)?;
+                    if let Some(data) = provenance.as_deref() {
+                        platform().write_file_provenance(&destination.path, data)?;
+                    }
+                    if let Ok(seconds) = entry.header().mtime() {
+                        if let Some(modified) = std::time::UNIX_EPOCH
+                            .checked_add(std::time::Duration::from_secs(seconds))
+                        {
+                            output.set_times(fs::FileTimes::new().set_modified(modified))?;
+                        }
+                    }
+                }
+            }
         }
         ArchiveFormat::Iso => {
-            extract_iso(&archive_path, &target_dir, checkpoint)?;
+            extract_iso(&archive_path, &root, provenance.as_deref(), checkpoint)?;
         }
         ArchiveFormat::Rar => {
             return Err(CommandError::ArchiveError(
@@ -418,112 +462,40 @@ pub(crate) fn extract_archive_with_checkpoint(
 fn decompress_seven_zip_with_checkpoint(
     path: &Path,
     target: &Path,
+    root: &ExtractionRoot,
+    provenance: Option<&[u8]>,
     checkpoint: &dyn Fn() -> io::Result<()>,
 ) -> Result<(), CommandError> {
-    let root = fs::canonicalize(target).map_err(|e| CommandError::IoError(e.to_string()))?;
     sevenz_rust2::decompress_file_with_extract_fn(path, target, |entry, reader, _| {
-        let destination = safe_seven_zip_destination(&root, entry.name())?;
         checkpoint()?;
-        sevenz_rust2::default_entry_extract_fn(
-            entry,
-            &mut CheckedReader { reader, checkpoint },
-            &destination,
-        )
+        let destination = root.destination(entry.name(), entry.is_directory())?;
+        if !entry.is_directory() {
+            let mut output = platform().create_archive_file(&destination.path)?;
+            io::copy(&mut CheckedReader { reader, checkpoint }, &mut output)?;
+            if let Some(data) = provenance {
+                platform().write_file_provenance(&destination.path, data)?;
+            }
+            let mut times = fs::FileTimes::new();
+            if entry.has_last_modified_date {
+                times = times.set_modified(entry.last_modified_date().into());
+            }
+            if entry.has_access_date {
+                times = times.set_accessed(entry.access_date().into());
+            }
+            output.set_times(times)?;
+        }
+        Ok(true)
     })
     .map_err(|e| CommandError::ArchiveError(e.to_string()))
 }
 
-fn safe_seven_zip_destination(
-    extraction_root: &Path,
-    entry_name: &str,
-) -> std::io::Result<PathBuf> {
-    let normalized = entry_name.replace('\\', "/");
-    let first_component = normalized.split('/').next().unwrap_or_default();
-    let has_drive_prefix = first_component.as_bytes().get(1) == Some(&b':');
-    let components: Vec<_> = normalized.split('/').collect();
-    if normalized.starts_with('/')
-        || has_drive_prefix
-        || components
-            .iter()
-            .any(|part| *part == ".." || part.contains(':'))
-    {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            format!("Unsafe 7z archive entry path: {entry_name}"),
-        ));
-    }
-
-    let relative_path: PathBuf = components
-        .into_iter()
-        .filter(|part| !part.is_empty() && *part != ".")
-        .collect();
-    if relative_path.as_os_str().is_empty() {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            "7z archive entry resolves to the extraction root",
-        ));
-    }
-
-    let mut canonical_parent = extraction_root.to_path_buf();
-    if let Some(relative_parent) = relative_path.parent() {
-        for component in relative_parent.components() {
-            canonical_parent.push(component.as_os_str());
-            match std::fs::symlink_metadata(&canonical_parent) {
-                Ok(metadata) => {
-                    if !metadata.is_dir() {
-                        return Err(std::io::Error::new(
-                            std::io::ErrorKind::InvalidData,
-                            format!(
-                                "7z archive parent is not a directory: {}",
-                                canonical_parent.display()
-                            ),
-                        ));
-                    }
-                }
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                    match std::fs::create_dir(&canonical_parent) {
-                        Ok(()) => {}
-                        Err(error)
-                            if error.kind() == std::io::ErrorKind::AlreadyExists
-                                && canonical_parent.is_dir() => {}
-                        Err(error) => return Err(error),
-                    }
-                }
-                Err(error) => return Err(error),
-            }
-            canonical_parent = std::fs::canonicalize(&canonical_parent)?;
-            if !canonical_parent.starts_with(extraction_root) {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    format!("7z archive entry escapes the extraction directory: {entry_name}"),
-                ));
-            }
-        }
-    }
-
-    let file_name = relative_path.file_name().ok_or_else(|| {
-        std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            "7z archive entry has no file name",
-        )
-    })?;
-    let safe_destination = canonical_parent.join(file_name);
-    match std::fs::symlink_metadata(&safe_destination) {
-        Ok(_) => {
-            let existing = std::fs::canonicalize(&safe_destination)?;
-            if !existing.starts_with(extraction_root) {
-                return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, format!(
-                    "7z archive entry would overwrite a path outside the extraction directory: {entry_name}"
-                )));
-            }
-        }
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-        Err(error) => return Err(error),
-    }
-    Ok(safe_destination)
+#[cfg(test)]
+fn safe_seven_zip_destination(root: &Path, name: &str) -> io::Result<PathBuf> {
+    Ok(ExtractionRoot::new(root)?.destination(name, false)?.path)
 }
 
 fn safe_iso_component(name: &str) -> Result<&str, CommandError> {
+    relative_archive_path(name)?;
     if name.is_empty()
         || name == "."
         || name == ".."
@@ -541,20 +513,22 @@ fn safe_iso_component(name: &str) -> Result<&str, CommandError> {
 
 fn extract_iso(
     archive_path: &str,
-    target_dir: &str,
+    root: &ExtractionRoot,
+    provenance: Option<&[u8]>,
     checkpoint: &dyn Fn() -> io::Result<()>,
 ) -> Result<(), CommandError> {
     let file = File::open(archive_path).map_err(|e| CommandError::IoError(e.to_string()))?;
     let mut iso = iso9660_core::ISO9660::load(file)
         .map_err(|e| CommandError::ArchiveError(format!("{:?}", e)))?;
 
-    extract_iso_recursive(&mut iso, "/", target_dir, checkpoint)
+    extract_iso_recursive(&mut iso, "/", root, provenance, checkpoint)
 }
 
 fn extract_iso_recursive<T: iso9660_core::block_device::ISORead>(
     iso: &mut iso9660_core::ISO9660<T>,
     internal_path: &str,
-    target_base: &str,
+    root: &ExtractionRoot,
+    provenance: Option<&[u8]>,
     checkpoint: &dyn Fn() -> io::Result<()>,
 ) -> Result<(), CommandError> {
     let mut iter = iso
@@ -585,28 +559,19 @@ fn extract_iso_recursive<T: iso9660_core::block_device::ISORead>(
             format!("{}/{}", internal_path.trim_end_matches('/'), display_name)
         };
 
-        let extraction_root =
-            fs::canonicalize(target_base).map_err(|e| CommandError::IoError(e.to_string()))?;
         let relative_path = new_internal.trim_start_matches('/');
-        let target_path = safe_seven_zip_destination(&extraction_root, relative_path)
-            .map_err(|e| CommandError::ArchiveError(e.to_string()))?;
+        let destination =
+            root.destination(relative_path, matches!(rec, ISO9660Record::Directory(_)))?;
 
         match rec {
             ISO9660Record::Directory(_) => {
-                fs::create_dir_all(&target_path)
-                    .map_err(|e| CommandError::IoError(e.to_string()))?;
-                extract_iso_recursive(iso, &new_internal, target_base, checkpoint)?;
+                extract_iso_recursive(iso, &new_internal, root, provenance, checkpoint)?;
             }
             ISO9660Record::File(_) => {
-                if let Some(parent) = target_path.parent() {
-                    fs::create_dir_all(parent).map_err(|e| CommandError::IoError(e.to_string()))?;
-                }
-
                 let size = iso
                     .total_size(&new_internal)
                     .map_err(|e| CommandError::ArchiveError(format!("{:?}", e)))?;
-                let mut writer =
-                    File::create(target_path).map_err(|e| CommandError::IoError(e.to_string()))?;
+                let mut writer = platform().create_archive_file(&destination.path)?;
 
                 let mut offset = 0;
                 let mut buf = [0u8; 65536];
@@ -627,6 +592,9 @@ fn extract_iso_recursive<T: iso9660_core::block_device::ISORead>(
                         .map_err(|e| CommandError::IoError(e.to_string()))?;
                     offset += n;
                 }
+                if let Some(data) = provenance {
+                    platform().write_file_provenance(&destination.path, data)?;
+                }
             }
         }
     }
@@ -638,6 +606,81 @@ mod archive_tests {
     use super::*;
     use crate::systems::archive_workspace::mutation_operation;
     use crate::systems::file_ops::FileOperationManager;
+
+    #[test]
+    fn zip_listing_and_workspace_reject_windows_paths_and_streams() {
+        use std::io::Write;
+        for name in [
+            "a/C:victim.txt",
+            "a/../C:victim.txt",
+            "C:sentinel.txt",
+            "file.txt:extra",
+            "dir./file",
+            "NUL.txt",
+        ] {
+            let dir = tempfile::tempdir().unwrap();
+            let archive = dir.path().join("unsafe.zip");
+            let mut writer = zip::ZipWriter::new(File::create(&archive).unwrap());
+            writer
+                .start_file("readme.txt", zip::write::SimpleFileOptions::default())
+                .unwrap();
+            writer.write_all(b"safe entry").unwrap();
+            writer
+                .start_file(name, zip::write::SimpleFileOptions::default())
+                .unwrap();
+            writer.write_all(b"untrusted entry").unwrap();
+            writer.finish().unwrap();
+            assert!(
+                list_archive_contents(archive.to_string_lossy().into_owned(), String::new())
+                    .is_err(),
+                "listed {name}"
+            );
+            assert!(
+                prepare_archive_file_for_open(&archive.join("readme.txt")).is_err(),
+                "opened {name}"
+            );
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn archive_outputs_and_external_copies_preserve_internet_provenance() {
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("readme.txt");
+        fs::write(&source, b"safe document").unwrap();
+        let data = b"[ZoneTransfer]\r\nZoneId=3\r\n";
+        for extension in ["zip", "7z", "tar", "zst"] {
+            let archive = dir.path().join(format!("marked.{extension}"));
+            FileOperationManager::perform_compress(
+                &mutation_operation("fast"),
+                vec![source.clone()],
+                Some(archive.clone()),
+            )
+            .unwrap();
+            platform().write_file_provenance(&archive, data).unwrap();
+            let target = dir.path().join(extension);
+            extract_archive_with_checkpoint(
+                archive.to_string_lossy().into_owned(),
+                target.to_string_lossy().into_owned(),
+                &|| Ok(()),
+            )
+            .unwrap();
+            assert_eq!(
+                platform()
+                    .read_file_provenance(&target.join("readme.txt"))
+                    .unwrap()
+                    .as_deref(),
+                Some(data.as_slice())
+            );
+            let cached = prepare_archive_file_for_open(&archive.join("readme.txt")).unwrap();
+            assert_eq!(
+                platform().read_file_provenance(&cached).unwrap().as_deref(),
+                Some(data.as_slice())
+            );
+            fs::remove_file(&cached).unwrap();
+            fs::remove_dir(cached.parent().unwrap()).unwrap();
+        }
+    }
 
     #[test]
     fn seven_zip_extraction_rejects_absolute_and_parent_paths() {

@@ -10,6 +10,22 @@ impl LinuxPlatform {
 }
 
 impl Platform for LinuxPlatform {
+    fn hold_archive_directory(&self, path: &std::path::Path) -> std::io::Result<std::fs::File> {
+        let metadata = std::fs::symlink_metadata(path)?;
+        if !metadata.is_dir() || metadata.file_type().is_symlink() {
+            return Err(std::io::Error::other("Archive parent is not an ordinary directory"));
+        }
+        std::fs::File::open(path)
+    }
+    fn create_archive_file(&self, path: &std::path::Path) -> std::io::Result<std::fs::File> {
+        std::fs::OpenOptions::new().write(true).create_new(true).open(path)
+    }
+    fn read_file_provenance(&self, _path: &std::path::Path) -> std::io::Result<Option<Vec<u8>>> {
+        Ok(None)
+    }
+    fn write_file_provenance(&self, _path: &std::path::Path, _data: &[u8]) -> std::io::Result<()> {
+        Ok(())
+    }
     fn replace_open_file(
         &self,
         _file: &std::fs::File,

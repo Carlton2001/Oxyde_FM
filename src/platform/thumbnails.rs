@@ -485,6 +485,25 @@ fn resize_video_frame(bytes: &[u8], layout: VideoLayout) -> Result<RgbaImage, Co
 }
 
 #[cfg(target_os = "windows")]
+fn decode_office_thumbnail(reader: impl std::io::Read) -> Result<RgbaImage, CommandError> {
+    use std::io::Read;
+    const MAX_BYTES: u64 = 8 * 1024 * 1024;
+    let mut data = Vec::new();
+    reader.take(MAX_BYTES + 1).read_to_end(&mut data)?;
+    if data.len() as u64 > MAX_BYTES {
+        return Err(CommandError::Other("Office thumbnail exceeds the size limit".into()));
+    }
+    let mut reader = image::ImageReader::new(std::io::Cursor::new(data)).with_guessed_format()?;
+    let mut limits = image::Limits::default();
+    limits.max_image_width = Some(4096);
+    limits.max_image_height = Some(4096);
+    limits.max_alloc = Some(64 * 1024 * 1024);
+    reader.limits(limits);
+    let image = reader.decode().map_err(|error| CommandError::Other(error.to_string()))?;
+    Ok(image.thumbnail(THUMB_SIZE, THUMB_SIZE).to_rgba8())
+}
+
+#[cfg(target_os = "windows")]
 fn get_office_thumbnail_uncached(path: String) -> Result<RgbaImage, CommandError> {
     if let Ok(img) = shell_thumbnail_raw(&path) {
         return Ok(img);
@@ -493,17 +512,36 @@ fn get_office_thumbnail_uncached(path: String) -> Result<RgbaImage, CommandError
     let mut archive = zip::ZipArchive::new(file).map_err(|e| CommandError::Other(e.to_string()))?;
     let target_files = vec!["docProps/thumbnail.jpeg", "Thumbnails/thumbnail.png"];
     for target in target_files {
-        if let Ok(mut content_file) = archive.by_name(target) {
-            use std::io::Read;
-            let mut data = Vec::new();
-            if content_file.read_to_end(&mut data).is_ok() {
-                if let Ok(img) = image::load_from_memory(&data) {
-                    return Ok(img.thumbnail(THUMB_SIZE, THUMB_SIZE).to_rgba8());
-                }
+        if let Ok(content_file) = archive.by_name(target) {
+            if let Ok(image) = decode_office_thumbnail(content_file) {
+                return Ok(image);
             }
         }
     }
     Err(CommandError::Other("No office thumbnail".to_string()))
+}
+
+#[cfg(all(test, target_os = "windows"))]
+mod office_thumbnail_security_tests {
+    use super::*;
+
+    #[test]
+    fn oversized_compressed_payload_is_rejected_with_bounded_reads() {
+        let mut input = std::io::Cursor::new(vec![0; 9 * 1024 * 1024]);
+        assert!(decode_office_thumbnail(&mut input).is_err());
+        assert_eq!(input.position(), 8 * 1024 * 1024 + 1);
+    }
+
+    #[test]
+    fn normal_images_decode_and_excessive_dimensions_are_rejected() {
+        for (width, accepted) in [(2, true), (4097, false)] {
+            let image = image::DynamicImage::ImageRgba8(RgbaImage::new(width, 1));
+            let mut data = std::io::Cursor::new(Vec::new());
+            image.write_to(&mut data, image::ImageFormat::Png).unwrap();
+            data.set_position(0);
+            assert_eq!(decode_office_thumbnail(data).is_ok(), accepted);
+        }
+    }
 }
 
 #[cfg(target_os = "windows")]

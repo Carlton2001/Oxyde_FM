@@ -2313,6 +2313,9 @@ impl FileOperationManager {
             }
         }
         let mut guard = PendingDirectory(target.clone());
+        let extraction_root = crate::utils::archive_security::ExtractionRoot::new(&target)
+            .map_err(|error| error.to_string())?;
+        let provenance = platform().read_file_provenance(source).map_err(|error| error.to_string())?;
         {
             let mut locked = op.lock().unwrap();
             locked.destination = Some(target.clone());
@@ -2328,10 +2331,12 @@ impl FileOperationManager {
         {
             let file = std::fs::File::open(source).map_err(|error| error.to_string())?;
             let mut archive = zip::ZipArchive::new(file).map_err(|error| error.to_string())?;
-            let mut total_bytes = 0;
+            let mut total_bytes = 0u64;
             for index in 0..archive.len() {
                 let entry = archive.by_index(index).map_err(|error| error.to_string())?;
-                total_bytes += entry.size();
+                crate::utils::archive_security::relative_archive_path(entry.name())
+                    .map_err(|error| error.to_string())?;
+                total_bytes = total_bytes.checked_add(entry.size()).ok_or("Archive size overflow")?;
             }
             {
                 let mut locked = op.lock().unwrap();
@@ -2342,25 +2347,18 @@ impl FileOperationManager {
             for index in 0..archive.len() {
                 Self::archive_checkpoint(op)?;
                 let mut entry = archive.by_index(index).map_err(|error| error.to_string())?;
-                let relative = entry.enclosed_name().ok_or("Unsafe archive path")?;
                 if entry
                     .unix_mode()
                     .is_some_and(|mode| mode & 0o170000 == 0o120000)
                 {
                     return Err("Archive contains a symbolic link".into());
                 }
-                let output = target.join(relative);
+                let destination = extraction_root.destination(entry.name(), entry.is_dir())
+                    .map_err(|error| error.to_string())?;
+                let output = &destination.path;
                 op.lock().unwrap().current_file = Some(output.to_string_lossy().into_owned());
-                if entry.is_dir() {
-                    std::fs::create_dir_all(&output).map_err(|error| error.to_string())?;
-                } else {
-                    if let Some(parent) = output.parent() {
-                        std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
-                    }
-                    let mut file = std::fs::OpenOptions::new()
-                        .write(true)
-                        .create_new(true)
-                        .open(&output)
+                if !entry.is_dir() {
+                    let mut file = platform().create_archive_file(output)
                         .map_err(|error| error.to_string())?;
                     loop {
                         Self::archive_checkpoint(op)?;
@@ -2371,6 +2369,9 @@ impl FileOperationManager {
                         file.write_all(&buffer[..count])
                             .map_err(|error| error.to_string())?;
                         Self::archive_progress(op, count as u64);
+                    }
+                    if let Some(data) = provenance.as_deref() {
+                        platform().write_file_provenance(output, data).map_err(|error| error.to_string())?;
                     }
                 }
                 op.lock().unwrap().processed_files += 1;
@@ -2488,6 +2489,40 @@ impl FileOperationManager {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn zip_operations_reject_windows_escape_and_alternate_stream_names() {
+        use super::*;
+        for name in ["a/C:victim.txt", "a/../C:victim.txt", "file.txt:extra"] {
+            let temp = tempfile::tempdir().unwrap();
+            let archive = temp.path().join("unsafe.zip");
+            let mut writer = zip::ZipWriter::new(std::fs::File::create(&archive).unwrap());
+            writer.start_file(name, zip::write::SimpleFileOptions::default()).unwrap();
+            writer.write_all(b"marker").unwrap();
+            writer.finish().unwrap();
+            let output = temp.path().join("output");
+            let op = Arc::new(Mutex::new(FileOperation::new(FileOpType::Extract, vec![archive.clone()], Some(output.clone()), None)));
+            assert!(FileOperationManager::perform_extract(&op, vec![archive], Some(output.clone())).is_err());
+            assert!(!output.exists());
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn zip_operations_mark_outputs_before_publication() {
+        use super::*;
+        let temp = tempfile::tempdir().unwrap();
+        let archive = temp.path().join("marked.zip");
+        let mut writer = zip::ZipWriter::new(std::fs::File::create(&archive).unwrap());
+        writer.start_file("file.txt", zip::write::SimpleFileOptions::default()).unwrap();
+        writer.write_all(b"marker").unwrap();
+        writer.finish().unwrap();
+        let data = b"[ZoneTransfer]\r\nZoneId=3\r\n";
+        platform().write_file_provenance(&archive, data).unwrap();
+        let output = temp.path().join("output");
+        let op = Arc::new(Mutex::new(FileOperation::new(FileOpType::Extract, vec![archive.clone()], Some(output.clone()), None)));
+        FileOperationManager::perform_extract(&op, vec![archive], Some(output.clone())).unwrap();
+        assert_eq!(platform().read_file_provenance(&output.join("file.txt")).unwrap().as_deref(), Some(data.as_slice()));
+    }
     use super::*;
 
     #[test]

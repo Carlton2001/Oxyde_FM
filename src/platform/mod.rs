@@ -39,6 +39,13 @@ pub struct TrashTransferEntry {
 /// Toute fonctionnalité native (lecteurs, ouverture, raccourcis, etc.)
 /// doit passer par ce trait plutôt qu'appeler directement les API OS.
 pub trait Platform: Send + Sync {
+    /// Holds an ordinary directory without following a reparse point. On Windows
+    /// the handle denies deletion/renaming until it is dropped.
+    fn hold_archive_directory(&self, path: &std::path::Path) -> std::io::Result<std::fs::File>;
+    fn create_archive_file(&self, path: &std::path::Path) -> std::io::Result<std::fs::File>;
+    /// Read/write bounded native Internet provenance; unsupported platforms use None.
+    fn read_file_provenance(&self, path: &std::path::Path) -> std::io::Result<Option<Vec<u8>>>;
+    fn write_file_provenance(&self, path: &std::path::Path, data: &[u8]) -> std::io::Result<()>;
     /// Blocking copy with native metadata/streams where supported. The callback
     /// Reports main-stream bytes; only an absent destination is accepted.
     /// A supplied source handle must already hold the same source path/identity.
@@ -259,6 +266,8 @@ mod windows_disk_images;
 mod windows_drives;
 #[cfg(target_os = "windows")]
 mod windows_impl;
+#[cfg(target_os = "windows")]
+mod windows_archive_security;
 #[cfg(target_os = "windows")]
 mod windows_com;
 #[cfg(target_os = "windows")]

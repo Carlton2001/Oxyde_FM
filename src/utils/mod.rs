@@ -1,8 +1,10 @@
 use std::fs::Metadata;
 
 pub mod archive;
+pub mod archive_security;
 pub mod disk_image;
 pub mod path_security;
+pub mod preview;
 
 pub mod hardware {
     pub fn is_network_path(path: &std::path::Path) -> bool {

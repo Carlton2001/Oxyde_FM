@@ -11,6 +11,18 @@ impl WindowsPlatform {
 }
 
 impl Platform for WindowsPlatform {
+    fn hold_archive_directory(&self, path: &std::path::Path) -> std::io::Result<std::fs::File> {
+        super::windows_archive_security::hold_directory(path)
+    }
+    fn create_archive_file(&self, path: &std::path::Path) -> std::io::Result<std::fs::File> {
+        super::windows_archive_security::create_file(path)
+    }
+    fn read_file_provenance(&self, path: &std::path::Path) -> std::io::Result<Option<Vec<u8>>> {
+        super::windows_archive_security::read_provenance(path)
+    }
+    fn write_file_provenance(&self, path: &std::path::Path, data: &[u8]) -> std::io::Result<()> {
+        super::windows_archive_security::write_provenance(path, data)
+    }
     fn copy_file_with_progress(
         &self,
         source: &std::path::Path,

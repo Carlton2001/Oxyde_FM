@@ -3,7 +3,7 @@ use crate::commands::archive::extract_archive_with_checkpoint;
 use crate::systems::file_ops::{FileOpType, FileOperation, FileOperationManager};
 use crate::utils::archive::{split_virtual_path, ArchiveFormat};
 use std::collections::HashMap;
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock, Mutex, MutexGuard, Weak};
 
 type MutationMutex = Arc<Mutex<()>>;
@@ -124,15 +124,8 @@ impl ArchiveWorkspace {
     }
 
     pub fn path(&self, internal: &str) -> Result<PathBuf, String> {
-        let normalized = internal.replace('\\', "/");
-        let relative = Path::new(&normalized);
-        if relative
-            .components()
-            .any(|c| !matches!(c, Component::Normal(_)))
-            || normalized.contains(':')
-        {
-            return Err("Unsafe path inside archive".into());
-        }
+        let relative = crate::utils::archive_security::relative_archive_path(internal)
+            .map_err(|error| error.to_string())?;
         Ok(self.root().join(relative))
     }
 
@@ -170,6 +163,9 @@ impl ArchiveWorkspace {
         op.lock().unwrap().destination = original_destination;
         op.lock().unwrap().compression_quality = original_quality;
         result?;
+        if let Some(data) = crate::platform::platform().read_file_provenance(&self.archive).map_err(|e| e.to_string())? {
+            crate::platform::platform().write_file_provenance(&destination, &data).map_err(|e| e.to_string())?;
+        }
         FileOperationManager::archive_checkpoint(op)?;
         let metadata = std::fs::metadata(&self.archive).map_err(|e| e.to_string())?;
         if metadata.len() != self.length || metadata.modified().ok() != self.modified {
@@ -283,6 +279,9 @@ pub fn external_file(path: &Path) -> Result<PathBuf, String> {
         .path()
         .join(source.file_name().ok_or("Invalid file name")?);
     std::fs::copy(source, &destination).map_err(|e| e.to_string())?;
+    if let Some(data) = crate::platform::platform().read_file_provenance(&workspace.archive).map_err(|e| e.to_string())? {
+        crate::platform::platform().write_file_provenance(&destination, &data).map_err(|e| e.to_string())?;
+    }
     let _ = directory.keep();
     Ok(destination)
 }
