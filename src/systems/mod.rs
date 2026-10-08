@@ -1,4 +1,5 @@
 pub(crate) mod archive_workspace;
+mod archive_move_sources;
 pub mod file_ops;
 pub(crate) mod file_copy;
 mod copied_source;

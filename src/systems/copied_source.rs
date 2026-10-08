@@ -27,6 +27,24 @@ impl CopiedSource {
     pub fn file(&self) -> &File {
         &self.file
     }
+    pub fn verify(
+        &mut self,
+        expected: &str,
+        checkpoint: &mut dyn FnMut() -> io::Result<()>,
+    ) -> io::Result<()> {
+        if super::history_move::hash_with(&mut self.file, checkpoint)? != expected {
+            return Err(io::Error::other(format!(
+                "Copied move source changed: {}",
+                self.path.display()
+            )));
+        }
+        Ok(())
+    }
+    /// Requires successful verification while retaining this same source handle.
+    pub fn remove_verified(self, checkpoint: &mut dyn FnMut() -> io::Result<()>) -> io::Result<()> {
+        checkpoint()?;
+        platform().remove_open_file(&self.file, &self.path)
+    }
     pub fn finish(
         mut self,
         output: CopiedFile,
@@ -34,15 +52,8 @@ impl CopiedSource {
     ) -> io::Result<()> {
         // The copied file remains held throughout verification/deletion; it
         // cannot be replaced or written through an incompatible Windows handle.
-        if super::history_move::hash_with(&mut self.file, checkpoint)? != output.hash {
-            return Err(io::Error::other(format!(
-                "Copied move source changed: {}",
-                self.path.display()
-            )));
-        }
-        checkpoint()?;
-        platform().remove_open_file(&self.file, &self.path)?;
-        drop(self);
+        self.verify(&output.hash, checkpoint)?;
+        self.remove_verified(checkpoint)?;
         drop(output.file);
         Ok(())
     }

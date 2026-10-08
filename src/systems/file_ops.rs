@@ -787,6 +787,17 @@ impl FileOperationManager {
         is_move: bool,
         resolutions: Option<HashMap<String, ConflictAction>>,
     ) -> Result<(), String> {
+        Self::perform_archive_transfer_with(op, sources, destination, is_move, resolutions, &mut || Ok(()))
+    }
+
+    fn perform_archive_transfer_with(
+        op: &Arc<Mutex<FileOperation>>,
+        sources: Vec<PathBuf>,
+        destination: Option<PathBuf>,
+        is_move: bool,
+        resolutions: Option<HashMap<String, ConflictAction>>,
+        after_copy: &mut dyn FnMut() -> Result<(), String>,
+    ) -> Result<(), String> {
         use crate::systems::archive_workspace::{
             lock_for_operation, mutation_locks, virtual_destination, virtual_source, writable,
             ArchiveWorkspaces,
@@ -848,16 +859,22 @@ impl FileOperationManager {
                     .collect::<Result<HashMap<_, _>, _>>()
             })
             .transpose()?;
-        Self::perform_copy(
+        let deferred_moves = is_move.then(|| Arc::new(Mutex::new(
+            super::archive_move_sources::ArchiveMoveSources::default(),
+        )));
+        let trash_entries = platform().trash_transfer_entries(&real_sources)?;
+        Self::perform_copy_real(
             op,
             real_sources.clone(),
             Some(real_target.clone()),
             false,
             mapped_resolutions,
+            &trash_entries,
+            deferred_moves.clone(),
         )?;
         Self::archive_checkpoint(op)?;
+        after_copy()?;
         let copied = op.lock().unwrap().copied_files.clone();
-        let hashes = op.lock().unwrap().copied_file_hashes.clone();
         let created_dirs = op.lock().unwrap().created_dirs.clone();
         let mut changed = std::collections::HashSet::new();
         if let Some(archive) = &target_archive {
@@ -865,10 +882,16 @@ impl FileOperationManager {
         }
         // Stage removals only for files that were actually copied. Skipped conflicts stay put.
         if is_move {
+            let mut moves = deferred_moves.as_ref().unwrap().lock().unwrap();
+            moves.verify_all(&mut || Self::archive_checkpoint(op).map_err(std::io::Error::other))
+                .map_err(|error| error.to_string())?;
+            moves.remove_matching(&|source| workspaces.display(source) != source,
+                &mut || Self::archive_checkpoint(op).map_err(std::io::Error::other))
+                .map_err(|error| error.to_string())?;
+            drop(moves);
             for (source, _) in &copied {
                 let original = workspaces.display(source);
                 if let Some((archive, _)) = virtual_source(&original) {
-                    std::fs::remove_file(source).map_err(|e| e.to_string())?;
                     changed.insert(std::fs::canonicalize(archive).map_err(|e| e.to_string())?);
                 }
             }
@@ -890,39 +913,11 @@ impl FileOperationManager {
             workspaces.0[&archive].commit(op)?;
         }
         if is_move {
-            // Reconstruction can be long: do not delete a real file edited since its copy.
-            for (source, destination) in &copied {
-                if workspaces.display(source) != *source {
-                    continue;
-                }
-                let expected = hashes
-                    .iter()
-                    .find(|(path, _)| path == destination)
-                    .map(|(_, hash)| hash)
-                    .ok_or("Missing copied file hash")?;
-                let mut reader = std::fs::File::open(source).map_err(|e| e.to_string())?;
-                let mut hasher = blake3::Hasher::new();
-                let mut buffer = [0u8; 256 * 1024];
-                loop {
-                    Self::archive_checkpoint(op)?;
-                    let count = reader.read(&mut buffer).map_err(|e| e.to_string())?;
-                    if count == 0 {
-                        break;
-                    }
-                    hasher.update(&buffer[..count]);
-                }
-                if hasher.finalize().to_hex().as_str() != expected {
-                    return Err(format!(
-                        "Source changed after copy; preserved: {}",
-                        source.display()
-                    ));
-                }
-            }
-            for (source, _) in &copied {
-                if workspaces.display(source) == *source {
-                    std::fs::remove_file(source).map_err(|e| e.to_string())?;
-                }
-            }
+            // Sources have remained held since copy, including during reconstruction.
+            deferred_moves.as_ref().unwrap().lock().unwrap().remove_matching(
+                &|source| workspaces.display(source) == source,
+                &mut || Self::archive_checkpoint(op).map_err(std::io::Error::other),
+            ).map_err(|error| error.to_string())?;
             for (original, source) in sources.iter().zip(&real_sources) {
                 if virtual_source(original).is_none() && source.is_dir() {
                     Self::remove_empty_copied_directories(source, &real_target, &created_dirs)?;
@@ -1028,6 +1023,7 @@ impl FileOperationManager {
             is_move,
             resolutions,
             &trash_entries,
+            None,
         );
         let mut metadata_errors = Vec::new();
         if is_move {
@@ -1067,6 +1063,7 @@ impl FileOperationManager {
         is_move: bool,
         resolutions: Option<HashMap<String, ConflictAction>>,
         trash_entries: &[crate::platform::TrashTransferEntry],
+        deferred_moves: Option<Arc<Mutex<super::archive_move_sources::ArchiveMoveSources>>>,
     ) -> Result<(), String> {
         let source_name = |source: &Path| -> Result<std::ffi::OsString, String> {
             trash_entries
@@ -1370,6 +1367,7 @@ impl FileOperationManager {
             let error_share = error_captured.clone();
             let operation = op.clone();
             let destination_tree = destination_tree.clone();
+            let deferred_moves = deferred_moves.clone();
 
             let handle = std::thread::spawn(move || {
                 let _priority_guard = RestoreNormalPriority;
@@ -1423,7 +1421,7 @@ impl FileOperationManager {
                         .map_err(|e| format!("Cannot hold destination {:?}: {e}", dest))?;
 
                     let source_guard =
-                        if is_move {
+                        if is_move || deferred_moves.is_some() {
                             Some(super::copied_source::CopiedSource::open(src).map_err(
                                 |error| format!("Cannot hold move source {:?}: {error}", src),
                             )?)
@@ -1492,6 +1490,11 @@ impl FileOperationManager {
                         .push((dest.clone(), output.hash.clone()));
                     drop(journal);
                     if let Some(source) = source_guard {
+                        if let Some(moves) = &deferred_moves {
+                            moves.lock().unwrap().record(src.clone(), source, output);
+                            processed_files.fetch_add(1, Ordering::Relaxed);
+                            continue;
+                        }
                         source
                             .finish(output, &mut || loop {
                                 if cancel.load(Ordering::Relaxed)
@@ -3521,6 +3524,62 @@ mod tests {
         assert_eq!(locked.moved_files.len(), 1);
         assert!(locked.copied_files.is_empty());
         assert!(locked.copied_file_hashes.is_empty());
+    }
+
+    #[test]
+    #[cfg(target_os = "windows")]
+    fn archive_move_publication_conflict_preserves_held_real_sources() {
+        let root = tempfile::tempdir().unwrap();
+        let source = root.path().join("source.txt");
+        let archive = root.path().join("target.zip");
+        std::fs::write(&source, b"source data").unwrap();
+        FileOperationManager::perform_compress(&operation(), vec![], Some(archive.clone())).unwrap();
+        let op = operation();
+        let result = FileOperationManager::perform_archive_transfer_with(
+            &op, vec![source.clone()], Some(archive.clone()), true, None,
+            &mut || {
+                assert!(std::fs::OpenOptions::new().write(true).open(&source).is_err());
+                assert!(std::fs::remove_file(&source).is_err());
+                let output = op.lock().unwrap().copied_files[0].1.clone();
+                assert!(std::fs::OpenOptions::new().write(true).open(&output).is_err());
+                assert!(std::fs::remove_file(&output).is_err());
+                std::fs::write(&archive, b"foreign archive edit").map_err(|error| error.to_string())
+            },
+        );
+        assert!(result.is_err());
+        assert_eq!(std::fs::read(&source).unwrap(), b"source data");
+        assert_eq!(std::fs::read(&archive).unwrap(), b"foreign archive edit");
+        assert!(std::fs::OpenOptions::new().write(true).open(&source).is_ok());
+        assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 2);
+    }
+
+    #[test]
+    #[cfg(target_os = "windows")]
+    fn archive_move_locks_copied_files_but_preserves_editable_skipped_conflicts() {
+        use crate::systems::archive_workspace::ArchiveWorkspace;
+        let root = tempfile::tempdir().unwrap();
+        let seed = root.path().join("seed/source");
+        let source = root.path().join("source");
+        let archive = root.path().join("target.zip");
+        std::fs::create_dir_all(&seed).unwrap();
+        std::fs::create_dir(&source).unwrap();
+        std::fs::write(seed.join("keep"), b"existing archive entry").unwrap();
+        std::fs::write(source.join("keep"), b"skipped source").unwrap();
+        std::fs::write(source.join("move"), b"moved source").unwrap();
+        FileOperationManager::perform_compress(&operation(), vec![seed], Some(archive.clone())).unwrap();
+        let resolutions = HashMap::from([(source.join("keep").to_string_lossy().into_owned(), ConflictAction::Skip)]);
+        FileOperationManager::perform_archive_transfer_with(
+            &operation(), vec![source.clone()], Some(archive.clone()), true, Some(resolutions),
+            &mut || {
+                assert!(std::fs::OpenOptions::new().write(true).open(source.join("move")).is_err());
+                std::fs::write(source.join("keep"), b"edited skipped source").map_err(|error| error.to_string())
+            },
+        ).unwrap();
+        assert_eq!(std::fs::read(source.join("keep")).unwrap(), b"edited skipped source");
+        assert!(!source.join("move").exists());
+        let workspace = ArchiveWorkspace::open(archive).unwrap();
+        assert_eq!(std::fs::read(workspace.root().join("source/keep")).unwrap(), b"existing archive entry");
+        assert_eq!(std::fs::read(workspace.root().join("source/move")).unwrap(), b"moved source");
     }
 
     #[cfg(target_os = "windows")]
