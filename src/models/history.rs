@@ -1,4 +1,4 @@
-use crate::models::transaction::Transaction;
+use crate::models::transaction::{Transaction, TransactionType};
 use std::sync::Mutex;
 
 fn cleanup_metadata_backups(transaction: &Transaction) {
@@ -16,10 +16,19 @@ fn cleanup_metadata_backups(transaction: &Transaction) {
     }
 }
 
-#[derive(Debug, Clone, Default)]
-pub struct HistoryState {
-    pub undo_stack: Vec<Transaction>,
-    pub redo_stack: Vec<Transaction>,
+#[derive(Debug, Default)]
+#[cfg_attr(test, derive(Clone))]
+pub(crate) struct HistoryState {
+    pub(crate) undo_stack: Vec<Transaction>,
+    pub(crate) redo_stack: Vec<Transaction>,
+}
+
+/// Small snapshot for action buttons, without cloning file journals.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct HistorySummary {
+    pub undo: Option<TransactionType>,
+    pub redo: Option<TransactionType>,
+    pub undo_blocked_by_overwrite: bool,
 }
 
 #[derive(Default)]
@@ -170,7 +179,22 @@ impl HistoryManager {
         self.begin(Direction::Redo)
     }
 
-    pub fn get_state(&self) -> HistoryState {
+    pub fn summary(&self) -> HistorySummary {
+        let data = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        let undo = data.history.undo_stack.last();
+        HistorySummary {
+            undo: undo.map(|transaction| transaction.op_type),
+            redo: data
+                .history
+                .redo_stack
+                .last()
+                .map(|transaction| transaction.op_type),
+            undo_blocked_by_overwrite: undo.is_some_and(Transaction::undo_blocked_by_overwrite),
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn get_state(&self) -> HistoryState {
         self.state
             .lock()
             .unwrap_or_else(|e| e.into_inner())
@@ -221,6 +245,111 @@ mod tests {
                 copied_file_hashes: None,
             },
         )
+    }
+
+    #[test]
+    fn summary_preserves_operation_labels_and_copy_overwrite_blocking() {
+        let history = HistoryManager::new();
+        assert_eq!(history.summary(), HistorySummary::default());
+        for kind in [
+            TransactionType::Copy,
+            TransactionType::Move,
+            TransactionType::Rename,
+            TransactionType::Delete,
+            TransactionType::NewFolder,
+        ] {
+            let mut entry = transaction();
+            entry.op_type = kind;
+            entry.details.overwritten_files = Some(vec!["existing file".into()]);
+            history.push(entry);
+            assert_eq!(history.summary().undo, Some(kind));
+            assert_eq!(
+                history.summary().undo_blocked_by_overwrite,
+                kind == TransactionType::Copy
+            );
+            history.begin_undo().unwrap().unwrap().complete();
+            assert_eq!(
+                history.summary(),
+                HistorySummary {
+                    undo: None,
+                    redo: Some(kind),
+                    undo_blocked_by_overwrite: false,
+                }
+            );
+            history.begin_redo().unwrap().unwrap().complete();
+            assert_eq!(history.summary().undo, Some(kind));
+            assert_eq!(history.summary().redo, None);
+            assert!(history.clear());
+            assert_eq!(history.summary(), HistorySummary::default());
+        }
+    }
+
+    #[test]
+    fn summary_uses_committed_stacks_during_reservation_and_deferred_clear() {
+        let history = HistoryManager::new();
+        history.push(transaction());
+        let selected = history.begin_undo().unwrap().unwrap();
+        let before = history.summary();
+        let mut pending = transaction();
+        pending.op_type = TransactionType::Rename;
+        history.push(pending);
+        assert_eq!(history.summary(), before);
+        selected.complete();
+        assert_eq!(history.summary().undo, Some(TransactionType::Rename));
+        assert_eq!(history.summary().redo, None);
+        let selected = history.begin_undo().unwrap().unwrap();
+        assert!(!history.clear());
+        assert_eq!(history.summary().undo, Some(TransactionType::Rename));
+        drop(selected);
+        assert_eq!(history.summary(), HistorySummary::default());
+    }
+
+    #[test]
+    #[ignore = "manual in-memory comparison of history preparation for four panes"]
+    fn profile_history_summary_for_multiple_panes() {
+        let history = HistoryManager::new();
+        for entry in 0..100 {
+            let mut tx = transaction();
+            let paths: Vec<_> = (0..128)
+                .map(|file| {
+                    format!(
+                        "C:\\fixture\\entry-{entry}\\{}\\file-{file}.txt",
+                        "long directory name ".repeat(5)
+                    )
+                })
+                .collect();
+            tx.details.paths = paths.clone();
+            tx.details.created_files = Some(paths.clone());
+            tx.details.copied_files = Some(
+                paths
+                    .iter()
+                    .map(|path| (path.clone(), path.clone()))
+                    .collect(),
+            );
+            tx.details.copied_file_hashes = Some(
+                paths
+                    .iter()
+                    .map(|path| (path.clone(), "a".repeat(64)))
+                    .collect(),
+            );
+            history.push(tx);
+        }
+        const FRAMES: usize = 50;
+        const PANES: usize = 4;
+        let start = std::time::Instant::now();
+        for _ in 0..FRAMES * PANES {
+            std::hint::black_box(history.get_state());
+        }
+        let full = start.elapsed();
+        let start = std::time::Instant::now();
+        for _ in 0..FRAMES * PANES {
+            std::hint::black_box(history.summary());
+        }
+        let summary = start.elapsed();
+        eprintln!(
+            "100 transactions x 128 files; {FRAMES} frames x {PANES} panes: full clone {full:?}, summary {summary:?}; summary size {} bytes",
+            std::mem::size_of::<HistorySummary>()
+        );
     }
 
     #[test]

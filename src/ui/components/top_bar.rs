@@ -117,14 +117,11 @@ pub fn render_top_bar(
     let show_hidden_setting = view.show_hidden;
     let show_system_setting = view.show_system;
 
-    let history_state = view.history.get_state();
-    let has_undo_entry = !history_state.undo_stack.is_empty();
-    let undo_blocked_by_overwrite = history_state
-        .undo_stack
-        .last()
-        .is_some_and(|transaction| transaction.undo_blocked_by_overwrite());
+    let history_state = view.history.summary();
+    let has_undo_entry = history_state.undo.is_some();
+    let undo_blocked_by_overwrite = history_state.undo_blocked_by_overwrite;
     let can_undo = has_undo_entry && !undo_blocked_by_overwrite;
-    let can_redo = !history_state.redo_stack.is_empty();
+    let can_redo = history_state.redo.is_some();
     let parent_path = if special_path_label.is_none() {
         std::path::Path::new(&current_path).parent().filter(|p| !p.as_os_str().is_empty())
             .map(|p| p.to_string_lossy().into_owned())
@@ -133,21 +130,21 @@ pub fn render_top_bar(
     let ordinary = special_path_label.is_none()
         && oxyde_lib::utils::archive::split_virtual_path(&current_path).is_none();
 
-    let undo_tooltip = history_state.undo_stack.last().map(|t| {
+    let undo_tooltip = history_state.undo.map(|operation| {
         let mut args = FluentArgs::new();
         args.set(
             "operation",
-            _cx.i18n().text(op_label(&t.op_type)).to_string(),
+            _cx.i18n().text(op_label(&operation)).to_string(),
         );
         _cx.i18n()
             .text_with_args(Message::UndoOperation, &args)
             .to_string()
     });
-    let redo_tooltip = history_state.redo_stack.last().map(|t| {
+    let redo_tooltip = history_state.redo.map(|operation| {
         let mut args = FluentArgs::new();
         args.set(
             "operation",
-            _cx.i18n().text(op_label(&t.op_type)).to_string(),
+            _cx.i18n().text(op_label(&operation)).to_string(),
         );
         _cx.i18n()
             .text_with_args(Message::RedoOperation, &args)
