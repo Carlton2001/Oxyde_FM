@@ -1,14 +1,29 @@
-use std::fs::{File, OpenOptions};
+use std::fs::File;
 use std::io::{Error, ErrorKind, Result};
-use std::os::windows::ffi::OsStrExt;
-use std::os::windows::fs::OpenOptionsExt;
 use std::os::windows::io::AsRawHandle;
 use std::path::Path;
 use windows::Win32::Foundation::{GENERIC_READ, HANDLE};
 use windows::Win32::Storage::FileSystem::{
-    FileDispositionInfo, FileRenameInfo, SetFileInformationByHandle, DELETE, FILE_DISPOSITION_INFO,
-    FILE_FLAG_OPEN_REPARSE_POINT, FILE_RENAME_INFO, FILE_SHARE_READ,
+    FileDispositionInfo, SetFileInformationByHandle, DELETE, FILE_DISPOSITION_INFO,
+    FILE_READ_ATTRIBUTES, FILE_RENAME_INFO, FILE_SHARE_READ, FILE_SHARE_WRITE,
 };
+
+#[repr(C)]
+struct IoStatusBlock {
+    status: usize,
+    information: usize,
+}
+#[link(name = "ntdll")]
+unsafe extern "system" {
+    fn NtSetInformationFile(
+        file: *mut std::ffi::c_void,
+        status: *mut IoStatusBlock,
+        information: *const std::ffi::c_void,
+        length: u32,
+        class: u32,
+    ) -> i32;
+    fn RtlNtStatusToDosError(status: i32) -> u32;
+}
 
 fn io_error(error: windows::core::Error) -> Error {
     // These APIs report HRESULT_FROM_WIN32(GetLastError()).
@@ -16,11 +31,35 @@ fn io_error(error: windows::core::Error) -> Error {
 }
 
 pub(super) fn open(path: &Path) -> Result<File> {
-    OpenOptions::new()
-        .access_mode(GENERIC_READ.0 | DELETE.0)
-        .share_mode(FILE_SHARE_READ.0)
-        .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT.0)
-        .open(path)
+    crate::systems::path_parents::HeldParents::new(path)?.open_file(path)
+}
+
+pub(super) fn hold_parent(path: &Path) -> Result<File> {
+    super::windows_no_reparse::open(
+        path,
+        true,
+        GENERIC_READ.0,
+        FILE_SHARE_READ.0 | FILE_SHARE_WRITE.0,
+        1,
+    )
+}
+
+pub(super) fn open_relative(parent: &File, path: &Path, read_contents: bool) -> Result<File> {
+    let leaf = path
+        .file_name()
+        .ok_or_else(|| Error::new(ErrorKind::InvalidInput, "Operation path has no file name"))?;
+    super::windows_no_reparse::open_relative(
+        parent,
+        leaf,
+        false,
+        (if read_contents {
+            GENERIC_READ.0
+        } else {
+            FILE_READ_ATTRIBUTES.0
+        }) | DELETE.0,
+        FILE_SHARE_READ.0,
+        1,
+    )
 }
 
 pub(super) fn rename(file: &File, destination: &Path) -> Result<()> {
@@ -36,21 +75,27 @@ fn rename_with(file: &File, destination: &Path, replace: bool) -> Result<()> {
             "Move destination must be absolute",
         ));
     }
-    let _parents = crate::systems::path_parents::HeldParents::new(destination)?;
-    let name: Vec<u16> = destination.as_os_str().encode_wide().collect();
-    if name.contains(&0) {
-        return Err(Error::new(
-            ErrorKind::InvalidInput,
-            "Move destination contains a null character",
-        ));
-    }
+    let parents = crate::systems::path_parents::HeldParents::new(destination)?;
+    rename_relative(file, parents.directory(), destination, replace)
+}
+
+pub(super) fn rename_relative(
+    file: &File,
+    parent: &File,
+    destination: &Path,
+    replace: bool,
+) -> Result<()> {
+    let leaf = destination
+        .file_name()
+        .ok_or_else(|| Error::new(ErrorKind::InvalidInput, "Move destination has no file name"))?;
+    let name = super::windows_no_reparse::leaf_name(leaf)?;
     let name_bytes = name
         .len()
         .checked_mul(2)
         .and_then(|size| u32::try_from(size).ok())
         .ok_or_else(|| Error::new(ErrorKind::InvalidInput, "Move destination is too long"))?;
     let offset = std::mem::offset_of!(FILE_RENAME_INFO, FileName);
-    let size = (offset + name_bytes as usize + 2).max(std::mem::size_of::<FILE_RENAME_INFO>());
+    let size = std::mem::size_of::<FILE_RENAME_INFO>() + name_bytes as usize;
     let size_u32 = u32::try_from(size)
         .map_err(|_| Error::new(ErrorKind::InvalidInput, "Move destination is too long"))?;
     // Pointer-sized storage provides FILE_RENAME_INFO alignment, including its
@@ -59,20 +104,29 @@ fn rename_with(file: &File, destination: &Path, replace: bool) -> Result<()> {
     unsafe {
         let info = storage.as_mut_ptr().cast::<FILE_RENAME_INFO>();
         (*info).Anonymous.ReplaceIfExists = replace;
-        (*info).RootDirectory = HANDLE::default();
+        (*info).RootDirectory = HANDLE(parent.as_raw_handle());
         (*info).FileNameLength = name_bytes;
         std::ptr::copy_nonoverlapping(
             name.as_ptr(),
             storage.as_mut_ptr().cast::<u8>().add(offset).cast::<u16>(),
             name.len(),
         );
-        SetFileInformationByHandle(
-            HANDLE(file.as_raw_handle()),
-            FileRenameInfo,
-            info.cast(),
-            size_u32,
-        )
-        .map_err(io_error)
+        // Native FileRenameInformation accepts a retained RootDirectory. The
+        // Win32 wrapper rejected that relative form on the tested Windows host.
+        // FILE_RENAME_INFO has the same C layout as FILE_RENAME_INFORMATION.
+        let mut status = IoStatusBlock {
+            status: 0,
+            information: 0,
+        };
+        let result =
+            NtSetInformationFile(file.as_raw_handle(), &mut status, info.cast(), size_u32, 10);
+        if result < 0 {
+            Err(Error::from_raw_os_error(
+                RtlNtStatusToDosError(result) as i32
+            ))
+        } else {
+            Ok(())
+        }
     }
 }
 

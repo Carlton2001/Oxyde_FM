@@ -1202,7 +1202,8 @@ impl FileOperationManager {
                     }
 
                     // Conflict Handling
-                    if dest_path.exists() {
+                    let replace_existing = dest_path.exists();
+                    if replace_existing {
                         if let Some(ref res_map) = resolutions {
                             match Self::get_resolution(entry.path(), res_map) {
                                 Some(ConflictAction::Skip) => {
@@ -1224,7 +1225,6 @@ impl FileOperationManager {
                     let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
                     total_bytes += size;
                     total_files += 1;
-                    let replace_existing = dest_path.exists();
                     files_to_process.push((
                         entry.path().to_path_buf(),
                         dest_path,
@@ -1233,7 +1233,8 @@ impl FileOperationManager {
                 }
             } else {
                 let dest_path = dest_root.clone();
-                if dest_path.exists() {
+                let replace_existing = dest_path.exists();
+                if replace_existing {
                     if let Some(ref res_map) = resolutions {
                         if Self::get_resolution(src, res_map) != Some(ConflictAction::Replace) {
                             continue;
@@ -1245,7 +1246,6 @@ impl FileOperationManager {
                 let size = std::fs::metadata(src).map(|m| m.len()).unwrap_or(0);
                 total_bytes += size;
                 total_files += 1;
-                let replace_existing = dest_path.exists();
                 files_to_process.push((src.clone(), dest_path, replace_existing));
             }
         }
@@ -1306,28 +1306,10 @@ impl FileOperationManager {
             let mut remaining = Vec::new();
             for (source, destination, replace_existing) in files_to_process {
                 Self::archive_checkpoint(op)?;
-                let _source_parents = super::path_parents::HeldParents::new(&source).map_err(|e| e.to_string())?;
-                let _destination_parents = super::path_parents::HeldParents::new(&destination).map_err(|e| e.to_string())?;
-                if replace_existing {
-                    let metadata = std::fs::symlink_metadata(&destination)
-                        .map_err(|error| format!("Cannot inspect {:?}: {error}", destination))?;
-                    if !metadata.file_type().is_file() {
-                        return Err(format!(
-                            "Destination is not a regular file: {:?}",
-                            destination
-                        ));
-                    }
-                } else if destination.exists() {
-                    return Err(format!(
-                        "Destination appeared during move: {:?}",
-                        destination
-                    ));
-                }
-                let size = std::fs::metadata(&source)
-                    .map_err(|error| format!("Cannot inspect {:?}: {error}", source))?
-                    .len();
-                match std::fs::rename(&source, &destination) {
-                    Ok(()) => {
+                match super::path_parents::move_file(&source, &destination, replace_existing, &mut || {
+                    Self::archive_checkpoint(op).map_err(std::io::Error::other)
+                }) {
+                    Ok(size) => {
                         let mut locked = op.lock().unwrap();
                         locked.current_file = Some(source.to_string_lossy().into_owned());
                         if replace_existing {

@@ -13,7 +13,7 @@ pub(super) struct CopiedSource {
 impl CopiedSource {
     pub fn open(path: &Path) -> io::Result<Self> {
         let parents = super::path_parents::HeldParents::new(path)?;
-        let file = platform().open_file_for_move(path)?;
+        let file = parents.open_file(path)?;
         let metadata = file.metadata()?;
         if !metadata.is_file() || platform().file_attributes(&metadata, "").2 {
             return Err(io::Error::other("Move source is not an ordinary file"));

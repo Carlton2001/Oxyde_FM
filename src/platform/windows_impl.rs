@@ -26,6 +26,15 @@ impl Platform for WindowsPlatform {
     fn hold_operation_directory(&self, path: &std::path::Path) -> std::io::Result<std::fs::File> {
         super::windows_archive_security::hold_operation_directory(path)
     }
+    fn hold_resolved_operation_directory(&self, path: &std::path::Path) -> std::io::Result<std::fs::File> {
+        super::windows_file_moves::hold_parent(path)
+    }
+    fn open_operation_file(&self, parent: &std::fs::File, path: &std::path::Path, read_contents: bool) -> std::io::Result<std::fs::File> {
+        super::windows_file_moves::open_relative(parent, path, read_contents)
+    }
+    fn rename_operation_file(&self, file: &std::fs::File, _source: &std::path::Path, parent: &std::fs::File, destination: &std::path::Path, replace: bool) -> std::io::Result<()> {
+        super::windows_file_moves::rename_relative(file, parent, destination, replace)
+    }
     fn lock_cache_file(&self, path: &std::path::Path) -> std::io::Result<std::fs::File> {
         super::windows_cache::lock_file(path)
     }

@@ -1,9 +1,13 @@
 //! Atomic native namespace lookup: refuse reparse points in every component.
 use std::{
-    ffi::c_void,
+    ffi::{c_void, OsStr},
     fs::File,
     io,
-    os::windows::{ffi::OsStrExt, fs::MetadataExt, io::FromRawHandle},
+    os::windows::{
+        ffi::OsStrExt,
+        fs::MetadataExt,
+        io::{AsRawHandle, FromRawHandle},
+    },
     path::Path,
 };
 #[repr(C)]
@@ -64,6 +68,57 @@ pub(super) fn open(
     } else {
         name.extend(dos);
     }
+    open_name(
+        name,
+        std::ptr::null_mut(),
+        directory,
+        access,
+        sharing,
+        disposition,
+    )
+}
+
+pub(super) fn leaf_name(leaf: &OsStr) -> io::Result<Vec<u16>> {
+    let name: Vec<u16> = leaf.encode_wide().collect();
+    if name.is_empty()
+        || name == [46]
+        || name == [46, 46]
+        || name.iter().any(|c| [0, 47, 92, 58].contains(c))
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "Operation requires a single file name",
+        ));
+    }
+    Ok(name)
+}
+
+pub(super) fn open_relative(
+    parent: &File,
+    leaf: &OsStr,
+    directory: bool,
+    access: u32,
+    sharing: u32,
+    disposition: u32,
+) -> io::Result<File> {
+    open_name(
+        leaf_name(leaf)?,
+        parent.as_raw_handle(),
+        directory,
+        access,
+        sharing,
+        disposition,
+    )
+}
+
+fn open_name(
+    mut name: Vec<u16>,
+    root: *mut c_void,
+    directory: bool,
+    access: u32,
+    sharing: u32,
+    disposition: u32,
+) -> io::Result<File> {
     if name.contains(&0) {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -83,7 +138,7 @@ pub(super) fn open(
     };
     let attributes = ObjectAttributes {
         length: std::mem::size_of::<ObjectAttributes>() as u32,
-        root: std::ptr::null_mut(),
+        root,
         name: &mut unicode,
         // OBJ_CASE_INSENSITIVE | OBJ_DONT_REPARSE, checked during native lookup.
         attributes: 0x40 | 0x1000,

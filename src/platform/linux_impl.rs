@@ -35,6 +35,19 @@ impl Platform for LinuxPlatform {
     fn hold_operation_directory(&self, path: &std::path::Path) -> std::io::Result<std::fs::File> {
         std::fs::File::open(path)
     }
+    fn hold_resolved_operation_directory(&self, path: &std::path::Path) -> std::io::Result<std::fs::File> {
+        self.hold_archive_directory(path)
+    }
+    fn open_operation_file(&self, _parent: &std::fs::File, path: &std::path::Path, _read_contents: bool) -> std::io::Result<std::fs::File> {
+        if !std::fs::symlink_metadata(path)?.is_file() {
+            return Err(std::io::Error::other("Operation source is not an ordinary file"));
+        }
+        self.open_file_for_move(path)
+    }
+    fn rename_operation_file(&self, file: &std::fs::File, source: &std::path::Path, _parent: &std::fs::File, destination: &std::path::Path, replace: bool) -> std::io::Result<()> {
+        if replace { self.replace_open_file(file, source, destination) }
+        else { self.rename_open_file_exclusive(file, source, destination) }
+    }
     fn lock_cache_file(&self, path: &std::path::Path) -> std::io::Result<std::fs::File> {
         let file = std::fs::OpenOptions::new().read(true).write(true).create(true).truncate(false).open(path)?;
         file.try_lock().map_err(std::io::Error::from)?;

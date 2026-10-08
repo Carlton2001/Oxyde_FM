@@ -41,11 +41,13 @@ pub(super) fn copy_with_source(
     held_source: Option<&std::fs::File>,
     progress: &mut dyn FnMut(u64) -> io::Result<()>,
 ) -> io::Result<CopiedFile> {
-    let _source_parents = super::path_parents::HeldParents::new(source)?;
+    let source_parents = super::path_parents::HeldParents::new(source)?;
+    let source = source_parents.resolved_path(source)?;
     let destination_parents = super::path_parents::HeldParents::new(destination)?;
+    let destination = destination_parents.resolved_path(destination)?;
     progress(0)?;
     if replace {
-        check_replacement(destination)?;
+        check_replacement(&destination)?;
     }
     let directory = tempfile::Builder::new().prefix(".oxyde-copy-").tempdir_in(
         destination
@@ -59,15 +61,13 @@ pub(super) fn copy_with_source(
         file: directory.path().join("output"),
         _directory: directory,
     };
-    platform().copy_file_with_progress(source, &staging.file, held_source, progress)?;
-    let output = platform().open_file_for_move(&staging.file)?;
-    let hash = hash(&staging.file, progress)?;
+    platform().copy_file_with_progress(&source, &staging.file, held_source, progress)?;
+    let mut output = platform().open_file_for_move(&staging.file)?;
+    let hash = hash(&mut output, progress)?;
     if replace {
-        check_replacement(destination)?;
-        platform().replace_open_file(&output, &staging.file, destination)?;
-    } else {
-        platform().rename_open_file_exclusive(&output, &staging.file, destination)?;
+        check_replacement(&destination)?;
     }
+    destination_parents.rename(&output, &staging.file, &destination, replace)?;
     Ok(CopiedFile {
         file: output,
         hash,
@@ -78,11 +78,11 @@ pub(super) fn copy_with_source(
 /// Remove only a journal-verified output, including copied readonly files.
 pub(crate) fn remove_verified_output(path: &Path, expected: &str) -> io::Result<()> {
     let _parents = super::path_parents::HeldParents::new(path)?;
-    let file = platform().open_file_for_move(path)?;
+    let mut file = platform().open_file_for_move(path)?;
     let metadata = file.metadata()?;
     if !metadata.is_file()
         || platform().file_attributes(&metadata, "").2
-        || super::history_move::hash_file(path)? != expected
+        || super::history_move::hash(&mut file)? != expected
     {
         return Err(io::Error::other(format!(
             "Copied output changed: {}",
@@ -122,8 +122,10 @@ fn check_replacement(path: &Path) -> io::Result<()> {
     Ok(())
 }
 
-fn hash(path: &Path, progress: &mut dyn FnMut(u64) -> io::Result<()>) -> io::Result<String> {
-    let mut file = std::fs::File::open(path)?;
+fn hash(
+    file: &mut std::fs::File,
+    progress: &mut dyn FnMut(u64) -> io::Result<()>,
+) -> io::Result<String> {
     let size = file.metadata()?.len();
     let mut hasher = blake3::Hasher::new();
     let mut buffer = vec![0_u8; 128 * 1024];
@@ -143,6 +145,76 @@ mod tests {
     use super::*;
     use std::fs;
     use std::io::ErrorKind;
+
+    #[test]
+    fn copy_stays_in_the_selected_parent_after_junction_retargeting() {
+        use crate::platform::windows_reparse_tests::{junction, Retarget};
+        for replace in [false, true] {
+            let root = tempfile::tempdir().unwrap();
+            let source_directory = root.path().join("source-directory");
+            fs::create_dir(&source_directory).unwrap();
+            let source = source_directory.join("input");
+            let selected = root.path().join("selected");
+            let outside = root.path().join("outside");
+            fs::create_dir(&selected).unwrap();
+            fs::create_dir(&outside).unwrap();
+            fs::write(&source, b"selected data").unwrap();
+            fs::write(outside.join("witness"), b"outside witness").unwrap();
+            fs::write(outside.join("input"), b"foreign source").unwrap();
+            if replace {
+                fs::write(selected.join("output"), b"old data").unwrap();
+                fs::write(outside.join("output"), b"foreign output").unwrap();
+            }
+            let link = root.path().join("link");
+            let template = root.path().join("template");
+            let source_link = root.path().join("source-link");
+            junction(&link, &selected);
+            junction(&template, &outside);
+            junction(&source_link, &source_directory);
+            let retarget = Retarget::new(&link, &template);
+            let source_retarget = Retarget::new(&source_link, &template);
+            let mut changed = false;
+            copy(
+                &source_link.join("input"),
+                &link.join("output"),
+                replace,
+                &mut |_| {
+                    if !changed {
+                        retarget.apply();
+                        source_retarget.apply();
+                        changed = true;
+                    }
+                    Ok(())
+                },
+            )
+            .unwrap();
+            assert_eq!(fs::read(selected.join("output")).unwrap(), b"selected data");
+            assert_eq!(
+                fs::read(outside.join("witness")).unwrap(),
+                b"outside witness"
+            );
+            assert_eq!(fs::read(outside.join("input")).unwrap(), b"foreign source");
+            assert_eq!(fs::read(&source).unwrap(), b"selected data");
+            if replace {
+                assert_eq!(fs::read(outside.join("output")).unwrap(), b"foreign output");
+            } else {
+                assert!(!outside.join("output").exists());
+            }
+            assert_eq!(
+                fs::read_dir(&outside).unwrap().count(),
+                if replace { 3 } else { 2 }
+            );
+            assert!(fs::read_dir(&selected).unwrap().all(|entry| !entry
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .starts_with(".oxyde-copy-")));
+            drop((retarget, source_retarget));
+            fs::remove_dir(link).unwrap();
+            fs::remove_dir(template).unwrap();
+            fs::remove_dir(source_link).unwrap();
+        }
+    }
 
     struct Fixture {
         root: tempfile::TempDir,

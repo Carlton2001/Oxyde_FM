@@ -66,6 +66,12 @@ pub trait Platform: Send + Sync {
     /// data writers, but attribute-only reparse mutation remains possible.
     /// Ordinary directories allow write sharing for native child renames.
     fn hold_operation_directory(&self, path: &std::path::Path) -> std::io::Result<std::fs::File>;
+    /// Open a resolved ordinary parent, rejecting reparse traversal atomically on Windows.
+    fn hold_resolved_operation_directory(&self, path: &std::path::Path) -> std::io::Result<std::fs::File>;
+    /// Open the basename relative to the retained parent, without following reparse objects.
+    fn open_operation_file(&self, parent: &std::fs::File, path: &std::path::Path, read_contents: bool) -> std::io::Result<std::fs::File>;
+    /// Rename by source identity into the retained destination parent on Windows.
+    fn rename_operation_file(&self, file: &std::fs::File, source: &std::path::Path, parent: &std::fs::File, destination: &std::path::Path, replace: bool) -> std::io::Result<()>;
     fn lock_cache_file(&self, path: &std::path::Path) -> std::io::Result<std::fs::File>;
     fn read_cache_file(&self, path: &std::path::Path) -> std::io::Result<std::fs::File>;
     fn open_cache_cleanup(&self, path: &std::path::Path, directory: bool) -> std::io::Result<std::fs::File>;
@@ -306,6 +312,8 @@ mod windows_no_reparse;
 mod windows_com;
 #[cfg(target_os = "windows")]
 mod windows_file_moves;
+#[cfg(all(test, target_os = "windows"))]
+pub(crate) mod windows_reparse_tests;
 #[cfg(target_os = "windows")]
 mod windows_archive_source;
 #[cfg(target_os = "windows")]
