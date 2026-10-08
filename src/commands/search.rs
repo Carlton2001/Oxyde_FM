@@ -186,8 +186,9 @@ pub fn advanced_search(
                         && options.min_date.is_none_or(|v| modified >= v)
                         && options.max_date.is_none_or(|v| modified <= v)
                         && content.as_ref().is_none_or(|r| {
-                            file_contains_content(path, r, options.ignore_accents, false)
+                            file_contains_content(path, r, options.ignore_accents, &cancellation)
                         });
+                    if cancellation.load(Ordering::Relaxed) { return Ok(()); }
                     if matches {
                         let (hidden, system, _) = crate::utils::get_file_attributes(&m, &name);
                         batch.push(FileEntry {
@@ -784,10 +785,32 @@ fn is_binary_file(path: &std::path::Path) -> bool {
     }
 }
 
+/// Bound each blocking read and check cancellation before/after it. A regular
+/// I/O error is used because read_to_string/read_line retry Interrupted errors.
+struct ContentReader<'a, R> {
+    inner: R,
+    cancellation: &'a AtomicBool,
+}
+
+impl<R: Read> Read for ContentReader<'_, R> {
+    fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+        if self.cancellation.load(Ordering::Relaxed) {
+            return Err(std::io::Error::other("Search cancelled"));
+        }
+        let length = buffer.len().min(64 * 1024);
+        let read = self.inner.read(&mut buffer[..length])?;
+        if self.cancellation.load(Ordering::Relaxed) {
+            return Err(std::io::Error::other("Search cancelled"));
+        }
+        Ok(read)
+    }
+}
+
 fn office_file_contains_content(
     path: &std::path::Path,
     pattern: &Regex,
     ignore_accents: bool,
+    cancellation: &AtomicBool,
 ) -> bool {
     let file = match File::open(path) {
         Ok(f) => f,
@@ -820,105 +843,291 @@ fn office_file_contains_content(
     };
 
     for target in targets {
+        if cancellation.load(Ordering::Relaxed) {
+            return false;
+        }
         if let Ok(mut content_file) = archive.by_name(target) {
-            let mut content = String::new();
-            if content_file.read_to_string(&mut content).is_ok() {
-                let mut in_tag = false;
-                let mut tag_buffer = String::new();
-                let mut stripped = String::with_capacity(content.len() / 2);
-
-                for c in content.chars() {
-                    if c == '<' {
-                        in_tag = true;
-                        tag_buffer.clear();
-                    } else if c == '>' {
-                        in_tag = false;
-                        let tl = &tag_buffer;
-                        if tl.starts_with("w:p")
-                            || tl.starts_with("/w:p")
-                            || tl.starts_with("w:br")
-                            || tl.starts_with("text:p")
-                            || tl.starts_with("/text:p")
-                            || tl == "p"
-                            || tl == "/p"
-                        {
-                            stripped.push('\n');
-                        }
-                    } else if in_tag {
-                        if tag_buffer.len() < 10 {
-                            tag_buffer.push(c);
-                        }
-                    } else {
-                        stripped.push(c);
-                    }
-                }
-
-                let check_text = if ignore_accents {
-                    crate::utils::remove_accents(&stripped)
-                } else {
-                    stripped
-                };
-                for line in check_text.lines() {
-                    if pattern.is_match(line) {
-                        return true;
-                    }
-                }
+            if office_entry_contains_content(
+                &mut content_file,
+                pattern,
+                ignore_accents,
+                cancellation,
+            ) {
+                return true;
             }
         }
     }
 
     false
+}
+
+fn office_entry_contains_content(
+    reader: impl Read,
+    pattern: &Regex,
+    ignore_accents: bool,
+    cancellation: &AtomicBool,
+) -> bool {
+    let mut content = String::new();
+    let mut reader = ContentReader {
+        inner: reader,
+        cancellation,
+    };
+    if reader.read_to_string(&mut content).is_err() {
+        return false;
+    }
+    let mut in_tag = false;
+    let mut tag_buffer = String::new();
+    let mut stripped = String::with_capacity(content.len() / 2);
+
+    for (index, c) in content.chars().enumerate() {
+        if index % 8192 == 0 && cancellation.load(Ordering::Relaxed) {
+            return false;
+        }
+        if c == '<' {
+            in_tag = true;
+            tag_buffer.clear();
+        } else if c == '>' {
+            in_tag = false;
+            let tl = &tag_buffer;
+            if tl.starts_with("w:p")
+                || tl.starts_with("/w:p")
+                || tl.starts_with("w:br")
+                || tl.starts_with("text:p")
+                || tl.starts_with("/text:p")
+                || tl == "p"
+                || tl == "/p"
+            {
+                stripped.push('\n');
+            }
+        } else if in_tag {
+            if tag_buffer.len() < 10 {
+                tag_buffer.push(c);
+            }
+        } else {
+            stripped.push(c);
+        }
+    }
+
+    for line in stripped.lines() {
+        if cancellation.load(Ordering::Relaxed) {
+            return false;
+        }
+        let matched = if ignore_accents {
+            pattern.is_match(&crate::utils::remove_accents(line))
+        } else {
+            pattern.is_match(line)
+        };
+        if matched && !cancellation.load(Ordering::Relaxed) {
+            return true;
+        }
+    }
+    false
+}
+
+fn content_lock<'a>(
+    lock: &'a Mutex<()>,
+    cancellation: &AtomicBool,
+) -> Option<std::sync::MutexGuard<'a, ()>> {
+    loop {
+        if cancellation.load(Ordering::Relaxed) {
+            return None;
+        }
+        match lock.try_lock() {
+            Ok(guard) => return Some(guard),
+            Err(std::sync::TryLockError::Poisoned(error)) => return Some(error.into_inner()),
+            Err(std::sync::TryLockError::WouldBlock) => {
+                thread::sleep(std::time::Duration::from_millis(10))
+            }
+        }
+    }
 }
 
 fn file_contains_content(
     path: &std::path::Path,
     pattern: &Regex,
     ignore_accents: bool,
-    ssd_hint: bool,
+    cancellation: &AtomicBool,
 ) -> bool {
-    if is_binary_file(path) {
+    if cancellation.load(Ordering::Relaxed) || is_binary_file(path) {
         return false;
     }
 
     let is_office = is_office_doc(path);
 
-    // Hardware-aware throttling
-    if !ssd_hint {
-        let vol_id = get_physical_disk_id(path);
-        let lock = DISK_IO_LOCKS
-            .entry(vol_id)
-            .or_insert_with(|| Arc::new(Mutex::new(())))
-            .clone();
-        let _guard = lock.lock().unwrap();
-        if is_office {
-            office_file_contains_content(path, pattern, ignore_accents)
-        } else {
-            read_file_and_check(path, pattern, ignore_accents)
-        }
-    } else if is_office {
-        office_file_contains_content(path, pattern, ignore_accents)
+    // Preserve the existing serialization per physical disk. The unused SSD
+    // bypass is removed; waiting for another search remains cancellable.
+    let vol_id = get_physical_disk_id(path);
+    let lock = DISK_IO_LOCKS
+        .entry(vol_id)
+        .or_insert_with(|| Arc::new(Mutex::new(())))
+        .clone();
+    let Some(_guard) = content_lock(&lock, cancellation) else {
+        return false;
+    };
+    if is_office {
+        office_file_contains_content(path, pattern, ignore_accents, cancellation)
     } else {
-        read_file_and_check(path, pattern, ignore_accents)
+        read_file_and_check(path, pattern, ignore_accents, cancellation)
     }
 }
 
-fn read_file_and_check(path: &std::path::Path, pattern: &Regex, ignore_accents: bool) -> bool {
+fn read_file_and_check(
+    path: &std::path::Path,
+    pattern: &Regex,
+    ignore_accents: bool,
+    cancellation: &AtomicBool,
+) -> bool {
     let file = match File::open(path) {
         Ok(f) => f,
         Err(_) => return false,
     };
 
-    let reader = BufReader::new(file);
+    text_reader_contains_content(file, pattern, ignore_accents, cancellation)
+}
+
+fn text_reader_contains_content(
+    reader: impl Read,
+    pattern: &Regex,
+    ignore_accents: bool,
+    cancellation: &AtomicBool,
+) -> bool {
+    let reader = BufReader::new(ContentReader {
+        inner: reader,
+        cancellation,
+    });
     for line in reader.lines().map_while(Result::ok) {
-        if ignore_accents {
-            if pattern.is_match(&crate::utils::remove_accents(&line)) {
-                return true;
-            }
-        } else if pattern.is_match(&line) {
+        if cancellation.load(Ordering::Relaxed) {
+            return false;
+        }
+        let matched = if ignore_accents {
+            pattern.is_match(&crate::utils::remove_accents(&line))
+        } else {
+            pattern.is_match(&line)
+        };
+        if matched && !cancellation.load(Ordering::Relaxed) {
             return true;
         }
     }
     false
+}
+
+#[cfg(test)]
+mod content_tests {
+    use super::*;
+    use std::cell::Cell;
+    use std::io::{Cursor, Write};
+
+    struct CancelAfter<'a, R> {
+        inner: R,
+        bytes: &'a Cell<usize>,
+        cancellation: &'a AtomicBool,
+    }
+    impl<R: Read> Read for CancelAfter<'_, R> {
+        fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+            let count = self.inner.read(buffer)?;
+            self.bytes.set(self.bytes.get() + count);
+            if self.bytes.get() >= 8192 {
+                self.cancellation.store(true, Ordering::Relaxed);
+            }
+            Ok(count)
+        }
+    }
+
+    #[test]
+    fn text_cancellation_stops_inside_a_large_line_before_publishing_a_match() {
+        let text = format!("needle{}", "x".repeat(2 * 1024 * 1024));
+        let cancellation = AtomicBool::new(false);
+        let bytes = Cell::new(0);
+        assert!(!text_reader_contains_content(
+            CancelAfter {
+                inner: Cursor::new(text.as_bytes()),
+                bytes: &bytes,
+                cancellation: &cancellation
+            },
+            &Regex::new("needle").unwrap(),
+            false,
+            &cancellation,
+        ));
+        assert!(bytes.get() <= 64 * 1024);
+        assert!(text_reader_contains_content(
+            Cursor::new("Résumé\n"),
+            &Regex::new("(?i)resume").unwrap(),
+            true,
+            &AtomicBool::new(false)
+        ));
+        assert!(!text_reader_contains_content(
+            Cursor::new(b"invalid\xff\nneedle\n"),
+            &Regex::new("needle").unwrap(),
+            false,
+            &AtomicBool::new(false)
+        ));
+    }
+
+    #[test]
+    fn office_cancellation_stops_during_decompression_and_keeps_normal_matching() {
+        let mut writer = zip::ZipWriter::new(Cursor::new(Vec::new()));
+        writer
+            .start_file(
+                "word/document.xml",
+                zip::write::SimpleFileOptions::default()
+                    .compression_method(zip::CompressionMethod::Deflated),
+            )
+            .unwrap();
+        let xml = format!("<w:p>Résumé{}<w:br/>end</w:p>", "x".repeat(2 * 1024 * 1024));
+        writer.write_all(xml.as_bytes()).unwrap();
+        let mut archive = zip::ZipArchive::new(writer.finish().unwrap()).unwrap();
+        let cancellation = AtomicBool::new(false);
+        let bytes = Cell::new(0);
+        assert!(!office_entry_contains_content(
+            CancelAfter {
+                inner: archive.by_name("word/document.xml").unwrap(),
+                bytes: &bytes,
+                cancellation: &cancellation
+            },
+            &Regex::new("(?i)resume").unwrap(),
+            true,
+            &cancellation,
+        ));
+        assert!(bytes.get() <= 64 * 1024);
+        cancellation.store(false, Ordering::Relaxed);
+        assert!(office_entry_contains_content(
+            archive.by_name("word/document.xml").unwrap(),
+            &Regex::new("(?i)resume").unwrap(),
+            true,
+            &cancellation
+        ));
+        assert!(office_entry_contains_content(
+            Cursor::new("<w:p>Résumé</w:p>"),
+            &Regex::new("Résumé").unwrap(),
+            false,
+            &cancellation
+        ));
+    }
+
+    #[test]
+    fn waiting_for_disk_lock_can_be_cancelled_without_releasing_the_lock() {
+        let lock = Arc::new(Mutex::new(()));
+        let guard = lock.lock().unwrap();
+        let cancellation = Arc::new(AtomicBool::new(false));
+        let (ready_tx, ready_rx) = std::sync::mpsc::channel();
+        let (done_tx, done_rx) = std::sync::mpsc::channel();
+        let worker_lock = lock.clone();
+        let worker_cancel = cancellation.clone();
+        let worker = thread::spawn(move || {
+            ready_tx.send(()).unwrap();
+            done_tx
+                .send(content_lock(&worker_lock, &worker_cancel).is_none())
+                .unwrap();
+        });
+        ready_rx.recv().unwrap();
+        thread::sleep(std::time::Duration::from_millis(20));
+        cancellation.store(true, Ordering::Relaxed);
+        assert!(done_rx
+            .recv_timeout(std::time::Duration::from_secs(1))
+            .unwrap());
+        worker.join().unwrap();
+        drop(guard);
+    }
 }
 
 #[cfg(test)]

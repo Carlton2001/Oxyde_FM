@@ -6,7 +6,7 @@ Priorités proposées : P1 pour un risque sur les opérations de fichiers à rep
 
 ## Tableau de suivi — 8 octobre 2026
 
-**19 points traités, 4 clos par retrait, 1 partiellement traité, 5 autres points de correction/optimisation à faire, 1 vérification manuelle distincte et 1 observation de référence.** « Traité » décrit la correction du code ; les validations manuelles encore ouvertes sont indiquées séparément. A11 est commité dans `00b6a30` et A12 dans le commit suivant ; A24/A25 sont commités dans `db3c5ae` et A30/A31 dans `daa8f52`.
+**20 points traités, 4 clos par retrait, 1 partiellement traité, 4 autres points de correction/optimisation à faire, 1 vérification manuelle distincte et 1 observation de référence.** « Traité » décrit la correction du code ; les validations manuelles encore ouvertes sont indiquées séparément. A11 est commité dans `00b6a30` et A12 dans `261cb8c` ; A24/A25 sont commités dans `db3c5ae` et A30/A31 dans `daa8f52`.
 
 | Point | Sujet | État du code | Suite ou validation restante |
 | --- | --- | --- | --- |
@@ -17,7 +17,7 @@ Priorités proposées : P1 pour un risque sur les opérations de fichiers à rep
 | [A05](#a05--durée-de-vie-des-ressources-comshell--p2) | Ressources COM/Shell | Traité | Extensions Shell, réseau et aperçus réels à confirmer manuellement |
 | [A06](#a06--presse-papiers--allocations-et-erreurs-du-format-couper--p2) | Publication du presse-papiers | Traité | Publication réelle et collage de fichiers ordinaires à confirmer manuellement |
 | [A07](#a07--api-windows-encore-dans-les-commandes--p2) | Isolation des API Windows | Partiel | Déplacer les appels restants de corbeille et de sidebar vers Platform |
-| [A08](#a08--annulation-de-recherche-et-détection-ssd--p2) | Annulation de recherche / SSD | À faire | Annulation des lecteurs texte/Office ; décision sur le paramètre SSD inactif |
+| [A08](#a08--annulation-de-recherche-et-détection-ssd--p2) | Annulation de recherche / SSD | Traité | Lectures et attente du verrou annulables ; branche SSD inactive retirée |
 | [A09](#a09--calcul-des-tailles--tâches-et-pools-cumulés--p2) | Concurrence du calcul des tailles | À faire | Mesures, limite de concurrence et annulation |
 | [A10](#a10--tri-et-normalisation-répétés--p2) | Tri et normalisation | À faire | Clarifier les règles, mesurer puis éviter les calculs répétés |
 | [A11](#a11--copie-de-lhistorique-pendant-le-rendu--p2) | État d'historique utilisé au rendu | Traité | Résumé sans allocation ; mesure sur un historique chargé pour quatre panneaux |
@@ -114,9 +114,13 @@ Restent notamment les appels natifs de vidage/suppression permanente de corbeill
 
 ## A08 — Annulation de recherche et détection SSD — P2
 
-**Limite structurelle établie, latence non mesurée.** La recherche avancée contrôle son annulation entre les entrées. Les lecteurs de contenu texte et Office (`commands/search.rs:800`, `:886`, `:918`) n'ont pas de paramètre d'annulation pour arrêter une lecture en cours. Un fichier volumineux peut retarder l'arrêt du travail après fermeture/annulation de la recherche.
+**Corrigé le 8 octobre 2026.** Le signal d'annulation de la recherche avancée est propagé aux lecteurs texte et Office. Le wrapper de lecture contrôle ce signal avant et après chaque appel, limité à 64 Kio. Les lectures de lignes et de chaînes ne peuvent plus attendre la fin d'une énorme ligne ou de toute une entrée ZIP avant de constater l'annulation. Une erreur ordinaire est utilisée pour arrêter ces helpers : `Interrupted` serait automatiquement réessayé par les lecteurs standard.
 
-Propager l'annulation jusqu'aux boucles de lecture et vérifier un arrêt pendant un gros fichier texte et une archive Office. Le seul appel de `file_contains_content` passe aussi `ssd_hint = false` (`:200`) : la branche permettant d'éviter le verrou de disque sur SSD n'est jamais choisie. Décider de raccorder une détection effective ou de simplifier ce paramètre ; ne pas activer la concurrence SSD sans mesure.
+Le stripping XML contrôle l'annulation toutes les 8 192 caractères, puis la recherche entre chaque ligne et avant de publier une correspondance. La suppression d'accents Office est réalisée ligne par ligne, avec les mêmes règles de correspondance. L'attente du verrou de disque vérifie le signal toutes les 10 ms ; le paramètre `ssd_hint`, toujours false chez son seul appelant, et sa branche inactive sont retirés. La sérialisation par disque est conservée ; aucun parallélisme SSD non mesuré n'est ajouté.
+
+Trois tests couvrent l'arrêt pendant une ligne texte de 2 Mio, pendant la décompression d'une entrée Office de 2 Mio, et pendant une attente de verrou sans libérer celui-ci. Les fixtures injectent l'annulation dans le lecteur : moins de 64 Kio sont consommés et une correspondance présente n'est pas publiée après annulation. Les lectures normales conservent accents, casse, regex et refus d'une ligne UTF-8 invalide. Les regex des fixtures d'accents ont été corrigées pour respecter leur option insensible à la casse ; cette correction de test ne change pas le comportement de production.
+
+Limites : un appel système de lecture déjà bloqué, la création du lecteur ZIP, une normalisation d'une ligne unique ou un appel regex déjà en cours ne sont pas préemptés. Les checkpoints bornent les phases contrôlées par Oxyde ; aucune garantie de latence sur un partage réseau bloqué n'est annoncée. Les cibles XML et les règles d'exclusion des fichiers binaires restent conservées.
 
 ## A09 — Calcul des tailles : tâches et pools cumulés — P2
 
@@ -455,3 +459,7 @@ Quatre tests du transfert initial vérifient les verrous source/destination apr�
 `cargo test --all-targets --offline` : 171 tests backend et 108 tests du binaire passent, soit 279. Les deux nouveaux tests du résumé sont inclus ; 14 tests restent ignorés par défaut (les 13 scénarios natifs précédents et la nouvelle mesure en mémoire). Cette mesure est exécutée séparément et passe, soit 280 tests distincts validés dans le lot. Ses résultats et sa portée sont indiqués en A11.
 
 `cargo check --all-targets --offline` passe sans avertissement du projet. Le modèle modifié est formaté ; les changements des handlers et de Platform restent limités aux blocs concernés. `git diff --check` passe et `cargo build --bin oxyde --offline` reconstruit `target/debug/oxyde.exe`. Les calculs et appels système restent en arrière-plan ; aucun Computer Use, aucune validation Linux, aucune modification des données du presse-papiers ou des préférences PowerToys. L'apparence, les traductions et les curseurs sont conservés. A11 est commité dans `00b6a30`, après `db3c5ae` ; A12 et le suivi documentaire sont commités séparément dans le commit suivant.
+
+### Validation du point A08
+
+`cargo test --all-targets --offline` : 174 tests backend et 108 tests du binaire passent (282) ; 14 tests restent ignorés par défaut. `cargo check --all-targets --offline` passe sans avertissement du projet et le binaire est reconstruit. Le formatage est limité aux lecteurs modifiés et à leurs tests ; `git diff --check` passe. A08 est commité séparément après `261cb8c`. Aucun Computer Use ni validation Linux.
