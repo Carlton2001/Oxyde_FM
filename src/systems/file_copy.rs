@@ -4,10 +4,33 @@ use std::io;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct StagingIdentity {
+    object: crate::platform::FileIdentity,
+    created: Option<std::time::SystemTime>,
+}
+impl StagingIdentity {
+    fn from_file(file: &std::fs::File) -> io::Result<Self> {
+        let created = file.metadata()?.created();
+        #[cfg(target_os = "windows")]
+        let created = Some(created?);
+        #[cfg(not(target_os = "windows"))]
+        let created = created.ok(); // Existing Unix copies do not require filesystem birth-time support.
+        Ok(Self {
+            object: platform().file_identity(file)?,
+            created,
+        })
+    }
+    fn matches(self, file: &std::fs::File) -> io::Result<bool> {
+        Ok(self == Self::from_file(file)?)
+    }
+}
+
 pub(super) struct Staging {
     pub directory: std::fs::File,
     pin: Option<std::fs::File>,
-    pub remove_output_on_drop: bool,
+    owned_output: std::cell::RefCell<Option<std::fs::File>>,
+    owned_identity: std::cell::Cell<Option<StagingIdentity>>,
     path: PathBuf,
     pub file: PathBuf,
 }
@@ -25,21 +48,62 @@ impl Staging {
         Ok(Self {
             directory,
             pin: Some(pin),
-            remove_output_on_drop: true,
+            owned_output: std::cell::RefCell::new(None),
+            owned_identity: std::cell::Cell::new(None),
             file: path.join("output"),
             path,
         })
     }
+    pub(super) fn capture_output(&self, file: &std::fs::File) -> io::Result<()> {
+        let mut owned = self.owned_output.borrow_mut();
+        if owned.is_none() {
+            *owned = Some(file.try_clone()?);
+        }
+        Ok(())
+    }
+    fn release_output(&self) -> io::Result<Option<StagingIdentity>> {
+        if let Some(file) = self.owned_output.borrow_mut().take() {
+            // Native copies apply source dates after their last callback. Capture
+            // the final proof while the actual output still has a retained handle.
+            let identity = StagingIdentity::from_file(&file);
+            drop(file); // The writer's access would conflict with the DELETE snapshot.
+            self.owned_identity.set(identity.as_ref().ok().copied());
+            identity?;
+        }
+        Ok(self.owned_identity.get())
+    }
+    pub(super) fn open_output(&self) -> io::Result<std::fs::File> {
+        let expected = self
+            .release_output()?
+            .ok_or_else(|| io::Error::other("Copy output ownership unavailable"))?;
+        let file = platform().open_copied_file(&self.directory, &self.file)?;
+        if !expected.matches(&file)? {
+            return Err(identity_changed(&self.file));
+        }
+        Ok(file)
+    }
+    fn clean_owned_output(&self) -> io::Result<()> {
+        if let Some(expected) = self.release_output()? {
+            let file = match platform().open_copied_file(&self.directory, &self.file) {
+                Ok(file) => file,
+                Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
+                Err(error) => return Err(error),
+            };
+            if !expected.matches(&file)? {
+                return Err(identity_changed(&self.file));
+            }
+            platform().remove_copied_file(&file, &self.file)?;
+        }
+        Ok(())
+    }
 }
 impl Drop for Staging {
     fn drop(&mut self) {
+        if let Err(error) = self.clean_owned_output() {
+            log::warn!("Copy output preserved at {}: {error}", self.file.display());
+        }
         if let Some(pin) = self.pin.take() {
-            if let Err(error) = platform().remove_copy_staging(
-                &self.directory,
-                pin,
-                &self.path,
-                self.remove_output_on_drop,
-            ) {
+            if let Err(error) = platform().remove_copy_staging(&self.directory, pin, &self.path) {
                 log::warn!("Cannot clean copy staging {}: {error}", self.path.display());
             }
         }
@@ -187,9 +251,10 @@ fn copy_with_parents_checked(
         &staging.file,
         held_source,
         &staging.directory,
+        &mut |file| staging.capture_output(file),
         progress,
     )?;
-    let mut output = platform().open_operation_file(&staging.directory, &staging.file, true)?;
+    let mut output = staging.open_output()?;
     let hash = hash(&mut output, progress)?;
     if expected.is_some_and(|expected| expected != hash) {
         // The output is still private: failure never publishes unexpected bytes.
@@ -298,6 +363,99 @@ mod tests {
     use std::fs;
     use std::io::ErrorKind;
 
+    #[test]
+    fn staging_preserves_unowned_outputs_after_a_native_creation_collision() {
+        let root = tempfile::tempdir().unwrap();
+        let source = root.path().join("source");
+        fs::write(&source, b"selected contents").unwrap();
+        let parents =
+            super::super::path_parents::HeldParents::new(&root.path().join("destination")).unwrap();
+        let staging = Staging::new(&parents).unwrap();
+        let path = staging.path.clone();
+        fs::write(&staging.file, b"independent contents").unwrap();
+        let mut captured = false;
+        let error = platform()
+            .copy_file_with_progress(
+                &source,
+                &staging.file,
+                None,
+                &staging.directory,
+                &mut |file| {
+                    captured = true;
+                    staging.capture_output(file)
+                },
+                &mut |_| Ok(()),
+            )
+            .unwrap_err();
+        assert_eq!(error.kind(), ErrorKind::AlreadyExists);
+        assert!(!captured);
+        drop(staging);
+        assert_eq!(
+            fs::read(path.join("output")).unwrap(),
+            b"independent contents"
+        );
+        assert!(!path.join(".pin").exists());
+    }
+    #[test]
+    fn staging_refuses_same_content_replacements_for_publication_and_cleanup() {
+        let root = tempfile::tempdir().unwrap();
+        let parents =
+            super::super::path_parents::HeldParents::new(&root.path().join("destination")).unwrap();
+        let staging = Staging::new(&parents).unwrap();
+        let path = staging.path.clone();
+        let file = platform()
+            .create_operation_output(&staging.directory, &staging.file)
+            .unwrap();
+        use std::io::Write;
+        (&file).write_all(b"matching contents").unwrap();
+        staging.capture_output(&file).unwrap();
+        drop(file);
+        staging.release_output().unwrap();
+        let displaced = root.path().join("original-output");
+        fs::rename(&staging.file, &displaced).unwrap();
+        fs::write(&staging.file, b"matching contents").unwrap();
+        assert!(staging.open_output().is_err());
+        drop(staging);
+        assert_eq!(fs::read(path.join("output")).unwrap(), b"matching contents");
+        assert_eq!(fs::read(displaced).unwrap(), b"matching contents");
+        assert!(!path.join(".pin").exists());
+    }
+    #[test]
+    fn staging_cleans_only_owned_output_and_preserves_unknown_children() {
+        let root = tempfile::tempdir().unwrap();
+        let parents =
+            super::super::path_parents::HeldParents::new(&root.path().join("destination")).unwrap();
+        let staging = Staging::new(&parents).unwrap();
+        let path = staging.path.clone();
+        let file = platform()
+            .create_operation_output(&staging.directory, &staging.file)
+            .unwrap();
+        staging.capture_output(&file).unwrap();
+        drop(file);
+        fs::write(path.join("independent"), b"independent contents").unwrap();
+        drop(staging);
+        assert!(!path.join("output").exists());
+        assert!(!path.join(".pin").exists());
+        assert_eq!(
+            fs::read(path.join("independent")).unwrap(),
+            b"independent contents"
+        );
+    }
+    #[test]
+    fn staging_keeps_unverified_ownership_without_adopting_a_file() {
+        let root = tempfile::tempdir().unwrap();
+        let parents =
+            super::super::path_parents::HeldParents::new(&root.path().join("destination")).unwrap();
+        let staging = Staging::new(&parents).unwrap();
+        let path = staging.path.clone();
+        fs::write(&staging.file, b"independent contents").unwrap();
+        assert!(staging.open_output().is_err());
+        drop(staging);
+        assert_eq!(
+            fs::read(path.join("output")).unwrap(),
+            b"independent contents"
+        );
+    }
     #[test]
     fn identity_checked_cleanup_preserves_a_matching_replacement() {
         let root = tempfile::tempdir().unwrap();

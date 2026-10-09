@@ -9,10 +9,9 @@ pub(super) struct Output {
 }
 impl Output {
     pub fn new(parents: &HeldParents) -> io::Result<Self> {
-        let mut staging = Staging::with_prefix(parents, ".oxyde-compress-")?;
+        let staging = Staging::with_prefix(parents, ".oxyde-compress-")?;
         // Never delete an unowned output on a create failure or after closing
         // its handle. Failure cleanup below uses only the retained object.
-        staging.remove_output_on_drop = false;
         let file = platform().create_operation_output(&staging.directory, &staging.file)?;
         Ok(Self {
             file,
@@ -78,8 +77,7 @@ mod tests {
     fn failed_archive_output_creation_preserves_preexisting_staging_file() {
         let root = tempfile::tempdir().unwrap();
         let parents = HeldParents::new(&root.path().join("archive.zip")).unwrap();
-        let mut staging = Staging::with_prefix(&parents, ".oxyde-compress-").unwrap();
-        staging.remove_output_on_drop = false;
+        let staging = Staging::with_prefix(&parents, ".oxyde-compress-").unwrap();
         let path = staging.file.clone();
         fs::write(&path, b"foreign output witness").unwrap();
         let error = platform()

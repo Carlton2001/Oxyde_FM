@@ -132,8 +132,8 @@ pub trait Platform: Send + Sync {
     /// Create a private archive writer relative to staging; retain rename/delete
     /// access and exclude external writers/replacement on Windows.
     fn create_operation_output(&self, parent: &std::fs::File, path: &std::path::Path) -> std::io::Result<std::fs::File>;
-    /// Remove only staging output and marker, by identity on Windows. Unknown children are preserved.
-    fn remove_copy_staging(&self, directory: &std::fs::File, pin: std::fs::File, path: &std::path::Path, remove_output: bool) -> std::io::Result<()>;
+    /// Remove only the staging marker and empty directory. Output cleanup needs a separately retained ownership proof.
+    fn remove_copy_staging(&self, directory: &std::fs::File, pin: std::fs::File, path: &std::path::Path) -> std::io::Result<()>;
     fn lock_cache_file(&self, path: &std::path::Path) -> std::io::Result<std::fs::File>;
     fn read_cache_file(&self, path: &std::path::Path) -> std::io::Result<std::fs::File>;
     /// Publish an optional preview cache. Windows retains ordinary parents and
@@ -154,13 +154,16 @@ pub trait Platform: Send + Sync {
     /// Reports main-stream bytes; only an absent destination is accepted.
     /// A supplied source handle must already hold the same source path/identity.
     /// The destination parent handle must retain the same directory as the path.
-    /// The callback may wait for pause or return an error to stop.
+    /// The creation observer receives the actual output before progress callbacks.
+    /// It may duplicate that handle for ownership tracking.
+    /// The progress callback may wait for pause or return an error to stop.
     fn copy_file_with_progress(
         &self,
         source: &std::path::Path,
         destination: &std::path::Path,
         held_source: Option<&std::fs::File>,
         destination_parent: &std::fs::File,
+        created: &mut dyn FnMut(&std::fs::File) -> std::io::Result<()>,
         progress: &mut dyn FnMut(u64) -> std::io::Result<()>,
     ) -> std::io::Result<()>;
     /// Opens a regular file for a history move, keeping its identity stable.

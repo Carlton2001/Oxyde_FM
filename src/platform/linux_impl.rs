@@ -205,17 +205,9 @@ impl Platform for LinuxPlatform {
     fn create_operation_output(&self, _parent: &std::fs::File, path: &std::path::Path) -> std::io::Result<std::fs::File> {
         std::fs::OpenOptions::new().read(true).write(true).create_new(true).open(path)
     }
-    fn remove_copy_staging(&self, _directory: &std::fs::File, pin: std::fs::File, path: &std::path::Path, remove_output: bool) -> std::io::Result<()> {
+    fn remove_copy_staging(&self, _directory: &std::fs::File, pin: std::fs::File, path: &std::path::Path) -> std::io::Result<()> {
         drop(pin);
-        // Unix unlink does not require write permission on the file itself.
-        let result = if !remove_output { Ok(()) } else { match std::fs::remove_file(path.join("output")) {
-            Ok(()) => Ok(()),
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-            Err(error) => Err(error),
-        }};
-        let unpin = std::fs::remove_file(path.join(".pin"));
-        result?;
-        unpin?;
+        std::fs::remove_file(path.join(".pin"))?;
         std::fs::remove_dir(path)
     }
     fn lock_cache_file(&self, path: &std::path::Path) -> std::io::Result<std::fs::File> {
@@ -297,6 +289,7 @@ impl Platform for LinuxPlatform {
         destination: &std::path::Path,
         _held_source: Option<&std::fs::File>,
         _destination_parent: &std::fs::File,
+        created: &mut dyn FnMut(&std::fs::File) -> std::io::Result<()>,
         progress: &mut dyn FnMut(u64) -> std::io::Result<()>,
     ) -> std::io::Result<()> {
         use std::io::{Read, Write};
@@ -306,6 +299,7 @@ impl Platform for LinuxPlatform {
             .write(true)
             .create_new(true)
             .open(destination)?;
+        created(&output)?;
         let mut buffer = vec![0_u8; 1024 * 1024];
         let mut copied = 0;
         loop {

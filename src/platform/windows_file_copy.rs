@@ -1,19 +1,22 @@
-use std::fs::OpenOptions;
+use std::fs::{File, OpenOptions};
 use std::io::{self, ErrorKind};
+use std::os::windows::io::FromRawHandle;
 use std::os::windows::{ffi::OsStrExt, fs::OpenOptionsExt};
 use std::path::Path;
-use windows::core::PCWSTR;
 use windows::Win32::Foundation::HANDLE;
 use windows::Win32::Storage::FileSystem::{
-    CopyFileExW, FlushFileBuffers, COPYPROGRESSROUTINE_PROGRESS, COPY_FILE_COPY_SYMLINK,
-    COPY_FILE_FAIL_IF_EXISTS, FILE_FLAG_OPEN_REPARSE_POINT, FILE_SHARE_READ,
+    COPY_FILE_COPY_SYMLINK, COPY_FILE_FAIL_IF_EXISTS, COPYPROGRESSROUTINE_PROGRESS, CopyFileExW,
+    FILE_FLAG_OPEN_REPARSE_POINT, FILE_SHARE_READ, FlushFileBuffers,
     LPPROGRESS_ROUTINE_CALLBACK_REASON, PROGRESS_CONTINUE, PROGRESS_STOP,
 };
+use windows::core::PCWSTR;
 
 fn io_error(error: windows::core::Error) -> io::Error {
     io::Error::from_raw_os_error((error.code().0 as u32 & 0xffff) as i32)
 }
 struct Context<'a> {
+    created: &'a mut dyn FnMut(&File) -> io::Result<()>,
+    captured: bool,
     progress: &'a mut dyn FnMut(u64) -> io::Result<()>,
     main_bytes: u64,
     error: Option<io::Error>,
@@ -35,6 +38,14 @@ unsafe extern "system" fn callback(
         return PROGRESS_STOP;
     }
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if !context.captured {
+            // Borrow the native handle only during this callback. The observer
+            // may duplicate it, but the OS copy remains its sole original owner.
+            let borrowed =
+                std::mem::ManuallyDrop::new(unsafe { File::from_raw_handle(destination.0) });
+            (context.created)(&borrowed)?;
+            context.captured = true;
+        }
         if stream == 1 {
             context.main_bytes = stream_copied.max(0) as u64;
         }
@@ -74,6 +85,7 @@ pub(super) fn copy(
     destination: &Path,
     held_source: Option<&std::fs::File>,
     destination_parent: &std::fs::File,
+    created: &mut dyn FnMut(&File) -> io::Result<()>,
     progress: &mut dyn FnMut(u64) -> io::Result<()>,
 ) -> io::Result<()> {
     let _source_parents = crate::systems::path_parents::HeldParents::new(source)?;
@@ -120,6 +132,8 @@ pub(super) fn copy(
     .join(name);
     let target = wide(&destination)?;
     let mut context = Context {
+        created,
+        captured: false,
         progress,
         main_bytes: 0,
         error: None,

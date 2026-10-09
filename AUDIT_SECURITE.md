@@ -10,7 +10,7 @@ La priorité est de sécuriser les chemins d'archives : les essais ont confirmé
 
 ## Avancement des six chantiers annoncés
 
-État actualisé au cinquantième lot. Ces six points sont des chantiers de tailles différentes, et non six étapes presque achevées. Les lots de concurrence Windows détaillés ci-dessous appartiennent principalement au premier point ; leur nombre ne constitue pas un pourcentage d’achèvement de l’audit.
+État actualisé au cinquante et unième lot. Ces six points sont des chantiers de tailles différentes, et non six étapes presque achevées. Les lots de concurrence Windows détaillés ci-dessous appartiennent principalement au premier point ; leur nombre ne constitue pas un pourcentage d’achèvement de l’audit.
 
 | Point annoncé dans la conversation | État et limite actuelle |
 | --- | --- |
@@ -21,7 +21,7 @@ La priorité est de sécuriser les chemins d'archives : les essais ont confirmé
 | 5. Dépendances non maintenues | Revue effectuée au lot 41 après autorisation de l’utilisateur : trois versions toujours disponibles et non yanked, zéro vulnérabilité publiée signalée par la base actualisée. Décision de maintien surveillé avec alternatives `pastey`, `harfrust` et `skrifa` documentées ; pas de fork ou migration forcée de GPUI. Encodeur AVIF inutilisé désactivé, tous les décodeurs conservés. Les trois avis de maintenance restent ouverts et visibles ; leurs remplacements ne sont pas effectués. |
 | 6. Validation finale des messages et du sélecteur | Lot 44 : exécutable construit, petites fixtures et protocole préparés dans `security/VERIFICATION_VISUELLE.md`. Tests automatisés des traductions, seuils, états, véritable chargeur et wrappers de cache/export réalisés. Revue reportée à la demande de l’utilisateur jusqu’à la fin des modifications de code prévues ; exécutable à reconstruire avant remise. Aucun résultat interactif encore obtenu. Aucun Computer Use. |
 
-**Borne du cinquantième lot :** préparation Copy/Move, compression et restauration native de corbeille liées aux objets ouverts dans les scénarios testés. La restauration refuse les destinations occupées et les sélections ambiguës. Preuve durable de Delete et mise à la corbeille Shell, limites des fournisseurs, isolation des parseurs et diagnostic du nettoyage intermittent restent ouverts. Le nettoyage par handle de la compression ne valide pas tous les nettoyages de temporaires Copy : leur mode antérieur est conservé et doit être vérifié séparément. La revue visuelle reste reportée jusqu’à la fin des corrections prévues ; l’ancien exécutable n’est pas une validation des lots suivants. Le suivi automatique du chat est arrêté ; les contrôles de dépendances du dépôt restent inchangés.
+**Borne du cinquante et unième lot :** préparation Copy/Move, compression et restauration native de corbeille liées aux objets ouverts dans les scénarios testés. La restauration refuse les destinations occupées et les sélections ambiguës. Preuve durable de Delete et mise à la corbeille Shell, limites des fournisseurs, isolation des parseurs et diagnostic du nettoyage intermittent restent ouverts. Lot 51 : les temporaires Copy et du repli intervolume d’historique sont désormais identifiés depuis le writer créé, puis vérifiés avant publication/nettoyage ; le retrait aveugle de `output` est supprimé. La revue visuelle reste reportée jusqu’à la fin des corrections prévues ; l’ancien exécutable n’est pas une validation des lots suivants. Le suivi automatique du chat est arrêté ; les contrôles de dépendances du dépôt restent inchangés.
 
 ## 1. Bloquer les sorties du dossier d'extraction
 
@@ -2129,3 +2129,27 @@ Suite finale : **552 tests de bibliothèque et 152 tests UI réussis, soit 704**
 **Limites explicites :** la capture du payload commence pendant la commande de restauration ; elle n’établit pas une preuve durable depuis la suppression initiale ou l’affichage UI. Le journal Delete ne conserve toujours que les chemins : un candidat unique pourrait être un autre élément supprimé plus tard. La mise à la corbeille initiale/Rétablir par Shell reste à traiter. La structure `$Recycle.Bin` est un contrôle de namespace, pas une preuve d’origine cryptographique. Un dossier d’origine supprimé ou devenu situé sur un autre volume entraîne un refus ; aucune recréation ou copie implicite ajoutée. Notification et comportement Explorer réels restent à vérifier, avec les autres messages, après reconstruction du binaire. Le lot ne valide pas les nettoyages Copy antérieurs.
 
 Lot 50 validé après `ad759d5`.
+
+## Cinquante et unième lot — propriété des sorties provisoires Copy et historique
+
+**Défaut confirmé :** `src/platform/windows_copy_staging.rs::remove` supprimait tout enfant nommé `output`, même si la copie native avait échoué avant sa création ou si un autre objet avait remplacé sa sortie. Les tests antérieurs supprimaient expressément un lien substitué. Le risque porte sur la suppression de l’entrée étrangère elle-même ; aucun traversal de sa cible ni élévation de privilèges démontré. Conditions : un autre acteur peut créer/remplacer cet enfant dans le staging retenu. Un UUID réduit les collisions fortuites mais ne constitue pas une preuve de propriété.
+
+**Correction :** `Platform::copy_file_with_progress` expose un observateur du fichier réellement créé. Windows l’appelle avec le handle natif reçu de `CopyFileExW`, avant toute progression applicative, y compris avant arrêt ou panic. Le handle emprunté reste propriété de Windows ; `Staging::capture_output` ne garde qu’un duplicata. Le callback conserve la protection FFI existante. Linux observe son fichier ouvert par création exclusive.
+
+`src/systems/file_copy.rs::Staging` garde ce duplicata jusqu’à la fin de la copie. La preuve d’identité et date de création est capturée après application des dates natives, avant libération du writer ; la réouverture relative pour publication/nettoyage exige cette même preuve. Sur Windows, le snapshot obtenu retient à nouveau l’objet contre écriture et remplacement. Un remplacement de mêmes octets est refusé. L’observation absente ou une preuve indisponible ne permet jamais d’adopter un nom. Les systèmes Unix sans date de naissance conservent leur support de copie par comparaison de l’identifiant disponible ; aucune nouvelle garantie atomique Unix revendiquée.
+
+`Platform::remove_copy_staging` retire désormais uniquement le marqueur détenu et le dossier devenu vide. Le paramètre permettant l’ancien retrait par nom est supprimé, y compris du rollback de création du staging. Un enfant inconnu reste intact. La compression conserve son writer par handle comme au lot 49. Le repli intervolume de `src/systems/history_move.rs` observe également sa sortie et utilise la même vérification avant hash/publication. Les erreurs habituelles retirent encore les fichiers partiels réellement créés ; aucun délai, quota ou nettoyage manuel de TEMP ajouté.
+
+**Reproduction et validation :** quatre tests permanents nouveaux vérifient la collision avant le premier callback natif sans adoption ni suppression, le remplacement de mêmes octets refusé tant pour publication que nettoyage, la suppression de la seule sortie possédée avec enfant indépendant conservé, et l’absence de preuve qui conserve l’enfant. Les tests natifs existants de staging exigent maintenant la conservation des liens/outputs inconnus. Les tests de copie vérifient toujours annulation, panic de callback, fichier vide readonly, ADS, progression, permissions et publication. L’injection de corruption d’historique est faite sur un writer de fixture exclusivement créé et observé : le writer natif retenu refuse l’accès concurrent par nom et peut fonctionner sans buffering, rendant une écriture arbitraire de fixture invalide. Le refus de contenu corrompu et son nettoyage restent vérifiés.
+
+```powershell
+cargo test --lib --locked --offline systems::file_copy::tests
+cargo test --all-targets --locked --offline --quiet
+cargo check --all-targets --locked --offline
+```
+
+Suite finale : **556 tests de bibliothèque et 152 tests UI réussis, soit 708**, aucun échec, 17 tests préexistants ignorés non activés ; compilation sans avertissement. Le premier appel d’écriture de ce lot n’avait pas été exécuté : le contrôle automatique d’approbation avait échoué à cause de la limite d’usage. Réessai autorisé par l’utilisateur, sans contournement du contrôle. Aucun changement de dépendance, vraie corbeille, UI, Linux ou provider supplémentaire, aucun push.
+
+**Limites :** identifiant/date non cryptographiques et période de transfert du writer vers le snapshot, contrôlée par comparaison de preuve plutôt que verrou continu ; un attaquant combinant réutilisation d’identifiant et falsification de date reste hors garantie. Si une preuve ou un nettoyage est refusé, le fichier inconnu reste conservé et son emplacement est journalisé. La suppression Shell et la preuve durable Delete restent ouvertes, comme l’isolation des parseurs. La revue visuelle reste reportée.
+
+Lot 51 validé après `c9680a2`.

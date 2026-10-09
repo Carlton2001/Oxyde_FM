@@ -94,8 +94,8 @@ impl Platform for WindowsPlatform {
     fn create_operation_output(&self, parent: &std::fs::File, path: &std::path::Path) -> std::io::Result<std::fs::File> {
         super::windows_copy_staging::create_output(parent, path)
     }
-    fn remove_copy_staging(&self, directory: &std::fs::File, pin: std::fs::File, _path: &std::path::Path, remove_output: bool) -> std::io::Result<()> {
-        super::windows_copy_staging::remove(directory, pin, remove_output)
+    fn remove_copy_staging(&self, directory: &std::fs::File, pin: std::fs::File, _path: &std::path::Path) -> std::io::Result<()> {
+        super::windows_copy_staging::remove(directory, pin)
     }
     fn lock_cache_file(&self, path: &std::path::Path) -> std::io::Result<std::fs::File> {
         super::windows_cache::lock_file(path)
@@ -132,9 +132,10 @@ impl Platform for WindowsPlatform {
         destination: &std::path::Path,
         held_source: Option<&std::fs::File>,
         destination_parent: &std::fs::File,
+        created: &mut dyn FnMut(&std::fs::File) -> std::io::Result<()>,
         progress: &mut dyn FnMut(u64) -> std::io::Result<()>,
     ) -> std::io::Result<()> {
-        super::windows_file_copy::copy(source, destination, held_source, destination_parent, progress)
+        super::windows_file_copy::copy(source, destination, held_source, destination_parent, created, progress)
     }
     fn open_file_for_move(&self, path: &std::path::Path) -> std::io::Result<std::fs::File> {
         super::windows_file_moves::open(path)

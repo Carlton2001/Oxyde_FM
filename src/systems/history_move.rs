@@ -18,6 +18,7 @@ trait MoveIo {
         source: &Path,
         destination: &Path,
         parent: &File,
+        created: &mut dyn FnMut(&File) -> io::Result<()>,
     ) -> io::Result<u64>;
     fn remove(&self, file: &File, path: &Path) -> io::Result<()>;
 }
@@ -38,9 +39,16 @@ impl MoveIo for NativeIo {
         source: &Path,
         destination: &Path,
         parent: &File,
+        created: &mut dyn FnMut(&File) -> io::Result<()>,
     ) -> io::Result<u64> {
-        platform()
-            .copy_file_with_progress(source, destination, Some(file), parent, &mut |_| Ok(()))?;
+        platform().copy_file_with_progress(
+            source,
+            destination,
+            Some(file),
+            parent,
+            created,
+            &mut |_| Ok(()),
+        )?;
         Ok(file.metadata()?.len())
     }
     fn remove(&self, file: &File, path: &Path) -> io::Result<()> {
@@ -219,11 +227,17 @@ fn move_bound_controlled(
     }
 
     let staging = super::file_copy::Staging::with_prefix(destination_parents, ".oxyde-history-")?;
-    let copied = ops.copy(&original, &source, &staging.file, &staging.directory)?;
+    let copied = ops.copy(
+        &original,
+        &source,
+        &staging.file,
+        &staging.directory,
+        &mut |file| staging.capture_output(file),
+    )?;
     if copied != metadata.len() {
         return Err(io::Error::other("Incomplete history move copy"));
     }
-    let mut output = platform().open_copied_file(&staging.directory, &staging.file)?;
+    let mut output = staging.open_output()?;
     if hash(&mut output)? != original_hash || hash(&mut original)? != original_hash {
         return Err(io::Error::other(
             "History move copy failed content verification",
@@ -322,6 +336,7 @@ mod tests {
             source: &Path,
             destination: &Path,
             parent: &File,
+            created: &mut dyn FnMut(&File) -> io::Result<()>,
         ) -> io::Result<u64> {
             #[cfg(target_os = "windows")]
             assert!(
@@ -333,15 +348,30 @@ mod tests {
                     .0
             );
             if matches!(self.fault, Fault::Copy) {
-                fs::write(destination, b"partial copy")?;
+                let output = fs::OpenOptions::new()
+                    .write(true)
+                    .create_new(true)
+                    .open(destination)?;
+                created(&output)?;
+                use std::io::Write;
+                (&output).write_all(b"partial copy")?;
                 return Err(io::Error::other("injected write failure"));
             }
-            let count = NativeIo.copy(file, source, destination, parent)?;
             if matches!(self.fault, Fault::Corrupt) {
-                let content = vec![b'x'; count as usize];
-                fs::write(destination, content)?;
+                // CopyFileEx can use an unbuffered writer, which cannot accept
+                // arbitrary fixture-sized writes. Simulate corrupted copy bytes
+                // on an exclusively created, observed buffered writer instead.
+                use std::io::Write;
+                let count = file.metadata()?.len();
+                let mut output = fs::OpenOptions::new()
+                    .write(true)
+                    .create_new(true)
+                    .open(destination)?;
+                created(&output)?;
+                output.write_all(&vec![b'x'; count as usize])?;
+                return Ok(count);
             }
-            Ok(count)
+            NativeIo.copy(file, source, destination, parent, created)
         }
         fn remove(&self, file: &File, path: &Path) -> io::Result<()> {
             if matches!(self.fault, Fault::Remove) {
@@ -497,8 +527,9 @@ mod tests {
                 source: &Path,
                 destination: &Path,
                 parent: &File,
+                created: &mut dyn FnMut(&File) -> io::Result<()>,
             ) -> io::Result<u64> {
-                NativeIo.copy(file, source, destination, parent)
+                NativeIo.copy(file, source, destination, parent, created)
             }
             fn remove(&self, file: &File, path: &Path) -> io::Result<()> {
                 NativeIo.remove(file, path)
@@ -570,8 +601,9 @@ mod tests {
                 source: &Path,
                 destination: &Path,
                 parent: &File,
+                created: &mut dyn FnMut(&File) -> io::Result<()>,
             ) -> io::Result<u64> {
-                NativeIo.copy(file, source, destination, parent)
+                NativeIo.copy(file, source, destination, parent, created)
             }
             fn remove(&self, file: &File, path: &Path) -> io::Result<()> {
                 NativeIo.remove(file, path)
@@ -648,6 +680,7 @@ mod tests {
                 _source: &Path,
                 _destination: &Path,
                 _parent: &File,
+                _created: &mut dyn FnMut(&File) -> io::Result<()>,
             ) -> io::Result<u64> {
                 self.copied.set(true);
                 Err(io::Error::other("test stop before data"))
@@ -713,8 +746,9 @@ mod tests {
                 source: &Path,
                 destination: &Path,
                 parent: &File,
+                created: &mut dyn FnMut(&File) -> io::Result<()>,
             ) -> io::Result<u64> {
-                NativeIo.copy(file, source, destination, parent)
+                NativeIo.copy(file, source, destination, parent, created)
             }
             fn remove(&self, _file: &File, _path: &Path) -> io::Result<()> {
                 self.retarget.apply();
@@ -824,11 +858,14 @@ mod tests {
             let root = tempfile::tempdir().unwrap();
             let ops = fixture(root.path(), fault);
             let error = move_with(&ops, &ops.source, &ops.destination, None).unwrap_err();
-            assert!(error.to_string().contains(match fault {
-                Fault::Copy => "injected write failure",
-                Fault::Corrupt => "content verification",
-                _ => unreachable!(),
-            }));
+            assert!(
+                error.to_string().contains(match fault {
+                    Fault::Copy => "injected write failure",
+                    Fault::Corrupt => "content verification",
+                    _ => unreachable!(),
+                }),
+                "unexpected copy failure: {error}"
+            );
             assert_eq!(fs::read(&ops.source).unwrap(), b"original bytes");
             assert!(!ops.destination.exists());
             assert_no_staging(root.path());
