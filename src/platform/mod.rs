@@ -378,6 +378,8 @@ mod windows_preview_cache;
 #[cfg(target_os = "windows")]
 mod windows_preview_quota;
 #[cfg(target_os = "windows")]
+mod windows_pdf_thumbnail;
+#[cfg(target_os = "windows")]
 mod windows_file_moves;
 #[cfg(target_os = "windows")]
 mod windows_file_tree;

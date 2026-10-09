@@ -1014,43 +1014,7 @@ mod office_thumbnail_security_tests {
 
 #[cfg(target_os = "windows")]
 pub fn get_pdf_thumbnail_raw(path: String) -> Result<RgbaImage, CommandError> {
-    use windows::Data::Pdf::{PdfDocument, PdfPageRenderOptions};
-    use windows::Graphics::Imaging::BitmapDecoder;
-    use windows::Storage::StorageFile;
-    use windows::Storage::Streams::InMemoryRandomAccessStream;
-    {
-        let _com = super::windows_com::ComApartment::mta_or_existing()
-            .map_err(|error| CommandError::SystemError(error.to_string()))?;
-        let res = (|| -> Result<RgbaImage, CommandError> {
-            let abs_path =
-                std::fs::canonicalize(&path).map_err(|e| CommandError::IoError(e.to_string()))?;
-            let mut path_str = abs_path.to_string_lossy().to_string();
-            if path_str.starts_with(r"\\?\") {
-                path_str = path_str.chars().skip(4).collect();
-            }
-            let hstring_path = windows::core::HSTRING::from(&path_str);
-            let file = StorageFile::GetFileFromPathAsync(&hstring_path)?.join()?;
-            let doc = PdfDocument::LoadFromFileAsync(&file)?.join()?;
-            if doc.PageCount()? == 0 {
-                return Err(CommandError::Other("Empty PDF".to_string()));
-            }
-            let page = doc.GetPage(0)?;
-            let stream = InMemoryRandomAccessStream::new()?;
-            let options = PdfPageRenderOptions::new()?;
-            options.SetDestinationWidth(THUMB_SIZE * 2)?;
-            page.RenderWithOptionsToStreamAsync(&stream, &options)?
-                .join()?;
-            let decoder = BitmapDecoder::CreateAsync(&stream)?.join()?;
-            let pixel_data = decoder.GetPixelDataAsync()?.join()?;
-            let pixels = pixel_data.DetachPixelData()?;
-            let width = decoder.PixelWidth()?;
-            let height = decoder.PixelHeight()?;
-            let rgba = pixels.to_vec();
-            RgbaImage::from_raw(width, height, rgba)
-                .ok_or_else(|| CommandError::Other("Invalid pixel data".to_string()))
-        })();
-        res
-    }
+    super::windows_pdf_thumbnail::get(path)
 }
 
 #[cfg(target_os = "windows")]

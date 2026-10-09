@@ -1,0 +1,241 @@
+use crate::models::CommandError;
+use image::RgbaImage;
+use windows::Data::Pdf::{PdfDocument, PdfPage, PdfPageRenderOptions};
+use windows::Graphics::Imaging::{
+    BitmapAlphaMode, BitmapDecoder, BitmapPixelFormat, BitmapTransform, ColorManagementMode,
+    ExifOrientationMode,
+};
+use windows::Storage::StorageFile;
+use windows::Storage::Streams::InMemoryRandomAccessStream;
+
+const MAX_SIDE: u32 = 512;
+const MAX_ENCODED_BYTES: u64 = 4 * 1024 * 1024;
+
+#[derive(Debug, PartialEq, Eq)]
+struct PixelLayout {
+    width: u32,
+    height: u32,
+    byte_len: usize,
+}
+
+impl PixelLayout {
+    fn new(width: u32, height: u32) -> Result<Self, CommandError> {
+        if width == 0 || height == 0 || width > MAX_SIDE || height > MAX_SIDE {
+            return Err(CommandError::Other(format!(
+                "Invalid PDF preview dimensions {width}x{height} (maximum {MAX_SIDE} per side)"
+            )));
+        }
+        let byte_len = (width as usize)
+            .checked_mul(height as usize)
+            .and_then(|pixels| pixels.checked_mul(4))
+            .ok_or_else(|| CommandError::Other("PDF preview buffer size overflow".into()))?;
+        Ok(Self {
+            width,
+            height,
+            byte_len,
+        })
+    }
+
+    fn fit(width: f32, height: f32) -> Result<Self, CommandError> {
+        if !width.is_finite() || !height.is_finite() || width <= 0.0 || height <= 0.0 {
+            return Err(CommandError::Other("Invalid PDF page size".into()));
+        }
+        // Normalize in f64 to avoid overflowing a scale factor for tiny valid sizes.
+        // One pixel is the minimum representable side for an extremely thin page.
+        let longest = f64::from(width.max(height));
+        let fit = |side: f32| {
+            (f64::from(side) / longest * f64::from(MAX_SIDE))
+                .round()
+                .clamp(1.0, f64::from(MAX_SIDE)) as u32
+        };
+        Self::new(fit(width), fit(height))
+    }
+
+    fn copy_bgra(&self, pixels: &[u8]) -> Result<RgbaImage, CommandError> {
+        if pixels.len() != self.byte_len {
+            return Err(CommandError::Other(
+                "Invalid PDF preview pixel buffer length".into(),
+            ));
+        }
+        let mut data = Vec::new();
+        data.try_reserve_exact(self.byte_len).map_err(|error| {
+            CommandError::Other(format!("Cannot allocate PDF preview buffer: {error}"))
+        })?;
+        data.extend_from_slice(pixels);
+        RgbaImage::from_raw(self.width, self.height, data)
+            .ok_or_else(|| CommandError::Other("Invalid PDF preview pixel buffer".into()))
+    }
+}
+
+struct OwnedPage(PdfPage);
+
+impl Drop for OwnedPage {
+    fn drop(&mut self) {
+        if let Err(error) = self.0.Close() {
+            log::warn!("Could not close PDF preview page: {error}");
+        }
+    }
+}
+
+pub(super) fn get(path: String) -> Result<RgbaImage, CommandError> {
+    let _com = super::windows_com::ComApartment::mta_or_existing()
+        .map_err(|error| CommandError::SystemError(error.to_string()))?;
+    let abs_path = std::fs::canonicalize(&path)?;
+    let mut path_str = abs_path.to_string_lossy().to_string();
+    if path_str.starts_with(r"\\?\") {
+        path_str = path_str.chars().skip(4).collect();
+    }
+    let file =
+        StorageFile::GetFileFromPathAsync(&windows::core::HSTRING::from(&path_str))?.join()?;
+    let document = PdfDocument::LoadFromFileAsync(&file)?.join()?;
+    if document.PageCount()? == 0 {
+        return Err(CommandError::Other("Empty PDF".into()));
+    }
+    let page = OwnedPage(document.GetPage(0)?);
+    // Size accounts for CropBox, MediaBox and rotation; bound BOTH requested sides
+    // before invoking the native renderer, not just the resulting Rust allocation.
+    let size = page.0.Size()?;
+    let requested = PixelLayout::fit(size.Width, size.Height)?;
+    let options = PdfPageRenderOptions::new()?;
+    options.SetDestinationWidth(requested.width)?;
+    options.SetDestinationHeight(requested.height)?;
+    let stream = InMemoryRandomAccessStream::new()?;
+    page.0
+        .RenderWithOptionsToStreamAsync(&stream, &options)?
+        .join()?;
+    if stream.Size()? > MAX_ENCODED_BYTES {
+        return Err(CommandError::Other(
+            "PDF preview exceeds the encoded size limit (4 MiB)".into(),
+        ));
+    }
+    let decoder = BitmapDecoder::CreateAsync(&stream)?.join()?;
+    // Validate before asking WinRT for uncompressed pixels. Native parser/renderer
+    // internals remain outside this allocation policy and are not process-isolated.
+    let layout = PixelLayout::new(decoder.PixelWidth()?, decoder.PixelHeight()?)?;
+    let pixels = decoder
+        .GetPixelDataTransformedAsync(
+            BitmapPixelFormat::Bgra8,
+            BitmapAlphaMode::Premultiplied,
+            &BitmapTransform::new()?,
+            ExifOrientationMode::IgnoreExifOrientation,
+            ColorManagementMode::ColorManageToSRgb,
+        )?
+        .join()?
+        .DetachPixelData()?;
+    // The UI consumes premultiplied BGRA; never assume the decoder's default format.
+    layout.copy_bgra(&pixels)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    #[test]
+    fn pdf_preview_fit_keeps_both_sides_bounded_for_extreme_ratios() {
+        for (width, height, expected) in [
+            (72.0, 144.0, (256, 512)),
+            (144.0, 72.0, (512, 256)),
+            (72.0, 720.0, (51, 512)),
+            (720.0, 72.0, (512, 51)),
+            (f32::MIN_POSITIVE, f32::MAX, (1, 512)),
+            (f32::MAX, f32::MIN_POSITIVE, (512, 1)),
+            (f32::from_bits(1), f32::from_bits(1), (512, 512)),
+        ] {
+            let layout = PixelLayout::fit(width, height).unwrap();
+            assert_eq!((layout.width, layout.height), expected);
+            assert!(layout.byte_len <= 1024 * 1024);
+        }
+    }
+
+    #[test]
+    fn pdf_preview_fit_rejects_nonfinite_and_nonpositive_page_sizes() {
+        for invalid in [0.0, -0.0, -1.0, f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
+            assert!(PixelLayout::fit(invalid, 72.0).is_err());
+            assert!(PixelLayout::fit(72.0, invalid).is_err());
+        }
+    }
+
+    #[test]
+    fn pdf_preview_decoded_layout_checks_both_boundaries_before_allocating() {
+        assert_eq!(PixelLayout::new(512, 512).unwrap().byte_len, 1024 * 1024);
+        for (width, height) in [(0, 1), (1, 0), (513, 1), (1, 513), (u32::MAX, u32::MAX)] {
+            assert!(PixelLayout::new(width, height).is_err());
+        }
+    }
+
+    #[test]
+    fn pdf_preview_pixel_copy_rejects_truncated_and_extra_data() {
+        let layout = PixelLayout::new(1, 1).unwrap();
+        for length in [0, 3, 5, 1024] {
+            assert!(layout.copy_bgra(&vec![0; length]).is_err());
+        }
+        assert_eq!(
+            layout.copy_bgra(&[10, 20, 30, 40]).unwrap().as_raw(),
+            &[10, 20, 30, 40]
+        );
+    }
+
+    // Small local PDF fixtures: a single opaque red page, no font or image assets.
+    fn write_pdf(path: &Path, width: u32, height: u32, rotation: u32) {
+        let content = format!("1 0 0 rg 0 0 {width} {height} re f\n");
+        let objects = [
+            "<< /Type /Catalog /Pages 2 0 R >>".to_string(),
+            "<< /Type /Pages /Kids [3 0 R] /Count 1 >>".to_string(),
+            format!("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {width} {height}] /Rotate {rotation} /Resources << >> /Contents 4 0 R >>"),
+            format!("<< /Length {} >>\nstream\n{content}endstream", content.len()),
+        ];
+        let mut pdf = b"%PDF-1.4\n".to_vec();
+        let mut offsets = Vec::new();
+        for (index, object) in objects.iter().enumerate() {
+            offsets.push(pdf.len());
+            pdf.extend_from_slice(format!("{} 0 obj\n{object}\nendobj\n", index + 1).as_bytes());
+        }
+        let xref = pdf.len();
+        pdf.extend_from_slice(b"xref\n0 5\n0000000000 65535 f \n");
+        for offset in offsets {
+            pdf.extend_from_slice(format!("{offset:010} 00000 n \n").as_bytes());
+        }
+        pdf.extend_from_slice(
+            format!("trailer\n<< /Size 5 /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n").as_bytes(),
+        );
+        std::fs::write(path, pdf).unwrap();
+    }
+
+    #[test]
+    fn pdf_preview_native_pipeline_bounds_both_sides_and_preserves_bgra() {
+        std::thread::spawn(|| {
+            let directory = tempfile::tempdir().unwrap();
+            for (width, height, rotation, expected) in [
+                (72, 144, 0, (256, 512)),
+                (144, 72, 0, (512, 256)),
+                (72, 720, 0, (51, 512)),
+                (720, 72, 0, (512, 51)),
+                (72, 144, 90, (512, 256)),
+                (72, 72, 0, (512, 512)),
+            ] {
+                let path = directory
+                    .path()
+                    .join(format!("page-{width}-{height}-{rotation}.pdf"));
+                write_pdf(&path, width, height, rotation);
+                let image = super::super::platform()
+                    .pdf_thumbnail(path.to_string_lossy().into_owned())
+                    .unwrap();
+                assert_eq!(
+                    image.dimensions(),
+                    expected,
+                    "page {width}x{height}, rotation {rotation}"
+                );
+                assert_eq!(
+                    image.get_pixel(image.width() / 2, image.height() / 2).0,
+                    [0, 0, 255, 255]
+                );
+                assert!(image.as_raw().len() <= 1024 * 1024);
+                // Rendering must release file/page resources before returning.
+                std::fs::remove_file(path).unwrap();
+            }
+        })
+        .join()
+        .unwrap();
+    }
+}
