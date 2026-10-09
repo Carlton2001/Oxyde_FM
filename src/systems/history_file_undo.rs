@@ -252,6 +252,25 @@ impl Plan {
             });
         }
         let discard = verified_outputs(created, &hashes, &moved_targets)?;
+        let identities: HashMap<_, _> = details
+            .copied_file_identities
+            .as_deref()
+            .unwrap_or_default()
+            .iter()
+            .map(|(path, identity)| (PathBuf::from(path), *identity))
+            .collect();
+        // A published copy whose source could not be removed is still user data.
+        // Verify every such output before the first completed file is moved back.
+        for (path, _) in &discard {
+            let identity = identities
+                .get(path)
+                .ok_or_else(|| super::history_move::move_identity_failure(path, false))?;
+            let parents = HeldParents::new(path)?;
+            let file = parents.open_file(path)?;
+            if !identity.matches(&file)? {
+                return Err(super::history_move::move_identity_failure(path, true));
+            }
+        }
         let mut source_dirs: Vec<_> = moved_dirs
             .iter()
             .map(|(source, _)| PathBuf::from(source))
@@ -262,7 +281,7 @@ impl Plan {
         let remove_dirs = sorted_directories(created_dirs);
         Ok(Self {
             directory_identities: HashMap::new(),
-            identities: HashMap::new(),
+            identities,
             files,
             discard,
             source_dirs,
@@ -534,7 +553,26 @@ impl Drop for Journal {
     }
 }
 pub(crate) fn undo(details: &TransactionDetails) -> Result<(), CommandError> {
-    undo_with(&NativeIo, details).map_err(CommandError::from)
+    undo_with(&NativeIo, details).map_err(|error| {
+        match CommandError::from(error) {
+            // Partial Move outputs use Copy's fixed-identity staging primitive,
+            // while their user-facing explanation still concerns the move.
+            CommandError::HistoryIdentity(failure) => {
+                CommandError::HistoryMove(crate::models::error::HistoryMoveFailure {
+                    issue: match failure.issue {
+                        crate::models::error::HistoryIdentityIssue::Changed => {
+                            crate::models::error::HistoryMoveIssue::Changed
+                        }
+                        crate::models::error::HistoryIdentityIssue::Unverified => {
+                            crate::models::error::HistoryMoveIssue::Unverified
+                        }
+                    },
+                    detail: failure.path,
+                })
+            }
+            other => other,
+        }
+    })
 }
 pub(crate) fn undo_copy(details: &TransactionDetails) -> Result<(), CommandError> {
     apply_plan(&NativeIo, Plan::copy(details)?).map_err(CommandError::from)
@@ -731,6 +769,79 @@ mod tests {
         destination: PathBuf,
         partial: PathBuf,
         details: TransactionDetails,
+    }
+
+    #[test]
+    fn move_partial_output_identity_is_required_before_any_undo_effect() {
+        for replace in [false, true] {
+            let mut fixture = Fixture::new();
+            let saved = fixture.root.path().join("original-partial");
+            if replace {
+                fs::rename(&fixture.partial, &saved).unwrap();
+                fs::write(&fixture.partial, b"partial content").unwrap();
+            } else {
+                fixture.details.copied_file_identities = None;
+            }
+            let error = undo(&fixture.details).unwrap_err();
+            let issue = if replace {
+                crate::models::error::HistoryMoveIssue::Changed
+            } else {
+                crate::models::error::HistoryMoveIssue::Unverified
+            };
+            assert!(matches!(error, CommandError::HistoryMove(failure) if failure.issue == issue));
+            fixture.unchanged();
+            if replace {
+                assert_eq!(fs::read(saved).unwrap(), b"partial content");
+            }
+        }
+    }
+
+    #[test]
+    fn move_partial_output_is_rechecked_after_planning_and_completed_moves_roll_back() {
+        struct Replace {
+            partial: PathBuf,
+            saved: PathBuf,
+        }
+        impl UndoIo for Replace {
+            fn move_file(
+                &self,
+                from: &Path,
+                to: &Path,
+                hash: &str,
+                parents: (&HeldParents, &HeldParents),
+                identity: Option<HistoryFileIdentity>,
+                journal_identity: Option<&crate::models::transaction::HistoryMoveIdentity>,
+            ) -> io::Result<()> {
+                if from == self.partial {
+                    fs::rename(from, &self.saved)?;
+                    fs::write(from, b"partial content")?;
+                }
+                NativeIo.move_file(from, to, hash, parents, identity, journal_identity)
+            }
+        }
+        let fixture = Fixture::new();
+        let saved = fixture.root.path().join("original-partial");
+        let error = undo_with(
+            &Replace {
+                partial: fixture.partial.clone(),
+                saved: saved.clone(),
+            },
+            &fixture.details,
+        )
+        .unwrap_err();
+        assert!(
+            matches!(CommandError::from(error), CommandError::HistoryIdentity(failure) if failure.issue == crate::models::error::HistoryIdentityIssue::Changed)
+        );
+        fixture.unchanged();
+        assert_eq!(fs::read(saved).unwrap(), b"partial content");
+        assert!(
+            fixture.details.moved_file_identities.as_ref().unwrap()[0]
+                .1
+                .snapshot()
+                .unwrap()
+                .matches(&fs::File::open(&fixture.destination).unwrap())
+                .unwrap()
+        );
     }
 
     #[test]

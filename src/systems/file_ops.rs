@@ -1542,21 +1542,14 @@ impl FileOperationManager {
                     })?;
                     // Capture from the published output's retained handle, before
                     // it is dropped or a pathname can be substituted.
-                    let copied_identity = if !is_move {
-                        match crate::models::transaction::HistoryFileIdentity::from_file(
-                            &output.file,
-                        ) {
-                            Ok(identity) => Some(identity),
-                            Err(error) => {
-                                log::warn!(
-                                    "Copy identity unavailable for {}: {error}",
-                                    dest.display()
-                                );
-                                None
-                            }
+                    let copied_identity = match crate::models::transaction::HistoryFileIdentity::from_file(
+                        &output.file,
+                    ) {
+                        Ok(identity) => Some(identity),
+                        Err(error) => {
+                            log::warn!("Copy identity unavailable for {}: {error}", dest.display());
+                            None
                         }
-                    } else {
-                        None
                     };
                     let moved_identity = if is_move {
                         crate::models::transaction::HistoryMoveIdentity::from_file(&output.file)
