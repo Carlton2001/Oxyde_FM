@@ -83,6 +83,22 @@ pub trait Platform: Send + Sync {
     fn remove_empty_operation_directory(&self, parent: &std::fs::File, path: &std::path::Path, expected: FileIdentity) -> std::io::Result<()>;
     /// Open the basename relative to the retained parent, without following reparse objects.
     fn open_operation_file(&self, parent: &std::fs::File, path: &std::path::Path, read_contents: bool) -> std::io::Result<std::fs::File>;
+    /// Hold a rename source, including directories and the reparse entry itself.
+    /// Windows prevents replacement after opening and resolves only the held parent's child.
+    fn open_rename_item(
+        &self,
+        parent: &std::fs::File,
+        path: &std::path::Path,
+    ) -> std::io::Result<std::fs::File>;
+    /// Rename into a held directory without replacing an existing destination.
+    fn rename_operation_item(
+        &self,
+        file: &std::fs::File,
+        source: &std::path::Path,
+        source_parent: &std::fs::File,
+        parent: &std::fs::File,
+        destination: &std::path::Path,
+    ) -> std::io::Result<()>;
     /// Hold a copied output for verification/publication and attribute-safe cleanup on Windows.
     fn open_copied_file(&self, parent: &std::fs::File, path: &std::path::Path) -> std::io::Result<std::fs::File>;
     /// Delete the held copy, clearing readonly only by handle and for a single link on Windows.

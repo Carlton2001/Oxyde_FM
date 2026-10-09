@@ -8,6 +8,7 @@ mod source_directories;
 pub(crate) mod history_move;
 pub(crate) mod history_file_undo;
 mod history_directories;
+pub(crate) mod item_rename;
 pub mod quick_access_watcher;
 
 pub(crate) mod folder_sizes;

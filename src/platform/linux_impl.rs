@@ -73,6 +73,89 @@ impl Platform for LinuxPlatform {
     fn open_copied_file(&self, parent: &std::fs::File, path: &std::path::Path) -> std::io::Result<std::fs::File> {
         self.open_operation_file(parent, path, true)
     }
+    fn open_rename_item(
+        &self,
+        _parent: &std::fs::File,
+        path: &std::path::Path,
+    ) -> std::io::Result<std::fs::File> {
+        #[cfg(target_os = "linux")]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            // O_PATH | O_NOFOLLOW: metadata-only, including the final symlink itself.
+            std::fs::OpenOptions::new()
+                .read(true)
+                .custom_flags(0x200000 | 0x20000)
+                .open(path)
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = path;
+            Err(std::io::Error::new(
+                std::io::ErrorKind::Unsupported,
+                "Exclusive item rename is unavailable on this platform",
+            ))
+        }
+    }
+    fn rename_operation_item(
+        &self,
+        _file: &std::fs::File,
+        source: &std::path::Path,
+        source_parent: &std::fs::File,
+        parent: &std::fs::File,
+        destination: &std::path::Path,
+    ) -> std::io::Result<()> {
+        #[cfg(target_os = "linux")]
+        {
+            use std::ffi::{CString, c_char, c_int, c_uint};
+            use std::os::unix::{ffi::OsStrExt, io::AsRawFd};
+            unsafe extern "C" {
+                fn renameat2(
+                    old_dir: c_int,
+                    old_name: *const c_char,
+                    new_dir: c_int,
+                    new_name: *const c_char,
+                    flags: c_uint,
+                ) -> c_int;
+            }
+            let leaf = |path: &std::path::Path| -> std::io::Result<CString> {
+                let name = path.file_name().ok_or_else(|| {
+                    std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        "Rename path has no file name",
+                    )
+                })?;
+                CString::new(name.as_bytes()).map_err(|_| {
+                    std::io::Error::new(std::io::ErrorKind::InvalidInput, "Invalid rename name")
+                })
+            };
+            let source = leaf(source)?;
+            let destination = leaf(destination)?;
+            // RENAME_NOREPLACE. No path-based replacement fallback if unsupported.
+            // Linux does not pin source names against concurrent external replacement.
+            let result = unsafe {
+                renameat2(
+                    source_parent.as_raw_fd(),
+                    source.as_ptr(),
+                    parent.as_raw_fd(),
+                    destination.as_ptr(),
+                    1,
+                )
+            };
+            if result == 0 {
+                Ok(())
+            } else {
+                Err(std::io::Error::last_os_error())
+            }
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = (source, source_parent, parent, destination);
+            Err(std::io::Error::new(
+                std::io::ErrorKind::Unsupported,
+                "Exclusive item rename is unavailable on this platform",
+            ))
+        }
+    }
     fn remove_copied_file(&self, _file: &std::fs::File, path: &std::path::Path) -> std::io::Result<()> {
         std::fs::remove_file(path)
     }

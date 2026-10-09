@@ -184,6 +184,20 @@ pub(super) fn open_copied_relative(parent: &File, path: &Path) -> Result<File> {
     )
 }
 
+pub(super) fn open_rename_relative(parent: &File, path: &Path) -> Result<File> {
+    let leaf = path
+        .file_name()
+        .ok_or_else(|| Error::new(ErrorKind::InvalidInput, "Rename source has no file name"))?;
+    // No content access or final reparse traversal. Renaming a junction changes
+    // the junction entry itself, while read-only sharing pins the selected object.
+    super::windows_no_reparse::open_entry(
+        parent,
+        leaf,
+        FILE_READ_ATTRIBUTES.0 | DELETE.0,
+        FILE_SHARE_READ.0,
+    )
+}
+
 pub(super) fn rename(file: &File, destination: &Path) -> Result<()> {
     rename_with(file, destination, false)
 }

@@ -588,10 +588,7 @@ pub async fn undo_last_action(
                 {
                     let old_pb = PathBuf::from(old);
                     let new_pb = PathBuf::from(new);
-                    if new_pb.exists() {
-                        std::fs::rename(new_pb, old_pb)
-                            .map_err(|e| CommandError::IoError(e.to_string()))?;
-                    }
+                    crate::systems::item_rename::rename(&new_pb, &old_pb)?;
                 }
             }
             TransactionType::NewFolder => {
@@ -907,10 +904,7 @@ pub async fn redo_last_action(
                 {
                     let old_pb = PathBuf::from(old);
                     let new_pb = PathBuf::from(new);
-                    if old_pb.exists() {
-                        std::fs::rename(old_pb, new_pb)
-                            .map_err(|e| CommandError::IoError(e.to_string()))?;
-                    }
+                    crate::systems::item_rename::rename(&old_pb, &new_pb)?;
                 }
             }
             TransactionType::NewFolder => {
@@ -1251,8 +1245,102 @@ mod copy_redo_tests {
 #[cfg(test)]
 mod history_concurrency_tests {
     use super::{redo_last_action, undo_last_action};
-    use crate::models::transaction::{Transaction, TransactionDetails, TransactionType};
     use crate::models::HistoryManager;
+    use crate::models::transaction::{Transaction, TransactionDetails, TransactionType};
+
+    #[test]
+    fn rename_history_keeps_missing_sources_retryable() {
+        for redo in [false, true] {
+            let temp = tempfile::tempdir().unwrap();
+            let old = temp.path().join("old");
+            let new = temp.path().join("new");
+            let history = HistoryManager::new();
+            history.push(rename_transaction(&old, &new));
+            if redo {
+                history.begin_undo().unwrap().unwrap().complete();
+            }
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .build()
+                .unwrap();
+            let result = if redo {
+                runtime.block_on(redo_last_action(&history))
+            } else {
+                runtime.block_on(undo_last_action(&history))
+            };
+            assert!(result.is_err());
+            let state = history.get_state();
+            assert_eq!(
+                (state.undo_stack.len(), state.redo_stack.len()),
+                if redo { (0, 1) } else { (1, 0) }
+            );
+            assert!(!old.exists());
+            assert!(!new.exists());
+            // Restore only the benign test source, then retry the same reservation.
+            let (source, destination) = if redo { (&old, &new) } else { (&new, &old) };
+            std::fs::create_dir(source).unwrap();
+            std::fs::write(source.join("child"), b"directory child").unwrap();
+            if redo {
+                runtime.block_on(redo_last_action(&history)).unwrap();
+            } else {
+                runtime.block_on(undo_last_action(&history)).unwrap();
+            }
+            assert!(!source.exists());
+            assert_eq!(
+                std::fs::read(destination.join("child")).unwrap(),
+                b"directory child"
+            );
+            let state = history.get_state();
+            assert_eq!(
+                (state.undo_stack.len(), state.redo_stack.len()),
+                if redo { (1, 0) } else { (0, 1) }
+            );
+        }
+    }
+
+    #[test]
+    fn rename_history_preserves_destinations_created_after_the_original_action() {
+        let mut rejected = Vec::new();
+        for redo in [false, true] {
+            let temp = tempfile::tempdir().unwrap();
+            let old = temp.path().join("old.txt");
+            let new = temp.path().join("new.txt");
+            let history = HistoryManager::new();
+            let (source, destination) = if redo { (&old, &new) } else { (&new, &old) };
+            std::fs::write(source, b"selected file").unwrap();
+            std::fs::write(destination, b"independent later file").unwrap();
+            history.push(rename_transaction(&old, &new));
+            if redo {
+                history.begin_undo().unwrap().unwrap().complete();
+            }
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .build()
+                .unwrap();
+            let result = if redo {
+                runtime.block_on(redo_last_action(&history))
+            } else {
+                runtime.block_on(undo_last_action(&history))
+            };
+            rejected.push((
+                redo,
+                result.is_err(),
+                std::fs::read(destination).unwrap() == b"independent later file",
+            ));
+            if result.is_err() {
+                assert_eq!(std::fs::read(source).unwrap(), b"selected file");
+                let state = history.get_state();
+                assert_eq!(
+                    (state.undo_stack.len(), state.redo_stack.len()),
+                    if redo { (0, 1) } else { (1, 0) }
+                );
+            }
+        }
+        assert!(
+            rejected
+                .iter()
+                .all(|(_, failed, preserved)| *failed && *preserved),
+            "rename history rejection: {rejected:?}"
+        );
+    }
 
     fn rename_transaction(old: &std::path::Path, new: &std::path::Path) -> Transaction {
         Transaction::new(
@@ -1349,10 +1437,12 @@ mod history_concurrency_tests {
         assert!(history.get_state().redo_stack.is_empty());
         assert_eq!(std::fs::read(&new).unwrap(), b"fixture content");
         std::fs::create_dir(old.parent().unwrap()).unwrap();
-        assert!(runtime
-            .block_on(undo_last_action(&history))
-            .unwrap()
-            .is_some());
+        assert!(
+            runtime
+                .block_on(undo_last_action(&history))
+                .unwrap()
+                .is_some()
+        );
         assert_eq!(std::fs::read(&old).unwrap(), b"fixture content");
         assert!(history.get_state().undo_stack.is_empty());
         assert_eq!(history.get_state().redo_stack[0].id, tx.id);

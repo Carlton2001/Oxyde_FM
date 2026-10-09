@@ -162,14 +162,26 @@ pub async fn rename_item_controlled(
             .path(&target_internal)
             .map_err(CommandError::PathError)?;
         validate_rename_target(&source, &destination)?;
-        fs::rename(source, destination)?;
+        crate::systems::item_rename::rename_with_checkpoint(&source, &destination, &mut || {
+            crate::systems::file_ops::FileOperationManager::archive_checkpoint(&operation)
+                .map_err(std::io::Error::other)
+        })?;
         return workspace
             .commit(&operation)
             .map_err(CommandError::ArchiveError);
     }
     validate_rename_target(&old_pb, &new_pb)?;
     info!("Renaming {:?} to {:?}", old_pb, new_pb);
-    fs::rename(old_pb, new_pb)?;
+    crate::systems::item_rename::rename_with_checkpoint(&old_pb, &new_pb, &mut || {
+        if cancel.load(std::sync::atomic::Ordering::Relaxed) {
+            Err(std::io::Error::new(
+                std::io::ErrorKind::Interrupted,
+                "Cancelled",
+            ))
+        } else {
+            Ok(())
+        }
+    })?;
 
     Ok(())
 }
