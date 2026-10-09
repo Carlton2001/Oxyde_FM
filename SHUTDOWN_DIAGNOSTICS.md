@@ -41,3 +41,7 @@ Le journal persistant est `%APPDATA%\oxyde\oxyde.log`, avec rotation au prochain
 ## Validation réalisée
 
 `cargo check`, `cargo build` et le test `shutdown_returns_while_a_blocking_worker_is_still_running` passent. Ce test vérifie l’arrêt borné de Tokio ; la validation du contournement PDF/Intel repose sur la reproduction puis sur les essais manuels de l’utilisateur.
+
+## Aperçus séparés — 9 octobre 2026
+
+Le mode interne `--oxyde-preview-worker-v1` produit un seul aperçu dans un processus sans interface. Il est traité avant logging, préférences et boucle GPUI. Après sérialisation et flush des pixels/du texte, il appelle la même sortie native finale ; ce worker n’a pas d’état applicatif à sauvegarder. Le parent conserve un délai et un Job Object pour terminer/récupérer un worker bloqué. Les étapes et hooks de fermeture de l’application principale restent inchangés. Le test d’intégration `tests/preview_worker.rs` exerce un véritable rendu PDF d’une page et vérifie la libération de son fichier après la réponse. Cela ne remplace pas la validation visuelle des aperçus et de la fermeture de la fenêtre principale.

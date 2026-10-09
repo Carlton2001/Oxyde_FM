@@ -65,6 +65,11 @@ pub struct FileIdentity {
 /// Toute fonctionnalité native (lecteurs, ouverture, raccourcis, etc.)
 /// doit passer par ce trait plutôt qu'appeler directement les API OS.
 pub trait Platform: Send + Sync {
+    fn initialize_preview_worker(&self) -> std::io::Result<()> { Ok(()) }
+    /// Windows executes bounded preview parsing in a hidden resource-limited process.
+    fn run_preview_worker(&self, _mode: &str, _path: &std::path::Path) -> std::io::Result<Vec<u8>> {
+        Err(std::io::Error::new(std::io::ErrorKind::Unsupported, "Preview worker unavailable on this platform"))
+    }
     /// Snapshot mode denies source writes and replacement on Windows. Tracking
     /// mode keeps the identity alive while permitting subsequent external edits.
     fn open_archive_source(&self, path: &std::path::Path, allow_changes: bool) -> std::io::Result<std::fs::File>;
@@ -437,6 +442,12 @@ pub fn platform() -> &'static dyn Platform {
     INSTANCE.get_or_init(CurrentPlatform::new)
 }
 
+/// Internal worker dispatch; never called by the UI to bypass process isolation.
+#[cfg(target_os = "windows")]
+pub fn local_preview_worker_reply(mode: &str, path: &std::path::Path) -> crate::utils::preview_protocol::Reply {
+    thumbnails::worker_reply(mode, path)
+}
+
 #[cfg(target_os = "windows")]
 mod windows_peek;
 #[cfg(target_os = "windows")]
@@ -454,3 +465,5 @@ mod linux_source_selection;
 mod windows_trash_restore;
 #[cfg(target_os = "windows")]
 mod windows_shell_delete;
+#[cfg(target_os = "windows")]
+mod windows_preview_worker;

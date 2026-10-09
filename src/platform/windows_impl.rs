@@ -456,6 +456,14 @@ impl Platform for WindowsPlatform {
         Ok(())
     }
 
+    fn run_preview_worker(&self, mode: &str, path: &std::path::Path) -> std::io::Result<Vec<u8>> {
+        super::windows_preview_worker::run(mode, path)
+    }
+
+    fn initialize_preview_worker(&self) -> std::io::Result<()> {
+        super::windows_preview_worker::initialize()
+    }
+
     fn set_thread_priority(&self, priority: ThreadPriority) {
         use windows::Win32::System::Threading::{
             GetCurrentThread, SetThreadPriority, THREAD_MODE_BACKGROUND_BEGIN,

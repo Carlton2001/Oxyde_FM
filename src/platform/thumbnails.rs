@@ -564,10 +564,16 @@ mod thumbnail_cache_write_tests {
 }
 
 pub fn get_thumbnail_raw(path: String) -> Result<RgbaImage, CommandError> {
+    #[cfg(target_os = "windows")]
+    return cached_thumbnail(path, "image", |path| isolated_thumbnail("thumbnail", &path));
+    #[cfg(not(target_os = "windows"))]
     cached_thumbnail(path, "image", get_thumbnail_uncached)
 }
 
 pub fn get_office_thumbnail_raw(path: String) -> Result<RgbaImage, CommandError> {
+    #[cfg(target_os = "windows")]
+    return cached_thumbnail(path, "office", |path| isolated_thumbnail("office", &path));
+    #[cfg(not(target_os = "windows"))]
     cached_thumbnail(path, "office", get_office_thumbnail_uncached)
 }
 
@@ -1014,7 +1020,7 @@ mod office_thumbnail_security_tests {
 
 #[cfg(target_os = "windows")]
 pub fn get_pdf_thumbnail_raw(path: String) -> Result<RgbaImage, CommandError> {
-    super::windows_pdf_thumbnail::get(path)
+    isolated_thumbnail("pdf", &path)
 }
 
 #[cfg(target_os = "windows")]
@@ -1039,7 +1045,7 @@ fn shell_thumbnail_raw(path: &str) -> Result<RgbaImage, CommandError> {
     }
 }
 
-pub fn get_office_text_preview(path: String) -> Result<String, CommandError> {
+fn get_office_text_preview_local(path: String) -> Result<String, CommandError> {
     let source_path = Path::new(&path);
     let file = fs::File::open(source_path).map_err(|e| CommandError::IoError(e.to_string()))?;
     let mut archive = zip::ZipArchive::new(file).map_err(|e| CommandError::Other(e.to_string()))?;
@@ -1101,6 +1107,68 @@ pub fn get_office_text_preview(path: String) -> Result<String, CommandError> {
         }
     }
     Ok(preview.trim().to_string())
+}
+
+pub fn get_office_text_preview(path: String) -> Result<String, CommandError> {
+    #[cfg(target_os = "windows")]
+    {
+        let bytes = super::platform().run_preview_worker("office-text", Path::new(&path))?;
+        match crate::utils::preview_protocol::decode(&bytes)? {
+            crate::utils::preview_protocol::Reply::Text(text) => Ok(text),
+            crate::utils::preview_protocol::Reply::Error { detail, .. } => {
+                Err(CommandError::Other(detail))
+            }
+            _ => Err(CommandError::Other(
+                "Unexpected Office preview reply".into(),
+            )),
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    get_office_text_preview_local(path)
+}
+
+#[cfg(target_os = "windows")]
+fn isolated_thumbnail(mode: &str, path: &str) -> Result<RgbaImage, CommandError> {
+    let bytes = super::platform().run_preview_worker(mode, Path::new(path))?;
+    match crate::utils::preview_protocol::decode(&bytes)? {
+        crate::utils::preview_protocol::Reply::Images { mut frames, .. } if frames.len() == 1 => {
+            Ok(frames.remove(0).into_buffer())
+        }
+        crate::utils::preview_protocol::Reply::Error { detail, .. } => {
+            Err(CommandError::Other(detail))
+        }
+        _ => Err(CommandError::Other(
+            "Unexpected thumbnail worker reply".into(),
+        )),
+    }
+}
+
+#[cfg(target_os = "windows")]
+pub(super) fn worker_reply(mode: &str, path: &Path) -> crate::utils::preview_protocol::Reply {
+    use crate::utils::preview_protocol::Reply;
+    let result = (|| -> Result<Reply, CommandError> {
+        let path = path
+            .to_str()
+            .ok_or_else(|| CommandError::Other("Preview path is not Unicode".into()))?
+            .to_owned();
+        if mode == "office-text" {
+            return get_office_text_preview_local(path).map(Reply::Text);
+        }
+        let image = match mode {
+            "thumbnail" => get_thumbnail_uncached(path),
+            "office" => get_office_thumbnail_uncached(path),
+            "pdf" => super::windows_pdf_thumbnail::get(path),
+            _ => Err(CommandError::Other("Unknown preview worker mode".into())),
+        }?;
+        Ok(Reply::Images {
+            frames: vec![image::Frame::new(image)],
+            limited: false,
+        })
+    })();
+    result.unwrap_or_else(|error| Reply::Error {
+        limit: false,
+        detail: error.to_string(),
+    })
 }
 
 #[cfg(all(test, target_os = "windows"))]

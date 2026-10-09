@@ -312,6 +312,44 @@ fn decode(
 }
 
 pub(crate) fn load_path(path: &Path, renderer: &SvgRenderer) -> Result<PreviewImage, PreviewError> {
+    #[cfg(target_os = "windows")]
+    {
+        // Retain the cheap admission and missing-file classification in the parent.
+        let length = std::fs::metadata(path)
+            .map_err(|error| PreviewError::Read(error.to_string()))?
+            .len();
+        if length > POLICY.encoded_bytes as u64 {
+            return Err(PreviewError::Limit("encoded byte limit (64 MiB)"));
+        }
+        let _ = renderer;
+        let reply = oxyde_lib::platform::platform()
+            .run_preview_worker("image", path)
+            .and_then(|bytes| oxyde_lib::utils::preview_protocol::decode(&bytes))
+            .map_err(|error| PreviewError::Worker(error.to_string()))?;
+        match reply {
+            oxyde_lib::utils::preview_protocol::Reply::Images { frames, limited } => {
+                Ok(PreviewImage {
+                    image: Arc::new(RenderImage::new(frames)),
+                    notice: limited.then_some(Message::PreviewAnimationStatic),
+                })
+            }
+            oxyde_lib::utils::preview_protocol::Reply::Error { limit: true, .. } => {
+                Err(PreviewError::Limit("worker decoder limits"))
+            }
+            oxyde_lib::utils::preview_protocol::Reply::Error { detail, .. } => {
+                Err(PreviewError::Decode(detail))
+            }
+            _ => Err(PreviewError::Worker("Unexpected preview reply".into())),
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    load_path_local(path, renderer)
+}
+
+pub(crate) fn load_path_local(
+    path: &Path,
+    renderer: &SvgRenderer,
+) -> Result<PreviewImage, PreviewError> {
     let file = std::fs::File::open(path).map_err(|error| PreviewError::Read(error.to_string()))?;
     if file
         .metadata()

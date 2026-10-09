@@ -63,6 +63,8 @@ fn initialize_logging() {
 }
 
 fn main() {
+    #[cfg(target_os = "windows")]
+    if crate::ui::preview_worker::run_if_requested() { return; }
     initialize_logging();
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()

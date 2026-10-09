@@ -11,6 +11,15 @@ use windows::Storage::Streams::InMemoryRandomAccessStream;
 const MAX_SIDE: u32 = 512;
 const MAX_ENCODED_BYTES: u64 = 4 * 1024 * 1024;
 
+// WinRT render options are DIPs, not physical pixels. Round down before native
+// rendering; normalize the small DPI rounding afterwards.
+fn render_dips(pixels: u32, dpi: u32) -> Result<u32, CommandError> {
+    if !(96..=768).contains(&dpi) {
+        return Err(CommandError::Other("Unsupported PDF preview DPI".into()));
+    }
+    Ok(((u64::from(pixels) * 96) / u64::from(dpi)).max(1) as u32)
+}
+
 #[derive(Debug, PartialEq, Eq)]
 struct PixelLayout {
     width: u32,
@@ -97,8 +106,9 @@ pub(super) fn get(path: String) -> Result<RgbaImage, CommandError> {
     let size = page.0.Size()?;
     let requested = PixelLayout::fit(size.Width, size.Height)?;
     let options = PdfPageRenderOptions::new()?;
-    options.SetDestinationWidth(requested.width)?;
-    options.SetDestinationHeight(requested.height)?;
+    let dpi = unsafe { windows::Win32::UI::HiDpi::GetDpiForSystem() };
+    options.SetDestinationWidth(render_dips(requested.width, dpi)?)?;
+    options.SetDestinationHeight(render_dips(requested.height, dpi)?)?;
     let stream = InMemoryRandomAccessStream::new()?;
     page.0
         .RenderWithOptionsToStreamAsync(&stream, &options)?
@@ -110,7 +120,8 @@ pub(super) fn get(path: String) -> Result<RgbaImage, CommandError> {
     }
     let decoder = BitmapDecoder::CreateAsync(&stream)?.join()?;
     // Validate before asking WinRT for uncompressed pixels. Native parser/renderer
-    // internals remain outside this allocation policy and are not process-isolated.
+    // internals remain outside this allocation policy; the production caller runs
+    // this decoder in the resource-limited preview process.
     let layout = PixelLayout::new(decoder.PixelWidth()?, decoder.PixelHeight()?)?;
     let pixels = decoder
         .GetPixelDataTransformedAsync(
@@ -123,13 +134,38 @@ pub(super) fn get(path: String) -> Result<RgbaImage, CommandError> {
         .join()?
         .DetachPixelData()?;
     // The UI consumes premultiplied BGRA; never assume the decoder's default format.
-    layout.copy_bgra(&pixels)
+    let image = layout.copy_bgra(&pixels)?;
+    if image.dimensions() != (requested.width, requested.height) {
+        Ok(image::imageops::resize(
+            &image,
+            requested.width,
+            requested.height,
+            image::imageops::FilterType::Nearest,
+        ))
+    } else {
+        Ok(image)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::path::Path;
+
+    #[test]
+    fn pdf_render_dips_never_request_more_than_the_pixel_envelope_at_supported_dpi() {
+        for dpi in [96, 120, 144, 168, 192, 240, 288, 384, 480, 768] {
+            for pixels in [1, 51, 256, 512] {
+                let dips = render_dips(pixels, dpi).unwrap();
+                assert!(dips >= 1);
+                if pixels >= 8 {
+                    assert!(u64::from(dips) * u64::from(dpi) <= u64::from(pixels) * 96);
+                }
+            }
+        }
+        assert!(render_dips(512, 0).is_err());
+        assert!(render_dips(512, 769).is_err());
+    }
 
     #[test]
     fn pdf_preview_fit_keeps_both_sides_bounded_for_extreme_ratios() {
@@ -218,9 +254,7 @@ mod tests {
                     .path()
                     .join(format!("page-{width}-{height}-{rotation}.pdf"));
                 write_pdf(&path, width, height, rotation);
-                let image = super::super::platform()
-                    .pdf_thumbnail(path.to_string_lossy().into_owned())
-                    .unwrap();
+                let image = get(path.to_string_lossy().into_owned()).unwrap();
                 assert_eq!(
                     image.dimensions(),
                     expected,
