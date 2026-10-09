@@ -173,6 +173,8 @@ path-error-failed = Impossible d’ouvrir ce dossier. Vérifiez le chemin et ré
 
 ## File operations
 undo-failed = Annulation impossible : { $detail }
+undo-copy-identity-changed = Ce fichier ne correspond plus à la copie originale : { $detail }. Annuler est interrompu pour préserver vos fichiers.
+undo-copy-unverified = L’historique ne permet pas de vérifier l’identité de cette copie : { $detail }. Les fichiers sont conservés.
 undo-overwrite-unavailable = Impossible d’annuler cette copie : elle a remplacé des fichiers existants.
 redo-failed = Rétablissement impossible : { $detail }
 redo-copy-source-changed = La source a changé depuis la copie : { $detail }. Rétablir est interrompu pour préserver vos fichiers.

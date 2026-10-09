@@ -96,6 +96,7 @@ pub struct FileOperation {
     pub moved_dirs: Vec<(PathBuf, PathBuf)>,
     pub copied_files: Vec<(PathBuf, PathBuf)>,
     pub copied_file_hashes: Vec<(PathBuf, String)>,
+    copied_file_identities: Vec<(PathBuf, crate::models::transaction::HistoryFileIdentity)>,
     // Internal execution state.
     pub cancel_flag: Arc<AtomicBool>,
     pub pause_flag: Arc<AtomicBool>,
@@ -149,6 +150,7 @@ impl FileOperation {
             moved_dirs: Vec::new(),
             copied_files: Vec::new(),
             copied_file_hashes: Vec::new(),
+            copied_file_identities: Vec::new(),
             cancel_flag: self.cancel_flag.clone(),
             pause_flag: self.pause_flag.clone(),
             turbo_flag: self.turbo_flag.clone(),
@@ -194,6 +196,7 @@ impl FileOperation {
             moved_dirs: Vec::new(),
             copied_files: Vec::new(),
             copied_file_hashes: Vec::new(),
+            copied_file_identities: Vec::new(),
             cancel_flag: Arc::new(AtomicBool::new(false)),
             pause_flag: Arc::new(AtomicBool::new(false)),
             turbo_flag: Arc::new(AtomicBool::new(false)),
@@ -751,6 +754,15 @@ impl FileOperationManager {
                             .map(|(path, hash)| (path.to_string_lossy().into_owned(), hash.clone()))
                             .collect(),
                     ),
+                    copied_file_identities: Some(
+                        locked
+                            .copied_file_identities
+                            .iter()
+                            .map(|(path, identity)| {
+                                (path.to_string_lossy().into_owned(), *identity)
+                            })
+                            .collect(),
+                    ),
                 };
 
                 let tx = Transaction::new(t_type, details);
@@ -934,6 +946,7 @@ impl FileOperationManager {
         locked.overwritten_files.clear();
         locked.copied_files.clear();
         locked.copied_file_hashes.clear();
+        locked.copied_file_identities.clear();
         Ok(())
     }
 
@@ -1441,6 +1454,24 @@ impl FileOperationManager {
                         }
                         message
                     })?;
+                    // Capture from the published output's retained handle, before
+                    // it is dropped or a pathname can be substituted.
+                    let copied_identity = if !is_move {
+                        match crate::models::transaction::HistoryFileIdentity::from_file(
+                            &output.file,
+                        ) {
+                            Ok(identity) => Some(identity),
+                            Err(error) => {
+                                log::warn!(
+                                    "Copy identity unavailable for {}: {error}",
+                                    dest.display()
+                                );
+                                None
+                            }
+                        }
+                    } else {
+                        None
+                    };
                     let mut journal = operation.lock().unwrap();
                     if *replace_existing {
                         journal.overwritten_files.push(dest.clone());
@@ -1451,6 +1482,11 @@ impl FileOperationManager {
                     journal
                         .copied_file_hashes
                         .push((dest.clone(), output.hash.clone()));
+                    if let Some(identity) = copied_identity {
+                        journal
+                            .copied_file_identities
+                            .push((dest.clone(), identity));
+                    }
                     drop(journal);
                     if let Some(source) = source_guard {
                         if let Some(moves) = &deferred_moves {
@@ -3967,7 +4003,30 @@ mod tests {
         runtime.block_on(async {
             FileOperationManager::execute_operation(history.clone(), op.clone()).await;
             assert_eq!(op.lock().unwrap().status, OpStatus::Completed);
+            let transaction_id = history.get_state().undo_stack[0].id.clone();
             for _ in 0..2 {
+                let state = history.get_state();
+                assert_eq!(state.undo_stack[0].id, transaction_id);
+                let identities = state.undo_stack[0]
+                    .details
+                    .copied_file_identities
+                    .as_ref()
+                    .unwrap();
+                assert_eq!(identities.len(), 1);
+                assert_eq!(
+                    PathBuf::from(&identities[0].0),
+                    std::fs::canonicalize(&target).unwrap()
+                );
+                assert!(
+                    identities[0]
+                        .1
+                        .matches(&std::fs::File::open(&target).unwrap())
+                        .unwrap()
+                );
+                // The journal contains values only; it must not keep a rename lock.
+                let renamed = target_dir.join("temporarily-renamed.txt");
+                std::fs::rename(&target, &renamed).unwrap();
+                std::fs::rename(&renamed, &target).unwrap();
                 let metadata = std::fs::metadata(&target).unwrap();
                 assert!(metadata.permissions().readonly());
                 assert_eq!(metadata.modified().unwrap(), modified);

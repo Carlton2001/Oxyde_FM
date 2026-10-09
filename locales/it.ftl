@@ -302,6 +302,8 @@ path-error-access-denied = Accesso alla cartella negato. Controlla i tuoi permes
 path-error-failed = Impossibile aprire la cartella. Controlla il percorso e riprova.
 
 undo-failed = Impossibile annullare: { $detail }
+undo-copy-identity-changed = Questo file non corrisponde più all’oggetto copiato originale: { $detail }. L’annullamento è stato interrotto per preservare i file.
+undo-copy-unverified = La cronologia non consente di verificare l’identità di questa copia: { $detail }. I file sono stati conservati.
 
 undo-overwrite-unavailable = Questa copia non può essere annullata perché ha sostituito file esistenti.
 

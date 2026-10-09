@@ -736,7 +736,8 @@ impl OxydeApp {
                     this.history_operation_in_progress = false;
                     if let Ok(Err(error)) = &result {
                         log::warn!("Undo failed: {error:?}");
-                        this.toast(ToastKind::Error, Message::UndoFailed, format!("{error:?}"), 0, cx);
+                        let (message, detail) = crate::ui::errors::undo_failure(error);
+                        this.toast(ToastKind::Error, message, detail, 0, cx);
                     } else if let Err(error) = &result {
                         this.toast(ToastKind::Error, Message::UndoFailed, format!("{error}"), 0, cx);
                     } else if matches!(result, Ok(Ok(Some(_)))) {
@@ -2101,6 +2102,7 @@ impl OxydeApp {
                             this.history.push(Transaction::new(
                                 TransactionType::NewFolder,
                                 TransactionDetails {
+                                    copied_file_identities: None,
                                     paths: vec![folder_path.to_string_lossy().into_owned()],
                                     target_dir: Some(current_path),
                                     old_path: None,

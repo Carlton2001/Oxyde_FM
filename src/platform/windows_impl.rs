@@ -801,6 +801,7 @@ mod deletion_history_tests {
             history.push(Transaction::new(
                 TransactionType::Delete,
                 TransactionDetails {
+                    copied_file_identities: None,
                     paths: self
                         .paths
                         .iter()

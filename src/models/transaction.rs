@@ -21,6 +21,7 @@ pub struct TransactionDetails {
     pub moved_dirs: Option<Vec<(String, String)>>,
     pub copied_files: Option<Vec<(String, String)>>,
     pub copied_file_hashes: Option<Vec<(String, String)>>,
+    pub copied_file_identities: Option<Vec<(String, HistoryFileIdentity)>>,
 }
 
 #[derive(Debug, Clone)]
@@ -49,5 +50,26 @@ impl Transaction {
                 .overwritten_files
                 .as_ref()
                 .is_some_and(|files| !files.is_empty())
+    }
+}
+/// Journal snapshot without a long-lived handle: no file locks or delayed deletion.
+/// Identifiers may still be reused after deletion; creation time is an extra check,
+/// not a cryptographic proof that metadata cannot be forged.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct HistoryFileIdentity {
+    identity: crate::platform::FileIdentity,
+    created: std::time::SystemTime,
+}
+
+impl HistoryFileIdentity {
+    pub(crate) fn from_file(file: &std::fs::File) -> std::io::Result<Self> {
+        Ok(Self {
+            identity: crate::platform::platform().file_identity(file)?,
+            created: file.metadata()?.created()?,
+        })
+    }
+
+    pub(crate) fn matches(&self, file: &std::fs::File) -> std::io::Result<bool> {
+        Ok(*self == Self::from_file(file)?)
     }
 }

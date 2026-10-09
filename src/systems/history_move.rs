@@ -94,6 +94,7 @@ fn move_with(
         source,
         destination,
         expected,
+        None,
         &source_parents,
         &destination_parents,
     )
@@ -111,6 +112,26 @@ pub(super) fn move_file_with_parents(
         source,
         destination,
         Some(expected),
+        None,
+        source_parents,
+        destination_parents,
+    )
+}
+
+pub(super) fn move_file_with_identity(
+    source: &Path,
+    destination: &Path,
+    expected: &str,
+    identity: crate::models::transaction::HistoryFileIdentity,
+    source_parents: &super::path_parents::HeldParents,
+    destination_parents: &super::path_parents::HeldParents,
+) -> io::Result<()> {
+    move_bound(
+        &NativeIo,
+        source,
+        destination,
+        Some(expected),
+        Some(identity),
         source_parents,
         destination_parents,
     )
@@ -121,12 +142,18 @@ fn move_bound(
     source: &Path,
     destination: &Path,
     expected: Option<&str>,
+    identity: Option<crate::models::transaction::HistoryFileIdentity>,
     source_parents: &super::path_parents::HeldParents,
     destination_parents: &super::path_parents::HeldParents,
 ) -> io::Result<()> {
     let source = source_parents.resolved_path(source)?;
     let destination = destination_parents.resolved_path(destination)?;
     let mut original = source_parents.open_file(&source)?;
+    if let Some(identity) = identity {
+        if !identity.matches(&original)? {
+            return Err(super::file_copy::identity_changed(&source));
+        }
+    }
     let metadata = original.metadata()?;
     let name = source
         .file_name()
@@ -147,7 +174,7 @@ fn move_bound(
     }
     match ops.rename(&original, &source, &destination, destination_parents) {
         Ok(()) => return Ok(()),
-        Err(error) if error.kind() == io::ErrorKind::CrossesDevices => {}
+        Err(error) if error.kind() == io::ErrorKind::CrossesDevices && identity.is_none() => {}
         Err(error) => return Err(error),
     }
 
@@ -272,6 +299,44 @@ mod tests {
             .file_name()
             .to_string_lossy()
             .starts_with(".oxyde-history-")));
+    }
+
+    #[test]
+    fn identity_bound_copy_undo_refuses_a_cross_volume_fallback() {
+        let root = tempfile::tempdir().unwrap();
+        let source = root.path().join("source");
+        let destination = root.path().join("staged");
+        fs::write(&source, b"selected data").unwrap();
+        let identity = crate::models::transaction::HistoryFileIdentity::from_file(
+            &File::open(&source).unwrap(),
+        )
+        .unwrap();
+        let source_parents = super::super::path_parents::HeldParents::new(&source).unwrap();
+        let destination_parents =
+            super::super::path_parents::HeldParents::new(&destination).unwrap();
+        let ops = ForcedCopy {
+            source: source.clone(),
+            destination: destination.clone(),
+            attempts: Cell::new(0),
+            fault: Fault::None,
+        };
+        let expected = blake3::hash(b"selected data").to_hex().to_string();
+        let error = move_bound(
+            &ops,
+            &source,
+            &destination,
+            Some(&expected),
+            Some(identity),
+            &source_parents,
+            &destination_parents,
+        )
+        .unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::CrossesDevices);
+        assert_eq!(ops.attempts.get(), 1);
+        assert_eq!(fs::read(&source).unwrap(), b"selected data");
+        assert!(identity.matches(&File::open(&source).unwrap()).unwrap());
+        assert!(!destination.exists());
+        assert_eq!(fs::read_dir(root.path()).unwrap().count(), 1);
     }
 
     #[cfg(target_os = "windows")]

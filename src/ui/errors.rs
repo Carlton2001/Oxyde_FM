@@ -1,6 +1,22 @@
 use crate::ui::i18n::Message;
 use oxyde_lib::models::CommandError;
 
+pub fn undo_failure(error: &CommandError) -> (Message, String) {
+    if let CommandError::HistoryIdentity(failure) = error {
+        let message = match failure.issue {
+            oxyde_lib::models::error::HistoryIdentityIssue::Changed => {
+                Message::UndoCopyIdentityChanged
+            }
+            oxyde_lib::models::error::HistoryIdentityIssue::Unverified => {
+                Message::UndoCopyUnverified
+            }
+        };
+        (message, failure.path.clone())
+    } else {
+        (Message::UndoFailed, format!("{error:?}"))
+    }
+}
+
 pub fn redo_failure(error: &CommandError) -> (Message, String) {
     if let CommandError::HistoryCopy(failure) = error {
         let message = match failure.issue {
@@ -56,6 +72,43 @@ pub fn rename_message(error: &CommandError) -> Message {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn undo_identity_failures_are_translated_and_preserve_literal_paths() {
+        use crate::ui::i18n::{I18n, Language};
+        use fluent_bundle::FluentArgs;
+        use oxyde_lib::models::error::{HistoryIdentityFailure, HistoryIdentityIssue};
+        let path = "C:\\école\\{ $detail }.txt";
+        for (issue, message) in [
+            (
+                HistoryIdentityIssue::Changed,
+                Message::UndoCopyIdentityChanged,
+            ),
+            (
+                HistoryIdentityIssue::Unverified,
+                Message::UndoCopyUnverified,
+            ),
+        ] {
+            let error = CommandError::from(std::io::Error::other(HistoryIdentityFailure {
+                issue,
+                path: path.into(),
+            }));
+            let (actual, detail) = undo_failure(&error);
+            assert_eq!(actual, message);
+            assert_eq!(detail, path);
+            for language in Language::ALL {
+                let mut args = FluentArgs::new();
+                args.set("detail", detail.as_str());
+                let rendered = I18n::for_language(language).text_with_args(actual, &args);
+                assert!(rendered.contains(path), "{language:?}: {rendered}");
+                assert!(!rendered.contains("History file identity"));
+                assert!(!rendered.contains(actual.key()));
+            }
+        }
+        assert_eq!(
+            undo_failure(&CommandError::Other("unrelated".into())).0,
+            Message::UndoFailed
+        );
+    }
     #[test]
     fn redo_copy_failures_explain_the_cause_with_a_literal_path() {
         use crate::ui::i18n::I18n;

@@ -52,7 +52,10 @@ pub(crate) fn copy_verified(
     destination: &Path,
     expected: &str,
     progress: &mut dyn FnMut(u64) -> io::Result<()>,
-) -> io::Result<String> {
+) -> io::Result<(
+    String,
+    Option<crate::models::transaction::HistoryFileIdentity>,
+)> {
     copy_verified_with_checkpoint(source, destination, expected, &mut || Ok(()), progress)
 }
 
@@ -62,7 +65,10 @@ fn copy_verified_with_checkpoint(
     expected: &str,
     checkpoint: &mut dyn FnMut() -> io::Result<()>,
     progress: &mut dyn FnMut(u64) -> io::Result<()>,
-) -> io::Result<String> {
+) -> io::Result<(
+    String,
+    Option<crate::models::transaction::HistoryFileIdentity>,
+)> {
     let source_parents = super::path_parents::HeldParents::new(source)?;
     let resolved = source_parents.resolved_path(source)?;
     // Read access only: Copy must not require DELETE permission on its source.
@@ -82,7 +88,24 @@ fn copy_verified_with_checkpoint(
         destination_parents,
         progress,
     )
-    .map(|output| output.hash)
+    .map(|output| {
+        let identity = crate::models::transaction::HistoryFileIdentity::from_file(&output.file)
+            .map_err(|error| {
+                log::warn!(
+                    "Redo copy identity unavailable for {}: {error}",
+                    destination.display()
+                )
+            })
+            .ok();
+        (output.hash, identity)
+    })
+}
+
+pub(super) fn identity_changed(path: &Path) -> io::Error {
+    io::Error::other(crate::models::error::HistoryIdentityFailure {
+        issue: crate::models::error::HistoryIdentityIssue::Changed,
+        path: path.to_string_lossy().into_owned(),
+    })
 }
 
 fn history_source_changed(source: &Path) -> io::Error {
@@ -176,19 +199,41 @@ fn copy_with_parents_checked(
     })
 }
 
-/// Remove only a journal-verified output, including copied readonly files.
+#[cfg(test)]
 pub(crate) fn remove_verified_output(path: &Path, expected: &str) -> io::Result<()> {
     let parents = super::path_parents::HeldParents::new(path)?;
-    remove_verified_output_with_parents(path, expected, &parents)
+    remove_verified_output_checked(path, expected, &parents, None)
 }
 
-pub(super) fn remove_verified_output_with_parents(
+pub(crate) fn remove_verified_output_identity(
+    path: &Path,
+    expected: &str,
+    identity: Option<crate::models::transaction::HistoryFileIdentity>,
+) -> io::Result<()> {
+    // Redo rollback must retain an output if its identity could not be captured.
+    let identity = identity.ok_or_else(|| {
+        io::Error::other(crate::models::error::HistoryIdentityFailure {
+            issue: crate::models::error::HistoryIdentityIssue::Unverified,
+            path: path.to_string_lossy().into_owned(),
+        })
+    })?;
+    let parents = super::path_parents::HeldParents::new(path)?;
+    remove_verified_output_checked(path, expected, &parents, Some(identity))
+}
+
+pub(super) fn remove_verified_output_checked(
     path: &Path,
     expected: &str,
     parents: &super::path_parents::HeldParents,
+    identity: Option<crate::models::transaction::HistoryFileIdentity>,
 ) -> io::Result<()> {
     let resolved = parents.resolved_path(path)?;
     let mut file = platform().open_copied_file(parents.directory(), &resolved)?;
+    if let Some(identity) = identity {
+        if !identity.matches(&file)? {
+            return Err(identity_changed(path));
+        }
+    }
     let metadata = file.metadata()?;
     if !metadata.is_file()
         || platform().file_attributes(&metadata, "").2
@@ -245,6 +290,42 @@ mod tests {
     use super::*;
     use std::fs;
     use std::io::ErrorKind;
+
+    #[test]
+    fn identity_checked_cleanup_preserves_a_matching_replacement() {
+        let root = tempfile::tempdir().unwrap();
+        let output = root.path().join("output");
+        let saved = root.path().join("selected-output");
+        fs::write(&output, b"matching contents").unwrap();
+        let identity = crate::models::transaction::HistoryFileIdentity::from_file(
+            &fs::File::open(&output).unwrap(),
+        )
+        .unwrap();
+        fs::rename(&output, &saved).unwrap();
+        fs::write(&output, b"matching contents").unwrap();
+        let expected = blake3::hash(b"matching contents").to_hex().to_string();
+        let error =
+            remove_verified_output_identity(&output, &expected, Some(identity)).unwrap_err();
+        assert!(matches!(
+            crate::models::CommandError::from(error),
+            crate::models::CommandError::HistoryIdentity(_)
+        ));
+        assert_eq!(fs::read(output).unwrap(), b"matching contents");
+        assert_eq!(fs::read(saved).unwrap(), b"matching contents");
+    }
+
+    #[test]
+    fn identity_cleanup_without_a_snapshot_preserves_the_output() {
+        let root = tempfile::tempdir().unwrap();
+        let output = root.path().join("output");
+        fs::write(&output, b"retained contents").unwrap();
+        let expected = blake3::hash(b"retained contents").to_hex().to_string();
+        let error = remove_verified_output_identity(&output, &expected, None).unwrap_err();
+        assert!(
+            matches!(crate::models::CommandError::from(error), crate::models::CommandError::HistoryIdentity(failure) if failure.issue == crate::models::error::HistoryIdentityIssue::Unverified)
+        );
+        assert_eq!(fs::read(output).unwrap(), b"retained contents");
+    }
 
     #[test]
     fn redo_copy_rejects_changed_sources_and_cancels_verification_before_staging() {

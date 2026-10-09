@@ -1,6 +1,28 @@
 use std::fmt;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HistoryIdentityIssue {
+    Changed,
+    Unverified,
+}
+
+#[derive(Clone, Debug)]
+pub struct HistoryIdentityFailure {
+    pub issue: HistoryIdentityIssue,
+    pub path: String,
+}
+impl fmt::Display for HistoryIdentityFailure {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let reason = match self.issue {
+            HistoryIdentityIssue::Changed => "History file identity changed; replacement preserved",
+            HistoryIdentityIssue::Unverified => "Copy history has no verified file identity",
+        };
+        write!(f, "{reason}: {}", self.path)
+    }
+}
+impl std::error::Error for HistoryIdentityFailure {}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum HistoryCopyIssue {
     SourceChanged,
     Unverified,
@@ -117,6 +139,7 @@ pub enum CommandError {
     ArchiveError(String),
     ArchiveCache(ArchiveCacheIssue),
     HistoryCopy(HistoryCopyFailure),
+    HistoryIdentity(HistoryIdentityFailure),
     TrashError(String),
     TrashFull(String),
     Other(String),
@@ -135,6 +158,7 @@ impl fmt::Display for CommandError {
             CommandError::ArchiveError(msg) => write!(f, "Archive Error: {}", msg),
             CommandError::ArchiveCache(issue) => issue.fmt(f),
             CommandError::HistoryCopy(failure) => failure.fmt(f),
+            CommandError::HistoryIdentity(failure) => failure.fmt(f),
             CommandError::TrashError(msg) => write!(f, "Trash Error: {}", msg),
             CommandError::TrashFull(msg) => write!(f, "Trash Full: {}", msg),
             CommandError::Other(msg) => write!(f, "Error: {}", msg),
@@ -144,6 +168,12 @@ impl fmt::Display for CommandError {
 
 impl From<std::io::Error> for CommandError {
     fn from(err: std::io::Error) -> Self {
+        if let Some(failure) = err
+            .get_ref()
+            .and_then(|e| e.downcast_ref::<HistoryIdentityFailure>())
+        {
+            return Self::HistoryIdentity(failure.clone());
+        }
         if let Some(failure) = err
             .get_ref()
             .and_then(|e| e.downcast_ref::<HistoryCopyFailure>())

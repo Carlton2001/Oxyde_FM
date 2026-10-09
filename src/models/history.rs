@@ -67,6 +67,11 @@ impl HistoryOperation<'_> {
     pub fn complete(mut self) {
         self.completed = true;
     }
+
+    pub(crate) fn complete_with_details(mut self, details: crate::models::TransactionDetails) {
+        self.transaction.details = details;
+        self.completed = true;
+    }
 }
 
 impl Drop for HistoryOperation<'_> {
@@ -83,14 +88,12 @@ impl Drop for HistoryOperation<'_> {
                 if self.completed {
                     match self.direction {
                         Direction::Undo => {
-                            let transaction =
-                                data.history.undo_stack.pop().expect("reserved undo entry");
-                            data.history.redo_stack.push(transaction);
+                            data.history.undo_stack.pop().expect("reserved undo entry");
+                            data.history.redo_stack.push(self.transaction.clone());
                         }
                         Direction::Redo => {
-                            let transaction =
-                                data.history.redo_stack.pop().expect("reserved redo entry");
-                            data.history.undo_stack.push(transaction);
+                            data.history.redo_stack.pop().expect("reserved redo entry");
+                            data.history.undo_stack.push(self.transaction.clone());
                         }
                     }
                 }
@@ -231,6 +234,7 @@ mod tests {
         Transaction::new(
             TransactionType::Copy,
             TransactionDetails {
+                copied_file_identities: None,
                 paths: Vec::new(),
                 target_dir: None,
                 old_path: None,
