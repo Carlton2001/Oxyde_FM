@@ -161,25 +161,30 @@ impl Asset for TooltipPreviewAsset {
     }
 }
 
-// Preserve GPUI's SVG and animated image handling, but run the LOCAL file loader
-// only after admission. Constructing its future captures services without decoding.
 struct TooltipImageAsset;
 
 impl Asset for TooltipImageAsset {
     type Source = std::path::PathBuf;
-    type Output = Result<Arc<RenderImage>, ImageCacheError>;
+    type Output =
+        Result<crate::ui::image_preview::PreviewImage, crate::ui::image_preview::PreviewError>;
 
     fn load(
         source: Self::Source,
         cx: &mut App,
     ) -> impl std::future::Future<Output = Self::Output> + Send + 'static {
-        let image = ImageAssetLoader::load(source.into(), cx);
-        let task = crate::ui::preview_jobs::load(move || futures::executor::block_on(image));
+        let renderer = cx.svg_renderer();
+        // Preserve the typed decoder error across the job runner's worker errors.
+        let task = crate::ui::preview_jobs::load(move || {
+            Ok::<_, String>(crate::ui::image_preview::load_path(&source, &renderer))
+        });
         async move {
-            task.await.map_err(|error| {
+            let result = task
+                .await
+                .map_err(crate::ui::image_preview::PreviewError::Worker)?;
+            if let Err(error) = &result {
                 log::warn!("Could not load tooltip image preview: {error}");
-                ImageCacheError::Asset(error.into())
-            })
+            }
+            result
         }
     }
 }
@@ -681,6 +686,7 @@ pub struct PreviewTask {
     data: Option<PreviewData>,
     media_asset: Option<SharedString>,
     original_image: Option<std::path::PathBuf>,
+    message: Option<Message>,
     _video_cancellation: Option<Arc<CancelVideoPreview>>,
 }
 
@@ -694,12 +700,29 @@ impl PreviewTask {
         if let Some(source) = &self.original_image {
             return window
                 .use_asset::<TooltipImageAsset>(source, cx)
-                .and_then(Result::ok);
+                .and_then(Result::ok)
+                .map(|preview| preview.image);
         }
         match &self.data {
             Some(PreviewData::Image(image)) => Some(image.clone()),
             _ => None,
         }
+    }
+    fn preview_message(&self, window: &mut Window, cx: &mut App) -> Option<Message> {
+        if let Some(source) = &self.original_image {
+            return window.use_asset::<TooltipImageAsset>(source, cx).and_then(
+                |result| match result {
+                    Ok(preview) => preview.notice,
+                    Err(error) => Some(error.message()),
+                },
+            );
+        }
+        if let Some(source) = &self.media_asset {
+            return window
+                .use_asset::<TooltipPreviewAsset>(source, cx)
+                .and_then(|result| result.err().map(|_| Message::PreviewUnavailable));
+        }
+        self.message
     }
     fn new(path: String, preview_type: PreviewType, cx: &mut Context<Self>) -> Self {
         if preview_type == PreviewType::Image {
@@ -707,6 +730,7 @@ impl PreviewTask {
                 data: None,
                 media_asset: None,
                 original_image: Some(path.into()),
+                message: None,
                 _video_cancellation: None,
             };
         }
@@ -715,6 +739,7 @@ impl PreviewTask {
                 data: None,
                 media_asset: Some(path.into()),
                 original_image: None,
+                message: None,
                 _video_cancellation: None,
             };
         }
@@ -784,6 +809,12 @@ impl PreviewTask {
                             cx.background_executor().timer(pts - elapsed).await;
                         }
                     }
+                    let _ = this.update(&mut cx, |this, cx| {
+                        if this.data.is_none() {
+                            this.message = Some(Message::PreviewUnavailable);
+                            cx.notify();
+                        }
+                    });
                     return;
                 }
 
@@ -887,12 +918,11 @@ impl PreviewTask {
                     _ => None,
                 };
 
-                if let Some(p) = preview {
-                    let _ = this.update(&mut cx, |this, cx| {
-                        this.data = Some(p);
-                        cx.notify();
-                    });
-                }
+                let _ = this.update(&mut cx, |this, cx| {
+                    this.message = preview.is_none().then_some(Message::PreviewUnavailable);
+                    this.data = preview;
+                    cx.notify();
+                });
             }
         })
         .detach();
@@ -901,6 +931,7 @@ impl PreviewTask {
             data: None,
             media_asset: None,
             original_image: None,
+            message: None,
             _video_cancellation: video_cancellation,
         }
     }
@@ -926,14 +957,29 @@ impl Render for PreviewTask {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = *OxydeTheme::global(cx);
         if let Some(image) = self.loaded_image(window, cx) {
-            let maximum = rem_pixels(rems(24.875)).min((window.viewport_size().width - rem_pixels(rems(3.625))).max(px(1.0)));
+            let maximum = rem_pixels(rems(24.875))
+                .min((window.viewport_size().width - rem_pixels(rems(3.625))).max(px(1.0)));
             let size = fitted_preview_size(&image, maximum);
-            return div().w_full().flex().child(
-                img(image)
-                    .w(size.width)
-                    .h(size.height)
-                    .object_fit(ObjectFit::Contain),
-            );
+            let notice = self.preview_message(window, cx);
+            return div()
+                .w_full()
+                .flex()
+                .flex_col()
+                .gap(rems(0.375))
+                .child(
+                    img(image)
+                        .w(size.width)
+                        .h(size.height)
+                        .object_fit(ObjectFit::Contain),
+                )
+                .when_some(notice, |this, notice| {
+                    this.child(
+                        div()
+                            .text_size(rems(0.625))
+                            .text_color(theme.text_muted)
+                            .child(cx.i18n().text(notice)),
+                    )
+                });
         }
         if let Some(preview) = &self.data {
             div().w_full().flex().child(match preview {
@@ -957,10 +1003,13 @@ impl Render for PreviewTask {
                     .into_any_element(),
             })
         } else {
+            let message = self
+                .preview_message(window, cx)
+                .unwrap_or(Message::PreviewLoading);
             div()
                 .text_size(rems(0.625))
                 .text_color(theme.text_muted)
-                .child(cx.i18n().text(Message::PreviewLoading))
+                .child(cx.i18n().text(message))
         }
     }
 }

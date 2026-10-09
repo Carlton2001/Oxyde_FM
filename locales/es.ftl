@@ -867,3 +867,6 @@ redo-move-unverified = Este historial no permite rehacer el movimiento de forma 
 redo-move-incomplete = El movimiento se detuvo y algunos elementos no pudieron volver a su ubicación original. Se han conservado archivos o carpetas para su recuperación: { $detail }. Compruebe estas ubicaciones antes de volver a intentarlo.
 
 undo-recovery-incomplete = Se ha detenido la acción de deshacer y algunos elementos no pudieron volver a su ubicación original. Se han conservado archivos o carpetas para su recuperación. Compruebe estas ubicaciones antes de volver a intentarlo: { $detail }.
+preview-unavailable = No se pudo cargar esta vista previa. Intente abrir el archivo directamente.
+preview-image-limit = Esta imagen supera los límites de la vista previa. El archivo sigue siendo accesible.
+preview-animation-static = Vista previa estática: la animación supera los límites de la vista previa.

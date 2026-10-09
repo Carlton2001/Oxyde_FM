@@ -3,6 +3,7 @@
 pub mod app;
 pub mod assets;
 pub(crate) mod preview_jobs;
+pub(crate) mod image_preview;
 pub mod components;
 pub mod elements;
 pub mod errors;

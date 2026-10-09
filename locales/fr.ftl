@@ -566,3 +566,6 @@ redo-move-unverified = Cet historique ne permet pas de rétablir le déplacement
 redo-move-incomplete = Le déplacement a été interrompu et certains éléments n’ont pas pu revenir à leur emplacement initial. Des fichiers ou dossiers sont conservés pour récupération : { $detail }. Vérifiez ces emplacements avant de réessayer.
 
 undo-recovery-incomplete = L’annulation a été interrompue et certains éléments n’ont pas pu revenir à leur emplacement initial. Des fichiers ou dossiers ont été conservés pour récupération. Vérifiez ces emplacements avant de réessayer : { $detail }.
+preview-unavailable = Impossible de charger cet aperçu. Essayez d’ouvrir le fichier directement.
+preview-image-limit = Cette image dépasse les limites de l’aperçu. Le fichier reste accessible.
+preview-animation-static = Aperçu fixe : l’animation dépasse les limites de l’aperçu.

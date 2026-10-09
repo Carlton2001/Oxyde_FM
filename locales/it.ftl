@@ -867,3 +867,6 @@ redo-move-unverified = Questa cronologia non consente di ripetere lo spostamento
 redo-move-incomplete = Lo spostamento è stato interrotto e alcuni elementi non sono tornati nella posizione originale. File o cartelle sono stati conservati per il recupero: { $detail }. Controlla queste posizioni prima di riprovare.
 
 undo-recovery-incomplete = L’annullamento è stato interrotto e alcuni elementi non sono tornati nella posizione originale. File o cartelle sono stati conservati per il recupero. Controlla queste posizioni prima di riprovare: { $detail }.
+preview-unavailable = Impossibile caricare questa anteprima. Prova ad aprire il file direttamente.
+preview-image-limit = Questa immagine supera i limiti dell’anteprima. Il file rimane accessibile.
+preview-animation-static = Anteprima statica: l’animazione supera i limiti dell’anteprima.
