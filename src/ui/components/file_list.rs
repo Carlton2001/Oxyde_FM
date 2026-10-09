@@ -68,15 +68,17 @@ impl Asset for GridThumbnailAsset {
 
     fn load(
         source: Self::Source,
-        cx: &mut App,
+        _cx: &mut App,
     ) -> impl std::future::Future<Output = Self::Output> + Send + 'static {
-        let task = cx.background_executor().spawn(async move {
+        let task = crate::ui::preview_jobs::load(move || {
             oxyde_lib::platform::platform()
                 .thumbnail(source.to_string())
                 .map_err(|error| ImageCacheError::Asset(error.to_string().into()))
         });
         async move {
-            let rgba = task.await?;
+            let rgba = task
+                .await
+                .map_err(|error| ImageCacheError::Asset(error.into()))?;
             Ok(std::sync::Arc::new(RenderImage::new(vec![
                 image::Frame::new(rgba),
             ])))

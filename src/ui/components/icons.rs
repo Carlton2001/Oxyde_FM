@@ -429,9 +429,9 @@ impl Asset for SystemIconAsset {
     type Output = Result<std::sync::Arc<RenderImage>, ImageCacheError>;
     fn load(
         source: Self::Source,
-        cx: &mut App,
+        _cx: &mut App,
     ) -> impl std::future::Future<Output = Self::Output> + Send + 'static {
-        let task = cx.background_executor().spawn(async move {
+        let task = crate::ui::preview_jobs::load(move || {
             oxyde_lib::platform::platform()
                 .file_icon(source.0.to_string(), source.1)
                 .map(|mut image| {
@@ -442,7 +442,10 @@ impl Asset for SystemIconAsset {
         });
         async move {
             Ok(std::sync::Arc::new(RenderImage::new(vec![
-                image::Frame::new(task.await?),
+                image::Frame::new(
+                    task.await
+                        .map_err(|error| ImageCacheError::Asset(error.into()))?,
+                ),
             ])))
         }
     }

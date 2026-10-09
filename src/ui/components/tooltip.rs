@@ -142,10 +142,10 @@ impl Asset for TooltipPreviewAsset {
 
     fn load(
         source: Self::Source,
-        cx: &mut App,
+        _cx: &mut App,
     ) -> impl std::future::Future<Output = Self::Output> + Send + 'static {
         let path = source.to_string();
-        let task = cx.background_executor().spawn(async move {
+        let task = crate::ui::preview_jobs::load(move || {
             let result = ::oxyde_lib::platform::platform().pdf_thumbnail(path);
             result.map_err(|error| {
                 log::warn!("Could not load tooltip media preview: {error}");
@@ -153,8 +153,33 @@ impl Asset for TooltipPreviewAsset {
             })
         });
         async move {
-            let image = task.await?;
+            let image = task
+                .await
+                .map_err(|error| ImageCacheError::Asset(error.into()))?;
             Ok(Arc::new(RenderImage::new(vec![image::Frame::new(image)])))
+        }
+    }
+}
+
+// Preserve GPUI's SVG and animated image handling, but run the LOCAL file loader
+// only after admission. Constructing its future captures services without decoding.
+struct TooltipImageAsset;
+
+impl Asset for TooltipImageAsset {
+    type Source = std::path::PathBuf;
+    type Output = Result<Arc<RenderImage>, ImageCacheError>;
+
+    fn load(
+        source: Self::Source,
+        cx: &mut App,
+    ) -> impl std::future::Future<Output = Self::Output> + Send + 'static {
+        let image = ImageAssetLoader::load(source.into(), cx);
+        let task = crate::ui::preview_jobs::load(move || futures::executor::block_on(image));
+        async move {
+            task.await.map_err(|error| {
+                log::warn!("Could not load tooltip image preview: {error}");
+                ImageCacheError::Asset(error.into())
+            })
         }
     }
 }
@@ -627,10 +652,10 @@ impl Render for Tooltip {
 fn send_video_frame<T>(
     sender: &tokio::sync::mpsc::Sender<T>,
     mut frame: T,
-    cancelled: &std::sync::atomic::AtomicBool,
+    cancelled: &crate::ui::preview_jobs::Cancellation,
 ) -> bool {
     loop {
-        if cancelled.load(std::sync::atomic::Ordering::Relaxed) {
+        if cancelled.is_cancelled() {
             return false;
         }
         match sender.try_send(frame) {
@@ -644,10 +669,10 @@ fn send_video_frame<T>(
     }
 }
 
-struct CancelVideoPreview(Arc<std::sync::atomic::AtomicBool>);
+struct CancelVideoPreview(crate::ui::preview_jobs::Cancellation);
 impl Drop for CancelVideoPreview {
     fn drop(&mut self) {
-        self.0.store(true, std::sync::atomic::Ordering::Relaxed);
+        self.0.cancel();
     }
 }
 
@@ -662,12 +687,19 @@ pub struct PreviewTask {
 impl PreviewTask {
     fn loaded_image(&self, window: &mut Window, cx: &mut App) -> Option<Arc<RenderImage>> {
         if let Some(source) = &self.media_asset {
-            return window.use_asset::<TooltipPreviewAsset>(source, cx).and_then(Result::ok);
+            return window
+                .use_asset::<TooltipPreviewAsset>(source, cx)
+                .and_then(Result::ok);
         }
         if let Some(source) = &self.original_image {
-            return window.use_asset::<ImageAssetLoader>(&source.clone().into(), cx).and_then(Result::ok);
+            return window
+                .use_asset::<TooltipImageAsset>(source, cx)
+                .and_then(Result::ok);
         }
-        match &self.data { Some(PreviewData::Image(image)) => Some(image.clone()), _ => None }
+        match &self.data {
+            Some(PreviewData::Image(image)) => Some(image.clone()),
+            _ => None,
+        }
     }
     fn new(path: String, preview_type: PreviewType, cx: &mut Context<Self>) -> Self {
         if preview_type == PreviewType::Image {
@@ -686,7 +718,7 @@ impl PreviewTask {
                 _video_cancellation: None,
             };
         }
-        let cancellation = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let cancellation = crate::ui::preview_jobs::Cancellation::default();
         let video_cancellation = (preview_type == PreviewType::Video)
             .then(|| Arc::new(CancelVideoPreview(cancellation.clone())));
         cx.spawn(move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
@@ -700,23 +732,29 @@ impl PreviewTask {
                         tokio::sync::mpsc::channel::<(Arc<RenderImage>, Duration)>(4);
 
                     let path_clone = path.clone();
-                    std::thread::spawn(move || {
-                        let receiver = tx.clone();
-                        let send_cancellation = cancellation.clone();
-                        let result = ::oxyde_lib::platform::platform().video_frames(
-                            path_clone,
-                            Box::new(move |rgba, pts| {
-                                let frame = Arc::new(RenderImage::new(vec![image::Frame::new(rgba)]));
-                                send_video_frame(&tx, (frame, pts), &send_cancellation)
-                            }),
-                            Box::new(move || {
-                                cancellation.load(std::sync::atomic::Ordering::Relaxed) || receiver.is_closed()
-                            }),
-                        );
-                        if let Err(error) = result {
-                            log::warn!("Could not stream tooltip video preview: {error}");
-                        }
-                    });
+                    let decode =
+                        crate::ui::preview_jobs::load_video(cancellation.clone(), move || {
+                            let receiver = tx.clone();
+                            let send_cancellation = cancellation.clone();
+                            ::oxyde_lib::platform::platform().video_frames(
+                                path_clone,
+                                Box::new(move |rgba, pts| {
+                                    let frame =
+                                        Arc::new(RenderImage::new(vec![image::Frame::new(rgba)]));
+                                    send_video_frame(&tx, (frame, pts), &send_cancellation)
+                                }),
+                                Box::new(move || {
+                                    cancellation.is_cancelled() || receiver.is_closed()
+                                }),
+                            )
+                        });
+                    cx.background_executor()
+                        .spawn(async move {
+                            if let Err(error) = decode.await {
+                                log::warn!("Could not stream tooltip video preview: {error}");
+                            }
+                        })
+                        .detach();
 
                     // PTS-based playback: sleep until wall-clock time matches the frame's
                     // presentation timestamp.  `start` is reset whenever the PTS resets to
@@ -754,12 +792,10 @@ impl PreviewTask {
                         let rgba_img = match preview_type {
                             PreviewType::Image => {
                                 let path = path.clone();
-                                match cx
-                                    .background_executor()
-                                    .spawn(async move {
-                                        ::oxyde_lib::platform::platform().thumbnail(path)
-                                    })
-                                    .await
+                                match crate::ui::preview_jobs::load(move || {
+                                    ::oxyde_lib::platform::platform().thumbnail(path)
+                                })
+                                .await
                                 {
                                     Ok(image) => Some(image),
                                     Err(error) => {
@@ -770,12 +806,10 @@ impl PreviewTask {
                             }
                             PreviewType::Office => {
                                 let path = path.clone();
-                                match cx
-                                    .background_executor()
-                                    .spawn(async move {
-                                        ::oxyde_lib::platform::platform().office_thumbnail(path)
-                                    })
-                                    .await
+                                match crate::ui::preview_jobs::load(move || {
+                                    ::oxyde_lib::platform::platform().office_thumbnail(path)
+                                })
+                                .await
                                 {
                                     Ok(image) => Some(image),
                                     Err(error) => {
@@ -788,12 +822,10 @@ impl PreviewTask {
                             }
                             PreviewType::Pdf => {
                                 let path = path.clone();
-                                match cx
-                                    .background_executor()
-                                    .spawn(async move {
-                                        ::oxyde_lib::platform::platform().pdf_thumbnail(path)
-                                    })
-                                    .await
+                                match crate::ui::preview_jobs::load(move || {
+                                    ::oxyde_lib::platform::platform().pdf_thumbnail(path)
+                                })
+                                .await
                                 {
                                     Ok(image) => Some(image),
                                     Err(error) => {
@@ -812,13 +844,10 @@ impl PreviewTask {
                         } else if preview_type == PreviewType::Office {
                             // Fallback to text for Office if no image
                             let path_for_text = path.clone();
-                            let content = match cx
-                                .background_executor()
-                                .spawn(async move {
-                                    ::oxyde_lib::platform::platform()
-                                        .office_text_preview(path_for_text)
-                                })
-                                .await
+                            let content = match crate::ui::preview_jobs::load(move || {
+                                ::oxyde_lib::platform::platform().office_text_preview(path_for_text)
+                            })
+                            .await
                             {
                                 Ok(content) => Some(content),
                                 Err(error) => {
@@ -840,14 +869,15 @@ impl PreviewTask {
                         }
                     }
                     PreviewType::Text => {
-                        let content = cx
-                            .background_executor()
-                            .spawn(async move {
-                                ::oxyde_lib::utils::preview::read_text_preview(std::path::Path::new(&path)).map_err(|error| {
-                                    ::oxyde_lib::models::CommandError::IoError(error.to_string())
-                                })
+                        let content = crate::ui::preview_jobs::load(move || {
+                            ::oxyde_lib::utils::preview::read_text_preview(std::path::Path::new(
+                                &path,
+                            ))
+                            .map_err(|error| {
+                                ::oxyde_lib::models::CommandError::IoError(error.to_string())
                             })
-                            .await;
+                        })
+                        .await;
                         if let Ok(content) = content {
                             Some(PreviewData::Text(content))
                         } else {
@@ -943,7 +973,7 @@ mod video_cancellation_tests {
     fn a_full_frame_queue_can_be_cancelled_without_a_consumer() {
         let (sender, _receiver) = tokio::sync::mpsc::channel(1);
         sender.try_send(1).unwrap();
-        let signal = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let signal = crate::ui::preview_jobs::Cancellation::default();
         let worker_signal = signal.clone();
         let (done, result) = std::sync::mpsc::channel();
         let worker = std::thread::spawn(move || {
@@ -951,18 +981,18 @@ mod video_cancellation_tests {
                 .unwrap();
         });
         std::thread::sleep(Duration::from_millis(20));
-        signal.store(true, std::sync::atomic::Ordering::Relaxed);
+        signal.cancel();
         assert!(!result.recv_timeout(Duration::from_secs(1)).unwrap());
         worker.join().unwrap();
     }
     #[test]
     fn final_preview_owner_cancels_without_receiving_any_frame() {
-        let signal = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let signal = crate::ui::preview_jobs::Cancellation::default();
         let owner = Arc::new(CancelVideoPreview(signal.clone()));
         let clone = owner.clone();
         drop(owner);
-        assert!(!signal.load(std::sync::atomic::Ordering::Relaxed));
+        assert!(!signal.is_cancelled());
         drop(clone);
-        assert!(signal.load(std::sync::atomic::Ordering::Relaxed));
+        assert!(signal.is_cancelled());
     }
 }
