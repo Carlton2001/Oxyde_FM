@@ -306,6 +306,8 @@ undo-failed = No se pudo deshacer: { $detail }
 undo-overwrite-unavailable = Esta copia no se puede deshacer porque ha reemplazado archivos existentes.
 
 redo-failed = No se pudo rehacer: { $detail }
+redo-copy-source-changed = El origen ha cambiado desde la copia: { $detail }. Se detuvo Rehacer para conservar sus archivos.
+redo-copy-unverified = El historial no permite verificar esta copia: { $detail }. Inicie una nueva copia desde la carpeta de origen.
 
 prepare-failed = No se pudo preparar la operación: { $detail }
 

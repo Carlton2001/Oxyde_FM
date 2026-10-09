@@ -306,6 +306,8 @@ undo-failed = Impossibile annullare: { $detail }
 undo-overwrite-unavailable = Questa copia non può essere annullata perché ha sostituito file esistenti.
 
 redo-failed = Impossibile ripetere: { $detail }
+redo-copy-source-changed = L’origine è cambiata dopo la copia: { $detail }. La ripetizione è stata interrotta per preservare i file.
+redo-copy-unverified = La cronologia non consente di verificare questa copia: { $detail }. Avvia una nuova copia dalla cartella di origine.
 
 prepare-failed = Impossibile preparare l’operazione: { $detail }
 

@@ -781,7 +781,8 @@ impl OxydeApp {
                     this.history_operation_in_progress = false;
                     if let Ok(Err(error)) = &result {
                         log::warn!("Redo failed: {error:?}");
-                        this.toast(ToastKind::Error, Message::RedoFailed, format!("{error:?}"), 0, cx);
+                        let (message, detail) = crate::ui::errors::redo_failure(error);
+                        this.toast(ToastKind::Error, message, detail, 0, cx);
                     } else if let Err(error) = &result {
                         this.toast(ToastKind::Error, Message::RedoFailed, format!("{error}"), 0, cx);
                     } else if matches!(result, Ok(Ok(Some(_)))) {

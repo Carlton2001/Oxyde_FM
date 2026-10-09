@@ -306,6 +306,8 @@ undo-failed = Rückgängig machen fehlgeschlagen: { $detail }
 undo-overwrite-unavailable = Diese Kopie kann nicht rückgängig gemacht werden, da vorhandene Dateien ersetzt wurden.
 
 redo-failed = Wiederholen fehlgeschlagen: { $detail }
+redo-copy-source-changed = Die Quelle wurde seit dem Kopieren geändert: { $detail }. Das Wiederholen wurde zum Schutz Ihrer Dateien abgebrochen.
+redo-copy-unverified = Der Verlauf kann diese Kopie nicht überprüfen: { $detail }. Kopieren Sie erneut aus dem Quellordner.
 
 prepare-failed = Vorgang konnte nicht vorbereitet werden: { $detail }
 

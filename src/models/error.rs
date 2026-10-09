@@ -1,6 +1,28 @@
 use std::fmt;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HistoryCopyIssue {
+    SourceChanged,
+    Unverified,
+}
+
+#[derive(Clone, Debug)]
+pub struct HistoryCopyFailure {
+    pub issue: HistoryCopyIssue,
+    pub path: String,
+}
+impl fmt::Display for HistoryCopyFailure {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let reason = match self.issue {
+            HistoryCopyIssue::SourceChanged => "Redo copy source changed since the operation",
+            HistoryCopyIssue::Unverified => "Redo copy journal has no verified hash for source",
+        };
+        write!(f, "{reason}: {}", self.path)
+    }
+}
+impl std::error::Error for HistoryCopyFailure {}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ArchiveCacheIssue {
     Full,
     Busy,
@@ -94,6 +116,7 @@ pub enum CommandError {
     SystemError(String),
     ArchiveError(String),
     ArchiveCache(ArchiveCacheIssue),
+    HistoryCopy(HistoryCopyFailure),
     TrashError(String),
     TrashFull(String),
     Other(String),
@@ -111,6 +134,7 @@ impl fmt::Display for CommandError {
             CommandError::SystemError(msg) => write!(f, "System Error: {}", msg),
             CommandError::ArchiveError(msg) => write!(f, "Archive Error: {}", msg),
             CommandError::ArchiveCache(issue) => issue.fmt(f),
+            CommandError::HistoryCopy(failure) => failure.fmt(f),
             CommandError::TrashError(msg) => write!(f, "Trash Error: {}", msg),
             CommandError::TrashFull(msg) => write!(f, "Trash Full: {}", msg),
             CommandError::Other(msg) => write!(f, "Error: {}", msg),
@@ -120,6 +144,12 @@ impl fmt::Display for CommandError {
 
 impl From<std::io::Error> for CommandError {
     fn from(err: std::io::Error) -> Self {
+        if let Some(failure) = err
+            .get_ref()
+            .and_then(|e| e.downcast_ref::<HistoryCopyFailure>())
+        {
+            return Self::HistoryCopy(failure.clone());
+        }
         if let Some(issue) = err
             .get_ref()
             .and_then(|e| e.downcast_ref::<ArchiveCacheIssue>())

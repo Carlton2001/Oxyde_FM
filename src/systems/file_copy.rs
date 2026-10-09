@@ -47,6 +47,51 @@ pub(crate) fn copy(
     copy_with_source(source, destination, replace, None, progress).map(|output| output.hash)
 }
 
+pub(crate) fn copy_verified(
+    source: &Path,
+    destination: &Path,
+    expected: &str,
+    progress: &mut dyn FnMut(u64) -> io::Result<()>,
+) -> io::Result<String> {
+    copy_verified_with_checkpoint(source, destination, expected, &mut || Ok(()), progress)
+}
+
+fn copy_verified_with_checkpoint(
+    source: &Path,
+    destination: &Path,
+    expected: &str,
+    checkpoint: &mut dyn FnMut() -> io::Result<()>,
+    progress: &mut dyn FnMut(u64) -> io::Result<()>,
+) -> io::Result<String> {
+    let source_parents = super::path_parents::HeldParents::new(source)?;
+    let resolved = source_parents.resolved_path(source)?;
+    // Read access only: Copy must not require DELETE permission on its source.
+    // Windows keeps this ordinary file unchanged through hashing and publication.
+    let mut original = platform().open_archive_source(&resolved, false)?;
+    if super::history_move::hash_with(&mut original, &mut || progress(0))? != expected {
+        return Err(history_source_changed(source));
+    }
+    checkpoint()?;
+    let destination_parents = super::path_parents::HeldParents::new(destination)?;
+    copy_with_parents_checked(
+        &resolved,
+        destination,
+        false,
+        Some(&original),
+        Some(expected),
+        destination_parents,
+        progress,
+    )
+    .map(|output| output.hash)
+}
+
+fn history_source_changed(source: &Path) -> io::Error {
+    io::Error::other(crate::models::error::HistoryCopyFailure {
+        issue: crate::models::error::HistoryCopyIssue::SourceChanged,
+        path: source.to_string_lossy().into_owned(),
+    })
+}
+
 pub(super) struct CopiedFile {
     pub file: std::fs::File,
     pub hash: String,
@@ -79,6 +124,26 @@ pub(super) fn copy_with_parents(
     destination_parents: super::path_parents::HeldParents,
     progress: &mut dyn FnMut(u64) -> io::Result<()>,
 ) -> io::Result<CopiedFile> {
+    copy_with_parents_checked(
+        source,
+        destination,
+        replace,
+        held_source,
+        None,
+        destination_parents,
+        progress,
+    )
+}
+
+fn copy_with_parents_checked(
+    source: &Path,
+    destination: &Path,
+    replace: bool,
+    held_source: Option<&std::fs::File>,
+    expected: Option<&str>,
+    destination_parents: super::path_parents::HeldParents,
+    progress: &mut dyn FnMut(u64) -> io::Result<()>,
+) -> io::Result<CopiedFile> {
     let source_parents = super::path_parents::HeldParents::new(source)?;
     let source = source_parents.resolved_path(source)?;
     let destination = destination_parents.resolved_path(destination)?;
@@ -96,6 +161,10 @@ pub(super) fn copy_with_parents(
     )?;
     let mut output = platform().open_operation_file(&staging.directory, &staging.file, true)?;
     let hash = hash(&mut output, progress)?;
+    if expected.is_some_and(|expected| expected != hash) {
+        // The output is still private: failure never publishes unexpected bytes.
+        return Err(history_source_changed(&source));
+    }
     if replace {
         check_replacement(&destination)?;
     }
@@ -176,6 +245,143 @@ mod tests {
     use super::*;
     use std::fs;
     use std::io::ErrorKind;
+
+    #[test]
+    fn redo_copy_rejects_changed_sources_and_cancels_verification_before_staging() {
+        let root = tempfile::tempdir().unwrap();
+        let source = root.path().join("source");
+        let destination = root.path().join("destination");
+        fs::write(&source, vec![0x42; 256 * 1024]).unwrap();
+        let error = copy_verified(&source, &destination, "old hash", &mut |_| Ok(())).unwrap_err();
+        assert!(
+            matches!(crate::models::CommandError::from(error), crate::models::CommandError::HistoryCopy(failure) if failure.issue == crate::models::error::HistoryCopyIssue::SourceChanged)
+        );
+        assert!(!destination.exists());
+        let expected = blake3::hash(&vec![0x42; 256 * 1024]).to_hex().to_string();
+        let mut calls = 0;
+        let error = copy_verified(&source, &destination, &expected, &mut |_| {
+            calls += 1;
+            if calls == 2 {
+                Err(io::Error::new(
+                    ErrorKind::Interrupted,
+                    "cancel verification",
+                ))
+            } else {
+                Ok(())
+            }
+        })
+        .unwrap_err();
+        assert_eq!(error.kind(), ErrorKind::Interrupted);
+        assert!(!destination.exists());
+        assert_eq!(fs::read(&source).unwrap(), vec![0x42; 256 * 1024]);
+        assert_eq!(fs::read_dir(root.path()).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn redo_copy_never_publishes_a_staged_hash_mismatch() {
+        let root = tempfile::tempdir().unwrap();
+        let source = root.path().join("source");
+        let destination = root.path().join("destination");
+        fs::write(&source, b"unexpected staged bytes").unwrap();
+        let parents = super::super::path_parents::HeldParents::new(&destination).unwrap();
+        let result = copy_with_parents_checked(
+            &source,
+            &destination,
+            false,
+            None,
+            Some("expected journal hash"),
+            parents,
+            &mut |_| Ok(()),
+        );
+        let error = match result {
+            Ok(_) => panic!("unverified output was published"),
+            Err(error) => error,
+        };
+        assert!(matches!(
+            crate::models::CommandError::from(error),
+            crate::models::CommandError::HistoryCopy(_)
+        ));
+        assert!(!destination.exists());
+        assert_eq!(fs::read(&source).unwrap(), b"unexpected staged bytes");
+        assert_eq!(fs::read_dir(root.path()).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn redo_copy_stays_in_its_resolved_source_after_junction_retargeting() {
+        use crate::platform::windows_reparse_tests::{Retarget, junction};
+        let root = tempfile::tempdir().unwrap();
+        let selected = root.path().join("selected");
+        let outside = root.path().join("outside");
+        fs::create_dir(&selected).unwrap();
+        fs::create_dir(&outside).unwrap();
+        fs::write(selected.join("source"), b"verified source").unwrap();
+        fs::write(outside.join("source"), b"outside witness").unwrap();
+        let link = root.path().join("link");
+        let template = root.path().join("template");
+        junction(&link, &selected);
+        junction(&template, &outside);
+        let retarget = Retarget::new(&link, &template);
+        let destination = root.path().join("destination");
+        let expected = blake3::hash(b"verified source").to_hex().to_string();
+        copy_verified_with_checkpoint(
+            &link.join("source"),
+            &destination,
+            &expected,
+            &mut || {
+                retarget.apply();
+                Ok(())
+            },
+            &mut |_| Ok(()),
+        )
+        .unwrap();
+        assert_eq!(fs::read(destination).unwrap(), b"verified source");
+        assert_eq!(
+            fs::read(selected.join("source")).unwrap(),
+            b"verified source"
+        );
+        assert_eq!(
+            fs::read(outside.join("source")).unwrap(),
+            b"outside witness"
+        );
+        drop(retarget);
+        fs::remove_dir(link).unwrap();
+        fs::remove_dir(template).unwrap();
+    }
+
+    #[test]
+    fn redo_copy_keeps_the_verified_source_when_replacement_is_attempted() {
+        let root = tempfile::tempdir().unwrap();
+        let source = root.path().join("source");
+        let destination = root.path().join("destination");
+        let displaced = root.path().join("displaced");
+        fs::write(&source, b"verified contents").unwrap();
+        let expected = blake3::hash(b"verified contents").to_hex().to_string();
+        let mut blocked = false;
+        let result = copy_verified_with_checkpoint(
+            &source,
+            &destination,
+            &expected,
+            &mut || {
+                if fs::rename(&source, &displaced).is_ok() {
+                    fs::write(&source, b"independent replacement")?;
+                } else {
+                    blocked = true;
+                    assert!(fs::write(&source, b"concurrent write").is_err());
+                }
+                Ok(())
+            },
+            &mut |_| Ok(()),
+        );
+        assert!(result.is_ok(), "verified copy failed: {result:?}");
+        assert_eq!(
+            fs::read(&destination).unwrap(),
+            b"verified contents",
+            "replacement was published after successful hash verification"
+        );
+        assert!(blocked);
+        assert_eq!(fs::read(&source).unwrap(), b"verified contents");
+        assert!(!displaced.exists());
+    }
 
     #[test]
     fn verified_copy_cleanup_preserves_readonly_foreign_hardlink_attributes() {

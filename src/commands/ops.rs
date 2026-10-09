@@ -649,13 +649,30 @@ pub async fn redo_last_action(
                     ));
                 }
                 if let Some(files) = &tx.details.copied_files {
-                    let files: Vec<(PathBuf, PathBuf)> = files
+                    let files: Vec<(PathBuf, PathBuf, String)> = files
                         .iter()
                         .map(|(source, destination)| {
-                            (PathBuf::from(source), PathBuf::from(destination))
+                            let hash = tx
+                                .details
+                                .copied_file_hashes
+                                .as_deref()
+                                .unwrap_or_default()
+                                .iter()
+                                .find(|(path, _)| path == destination)
+                                .map(|(_, hash)| hash.clone())
+                                .ok_or_else(|| {
+                                    CommandError::HistoryCopy(
+                                        crate::models::error::HistoryCopyFailure {
+                                            issue:
+                                                crate::models::error::HistoryCopyIssue::Unverified,
+                                            path: source.clone(),
+                                        },
+                                    )
+                                })?;
+                            Ok((PathBuf::from(source), PathBuf::from(destination), hash))
                         })
-                        .collect();
-                    for (source, destination) in &files {
+                        .collect::<Result<_, CommandError>>()?;
+                    for (source, destination, _) in &files {
                         if !source.exists() {
                             return Err(CommandError::IoError(format!(
                                 "Cannot redo copy; source is missing: {}",
@@ -668,24 +685,8 @@ pub async fn redo_last_action(
                                 destination.display()
                             )));
                         }
-                        let expected_hash = tx
-                            .details
-                            .copied_file_hashes
-                            .as_deref()
-                            .unwrap_or_default()
-                            .iter()
-                            .find(|(path, _)| path == &destination.to_string_lossy())
-                            .map(|(_, hash)| hash.as_str());
-                        if let Some(expected_hash) = expected_hash {
-                            if hash_file(source)? != expected_hash {
-                                return Err(CommandError::Other(format!(
-                                    "Cannot redo copy because the source changed since the operation: {}",
-                                    source.display()
-                                )));
-                            }
-                        }
                     }
-                    for (source, _) in &files {
+                    for (source, _, _) in &files {
                         std::fs::metadata(source)
                             .map_err(|error| CommandError::IoError(error.to_string()))?;
                     }
@@ -716,10 +717,9 @@ pub async fn redo_last_action(
                         made_dirs.push(directory.clone());
                     }
                     if !files.is_empty() {
-                        if let Err(error) = perform_copy_with_progress(
-                            files,
-                            Arc::new(AtomicBool::new(false)),
-                        ) {
+                        if let Err(error) =
+                            perform_copy_with_progress(files, Arc::new(AtomicBool::new(false)))
+                        {
                             for directory in made_dirs.iter().rev() {
                                 let _ = std::fs::remove_dir(directory);
                             }
@@ -924,16 +924,16 @@ pub async fn redo_last_action(
 
 // Copies files with cancellation and rollback on failure.
 fn perform_copy_with_progress(
-    files: Vec<(PathBuf, PathBuf)>,
+    files: Vec<(PathBuf, PathBuf, String)>,
     cancel_flag: Arc<AtomicBool>,
 ) -> Result<(), CommandError> {
     let mut published: Vec<(PathBuf, String)> = Vec::new();
-    for (source, destination) in files {
+    for (source, destination, expected) in files {
         let result = (|| {
             if let Some(parent) = destination.parent() {
                 std::fs::create_dir_all(parent)?;
             }
-            crate::systems::file_copy::copy(&source, &destination, false, &mut |_| {
+            crate::systems::file_copy::copy_verified(&source, &destination, &expected, &mut |_| {
                 if cancel_flag.load(Ordering::Relaxed) {
                     return Err(std::io::Error::new(
                         std::io::ErrorKind::Interrupted,
@@ -955,14 +955,14 @@ fn perform_copy_with_progress(
                             .map(|error| format!("{}: {error}", path.display()))
                     })
                     .collect();
-                return Err(CommandError::IoError(if rollback_errors.is_empty() {
-                    error.to_string()
+                return Err(if rollback_errors.is_empty() {
+                    CommandError::from(error)
                 } else {
-                    format!(
+                    CommandError::IoError(format!(
                         "{error}; redo copy rollback incomplete: {}",
                         rollback_errors.join("; ")
-                    )
-                }));
+                    ))
+                });
             }
         }
     }
@@ -1118,11 +1118,130 @@ mod trash_restore_tests {
 
 #[cfg(test)]
 mod copy_redo_tests {
-    use super::{perform_copy_with_progress, undo_last_action};
-    use crate::models::transaction::{Transaction, TransactionDetails, TransactionType};
+    use super::{perform_copy_with_progress, redo_last_action, undo_last_action};
     use crate::models::HistoryManager;
-    use std::sync::atomic::AtomicBool;
+    use crate::models::transaction::{Transaction, TransactionDetails, TransactionType};
     use std::sync::Arc;
+    use std::sync::atomic::AtomicBool;
+
+    #[test]
+    fn redo_copy_rejects_incomplete_or_changed_journals_and_can_retry() {
+        use crate::models::error::HistoryCopyIssue;
+        for missing_hash in [false, true] {
+            let root = tempfile::tempdir().unwrap();
+            let source = root.path().join("source.txt");
+            let output_directory = root.path().join("copied-folder");
+            std::fs::create_dir(&output_directory).unwrap();
+            let destination = output_directory.join("copy.txt");
+            std::fs::write(&source, b"original copy").unwrap();
+            std::fs::write(&destination, b"original copy").unwrap();
+            let name = |path: &std::path::Path| path.to_string_lossy().into_owned();
+            let history = HistoryManager::new();
+            history.push(Transaction::new(
+                TransactionType::Copy,
+                TransactionDetails {
+                    paths: vec![name(&source)],
+                    target_dir: None,
+                    old_path: None,
+                    new_path: None,
+                    created_files: Some(vec![name(&destination)]),
+                    created_dirs: Some(vec![name(&output_directory)]),
+                    overwritten_files: Some(vec![]),
+                    moved_files: None,
+                    trash_metadata_backups: None,
+                    moved_dirs: None,
+                    copied_files: Some(vec![(name(&source), name(&destination))]),
+                    copied_file_hashes: Some(if missing_hash {
+                        vec![]
+                    } else {
+                        vec![(
+                            name(&destination),
+                            blake3::hash(b"original copy").to_hex().to_string(),
+                        )]
+                    }),
+                },
+            ));
+            // Missing-proof fixture reserves the prior phase without guessing an Undo.
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .build()
+                .unwrap();
+            if missing_hash {
+                history.begin_undo().unwrap().unwrap().complete();
+                std::fs::remove_file(&destination).unwrap();
+                std::fs::remove_dir(&output_directory).unwrap();
+            } else {
+                runtime.block_on(undo_last_action(&history)).unwrap();
+                std::fs::write(&source, b"independent change").unwrap();
+            }
+            let error = runtime.block_on(redo_last_action(&history)).unwrap_err();
+            assert!(
+                matches!(error, crate::models::CommandError::HistoryCopy(failure) if failure.issue == if missing_hash { HistoryCopyIssue::Unverified } else { HistoryCopyIssue::SourceChanged })
+            );
+            assert!(!destination.exists());
+            assert!(!output_directory.exists());
+            assert_eq!(
+                (
+                    history.get_state().undo_stack.len(),
+                    history.get_state().redo_stack.len()
+                ),
+                (0, 1)
+            );
+            if !missing_hash {
+                assert_eq!(std::fs::read(&source).unwrap(), b"independent change");
+                std::fs::write(&source, b"original copy").unwrap();
+                runtime.block_on(redo_last_action(&history)).unwrap();
+                assert_eq!(std::fs::read(&destination).unwrap(), b"original copy");
+                assert_eq!(
+                    (
+                        history.get_state().undo_stack.len(),
+                        history.get_state().redo_stack.len()
+                    ),
+                    (1, 0)
+                );
+                runtime.block_on(undo_last_action(&history)).unwrap();
+                assert!(!destination.exists());
+                runtime.block_on(redo_last_action(&history)).unwrap();
+                assert_eq!(std::fs::read(&destination).unwrap(), b"original copy");
+            } else {
+                assert_eq!(std::fs::read(&source).unwrap(), b"original copy");
+            }
+        }
+    }
+
+    #[test]
+    fn redo_copy_rolls_back_earlier_outputs_when_a_later_source_changed() {
+        let root = tempfile::tempdir().unwrap();
+        let first = root.path().join("first");
+        let second = root.path().join("second");
+        let first_destination = root.path().join("first-output");
+        let second_destination = root.path().join("second-output");
+        std::fs::write(&first, b"first copy").unwrap();
+        std::fs::write(&second, b"changed second copy").unwrap();
+        let result = perform_copy_with_progress(
+            vec![
+                (
+                    first.clone(),
+                    first_destination.clone(),
+                    blake3::hash(b"first copy").to_hex().to_string(),
+                ),
+                (
+                    second.clone(),
+                    second_destination.clone(),
+                    blake3::hash(b"old second copy").to_hex().to_string(),
+                ),
+            ],
+            Arc::new(AtomicBool::new(false)),
+        );
+        assert!(matches!(
+            result,
+            Err(crate::models::CommandError::HistoryCopy(_))
+        ));
+        assert!(!first_destination.exists());
+        assert!(!second_destination.exists());
+        assert_eq!(std::fs::read(first).unwrap(), b"first copy");
+        assert_eq!(std::fs::read(second).unwrap(), b"changed second copy");
+        assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 2);
+    }
 
     #[test]
     fn undo_copy_directory_error_preserves_outputs_and_allows_retry() {
@@ -1187,8 +1306,16 @@ mod copy_redo_tests {
 
         let result = perform_copy_with_progress(
             vec![
-                (first_source, first_destination.clone()),
-                (second_source, second_destination.clone()),
+                (
+                    first_source,
+                    first_destination.clone(),
+                    blake3::hash(b"new file").to_hex().to_string(),
+                ),
+                (
+                    second_source,
+                    second_destination.clone(),
+                    blake3::hash(b"source version").to_hex().to_string(),
+                ),
             ],
             Arc::new(AtomicBool::new(false)),
         );
