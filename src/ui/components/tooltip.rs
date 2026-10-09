@@ -758,12 +758,15 @@ impl VideoClock {
     }
 }
 
+const PREVIEW_LOADING_DELAY: Duration = Duration::from_secs(1);
+
 #[derive(Clone)]
 pub struct PreviewTask {
     data: Option<PreviewData>,
     media_asset: Option<SharedString>,
     original_image: Option<std::path::PathBuf>,
     message: Option<Message>,
+    loading_delay_elapsed: bool,
     _video_cancellation: Option<Arc<CancelVideoPreview>>,
 }
 
@@ -802,6 +805,18 @@ impl PreviewTask {
         self.message
     }
     fn new(path: String, preview_type: PreviewType, cx: &mut Context<Self>) -> Self {
+        // The task holds only a weak entity reference: closing the tooltip
+        // cannot bring its loading message back after the delay.
+        cx.spawn(async move |this, cx| {
+            cx.background_executor().timer(PREVIEW_LOADING_DELAY).await;
+            let _ = this.update(cx, |this, cx| {
+                this.loading_delay_elapsed = true;
+                if this.data.is_none() && this.message.is_none() {
+                    cx.notify();
+                }
+            });
+        })
+        .detach();
         if preview_type == PreviewType::Image {
             let path = std::path::PathBuf::from(path);
             retain_tooltip_asset(TooltipAssetSource::Image(path.clone()), cx);
@@ -810,6 +825,7 @@ impl PreviewTask {
                 media_asset: None,
                 original_image: Some(path),
                 message: None,
+                loading_delay_elapsed: false,
                 _video_cancellation: None,
             };
         }
@@ -821,6 +837,7 @@ impl PreviewTask {
                 media_asset: Some(path),
                 original_image: None,
                 message: None,
+                loading_delay_elapsed: false,
                 _video_cancellation: None,
             };
         }
@@ -1021,6 +1038,7 @@ impl PreviewTask {
             media_asset: None,
             original_image: None,
             message: None,
+            loading_delay_elapsed: false,
             _video_cancellation: video_cancellation,
         }
     }
@@ -1096,11 +1114,11 @@ impl Render for PreviewTask {
         } else {
             let message = self
                 .preview_message(window, cx)
-                .unwrap_or(Message::PreviewLoading);
+                .or_else(|| self.loading_delay_elapsed.then_some(Message::PreviewLoading));
             div()
                 .text_size(rems(0.625))
                 .text_color(theme.text_muted)
-                .child(cx.i18n().text(message))
+                .when_some(message, |this, message| this.child(cx.i18n().text(message)))
         }
     }
 }

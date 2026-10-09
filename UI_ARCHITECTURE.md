@@ -242,6 +242,10 @@ Les dossiers restent en tête en ordre ascendant et descendant. GPUI prépare un
 Le lecteur vidéo reçoit un signal d’annulation indépendant des images. La destruction du dernier propriétaire de l’aperçu le déclenche ; lectures, reprise et envoi dans la file bornée le contrôlent sur le worker. Une erreur native est propagée et journalisée, sans nouveau toast. Seule une fin normale après une image relance la lecture ; les flux vides et les buffers tronqués sont refusés. Le type RGB32 de sortie, son stride signé et la longueur valide du buffer guident la conversion. Les opérations natives déjà bloquées restent soumises à leur propre délai.
 
 
+### Retour de chargement des aperçus
+
+Dans les infobulles, « Chargement de l’aperçu… » apparaît seulement après une seconde si aucun résultat n’est encore disponible. Images, PDF, vidéos et autres aperçus commencent à charger immédiatement ; un résultat prêt est affiché sans attendre ce délai. Les erreurs et avertissements ne sont pas retardés. Le timer utilise une référence faible à la vue et ne réouvre pas une infobulle fermée.
+
 ### Géométrie de la fenêtre principale
 
 `ui/window_geometry.rs` capture les bounds restaurables de GPUI et l’état maximisé dans `AppConfig::window_placement`. Les déplacements/redimensionnements actualisent le snapshot immédiatement ; les écritures passent par la file des préférences après 350 ms de calme. Le hook de sortie force l’envoi de la dernière géométrie avant d’attendre cette file. Les positions négatives sur un écran secondaire sont conservées ; une géométrie invalide ou un écran disparu déclenche un ajustement aux zones visibles des écrans disponibles. Une minimisation ne remplace pas l’état visible mémorisé. Réinitialiser les préférences conserve cette géométrie.
