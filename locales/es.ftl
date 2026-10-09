@@ -873,3 +873,8 @@ preview-animation-static = Vista previa estática: la animación supera los lím
 
 undo-move-changed = No se puede deshacer este movimiento: el archivo o la carpeta fue reemplazado o creado de nuevo. Se ha conservado en su ubicación actual. { $detail }
 undo-move-unverified = No se puede deshacer este movimiento de forma segura: no se pudo verificar la identidad del archivo o la carpeta. Se ha conservado. { $detail }
+
+undo-rename-changed = No se puede deshacer este cambio de nombre: el archivo o la carpeta fue reemplazado. Se ha conservado en su ubicación actual. { $detail }
+undo-rename-unverified = No se puede deshacer este cambio de nombre de forma segura: no se pudo verificar la identidad del archivo o la carpeta. Se ha conservado. { $detail }
+redo-rename-changed = No se puede rehacer este cambio de nombre: el archivo o la carpeta fue reemplazado. Se ha conservado en su ubicación actual. { $detail }
+redo-rename-unverified = No se puede rehacer este cambio de nombre de forma segura: no se pudo verificar la identidad del archivo o la carpeta. Se ha conservado. { $detail }

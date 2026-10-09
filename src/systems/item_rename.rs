@@ -3,6 +3,7 @@ use super::path_parents::HeldParents;
 use crate::platform::platform;
 use std::{io, path::Path};
 
+#[cfg(test)]
 pub(crate) fn rename(source: &Path, destination: &Path) -> io::Result<()> {
     rename_with_checkpoint(source, destination, &mut || Ok(()))
 }
@@ -12,6 +13,16 @@ pub(crate) fn rename_with_checkpoint(
     destination: &Path,
     checkpoint: &mut dyn FnMut() -> io::Result<()>,
 ) -> io::Result<()> {
+    rename_captured_with_checkpoint(source, destination, None, checkpoint).map(|_| ())
+}
+
+/// Capture from the very handle used for renaming, never by reopening its name.
+pub(crate) fn rename_captured_with_checkpoint(
+    source: &Path,
+    destination: &Path,
+    expected: Option<crate::models::transaction::HistoryFileIdentity>,
+    checkpoint: &mut dyn FnMut() -> io::Result<()>,
+) -> io::Result<Option<crate::models::transaction::HistoryFileIdentity>> {
     if source == destination {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -40,6 +51,11 @@ pub(crate) fn rename_with_checkpoint(
         Err(error) => return Err(error),
     }
     let file = platform().open_rename_item(parents.directory(), &source)?;
+    if let Some(expected) = expected {
+        if !expected.matches(&file)? {
+            return Err(history_failure(&source, true));
+        }
+    }
     checkpoint()?;
     for parent in [parents.directory(), destination_parents.directory()] {
         let metadata = parent.metadata()?;
@@ -64,7 +80,39 @@ pub(crate) fn rename_with_checkpoint(
             } else {
                 error
             }
-        })
+        })?;
+    // The rename is already complete: failed capture disables history without
+    // turning a successful operation into a misleading, unjournaled failure.
+    Ok(
+        crate::models::transaction::HistoryFileIdentity::from_file(&file)
+            .map_err(|error| {
+                log::warn!(
+                    "Rename identity unavailable for {}: {error}",
+                    destination.display()
+                )
+            })
+            .ok(),
+    )
+}
+
+fn history_failure(path: &Path, changed: bool) -> io::Error {
+    io::Error::other(crate::models::error::HistoryRenameFailure {
+        issue: if changed {
+            crate::models::error::HistoryIdentityIssue::Changed
+        } else {
+            crate::models::error::HistoryIdentityIssue::Unverified
+        },
+        path: path.to_string_lossy().into_owned(),
+    })
+}
+
+pub(crate) fn rename_from_history(
+    source: &Path,
+    destination: &Path,
+    expected: Option<crate::models::transaction::HistoryFileIdentity>,
+) -> io::Result<()> {
+    let expected = expected.ok_or_else(|| history_failure(source, false))?;
+    rename_captured_with_checkpoint(source, destination, Some(expected), &mut || Ok(())).map(|_| ())
 }
 
 #[cfg(test)]
@@ -77,6 +125,62 @@ mod tests {
             .open_rename_item(parents.directory(), &parents.resolved_path(path).unwrap())
             .unwrap();
         platform().file_identity(&file).unwrap()
+    }
+
+    #[test]
+    fn captured_rename_proof_follows_files_and_directories_without_retaining_handles() {
+        for directory in [false, true] {
+            let root = tempfile::tempdir().unwrap();
+            let source = root.path().join("source");
+            let renamed = root.path().join("renamed");
+            let displaced = root.path().join("displaced");
+            if directory {
+                std::fs::create_dir(&source).unwrap();
+            } else {
+                std::fs::write(&source, b"selected file").unwrap();
+            }
+            let proof = rename_captured_with_checkpoint(&source, &renamed, None, &mut || Ok(()))
+                .unwrap()
+                .unwrap();
+            // A durable proof must not hold a handle that prevents independent rename.
+            std::fs::rename(&renamed, &displaced).unwrap();
+            if directory {
+                std::fs::create_dir(&renamed).unwrap();
+            } else {
+                std::fs::write(&renamed, b"selected file").unwrap();
+            }
+            let error = rename_from_history(&renamed, &source, Some(proof)).unwrap_err();
+            assert!(matches!(crate::models::CommandError::from(error),
+                crate::models::CommandError::HistoryRename(failure)
+                if failure.issue == crate::models::error::HistoryIdentityIssue::Changed));
+            assert!(renamed.exists());
+            assert!(displaced.exists());
+            assert!(!source.exists());
+            if directory {
+                std::fs::remove_dir(&renamed).unwrap();
+            } else {
+                std::fs::remove_file(&renamed).unwrap();
+            }
+            std::fs::rename(&displaced, &renamed).unwrap();
+            for _ in 0..2 {
+                rename_from_history(&renamed, &source, Some(proof)).unwrap();
+                rename_from_history(&source, &renamed, Some(proof)).unwrap();
+            }
+        }
+    }
+
+    #[test]
+    fn rename_history_without_proof_preserves_existing_source() {
+        let root = tempfile::tempdir().unwrap();
+        let source = root.path().join("source.txt");
+        let destination = root.path().join("renamed.txt");
+        std::fs::write(&source, b"selected file").unwrap();
+        let error = rename_from_history(&source, &destination, None).unwrap_err();
+        assert!(matches!(crate::models::CommandError::from(error),
+            crate::models::CommandError::HistoryRename(failure)
+            if failure.issue == crate::models::error::HistoryIdentityIssue::Unverified));
+        assert_eq!(std::fs::read(&source).unwrap(), b"selected file");
+        assert!(!destination.exists());
     }
 
     #[test]

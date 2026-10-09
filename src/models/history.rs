@@ -263,6 +263,7 @@ mod tests {
         Transaction::new(
             TransactionType::Copy,
             TransactionDetails {
+                renamed_item_identity: None,
                 moved_directory_identities: None,
                 new_folder_identity: None,
                 moved_file_identities: None,

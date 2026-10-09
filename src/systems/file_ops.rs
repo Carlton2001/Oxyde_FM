@@ -691,6 +691,7 @@ impl FileOperationManager {
                     .map(|p| p.to_string_lossy().to_string());
 
                 let details = TransactionDetails {
+                    renamed_item_identity: None,
                     moved_directory_identities: Some(
                         locked.moved_directory_identities.iter()
                             .map(|(path, identity)| (path.to_string_lossy().into_owned(), identity.clone()))

@@ -873,3 +873,8 @@ preview-animation-static = Standbild: Die Animation überschreitet die Vorschaug
 
 undo-move-changed = Dieses Verschieben kann nicht rückgängig gemacht werden: Die Datei oder der Ordner wurde ersetzt oder neu erstellt. Das Element bleibt an seinem aktuellen Ort erhalten. { $detail }
 undo-move-unverified = Dieses Verschieben kann nicht sicher rückgängig gemacht werden: Die Identität der Datei oder des Ordners konnte nicht überprüft werden. Das Element bleibt erhalten. { $detail }
+
+undo-rename-changed = Das Umbenennen kann nicht rückgängig gemacht werden: Die Datei oder der Ordner wurde ersetzt. Das Element bleibt an seinem aktuellen Ort erhalten. { $detail }
+undo-rename-unverified = Das Umbenennen kann nicht sicher rückgängig gemacht werden: Die Identität der Datei oder des Ordners konnte nicht überprüft werden. Das Element bleibt erhalten. { $detail }
+redo-rename-changed = Das Umbenennen kann nicht wiederholt werden: Die Datei oder der Ordner wurde ersetzt. Das Element bleibt an seinem aktuellen Ort erhalten. { $detail }
+redo-rename-unverified = Das Umbenennen kann nicht sicher wiederholt werden: Die Identität der Datei oder des Ordners konnte nicht überprüft werden. Das Element bleibt erhalten. { $detail }

@@ -873,3 +873,8 @@ preview-animation-static = Anteprima statica: l’animazione supera i limiti del
 
 undo-move-changed = Impossibile annullare questo spostamento: il file o la cartella è stato sostituito o ricreato. È stato conservato nella posizione attuale. { $detail }
 undo-move-unverified = Impossibile annullare questo spostamento in sicurezza: non è stato possibile verificare l’identità del file o della cartella. L’elemento è stato conservato. { $detail }
+
+undo-rename-changed = Impossibile annullare questa rinomina: il file o la cartella è stato sostituito. È stato conservato nella posizione attuale. { $detail }
+undo-rename-unverified = Impossibile annullare questa rinomina in sicurezza: non è stato possibile verificare l’identità del file o della cartella. L’elemento è stato conservato. { $detail }
+redo-rename-changed = Impossibile ripetere questa rinomina: il file o la cartella è stato sostituito. È stato conservato nella posizione attuale. { $detail }
+redo-rename-unverified = Impossibile ripetere questa rinomina in sicurezza: non è stato possibile verificare l’identità del file o della cartella. L’elemento è stato conservato. { $detail }

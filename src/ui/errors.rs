@@ -2,6 +2,15 @@ use crate::ui::i18n::Message;
 use oxyde_lib::models::CommandError;
 
 pub fn undo_failure(error: &CommandError) -> (Message, String) {
+    if let CommandError::HistoryRename(failure) = error {
+        let message = match failure.issue {
+            oxyde_lib::models::error::HistoryIdentityIssue::Changed => Message::UndoRenameChanged,
+            oxyde_lib::models::error::HistoryIdentityIssue::Unverified => {
+                Message::UndoRenameUnverified
+            }
+        };
+        return (message, failure.path.clone());
+    }
     if let CommandError::HistoryMove(failure) = error {
         use oxyde_lib::models::error::HistoryMoveIssue as Issue;
         let message = match failure.issue {
@@ -41,6 +50,15 @@ pub fn undo_failure(error: &CommandError) -> (Message, String) {
 }
 
 pub fn redo_failure(error: &CommandError) -> (Message, String) {
+    if let CommandError::HistoryRename(failure) = error {
+        let message = match failure.issue {
+            oxyde_lib::models::error::HistoryIdentityIssue::Changed => Message::RedoRenameChanged,
+            oxyde_lib::models::error::HistoryIdentityIssue::Unverified => {
+                Message::RedoRenameUnverified
+            }
+        };
+        return (message, failure.path.clone());
+    }
     if let CommandError::HistoryMove(failure) = error {
         use oxyde_lib::models::error::HistoryMoveIssue as Issue;
         let message = match failure.issue {
@@ -249,6 +267,42 @@ mod tests {
             undo_failure(&CommandError::Other("unrelated".into())).0,
             Message::UndoFailed
         );
+    }
+    #[test]
+    fn rename_identity_failures_are_translated_for_undo_and_redo() {
+        use crate::ui::i18n::{I18n, Language};
+        use fluent_bundle::FluentArgs;
+        use oxyde_lib::models::error::{HistoryIdentityIssue, HistoryRenameFailure};
+        let path = "C:/école_日本語/{ $detail }";
+        for (issue, undo, redo) in [
+            (
+                HistoryIdentityIssue::Changed,
+                Message::UndoRenameChanged,
+                Message::RedoRenameChanged,
+            ),
+            (
+                HistoryIdentityIssue::Unverified,
+                Message::UndoRenameUnverified,
+                Message::RedoRenameUnverified,
+            ),
+        ] {
+            let error = CommandError::from(std::io::Error::other(HistoryRenameFailure {
+                issue,
+                path: path.into(),
+            }));
+            assert_eq!(undo_failure(&error), (undo, path.into()));
+            assert_eq!(redo_failure(&error), (redo, path.into()));
+            for language in Language::ALL {
+                for message in [undo, redo] {
+                    let mut args = FluentArgs::new();
+                    args.set("detail", path);
+                    let rendered = I18n::for_language(language).text_with_args(message, &args);
+                    assert!(rendered.contains(path), "{language:?}: {rendered}");
+                    assert!(!rendered.contains(message.key()));
+                    assert!(!rendered.contains("Rename history"));
+                }
+            }
+        }
     }
     #[test]
     fn move_identity_failures_are_translated_for_undo_and_redo() {

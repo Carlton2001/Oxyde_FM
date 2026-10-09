@@ -60,6 +60,18 @@ pub enum HistoryIdentityIssue {
 }
 
 #[derive(Clone, Debug)]
+pub struct HistoryRenameFailure {
+    pub issue: HistoryIdentityIssue,
+    pub path: String,
+}
+impl fmt::Display for HistoryRenameFailure {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Rename history {:?}: {}", self.issue, self.path)
+    }
+}
+impl std::error::Error for HistoryRenameFailure {}
+
+#[derive(Clone, Debug)]
 pub struct HistoryIdentityFailure {
     pub issue: HistoryIdentityIssue,
     pub path: String,
@@ -195,6 +207,7 @@ pub enum CommandError {
     HistoryIdentity(HistoryIdentityFailure),
     NewFolderHistory(NewFolderHistoryFailure),
     HistoryMove(HistoryMoveFailure),
+    HistoryRename(HistoryRenameFailure),
     HistoryUndoRecovery(HistoryUndoRecoveryFailure),
     TrashError(String),
     TrashFull(String),
@@ -217,6 +230,7 @@ impl fmt::Display for CommandError {
             CommandError::HistoryIdentity(failure) => failure.fmt(f),
             CommandError::NewFolderHistory(failure) => failure.fmt(f),
             CommandError::HistoryMove(failure) => failure.fmt(f),
+            CommandError::HistoryRename(failure) => failure.fmt(f),
             CommandError::HistoryUndoRecovery(failure) => failure.fmt(f),
             CommandError::TrashError(msg) => write!(f, "Trash Error: {}", msg),
             CommandError::TrashFull(msg) => write!(f, "Trash Full: {}", msg),
@@ -227,6 +241,12 @@ impl fmt::Display for CommandError {
 
 impl From<std::io::Error> for CommandError {
     fn from(err: std::io::Error) -> Self {
+        if let Some(failure) = err
+            .get_ref()
+            .and_then(|error| error.downcast_ref::<HistoryRenameFailure>())
+        {
+            return Self::HistoryRename(failure.clone());
+        }
         if let Some(failure) = err
             .get_ref()
             .and_then(|error| error.downcast_ref::<HistoryUndoRecoveryFailure>())

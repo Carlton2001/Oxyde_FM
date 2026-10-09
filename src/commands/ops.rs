@@ -507,13 +507,17 @@ pub async fn undo_last_action(
                 restore_items(tx.details.paths.clone()).await?;
             }
             TransactionType::Rename => {
-                if let (Some(old), Some(new)) =
+                let (Some(old), Some(new)) =
                     (tx.details.old_path.as_ref(), tx.details.new_path.as_ref())
-                {
-                    let old_pb = PathBuf::from(old);
-                    let new_pb = PathBuf::from(new);
-                    crate::systems::item_rename::rename(&new_pb, &old_pb)?;
-                }
+                else {
+                    return Err(CommandError::HistoryRename(crate::models::error::HistoryRenameFailure {
+                        issue: crate::models::error::HistoryIdentityIssue::Unverified,
+                        path: tx.details.paths.first().cloned().unwrap_or_default(),
+                    }));
+                };
+                let old_pb = PathBuf::from(old);
+                let new_pb = PathBuf::from(new);
+                crate::systems::item_rename::rename_from_history(&new_pb, &old_pb, tx.details.renamed_item_identity)?;
             }
             TransactionType::NewFolder => {
                 crate::systems::new_folder_history::undo(&tx.details)?;
@@ -665,13 +669,17 @@ pub async fn redo_last_action(
                 crate::systems::history_move_redo::redo(&tx.details)?;
             }
             TransactionType::Rename => {
-                if let (Some(old), Some(new)) =
+                let (Some(old), Some(new)) =
                     (tx.details.old_path.as_ref(), tx.details.new_path.as_ref())
-                {
-                    let old_pb = PathBuf::from(old);
-                    let new_pb = PathBuf::from(new);
-                    crate::systems::item_rename::rename(&old_pb, &new_pb)?;
-                }
+                else {
+                    return Err(CommandError::HistoryRename(crate::models::error::HistoryRenameFailure {
+                        issue: crate::models::error::HistoryIdentityIssue::Unverified,
+                        path: tx.details.paths.first().cloned().unwrap_or_default(),
+                    }));
+                };
+                let old_pb = PathBuf::from(old);
+                let new_pb = PathBuf::from(new);
+                crate::systems::item_rename::rename_from_history(&old_pb, &new_pb, tx.details.renamed_item_identity)?;
             }
             TransactionType::NewFolder => {
                 crate::systems::new_folder_history::redo(&mut tx.details)?;
@@ -968,6 +976,7 @@ mod copy_redo_tests {
         let transaction = Transaction::new(
             TransactionType::Copy,
             TransactionDetails {
+                renamed_item_identity: None,
                 moved_directory_identities: None,
                 new_folder_identity: None,
                 moved_file_identities: None,
@@ -1056,6 +1065,7 @@ mod copy_redo_tests {
             history.push(Transaction::new(
                 TransactionType::Copy,
                 TransactionDetails {
+                    renamed_item_identity: None,
                     moved_directory_identities: None,
                     new_folder_identity: None,
                     moved_file_identities: None,
@@ -1195,6 +1205,7 @@ mod copy_redo_tests {
         history.push(Transaction::new(
             TransactionType::Copy,
             TransactionDetails {
+                renamed_item_identity: None,
                 moved_directory_identities: None,
                 new_folder_identity: None,
                 moved_file_identities: None,
@@ -1302,6 +1313,7 @@ mod copy_redo_tests {
         history.push(Transaction::new(
             TransactionType::Copy,
             TransactionDetails {
+                renamed_item_identity: None,
                 moved_directory_identities: None,
                 new_folder_identity: None,
                 moved_file_identities: None,
@@ -1355,7 +1367,21 @@ mod history_concurrency_tests {
             let old = temp.path().join("old");
             let new = temp.path().join("new");
             let history = HistoryManager::new();
-            history.push(rename_transaction(&old, &new));
+            let (source, destination) = if redo { (&old, &new) } else { (&new, &old) };
+            std::fs::create_dir(source).unwrap();
+            std::fs::write(source.join("child"), b"directory child").unwrap();
+            let mut tx = rename_transaction(&old, &new);
+            let parents = crate::systems::path_parents::HeldParents::new(source).unwrap();
+            let file = crate::platform::platform()
+                .open_rename_item(parents.directory(), &parents.resolved_path(source).unwrap())
+                .unwrap();
+            tx.details.renamed_item_identity =
+                Some(crate::models::transaction::HistoryFileIdentity::from_file(&file).unwrap());
+            drop(file);
+            drop(parents);
+            let saved = temp.path().join("saved-selected-source");
+            std::fs::rename(source, &saved).unwrap();
+            history.push(tx);
             if redo {
                 history.begin_undo().unwrap().unwrap().complete();
             }
@@ -1376,9 +1402,7 @@ mod history_concurrency_tests {
             assert!(!old.exists());
             assert!(!new.exists());
             // Restore only the benign test source, then retry the same reservation.
-            let (source, destination) = if redo { (&old, &new) } else { (&new, &old) };
-            std::fs::create_dir(source).unwrap();
-            std::fs::write(source.join("child"), b"directory child").unwrap();
+            std::fs::rename(&saved, source).unwrap();
             if redo {
                 runtime.block_on(redo_last_action(&history)).unwrap();
             } else {
@@ -1408,7 +1432,14 @@ mod history_concurrency_tests {
             let (source, destination) = if redo { (&old, &new) } else { (&new, &old) };
             std::fs::write(source, b"selected file").unwrap();
             std::fs::write(destination, b"independent later file").unwrap();
-            history.push(rename_transaction(&old, &new));
+            let mut tx = rename_transaction(&old, &new);
+            tx.details.renamed_item_identity = Some(
+                crate::models::transaction::HistoryFileIdentity::from_file(
+                    &std::fs::File::open(source).unwrap(),
+                )
+                .unwrap(),
+            );
+            history.push(tx);
             if redo {
                 history.begin_undo().unwrap().unwrap().complete();
             }
@@ -1442,10 +1473,135 @@ mod history_concurrency_tests {
         );
     }
 
+    #[test]
+    fn rename_history_preserves_replacements_before_undo_and_redo_and_can_retry() {
+        for directory in [false, true] {
+            for redo in [false, true] {
+                let root = tempfile::tempdir().unwrap();
+                let old = root.path().join("old");
+                let new = root.path().join("new");
+                let (source, destination) = if redo { (&old, &new) } else { (&new, &old) };
+                if directory {
+                    std::fs::create_dir(source).unwrap();
+                } else {
+                    std::fs::write(source, b"same contents").unwrap();
+                }
+                let mut tx = rename_transaction(&old, &new);
+                if redo {
+                    let parents = crate::systems::path_parents::HeldParents::new(source).unwrap();
+                    let file = crate::platform::platform()
+                        .open_rename_item(
+                            parents.directory(),
+                            &parents.resolved_path(source).unwrap(),
+                        )
+                        .unwrap();
+                    tx.details.renamed_item_identity = Some(
+                        crate::models::transaction::HistoryFileIdentity::from_file(&file).unwrap(),
+                    );
+                }
+                let saved = root.path().join("saved-selected-source");
+                std::fs::rename(source, &saved).unwrap();
+                if directory {
+                    std::fs::create_dir(source).unwrap();
+                } else {
+                    std::fs::write(source, b"same contents").unwrap();
+                }
+                let history = HistoryManager::new();
+                history.push(tx);
+                if redo {
+                    history.begin_undo().unwrap().unwrap().complete();
+                }
+                let runtime = tokio::runtime::Builder::new_current_thread()
+                    .build()
+                    .unwrap();
+                let result = if redo {
+                    runtime.block_on(redo_last_action(&history))
+                } else {
+                    runtime.block_on(undo_last_action(&history))
+                };
+                assert!(
+                    matches!(result, Err(crate::models::CommandError::HistoryRename(failure))
+                    if failure.issue == crate::models::error::HistoryIdentityIssue::Changed)
+                );
+                assert!(source.exists());
+                assert!(saved.exists());
+                assert!(!destination.exists());
+                let state = history.get_state();
+                assert_eq!(
+                    (state.undo_stack.len(), state.redo_stack.len()),
+                    if redo { (0, 1) } else { (1, 0) }
+                );
+                if directory {
+                    std::fs::remove_dir(source).unwrap();
+                } else {
+                    std::fs::remove_file(source).unwrap();
+                }
+                std::fs::rename(saved, source).unwrap();
+                if redo {
+                    runtime.block_on(redo_last_action(&history)).unwrap();
+                } else {
+                    runtime.block_on(undo_last_action(&history)).unwrap();
+                }
+                assert!(destination.exists());
+                assert!(!source.exists());
+            }
+        }
+    }
+
+    #[test]
+    fn rename_history_requires_complete_paths_and_identity_before_stack_changes() {
+        for redo in [false, true] {
+            for missing_path in [false, true] {
+                let root = tempfile::tempdir().unwrap();
+                let old = root.path().join("old");
+                let new = root.path().join("new");
+                let (source, destination) = if redo { (&old, &new) } else { (&new, &old) };
+                std::fs::write(source, b"selected contents").unwrap();
+                let mut tx = rename_transaction(&old, &new);
+                if missing_path {
+                    tx.details.old_path = None;
+                } else {
+                    tx.details.renamed_item_identity = None;
+                }
+                let history = HistoryManager::new();
+                history.push(tx);
+                if redo {
+                    history.begin_undo().unwrap().unwrap().complete();
+                }
+                let runtime = tokio::runtime::Builder::new_current_thread()
+                    .build()
+                    .unwrap();
+                let result = if redo {
+                    runtime.block_on(redo_last_action(&history))
+                } else {
+                    runtime.block_on(undo_last_action(&history))
+                };
+                assert!(
+                    matches!(result, Err(crate::models::CommandError::HistoryRename(failure))
+                    if failure.issue == crate::models::error::HistoryIdentityIssue::Unverified)
+                );
+                assert_eq!(std::fs::read(source).unwrap(), b"selected contents");
+                assert!(!destination.exists());
+                let state = history.get_state();
+                assert_eq!(
+                    (state.undo_stack.len(), state.redo_stack.len()),
+                    if redo { (0, 1) } else { (1, 0) }
+                );
+            }
+        }
+    }
+
     fn rename_transaction(old: &std::path::Path, new: &std::path::Path) -> Transaction {
         Transaction::new(
             TransactionType::Rename,
             TransactionDetails {
+                renamed_item_identity: [new, old].into_iter().find_map(|path| {
+                    let parents = crate::systems::path_parents::HeldParents::new(path).ok()?;
+                    let file = crate::platform::platform()
+                        .open_rename_item(parents.directory(), &parents.resolved_path(path).ok()?)
+                        .ok()?;
+                    crate::models::transaction::HistoryFileIdentity::from_file(&file).ok()
+                }),
                 moved_directory_identities: None,
                 new_folder_identity: None,
                 moved_file_identities: None,
@@ -1636,6 +1792,7 @@ mod move_undo_rollback_tests {
 
     fn details(source: &std::path::Path, destination: &std::path::Path) -> TransactionDetails {
         TransactionDetails {
+            renamed_item_identity: None,
             moved_directory_identities: None,
             new_folder_identity: None,
             moved_file_identities: std::fs::File::open(destination).ok().map(|file| {
@@ -1884,6 +2041,7 @@ mod new_folder_history_tests {
 
     fn details(path: &std::path::Path) -> TransactionDetails {
         TransactionDetails {
+            renamed_item_identity: None,
             moved_directory_identities: None,
             new_folder_identity: None,
             moved_file_identities: None,
@@ -1998,18 +2156,19 @@ mod new_folder_history_tests {
         let transaction = created_transaction(&initial);
         history.push(transaction.clone());
         let runtime = runtime();
-        runtime
-            .block_on(crate::commands::io::rename_item_controlled(
+        let proof = runtime
+            .block_on(crate::commands::io::rename_item_controlled_with_identity(
                 initial.to_string_lossy().into_owned(),
                 renamed.to_string_lossy().into_owned(),
                 "normal".into(),
                 Arc::new(AtomicBool::new(false)),
             ))
-            .unwrap();
-        assert!(crate::commands::io::record_created_folder_rename(
+            .unwrap().unwrap();
+        assert!(crate::commands::io::record_captured_folder_rename(
             &history,
             &initial.to_string_lossy(),
-            &renamed.to_string_lossy()
+            &renamed.to_string_lossy(),
+            proof,
         ));
         assert_eq!(
             history.get_state().undo_stack[0].details.paths,

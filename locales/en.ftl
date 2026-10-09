@@ -566,3 +566,8 @@ preview-animation-static = Still preview: the animation exceeds the preview limi
 
 undo-move-changed = Cannot undo this move: the file or folder was replaced or recreated. It was preserved at its current location. { $detail }
 undo-move-unverified = Cannot safely undo this move: the file or folder’s identity could not be verified. It was preserved. { $detail }
+
+undo-rename-changed = Cannot undo this rename: the file or folder was replaced. It was preserved at its current location. { $detail }
+undo-rename-unverified = Cannot safely undo this rename: the file or folder’s identity could not be verified. It was preserved. { $detail }
+redo-rename-changed = Cannot redo this rename: the file or folder was replaced. It was preserved at its current location. { $detail }
+redo-rename-unverified = Cannot safely redo this rename: the file or folder’s identity could not be verified. It was preserved. { $detail }

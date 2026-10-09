@@ -1429,13 +1429,13 @@ impl OxydeApp {
             async move {
                 let runtime = tokio::runtime::Handle::current();
                 let result = tokio::task::spawn_blocking(move || {
-                    let result = runtime.block_on(oxyde_lib::commands::io::rename_item_controlled(
+                    let result = runtime.block_on(oxyde_lib::commands::io::rename_item_controlled_with_identity(
                         old_path.clone(), new_path.clone(), quality, cancel,
                     ));
-                    if result.is_ok() {
-                        oxyde_lib::commands::io::record_created_folder_rename(&rename_history, &old_path, &new_path);
+                    if let Ok(Some(identity)) = &result {
+                        oxyde_lib::commands::io::record_captured_folder_rename(&rename_history, &old_path, &new_path, *identity);
                     }
-                    result
+                    result.map(|_| ())
                 })
                 .await;
                 handle.update(&mut cx, |this, cx| {
@@ -2112,6 +2112,7 @@ impl OxydeApp {
                                 this.history.push(Transaction::new(
                                     TransactionType::NewFolder,
                                     TransactionDetails {
+                                        renamed_item_identity: None,
                                         moved_directory_identities: None,
                                         new_folder_identity: identity,
                                         moved_file_identities: None,

@@ -819,6 +819,7 @@ mod deletion_history_tests {
             history.push(Transaction::new(
                 TransactionType::Delete,
                 TransactionDetails {
+                    renamed_item_identity: None,
                     moved_directory_identities: None,
                     new_folder_identity: None,
                     moved_file_identities: None,

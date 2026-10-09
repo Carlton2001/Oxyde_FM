@@ -107,6 +107,7 @@ mod tests {
 
     fn details(path: &Path) -> TransactionDetails {
         TransactionDetails {
+            renamed_item_identity: None,
             moved_directory_identities: None,
             new_folder_identity: create(path).unwrap(),
             moved_file_identities: None,

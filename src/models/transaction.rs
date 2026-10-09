@@ -19,6 +19,7 @@ pub struct TransactionDetails {
     pub moved_files: Option<Vec<(String, String)>>,
     pub moved_file_identities: Option<Vec<(String, HistoryMoveIdentity)>>,
     pub trash_metadata_backups: Option<Vec<String>>,
+    pub renamed_item_identity: Option<HistoryFileIdentity>,
     pub moved_directory_identities: Option<Vec<(String, HistoryDirectoryIdentity)>>,
     pub moved_dirs: Option<Vec<(String, String)>>,
     pub copied_files: Option<Vec<(String, String)>>,

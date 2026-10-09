@@ -572,3 +572,8 @@ preview-animation-static = Aperçu fixe : l’animation dépasse les limites de 
 
 undo-move-changed = Impossible d’annuler ce déplacement : le fichier ou dossier a été remplacé ou recréé. Il a été conservé à son emplacement actuel. { $detail }
 undo-move-unverified = Impossible d’annuler ce déplacement en toute sécurité : l’identité du fichier ou dossier n’a pas pu être vérifiée. Il a été conservé. { $detail }
+
+undo-rename-changed = Impossible d’annuler ce renommage : le fichier ou dossier a été remplacé. Il a été conservé à son emplacement actuel. { $detail }
+undo-rename-unverified = Impossible d’annuler ce renommage en toute sécurité : l’identité du fichier ou dossier n’a pas pu être vérifiée. Il a été conservé. { $detail }
+redo-rename-changed = Impossible de rétablir ce renommage : le fichier ou dossier a été remplacé. Il a été conservé à son emplacement actuel. { $detail }
+redo-rename-unverified = Impossible de rétablir ce renommage en toute sécurité : l’identité du fichier ou dossier n’a pas pu être vérifiée. Il a été conservé. { $detail }

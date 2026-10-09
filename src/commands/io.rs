@@ -144,6 +144,16 @@ pub fn create_local_folder(
     crate::systems::new_folder_history::create(path)
 }
 
+/// Worker-only relocation using the proof captured by the original rename.
+pub fn record_captured_folder_rename(
+    history: &crate::models::HistoryManager,
+    old: &str,
+    new: &str,
+    identity: crate::models::transaction::HistoryFileIdentity,
+) -> bool {
+    history.relocate_created_folder(old, new, identity)
+}
+
 /// Worker-only journal relocation; an independently replaced destination is never adopted.
 pub fn record_created_folder_rename(
     history: &crate::models::HistoryManager,
@@ -167,6 +177,15 @@ pub async fn rename_item_controlled(
     old_path: String, new_path: String, quality: String,
     cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
 ) -> Result<(), CommandError> {
+    rename_item_controlled_with_identity(old_path, new_path, quality, cancel).await.map(|_| ())
+}
+
+/// Local renames return a proof captured on their original handle. Archive renames
+/// do not create filesystem history and return None.
+pub async fn rename_item_controlled_with_identity(
+    old_path: String, new_path: String, quality: String,
+    cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
+) -> Result<Option<crate::models::transaction::HistoryFileIdentity>, CommandError> {
     if cancel.load(std::sync::atomic::Ordering::Relaxed) { return Err(CommandError::IoError("Cancelled".into())); }
     let old_pb = validate_path(&old_path)?;
     let new_pb = validate_path(&new_path)?;
@@ -200,11 +219,12 @@ pub async fn rename_item_controlled(
         })?;
         return workspace
             .commit(&operation)
+            .map(|_| None)
             .map_err(CommandError::ArchiveError);
     }
     validate_rename_target(&old_pb, &new_pb)?;
     info!("Renaming {:?} to {:?}", old_pb, new_pb);
-    crate::systems::item_rename::rename_with_checkpoint(&old_pb, &new_pb, &mut || {
+    let identity = crate::systems::item_rename::rename_captured_with_checkpoint(&old_pb, &new_pb, None, &mut || {
         if cancel.load(std::sync::atomic::Ordering::Relaxed) {
             Err(std::io::Error::new(
                 std::io::ErrorKind::Interrupted,
@@ -215,7 +235,7 @@ pub async fn rename_item_controlled(
         }
     })?;
 
-    Ok(())
+    Ok(identity)
 }
 
 fn validate_rename_target(
