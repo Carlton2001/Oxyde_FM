@@ -237,16 +237,9 @@ impl IFileOperationProgressSink_Impl for DeleteSink_Impl {
 }
 
 fn flags(recycle: bool) -> FILEOPERATION_FLAGS {
-    let base = FOF_NOCONFIRMATION
-        | FOF_NOERRORUI
-        | FOF_SILENT
-        | FOF_NO_CONNECTED_ELEMENTS
-        | FOFX_EARLYFAILURE;
-    if recycle {
-        base | FOF_ALLOWUNDO
-    } else {
-        base
-    }
+    FILEOPERATION_FLAGS(u32::from(super::windows_shell_delete::operation_flags(
+        recycle,
+    ))) | FOFX_EARLYFAILURE
 }
 
 fn delete(path: &Path, recycle: bool, proof: Option<HistoryFileIdentity>) -> ShellDeleteOutcome {

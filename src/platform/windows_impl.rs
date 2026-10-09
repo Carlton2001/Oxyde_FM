@@ -397,8 +397,7 @@ impl Platform for WindowsPlatform {
         use windows::core::PCWSTR;
         use windows::Win32::Foundation::HWND;
         use windows::Win32::UI::Shell::{
-            SHFileOperationW, FOF_ALLOWUNDO, FOF_NOCONFIRMATION, FOF_NOERRORUI, FOF_NO_UI,
-            FOF_SILENT, FO_DELETE, SHFILEOPSTRUCTW,
+            SHFileOperationW, FO_DELETE, SHFILEOPSTRUCTW,
         };
         if paths.is_empty() {
             return Ok(());
@@ -417,18 +416,13 @@ impl Platform for WindowsPlatform {
             }
         }
         let recycle = recycle && !paths.first().is_some_and(immediate);
-        let mut flags = FOF_NOCONFIRMATION.0 | FOF_NOERRORUI.0 | FOF_SILENT.0;
-        if recycle {
-            flags |= FOF_ALLOWUNDO.0;
-        } else {
-            flags |= FOF_NO_UI.0;
-        }
+        let flags = super::windows_shell_delete::operation_flags(recycle);
         let mut operation = SHFILEOPSTRUCTW {
             hwnd: HWND(std::ptr::null_mut()),
             wFunc: FO_DELETE,
             pFrom: PCWSTR(buffer.as_ptr()),
             pTo: PCWSTR::null(),
-            fFlags: flags as u16,
+            fFlags: flags,
             fAnyOperationsAborted: Default::default(),
             hNameMappings: std::ptr::null_mut(),
             lpszProgressTitle: PCWSTR::null(),

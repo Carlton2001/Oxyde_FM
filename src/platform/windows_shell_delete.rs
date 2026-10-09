@@ -2,6 +2,22 @@
 use std::os::windows::ffi::OsStrExt;
 use std::path::{Component, PathBuf, Prefix};
 
+/// Explicit selections must never acquire unselected Shell-connected items.
+pub(super) fn operation_flags(recycle: bool) -> u16 {
+    use windows::Win32::UI::Shell::{
+        FOF_ALLOWUNDO, FOF_NOCONFIRMATION, FOF_NOERRORUI, FOF_NO_CONNECTED_ELEMENTS, FOF_NO_UI,
+        FOF_SILENT,
+    };
+    let mut flags =
+        FOF_NOCONFIRMATION.0 | FOF_NOERRORUI.0 | FOF_SILENT.0 | FOF_NO_CONNECTED_ELEMENTS.0;
+    if recycle {
+        flags |= FOF_ALLOWUNDO.0;
+    } else {
+        flags |= FOF_NO_UI.0;
+    }
+    flags as u16
+}
+
 pub(super) fn source_buffer(paths: &[PathBuf]) -> Result<Vec<u16>, String> {
     let mut buffer = Vec::new();
     for path in paths {
@@ -66,6 +82,22 @@ pub(super) fn source_buffer(paths: &[PathBuf]) -> Result<Vec<u16>, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn html_selection_never_packs_its_companion_and_both_modes_disable_connected_items() {
+        use windows::Win32::UI::Shell::{FOF_ALLOWUNDO, FOF_NO_CONNECTED_ELEMENTS};
+        let source = PathBuf::from(r"C:\fixtures\Page.html");
+        let buffer = source_buffer(&[source]).unwrap();
+        assert_eq!(
+            String::from_utf16(&buffer).unwrap(),
+            "C:\\fixtures\\Page.html\0\0"
+        );
+        for recycle in [false, true] {
+            let flags = u32::from(operation_flags(recycle));
+            assert_ne!(flags & FOF_NO_CONNECTED_ELEMENTS.0, 0);
+            assert_eq!(flags & FOF_ALLOWUNDO.0 != 0, recycle);
+        }
+    }
 
     #[test]
     fn refuses_ambiguous_sources_before_any_shell_call() {
