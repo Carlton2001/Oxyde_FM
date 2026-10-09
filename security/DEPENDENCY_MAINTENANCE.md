@@ -1,0 +1,39 @@
+# Décision de maintenance des dépendances
+
+Revue du 9 octobre 2026, à partir de `master` / `64fff74`. Le rapport [RUSTSEC_WINDOWS.json](RUSTSEC_WINDOWS.json) porte sur le verrou final du lot 41 et la base RustSec `7eebec69c352c7191b1f13eb95dd510eeca5d1de`, datée du 9 octobre à 10:12:02 +02:00 : 1 296 avis, zéro vulnérabilité publiée signalée pour les filtres Windows x86_64, trois avis de maintenance. Aucune advisory n’est ignorée. Ce résultat n’exclut pas les défauts inconnus et ne remplace pas la revue du code ou l’analyse de sa disponibilité.
+
+## Décision
+
+**Conserver pour l’instant les versions de la pile SVG/polices et les macros indirectes, avec suivi explicite de leurs avis.** Une absence de maintenance n’est pas, à elle seule, une preuve de vulnérabilité ni une raison suffisante pour introduire un fork de GPUI ou des remplacements Git hors versions publiées. Le coût d’une migration inclut les changements d’API, les différences de rendu et la maintenance future du correctif.
+
+| Crate présente | Chemin Windows et rôle observés | Alternative retenue pour une migration future | Décision actuelle |
+| --- | --- | --- | --- |
+| `paste 1.0.15` | `image → exr 1.74.2 → pulp 0.22.3`. Macro procédurale exécutée à la compilation ; elle ne décode pas les fichiers de l’utilisateur à l’exécution. La seconde branche `image → ravif → rav1e → paste` n’est plus activée dans le graphe compilé après le lot 41. | [`pastey`](https://github.com/AS1100K/pastey), successeur compatible recommandé par [RustSec](https://rustsec.org/advisories/RUSTSEC-2024-0436.html). | Garder `paste` tant que les dépendances publiées compatibles l’exigent. Ne pas retirer le décodeur OpenEXR pour faire disparaître l’avis. |
+| `rustybuzz 0.20.1` | `GPUI → usvg 0.46.0 → rustybuzz`. Composition des glyphes des textes contenus dans les SVG. | [`harfrust`](https://github.com/harfbuzz/harfrust), recommandé par [RustSec](https://rustsec.org/advisories/RUSTSEC-2026-0206.html) et déjà utilisé par `usvg 0.48.1`. | Attendre une adoption compatible par GPUI ou une justification concrète d’un backport. Ajouter `harfrust` dans Oxyde ne remplace pas cette dépendance indirecte. |
+| `ttf-parser 0.25.1` | GPUI directement dans `svg_renderer::font_has_char`, et via `fontdb 0.23.0` et `rustybuzz`. Le système de texte natif Windows utilise DirectWrite ; ne pas confondre cette pile SVG avec tout le texte de l’interface. | [`skrifa`](https://github.com/googlefonts/fontations/tree/main/skrifa) / Fontations, recommandé par [RustSec](https://rustsec.org/advisories/RUSTSEC-2026-0192.html). `harfrust` utilise `read-fonts` de cette même famille. | Prévoir une migration cohérente de `usvg/resvg`, de la base de polices et du contrôle de glyphes dans GPUI. Ne pas substituer uniquement le nom de la crate dans Cargo. |
+
+Le [changelog officiel de resvg](https://github.com/linebender/resvg/blob/main/CHANGELOG.md) indique que la version 0.48 a adopté `harfrust` et `skrifa` et peut modifier légèrement le rendu. Le manifeste GPUI verrouillé et le manifeste amont consulté référencent encore la génération 0.46 de SVG et `ttf-parser 0.25`. Une mise à jour globale de GPUI n’est donc pas présumée supprimer les trois avis. Les alternatives sont des candidates maintenues documentées par leurs projets ; elles ne sont pas déclarées exemptes de vulnérabilités.
+
+Pour `paste`, les commits amont ont été examinés : [pulp `601de0c`](https://github.com/sarah-quinones/pulp/commit/601de0c071ba32df3fd7ff33fc4218c9bd712aba) migre vers `pastey`, mais son manifeste annonce `pulp 0.23.0`, hors contrainte `0.22.3` d’OpenEXR ; [rav1e `c247d53`](https://github.com/xiph/rav1e/commit/c247d53ae43dd1312dbd90117c45e4c0ee6b06ce) migre aussi vers `pastey`. Les versions publiées consultées restent `pulp 0.22.3`, `exr 1.74.2` et `rav1e 0.8.1`, qui conservent `paste`. Ces migrations ne sont pas forcées dans Oxyde par une dépendance Git ou un fork local.
+
+## Disponibilité sur crates.io
+
+Les trois versions sont toujours publiées et `yanked=false`, vérifié le 9 octobre via les endpoints officiels : [paste 1.0.15](https://crates.io/api/v1/crates/paste/1.0.15), [rustybuzz 0.20.1](https://crates.io/api/v1/crates/rustybuzz/0.20.1), [ttf-parser 0.25.1](https://crates.io/api/v1/crates/ttf-parser/0.25.1). Elles peuvent toujours être téléchargées et compilées. « Non maintenue », « retirée du registre/yanked » et « vulnérabilité publiée » sont des statuts distincts ; la présence sur crates.io ne garantit pas la maintenance ou la sécurité. Le statut peut changer après cette revue.
+
+## Réduction appliquée sans remplacement de crate
+
+Oxyde n’écrit aucun AVIF dans les sources relues. La feature `image/avif` active l’encodage `ravif/rav1e` ; le décodage AVIF nécessite une autre feature, `avif-native`, qui n’était pas activée. GPUI exclut déjà cet encodeur de sa liste explicite.
+
+Le manifeste Oxyde désactive les defaults d’`image` et garde les quinze features `bmp`, `dds`, `exr`, `ff`, `gif`, `hdr`, `ico`, `jpeg`, `png`, `pnm`, `qoi`, `rayon`, `tga`, `tiff`, `webp`. Les décodeurs antérieurs et le parallélisme sont conservés. Ce retrait vise du code et des dépendances de compilation inutilisés ; aucune exploitation ni amélioration mesurée du RSS n’est revendiquée. Les intégrations d’aperçu Shell et d’ouverture externe restent inchangées.
+
+`cargo metadata` et `cargo tree --target x86_64-pc-windows-msvc` confirment que `ravif/rav1e` n’appartiennent plus au graphe compilé Windows. Le verrou conserve cependant ces packages et ses 791 packages au total : ne pas assimiler le graphe actif à l’inventaire du verrou analysé par RustSec. Aucune version, source ou checksum de package n’a changé ; seul un lien de dépendance du verrou vers `rgb` a été retiré par Cargo. Les trois avis restent présents et visibles. SHA256 du verrou normalisé LF : `37bc0db61c2ce3a27e94afde04c6937188fdffe4af8b8b9d19e10c2ec12fe761`.
+
+## Conditions de réexamen et contrôles
+
+Réexaminer la décision si une vulnérabilité publiée concerne une version et un chemin d’Oxyde, si une version compatible de GPUI/OpenEXR adopte les alternatives, ou si un défaut fonctionnel concret justifie la migration. Pour une alerte de sécurité, analyser sa portée et choisir réduction de fonctionnalité, mise à jour ou backport selon le cas ; l’attente de l’amont n’est pas une règle absolue.
+
+Avant toute migration de typographie : vérifier les ligatures et accents des cinq langues, les scripts complexes et le texte bidirectionnel dans les SVG, les polices de repli, emoji et glyphes manquants, les dimensions et couleurs des SVG, ainsi que les messages et aperçus. Les tests des couleurs/proportions SVG et des images du lot 39 donnent une base, sans remplacer les tests de texte ni la validation visuelle. Aucun Computer Use n’est utilisé ici.
+
+Le script [audit-security.ps1](../scripts/audit-security.ps1) et la [CI hebdomadaire](../.github/workflows/security.yml) restent inchangés : ils échouent pour une vulnérabilité signalée ou une version yanked ; les avis de maintenance sont affichés dans le rapport et les logs. Ils ne corrigent pas les dépendances automatiquement et ne promettent pas une notification dédiée pour ces trois avis.
+
+Validation du lot 41 : `cargo check --all-targets --offline` sans avertissement du projet ; `cargo test --all-targets --locked --offline --quiet` avec 647 réussites, aucun échec et 17 tests préexistants ignorés. Comparaison de `cargo metadata` avec les formats par défaut d’`image` : tous les formats précédents conservés sauf l’encodeur AVIF ; `avif-native` demeure désactivé. Nouvelle analyse RustSec réussie avec une base séparée propre, car le dossier de base habituel contient un fichier non suivi ; ce fichier n’a pas été modifié. Aucun fork, substitution de package, nouvelle version, avis ignoré, vérification visuelle, test ignoré activé ou push.

@@ -1,8 +1,8 @@
 {
   "database": {
-    "advisory-count": 1294,
-    "last-commit": "5701a6d2a6158d5d4a933df5141a0415c285075d",
-    "last-updated": "2026-10-08T13:59:15+02:00"
+    "advisory-count": 1296,
+    "last-commit": null,
+    "last-updated": null
   },
   "lockfile": {
     "dependency-count": 791
@@ -198,8 +198,8 @@
   "oxyde-audit": {
     "date": "2026-10-09",
     "cargo-audit-version": "0.22.2",
-    "base-commit": "b8165f9",
-    "lockfile-sha256-lf": "b2de519ffb1a8337a9d6c7ae7c1ffdc3dfe3049be81264741a3b3f3a916cd9a3",
-    "scope": "RustSec advisory applicability filter: Windows x86_64; no advisory ignored; existing local database, no network fetch"
+    "base-commit": "64fff74",
+    "lockfile-sha256-lf": "37bc0db61c2ce3a27e94afde04c6937188fdffe4af8b8b9d19e10c2ec12fe761",
+    "scope": "RustSec advisory applicability filter: Windows x86_64; no advisory ignored; freshly fetched separate database, clean tracked checkout; all three maintenance warnings retained"
   }
 }
