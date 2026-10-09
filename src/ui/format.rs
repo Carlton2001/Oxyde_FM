@@ -96,6 +96,30 @@ fn format_datetime(date: NaiveDateTime, format: DateFormat) -> String {
 mod tests {
     use super::*;
     #[test]
+    fn trash_restore_failures_are_clear_in_every_language() {
+        use crate::ui::i18n::{I18n, Message};
+        use oxyde_lib::models::error::{TrashRestoreFailure, TrashRestoreIssue};
+        for language in [Language::French, Language::English, Language::German, Language::Spanish, Language::Italian] {
+            let i18n = I18n::for_language(language);
+            for (issue, key) in [
+                (TrashRestoreIssue::Ambiguous, Message::TrashRestoreAmbiguous),
+                (TrashRestoreIssue::Changed, Message::TrashRestoreChanged),
+                (TrashRestoreIssue::Conflict, Message::TrashRestoreConflict),
+                (TrashRestoreIssue::Unavailable, Message::TrashRestoreUnavailable),
+            ] {
+                let error = TrashRestoreFailure { issue, path: "C:/école/空".into(), detail: "Native operation failed".into() };
+                for detail in [error.to_string(), format!("TrashError({:?})", error.to_string())] {
+                    let displayed = error_detail(&detail, &i18n);
+                    assert_eq!(displayed, i18n.text(key).to_string());
+                    assert!(!displayed.contains("Trash restore ["));
+                    assert!(!displayed.starts_with('['));
+                    assert!(displayed.len() > 100);
+                }
+            }
+            assert_eq!(error_detail("Unrelated trash error", &i18n), "Unrelated trash error");
+        }
+    }
+    #[test]
     fn selected_source_failures_explain_partial_results_in_all_languages() {
         use crate::ui::i18n::{I18n, Message};
         for language in [Language::French, Language::English, Language::German, Language::Spanish, Language::Italian] {
@@ -269,6 +293,16 @@ mod tests {
 pub fn error_detail(detail: &str, i18n: &crate::ui::i18n::I18n) -> String {
     use crate::ui::i18n::{FluentArgs, Message};
     use oxyde_lib::models::error::{ArchiveLimitFailure, ArchiveLimitKind};
+    if let Some(issue) = oxyde_lib::models::error::TrashRestoreFailure::from_message(detail) {
+        use oxyde_lib::models::error::TrashRestoreIssue;
+        let message = match issue {
+            TrashRestoreIssue::Ambiguous => Message::TrashRestoreAmbiguous,
+            TrashRestoreIssue::Changed => Message::TrashRestoreChanged,
+            TrashRestoreIssue::Conflict => Message::TrashRestoreConflict,
+            TrashRestoreIssue::Unavailable => Message::TrashRestoreUnavailable,
+        };
+        return i18n.text(message).to_string();
+    }
     if let Some(changed) = oxyde_lib::models::error::SourceSelectionFailure::from_message(detail) {
         return i18n.text(if changed { Message::TransferSourceChanged } else { Message::TransferSourceUnverified }).to_string();
     }

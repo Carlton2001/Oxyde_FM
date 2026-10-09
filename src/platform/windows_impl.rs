@@ -180,7 +180,7 @@ impl Platform for WindowsPlatform {
         trash::os_limited::list().map_err(|error| error.to_string())
     }
     fn restore_trash_items(&self, items: Vec<trash::TrashItem>) -> Result<(), String> {
-        trash::os_limited::restore_all(items).map_err(|error| error.to_string())
+        super::windows_trash_restore::restore(items)
     }
     fn purge_trash_items(&self, items: Vec<trash::TrashItem>) -> Result<(), String> {
         let paths: Vec<_> = items

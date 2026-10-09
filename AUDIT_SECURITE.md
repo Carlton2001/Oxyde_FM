@@ -10,7 +10,7 @@ La priorité est de sécuriser les chemins d'archives : les essais ont confirmé
 
 ## Avancement des six chantiers annoncés
 
-État actualisé au quarante-neuvième lot. Ces six points sont des chantiers de tailles différentes, et non six étapes presque achevées. Les lots de concurrence Windows détaillés ci-dessous appartiennent principalement au premier point ; leur nombre ne constitue pas un pourcentage d’achèvement de l’audit.
+État actualisé au cinquantième lot. Ces six points sont des chantiers de tailles différentes, et non six étapes presque achevées. Les lots de concurrence Windows détaillés ci-dessous appartiennent principalement au premier point ; leur nombre ne constitue pas un pourcentage d’achèvement de l’audit.
 
 | Point annoncé dans la conversation | État et limite actuelle |
 | --- | --- |
@@ -21,7 +21,7 @@ La priorité est de sécuriser les chemins d'archives : les essais ont confirmé
 | 5. Dépendances non maintenues | Revue effectuée au lot 41 après autorisation de l’utilisateur : trois versions toujours disponibles et non yanked, zéro vulnérabilité publiée signalée par la base actualisée. Décision de maintien surveillé avec alternatives `pastey`, `harfrust` et `skrifa` documentées ; pas de fork ou migration forcée de GPUI. Encodeur AVIF inutilisé désactivé, tous les décodeurs conservés. Les trois avis de maintenance restent ouverts et visibles ; leurs remplacements ne sont pas effectués. |
 | 6. Validation finale des messages et du sélecteur | Lot 44 : exécutable construit, petites fixtures et protocole préparés dans `security/VERIFICATION_VISUELLE.md`. Tests automatisés des traductions, seuils, états, véritable chargeur et wrappers de cache/export réalisés. Revue reportée à la demande de l’utilisateur jusqu’à la fin des modifications de code prévues ; exécutable à reconstruire avant remise. Aucun résultat interactif encore obtenu. Aucun Computer Use. |
 
-**Borne du quarante-neuvième lot :** préparation Copy/Move et compression directe liées aux sources ouvertes dans les scénarios testés. Delete et opérations Shell de corbeille, limites des fournisseurs, isolation des parseurs et diagnostic du nettoyage intermittent restent ouverts. Le nouveau nettoyage par handle de la compression ne valide pas tous les nettoyages de temporaires Copy : leur mode antérieur est conservé et doit être vérifié séparément. La revue visuelle reste reportée jusqu’à la fin des corrections prévues ; l’ancien exécutable n’est pas une validation des lots suivants. Le suivi automatique du chat est arrêté ; les contrôles de dépendances du dépôt restent inchangés.
+**Borne du cinquantième lot :** préparation Copy/Move, compression et restauration native de corbeille liées aux objets ouverts dans les scénarios testés. La restauration refuse les destinations occupées et les sélections ambiguës. Preuve durable de Delete et mise à la corbeille Shell, limites des fournisseurs, isolation des parseurs et diagnostic du nettoyage intermittent restent ouverts. Le nettoyage par handle de la compression ne valide pas tous les nettoyages de temporaires Copy : leur mode antérieur est conservé et doit être vérifié séparément. La revue visuelle reste reportée jusqu’à la fin des corrections prévues ; l’ancien exécutable n’est pas une validation des lots suivants. Le suivi automatique du chat est arrêté ; les contrôles de dépendances du dépôt restent inchangés.
 
 ## 1. Bloquer les sorties du dossier d'extraction
 
@@ -2105,3 +2105,27 @@ Suite finale : **540 tests de bibliothèque et 151 tests UI réussis, soit 691**
 **Limites :** preuve identifiant/date non cryptographique, budget RAM/handles global et allocations internes des encodeurs non traités. Les appels bloquants d’encodage ne sont pas isolés par processus. Les garanties atomiques décrites sont Windows ; les replis Linux existants restent par nom pour certaines mutations. Mise à la corbeille/restauration Shell et preuve durable Delete restent ouvertes ; autres nettoyages Copy à vérifier séparément. Le binaire visuel sera reconstruit après les corrections prévues.
 
 Lot 49 validé, commit identifié dans l’historique Git après `634bd46`.
+
+## Cinquantième lot — restauration native de corbeille sans écrasement
+
+**Défaut de sélection confirmé par test pur :** `src/commands/ops.rs::restore_items` choisissait le premier élément correspondant à un chemin d’origine, avec recherche de nom sans extension, puis utilisait des renommages correctifs par chemin. Plusieurs suppressions successives au même emplacement rendaient le choix arbitraire. Condition : plusieurs éléments de corbeille portent cette origine et une restauration, notamment Annuler Delete, fournit le chemin d’origine. Le risque de concurrence des renommages correctifs était distinct ; aucune reproduction utilisant la corbeille réelle n’a été exécutée.
+
+**Correction :** `select_restoration_tasks` donne priorité à l’identifiant exact, exige un seul candidat par origine, déduplique les demandes, et refuse les noms seulement approchants. Toutes les sélections sont décidées avant mutation. Le backend Windows `src/platform/windows_trash_restore.rs`, appelé exclusivement via `Platform::restore_trash_items`, remplace la restauration Shell suivie de corrections par une opération native sur le payload ouvert. Le chemin doit appartenir à une branche `$Recycle.Bin/<utilisateur>/$R…` ; le sidecar `$I…` correspondant est ouvert relativement au parent retenu, sans reparse final, et lu avec le plafond existant de 128 Kio. Son chemin d’origine doit correspondre à la sélection corrigée avant tout effet. Les extensions LNK/URL masquées sont corrigées avant publication.
+
+**Protection pendant la commande :** payload, sidecar et parents restent retenus ; les écrivains et remplacements sont refusés. Le renommage relatif par handle ne remplace jamais une destination, même arrivée après préparation. Le dossier d’origine doit exister. Les dossiers et jonctions sont restaurés comme entrées, sans parcours de leur contenu ni de leur cible. Le sidecar est nettoyé sur son handle ; si ce seul nettoyage échoue après restauration, le succès du déplacement reste enregistré et l’erreur est journalisée, sans compensation par nom. Le backend prépare toutes les paires avant le premier déplacement ; les conflits tardifs d’un lot ne déclenchent pas de rollback des restaurations déjà accomplies. Linux conserve son backend de corbeille.
+
+**Messages :** quatre causes sont affichées dans les cinq langues, au rendu des erreurs de corbeille et d’Annuler : ambiguïté, sélection changée, destination occupée, indisponibilité. Ils expliquent l’action à effectuer et la conservation des résultats déjà obtenus. Aucune demande de nettoyage de TEMP, aucun changement de curseur.
+
+**Reproduction et tests :** douze tests de bibliothèque nouveaux et un test UI. Les tests natifs créent uniquement une fausse arborescence `$Recycle.Bin/test-user` dans un répertoire temporaire privé : formats de sidecar v1/v2, Unicode, extensions LNK/URL, identité native et flux alternatifs conservés, fichier/dossier concurrent préservé, refus des remplacements et écritures pendant l’opération, sidecar changé/malformé/surdimensionné, nom de payload hors corbeille, parent absent, dossier/jonction sans traversal, alias de destination redirigé, préparation d’un lot invalidé avant mutation, et succès conservé lors du seul refus de nettoyage d’un sidecar readonly à liens multiples. Les trois tests de sélection couvrent priorité de l’identifiant, déduplication, ambiguïté/absence et retrait du choix approximatif. Le test UI vérifie les quatre causes dans les cinq catalogues, y compris après encapsulation dans une erreur d’Annuler.
+
+```powershell
+cargo test --lib --locked --offline native_restore
+cargo test --all-targets --locked --offline --quiet
+cargo check --all-targets --locked --offline
+```
+
+Suite finale : **552 tests de bibliothèque et 152 tests UI réussis, soit 704**, aucun échec, 17 tests préexistants ignorés non activés ; compilation sans avertissement. Aucun envoi à la corbeille réelle, aucune interface, exécution Linux ou validation FAT/ReFS/SMB. Aucun push.
+
+**Limites explicites :** la capture du payload commence pendant la commande de restauration ; elle n’établit pas une preuve durable depuis la suppression initiale ou l’affichage UI. Le journal Delete ne conserve toujours que les chemins : un candidat unique pourrait être un autre élément supprimé plus tard. La mise à la corbeille initiale/Rétablir par Shell reste à traiter. La structure `$Recycle.Bin` est un contrôle de namespace, pas une preuve d’origine cryptographique. Un dossier d’origine supprimé ou devenu situé sur un autre volume entraîne un refus ; aucune recréation ou copie implicite ajoutée. Notification et comportement Explorer réels restent à vérifier, avec les autres messages, après reconstruction du binaire. Le lot ne valide pas les nettoyages Copy antérieurs.
+
+Lot 50 validé après `ad759d5`.

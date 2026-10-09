@@ -145,7 +145,7 @@ fn detach_metadata_checked(
 // Covers the maximal Windows UTF-16 path plus the metadata header, without
 // trusting a malformed length or allocating an unbounded sidecar.
 const MAX_METADATA_BYTES: u64 = 128 * 1024;
-fn metadata_bytes(file: &mut std::fs::File) -> std::io::Result<Vec<u8>> {
+pub(super) fn metadata_bytes(file: &mut std::fs::File) -> std::io::Result<Vec<u8>> {
     use std::io::Read;
     if file.metadata()?.len() > MAX_METADATA_BYTES {
         return Err(std::io::Error::other("Trash metadata is too large"));
@@ -180,7 +180,7 @@ fn hide_metadata(file: &std::fs::File) -> std::io::Result<()> {
     }
 }
 
-fn parse_original_path(bytes: &[u8]) -> Option<PathBuf> {
+pub(super) fn parse_original_path(bytes: &[u8]) -> Option<PathBuf> {
     let version = u64::from_le_bytes(bytes.get(..8)?.try_into().ok()?);
     let path_bytes = match version {
         // v1: a fixed MAX_PATH buffer immediately after the 24-byte header.

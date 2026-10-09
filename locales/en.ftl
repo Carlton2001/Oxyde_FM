@@ -574,3 +574,8 @@ redo-rename-unverified = Cannot safely redo this rename: the file or folder’s 
 
 transfer-source-changed = The source was replaced or is no longer a regular file or folder. The operation stopped; items already transferred were kept. Check the source and try again.
 transfer-source-unverified = The source identity cannot be verified at this location. The operation stopped; items already transferred were kept. Try from a compatible local folder.
+
+trash-restore-ambiguous = Several Recycle Bin items came from the same location. Open the Recycle Bin and select the specific item to restore. Items already restored were kept.
+trash-restore-changed = The Recycle Bin item changed after selection. Restoration stopped. Refresh the Recycle Bin and select the item again. Items already restored were kept.
+trash-restore-conflict = A file or folder already exists at the restore location. It was kept, and the affected item remains in the Recycle Bin. Rename or move the destination and try again.
+trash-restore-unavailable = This item could not be restored. Check that it is still in the Recycle Bin and that its original folder exists and is accessible, then try again. Items already restored were kept.

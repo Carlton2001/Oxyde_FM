@@ -1,5 +1,44 @@
 use std::fmt;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TrashRestoreIssue {
+    Ambiguous,
+    Changed,
+    Conflict,
+    Unavailable,
+}
+#[derive(Clone, Debug)]
+pub struct TrashRestoreFailure {
+    pub issue: TrashRestoreIssue,
+    pub path: String,
+    pub detail: String,
+}
+impl fmt::Display for TrashRestoreFailure {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let issue = match self.issue {
+            TrashRestoreIssue::Ambiguous => "ambiguous",
+            TrashRestoreIssue::Changed => "changed",
+            TrashRestoreIssue::Conflict => "conflict",
+            TrashRestoreIssue::Unavailable => "unavailable",
+        };
+        write!(f, "Trash restore [{issue}]: {}: {}", self.path, self.detail)
+    }
+}
+impl std::error::Error for TrashRestoreFailure {}
+impl TrashRestoreFailure {
+    pub fn from_message(message: &str) -> Option<TrashRestoreIssue> {
+        let (_, value) = message.split_once("Trash restore [")?;
+        let (issue, _) = value.split_once("]: ")?;
+        match issue {
+            "ambiguous" => Some(TrashRestoreIssue::Ambiguous),
+            "changed" => Some(TrashRestoreIssue::Changed),
+            "conflict" => Some(TrashRestoreIssue::Conflict),
+            "unavailable" => Some(TrashRestoreIssue::Unavailable),
+            _ => None,
+        }
+    }
+}
+
 /// Stable cause retained through string-based file-operation status.
 #[derive(Clone, Debug)]
 pub struct SourceSelectionFailure {

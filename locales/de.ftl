@@ -881,3 +881,8 @@ redo-rename-unverified = Das Umbenennen kann nicht sicher wiederholt werden: Die
 
 transfer-source-changed = Die Quelle wurde ersetzt oder ist keine reguläre Datei bzw. kein regulärer Ordner mehr. Der Vorgang wurde gestoppt; bereits übertragene Elemente bleiben erhalten. Prüfen Sie die Quelle und versuchen Sie es erneut.
 transfer-source-unverified = Die Identität der Quelle kann an diesem Speicherort nicht überprüft werden. Der Vorgang wurde gestoppt; bereits übertragene Elemente bleiben erhalten. Versuchen Sie es von einem kompatiblen lokalen Ordner aus.
+
+trash-restore-ambiguous = Mehrere Papierkorbelemente stammen vom selben Speicherort. Öffnen Sie den Papierkorb und wählen Sie das gewünschte Element zum Wiederherstellen aus. Bereits wiederhergestellte Elemente bleiben erhalten.
+trash-restore-changed = Das Papierkorbelement wurde nach der Auswahl geändert. Die Wiederherstellung wurde gestoppt. Aktualisieren Sie den Papierkorb und wählen Sie das Element erneut aus. Bereits wiederhergestellte Elemente bleiben erhalten.
+trash-restore-conflict = Am Zielort der Wiederherstellung existiert bereits eine Datei oder ein Ordner. Sie bleiben erhalten, das betroffene Element bleibt im Papierkorb. Benennen Sie das Ziel um oder verschieben Sie es und versuchen Sie es erneut.
+trash-restore-unavailable = Dieses Element konnte nicht wiederhergestellt werden. Prüfen Sie, ob es noch im Papierkorb liegt und sein ursprünglicher Ordner existiert und zugänglich ist. Versuchen Sie es erneut. Bereits wiederhergestellte Elemente bleiben erhalten.

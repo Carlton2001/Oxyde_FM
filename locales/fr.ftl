@@ -580,3 +580,8 @@ redo-rename-unverified = Impossible de rétablir ce renommage en toute sécurit�
 
 transfer-source-changed = La source a été remplacée ou n’est plus un fichier ou dossier ordinaire. L’opération a été arrêtée ; les éléments déjà transférés sont conservés. Vérifiez la source puis réessayez.
 transfer-source-unverified = L’identité de la source ne peut pas être vérifiée sur cet emplacement. L’opération a été arrêtée ; les éléments déjà transférés sont conservés. Essayez depuis un dossier local compatible.
+
+trash-restore-ambiguous = Plusieurs éléments de la corbeille proviennent du même emplacement. Ouvrez la corbeille et sélectionnez précisément l’élément à restaurer. Les éléments déjà restaurés sont conservés.
+trash-restore-changed = L’élément de la corbeille a changé depuis sa sélection. La restauration a été arrêtée. Actualisez la corbeille puis sélectionnez à nouveau l’élément. Les éléments déjà restaurés sont conservés.
+trash-restore-conflict = Un fichier ou un dossier existe déjà à l’emplacement de restauration. Il a été conservé et l’élément concerné reste dans la corbeille. Renommez ou déplacez la destination puis réessayez.
+trash-restore-unavailable = Cet élément n’a pas pu être restauré. Vérifiez qu’il est toujours dans la corbeille et que son dossier d’origine existe et est accessible, puis réessayez. Les éléments déjà restaurés sont conservés.

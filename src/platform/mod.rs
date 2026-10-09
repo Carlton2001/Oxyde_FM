@@ -444,3 +444,6 @@ mod windows_trash_clipboard;
 mod windows_source_selection;
 #[cfg(target_os = "linux")]
 mod linux_source_selection;
+
+#[cfg(target_os = "windows")]
+mod windows_trash_restore;

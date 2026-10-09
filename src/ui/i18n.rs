@@ -396,6 +396,11 @@ pub enum Message {
     ArchiveSourceChanged,
     TransferSourceChanged,
     TransferSourceUnverified,
+    TrashRestoreAmbiguous,
+    TrashRestoreChanged,
+    TrashRestoreConflict,
+    TrashRestoreUnavailable,
+
 
     NetworkMapDescription,
     NetworkMapHint,
@@ -871,6 +876,11 @@ impl Message {
             Self::ArchiveSourceChanged => "archive-source-changed",
             Self::TransferSourceChanged => "transfer-source-changed",
             Self::TransferSourceUnverified => "transfer-source-unverified",
+            Self::TrashRestoreAmbiguous => "trash-restore-ambiguous",
+            Self::TrashRestoreChanged => "trash-restore-changed",
+            Self::TrashRestoreConflict => "trash-restore-conflict",
+            Self::TrashRestoreUnavailable => "trash-restore-unavailable",
+
 
             Self::NetworkMapDescription => "network-map-description",
             Self::NetworkMapHint => "network-map-hint",
@@ -1497,6 +1507,11 @@ mod tests {
                 Message::ArchiveSourceChanged,
                 Message::TransferSourceChanged,
                 Message::TransferSourceUnverified,
+                Message::TrashRestoreAmbiguous,
+                Message::TrashRestoreChanged,
+                Message::TrashRestoreConflict,
+                Message::TrashRestoreUnavailable,
+
 
                 Message::NetworkMapDescription,
                 Message::NetworkMapHint,

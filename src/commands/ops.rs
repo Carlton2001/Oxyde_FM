@@ -3,12 +3,11 @@ use crate::models::{
     Transaction, TransactionType, TrashEntry,
 };
 use crate::utils::path_security::validate_path;
-use log::{info, warn};
+use log::info;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 struct RestorationPaths {
-    crate_path: PathBuf,
     corrected_path: PathBuf,
 }
 
@@ -38,10 +37,7 @@ fn get_restoration_paths(item: &trash::TrashItem) -> RestorationPaths {
         }
     }
 
-    RestorationPaths {
-        crate_path,
-        corrected_path,
-    }
+    RestorationPaths { corrected_path }
 }
 
 /// Shares the original identity used by trash listings, restore, and properties.
@@ -357,114 +353,78 @@ pub async fn get_total_recycle_bin_usage() -> Result<(u64, u64), CommandError> {
     crate::platform::platform().recycle_bin_usage().map_err(CommandError::SystemError)
 }
 
+fn normalize_restore_path(path: &std::path::Path) -> String {
+    path.to_string_lossy()
+        .to_lowercase()
+        .replace('/', "\\")
+        .trim_start_matches("\\\\?\\")
+        .to_string()
+}
+fn select_restoration_tasks(
+    items: &[trash::TrashItem],
+    paths: Vec<String>,
+) -> Result<Vec<trash::TrashItem>, CommandError> {
+    use crate::models::error::{TrashRestoreFailure, TrashRestoreIssue};
+    let mut selected = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for path in paths {
+        let normalized = normalize_restore_path(std::path::Path::new(&path));
+        // An explicit ID always wins over another item's original path.
+        let exact = items
+            .iter()
+            .filter(|item| normalize_restore_path(std::path::Path::new(&item.id)) == normalized)
+            .collect::<Vec<_>>();
+        let candidates = if !exact.is_empty() {
+            exact
+        } else {
+            items
+                .iter()
+                .filter(|item| normalize_restore_path(&item.original_path()) == normalized)
+                .collect::<Vec<_>>()
+        };
+        if candidates.len() != 1 {
+            return Err(CommandError::TrashError(
+                TrashRestoreFailure {
+                    issue: if candidates.is_empty() {
+                        TrashRestoreIssue::Unavailable
+                    } else {
+                        TrashRestoreIssue::Ambiguous
+                    },
+                    path,
+                    detail: "Selection does not identify exactly one trash item".into(),
+                }
+                .to_string(),
+            ));
+        }
+        let item = candidates[0];
+        if seen.insert(normalize_restore_path(std::path::Path::new(&item.id))) {
+            selected.push(item.clone());
+        }
+    }
+    Ok(selected)
+}
 pub async fn restore_items(paths: Vec<String>) -> Result<Vec<String>, CommandError> {
     info!("Restoring items: {:?}", paths);
-    let trash_items =
-        crate::platform::platform().list_trash_items().map_err(CommandError::TrashError)?;
-
-    let mut restoration_tasks = Vec::new();
-    let mut restored_paths = Vec::new();
-
-    let normalize = |p: &std::path::Path| -> String {
-        p.to_string_lossy()
-            .to_lowercase()
-            .replace("/", "\\")
-            .trim_start_matches("\\\\?\\")
-            .to_string()
-    };
-
-    for path_str in paths {
-        let path = PathBuf::from(&path_str);
-        let normalized_target = normalize(&path);
-
-        info!(
-            "Looking for target by id or original path: {}",
-            normalized_target
-        );
-
-        // Match by internal trash id OR original path
-        let found = trash_items.iter().find(|item| {
-            let item_id = normalize(&PathBuf::from(&item.id));
-            if item_id == normalized_target {
-                return true;
-            }
-
-            let original_path = normalize(&item.original_path());
-            if original_path == normalized_target {
-                return true;
-            }
-
-            // Special case for shortcuts/urls where extension might be missing in original_path
-            if normalized_target.ends_with(".lnk") || normalized_target.ends_with(".url") {
-                let stem = normalized_target
-                    .rsplit_once('.')
-                    .map(|(s, _)| s)
-                    .unwrap_or(&normalized_target);
-                if original_path == stem {
-                    return true;
-                }
-            }
-
-            false
-        });
-
-        if let Some(item) = found {
-            info!("Found match: {:?}", item.original_path());
-            restoration_tasks.push((item.clone(), path));
-        } else {
-            warn!("No match found for: {}", path_str);
-        }
-    }
-
-    if restoration_tasks.is_empty() {
-        warn!("No matching items found to restore.");
+    let items = crate::platform::platform()
+        .list_trash_items()
+        .map_err(CommandError::TrashError)?
+        .iter()
+        .map(item_with_correct_restore_name)
+        .collect::<Vec<_>>();
+    let tasks = select_restoration_tasks(&items, paths)?;
+    if tasks.is_empty() {
         return Err(CommandError::TrashError(
-            "No matching items found in Recycle Bin".to_string(),
+            "No matching items found in Recycle Bin".into(),
         ));
     }
-
-    for (item, intended_path) in restoration_tasks {
-        let item = item_with_correct_restore_name(&item);
-        let original_path = original_trash_path(&item);
-        let original_path_str = original_path.to_string_lossy().to_string();
-
-        crate::platform::platform().restore_trash_items(vec![item.clone()])
-            .map_err(CommandError::TrashError)?;
-        restored_paths.push(original_path_str);
-
-        // Check if we restored by ID (from Trash View) or by Original Path (Undo)
-        // If intended_path matches the internal trash ID, we should NOT try to rename the result to intended_path.
-        let intended_normalized = normalize(&intended_path);
-        let id_normalized = normalize(&PathBuf::from(&item.id));
-
-        if intended_normalized == id_normalized {
-            continue;
-        }
-
-        // After restore, if it didn't land at intended_path, check for truncated landing
-        if !intended_path.exists() {
-            if original_path.exists() {
-                // Use the captured original_path
-                info!(
-                    "Fixing extension after restore (original_path exists): {:?} -> {:?}",
-                    original_path, intended_path
-                );
-                let _ = std::fs::rename(&original_path, &intended_path);
-            } else {
-                // Try corrected path as well just in case
-                let res_paths = get_restoration_paths(&item);
-                if res_paths.crate_path != intended_path && res_paths.crate_path.exists() {
-                    info!(
-                        "Fixing extension after restore (res_paths exists): {:?} -> {:?}",
-                        res_paths.crate_path, intended_path
-                    );
-                    let _ = std::fs::rename(&res_paths.crate_path, &intended_path);
-                }
-            }
-        }
-    }
-
-    Ok(restored_paths)
+    let restored = tasks
+        .iter()
+        .map(|item| item.original_path().to_string_lossy().into_owned())
+        .collect();
+    crate::platform::platform()
+        .restore_trash_items(tasks)
+        .map_err(CommandError::TrashError)?;
+    Ok(restored)
 }
 
 /// Replay the same system deletion policy used by the operation queue.
@@ -2340,5 +2300,67 @@ mod new_folder_history_tests {
         runtime.block_on(redo_last_action(&history)).unwrap();
         runtime.block_on(undo_last_action(&history)).unwrap();
         assert!(!path.exists());
+    }
+}
+
+#[cfg(test)]
+mod restoration_selection_tests {
+    use super::*;
+    fn item(id: &str, original: &str) -> trash::TrashItem {
+        let original = PathBuf::from(original);
+        trash::TrashItem {
+            id: id.into(),
+            name: original.file_name().unwrap().to_owned(),
+            original_parent: original.parent().unwrap().to_owned(),
+            time_deleted: 0,
+        }
+    }
+    #[test]
+    fn restoration_selects_exact_ids_first_and_deduplicates_requests() {
+        let first = item("C:/bin/$Rfirst", "C:/original/first");
+        let other = item("C:/bin/$Rother", "C:/bin/$Rfirst");
+        let chosen = select_restoration_tasks(
+            &[other, first.clone()],
+            vec!["C:/bin/$Rfirst".into(), "C:/original/first".into()],
+        )
+        .unwrap();
+        assert_eq!(chosen, vec![first]);
+    }
+    #[test]
+    fn restoration_refuses_ambiguous_or_missing_original_paths_before_effects() {
+        use crate::models::error::{TrashRestoreFailure, TrashRestoreIssue};
+        let items = [
+            item("C:/bin/$Rfirst", "C:/original/first"),
+            item("C:/bin/$Rsecond", "C:/original/first"),
+        ];
+        for (path, issue) in [
+            ("C:/original/first", TrashRestoreIssue::Ambiguous),
+            ("C:/missing", TrashRestoreIssue::Unavailable),
+        ] {
+            let error =
+                select_restoration_tasks(&items, vec!["C:/bin/$Rfirst".into(), path.into()])
+                    .unwrap_err();
+            assert_eq!(
+                TrashRestoreFailure::from_message(&error.to_string()),
+                Some(issue)
+            );
+        }
+        assert_eq!(
+            select_restoration_tasks(&items, vec!["C:/bin/$Rsecond".into()]).unwrap(),
+            vec![items[1].clone()]
+        );
+    }
+    #[test]
+    fn restoration_requires_the_complete_corrected_name_without_stem_guessing() {
+        let selected = item("C:/bin/$Rshortcut.lnk", "C:/original/shortcut.lnk");
+        assert!(
+            select_restoration_tasks(&[selected.clone()], vec!["C:/original/shortcut".into()])
+                .is_err()
+        );
+        assert_eq!(
+            select_restoration_tasks(&[selected.clone()], vec!["C:/original/shortcut.lnk".into()])
+                .unwrap(),
+            vec![selected]
+        );
     }
 }
