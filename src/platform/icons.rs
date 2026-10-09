@@ -10,18 +10,12 @@ use std::os::windows::ffi::OsStrExt;
 use std::path::PathBuf;
 use std::sync::Mutex;
 use windows::core::PCWSTR;
-use windows::Win32::Graphics::Gdi::{
-    CreateCompatibleDC, CreateDIBSection, DeleteDC, DeleteObject, GetDC, GetObjectW, ReleaseDC,
-    SelectObject, BITMAP, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS, HGDIOBJ,
-};
 use windows::Win32::UI::Controls::IImageList;
 use windows::Win32::UI::Shell::{
     SHGetFileInfoW, SHGetImageList, SHFILEINFOW, SHGFI_ICON, SHGFI_LARGEICON, SHGFI_SMALLICON,
     SHGFI_SYSICONINDEX, SHIL_JUMBO,
 };
-use windows::Win32::UI::WindowsAndMessaging::{
-    DestroyIcon, DrawIconEx, GetIconInfo, DI_NORMAL, HICON,
-};
+use windows::Win32::UI::WindowsAndMessaging::HICON;
 
 lazy_static! {
     static ref ICON_CACHE: Mutex<HashMap<String, Vec<u8>>> = Mutex::new(HashMap::new());
@@ -143,15 +137,9 @@ pub fn extract_icon_png(
         // Target size for display (Retina/High DPI friendly)
         let target_size = if size == "small" { 32 } else { 96 };
 
-        let icon_bitmap = match icon_to_bitmap(hicon, target_size) {
-            Ok(b) => b,
-            Err(e) => {
-                let _ = DestroyIcon(hicon);
-                return Err(format!("Failed to convert icon to bitmap: {}", e));
-            }
-        };
-
-        let _ = DestroyIcon(hicon);
+        // The converter owns the Shell icon and releases it even on an error/unwind.
+        let icon_bitmap = icon_to_bitmap(hicon, target_size)
+            .map_err(|error| format!("Failed to convert icon to bitmap: {error}"))?;
 
         // Encode to PNG
         let mut png_buffer = Vec::new();
@@ -183,71 +171,98 @@ pub fn extract_icon_png(
 }
 
 fn icon_to_bitmap(hicon: HICON, target_size: i32) -> Result<RgbaImage, String> {
-    unsafe {
-        // 1. Get the actual dimensions of the icon provided by Windows
-        let mut icon_info = std::mem::zeroed();
-        if GetIconInfo(hicon, &mut icon_info).is_err() {
-            // Clean up handles from GetIconInfo if it fails
-            let _ = DeleteObject(HGDIOBJ(icon_info.hbmColor.0));
-            let _ = DeleteObject(HGDIOBJ(icon_info.hbmMask.0));
-            return Err("GetIconInfo failed".to_string());
+    let native_image = super::windows_icon_bitmap::into_image(hicon, target_size)?;
+    let actual_width = native_image.width();
+    let actual_height = native_image.height();
+    // --- SMART RENDERING PIPELINE ---
+
+    // 1. CONTENT-AWARE CROPPING (Always enabled to fix tiny icons in large canvases)
+    let mut min_x = actual_width as u32;
+    let mut max_x = 0;
+    let mut min_y = actual_height as u32;
+    let mut max_y = 0;
+    let mut has_content = false;
+
+    for (x, y, pixel) in native_image.enumerate_pixels() {
+        if pixel[3] > 8 {
+            // Alpha threshold
+            has_content = true;
+            if x < min_x {
+                min_x = x;
+            }
+            if x > max_x {
+                max_x = x;
+            }
+            if y < min_y {
+                min_y = y;
+            }
+            if y > max_y {
+                max_y = y;
+            }
         }
+    }
 
-        // Clean up handle from GetIconInfo later
-        let hbm_color = icon_info.hbmColor;
-        let hbm_mask = icon_info.hbmMask;
+    let processed_img = if has_content {
+        let cw = (max_x - min_x) + 1;
+        let ch = (max_y - min_y) + 1;
+        image::imageops::crop_imm(&native_image, min_x, min_y, cw, ch).to_image()
+    } else {
+        native_image.clone()
+    };
 
-        let mut actual_width = 0;
-        let mut actual_height = 0;
-        let mut bitmap: BITMAP = std::mem::zeroed();
+    // 2. SUPER-SAMPLING for Perfect Curves
+    // We scale to 2x target size with a smooth filter, then down to 1x with a sharp filter.
+    let intermediate_size = (target_size * 2) as u32;
+    let margin_factor = 0.94f32; // Slight padding
+    let max_dim = (intermediate_size as f32 * margin_factor) as u32;
 
-        if !hbm_color.is_invalid()
-            && GetObjectW(
-                HGDIOBJ(hbm_color.0),
-                std::mem::size_of::<BITMAP>() as i32,
-                Some(&mut bitmap as *mut _ as *mut _),
-            ) > 0
-        {
-            actual_width = bitmap.bmWidth;
-            actual_height = bitmap.bmHeight;
-        } else if !hbm_mask.is_invalid()
-            && GetObjectW(
-                HGDIOBJ(hbm_mask.0),
-                std::mem::size_of::<BITMAP>() as i32,
-                Some(&mut bitmap as *mut _ as *mut _),
-            ) > 0
-        {
-            actual_width = bitmap.bmWidth;
-            actual_height = bitmap.bmHeight / 2; // Mask bitmap is double height (XOR + AND)
-        }
+    let (pw, ph) = (processed_img.width(), processed_img.height());
+    let ratio = pw as f32 / ph as f32;
+    let (nw, nh) = if ratio > 1.0 {
+        (max_dim, (max_dim as f32 / ratio) as u32)
+    } else {
+        ((max_dim as f32 * ratio) as u32, max_dim)
+    };
 
-        if actual_width == 0 || actual_height == 0 {
-            let _ = DeleteObject(HGDIOBJ(hbm_color.0));
-            let _ = DeleteObject(HGDIOBJ(hbm_mask.0));
-            return Err("Could not detect icon size".to_string());
-        }
+    // Step A: Upscale to 2x Target with smooth CatmullRom
+    let upscaled = image::imageops::resize(
+        &processed_img,
+        nw,
+        nh,
+        image::imageops::FilterType::CatmullRom,
+    );
 
-        // 2. Draw icon into a DIB at its NATIVE size to avoid initial aliasing
-        let dc = GetDC(None);
-        if dc.is_invalid() {
-            let _ = DeleteObject(HGDIOBJ(hbm_color.0));
-            let _ = DeleteObject(HGDIOBJ(hbm_mask.0));
-            return Err("GetDC failed".to_string());
-        }
+    // Step B: Center on 2x Canvas
+    let mut canvas_2x = RgbaImage::new(intermediate_size, intermediate_size);
+    let ox = (intermediate_size - nw) / 2;
+    let oy = (intermediate_size - nh) / 2;
+    image::imageops::overlay(&mut canvas_2x, &upscaled, ox as i64, oy as i64);
 
-        let mem_dc = CreateCompatibleDC(Some(dc));
-        if mem_dc.is_invalid() {
-            let _ = ReleaseDC(None, dc);
-            let _ = DeleteObject(HGDIOBJ(hbm_color.0));
-            let _ = DeleteObject(HGDIOBJ(hbm_mask.0));
-            return Err("CreateCompatibleDC failed".to_string());
-        }
+    // Step C: Downscale to Final Target with high-precision Lanczos3
+    // This is the "magic" for smooth corners.
+    Ok(image::imageops::resize(
+        &canvas_2x,
+        target_size as u32,
+        target_size as u32,
+        image::imageops::FilterType::Lanczos3,
+    ))
+}
 
-        let bi = BITMAPINFO {
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use windows::Win32::Graphics::Gdi::{
+        CreateBitmap, CreateDIBSection, DeleteObject, BITMAPINFO, BITMAPINFOHEADER, BI_RGB,
+        DIB_RGB_COLORS, HGDIOBJ,
+    };
+    use windows::Win32::UI::WindowsAndMessaging::{CreateIconIndirect, GetIconInfo, ICONINFO};
+
+    fn color_icon(width: i32, height: i32) -> HICON {
+        let info = BITMAPINFO {
             bmiHeader: BITMAPINFOHEADER {
                 biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
-                biWidth: actual_width,
-                biHeight: -actual_height, // Top-down
+                biWidth: width,
+                biHeight: -height,
                 biPlanes: 1,
                 biBitCount: 32,
                 biCompression: BI_RGB.0,
@@ -255,150 +270,80 @@ fn icon_to_bitmap(hicon: HICON, target_size: i32) -> Result<RgbaImage, String> {
             },
             ..Default::default()
         };
-
-        let mut bits: *mut std::ffi::c_void = std::ptr::null_mut();
-        let h_bitmap = CreateDIBSection(
-            Some(mem_dc),
-            &bi as *const BITMAPINFO,
-            DIB_RGB_COLORS,
-            &mut bits,
-            None,
-            0,
-        )
-        .map_err(|e| {
-            let _ = DeleteDC(mem_dc);
-            let _ = ReleaseDC(None, dc);
-            let _ = DeleteObject(HGDIOBJ(hbm_color.0));
-            let _ = DeleteObject(HGDIOBJ(hbm_mask.0));
-            format!("CreateDIBSection failed: {}", e)
-        })?;
-
-        let old_obj = SelectObject(mem_dc, HGDIOBJ(h_bitmap.0));
-
-        // Draw at native size
-        if DrawIconEx(
-            mem_dc,
-            0,
-            0,
-            hicon,
-            actual_width,
-            actual_height,
-            0,
-            None,
-            DI_NORMAL,
-        )
-        .is_err()
-        {
-            let _ = SelectObject(mem_dc, old_obj);
-            let _ = DeleteObject(HGDIOBJ(h_bitmap.0));
-            let _ = DeleteDC(mem_dc);
-            let _ = ReleaseDC(None, dc);
-            let _ = DeleteObject(HGDIOBJ(hbm_color.0));
-            let _ = DeleteObject(HGDIOBJ(hbm_mask.0));
-            return Err("DrawIconEx failed".to_string());
+        unsafe {
+            let mut bits = std::ptr::null_mut();
+            let color = CreateDIBSection(None, &info, DIB_RGB_COLORS, &mut bits, None, 0).unwrap();
+            assert!(!bits.is_null());
+            let pixels = std::slice::from_raw_parts_mut(
+                bits as *mut u8,
+                width as usize * height as usize * 4,
+            );
+            for pixel in pixels.chunks_exact_mut(4) {
+                pixel.copy_from_slice(&[17, 43, 201, 255]);
+            }
+            let mask_data = vec![0u8; ((width as usize + 15) / 16 * 2) * height as usize];
+            let mask = CreateBitmap(width, height, 1, 1, Some(mask_data.as_ptr().cast()));
+            assert!(!mask.is_invalid());
+            let result = CreateIconIndirect(&ICONINFO {
+                fIcon: true.into(),
+                hbmColor: color,
+                hbmMask: mask,
+                ..Default::default()
+            });
+            let _ = DeleteObject(HGDIOBJ(color.0));
+            let _ = DeleteObject(HGDIOBJ(mask.0));
+            result.unwrap()
         }
+    }
 
-        let num_pixels = (actual_width * actual_height) as usize;
-        let src_pixels = std::slice::from_raw_parts(bits as *const u32, num_pixels);
-
-        let mut rgba_pixels = Vec::with_capacity(num_pixels * 4);
-        for &pixel in src_pixels {
-            rgba_pixels.push(((pixel >> 16) & 0xFF) as u8); // R
-            rgba_pixels.push(((pixel >> 8) & 0xFF) as u8); // G
-            rgba_pixels.push((pixel & 0xFF) as u8); // B
-            rgba_pixels.push(((pixel >> 24) & 0xFF) as u8); // A
-        }
-
-        // Cleanup GDI
-        let _ = SelectObject(mem_dc, old_obj);
-        let _ = DeleteObject(HGDIOBJ(h_bitmap.0));
-        let _ = DeleteDC(mem_dc);
-        let _ = ReleaseDC(None, dc);
-        let _ = DeleteObject(HGDIOBJ(hbm_color.0));
-        let _ = DeleteObject(HGDIOBJ(hbm_mask.0));
-
-        let native_image =
-            RgbaImage::from_raw(actual_width as u32, actual_height as u32, rgba_pixels)
-                .ok_or_else(|| "Failed to create RgbaImage".to_string())?;
-
-        // --- SMART RENDERING PIPELINE ---
-
-        // 1. CONTENT-AWARE CROPPING (Always enabled to fix tiny icons in large canvases)
-        let mut min_x = actual_width as u32;
-        let mut max_x = 0;
-        let mut min_y = actual_height as u32;
-        let mut max_y = 0;
-        let mut has_content = false;
-
-        for (x, y, pixel) in native_image.enumerate_pixels() {
-            if pixel[3] > 8 {
-                // Alpha threshold
-                has_content = true;
-                if x < min_x {
-                    min_x = x;
-                }
-                if x > max_x {
-                    max_x = x;
-                }
-                if y < min_y {
-                    min_y = y;
-                }
-                if y > max_y {
-                    max_y = y;
-                }
+    fn assert_icon_released(icon: HICON) {
+        let mut info = ICONINFO::default();
+        let result = unsafe { GetIconInfo(icon, &mut info) };
+        unsafe {
+            if !info.hbmColor.is_invalid() {
+                let _ = DeleteObject(HGDIOBJ(info.hbmColor.0));
+            }
+            if !info.hbmMask.is_invalid() {
+                let _ = DeleteObject(HGDIOBJ(info.hbmMask.0));
             }
         }
-
-        let processed_img = if has_content {
-            let cw = (max_x - min_x) + 1;
-            let ch = (max_y - min_y) + 1;
-            image::imageops::crop_imm(&native_image, min_x, min_y, cw, ch).to_image()
-        } else {
-            native_image.clone()
-        };
-
-        // 2. SUPER-SAMPLING for Perfect Curves
-        // We scale to 2x target size with a smooth filter, then down to 1x with a sharp filter.
-        let intermediate_size = (target_size * 2) as u32;
-        let margin_factor = 0.94f32; // Slight padding
-        let max_dim = (intermediate_size as f32 * margin_factor) as u32;
-
-        let (pw, ph) = (processed_img.width(), processed_img.height());
-        let ratio = pw as f32 / ph as f32;
-        let (nw, nh) = if ratio > 1.0 {
-            (max_dim, (max_dim as f32 / ratio) as u32)
-        } else {
-            ((max_dim as f32 * ratio) as u32, max_dim)
-        };
-
-        // Step A: Upscale to 2x Target with smooth CatmullRom
-        let upscaled = image::imageops::resize(
-            &processed_img,
-            nw,
-            nh,
-            image::imageops::FilterType::CatmullRom,
-        );
-
-        // Step B: Center on 2x Canvas
-        let mut canvas_2x = RgbaImage::new(intermediate_size, intermediate_size);
-        let ox = (intermediate_size - nw) / 2;
-        let oy = (intermediate_size - nh) / 2;
-        image::imageops::overlay(&mut canvas_2x, &upscaled, ox as i64, oy as i64);
-
-        // Step C: Downscale to Final Target with high-precision Lanczos3
-        // This is the "magic" for smooth corners.
-        Ok(image::imageops::resize(
-            &canvas_2x,
-            target_size as u32,
-            target_size as u32,
-            image::imageops::FilterType::Lanczos3,
-        ))
+        assert!(result.is_err(), "Owned Shell icon was not released");
     }
-}
 
-#[cfg(test)]
-mod tests {
-    use super::shell_icon_path;
+    #[test]
+    fn native_icon_rejects_excessive_source_dimensions() {
+        let icon = color_icon(1025, 1);
+        let result = icon_to_bitmap(icon, 32);
+        assert_icon_released(icon);
+        assert!(result.is_err(), "Oversized native icon was accepted");
+    }
+
+    #[test]
+    fn native_icon_rejects_zero_display_size() {
+        let icon = color_icon(16, 16);
+        let result = icon_to_bitmap(icon, 0);
+        assert_icon_released(icon);
+        assert!(result.is_err(), "Zero-sized icon output was accepted");
+    }
+
+    #[test]
+    fn normal_native_icons_keep_display_sizes_and_color_channels() {
+        for target in [32, 96] {
+            let icon = color_icon(16, 16);
+            let image = icon_to_bitmap(icon, target);
+            assert_icon_released(icon);
+            let image = image.unwrap();
+            assert_eq!(
+                (image.width(), image.height()),
+                (target as u32, target as u32)
+            );
+            let pixel = image.get_pixel(target as u32 / 2, target as u32 / 2).0;
+            assert!(
+                pixel[0] > 190 && pixel[1] < 55 && pixel[2] < 30 && pixel[3] == 255,
+                "{pixel:?}"
+            );
+        }
+    }
 
     #[test]
     fn breadcrumb_and_tree_paths_resolve_to_the_same_shell_path() {
