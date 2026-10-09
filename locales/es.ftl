@@ -891,3 +891,4 @@ history-delete-changed = El elemento ya no coincide con el registrado al elimina
 history-delete-unverified = Oxyde no tiene la información necesaria para deshacer o rehacer esta eliminación de forma segura. Se detuvo la acción. Puede comprobar la papelera y restaurar manualmente el elemento deseado.
 
 preview-timed-out = Esta vista previa ha superado el límite de 15 segundos. El archivo sigue siendo accesible.
+copy-name-suffix = Copia

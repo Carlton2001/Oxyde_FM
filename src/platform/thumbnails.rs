@@ -830,7 +830,7 @@ where
                 let attributes = attributes
                     .ok_or_else(|| CommandError::Other("Missing video attributes".into()))?;
                 attributes
-                    .SetUINT32(&MF_SOURCE_READER_ENABLE_VIDEO_PROCESSING, 1)
+                    .SetUINT32(&MF_SOURCE_READER_ENABLE_ADVANCED_VIDEO_PROCESSING, 1)
                     .map_err(video_error)?;
                 attributes
                     .SetUINT32(&MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS, 1)
@@ -839,7 +839,7 @@ where
                     windows::core::PCWSTR(wide_path.as_ptr()),
                     &attributes,
                 )
-                .map_err(video_error)?;
+                .map_err(|error| CommandError::SystemError(format!("Video source open: {error}")))?;
                 reader
                     .SetStreamSelection(MF_SOURCE_READER_ALL_STREAMS.0 as u32, false)
                     .map_err(video_error)?;
@@ -853,9 +853,30 @@ where
                 request
                     .SetGUID(&MF_MT_SUBTYPE, &MFVideoFormat_RGB32)
                     .map_err(video_error)?;
-                reader
-                    .SetCurrentMediaType(stream, None, &request)
-                    .map_err(video_error)?;
+                // Scale in the native video processor rather than converting a
+                // full-resolution RGB frame and resizing it in Rust every time.
+                let native_size = reader.GetNativeMediaType(stream, 0).map_err(video_error)?
+                    .GetUINT64(&MF_MT_FRAME_SIZE).map_err(video_error)?;
+                let width = (native_size >> 32) as u32;
+                let height = native_size as u32;
+                let stride = width.checked_mul(4).filter(|stride| *stride <= i32::MAX as u32)
+                    .ok_or_else(|| CommandError::Other("Video stride overflow".into()))?;
+                let desired = VideoLayout::new(width, height, stride as i32)?;
+                if width > VIDEO_THUMB_SIZE || height > VIDEO_THUMB_SIZE {
+                    request.SetUINT64(&MF_MT_FRAME_SIZE,
+                        (u64::from(desired.out_w) << 32) | u64::from(desired.out_h))
+                        .map_err(video_error)?;
+                }
+                if let Err(error) = reader.SetCurrentMediaType(stream, None, &request) {
+                    // Some installed processors cannot scale a particular format.
+                    // Keep the former bounded Rust resize inside this worker.
+                    if width <= VIDEO_THUMB_SIZE && height <= VIDEO_THUMB_SIZE {
+                        return Err(CommandError::SystemError(format!("Video output negotiation: {error}")));
+                    }
+                    request.DeleteItem(&MF_MT_FRAME_SIZE).map_err(video_error)?;
+                    reader.SetCurrentMediaType(stream, None, &request)
+                        .map_err(|error| CommandError::SystemError(format!("Video output negotiation: {error}")))?;
+                }
                 let layout = VideoLayout::from_media_type(
                     &reader.GetCurrentMediaType(stream).map_err(video_error)?,
                 )?;
@@ -956,6 +977,15 @@ fn resize_video_frame(bytes: &[u8], layout: VideoLayout) -> Result<RgbaImage, Co
         }
     };
     let mut out = vec![0; (out_w * out_h * 4) as usize];
+    if src_w == out_w && src_h == out_h {
+        for (y, destination) in out.chunks_exact_mut(out_w as usize * 4).enumerate() {
+            let offset = row(y) * pitch;
+            destination.copy_from_slice(&bytes[offset..offset + destination.len()]);
+            for pixel in destination.chunks_exact_mut(4) { pixel[3] = 255; }
+        }
+        return RgbaImage::from_raw(out_w, out_h, out)
+            .ok_or_else(|| CommandError::Other("Invalid frame dimensions".into()));
+    }
     for y in 0..out_h as usize {
         let fy = (y as f32 + 0.5) * src_h as f32 / out_h as f32 - 0.5;
         let y0 = (fy as i32).clamp(0, src_h as i32 - 1) as usize;
@@ -1415,5 +1445,21 @@ mod video_stream_tests {
         let result =
             stream_video_frames_local(path, |_, _| panic!("missing file produced image"), || false);
         assert!(result.is_err());
+    }
+    #[test]
+    fn native_scaled_frames_keep_colors_alpha_padding_and_signed_stride() {
+        let mut pixels = Vec::new();
+        for color in [[17, 43, 201, 0], [99, 21, 7, 0]] {
+            pixels.extend(color.repeat(640));
+            pixels.extend([0; 4]);
+        }
+        for (stride, first) in [(2564, [17, 43, 201, 255]), (-2564, [99, 21, 7, 255])] {
+            let layout = VideoLayout::new(640, 2, stride).unwrap();
+            let image = resize_video_frame(&pixels, layout).unwrap();
+            assert_eq!(image.dimensions(), (640, 2));
+            assert_eq!(image.get_pixel(0, 0).0, first);
+            assert_eq!(image.get_pixel(639, 0).0, first);
+            assert_eq!(image.get_pixel(639, 1).0[3], 255);
+        }
     }
 }

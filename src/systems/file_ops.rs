@@ -78,6 +78,7 @@ pub struct FileOperation {
     speed_sample_bytes: u64,
     pub compression_quality: String,
     pub archive_qualities: HashMap<String, String>,
+    pub copy_name_suffix: String,
     archive_path_mappings: Vec<(PathBuf, PathBuf)>,
     pub turbo: bool,
     pub resolutions: Option<HashMap<String, ConflictAction>>,
@@ -139,6 +140,7 @@ impl FileOperation {
             speed_sample_bytes: 0,
             compression_quality: self.compression_quality.clone(),
             archive_qualities: self.archive_qualities.clone(),
+            copy_name_suffix: self.copy_name_suffix.clone(),
             archive_path_mappings: self.archive_path_mappings.clone(),
             turbo: self.turbo,
             resolutions: None,
@@ -189,6 +191,7 @@ impl FileOperation {
             speed_sample_bytes: 0,
             compression_quality: "normal".into(),
             archive_qualities: HashMap::new(),
+            copy_name_suffix: "Copie".into(),
             archive_path_mappings: Vec::new(),
             turbo: false,
             resolutions,
@@ -1187,17 +1190,24 @@ impl FileOperationManager {
         let mut files_to_process = Vec::new();
         let mut directories_to_create = Vec::new();
         let mut source_directories = super::source_directories::SourceDirectories::default();
+        let mut reserved_copy_names = std::collections::HashSet::new();
+        let mut fresh_copy_directories = Vec::new();
+        let copy_name_suffix = op.lock().unwrap().copy_name_suffix.clone();
 
         for (selected, canonical_src) in selected_sources.iter().zip(&canonical_sources) {
             Self::archive_checkpoint(op)?;
             let src = selected.path();
-            let dest_root = target_dir.join(source_name(src)?);
-            if dest_root == src
+            let mut dest_root = target_dir.join(source_name(src)?);
+            let self_transfer = super::transfer_naming::same_entry(src, &dest_root)
+                || dest_root == src
                 || (dest_root.exists()
                     && std::fs::canonicalize(&dest_root)
-                        .is_ok_and(|destination| destination == *canonical_src))
-            {
-                return Err(format!("Source and destination are identical: {:?}", src));
+                        .is_ok_and(|destination| destination == *canonical_src));
+            if self_transfer {
+                if is_move { continue; }
+                dest_root = super::transfer_naming::copy_name(src, &target_dir, selected.is_dir(),
+                    &copy_name_suffix, &mut reserved_copy_names).map_err(|error| error.to_string())?;
+                if selected.is_dir() { fresh_copy_directories.push(dest_root.clone()); }
             }
             let mut walker = super::source_selection::SourceWalk::new(selected.clone());
             while let Some(entry) = walker
@@ -1237,7 +1247,7 @@ impl FileOperationManager {
                     directories_to_create.push(dest_path);
                     continue;
                 }
-                let replace_existing = dest_path.exists();
+                let replace_existing = !self_transfer && dest_path.exists();
                 if replace_existing
                     && resolutions
                         .as_ref()
@@ -1294,6 +1304,12 @@ impl FileOperationManager {
         for directory in &directories_to_create {
             if cancel_flag.load(Ordering::Relaxed) {
                 break;
+            }
+            if fresh_copy_directories.contains(directory) {
+                destination_tree.reserve_copy_directory(directory, &mut |created| {
+                    Self::record_created_copy_directory(op, &destination_tree, created, is_move)
+                }).map_err(|e| format!("Cannot create new copy directory {:?}: {e}", directory))?;
+                continue;
             }
             destination_tree
                 .ensure_directory(
@@ -4945,7 +4961,7 @@ mod tests {
     }
 
     #[test]
-    fn copy_rejects_same_file_even_when_the_source_uses_parent_components() {
+    fn self_transfers_preserve_the_original_even_with_parent_components_and_replace_resolution() {
         let temp = tempfile::tempdir().unwrap();
         let folder = temp.path().join("folder");
         let detour = folder.join("detour");
@@ -4958,15 +4974,35 @@ mod tests {
             ConflictAction::Replace,
         )]);
 
-        assert!(FileOperationManager::perform_copy(
-            &operation(),
-            vec![source_alias],
-            Some(folder),
+        let move_op = operation();
+        FileOperationManager::perform_copy(
+            &move_op,
+            vec![source_alias.clone()],
+            Some(folder.clone()),
             true,
+            Some(resolutions.clone()),
+        )
+        .unwrap();
+        assert_eq!(move_op.lock().unwrap().processed_files, 0);
+        assert!(move_op.lock().unwrap().moved_files.is_empty());
+        assert_eq!(std::fs::read(&destination).unwrap(), b"preserve");
+
+        let copy_op = operation();
+        FileOperationManager::perform_copy(
+            &copy_op,
+            vec![source_alias],
+            Some(folder.clone()),
+            false,
             Some(resolutions),
         )
-        .is_err());
-        assert_eq!(std::fs::read(destination).unwrap(), b"preserve");
+        .unwrap();
+        let duplicate = folder.join("file - Copie.txt");
+        assert_eq!(std::fs::read(&destination).unwrap(), b"preserve");
+        assert_eq!(std::fs::read(&duplicate).unwrap(), b"preserve");
+        assert!(!crate::systems::transfer_naming::same_entry(&destination, &duplicate));
+        let copy_op = copy_op.lock().unwrap();
+        assert_eq!(copy_op.copied_files[0].1, std::fs::canonicalize(duplicate).unwrap());
+        assert!(copy_op.overwritten_files.is_empty());
     }
 
     #[test]
@@ -5481,5 +5517,63 @@ mod trash_transfer_tests {
                 .unwrap();
             fixture.assert_payload(fixture.root.path());
         });
+    }
+}
+
+
+#[cfg(all(test, target_os = "windows"))]
+mod same_folder_transfer_tests {
+    use super::*;
+    fn operation(source: &Path, destination: &Path, is_move: bool) -> Arc<Mutex<FileOperation>> {
+        let mut operation = FileOperation::new(if is_move { FileOpType::Move } else { FileOpType::Copy },
+            vec![source.to_path_buf()], Some(destination.to_path_buf()), None);
+        operation.turbo = true;
+        operation.turbo_flag.store(true, Ordering::Relaxed);
+        Arc::new(Mutex::new(operation))
+    }
+    #[test]
+    fn same_folder_copy_creates_numbered_duplicates_and_journals_the_actual_names() {
+        let root = tempfile::tempdir().unwrap();
+        let source = root.path().join("École.txt");
+        std::fs::write(&source, "original").unwrap();
+        for name in ["École - Copie.txt", "École - Copie (2).txt"] {
+            let op = operation(&source, root.path(), false);
+            FileOperationManager::perform_copy(&op, vec![source.clone()], Some(root.path().to_path_buf()), false, None).unwrap();
+            assert_eq!(std::fs::read(root.path().join(name)).unwrap(), b"original");
+            let op = op.lock().unwrap();
+            assert_eq!(op.copied_files.len(), 1);
+            assert_eq!(op.copied_files[0].1.file_name().unwrap(), name);
+            assert_eq!(op.copied_file_identities.len(), 1);
+            assert!(op.overwritten_files.is_empty());
+            std::fs::write(root.path().join(name), "witness").unwrap();
+        }
+        assert_eq!(std::fs::read(source).unwrap(), b"original");
+        assert_eq!(std::fs::read(root.path().join("École - Copie.txt")).unwrap(), b"witness");
+    }
+    #[test]
+    fn same_folder_move_is_ignored_before_conflicts_and_executor_effects() {
+        let root = tempfile::tempdir().unwrap();
+        let source = root.path().join("original.txt");
+        std::fs::write(&source, "original").unwrap();
+        assert!(futures::executor::block_on(crate::commands::ops::check_conflicts(
+            vec![source.to_string_lossy().into_owned()], root.path().to_string_lossy().into_owned())).unwrap().is_empty());
+        let op = operation(&source, root.path(), true);
+        FileOperationManager::perform_copy(&op, vec![source.clone()], Some(root.path().to_path_buf()), true, None).unwrap();
+        let op = op.lock().unwrap();
+        assert_eq!(op.processed_files, 0);
+        assert!(op.moved_files.is_empty() && op.created_files.is_empty() && op.overwritten_files.is_empty());
+        assert_eq!(std::fs::read(source).unwrap(), b"original");
+    }
+    #[test]
+    fn same_folder_directory_copy_preserves_the_original_tree_and_literal_folder_name() {
+        let root = tempfile::tempdir().unwrap();
+        let source = root.path().join("Dossier.ext");
+        std::fs::create_dir_all(source.join("nested")).unwrap();
+        std::fs::write(source.join("nested/file.txt"), "original").unwrap();
+        let op = operation(&source, root.path(), false);
+        FileOperationManager::perform_copy(&op, vec![source.clone()], Some(root.path().to_path_buf()), false, None).unwrap();
+        assert_eq!(std::fs::read(root.path().join("Dossier.ext - Copie/nested/file.txt")).unwrap(), b"original");
+        assert_eq!(std::fs::read(source.join("nested/file.txt")).unwrap(), b"original");
+        assert!(op.lock().unwrap().created_dirs.iter().any(|path| path.file_name().unwrap() == "Dossier.ext - Copie"));
     }
 }

@@ -105,6 +105,10 @@ fn main() {
             // Text fields handle their own editing actions; file shortcuts are
             // handled by the explorer only while its focus handle is focused.
             crate::ui::components::input::bind_keys(cx);
+            let mut screens = Vec::new();
+            if let Some(primary) = cx.primary_display() { screens.push(primary.visible_bounds()); }
+            screens.extend(cx.displays().into_iter().map(|display| display.visible_bounds()));
+            let window_bounds = crate::ui::window_geometry::restore(config.window_placement, &screens);
             let app = cx.new(|cx| OxydeApp::new(config, config_path, load_failed, cx));
             let operations_panel = cx.new(|cx| {
                 crate::ui::components::operations::OperationsPanelView::new(app.clone(), cx)
@@ -119,10 +123,7 @@ fn main() {
             });
             cx.open_window(
                 WindowOptions {
-                    window_bounds: Some(WindowBounds::Windowed(Bounds {
-                        origin: point(px(100.0), px(100.0)),
-                        size: size(px(1200.0), px(800.0)),
-                    })),
+                    window_bounds: Some(window_bounds),
                     titlebar: Some(TitlebarOptions {
                         appears_transparent: true,
                         title: Some("Oxyde GPUI".into()),
@@ -131,6 +132,7 @@ fn main() {
                     ..Default::default()
                 },
                 move |window, cx| {
+                    app.update(cx, |this, cx| this.observe_main_window(window, cx));
                     window.on_window_should_close(cx, |_, cx| {
                         trace_shutdown_request("native window close");
                         crate::ui::app::duplicates::close_duplicate_windows(cx);

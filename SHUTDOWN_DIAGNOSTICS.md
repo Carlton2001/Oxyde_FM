@@ -45,3 +45,8 @@ Le journal persistant est `%APPDATA%\oxyde\oxyde.log`, avec rotation au prochain
 ## Aperçus séparés — 9 octobre 2026
 
 Le mode interne `--oxyde-preview-worker-v1` produit un seul aperçu dans un processus sans interface. Il est traité avant logging, préférences et boucle GPUI. Après sérialisation et flush des pixels/du texte, il appelle la même sortie native finale ; ce worker n’a pas d’état applicatif à sauvegarder. Le parent conserve un délai et un Job Object pour terminer/récupérer un worker bloqué. Les étapes et hooks de fermeture de l’application principale restent inchangés. Le test d’intégration `tests/preview_worker.rs` exerce un véritable rendu PDF d’une page et vérifie la libération de son fichier après la réponse. Cela ne remplace pas la validation visuelle des aperçus et de la fermeture de la fenêtre principale.
+
+
+## Géométrie persistante — 10 octobre 2026
+
+Le hook GPUI de la fenêtre principale force maintenant la sauvegarde de la dernière géométrie lorsqu’un debounce de déplacement/redimensionnement est en attente, avant de prendre et attendre la queue des préférences. Le snapshot en mémoire est déjà à jour ; la minimisation est ignorée. Aucune écriture bloquante sur le thread UI et aucun changement du contournement final TerminateProcess. La fermeture juste après déplacement/redimensionnement reste à confirmer visuellement.

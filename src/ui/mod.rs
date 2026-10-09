@@ -16,3 +16,4 @@ pub mod scale;
 pub mod style;
 pub mod theme;
 pub mod workspace;
+pub(crate) mod window_geometry;

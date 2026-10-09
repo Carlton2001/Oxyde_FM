@@ -729,6 +729,35 @@ impl Drop for CancelVideoPreview {
     }
 }
 
+#[derive(Default)]
+struct VideoClock {
+    origin: Option<(std::time::Instant, Duration)>,
+    previous: Option<(Duration, std::time::Instant)>,
+    interval: Duration,
+}
+
+impl VideoClock {
+    fn presentation_time(
+        &mut self,
+        pts: Duration,
+        now: std::time::Instant,
+    ) -> Option<std::time::Instant> {
+        if let Some((previous_pts, previous_due)) = self.previous {
+            if pts < previous_pts {
+                // Keep the last frame visible for a full interval on loop restart.
+                let restart = previous_due.checked_add(self.interval)?.max(now);
+                self.origin = Some((restart, pts));
+            } else if pts > previous_pts {
+                self.interval = pts - previous_pts;
+            }
+        }
+        let (origin, first_pts) = *self.origin.get_or_insert((now, pts));
+        let due = origin.checked_add(pts.checked_sub(first_pts)?)?;
+        self.previous = Some((pts, due));
+        Some(due)
+    }
+}
+
 #[derive(Clone)]
 pub struct PreviewTask {
     data: Option<PreviewData>,
@@ -839,39 +868,28 @@ impl PreviewTask {
                         })
                         .detach();
 
-                    // PTS-based playback: sleep until wall-clock time matches the frame's
-                    // presentation timestamp.  `start` is reset whenever the PTS resets to
-                    // near zero (video looped), keeping timing accurate across restarts.
-                    let mut start = std::time::Instant::now();
-                    let mut last_pts = Duration::ZERO;
+                    let mut clock = VideoClock::default();
 
                     while let Some((frame, pts)) = rx.recv().await {
-                        // Detect loop restart: PTS jumped back by more than 500 ms.
-                        if pts + Duration::from_millis(500) < last_pts {
-                            start = std::time::Instant::now();
+                        let now = std::time::Instant::now();
+                        let Some(due) = clock.presentation_time(pts, now) else {
+                            playback_cancellation.cancel();
+                            break;
+                        };
+                        // Wait BEFORE publishing the frame: otherwise a two-frame
+                        // clip presents both colors in one UI frame and looks fixed.
+                        if let Some(delay) = due.checked_duration_since(now) {
+                            let timer = Box::pin(cx.background_executor().timer(delay));
+                            let cancelled = Box::pin(playback_cancellation.cancelled());
+                            if matches!(futures::future::select(timer,cancelled).await, futures::future::Either::Right(_)) { break; }
                         }
-                        last_pts = pts;
-
                         let res = this.update(&mut cx, |this, cx| {
                             this.data = Some(PreviewData::Image(frame));
                             cx.notify();
                         });
                         if res.is_err() {
+                            playback_cancellation.cancel();
                             break;
-                        }
-
-                        // Sleep only as long as needed to stay on schedule.
-                        // If we are already late, skip the sleep (drop-frame behaviour).
-                        let elapsed = start.elapsed();
-                        if pts > elapsed {
-                            let delay = pts - elapsed;
-                            if std::time::Instant::now().checked_add(delay).is_none() {
-                                playback_cancellation.cancel();
-                                break;
-                            }
-                            let timer = Box::pin(cx.background_executor().timer(delay));
-                            let cancelled = Box::pin(playback_cancellation.cancelled());
-                            if matches!(futures::future::select(timer,cancelled).await, futures::future::Either::Right(_)) { break; }
                         }
                     }
                     let failure = completion_rx.await.ok().flatten();
@@ -1090,6 +1108,31 @@ impl Render for PreviewTask {
 #[cfg(test)]
 mod video_cancellation_tests {
     use super::{send_video_frame, CancelVideoPreview};
+
+    #[test]
+    fn video_clock_keeps_both_avi_colors_visible_for_one_second_on_every_loop() {
+        let start = std::time::Instant::now();
+        let mut clock = super::VideoClock::default();
+        for (pts, due) in [(0, 0), (1, 1), (0, 2), (1, 3), (0, 4)] {
+            assert_eq!(
+                clock.presentation_time(Duration::from_secs(pts), start),
+                Some(start + Duration::from_secs(due))
+            );
+        }
+    }
+
+    #[test]
+    fn video_clock_normalizes_initial_timestamp_and_restarts_short_clips() {
+        let start = std::time::Instant::now();
+        let mut clock = super::VideoClock::default();
+        assert_eq!(clock.presentation_time(Duration::from_secs(3600), start), Some(start));
+        assert_eq!(
+            clock.presentation_time(Duration::from_millis(3_600_100), start),
+            Some(start + Duration::from_millis(100))
+        );
+        assert_eq!(clock.presentation_time(Duration::from_secs(3600), start),
+            Some(start + Duration::from_millis(200)));
+    }
     use std::{sync::Arc, time::Duration};
     #[test]
     fn a_full_frame_queue_can_be_cancelled_without_a_consumer() {

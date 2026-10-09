@@ -448,6 +448,7 @@ pub struct OxydeApp {
     pub(crate) network_force_focus_pending: bool,
     pub(crate) network_focus_restore: bool,
     pub _subscriptions: Vec<Subscription>,
+    pub(crate) window_geometry_save_task: Option<Task<()>>,
     /// Effective drag operation: true = copy, false = move.
     /// Derived from `drag_modifier_copy` (if Some) or `drag_target_default_copy` otherwise.
     pub drag_copy_mode: bool,
@@ -905,7 +906,9 @@ impl OxydeApp {
             network_force_confirmation: None,
             network_force_focus_pending: false,
             network_focus_restore: false,
-            _subscriptions: vec![cx.on_app_quit(|this, _| {
+            window_geometry_save_task: None,
+            _subscriptions: vec![cx.on_app_quit(|this, cx| {
+                this.flush_window_geometry(cx);
                 crate::trace_shutdown_request("GPUI quit hook");
                 crate::trace_shutdown_stage("history cleanup started");
                 // Undo history is session-only, so its replacement backups must
@@ -1872,19 +1875,25 @@ impl OxydeApp {
         cx.spawn(move |_, cx: &mut AsyncApp| {
             let mut cx = cx.clone();
             async move {
-                let check_paths = paths.clone();
+                let mut check_paths = paths;
                 let check_destination = target_dir.clone();
                 let runtime = tokio::runtime::Handle::current();
                 let runtime_for_check = runtime.clone();
                 let checked = tokio::task::spawn_blocking(move || {
-                    runtime_for_check.block_on(oxyde_lib::commands::ops::check_conflicts(
-                        check_paths,
+                    if is_move {
+                        check_paths.retain(|source| !oxyde_lib::commands::ops::is_self_transfer(
+                            std::path::Path::new(source), std::path::Path::new(&check_destination)));
+                    }
+                    let response = runtime_for_check.block_on(oxyde_lib::commands::ops::check_conflicts(
+                        check_paths.clone(),
                         check_destination,
-                    ))
+                    ))?;
+                    Ok::<_, oxyde_lib::models::CommandError>((check_paths, response))
                 })
                 .await;
                 handle.update(&mut cx, |this, cx| match checked {
-                    Ok(Ok(response)) if !response.is_empty() => {
+                    Ok(Ok((paths, _))) if paths.is_empty() => {}
+                    Ok(Ok((paths, response))) if !response.is_empty() => {
                         this.pending_file_operations
                             .push_back(PendingFileOperation {
                                 paths,
@@ -1896,7 +1905,7 @@ impl OxydeApp {
                             });
                         cx.notify();
                     }
-                    Ok(Ok(_)) => {
+                    Ok(Ok((paths, _))) => {
                         this.queue_file_operation(paths, target_dir, is_move, None, runtime, cx)
                     }
                     Ok(Err(error)) => {
@@ -1937,6 +1946,7 @@ impl OxydeApp {
         );
         op.compression_quality = self.archive_quality_for_path(op.destination.as_ref().unwrap());
         op.archive_qualities = self.archive_qualities();
+        op.copy_name_suffix = cx.i18n().text(Message::CopyNameSuffix).to_string();
         op.turbo = self.config.default_turbo_mode;
         op.turbo_flag.store(op.turbo, std::sync::atomic::Ordering::Relaxed);
         let op_id = self

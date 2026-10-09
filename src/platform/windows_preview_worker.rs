@@ -5,12 +5,12 @@ use std::os::windows::{
     process::CommandExt,
 };
 use std::path::Path;
-use std::process::{Child, ChildStdout, Command, Stdio};
+use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use windows::Win32::Foundation::{ERROR_BROKEN_PIPE, HANDLE, WAIT_OBJECT_0};
 use windows::Win32::System::JobObjects::*;
-use windows::Win32::System::Pipes::PeekNamedPipe;
+use windows::Win32::System::Pipes::{CreatePipe, PeekNamedPipe};
 use windows::Win32::System::Threading::WaitForSingleObject;
 
 const MEMORY_BYTES: usize = 512 * 1024 * 1024;
@@ -47,14 +47,22 @@ struct Worker {
     _job: OwnedHandle,
 }
 impl Worker {
-    fn start(mut command: Command, memory_bytes: usize) -> io::Result<(Self, ChildStdout)> {
+    fn start(mut command: Command, memory_bytes: usize) -> io::Result<(Self, std::fs::File)> {
         let job = job(memory_bytes)?;
+        // Suggest enough capacity for one bounded video packet to reduce small
+        // transfers through the polled pipe. Windows may choose another size.
+        let mut read = HANDLE::default();
+        let mut write = HANDLE::default();
+        unsafe { CreatePipe(&mut read, &mut write, None, 2 * 1024 * 1024) }.map_err(native)?;
+        let output = std::fs::File::from(unsafe { OwnedHandle::from_raw_handle(read.0) });
+        let input = std::fs::File::from(unsafe { OwnedHandle::from_raw_handle(write.0) });
         let child = command
             .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
+            .stdout(Stdio::from(input))
             .stderr(Stdio::null())
             .creation_flags(0x08000000)
             .spawn()?;
+        drop(command); // Close the parent's copy of the pipe writer.
         let mut worker = Self { child, _job: job };
         unsafe {
             AssignProcessToJobObject(
@@ -70,11 +78,6 @@ impl Worker {
             .ok_or_else(|| io::Error::other("Missing preview gate"))?;
         start.write_all(&[0xA7])?;
         drop(start);
-        let output = worker
-            .child
-            .stdout
-            .take()
-            .ok_or_else(|| io::Error::other("Missing preview output"))?;
         Ok((worker, output))
     }
 }

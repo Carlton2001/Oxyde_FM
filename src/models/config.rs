@@ -2,8 +2,20 @@ use crate::models::CommandError;
 use serde::{Deserialize, Serialize};
 use std::fs;
 
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct WindowPlacement {
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
+    #[serde(default)]
+    pub maximized: bool,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub window_placement: Option<WindowPlacement>,
     #[serde(default = "default_theme")]
     pub theme: String,
     #[serde(default = "default_language")]
@@ -69,6 +81,7 @@ fn default_ui_rem_size() -> u32 { 16 }
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
+            window_placement: None,
             theme: default_theme(),
             language: default_language(),
             show_hidden: false,
@@ -109,11 +122,13 @@ impl AppConfig {
         let duplicate_search_options = self.duplicate_search_options.take();
         let duplicate_search_window_size = self.duplicate_search_window_size.take();
         let operations_panel_position = self.operations_panel_position;
+        let window_placement = self.window_placement;
         *self = Self {
             workspace_state,
             duplicate_search_options,
             duplicate_search_window_size,
             operations_panel_position,
+            window_placement,
             ..Self::default()
         };
     }
@@ -137,6 +152,9 @@ mod reset_tests {
         config.duplicate_search_options = Some(serde_json::json!([true, false, true]));
         config.duplicate_search_window_size = Some(serde_json::json!([900.0, 650.0]));
         config.operations_panel_position = Some([20.0, 30.0]);
+        config.window_placement = Some(super::WindowPlacement {
+            x: -800.0, y: 30.0, width: 700.0, height: 500.0, maximized: true,
+        });
         let previous = config.clone();
         config.reset_preferences();
         assert_eq!(config.theme, "dark");
@@ -150,6 +168,7 @@ mod reset_tests {
         assert_eq!(config.duplicate_search_options, previous.duplicate_search_options);
         assert_eq!(config.duplicate_search_window_size, previous.duplicate_search_window_size);
         assert_eq!(config.operations_panel_position, Some([20.0, 30.0]));
+        assert_eq!(config.window_placement, previous.window_placement);
     }
 }
 

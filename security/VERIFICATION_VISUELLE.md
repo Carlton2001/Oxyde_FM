@@ -127,3 +127,21 @@ Premier passage : archives, corbeille/historique et lisibilité sans anomalie si
 Ne pas refaire toute la procédure : reprendre seulement les GIF/AVI du nouveau jeu, le même MOV x265, puis les sections 3 et 4 ci-dessus. Le GIF limité doit rester fixe avec son avertissement. Son grand carré provient de l’agrandissement dans la bulle. L’AVI s’active désormais en aperçu, avec les codecs disponibles sur Windows.
 
 Validation avant cette reprise : 739 tests permanents réussis, aucun échec ; compilation et build sans avertissement du projet. Le worker vidéo reçoit 1 Gio au lieu de 512 Mio, le worker fixe reste à 512 Mio. Le MOV utilisateur a donné 24 frames via le vrai worker corrigé, première frame en 0,40 seconde. Ces contrôles sans fenêtre ne remplacent pas la confirmation visuelle des corrections. Les autres chantiers techniques ouverts ne sont pas clôturés par cette reprise.
+
+
+## Deuxième retour utilisateur et reprise ciblée — lot 58
+
+Annuler/Rétablir après remplacement et cache indisponible/sélecteur : sans anomalie de fonctionnement signalée. Le chemin natif étendu affiché dans le refus et la présentation des notifications sont corrigés. La vidéo était toujours lente et l’AVI semblait fixe ; de nouvelles corrections de timing, boucle, redimensionnement natif et transport sont incluses. Le sélecteur Windows est conservé ; créer un sélecteur Oxyde constitue un chantier distinct reporté à la demande de l’utilisateur.
+
+Reprendre seulement les points modifiés :
+
+1. **Vidéo :** dans le même jeu `security-visual-check-xusvjigg`, `09-video.avi` doit alterner rouge/bleu environ chaque seconde, aussi aux reprises de boucle. Le même MOV x265 doit jouer à la vitesse normale. Fermer le survol interrompt toujours la lecture ; PNG/PDF restent consultables pendant une vidéo.
+2. **Fenêtre :** déplacer et redimensionner, fermer immédiatement puis relancer. Position et dimensions doivent être retrouvées ; essayer aussi après maximisation, puis restauration. Sur plusieurs écrans, les coordonnées négatives sont permises ; si un écran disparaît, la fenêtre doit rester accessible.
+3. **Transferts :** utiliser seulement les témoins générés. Déplacer un fichier dans son dossier actuel doit être ignoré sans dialogue ni nouvelle action à annuler. Copier/coller dans ce dossier doit créer `témoin - Copie.txt`, puis `témoin - Copie (2).txt` en français ; Annuler/Rétablir vise la copie réellement créée. L’original et les copies précédentes restent intacts. Le suffixe suit la langue active. Une copie de dossier utilise aussi un nom distinct.
+4. **Notifications :** reprendre le refus après remplacement déjà vérifié, et éventuellement le cache indisponible seulement pour contrôler sa présentation. Le chemin doit apparaître comme `C:\Users\...`, ou `\\serveur\partage\...` pour UNC, sans préfixe `\\?\`. La croix reste en haut à droite ; les messages longs peuvent atteindre 40 rem si la fenêtre le permet. « Extraire et ouvrir… » doit être un bouton rempli lisible. Aucune modification de curseur.
+
+Ces changements ont des validations sans fenêtre ; leur rendu et la sauvegarde à la fermeture demandent cette confirmation ciblée. Les autres risques techniques de l’audit ne sont pas clôturés.
+
+Validation automatisée du lot 58 : **751 tests permanents réussis**, aucun échec ; 17 tests préexistants ignorés non activés. Le diagnostic ponctuel du MOV reste distinct de cette suite.
+
+Compilation et reconstruction sans avertissement du projet ; utiliser `target/debug/oxyde.exe` pour cette reprise.

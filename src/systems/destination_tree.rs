@@ -139,6 +139,21 @@ impl DestinationTree {
             .with_bound_directory(directory, ancestors, resolved)
     }
 
+    /// A same-folder copy root must be new; never merge into a racing creation.
+    pub fn reserve_copy_directory(&self, path: &Path, created: &mut dyn FnMut(&Path)) -> io::Result<()> {
+        if path.parent() != Some(self.path()) {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, "Copy root is outside destination"));
+        }
+        ordinary(self.root.directory())?;
+        let (file, is_new) = platform().ensure_operation_directory(self.root.directory(), path)?;
+        if !is_new {
+            return Err(io::Error::new(io::ErrorKind::AlreadyExists, "New copy directory already exists"));
+        }
+        self.directories.lock().unwrap().insert(path.to_path_buf(), file);
+        created(path);
+        Ok(())
+    }
+
     pub fn file_parents(
         &self,
         path: &Path,
@@ -167,6 +182,18 @@ mod tests {
     use super::*;
     use crate::platform::windows_reparse_tests::{junction, Retarget};
     use std::{fs, sync::Arc};
+
+    #[test]
+    fn new_copy_root_refuses_an_existing_directory_instead_of_merging_into_it() {
+        let root = tempfile::tempdir().unwrap();
+        let tree = DestinationTree::new(root.path()).unwrap();
+        let copy = tree.path().join("Dossier - Copie");
+        fs::create_dir(&copy).unwrap();
+        fs::write(copy.join("witness.txt"), "keep").unwrap();
+        assert_eq!(tree.reserve_copy_directory(&copy, &mut |_| panic!("existing root journaled as new"))
+            .unwrap_err().kind(), io::ErrorKind::AlreadyExists);
+        assert_eq!(fs::read(copy.join("witness.txt")).unwrap(), b"keep");
+    }
 
     #[test]
     fn destination_tree_records_only_atomic_creations_across_workers() {

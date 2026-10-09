@@ -590,3 +590,4 @@ history-delete-changed = L’élément ne correspond plus à celui enregistré l
 history-delete-unverified = Oxyde ne dispose pas des informations nécessaires pour annuler ou rétablir cette suppression en toute sécurité. L’action a été arrêtée. Vous pouvez vérifier la corbeille et restaurer manuellement l’élément voulu.
 
 preview-timed-out = Cet aperçu a dépassé le délai de 15 secondes. Le fichier reste accessible.
+copy-name-suffix = Copie

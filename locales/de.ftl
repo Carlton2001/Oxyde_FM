@@ -891,3 +891,4 @@ history-delete-changed = Das Element entspricht nicht mehr dem bei der Löschung
 history-delete-unverified = Oxyde fehlen die Informationen, um diese Löschung sicher rückgängig zu machen oder zu wiederholen. Die Aktion wurde gestoppt. Prüfen Sie den Papierkorb und stellen Sie das gewünschte Element manuell wieder her.
 
 preview-timed-out = Diese Vorschau hat das Zeitlimit von 15 Sekunden überschritten. Die Datei bleibt zugänglich.
+copy-name-suffix = Kopie

@@ -224,6 +224,13 @@ pub async fn check_conflicts(
     check_conflicts_real(paths, target_dir)
 }
 
+/// UI preparation only: the executor repeats this classification on held sources.
+pub fn is_self_transfer(source: &std::path::Path, target_dir: &std::path::Path) -> bool {
+    source.file_name().is_some_and(|name| {
+        crate::systems::transfer_naming::same_entry(source, &target_dir.join(name))
+    })
+}
+
 fn check_conflicts_real(
     paths: Vec<String>,
     target_dir: String,
@@ -246,6 +253,9 @@ fn check_conflicts_real(
             .unwrap_or(&source_path);
         if let Some(file_name) = display_path.file_name() {
             let target_path = target_base.join(file_name);
+            if crate::systems::transfer_naming::same_entry(&source_path, &target_path) {
+                continue;
+            }
             if target_path.exists() {
                 // Initial top-level conflict found
                 add_conflict_recursive(&source_path, &target_path, &mut conflicts)?;

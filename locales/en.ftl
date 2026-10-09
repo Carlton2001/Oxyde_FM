@@ -584,3 +584,4 @@ history-delete-changed = The item no longer matches the object recorded when it 
 history-delete-unverified = Oxyde does not have the information needed to undo or redo this deletion safely. The action stopped. You can check the Recycle Bin and manually restore the item you want.
 
 preview-timed-out = This preview exceeded the 15-second time limit. The file remains accessible.
+copy-name-suffix = Copy

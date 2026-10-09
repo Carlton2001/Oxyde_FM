@@ -1,7 +1,7 @@
 use super::OxydeApp;
 use crate::ui::i18n::{I18n, I18nContext, Language, Message};
 use crate::ui::theme::{OxydeTheme, ThemeId};
-use gpui::Context;
+use gpui::{Context, Window};
 use oxyde_lib::models::ConfigManager;
 
 impl OxydeApp {
@@ -331,5 +331,24 @@ impl OxydeApp {
             });
         }));
         cx.notify();
+    }
+
+    pub(crate) fn flush_window_geometry(&mut self, cx: &mut Context<Self>) {
+        if self.window_geometry_save_task.take().is_some() {
+            self.save_preferences(cx);
+        }
+    }
+
+    pub(crate) fn observe_main_window(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let subscription = cx.observe_window_bounds(window, |this, window, cx| {
+            let Some(placement) = crate::ui::window_geometry::capture(window) else { return; };
+            if this.config.window_placement == Some(placement) { return; }
+            this.config.window_placement = Some(placement);
+            this.window_geometry_save_task = Some(cx.spawn(async move |this, cx| {
+                cx.background_executor().timer(std::time::Duration::from_millis(350)).await;
+                let _ = this.update(cx, |this, cx| this.save_preferences(cx));
+            }));
+        });
+        self._subscriptions.push(subscription);
     }
 }

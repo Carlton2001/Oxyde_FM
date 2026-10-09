@@ -327,7 +327,7 @@ pub fn error_detail(detail: &str, i18n: &crate::ui::i18n::I18n) -> String {
         return i18n.text(Message::ArchiveSourceChanged).to_string();
     }
     let Some(failure) = ArchiveLimitFailure::from_message(detail) else {
-        return detail.into();
+        return display_paths(detail);
     };
     let message = match failure.kind {
         ArchiveLimitKind::Bytes => Message::ArchiveLimitBytes,
@@ -346,4 +346,39 @@ pub fn error_detail(detail: &str, i18n: &crate::ui::i18n::I18n) -> String {
     let mut args = FluentArgs::new();
     args.set("limit", limit);
     i18n.text_with_args(message, &args).to_string()
+}
+
+/// Presentation only: retain extended/native paths in all filesystem operations.
+pub fn display_paths(text: &str) -> String {
+    use once_cell::sync::Lazy;
+    use regex::{Captures, Regex};
+    static QUOTED: Lazy<Regex> = Lazy::new(|| Regex::new(r#""(?:\\.|[^"\\])*""#).unwrap());
+    static DRIVE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\\\\\?\\([A-Za-z]:[\\/])").unwrap());
+    static UNC: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)\\\\\?\\UNC\\").unwrap());
+    let quoted = QUOTED.replace_all(text, |captures: &Captures| {
+        let raw = &captures[0];
+        match serde_json::from_str::<String>(raw) {
+            Ok(path) if path.starts_with(r"\\") || (path.len() >= 3
+                && path.as_bytes()[0].is_ascii_alphabetic() && path.as_bytes()[1] == b':'
+                && matches!(path.as_bytes()[2], b'\\' | b'/')) => format!("\"{path}\""),
+            _ => raw.to_string(),
+        }
+    });
+    let unc = UNC.replace_all(&quoted, r"\\");
+    DRIVE.replace_all(&unc, "$1").into_owned()
+}
+
+#[cfg(test)]
+mod displayed_path_tests {
+    use super::display_paths;
+    #[test]
+    fn displays_native_dos_unc_and_debug_paths_without_changing_other_namespaces() {
+        assert_eq!(display_paths(r"Changed: \\?\C:\École\file.txt"), r"Changed: C:\École\file.txt");
+        assert_eq!(display_paths(r"Export: \\?\UNC\server\share\file.txt"), r"Export: \\server\share\file.txt");
+        let raw = format!("Cannot copy {:?}", std::path::Path::new(r"\\?\C:\École\new.txt"));
+        assert_eq!(display_paths(&raw), "Cannot copy \"C:\\École\\new.txt\"");
+        let device = r"\\?\Volume{123}\file.txt";
+        assert_eq!(display_paths(device), device);
+        assert_eq!(display_paths("ordinary text"), "ordinary text");
+    }
 }

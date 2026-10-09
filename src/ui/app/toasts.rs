@@ -222,7 +222,7 @@ impl OxydeApp {
                     if toast.kind == ToastKind::Error {
                         crate::ui::format::error_detail(&toast.detail, cx.i18n())
                     } else {
-                        toast.detail.clone()
+                        crate::ui::format::display_paths(&toast.detail)
                     },
                 );
                 args.set("count", toast.count);
@@ -235,11 +235,13 @@ impl OxydeApp {
                     ToastKind::Success => ("icons/circle-check.svg", theme.toast_success),
                     ToastKind::Error => ("icons/circle-x.svg", theme.toast_error),
                 };
+                let message = cx.i18n().text_with_args(toast.message, &args);
+                let width = if source.is_some() || message.chars().count() > 120 { 40.0 } else { 24.0 };
                 div()
                     .id(("toast", id))
                     .max_w(
-                        rem_pixels(rems(24.0))
-                            .min(window.viewport_size().width - rem_pixels(rems(2.0))),
+                        rem_pixels(rems(width))
+                            .min((window.viewport_size().width - rem_pixels(rems(2.0))).max(px(1.0))),
                     )
                     .px(rems(1.0))
                     .py(rems(0.75))
@@ -267,18 +269,20 @@ impl OxydeApp {
                             .flex()
                             .flex_col()
                             .gap(rems(0.5))
-                            .child(cx.i18n().text_with_args(toast.message, &args))
+                            .child(message)
                             .when_some(source, |column, source| {
                                 column.child(
                                     div()
                                         .id(("archive-cache-export", id))
-                                        .px(rems(0.5))
+                                        .self_start()
+                                        .px(rems(0.75))
                                         .py(rems(0.375))
                                         .rounded(rems(0.25))
                                         .border(rems(0.0625))
-                                        .border_color(theme.border)
-                                        .bg(theme.surface)
-                                        .hover(|style| style.bg(theme.control_hover))
+                                        .border_color(theme.accent)
+                                        .bg(theme.accent)
+                                        .text_color(theme.text_on_accent)
+                                        .hover(|style| style.opacity(0.9))
                                         .child(cx.i18n().text(Message::ArchiveCacheExtract))
                                         .on_click(move |_, _, cx| {
                                             export.update(cx, |this, cx| {
@@ -295,6 +299,7 @@ impl OxydeApp {
                     .child(
                         div()
                             .id(("toast-close", id))
+                            .self_start()
                             .p(rems(0.25))
                             .rounded(rems(0.25))
                             .flex_shrink_0()
