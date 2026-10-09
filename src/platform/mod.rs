@@ -467,3 +467,5 @@ mod windows_trash_restore;
 mod windows_shell_delete;
 #[cfg(target_os = "windows")]
 mod windows_preview_worker;
+#[cfg(target_os = "windows")]
+mod windows_icon_pixels;

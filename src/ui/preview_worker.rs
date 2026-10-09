@@ -1,4 +1,4 @@
-//! Headless self-worker entry. No GPUI app, preferences, logs or cache writes.
+//! Headless self-worker entry. No GPUI app, preferences or application logs.
 use oxyde_lib::utils::preview_protocol::{self, Reply};
 use std::io::{Read, Write};
 

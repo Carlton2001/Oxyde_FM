@@ -565,14 +565,14 @@ mod thumbnail_cache_write_tests {
 
 pub fn get_thumbnail_raw(path: String) -> Result<RgbaImage, CommandError> {
     #[cfg(target_os = "windows")]
-    return cached_thumbnail(path, "image", |path| isolated_thumbnail("thumbnail", &path));
+    return isolated_thumbnail("cached-thumbnail", &path);
     #[cfg(not(target_os = "windows"))]
     cached_thumbnail(path, "image", get_thumbnail_uncached)
 }
 
 pub fn get_office_thumbnail_raw(path: String) -> Result<RgbaImage, CommandError> {
     #[cfg(target_os = "windows")]
-    return cached_thumbnail(path, "office", |path| isolated_thumbnail("office", &path));
+    return isolated_thumbnail("cached-office", &path);
     #[cfg(not(target_os = "windows"))]
     cached_thumbnail(path, "office", get_office_thumbnail_uncached)
 }
@@ -974,7 +974,14 @@ fn resize_video_frame(bytes: &[u8], layout: VideoLayout) -> Result<RgbaImage, Co
 
 fn decode_office_thumbnail(reader: impl std::io::Read) -> Result<RgbaImage, CommandError> {
     let image = decode_thumbnail_image(reader, OFFICE_DECODE_LIMITS, None)?;
-    Ok(image.thumbnail(THUMB_SIZE, THUMB_SIZE).to_rgba8())
+    let image = image.thumbnail(THUMB_SIZE, THUMB_SIZE).to_rgba8();
+    #[cfg(target_os = "windows")]
+    let image = {
+        let mut image = image;
+        for pixel in image.pixels_mut() { pixel.0.swap(0,2); }
+        image
+    };
+    Ok(image)
 }
 
 #[cfg(target_os = "windows")]
@@ -998,6 +1005,16 @@ fn get_office_thumbnail_uncached(path: String) -> Result<RgbaImage, CommandError
 #[cfg(test)]
 mod office_thumbnail_security_tests {
     use super::*;
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn embedded_office_thumbnail_keeps_bgra_channels_for_native_ui() {
+        let mut bytes = std::io::Cursor::new(Vec::new());
+        image::DynamicImage::ImageRgba8(RgbaImage::from_pixel(2,1,image::Rgba([201,43,17,255])))
+            .write_to(&mut bytes,image::ImageFormat::Png).unwrap();
+        bytes.set_position(0);
+        assert_eq!(decode_office_thumbnail(bytes).unwrap().get_pixel(0,0).0,[17,43,201,255]);
+    }
 
     #[test]
     fn oversized_compressed_payload_is_rejected_with_bounded_reads() {
@@ -1155,6 +1172,15 @@ pub(super) fn worker_reply(mode: &str, path: &Path) -> crate::utils::preview_pro
             return get_office_text_preview_local(path).map(Reply::Text);
         }
         let image = match mode {
+            "cached-thumbnail" => cached_thumbnail(path, "image", get_thumbnail_uncached),
+            "cached-office" => cached_thumbnail(path, "office", get_office_thumbnail_uncached),
+            "icon-small" | "icon-large" => {
+                let _com = super::windows_com::ComApartment::mta_or_existing()
+                    .map_err(|error| CommandError::SystemError(error.to_string()))?;
+                let size = if mode == "icon-small" { "small" } else { "large" };
+                let bytes = super::icons::get_file_icon(path, size.into())?;
+                super::windows_icon_cache::decode_icon_png(&bytes).map_err(CommandError::Other)
+            }
             "thumbnail" => get_thumbnail_uncached(path),
             "office" => get_office_thumbnail_uncached(path),
             "pdf" => super::windows_pdf_thumbnail::get(path),

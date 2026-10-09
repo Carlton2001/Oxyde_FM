@@ -87,6 +87,27 @@ fn actual_worker_returns_typed_error_for_missing_and_oversized_sources() {
 }
 
 #[test]
+fn actual_worker_returns_native_icon_pixels_and_handles_thumbnail_cache_hits() {
+    let Reply::Images { frames, .. } = worker("icon-small", Path::new("oxyde_ext_txt")) else {
+        panic!("Native icon unavailable")
+    };
+    assert_eq!(frames.len(), 1);
+    assert!(frames[0].buffer().width() <= 256 && frames[0].buffer().height() <= 256);
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("cache-source.png");
+    image::RgbaImage::from_pixel(8, 4, image::Rgba([11, 22, 33, 255]))
+        .save(&path)
+        .unwrap();
+    for _ in 0..2 {
+        let Reply::Images { frames, .. } = worker("cached-thumbnail", &path) else {
+            panic!("Cached thumbnail unavailable")
+        };
+        assert_eq!(frames.len(), 1);
+        assert!(frames[0].buffer().width() <= 256 && frames[0].buffer().height() <= 256);
+    }
+}
+
+#[test]
 fn actual_worker_renders_pdf_and_reads_office_thumbnail_and_text() {
     use std::io::Write;
     let directory = tempfile::tempdir().unwrap();

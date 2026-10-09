@@ -768,7 +768,7 @@ impl PreviewTask {
         if let Some(source) = &self.media_asset {
             return window
                 .use_asset::<TooltipPreviewAsset>(source, cx)
-                .and_then(|result| result.err().map(|_| Message::PreviewUnavailable));
+                .and_then(|result| result.err().map(|error| crate::ui::image_preview::worker_message(&format!("{error:?}"))));
         }
         self.message
     }
@@ -870,6 +870,7 @@ impl PreviewTask {
                     return;
                 }
 
+                let mut failure_message = None;
                 let preview = match preview_type {
                     PreviewType::Image | PreviewType::Office | PreviewType::Pdf => {
                         let rgba_img = match preview_type {
@@ -882,6 +883,7 @@ impl PreviewTask {
                                 {
                                     Ok(image) => Some(image),
                                     Err(error) => {
+                                        failure_message = Some(crate::ui::image_preview::worker_message(&error));
                                         log::warn!("Could not load tooltip image preview: {error}");
                                         None
                                     }
@@ -896,6 +898,7 @@ impl PreviewTask {
                                 {
                                     Ok(image) => Some(image),
                                     Err(error) => {
+                                        failure_message = Some(crate::ui::image_preview::worker_message(&error));
                                         log::warn!(
                                             "Could not load tooltip office preview: {error}"
                                         );
@@ -912,6 +915,7 @@ impl PreviewTask {
                                 {
                                     Ok(image) => Some(image),
                                     Err(error) => {
+                                        failure_message = Some(crate::ui::image_preview::worker_message(&error));
                                         log::warn!("Could not load tooltip PDF preview: {error}");
                                         None
                                     }
@@ -934,6 +938,7 @@ impl PreviewTask {
                             {
                                 Ok(content) => Some(content),
                                 Err(error) => {
+                                    failure_message = Some(crate::ui::image_preview::worker_message(&error));
                                     log::warn!(
                                         "Could not load tooltip office text preview: {error}"
                                     );
@@ -971,7 +976,7 @@ impl PreviewTask {
                 };
 
                 let _ = this.update(&mut cx, |this, cx| {
-                    this.message = preview.is_none().then_some(Message::PreviewUnavailable);
+                    this.message = if preview.is_none() { failure_message.or(Some(Message::PreviewUnavailable)) } else { None };
                     this.data = preview;
                     cx.notify();
                 });

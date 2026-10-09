@@ -889,3 +889,5 @@ trash-restore-unavailable = No se pudo restaurar este elemento. Compruebe que si
 
 history-delete-changed = El elemento ya no coincide con el registrado al eliminarlo o no está disponible. Se detuvo Deshacer o Rehacer para conservar los archivos actuales. Los elementos ya procesados se conservan.
 history-delete-unverified = Oxyde no tiene la información necesaria para deshacer o rehacer esta eliminación de forma segura. Se detuvo la acción. Puede comprobar la papelera y restaurar manualmente el elemento deseado.
+
+preview-timed-out = Esta vista previa ha superado el límite de 15 segundos. El archivo sigue siendo accesible.

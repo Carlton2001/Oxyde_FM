@@ -889,3 +889,5 @@ trash-restore-unavailable = Dieses Element konnte nicht wiederhergestellt werden
 
 history-delete-changed = Das Element entspricht nicht mehr dem bei der Löschung erfassten Objekt oder ist nicht verfügbar. Rückgängig oder Wiederholen wurde zum Schutz aktueller Dateien gestoppt. Bereits bearbeitete Elemente bleiben erhalten.
 history-delete-unverified = Oxyde fehlen die Informationen, um diese Löschung sicher rückgängig zu machen oder zu wiederholen. Die Aktion wurde gestoppt. Prüfen Sie den Papierkorb und stellen Sie das gewünschte Element manuell wieder her.
+
+preview-timed-out = Diese Vorschau hat das Zeitlimit von 15 Sekunden überschritten. Die Datei bleibt zugänglich.

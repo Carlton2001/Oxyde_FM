@@ -20,6 +20,7 @@ lazy_static! {
 }
 
 pub fn purge_icon_cache() {
+    super::windows_icon_pixels::clear();
     let mut cache = ICON_CACHE.lock().unwrap();
     cache.clear();
 }

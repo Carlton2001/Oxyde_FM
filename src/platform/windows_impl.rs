@@ -328,10 +328,7 @@ impl Platform for WindowsPlatform {
     }
 
     fn file_icon(&self, path: String, large: bool) -> Result<image::RgbaImage, String> {
-        let _com = ComApartment::mta_or_existing().map_err(|error| error.to_string())?;
-        super::icons::get_file_icon(path, if large { "large" } else { "small" }.into())
-            .map_err(|error| error.to_string())
-            .and_then(|bytes| super::windows_icon_cache::decode_icon_png(&bytes))
+        super::windows_icon_pixels::get(path, large)
     }
 
     fn set_hidden_attribute(&self, path: &std::path::Path, hidden: bool) -> Result<(), String> {

@@ -889,3 +889,5 @@ trash-restore-unavailable = Impossibile ripristinare questo elemento. Verifica c
 
 history-delete-changed = L’elemento non corrisponde più a quello registrato durante l’eliminazione o non è disponibile. Annulla o Ripeti è stato interrotto per preservare i file attuali. Gli elementi già elaborati vengono conservati.
 history-delete-unverified = Oxyde non dispone delle informazioni necessarie per annullare o ripetere questa eliminazione in modo sicuro. L’azione è stata interrotta. Puoi controllare il cestino e ripristinare manualmente l’elemento desiderato.
+
+preview-timed-out = Questa anteprima ha superato il limite di 15 secondi. Il file rimane accessibile.

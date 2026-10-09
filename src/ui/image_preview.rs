@@ -44,8 +44,17 @@ impl PreviewError {
     pub(crate) fn message(&self) -> Message {
         match self {
             Self::Limit(_) => Message::PreviewImageLimit,
+            Self::Worker(detail) => worker_message(detail),
             _ => Message::PreviewUnavailable,
         }
+    }
+}
+
+pub(crate) fn worker_message(detail: &str) -> Message {
+    if detail.contains("PreviewWorkerTimeout:") {
+        Message::PreviewTimedOut
+    } else {
+        Message::PreviewUnavailable
     }
 }
 
@@ -656,12 +665,28 @@ mod tests {
             for message in [
                 error.message(),
                 Message::PreviewImageLimit,
+                Message::PreviewTimedOut,
                 Message::PreviewAnimationStatic,
             ] {
                 let text = i18n.text(message);
                 assert!(!text.is_empty() && !text.starts_with('['));
                 assert!(!text.contains("%TEMP%"));
             }
+        }
+    }
+
+    #[test]
+    fn worker_timeout_has_a_translated_terminal_message_without_reclassifying_other_errors() {
+        let detail = "IO Error: PreviewWorkerTimeout: Preview exceeded 15 seconds";
+        assert_eq!(
+            PreviewError::Worker(detail.into()).message(),
+            Message::PreviewTimedOut
+        );
+        assert_eq!(worker_message("bad PDF"), Message::PreviewUnavailable);
+        for language in crate::ui::i18n::Language::ALL {
+            let text = crate::ui::i18n::I18n::for_language(language).text(worker_message(detail));
+            assert!(text.contains("15"));
+            assert!(!text.starts_with('[') && !text.contains("PreviewWorkerTimeout"));
         }
     }
 }

@@ -135,7 +135,7 @@ pub(super) fn supervise(mut command: Command, deadline: Duration) -> io::Result<
         if started.elapsed() >= deadline {
             return Err(io::Error::new(
                 io::ErrorKind::TimedOut,
-                "Preview worker timed out (15 seconds)",
+                "PreviewWorkerTimeout: Preview exceeded 15 seconds",
             ));
         }
         let mut available = 0;

@@ -588,3 +588,5 @@ trash-restore-unavailable = Cet élément n’a pas pu être restauré. Vérifie
 
 history-delete-changed = L’élément ne correspond plus à celui enregistré lors de la suppression, ou il n’est plus disponible. Annuler ou Rétablir a été arrêté pour préserver les fichiers actuels. Les éléments déjà traités sont conservés.
 history-delete-unverified = Oxyde ne dispose pas des informations nécessaires pour annuler ou rétablir cette suppression en toute sécurité. L’action a été arrêtée. Vous pouvez vérifier la corbeille et restaurer manuellement l’élément voulu.
+
+preview-timed-out = Cet aperçu a dépassé le délai de 15 secondes. Le fichier reste accessible.
