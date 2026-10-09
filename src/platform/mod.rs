@@ -61,6 +61,19 @@ pub struct FileIdentity {
     kind: u8,
 }
 
+/// The item receipt is independent of a later failure of the native operation.
+#[derive(Debug)]
+pub struct ShellDeleteOutcome {
+    pub completed: bool,
+    pub error: Option<String>,
+}
+
+impl ShellDeleteOutcome {
+    pub fn from_result(result: Result<(), String>) -> Self {
+        Self { completed: result.is_ok(), error: result.err() }
+    }
+}
+
 /// Abstraction des opérations spécifiques à l'OS.
 /// Toute fonctionnalité native (lecteurs, ouverture, raccourcis, etc.)
 /// doit passer par ce trait plutôt qu'appeler directement les API OS.
@@ -257,6 +270,11 @@ pub trait Platform: Send + Sync {
 
     /// Deletes files permanently or sends them to the system trash.
     fn shell_delete(&self, paths: &[std::path::PathBuf], recycle: bool) -> Result<(), String>;
+
+    /// Windows obtains an item-level receipt, checking a known identity at dispatch.
+    fn shell_delete_tracked(&self, path: &std::path::Path, _proof: Option<crate::models::transaction::HistoryFileIdentity>) -> ShellDeleteOutcome {
+        ShellDeleteOutcome::from_result(self.shell_delete(&[path.to_path_buf()], true))
+    }
 
     /// Lists entries in the operating system's network neighborhood.
     fn list_network_vicinity(&self) -> Result<Vec<crate::models::FileEntry>, String>;
@@ -481,6 +499,8 @@ mod linux_source_selection;
 mod windows_trash_restore;
 #[cfg(target_os = "windows")]
 mod windows_shell_delete;
+#[cfg(target_os = "windows")]
+mod windows_shell_delete_tracked;
 #[cfg(target_os = "windows")]
 mod windows_preview_worker;
 #[cfg(target_os = "windows")]

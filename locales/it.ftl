@@ -892,3 +892,5 @@ history-delete-unverified = Oxyde non dispone delle informazioni necessarie per 
 
 preview-timed-out = Questa anteprima ha superato il limite di 15 secondi. Il file rimane accessibile.
 copy-name-suffix = Copia
+shell-delete-completed-error = Windows ha eliminato questo elemento, poi ha segnalato un errore. L’operazione completata rimane nella cronologia. Controlla la cartella e il Cestino prima di riprovare.
+shell-delete-unconfirmed = Windows non ha confermato l’eliminazione di questo elemento. L’eliminazione potrebbe essere stata parziale. Controlla la cartella e il Cestino prima di riprovare.

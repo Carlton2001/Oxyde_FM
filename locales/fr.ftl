@@ -591,3 +591,5 @@ history-delete-unverified = Oxyde ne dispose pas des informations nécessaires p
 
 preview-timed-out = Cet aperçu a dépassé le délai de 15 secondes. Le fichier reste accessible.
 copy-name-suffix = Copie
+shell-delete-completed-error = Windows a terminé la suppression de cet élément, puis a signalé une erreur. L’historique conserve l’opération terminée. Vérifiez le dossier et la corbeille avant de réessayer.
+shell-delete-unconfirmed = Windows n’a pas confirmé la suppression de cet élément. La suppression a pu être partielle. Vérifiez le dossier et la corbeille avant de réessayer.

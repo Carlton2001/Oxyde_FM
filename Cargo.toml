@@ -64,6 +64,10 @@ fluent-bundle = "0.16"
 unic-langid = "0.9"
 tempfile = "3.10"
 
+[target.'cfg(target_os = "windows")'.dependencies]
+# Required by the official COM implementation macro; already used by windows.
+windows-core = "0.62.2"
+
 [target.'cfg(target_os = "windows")'.dependencies.windows]
 version = "0.62.2"
 features = [

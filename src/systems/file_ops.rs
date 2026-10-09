@@ -2096,14 +2096,19 @@ impl FileOperationManager {
             op.lock().unwrap().current_file = Some(source.to_string_lossy().into_owned());
             #[cfg(target_os = "windows")]
             {
-                let deleted = selected[index]
-                    .recycle()
+                selected[index]
+                    .recycle(&mut |deleted| {
+                        let mut locked = op.lock().unwrap();
+                        locked.deleted_items.push(deleted);
+                        locked.processed_files += 1;
+                    })
                     .map_err(|error| error.to_string())?;
-                op.lock().unwrap().deleted_items.push(deleted);
             }
             #[cfg(not(target_os = "windows"))]
-            platform().shell_delete(std::slice::from_ref(source), true)?;
-            op.lock().unwrap().processed_files += 1;
+            {
+                platform().shell_delete(std::slice::from_ref(source), true)?;
+                op.lock().unwrap().processed_files += 1;
+            }
             if !turbo_flag.load(Ordering::Relaxed) {
                 std::thread::sleep(std::time::Duration::from_millis(25));
             }

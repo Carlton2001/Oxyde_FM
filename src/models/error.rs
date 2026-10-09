@@ -70,6 +70,29 @@ impl HistoryDeleteFailure {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct ShellDeleteFailure {
+    pub completed: bool,
+    pub path: String,
+    pub detail: String,
+}
+impl fmt::Display for ShellDeleteFailure {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Shell deletion [{}]: {}: {}", if self.completed { "completed" } else { "unconfirmed" }, self.path, self.detail)
+    }
+}
+impl std::error::Error for ShellDeleteFailure {}
+impl ShellDeleteFailure {
+    pub fn from_message(message: &str) -> Option<bool> {
+        let (_, cause) = message.split_once("Shell deletion [")?;
+        match cause.split_once("]: ")?.0 {
+            "completed" => Some(true),
+            "unconfirmed" => Some(false),
+            _ => None,
+        }
+    }
+}
+
 /// Stable cause retained through string-based file-operation status.
 #[derive(Clone, Debug)]
 pub struct SourceSelectionFailure {

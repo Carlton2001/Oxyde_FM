@@ -96,6 +96,23 @@ fn format_datetime(date: NaiveDateTime, format: DateFormat) -> String {
 mod tests {
     use super::*;
     #[test]
+    fn shell_delete_receipts_explain_completed_and_unconfirmed_errors_in_all_languages() {
+        use crate::ui::i18n::{I18n, Message};
+        for language in [Language::French, Language::English, Language::German, Language::Spanish, Language::Italian] {
+            let i18n = I18n::for_language(language);
+            for (completed, key) in [(true, Message::ShellDeleteCompletedError), (false, Message::ShellDeleteUnconfirmed)] {
+                let failure = oxyde_lib::models::error::ShellDeleteFailure { completed, path: "C:/école/空".into(), detail: "late native failure".into() };
+                for detail in [failure.to_string(), format!("TrashError({:?})", failure.to_string())] {
+                    let displayed = error_detail(&detail, &i18n);
+                    assert_eq!(displayed, i18n.text(key).to_string());
+                    assert!(!displayed.contains("Shell deletion ["));
+                    assert!(!displayed.contains("late native failure"));
+                    assert!(displayed.len() > 100);
+                }
+            }
+        }
+    }
+    #[test]
     fn delete_history_failures_are_translated_in_every_language() {
         use crate::ui::i18n::{I18n, Message};
         for language in [Language::French, Language::English, Language::German, Language::Spanish, Language::Italian] {
@@ -307,6 +324,9 @@ mod tests {
 pub fn error_detail(detail: &str, i18n: &crate::ui::i18n::I18n) -> String {
     use crate::ui::i18n::{FluentArgs, Message};
     use oxyde_lib::models::error::{ArchiveLimitFailure, ArchiveLimitKind};
+    if let Some(completed) = oxyde_lib::models::error::ShellDeleteFailure::from_message(detail) {
+        return i18n.text(if completed { Message::ShellDeleteCompletedError } else { Message::ShellDeleteUnconfirmed }).to_string();
+    }
     if let Some(changed) = oxyde_lib::models::error::HistoryDeleteFailure::from_message(detail) {
         return i18n.text(if changed { Message::HistoryDeleteChanged } else { Message::HistoryDeleteUnverified }).to_string();
     }

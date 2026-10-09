@@ -1,0 +1,446 @@
+//! Root-item receipts for Delete history; Shell lookup is still path based.
+use super::ShellDeleteOutcome;
+use crate::models::transaction::HistoryFileIdentity;
+use crate::systems::path_parents::HeldParents;
+use std::{
+    path::{Path, PathBuf},
+    sync::{Arc, Mutex},
+};
+use windows::core::{implement, Error, Ref, HRESULT, PCWSTR};
+use windows::Win32::Foundation::{E_ABORT, S_OK};
+use windows::Win32::System::Com::{CoCreateInstance, CLSCTX_INPROC_SERVER};
+use windows::Win32::System::Ole::{OleInitialize, OleUninitialize};
+use windows::Win32::UI::Shell::*;
+
+struct Apartment;
+impl Apartment {
+    fn new() -> windows::core::Result<Self> {
+        unsafe {
+            OleInitialize(None)?;
+        }
+        Ok(Self)
+    }
+}
+impl Drop for Apartment {
+    fn drop(&mut self) {
+        unsafe {
+            OleUninitialize();
+        }
+    }
+}
+
+#[derive(Default)]
+struct Receipt {
+    preflight: bool,
+    completed: bool,
+    error: Option<String>,
+}
+impl Receipt {
+    fn fail(&mut self, error: String) {
+        if self.error.is_none() {
+            self.error = Some(error);
+        }
+    }
+    fn post(&mut self, result: HRESULT) {
+        if self.preflight && result == S_OK {
+            self.completed = true;
+        } else {
+            self.fail(format!(
+                "Windows did not confirm deletion of the selected item (0x{:08X})",
+                result.0 as u32
+            ));
+        }
+    }
+    fn outcome(&mut self, result: windows::core::Result<()>, aborted: bool) -> ShellDeleteOutcome {
+        if let Err(error) = result {
+            self.fail(error.to_string());
+        }
+        if aborted {
+            self.fail("Deletion was aborted".into());
+        }
+        if !self.completed && self.error.is_none() {
+            self.fail("Windows did not provide a completion receipt for the selected item".into());
+        }
+        ShellDeleteOutcome {
+            completed: self.completed,
+            error: self.error.take(),
+        }
+    }
+}
+
+fn check_source(path: &Path, proof: Option<HistoryFileIdentity>) -> Result<(), String> {
+    let Some(proof) = proof else {
+        return Ok(());
+    };
+    let check = || -> std::io::Result<bool> {
+        let parents = HeldParents::new(path)?;
+        let file = super::platform()
+            .track_source_item(parents.directory(), &parents.resolved_path(path)?)?;
+        proof.matches(&file)
+    };
+    if check().unwrap_or(false) {
+        Ok(())
+    } else {
+        Err(crate::models::error::SourceSelectionFailure {
+            changed: true,
+            path: path.to_string_lossy().into_owned(),
+        }
+        .to_string())
+    }
+}
+
+#[implement(IFileOperationProgressSink)]
+struct DeleteSink {
+    root: IShellItem,
+    path: PathBuf,
+    proof: Option<HistoryFileIdentity>,
+    receipt: Arc<Mutex<Receipt>>,
+}
+impl DeleteSink_Impl {
+    fn root_item(&self, item: Ref<IShellItem>) -> windows::core::Result<bool> {
+        let item = item.ok()?;
+        Ok(unsafe { item.Compare(&self.root, SICHINT_CANONICAL.0 as u32)? } == 0)
+    }
+    fn record_failure(&self, error: String) -> Error {
+        self.receipt
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .fail(error);
+        Error::from_hresult(E_ABORT)
+    }
+}
+#[allow(non_snake_case)]
+impl IFileOperationProgressSink_Impl for DeleteSink_Impl {
+    fn StartOperations(&self) -> windows::core::Result<()> {
+        Ok(())
+    }
+    fn FinishOperations(&self, result: HRESULT) -> windows::core::Result<()> {
+        if result.is_err() {
+            self.receipt
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .fail(Error::from_hresult(result).to_string());
+        }
+        Ok(())
+    }
+    fn PreDeleteItem(&self, _: u32, item: Ref<IShellItem>) -> windows::core::Result<()> {
+        if self
+            .root_item(item)
+            .map_err(|e| self.record_failure(e.to_string()))?
+        {
+            check_source(&self.path, self.proof).map_err(|e| self.record_failure(e))?;
+            self.receipt
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .preflight = true;
+        }
+        Ok(())
+    }
+    fn PostDeleteItem(
+        &self,
+        _: u32,
+        item: Ref<IShellItem>,
+        result: HRESULT,
+        _: Ref<IShellItem>,
+    ) -> windows::core::Result<()> {
+        if self
+            .root_item(item)
+            .map_err(|e| self.record_failure(e.to_string()))?
+        {
+            self.receipt
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .post(result);
+        }
+        Ok(())
+    }
+    fn PreRenameItem(&self, _: u32, _: Ref<IShellItem>, _: &PCWSTR) -> windows::core::Result<()> {
+        Ok(())
+    }
+    fn PostRenameItem(
+        &self,
+        _: u32,
+        _: Ref<IShellItem>,
+        _: &PCWSTR,
+        _: HRESULT,
+        _: Ref<IShellItem>,
+    ) -> windows::core::Result<()> {
+        Ok(())
+    }
+    fn PreMoveItem(
+        &self,
+        _: u32,
+        _: Ref<IShellItem>,
+        _: Ref<IShellItem>,
+        _: &PCWSTR,
+    ) -> windows::core::Result<()> {
+        Ok(())
+    }
+    fn PostMoveItem(
+        &self,
+        _: u32,
+        _: Ref<IShellItem>,
+        _: Ref<IShellItem>,
+        _: &PCWSTR,
+        _: HRESULT,
+        _: Ref<IShellItem>,
+    ) -> windows::core::Result<()> {
+        Ok(())
+    }
+    fn PreCopyItem(
+        &self,
+        _: u32,
+        _: Ref<IShellItem>,
+        _: Ref<IShellItem>,
+        _: &PCWSTR,
+    ) -> windows::core::Result<()> {
+        Ok(())
+    }
+    fn PostCopyItem(
+        &self,
+        _: u32,
+        _: Ref<IShellItem>,
+        _: Ref<IShellItem>,
+        _: &PCWSTR,
+        _: HRESULT,
+        _: Ref<IShellItem>,
+    ) -> windows::core::Result<()> {
+        Ok(())
+    }
+    fn PreNewItem(&self, _: u32, _: Ref<IShellItem>, _: &PCWSTR) -> windows::core::Result<()> {
+        Ok(())
+    }
+    fn PostNewItem(
+        &self,
+        _: u32,
+        _: Ref<IShellItem>,
+        _: &PCWSTR,
+        _: &PCWSTR,
+        _: u32,
+        _: HRESULT,
+        _: Ref<IShellItem>,
+    ) -> windows::core::Result<()> {
+        Ok(())
+    }
+    fn UpdateProgress(&self, _: u32, _: u32) -> windows::core::Result<()> {
+        Ok(())
+    }
+    fn ResetTimer(&self) -> windows::core::Result<()> {
+        Ok(())
+    }
+    fn PauseTimer(&self) -> windows::core::Result<()> {
+        Ok(())
+    }
+    fn ResumeTimer(&self) -> windows::core::Result<()> {
+        Ok(())
+    }
+}
+
+fn flags(recycle: bool) -> FILEOPERATION_FLAGS {
+    let base = FOF_NOCONFIRMATION
+        | FOF_NOERRORUI
+        | FOF_SILENT
+        | FOF_NO_CONNECTED_ELEMENTS
+        | FOFX_EARLYFAILURE;
+    if recycle {
+        base | FOF_ALLOWUNDO
+    } else {
+        base
+    }
+}
+
+fn delete(path: &Path, recycle: bool, proof: Option<HistoryFileIdentity>) -> ShellDeleteOutcome {
+    // Validate literal names before initializing any native operation.
+    let buffer = match super::windows_shell_delete::source_buffer(&[path.to_path_buf()]) {
+        Ok(buffer) => buffer,
+        Err(error) => {
+            return ShellDeleteOutcome {
+                completed: false,
+                error: Some(error),
+            }
+        }
+    };
+    let receipt = Arc::new(Mutex::new(Receipt::default()));
+    let result = (|| -> windows::core::Result<bool> {
+        let _apartment = Apartment::new()?;
+        unsafe {
+            let root: IShellItem = SHCreateItemFromParsingName(PCWSTR(buffer.as_ptr()), None)?;
+            let operation: IFileOperation =
+                CoCreateInstance(&FileOperation, None, CLSCTX_INPROC_SERVER)?;
+            operation.SetOperationFlags(flags(recycle))?;
+            let sink: IFileOperationProgressSink = DeleteSink {
+                root: root.clone(),
+                path: path.to_path_buf(),
+                proof,
+                receipt: receipt.clone(),
+            }
+            .into();
+            operation.DeleteItem(&root, &sink)?;
+            // Completion receipts remain available even when PerformOperations fails.
+            let performed = operation.PerformOperations();
+            let aborted = operation.GetAnyOperationsAborted();
+            performed?;
+            Ok(aborted?.as_bool())
+        }
+    })();
+    let aborted = result.as_ref().copied().unwrap_or(false);
+    let outcome = receipt
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .outcome(result.map(|_| ()), aborted);
+    outcome
+}
+
+pub(super) fn run(
+    path: &Path,
+    recycle: bool,
+    proof: Option<HistoryFileIdentity>,
+) -> ShellDeleteOutcome {
+    // A fresh STA avoids borrowing the Tokio worker's existing COM apartment.
+    let path = path.to_path_buf();
+    match std::thread::Builder::new()
+        .name("oxyde-shell-delete".into())
+        .spawn(move || delete(&path, recycle, proof))
+    {
+        Ok(thread) => thread.join().unwrap_or_else(|_| ShellDeleteOutcome {
+            completed: false,
+            error: Some("Windows deletion worker failed".into()),
+        }),
+        Err(error) => ShellDeleteOutcome {
+            completed: false,
+            error: Some(error.to_string()),
+        },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::{fs, os::windows::ffi::OsStrExt};
+    use windows::Win32::Foundation::E_FAIL;
+
+    fn item(path: &Path) -> IShellItem {
+        let wide: Vec<_> = path.as_os_str().encode_wide().chain([0]).collect();
+        unsafe { SHCreateItemFromParsingName(PCWSTR(wide.as_ptr()), None).unwrap() }
+    }
+
+    #[test]
+    fn completed_root_survives_later_error_and_abort_but_skips_never_become_success() {
+        let mut receipt = Receipt {
+            preflight: true,
+            ..Default::default()
+        };
+        receipt.post(S_OK);
+        let outcome = receipt.outcome(Err(Error::from_hresult(E_FAIL)), true);
+        assert!(outcome.completed);
+        assert!(outcome.error.is_some());
+        for status in [
+            E_FAIL,
+            HRESULT(1),
+            COPYENGINE_S_USER_IGNORED,
+            COPYENGINE_S_PENDING_DELETE,
+        ] {
+            let mut receipt = Receipt {
+                preflight: true,
+                ..Default::default()
+            };
+            receipt.post(status);
+            let outcome = receipt.outcome(Ok(()), false);
+            assert!(!outcome.completed);
+            assert!(outcome.error.is_some());
+        }
+        let mut receipt = Receipt::default();
+        receipt.post(S_OK);
+        assert!(!receipt.outcome(Ok(()), false).completed);
+        assert!(Receipt::default().outcome(Ok(()), false).error.is_some());
+    }
+
+    #[test]
+    fn native_sink_ignores_other_items_and_keeps_root_receipt_after_rename_without_deletion() {
+        std::thread::spawn(|| {
+            let _apartment = Apartment::new().unwrap();
+            let temp = tempfile::tempdir().unwrap();
+            let path = temp.path().join("selected.txt");
+            let other = temp.path().join("other.txt");
+            fs::write(&path, "selected").unwrap();
+            fs::write(&other, "witness").unwrap();
+            let proof = HistoryFileIdentity::from_file(&fs::File::open(&path).unwrap()).unwrap();
+            let root = item(&path);
+            let sibling = item(&other);
+            let callback_root = item(&path);
+            let receipt = Arc::new(Mutex::new(Receipt::default()));
+            let sink: IFileOperationProgressSink = DeleteSink {
+                root: root.clone(),
+                path: path.clone(),
+                proof: Some(proof),
+                receipt: receipt.clone(),
+            }
+            .into();
+            unsafe {
+                sink.PreDeleteItem(0, &sibling).unwrap();
+                sink.PostDeleteItem(0, &sibling, S_OK, None).unwrap();
+                assert!(!receipt.lock().unwrap().completed);
+                sink.PreDeleteItem(0, &callback_root).unwrap();
+                fs::rename(&path, path.with_extension("saved")).unwrap();
+                sink.PostDeleteItem(0, &callback_root, S_OK, None).unwrap();
+                sink.FinishOperations(E_FAIL).unwrap();
+            }
+            let outcome = receipt.lock().unwrap().outcome(Ok(()), false);
+            assert!(outcome.completed);
+            assert!(outcome.error.is_some());
+            assert_eq!(fs::read(other).unwrap(), b"witness");
+            assert_eq!(fs::read(path.with_extension("saved")).unwrap(), b"selected");
+        })
+        .join()
+        .unwrap();
+    }
+
+    #[test]
+    fn native_predelete_refuses_a_same_content_replacement_without_deleting_anything() {
+        std::thread::spawn(|| {
+            let _apartment = Apartment::new().unwrap();
+            let temp = tempfile::tempdir().unwrap();
+            let path = temp.path().join("selected.txt");
+            fs::write(&path, "same").unwrap();
+            let proof = HistoryFileIdentity::from_file(&fs::File::open(&path).unwrap()).unwrap();
+            let root = item(&path);
+            let receipt = Arc::new(Mutex::new(Receipt::default()));
+            let sink: IFileOperationProgressSink = DeleteSink {
+                root: root.clone(),
+                path: path.clone(),
+                proof: Some(proof),
+                receipt: receipt.clone(),
+            }
+            .into();
+            let saved = path.with_extension("saved");
+            fs::rename(&path, &saved).unwrap();
+            fs::write(&path, "same").unwrap();
+            assert!(unsafe { sink.PreDeleteItem(0, &root) }.is_err());
+            assert!(!receipt.lock().unwrap().preflight);
+            assert!(!receipt.lock().unwrap().completed);
+            assert_eq!(
+                crate::models::error::SourceSelectionFailure::from_message(
+                    receipt.lock().unwrap().error.as_deref().unwrap()
+                ),
+                Some(true)
+            );
+            assert_eq!(fs::read(path).unwrap(), b"same");
+            assert_eq!(fs::read(saved).unwrap(), b"same");
+        })
+        .join()
+        .unwrap();
+    }
+
+    #[test]
+    fn invalid_literals_fail_before_native_dispatch_and_flags_stop_on_error() {
+        let outcome = run(Path::new(r"C:\unselected*"), true, None);
+        assert!(!outcome.completed);
+        assert!(outcome.error.unwrap().contains("literal"));
+        let flags = flags(true);
+        assert_ne!((flags & FOFX_EARLYFAILURE).0, 0);
+        assert_ne!((flags & FOF_NOERRORUI).0, 0);
+        assert_ne!((flags & FOF_NO_CONNECTED_ELEMENTS).0, 0);
+        assert_ne!((flags & FOF_ALLOWUNDO).0, 0);
+        assert_eq!((super::flags(false) & FOF_ALLOWUNDO).0, 0);
+    }
+}

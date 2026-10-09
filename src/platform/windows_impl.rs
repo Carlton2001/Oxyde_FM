@@ -453,6 +453,13 @@ impl Platform for WindowsPlatform {
         Ok(())
     }
 
+    fn shell_delete_tracked(&self, path: &std::path::Path, proof: Option<crate::models::transaction::HistoryFileIdentity>) -> super::ShellDeleteOutcome {
+        let immediate = path.ancestors().last()
+            .and_then(|root| read_recycle_bin_config(root.to_string_lossy().into_owned()).ok())
+            .is_some_and(|config| config.nuke_on_delete);
+        super::windows_shell_delete_tracked::run(path, !immediate, proof)
+    }
+
     fn run_preview_worker(&self, mode: &str, path: &std::path::Path) -> std::io::Result<Vec<u8>> {
         super::windows_preview_worker::run(mode, path)
     }

@@ -892,3 +892,5 @@ history-delete-unverified = Oxyde fehlen die Informationen, um diese Löschung s
 
 preview-timed-out = Diese Vorschau hat das Zeitlimit von 15 Sekunden überschritten. Die Datei bleibt zugänglich.
 copy-name-suffix = Kopie
+shell-delete-completed-error = Windows hat dieses Element gelöscht und anschließend einen Fehler gemeldet. Der abgeschlossene Vorgang bleibt im Verlauf erhalten. Prüfen Sie den Ordner und den Papierkorb, bevor Sie es erneut versuchen.
+shell-delete-unconfirmed = Windows hat das Löschen dieses Elements nicht bestätigt. Der Löschvorgang wurde möglicherweise nur teilweise ausgeführt. Prüfen Sie den Ordner und den Papierkorb, bevor Sie es erneut versuchen.

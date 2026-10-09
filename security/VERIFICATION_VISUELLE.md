@@ -145,3 +145,7 @@ La reprise ciblée est terminée selon le retour utilisateur du 10 octobre 2026 
 Validation automatisée du lot 58 : **751 tests permanents réussis**, aucun échec ; 17 tests préexistants ignorés non activés. Le diagnostic ponctuel du MOV reste distinct de cette suite.
 
 Compilation et reconstruction sans avertissement du projet ; utiliser `target/debug/oxyde.exe` pour cette reprise.
+
+## Reprise après le retour par élément du Shell — lot 59
+
+La validation précédente du lot 58 reste acquise pour ses parcours. L’implémentation Windows des nouvelles suppressions suivies et de Rétablir Delete passe maintenant par IFileOperation ; les callbacks et reprises sont contrôlés automatiquement sans vraie suppression. Après les derniers changements de code, contrôler uniquement avec un nouveau fichier et un nouveau dossier jetables dans le jeu généré : suppression vers la corbeille, Annuler, puis Rétablir ; observer la mise à jour de la liste et la possibilité de restaurer. Ne pas vider la corbeille ni utiliser de documents personnels. Vérifier aussi qu’un dossier compagnon non sélectionné reste en place. Les erreurs tardives injectées restent des tests automatisés ; ne pas provoquer une erreur en remplaçant des fichiers personnels. Cette reprise native n’a pas encore été exécutée par l’agent ou l’utilisateur.

@@ -242,6 +242,10 @@ Les dossiers restent en tête en ordre ascendant et descendant. GPUI prépare un
 Le lecteur vidéo reçoit un signal d’annulation indépendant des images. La destruction du dernier propriétaire de l’aperçu le déclenche ; lectures, reprise et envoi dans la file bornée le contrôlent sur le worker. Une erreur native est propagée et journalisée, sans nouveau toast. Seule une fin normale après une image relance la lecture ; les flux vides et les buffers tronqués sont refusés. Le type RGB32 de sortie, son stride signé et la longueur valide du buffer guident la conversion. Les opérations natives déjà bloquées restent soumises à leur propre délai.
 
 
+### Erreurs des suppressions Shell
+
+Les erreurs de suppression Shell distinguent une racine confirmée puis suivie d’une erreur d’un résultat non confirmé. Le formatter partagé résout ces causes dans les cinq langues, sans afficher les HRESULT et détails internes ; la cause de source remplacée garde son message dédié. Le reçu d’élément reste dans l’historique malgré l’erreur finale. Ces messages demandent de vérifier le dossier et la corbeille avant une reprise ; ils ne promettent pas de pouvoir annuler une suppression permanente.
+
 ### Retour de chargement des aperçus
 
 Dans les infobulles, « Chargement de l’aperçu… » apparaît seulement après une seconde si aucun résultat n’est encore disponible. Images, PDF, vidéos et autres aperçus commencent à charger immédiatement ; un résultat prêt est affiché sans attendre ce délai. Les erreurs et avertissements ne sont pas retardés. Le timer utilise une référence faible à la vue et ne réouvre pas une infobulle fermée.

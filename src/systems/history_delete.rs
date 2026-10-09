@@ -2,9 +2,9 @@
 use super::path_parents::HeldParents;
 use crate::{
     models::{
-        CommandError, TransactionDetails,
         error::HistoryDeleteFailure,
         transaction::{HistoryDeletedItem, HistoryFileIdentity},
+        CommandError, TransactionDetails,
     },
     platform::platform,
 };
@@ -53,6 +53,19 @@ fn source_failure(path: &Path, changed: bool) -> CommandError {
         .to_string(),
     )
 }
+fn dispatch_failure(path: &Path, completed: bool, detail: String) -> CommandError {
+    if crate::models::error::SourceSelectionFailure::from_message(&detail).is_some() {
+        return CommandError::TrashError(detail);
+    }
+    CommandError::TrashError(
+        crate::models::error::ShellDeleteFailure {
+            completed,
+            path: path.to_string_lossy().into_owned(),
+            detail,
+        }
+        .to_string(),
+    )
+}
 pub(super) struct PreparedDelete {
     path: std::path::PathBuf,
     source: SelectedSource,
@@ -89,17 +102,39 @@ impl PreparedDelete {
     pub(super) fn path(&self) -> &Path {
         &self.path
     }
-    pub(super) fn recycle(&self) -> Result<HistoryDeletedItem, CommandError> {
-        self.recycle_with(&mut |path| {
-            platform()
-                .shell_delete(&[path.to_path_buf()], true)
-                .map_err(CommandError::TrashError)
-        })
+    pub(super) fn recycle(
+        &self,
+        completed: &mut dyn FnMut(HistoryDeletedItem),
+    ) -> Result<(), CommandError> {
+        self.recycle_reporting(
+            &mut |path, proof| platform().shell_delete_tracked(path, proof),
+            completed,
+        )
     }
+    #[cfg(test)]
     fn recycle_with(
         &self,
         delete: &mut dyn FnMut(&Path) -> Result<(), CommandError>,
     ) -> Result<HistoryDeletedItem, CommandError> {
+        let mut entry = None;
+        self.recycle_reporting(
+            &mut |path, _| {
+                crate::platform::ShellDeleteOutcome::from_result(
+                    delete(path).map_err(|e| e.to_string()),
+                )
+            },
+            &mut |deleted| entry = Some(deleted),
+        )?;
+        entry.ok_or_else(|| source_failure(&self.path, false))
+    }
+    fn recycle_reporting(
+        &self,
+        delete: &mut dyn FnMut(
+            &Path,
+            Option<HistoryFileIdentity>,
+        ) -> crate::platform::ShellDeleteOutcome,
+        completed: &mut dyn FnMut(HistoryDeletedItem),
+    ) -> Result<(), CommandError> {
         if let Some(identity) = self.identity {
             let current =
                 SelectedSource::new(&self.path).map_err(|_| source_failure(&self.path, true))?;
@@ -113,11 +148,24 @@ impl PreparedDelete {
         // Keep the captured object alive through dispatch, even if its name moves.
         // Shared DELETE access permits the Shell operation; its lookup is not atomic.
         let _source = &self.source;
-        delete(&self.path)?;
-        Ok(HistoryDeletedItem::new(
-            self.path.to_string_lossy().into_owned(),
-            self.identity,
-        ))
+        let outcome = delete(&self.path, self.identity);
+        if outcome.completed {
+            completed(HistoryDeletedItem::new(
+                self.path.to_string_lossy().into_owned(),
+                self.identity,
+            ));
+        }
+        if let Some(error) = outcome.error {
+            return Err(dispatch_failure(&self.path, outcome.completed, error));
+        }
+        if !outcome.completed {
+            return Err(dispatch_failure(
+                &self.path,
+                false,
+                "Missing completion receipt".into(),
+            ));
+        }
+        Ok(())
     }
 }
 /// Drop descendant guards before recycling a parent directory; otherwise their
@@ -193,15 +241,25 @@ pub(crate) fn undo(details: &TransactionDetails) -> Result<(), CommandError> {
         .map_err(CommandError::TrashError)
 }
 pub(crate) fn redo(details: &TransactionDetails) -> Result<(), CommandError> {
-    redo_with(entries(details)?, &mut |path| {
-        platform()
-            .shell_delete(&[path.to_path_buf()], true)
-            .map_err(CommandError::TrashError)
+    redo_reporting(entries(details)?, &mut |path, proof| {
+        platform().shell_delete_tracked(path, proof)
     })
 }
+#[cfg(test)]
 fn redo_with(
     entries: &[HistoryDeletedItem],
     delete: &mut dyn FnMut(&Path) -> Result<(), CommandError>,
+) -> Result<(), CommandError> {
+    redo_reporting(entries, &mut |path, _| {
+        crate::platform::ShellDeleteOutcome::from_result(delete(path).map_err(|e| e.to_string()))
+    })
+}
+fn redo_reporting(
+    entries: &[HistoryDeletedItem],
+    delete: &mut dyn FnMut(
+        &Path,
+        Option<HistoryFileIdentity>,
+    ) -> crate::platform::ShellDeleteOutcome,
 ) -> Result<(), CommandError> {
     // Preflight the whole remaining batch and keep metadata/parents retained.
     let selected = entries
@@ -212,8 +270,25 @@ fn redo_with(
     for (entry, source) in selected {
         // The path-based Shell call has a residual race after this check.
         let current = SelectedSource::expected(entry)?;
-        delete(Path::new(&entry.path))?;
-        entry.set_restored(false);
+        let outcome = delete(Path::new(&entry.path), entry.identity);
+        // Preserve the native item receipt even if the operation later failed.
+        if outcome.completed {
+            entry.set_restored(false);
+        }
+        if let Some(error) = outcome.error {
+            return Err(dispatch_failure(
+                Path::new(&entry.path),
+                outcome.completed,
+                error,
+            ));
+        }
+        if !outcome.completed {
+            return Err(dispatch_failure(
+                Path::new(&entry.path),
+                false,
+                "Missing completion receipt".into(),
+            ));
+        }
         drop((current, source));
     }
     Ok(())
@@ -268,24 +343,20 @@ mod tests {
         .unwrap();
         assert_eq!(entry.path, source.to_string_lossy());
         assert!(!entry.is_restored());
-        assert!(
-            entry
-                .identity
-                .unwrap()
-                .matches(&File::open(&payload).unwrap())
-                .unwrap()
-        );
+        assert!(entry
+            .identity
+            .unwrap()
+            .matches(&File::open(&payload).unwrap())
+            .unwrap());
         let clone = entry.clone();
         clone.set_restored(true);
         assert!(entry.is_restored());
         fs::rename(&payload, &source).unwrap(); // Journal values hold no handles.
-        assert!(
-            entry
-                .identity
-                .unwrap()
-                .matches(&File::open(&source).unwrap())
-                .unwrap()
-        );
+        assert!(entry
+            .identity
+            .unwrap()
+            .matches(&File::open(&source).unwrap())
+            .unwrap());
     }
     #[test]
     fn delete_history_failures_keep_the_selected_undo_or_redo_reservation() {
@@ -304,11 +375,9 @@ mod tests {
             crate::models::Transaction::new(crate::models::TransactionType::Delete, no_proof);
         let id = transaction.id.clone();
         history.push(transaction);
-        assert!(
-            runtime
-                .block_on(crate::commands::ops::undo_last_action(&history))
-                .is_err()
-        );
+        assert!(runtime
+            .block_on(crate::commands::ops::undo_last_action(&history))
+            .is_err());
         assert_eq!(history.get_state().undo_stack[0].id, id);
         assert!(history.get_state().redo_stack.is_empty());
         history.clear();
@@ -321,11 +390,9 @@ mod tests {
         history.begin_undo().unwrap().unwrap().complete(); // Simulate the already restored phase.
         std::fs::rename(&source, &saved).unwrap();
         std::fs::write(&source, b"independent contents").unwrap();
-        assert!(
-            runtime
-                .block_on(crate::commands::ops::redo_last_action(&history))
-                .is_err()
-        );
+        assert!(runtime
+            .block_on(crate::commands::ops::redo_last_action(&history))
+            .is_err());
         assert_eq!(history.get_state().redo_stack[0].id, id);
         assert!(history.get_state().undo_stack.is_empty());
         assert_eq!(std::fs::read(source).unwrap(), b"independent contents");
@@ -468,5 +535,98 @@ mod tests {
             }
             assert_eq!(fs::read(&source).unwrap(), b"selected contents");
         }
+    }
+
+    #[test]
+    fn initial_delete_journals_a_completed_item_even_when_the_same_dispatch_reports_an_error() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("selected");
+        let saved = root.path().join("payload");
+        fs::write(&path, "selected").unwrap();
+        let prepared = PreparedDelete::new(&path).unwrap();
+        let mut journal = Vec::new();
+        let result = prepared.recycle_reporting(
+            &mut |source, proof| {
+                assert!(proof.is_some());
+                fs::rename(source, &saved).unwrap();
+                crate::platform::ShellDeleteOutcome {
+                    completed: true,
+                    error: Some("late injected failure".into()),
+                }
+            },
+            &mut |item| journal.push(item),
+        );
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("late injected failure"));
+        assert_eq!(journal.len(), 1);
+        assert_eq!(journal[0].path, path.to_string_lossy());
+        assert!(journal[0]
+            .identity
+            .unwrap()
+            .matches(&File::open(&saved).unwrap())
+            .unwrap());
+        assert_eq!(fs::read(saved).unwrap(), b"selected");
+    }
+
+    #[test]
+    fn redo_keeps_same_dispatch_completion_and_preserves_a_new_source_on_retry() {
+        let root = tempfile::tempdir().unwrap();
+        let first = root.path().join("first");
+        let second = root.path().join("second");
+        fs::write(&first, "first").unwrap();
+        fs::write(&second, "second").unwrap();
+        let entries = [selected(&first), selected(&second)];
+        let clones = entries.clone();
+        let result = redo_reporting(&entries, &mut |path, _| {
+            assert_eq!(path, first);
+            fs::rename(path, path.with_extension("saved")).unwrap();
+            crate::platform::ShellDeleteOutcome {
+                completed: true,
+                error: Some("late injected failure".into()),
+            }
+        });
+        assert!(result.is_err());
+        assert!(!clones[0].is_restored());
+        assert!(clones[1].is_restored());
+        fs::write(&first, "independent").unwrap();
+        redo_reporting(&clones, &mut |path, _| {
+            assert_eq!(path, second);
+            fs::rename(path, path.with_extension("saved")).unwrap();
+            crate::platform::ShellDeleteOutcome::from_result(Ok(()))
+        })
+        .unwrap();
+        assert_eq!(fs::read(first).unwrap(), b"independent");
+        assert!(clones.iter().all(|entry| !entry.is_restored()));
+    }
+
+    #[test]
+    fn missing_completion_never_enters_history_or_changes_the_redo_phase() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("selected");
+        fs::write(&path, "keep").unwrap();
+        let prepared = PreparedDelete::new(&path).unwrap();
+        let mut completed = false;
+        assert!(prepared
+            .recycle_reporting(
+                &mut |_, _| crate::platform::ShellDeleteOutcome {
+                    completed: false,
+                    error: None
+                },
+                &mut |_| completed = true
+            )
+            .is_err());
+        assert!(!completed);
+        let entries = [selected(&path)];
+        assert!(
+            redo_reporting(&entries, &mut |_, _| crate::platform::ShellDeleteOutcome {
+                completed: false,
+                error: None
+            })
+            .is_err()
+        );
+        assert!(entries[0].is_restored());
+        assert_eq!(fs::read(path).unwrap(), b"keep");
     }
 }

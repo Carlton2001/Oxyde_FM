@@ -585,3 +585,5 @@ history-delete-unverified = Oxyde does not have the information needed to undo o
 
 preview-timed-out = This preview exceeded the 15-second time limit. The file remains accessible.
 copy-name-suffix = Copy
+shell-delete-completed-error = Windows finished deleting this item, then reported an error. The completed operation remains in history. Check the folder and Recycle Bin before trying again.
+shell-delete-unconfirmed = Windows did not confirm deletion of this item. The deletion may have been partial. Check the folder and Recycle Bin before trying again.
