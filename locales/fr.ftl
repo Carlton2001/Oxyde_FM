@@ -569,3 +569,6 @@ undo-recovery-incomplete = L’annulation a été interrompue et certains élém
 preview-unavailable = Impossible de charger cet aperçu. Essayez d’ouvrir le fichier directement.
 preview-image-limit = Cette image dépasse les limites de l’aperçu. Le fichier reste accessible.
 preview-animation-static = Aperçu fixe : l’animation dépasse les limites de l’aperçu.
+
+undo-move-changed = Impossible d’annuler ce déplacement : le fichier a été remplacé. Il a été conservé à son emplacement actuel. { $detail }
+undo-move-unverified = Impossible d’annuler ce déplacement en toute sécurité : l’identité du fichier n’a pas pu être vérifiée. Le fichier a été conservé. { $detail }

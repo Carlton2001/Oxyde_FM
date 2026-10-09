@@ -969,6 +969,7 @@ mod copy_redo_tests {
             TransactionType::Copy,
             TransactionDetails {
                 new_folder_identity: None,
+                moved_file_identities: None,
                 copied_directory_identities: None,
                 copied_file_identities: Some(vec![(
                     destination.to_string_lossy().into_owned(),
@@ -1055,6 +1056,7 @@ mod copy_redo_tests {
                 TransactionType::Copy,
                 TransactionDetails {
                     new_folder_identity: None,
+                    moved_file_identities: None,
                     copied_directory_identities: Some(vec![(
                         name(&output_directory),
                         crate::models::transaction::HistoryDirectoryIdentity::from_file(
@@ -1192,6 +1194,7 @@ mod copy_redo_tests {
             TransactionType::Copy,
             TransactionDetails {
                 new_folder_identity: None,
+                moved_file_identities: None,
                 copied_directory_identities: Some(vec![(
                     name(&blocker),
                     crate::models::transaction::HistoryDirectoryIdentity::from_file(
@@ -1297,6 +1300,7 @@ mod copy_redo_tests {
             TransactionType::Copy,
             TransactionDetails {
                 new_folder_identity: None,
+                moved_file_identities: None,
                 copied_directory_identities: None,
                 copied_file_identities: Some(vec![(
                     destination.to_string_lossy().into_owned(),
@@ -1439,6 +1443,7 @@ mod history_concurrency_tests {
             TransactionType::Rename,
             TransactionDetails {
                 new_folder_identity: None,
+                moved_file_identities: None,
                 copied_directory_identities: None,
                 copied_file_identities: None,
                 paths: vec![],
@@ -1549,9 +1554,90 @@ mod move_undo_rollback_tests {
     use super::*;
     use crate::models::TransactionDetails;
 
+    #[test]
+    fn move_history_preserves_identical_replacements_before_undo_and_redo() {
+        for redo in [false, true] {
+            let root = tempfile::tempdir().unwrap();
+            let source = root.path().join("source.txt");
+            let destination = root.path().join("destination.txt");
+            std::fs::write(&destination, b"moving file").unwrap();
+            let history = HistoryManager::new();
+            history.push(Transaction::new(
+                TransactionType::Move,
+                details(&source, &destination),
+            ));
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .build()
+                .unwrap();
+            if redo {
+                runtime.block_on(undo_last_action(&history)).unwrap();
+            }
+            let selected = if redo { &source } else { &destination };
+            let saved = root.path().join("selected-original.txt");
+            let timestamp = std::fs::metadata(selected).unwrap().modified().unwrap();
+            std::fs::rename(selected, &saved).unwrap();
+            std::fs::write(selected, b"moving file").unwrap();
+            std::fs::File::options()
+                .write(true)
+                .open(selected)
+                .unwrap()
+                .set_modified(timestamp)
+                .unwrap();
+            let result = if redo {
+                runtime.block_on(redo_last_action(&history))
+            } else {
+                runtime.block_on(undo_last_action(&history))
+            };
+            assert!(
+                matches!(result, Err(CommandError::HistoryMove(failure)) if failure.issue == crate::models::error::HistoryMoveIssue::Changed)
+            );
+            assert_eq!(std::fs::read(selected).unwrap(), b"moving file");
+            assert_eq!(std::fs::read(&saved).unwrap(), b"moving file");
+            assert!(!(if redo { &destination } else { &source }).exists());
+            assert_eq!(history.get_state().undo_stack.len(), usize::from(!redo));
+            assert_eq!(history.get_state().redo_stack.len(), usize::from(redo));
+            std::fs::remove_file(selected).unwrap();
+            std::fs::rename(saved, selected).unwrap();
+            if redo {
+                runtime.block_on(redo_last_action(&history)).unwrap();
+            } else {
+                runtime.block_on(undo_last_action(&history)).unwrap();
+            }
+        }
+    }
+
+    #[test]
+    fn move_history_without_identity_preserves_data_and_stack() {
+        let root = tempfile::tempdir().unwrap();
+        let source = root.path().join("source.txt");
+        let destination = root.path().join("destination.txt");
+        std::fs::write(&destination, b"moving file").unwrap();
+        let mut journal = details(&source, &destination);
+        journal.moved_file_identities = None;
+        let history = HistoryManager::new();
+        history.push(Transaction::new(TransactionType::Move, journal));
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .build()
+            .unwrap();
+        let error = runtime.block_on(undo_last_action(&history)).unwrap_err();
+        assert!(
+            matches!(error, CommandError::HistoryMove(failure) if failure.issue == crate::models::error::HistoryMoveIssue::Unverified)
+        );
+        assert_eq!(std::fs::read(&destination).unwrap(), b"moving file");
+        assert!(!source.exists());
+        assert_eq!(history.get_state().undo_stack.len(), 1);
+        assert!(history.get_state().redo_stack.is_empty());
+    }
+
     fn details(source: &std::path::Path, destination: &std::path::Path) -> TransactionDetails {
         TransactionDetails {
             new_folder_identity: None,
+            moved_file_identities: std::fs::File::open(destination).ok().map(|file| {
+                vec![(
+                    destination.to_string_lossy().into_owned(),
+                    crate::models::transaction::HistoryMoveIdentity::from_file(&file).unwrap(),
+                )]
+            }),
             copied_directory_identities: None,
             copied_file_identities: None,
             paths: vec![],
@@ -1723,6 +1809,7 @@ mod new_folder_history_tests {
     fn details(path: &std::path::Path) -> TransactionDetails {
         TransactionDetails {
             new_folder_identity: None,
+            moved_file_identities: None,
             paths: vec![path.to_string_lossy().into_owned()],
             target_dir: None,
             old_path: None,

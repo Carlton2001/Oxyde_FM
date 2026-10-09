@@ -264,6 +264,7 @@ mod tests {
             TransactionType::Copy,
             TransactionDetails {
                 new_folder_identity: None,
+                moved_file_identities: None,
                 copied_directory_identities: None,
                 copied_file_identities: None,
                 paths: Vec::new(),

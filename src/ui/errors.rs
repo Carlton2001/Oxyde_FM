@@ -2,6 +2,15 @@ use crate::ui::i18n::Message;
 use oxyde_lib::models::CommandError;
 
 pub fn undo_failure(error: &CommandError) -> (Message, String) {
+    if let CommandError::HistoryMove(failure) = error {
+        use oxyde_lib::models::error::HistoryMoveIssue as Issue;
+        let message = match failure.issue {
+            Issue::Changed => Message::UndoMoveChanged,
+            Issue::Unverified => Message::UndoMoveUnverified,
+            Issue::Conflict | Issue::Incomplete => Message::UndoFailed,
+        };
+        return (message, failure.detail.clone());
+    }
     if let CommandError::HistoryUndoRecovery(failure) = error {
         return (Message::UndoRecoveryIncomplete, failure.locations.clone());
     }
@@ -240,6 +249,42 @@ mod tests {
             undo_failure(&CommandError::Other("unrelated".into())).0,
             Message::UndoFailed
         );
+    }
+    #[test]
+    fn move_identity_failures_are_translated_for_undo_and_redo() {
+        use crate::ui::i18n::{I18n, Language};
+        use fluent_bundle::FluentArgs;
+        use oxyde_lib::models::error::{HistoryMoveFailure, HistoryMoveIssue};
+        let path = "C:\\école_日本語\\{ $detail }.txt";
+        for (issue, undo, redo) in [
+            (
+                HistoryMoveIssue::Changed,
+                Message::UndoMoveChanged,
+                Message::RedoMoveChanged,
+            ),
+            (
+                HistoryMoveIssue::Unverified,
+                Message::UndoMoveUnverified,
+                Message::RedoMoveUnverified,
+            ),
+        ] {
+            let error = CommandError::HistoryMove(HistoryMoveFailure {
+                issue,
+                detail: path.into(),
+            });
+            assert_eq!(undo_failure(&error), (undo, path.into()));
+            assert_eq!(redo_failure(&error), (redo, path.into()));
+            for language in Language::ALL {
+                for message in [undo, redo] {
+                    let mut args = FluentArgs::new();
+                    args.set("detail", path);
+                    let rendered = I18n::for_language(language).text_with_args(message, &args);
+                    assert!(rendered.contains(path), "{language:?}: {rendered}");
+                    assert!(!rendered.contains(message.key()));
+                    assert!(!rendered.contains("History move"));
+                }
+            }
+        }
     }
     #[test]
     fn redo_copy_failures_explain_the_cause_with_a_literal_path() {

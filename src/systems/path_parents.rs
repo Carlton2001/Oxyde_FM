@@ -113,6 +113,7 @@ pub(crate) fn move_file(
         destination_parents,
         checkpoint,
     )
+    .map(|(size, _)| size)
 }
 
 pub(super) fn move_file_with_parents(
@@ -121,7 +122,7 @@ pub(super) fn move_file_with_parents(
     replace: bool,
     destination_parents: HeldParents,
     checkpoint: &mut dyn FnMut() -> io::Result<()>,
-) -> io::Result<u64> {
+) -> io::Result<(u64, Option<crate::models::transaction::HistoryMoveIdentity>)> {
     let source_parents = HeldParents::new(source)?;
     let file = source_parents.open_mutation(source)?;
     let metadata = file.metadata()?;
@@ -141,7 +142,17 @@ pub(super) fn move_file_with_parents(
         destination,
         replace,
     )?;
-    Ok(metadata.len())
+    // Capture the renamed object while its mutation handle still excludes
+    // substitution. A missing proof only disables history, not a completed move.
+    let identity = crate::models::transaction::HistoryMoveIdentity::from_file(&file)
+        .map_err(|error| {
+            log::warn!(
+                "Move identity unavailable for {}: {error}",
+                destination.display()
+            )
+        })
+        .ok();
+    Ok((metadata.len(), identity))
 }
 
 pub(crate) fn remove(
@@ -158,7 +169,7 @@ mod tests {
     use super::*;
     #[test]
     fn recursive_delete_removes_selected_and_nested_junctions_without_traversal() {
-        use crate::platform::windows_reparse_tests::{junction, Retarget};
+        use crate::platform::windows_reparse_tests::{Retarget, junction};
         for nested in [false, true] {
             let root = tempfile::tempdir().unwrap();
             let first = root.path().join("first");
@@ -202,7 +213,7 @@ mod tests {
 
     #[test]
     fn recursive_delete_never_enumerates_a_new_reparse_target() {
-        use crate::platform::windows_reparse_tests::{junction, Retarget};
+        use crate::platform::windows_reparse_tests::{Retarget, junction};
         let root = tempfile::tempdir().unwrap();
         let selected = root.path().join("selected");
         let outside = root.path().join("outside");
@@ -324,7 +335,7 @@ mod tests {
     }
     #[test]
     fn move_never_follows_a_reparse_point_installed_on_the_retained_parent() {
-        use crate::platform::windows_reparse_tests::{junction, Retarget};
+        use crate::platform::windows_reparse_tests::{Retarget, junction};
         let root = tempfile::tempdir().unwrap();
         let source = root.path().join("source");
         let selected = root.path().join("selected");
@@ -371,7 +382,7 @@ mod tests {
     }
     #[test]
     fn move_keeps_source_and_destination_bound_when_junctions_are_retargeted() {
-        use crate::platform::windows_reparse_tests::{junction, Retarget};
+        use crate::platform::windows_reparse_tests::{Retarget, junction};
         let root = tempfile::tempdir().unwrap();
         for name in [
             "source",
@@ -492,7 +503,7 @@ mod tests {
     }
     #[test]
     fn deletion_cannot_be_redirected_by_attribute_only_junction_retargeting() {
-        use crate::platform::windows_reparse_tests::{junction, Retarget};
+        use crate::platform::windows_reparse_tests::{Retarget, junction};
         let root = tempfile::tempdir().unwrap();
         let selected = root.path().join("selected");
         let outside = root.path().join("outside");

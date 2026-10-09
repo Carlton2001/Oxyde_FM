@@ -2113,6 +2113,7 @@ impl OxydeApp {
                                     TransactionType::NewFolder,
                                     TransactionDetails {
                                         new_folder_identity: identity,
+                                        moved_file_identities: None,
                                         copied_directory_identities: None,
                                         copied_file_identities: None,
                                         paths: vec![folder_path.to_string_lossy().into_owned()],

@@ -37,12 +37,36 @@ trait Checkpoint {
 struct Native;
 impl Checkpoint for Native {}
 
+fn transfer_file(
+    from: &Path,
+    to: &Path,
+    expected: Option<&str>,
+    identity: Option<&crate::models::transaction::HistoryMoveIdentity>,
+    source: &super::path_parents::HeldParents,
+    destination: &super::path_parents::HeldParents,
+) -> io::Result<String> {
+    if let Some(identity) = identity {
+        super::history_move::move_file_with_journal_identity(
+            from,
+            to,
+            expected,
+            identity,
+            source,
+            destination,
+        )
+    } else {
+        // Only recovery sidecars reach this branch after plan validation.
+        super::history_move::move_file_without_identity(from, to, expected, source, destination)
+    }
+}
+
 enum Effect {
     Created(PathBuf),
     Moved {
         from: PathBuf,
         to: PathBuf,
         hash: String,
+        identity: Option<crate::models::transaction::HistoryMoveIdentity>,
     },
     Removed {
         path: PathBuf,
@@ -89,23 +113,19 @@ impl Journal {
         from: &Path,
         to: &Path,
         expected: Option<&str>,
+        identity: Option<&crate::models::transaction::HistoryMoveIdentity>,
         checkpoint: &mut impl Checkpoint,
     ) -> io::Result<()> {
         let source = self.directories.file_parents(from)?;
         let destination = self.directories.file_parents(to)?;
         checkpoint.before(Phase::Move, from)?;
-        let hash = super::history_move::move_file_with_bound_parents(
-            from,
-            to,
-            expected,
-            &source,
-            &destination,
-        )
-        .map_err(|error| at(error, to))?;
+        let hash = transfer_file(from, to, expected, identity, &source, &destination)
+            .map_err(|error| at(error, to))?;
         self.effects.push(Effect::Moved {
             from: from.to_path_buf(),
             to: to.to_path_buf(),
             hash,
+            identity: identity.cloned(),
         });
         Ok(())
     }
@@ -134,7 +154,12 @@ impl Journal {
                     });
                     (path, result)
                 }
-                Effect::Moved { from, to, hash } => {
+                Effect::Moved {
+                    from,
+                    to,
+                    hash,
+                    identity,
+                } => {
                     let result = (|| {
                         if blocked_parents
                             .iter()
@@ -146,10 +171,11 @@ impl Journal {
                         }
                         let source = self.directories.file_parents(&to)?;
                         let destination = self.directories.file_parents(&from)?;
-                        super::history_move::move_file_with_bound_parents(
+                        transfer_file(
                             &to,
                             &from,
                             Some(&hash),
+                            identity.as_ref(),
                             &source,
                             &destination,
                         )
@@ -226,6 +252,13 @@ fn redo_with(details: &TransactionDetails, checkpoint: &mut impl Checkpoint) -> 
         .iter()
         .map(|(path, hash)| (PathBuf::from(path), hash.as_str()))
         .collect();
+    let identities: HashMap<_, _> = details
+        .moved_file_identities
+        .as_deref()
+        .unwrap_or_default()
+        .iter()
+        .map(|(path, identity)| (PathBuf::from(path), identity))
+        .collect();
     let mut created: Vec<_> = details
         .created_dirs
         .as_deref()
@@ -264,6 +297,21 @@ fn redo_with(details: &TransactionDetails, checkpoint: &mut impl Checkpoint) -> 
             let destination = Path::new(destination);
             let parents = journal.directories.file_parents(source)?;
             let mut file = parents.open_file(source)?;
+            let sidecar = details
+                .trash_metadata_backups
+                .as_deref()
+                .unwrap_or_default()
+                .iter()
+                .any(|path| Path::new(path) == destination);
+            if !sidecar {
+                let identity = identities
+                    .get(destination)
+                    .and_then(|proof| proof.snapshot())
+                    .ok_or_else(|| super::history_move::move_identity_failure(source, false))?;
+                if !identity.matches(&file)? {
+                    return Err(super::history_move::move_identity_failure(source, true));
+                }
+            }
             if let Some(expected) = hashes.get(destination) {
                 if *expected != super::history_move::hash(&mut file)? {
                     return Err(failure(Issue::Changed, source.to_string_lossy()));
@@ -302,6 +350,7 @@ fn redo_with(details: &TransactionDetails, checkpoint: &mut impl Checkpoint) -> 
                 Path::new(source),
                 destination,
                 hashes.get(destination).copied(),
+                identities.get(destination).copied(),
                 checkpoint,
             )?;
         }
@@ -356,6 +405,13 @@ mod tests {
             copied_file_identities: None,
             copied_directory_identities: None,
             new_folder_identity: None,
+            moved_file_identities: Some(vec![(
+                destination.to_string_lossy().into_owned(),
+                crate::models::transaction::HistoryMoveIdentity::from_file(
+                    &fs::File::open(source).unwrap(),
+                )
+                .unwrap(),
+            )]),
             trash_metadata_backups: None,
         }
     }
@@ -364,6 +420,33 @@ mod tests {
         fn before(&mut self, phase: Phase, path: &Path) -> io::Result<()> {
             (self.0)(phase, path)
         }
+    }
+
+    #[test]
+    fn redo_move_rechecks_identity_after_plan_before_publication() {
+        let root = tempfile::tempdir().unwrap();
+        let source = root.path().join("source.txt");
+        let destination = root.path().join("destination.txt");
+        let saved = root.path().join("selected-original.txt");
+        fs::write(&source, b"moving file").unwrap();
+        let tx = details(&source, &destination);
+        let error = redo_with(
+            &tx,
+            &mut Hook(|phase, _: &Path| {
+                if matches!(phase, Phase::Move) {
+                    fs::rename(&source, &saved)?;
+                    fs::write(&source, b"moving file")?;
+                }
+                Ok(())
+            }),
+        )
+        .unwrap_err();
+        assert!(
+            matches!(CommandError::from(error), CommandError::HistoryMove(failure) if failure.issue == Issue::Changed)
+        );
+        assert_eq!(fs::read(&source).unwrap(), b"moving file");
+        assert_eq!(fs::read(&saved).unwrap(), b"moving file");
+        assert!(!destination.exists());
     }
 
     #[test]
@@ -672,6 +755,16 @@ mod tests {
                 .join("destination/second.txt")
                 .to_string_lossy()
                 .into_owned(),
+        ));
+        tx.moved_file_identities.as_mut().unwrap().push((
+            root.path()
+                .join("destination/second.txt")
+                .to_string_lossy()
+                .into_owned(),
+            crate::models::transaction::HistoryMoveIdentity::from_file(
+                &fs::File::open(&second).unwrap(),
+            )
+            .unwrap(),
         ));
         let error = redo_with(
             &tx,

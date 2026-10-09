@@ -17,6 +17,7 @@ pub struct TransactionDetails {
     pub created_dirs: Option<Vec<String>>,
     pub overwritten_files: Option<Vec<String>>,
     pub moved_files: Option<Vec<(String, String)>>,
+    pub moved_file_identities: Option<Vec<(String, HistoryMoveIdentity)>>,
     pub trash_metadata_backups: Option<Vec<String>>,
     pub moved_dirs: Option<Vec<(String, String)>>,
     pub copied_files: Option<Vec<(String, String)>>,
@@ -82,6 +83,10 @@ impl HistoryFileIdentity {
 pub struct HistoryDirectoryIdentity {
     current: std::sync::Arc<std::sync::Mutex<Option<HistoryFileIdentity>>>,
 }
+
+/// A Move proof follows the logical file through cross-volume publication and
+/// rollback. It is shared by history snapshots and never retains a file handle.
+pub type HistoryMoveIdentity = HistoryDirectoryIdentity;
 
 impl HistoryDirectoryIdentity {
     pub(crate) fn from_file(file: &std::fs::File) -> std::io::Result<Self> {

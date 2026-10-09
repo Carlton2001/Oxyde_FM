@@ -870,3 +870,6 @@ undo-recovery-incomplete = Se ha detenido la acción de deshacer y algunos eleme
 preview-unavailable = No se pudo cargar esta vista previa. Intente abrir el archivo directamente.
 preview-image-limit = Esta imagen supera los límites de la vista previa. El archivo sigue siendo accesible.
 preview-animation-static = Vista previa estática: la animación supera los límites de la vista previa.
+
+undo-move-changed = No se puede deshacer este movimiento: el archivo fue reemplazado. Se ha conservado en su ubicación actual. { $detail }
+undo-move-unverified = No se puede deshacer este movimiento de forma segura: no se pudo verificar la identidad del archivo. El archivo se ha conservado. { $detail }

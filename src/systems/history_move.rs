@@ -103,24 +103,6 @@ fn move_with(
     .map(|_| ())
 }
 
-pub(super) fn move_file_with_bound_parents(
-    source: &Path,
-    destination: &Path,
-    expected: Option<&str>,
-    source_parents: &super::path_parents::HeldParents,
-    destination_parents: &super::path_parents::HeldParents,
-) -> io::Result<String> {
-    move_bound(
-        &NativeIo,
-        source,
-        destination,
-        expected,
-        None,
-        source_parents,
-        destination_parents,
-    )
-}
-
 pub(super) fn move_file_with_parents(
     source: &Path,
     destination: &Path,
@@ -138,6 +120,24 @@ pub(super) fn move_file_with_parents(
         destination_parents,
     )
     .map(|_| ())
+}
+
+pub(super) fn move_file_without_identity(
+    source: &Path,
+    destination: &Path,
+    expected: Option<&str>,
+    source_parents: &super::path_parents::HeldParents,
+    destination_parents: &super::path_parents::HeldParents,
+) -> io::Result<String> {
+    move_bound(
+        &NativeIo,
+        source,
+        destination,
+        expected,
+        None,
+        source_parents,
+        destination_parents,
+    )
 }
 
 pub(super) fn move_file_with_identity(
@@ -169,12 +169,61 @@ fn move_bound(
     source_parents: &super::path_parents::HeldParents,
     destination_parents: &super::path_parents::HeldParents,
 ) -> io::Result<String> {
+    move_bound_controlled(
+        ops,
+        source,
+        destination,
+        expected,
+        identity,
+        None,
+        source_parents,
+        destination_parents,
+    )
+}
+
+pub(super) fn move_file_with_journal_identity(
+    source: &Path,
+    destination: &Path,
+    expected: Option<&str>,
+    identity: &crate::models::transaction::HistoryMoveIdentity,
+    source_parents: &super::path_parents::HeldParents,
+    destination_parents: &super::path_parents::HeldParents,
+) -> io::Result<String> {
+    let captured = identity
+        .snapshot()
+        .ok_or_else(|| move_identity_failure(source, false))?;
+    move_bound_controlled(
+        &NativeIo,
+        source,
+        destination,
+        expected,
+        Some(captured),
+        Some(identity),
+        source_parents,
+        destination_parents,
+    )
+}
+
+fn move_bound_controlled(
+    ops: &impl MoveIo,
+    source: &Path,
+    destination: &Path,
+    expected: Option<&str>,
+    identity: Option<crate::models::transaction::HistoryFileIdentity>,
+    journal_identity: Option<&crate::models::transaction::HistoryMoveIdentity>,
+    source_parents: &super::path_parents::HeldParents,
+    destination_parents: &super::path_parents::HeldParents,
+) -> io::Result<String> {
     let source = source_parents.resolved_path(source)?;
     let destination = destination_parents.resolved_path(destination)?;
     let mut original = source_parents.open_file(&source)?;
     if let Some(identity) = identity {
         if !identity.matches(&original)? {
-            return Err(super::file_copy::identity_changed(&source));
+            return Err(if journal_identity.is_some() {
+                move_identity_failure(&source, true)
+            } else {
+                super::file_copy::identity_changed(&source)
+            });
         }
     }
     let metadata = original.metadata()?;
@@ -196,8 +245,13 @@ fn move_bound(
         )));
     }
     match ops.rename(&original, &source, &destination, destination_parents) {
-        Ok(()) => return Ok(original_hash),
-        Err(error) if error.kind() == io::ErrorKind::CrossesDevices && identity.is_none() => {}
+        Ok(()) => {
+            refresh_move_identity(journal_identity, &original, &destination);
+            return Ok(original_hash);
+        }
+        Err(error)
+            if error.kind() == io::ErrorKind::CrossesDevices
+                && (identity.is_none() || journal_identity.is_some()) => {}
         Err(error) => return Err(error),
     }
 
@@ -225,7 +279,37 @@ fn move_bound(
             ))),
         };
     }
+    refresh_move_identity(journal_identity, &output, &destination);
     Ok(original_hash)
+}
+
+pub(super) fn move_identity_failure(path: &Path, changed: bool) -> io::Error {
+    io::Error::other(crate::models::error::HistoryMoveFailure {
+        issue: if changed {
+            crate::models::error::HistoryMoveIssue::Changed
+        } else {
+            crate::models::error::HistoryMoveIssue::Unverified
+        },
+        detail: path.to_string_lossy().into_owned(),
+    })
+}
+
+fn refresh_move_identity(
+    identity: Option<&crate::models::transaction::HistoryMoveIdentity>,
+    file: &File,
+    path: &Path,
+) {
+    if let Some(identity) = identity {
+        // Publication already succeeded: invalidate an unavailable proof and
+        // preserve the completed effect for rollback, rather than report an
+        // unrecorded failure after moving user data.
+        if let Err(error) = identity.refresh_from_file(file) {
+            log::warn!(
+                "Move history identity unavailable for {}: {error}",
+                path.display()
+            );
+        }
+    }
 }
 
 #[cfg(test)]
@@ -317,11 +401,13 @@ mod tests {
         }
     }
     fn assert_no_staging(root: &Path) {
-        assert!(fs::read_dir(root).unwrap().all(|entry| !entry
-            .unwrap()
-            .file_name()
-            .to_string_lossy()
-            .starts_with(".oxyde-history-")));
+        assert!(fs::read_dir(root).unwrap().all(|entry| {
+            !entry
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .starts_with(".oxyde-history-")
+        }));
     }
 
     #[test]
@@ -362,10 +448,72 @@ mod tests {
         assert_eq!(fs::read_dir(root.path()).unwrap().count(), 1);
     }
 
+    #[test]
+    fn move_journal_refreshes_identity_on_verified_cross_volume_publication() {
+        for fault in [Fault::None, Fault::Remove] {
+            let root = tempfile::tempdir().unwrap();
+            let ops = fixture(root.path(), fault);
+            let proof = crate::models::transaction::HistoryMoveIdentity::from_file(
+                &File::open(&ops.source).unwrap(),
+            )
+            .unwrap();
+            let before = proof.snapshot().unwrap();
+            let source = super::super::path_parents::HeldParents::new(&ops.source).unwrap();
+            let destination =
+                super::super::path_parents::HeldParents::new(&ops.destination).unwrap();
+            let expected = blake3::hash(b"original bytes").to_hex().to_string();
+            let result = move_bound_controlled(
+                &ops,
+                &ops.source,
+                &ops.destination,
+                Some(&expected),
+                Some(before),
+                Some(&proof),
+                &source,
+                &destination,
+            );
+            if matches!(fault, Fault::None) {
+                result.unwrap();
+                assert!(!ops.source.exists());
+                assert_eq!(fs::read(&ops.destination).unwrap(), b"original bytes");
+                assert!(
+                    proof
+                        .snapshot()
+                        .unwrap()
+                        .matches(&File::open(&ops.destination).unwrap())
+                        .unwrap()
+                );
+                assert_ne!(proof.snapshot().unwrap(), before);
+                move_file_with_journal_identity(
+                    &ops.destination,
+                    &ops.source,
+                    Some(&expected),
+                    &proof,
+                    &destination,
+                    &source,
+                )
+                .unwrap();
+                assert!(
+                    proof
+                        .snapshot()
+                        .unwrap()
+                        .matches(&File::open(&ops.source).unwrap())
+                        .unwrap()
+                );
+            } else {
+                result.unwrap_err();
+                assert_eq!(proof.snapshot().unwrap(), before);
+                assert!(before.matches(&File::open(&ops.source).unwrap()).unwrap());
+                assert!(!ops.destination.exists());
+            }
+            assert_no_staging(root.path());
+        }
+    }
+
     #[cfg(target_os = "windows")]
     #[test]
     fn history_move_keeps_the_initial_destination_after_junction_retargeting() {
-        use crate::platform::windows_reparse_tests::{junction, Retarget};
+        use crate::platform::windows_reparse_tests::{Retarget, junction};
         struct RetargetingIo {
             retarget: Retarget,
         }
@@ -428,7 +576,7 @@ mod tests {
     #[cfg(target_os = "windows")]
     #[test]
     fn history_copy_keeps_initial_source_and_destination_after_retargeting() {
-        use crate::platform::windows_reparse_tests::{junction, Retarget};
+        use crate::platform::windows_reparse_tests::{Retarget, junction};
         struct RetargetingCopy {
             source: Retarget,
             destination: Retarget,
@@ -512,7 +660,7 @@ mod tests {
     #[cfg(target_os = "windows")]
     #[test]
     fn history_copy_refuses_a_new_destination_reparse_before_staging() {
-        use crate::platform::windows_reparse_tests::{junction, Retarget};
+        use crate::platform::windows_reparse_tests::{Retarget, junction};
         struct RedirectBeforeCopy {
             retarget: Retarget,
             copied: Cell<bool>,
@@ -574,7 +722,7 @@ mod tests {
     #[cfg(target_os = "windows")]
     #[test]
     fn history_readonly_cleanup_uses_the_published_identity_after_retargeting() {
-        use crate::platform::windows_reparse_tests::{junction, Retarget};
+        use crate::platform::windows_reparse_tests::{Retarget, junction};
         struct RedirectOnRemove {
             retarget: Retarget,
             calls: Cell<usize>,

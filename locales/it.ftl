@@ -870,3 +870,6 @@ undo-recovery-incomplete = L’annullamento è stato interrotto e alcuni element
 preview-unavailable = Impossibile caricare questa anteprima. Prova ad aprire il file direttamente.
 preview-image-limit = Questa immagine supera i limiti dell’anteprima. Il file rimane accessibile.
 preview-animation-static = Anteprima statica: l’animazione supera i limiti dell’anteprima.
+
+undo-move-changed = Impossibile annullare questo spostamento: il file è stato sostituito. È stato conservato nella posizione attuale. { $detail }
+undo-move-unverified = Impossibile annullare questo spostamento in sicurezza: non è stato possibile verificare l’identità del file. Il file è stato conservato. { $detail }

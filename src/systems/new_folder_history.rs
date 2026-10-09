@@ -108,6 +108,7 @@ mod tests {
     fn details(path: &Path) -> TransactionDetails {
         TransactionDetails {
             new_folder_identity: create(path).unwrap(),
+            moved_file_identities: None,
             paths: vec![path.to_string_lossy().into_owned()],
             target_dir: None,
             old_path: None,

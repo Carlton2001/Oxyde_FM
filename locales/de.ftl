@@ -870,3 +870,6 @@ undo-recovery-incomplete = Das Rückgängigmachen wurde angehalten und einige El
 preview-unavailable = Diese Vorschau konnte nicht geladen werden. Versuchen Sie, die Datei direkt zu öffnen.
 preview-image-limit = Dieses Bild überschreitet die Vorschaugrenzen. Die Datei bleibt zugänglich.
 preview-animation-static = Standbild: Die Animation überschreitet die Vorschaugrenzen.
+
+undo-move-changed = Dieses Verschieben kann nicht rückgängig gemacht werden: Die Datei wurde ersetzt. Sie bleibt an ihrem aktuellen Ort erhalten. { $detail }
+undo-move-unverified = Dieses Verschieben kann nicht sicher rückgängig gemacht werden: Die Identität der Datei konnte nicht überprüft werden. Die Datei bleibt erhalten. { $detail }

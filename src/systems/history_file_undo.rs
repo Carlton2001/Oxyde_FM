@@ -17,6 +17,7 @@ trait UndoIo {
         hash: &str,
         parents: (&HeldParents, &HeldParents),
         identity: Option<HistoryFileIdentity>,
+        journal_identity: Option<&crate::models::transaction::HistoryMoveIdentity>,
     ) -> io::Result<()>;
     fn before_create_dir(&self, _path: &Path) -> io::Result<()> {
         Ok(())
@@ -34,8 +35,19 @@ impl UndoIo for NativeIo {
         hash: &str,
         parents: (&HeldParents, &HeldParents),
         identity: Option<HistoryFileIdentity>,
+        journal_identity: Option<&crate::models::transaction::HistoryMoveIdentity>,
     ) -> io::Result<()> {
-        if let Some(identity) = identity {
+        if let Some(identity) = journal_identity {
+            super::history_move::move_file_with_journal_identity(
+                from,
+                to,
+                Some(hash),
+                identity,
+                parents.0,
+                parents.1,
+            )
+            .map(|_| ())
+        } else if let Some(identity) = identity {
             super::history_move::move_file_with_identity(
                 from, to, hash, identity, parents.0, parents.1,
             )
@@ -47,6 +59,7 @@ impl UndoIo for NativeIo {
 
 struct FileMove {
     identity: Option<HistoryFileIdentity>,
+    journal_identity: Option<crate::models::transaction::HistoryMoveIdentity>,
     from: PathBuf,
     to: PathBuf,
     hash: String,
@@ -178,6 +191,13 @@ impl Plan {
             .map(|(path, hash)| (PathBuf::from(path), hash))
             .collect();
         let mut files = Vec::new();
+        let move_identities: HashMap<_, _> = details
+            .moved_file_identities
+            .as_deref()
+            .unwrap_or_default()
+            .iter()
+            .map(|(path, identity)| (PathBuf::from(path), identity.clone()))
+            .collect();
         let mut moved_targets = HashSet::new();
         for (original, destination) in moved.iter().rev() {
             let original = PathBuf::from(original);
@@ -196,9 +216,36 @@ impl Plan {
                 Err(error) => return Err(error),
             }
             let hash = verified_file(&destination, hashes.get(&destination).copied())?;
+            // Trash sidecars have their own recovery lifecycle. This lot binds
+            // user files; durable sidecar identity is handled separately.
+            let sidecar = details
+                .trash_metadata_backups
+                .as_deref()
+                .unwrap_or_default()
+                .iter()
+                .any(|path| Path::new(path) == destination);
+            let identity = move_identities.get(&destination);
+            if !sidecar {
+                let identity = identity.ok_or_else(|| {
+                    super::history_move::move_identity_failure(&destination, false)
+                })?;
+                let parents = HeldParents::new(&destination)?;
+                let file = parents.open_file(&destination)?;
+                if !identity
+                    .snapshot()
+                    .ok_or_else(|| super::history_move::move_identity_failure(&destination, false))?
+                    .matches(&file)?
+                {
+                    return Err(super::history_move::move_identity_failure(
+                        &destination,
+                        true,
+                    ));
+                }
+            }
             moved_targets.insert(destination.clone());
             files.push(FileMove {
                 identity: None,
+                journal_identity: identity.cloned(),
                 from: destination,
                 to: original,
                 hash,
@@ -308,6 +355,7 @@ impl Journal {
             &effect.hash,
             (&source, &destination),
             effect.identity,
+            effect.journal_identity.as_ref(),
         )?;
         self.effects.push(Effect::Move(effect));
         Ok(())
@@ -331,6 +379,7 @@ impl Journal {
             ops,
             FileMove {
                 identity,
+                journal_identity: None,
                 from: path,
                 to: saved.clone(),
                 hash: hash.clone(),
@@ -398,6 +447,7 @@ impl Journal {
                             &effect.hash,
                             (&source, &destination),
                             effect.identity,
+                            effect.journal_identity.as_ref(),
                         )
                     })();
                     (effect.to, result)
@@ -646,12 +696,13 @@ mod tests {
                 hash: &str,
                 parents: (&HeldParents, &HeldParents),
                 identity: Option<HistoryFileIdentity>,
+                journal_identity: Option<&crate::models::transaction::HistoryMoveIdentity>,
             ) -> io::Result<()> {
                 if from == self.selected {
                     fs::rename(from, &self.saved)?;
                     fs::write(from, b"moved content")?;
                 }
-                NativeIo.move_file(from, to, hash, parents, identity)
+                NativeIo.move_file(from, to, hash, parents, identity, journal_identity)
             }
         }
         let fixture = Fixture::new();
@@ -681,6 +732,35 @@ mod tests {
         partial: PathBuf,
         details: TransactionDetails,
     }
+
+    #[test]
+    fn move_undo_rechecks_identity_after_plan_before_publication() {
+        struct Replace(PathBuf);
+        impl UndoIo for Replace {
+            fn move_file(
+                &self,
+                from: &Path,
+                to: &Path,
+                hash: &str,
+                parents: (&HeldParents, &HeldParents),
+                identity: Option<HistoryFileIdentity>,
+                journal_identity: Option<&crate::models::transaction::HistoryMoveIdentity>,
+            ) -> io::Result<()> {
+                fs::rename(from, &self.0)?;
+                fs::write(from, b"moved content")?;
+                NativeIo.move_file(from, to, hash, parents, identity, journal_identity)
+            }
+        }
+        let fixture = Fixture::new();
+        let saved = fixture.root.path().join("selected-original");
+        let plan = Plan::new(&fixture.details).unwrap();
+        let error = apply_plan(&Replace(saved.clone()), plan).unwrap_err();
+        assert!(
+            matches!(CommandError::from(error), CommandError::HistoryMove(failure) if failure.issue == crate::models::error::HistoryMoveIssue::Changed)
+        );
+        fixture.unchanged();
+        assert_eq!(fs::read(saved).unwrap(), b"moved content");
+    }
     impl Fixture {
         fn new() -> Self {
             let root = tempfile::tempdir().unwrap();
@@ -694,6 +774,13 @@ mod tests {
             let name = |path: &Path| path.to_string_lossy().into_owned();
             let details = TransactionDetails {
                 new_folder_identity: None,
+                moved_file_identities: Some(vec![(
+                    name(&destination),
+                    crate::models::transaction::HistoryMoveIdentity::from_file(
+                        &fs::File::open(&destination).unwrap(),
+                    )
+                    .unwrap(),
+                )]),
                 copied_directory_identities: Some(
                     [directory.parent().unwrap(), directory.as_path()]
                         .into_iter()
@@ -785,8 +872,9 @@ mod tests {
             hash: &str,
             parents: (&HeldParents, &HeldParents),
             identity: Option<HistoryFileIdentity>,
+            journal_identity: Option<&crate::models::transaction::HistoryMoveIdentity>,
         ) -> io::Result<()> {
-            NativeIo.move_file(from, to, hash, parents, identity)
+            NativeIo.move_file(from, to, hash, parents, identity, journal_identity)
         }
         fn before_create_dir(&self, path: &Path) -> io::Result<()> {
             NativeIo.before_create_dir(path)
@@ -859,8 +947,9 @@ mod tests {
                 hash: &str,
                 parents: (&HeldParents, &HeldParents),
                 identity: Option<HistoryFileIdentity>,
+                journal_identity: Option<&crate::models::transaction::HistoryMoveIdentity>,
             ) -> io::Result<()> {
-                NativeIo.move_file(from, to, hash, parents, identity)?;
+                NativeIo.move_file(from, to, hash, parents, identity, journal_identity)?;
                 if !self.0.exists() {
                     fs::create_dir(&self.0)?;
                 }
@@ -1178,8 +1267,9 @@ mod tests {
                 hash: &str,
                 parents: (&HeldParents, &HeldParents),
                 identity: Option<HistoryFileIdentity>,
+                journal_identity: Option<&crate::models::transaction::HistoryMoveIdentity>,
             ) -> io::Result<()> {
-                NativeIo.move_file(from, to, hash, parents, identity)
+                NativeIo.move_file(from, to, hash, parents, identity, journal_identity)
             }
             fn before_create_dir(&self, _path: &Path) -> io::Result<()> {
                 self.0.apply();
@@ -1310,8 +1400,9 @@ mod tests {
                 hash: &str,
                 parents: (&HeldParents, &HeldParents),
                 identity: Option<HistoryFileIdentity>,
+                journal_identity: Option<&crate::models::transaction::HistoryMoveIdentity>,
             ) -> io::Result<()> {
-                NativeIo.move_file(from, to, hash, parents, identity)
+                NativeIo.move_file(from, to, hash, parents, identity, journal_identity)
             }
             fn before_create_dir(&self, path: &Path) -> io::Result<()> {
                 if path == self.0 {

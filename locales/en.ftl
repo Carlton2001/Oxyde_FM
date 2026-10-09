@@ -563,3 +563,6 @@ undo-recovery-incomplete = Undo stopped and some items could not return to their
 preview-unavailable = This preview could not be loaded. Try opening the file directly.
 preview-image-limit = This image exceeds the preview limits. The file remains accessible.
 preview-animation-static = Still preview: the animation exceeds the preview limits.
+
+undo-move-changed = Cannot undo this move: the file was replaced. It was preserved at its current location. { $detail }
+undo-move-unverified = Cannot safely undo this move: the file’s identity could not be verified. The file was preserved. { $detail }

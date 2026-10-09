@@ -92,6 +92,7 @@ pub struct FileOperation {
     pub created_dirs: Vec<PathBuf>,
     pub overwritten_files: Vec<PathBuf>,
     pub moved_files: Vec<(PathBuf, PathBuf)>,
+    moved_file_identities: Vec<(PathBuf, crate::models::transaction::HistoryMoveIdentity)>,
     trash_metadata_backups: Vec<PathBuf>,
     pub moved_dirs: Vec<(PathBuf, PathBuf)>,
     pub copied_files: Vec<(PathBuf, PathBuf)>,
@@ -150,6 +151,7 @@ impl FileOperation {
             created_dirs: Vec::new(),
             overwritten_files: Vec::new(),
             moved_files: Vec::new(),
+            moved_file_identities: Vec::new(),
             trash_metadata_backups: Vec::new(),
             moved_dirs: Vec::new(),
             copied_files: Vec::new(),
@@ -197,6 +199,7 @@ impl FileOperation {
             created_dirs: Vec::new(),
             overwritten_files: Vec::new(),
             moved_files: Vec::new(),
+            moved_file_identities: Vec::new(),
             trash_metadata_backups: Vec::new(),
             moved_dirs: Vec::new(),
             copied_files: Vec::new(),
@@ -686,6 +689,13 @@ impl FileOperationManager {
 
                 let details = TransactionDetails {
                     new_folder_identity: None,
+                    moved_file_identities: Some(
+                        locked.moved_file_identities.iter()
+                            .map(|(path, identity)| {
+                                (path.to_string_lossy().into_owned(), identity.clone())
+                            })
+                            .collect(),
+                    ),
                     copied_directory_identities: Some(
                         locked
                             .copied_directory_identities
@@ -964,6 +974,7 @@ impl FileOperationManager {
         locked.copied_file_hashes.clear();
         locked.copied_file_identities.clear();
         locked.copied_directory_identities.clear();
+        locked.moved_file_identities.clear();
         Ok(())
     }
 
@@ -1347,11 +1358,15 @@ impl FileOperationManager {
                 match super::path_parents::move_file_with_parents(&source, &destination, replace_existing, destination_parents, &mut || {
                     Self::archive_checkpoint(op).map_err(std::io::Error::other)
                 }) {
-                    Ok(size) => {
+                    Ok((size, identity)) => {
                         let mut locked = op.lock().unwrap();
                         locked.current_file = Some(source.to_string_lossy().into_owned());
                         if replace_existing {
                             locked.overwritten_files.push(destination.clone());
+                        }
+                        if let Some(identity) = identity {
+                            locked.moved_file_identities
+                                .push((destination.clone(), identity));
                         }
                         locked.moved_files.push((source, destination));
                         processed_bytes_atomic.fetch_add(size, Ordering::Relaxed);
@@ -1543,6 +1558,15 @@ impl FileOperationManager {
                     } else {
                         None
                     };
+                    let moved_identity = if is_move {
+                        crate::models::transaction::HistoryMoveIdentity::from_file(&output.file)
+                            .map_err(|error| {
+                                log::warn!("Move identity unavailable for {}: {error}", dest.display())
+                            })
+                            .ok()
+                    } else {
+                        None
+                    };
                     let mut journal = operation.lock().unwrap();
                     if *replace_existing {
                         journal.overwritten_files.push(dest.clone());
@@ -1550,6 +1574,9 @@ impl FileOperationManager {
                         journal.created_files.push(dest.clone());
                     }
                     journal.copied_files.push((src.clone(), dest.clone()));
+                    if let Some(identity) = moved_identity {
+                        journal.moved_file_identities.push((dest.clone(), identity));
+                    }
                     journal
                         .copied_file_hashes
                         .push((dest.clone(), output.hash.clone()));
@@ -3598,6 +3625,10 @@ mod tests {
         assert_eq!(std::fs::read(alias).unwrap(), b"changed");
         let locked = op.lock().unwrap();
         assert_eq!(locked.moved_files.len(), 1);
+        assert_eq!(locked.moved_file_identities.len(), 1);
+        assert!(locked.moved_file_identities[0].1.snapshot().unwrap()
+            .matches(&std::fs::File::open(target_dir.join("file.bin")).unwrap())
+            .unwrap());
         assert!(locked.copied_files.is_empty());
         assert!(locked.copied_file_hashes.is_empty());
     }

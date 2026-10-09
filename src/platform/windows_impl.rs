@@ -820,6 +820,7 @@ mod deletion_history_tests {
                 TransactionType::Delete,
                 TransactionDetails {
                     new_folder_identity: None,
+                    moved_file_identities: None,
                     copied_directory_identities: None,
                     copied_file_identities: None,
                     paths: self
