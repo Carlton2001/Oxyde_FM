@@ -88,6 +88,7 @@ pub struct FileOperation {
     moved_directory_identities: Vec<(PathBuf, crate::models::transaction::HistoryDirectoryIdentity)>,
     moved_file_identities: Vec<(PathBuf, crate::models::transaction::HistoryMoveIdentity)>,
     trash_metadata_backups: Vec<PathBuf>,
+    deleted_items: Vec<crate::models::transaction::HistoryDeletedItem>,
     pub moved_dirs: Vec<(PathBuf, PathBuf)>,
     pub copied_files: Vec<(PathBuf, PathBuf)>,
     pub copied_file_hashes: Vec<(PathBuf, String)>,
@@ -148,6 +149,7 @@ impl FileOperation {
             moved_directory_identities: Vec::new(),
             moved_file_identities: Vec::new(),
             trash_metadata_backups: Vec::new(),
+            deleted_items: Vec::new(),
             moved_dirs: Vec::new(),
             copied_files: Vec::new(),
             copied_file_hashes: Vec::new(),
@@ -197,6 +199,7 @@ impl FileOperation {
             moved_directory_identities: Vec::new(),
             moved_file_identities: Vec::new(),
             trash_metadata_backups: Vec::new(),
+            deleted_items: Vec::new(),
             moved_dirs: Vec::new(),
             copied_files: Vec::new(),
             copied_file_hashes: Vec::new(),
@@ -630,7 +633,8 @@ impl FileOperationManager {
 
         // Record exact filesystem effects, including partial or cancelled work,
         // so Undo never guesses from the original top-level paths.
-        let has_effects = !locked.created_files.is_empty()
+        let has_effects = !locked.deleted_items.is_empty()
+            || !locked.created_files.is_empty()
             || !locked.created_dirs.is_empty()
             || !locked.overwritten_files.is_empty()
             || !locked.moved_files.is_empty()
@@ -678,12 +682,17 @@ impl FileOperationManager {
                     .iter()
                     .map(|p| p.to_string_lossy().to_string())
                     .collect();
+                #[cfg(target_os = "windows")]
+                let sources_str = if matches!(locked.op_type, FileOpType::Trash) {
+                    locked.deleted_items.iter().map(|entry| entry.path.clone()).collect()
+                } else { sources_str };
                 let target_str = locked
                     .destination
                     .as_ref()
                     .map(|p| p.to_string_lossy().to_string());
 
                 let details = TransactionDetails {
+                    deleted_items: Some(locked.deleted_items.clone()),
                     renamed_item_identity: None,
                     moved_directory_identities: Some(
                         locked.moved_directory_identities.iter()
@@ -2038,7 +2047,22 @@ impl FileOperationManager {
             locked.total_files = real_sources.len();
         }
 
-        for source in &real_sources {
+        #[cfg(target_os = "windows")]
+        let selected = real_sources
+            .iter()
+            .map(|path| {
+                Self::archive_checkpoint(op)?;
+                super::history_delete::PreparedDelete::new(path).map_err(|error| error.to_string())
+            })
+            .collect::<Result<Vec<_>, String>>()?;
+        #[cfg(target_os = "windows")]
+        let selected = super::history_delete::collapse_roots(selected);
+        #[cfg(target_os = "windows")]
+        let real_sources = selected.iter().map(|entry| entry.path().to_path_buf()).collect::<Vec<_>>();
+        op.lock().unwrap().total_files = real_sources.len();
+        for (index, source) in real_sources.iter().enumerate() {
+            #[cfg(not(target_os = "windows"))]
+            let _ = index;
             if cancel_flag.load(Ordering::Relaxed) {
                 return Ok(());
             }
@@ -2054,6 +2078,14 @@ impl FileOperationManager {
                 ThreadPriority::Background
             });
             op.lock().unwrap().current_file = Some(source.to_string_lossy().into_owned());
+            #[cfg(target_os = "windows")]
+            {
+                let deleted = selected[index]
+                    .recycle()
+                    .map_err(|error| error.to_string())?;
+                op.lock().unwrap().deleted_items.push(deleted);
+            }
+            #[cfg(not(target_os = "windows"))]
             platform().shell_delete(std::slice::from_ref(source), true)?;
             op.lock().unwrap().processed_files += 1;
             if !turbo_flag.load(Ordering::Relaxed) {

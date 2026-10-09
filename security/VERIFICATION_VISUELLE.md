@@ -1,18 +1,18 @@
 # Vérification visuelle de sécurité — Windows
 
-Préparation du 9 octobre 2026, après les lots 42 et 43. **La vérification visuelle n’a pas été effectuée.** Ce protocole est à réaliser par l’utilisateur, sans Computer Use. Il vérifie les changements déjà implémentés ; il ne clôture pas les autres risques de l’audit.
+Préparation du 9 octobre 2026, actualisée jusqu’au lot 52. **La vérification visuelle n’a pas été effectuée.** Ce protocole est à réaliser par l’utilisateur, sans Computer Use. Il vérifie les changements déjà implémentés ; il ne clôture pas les autres risques de l’audit.
 
-**Revue reportée :** l’utilisateur demande de finir les corrections avant le contrôle visuel. Le binaire préparé au lot 44 précède les lots suivants ; il sera reconstruit avant la prochaine remise. Ne pas lancer ce protocole comme validation du code en cours.
+**Revue reportée :** l’utilisateur demande de finir les corrections avant le contrôle visuel. Le binaire est reconstruit après le lot 52. Ce protocole couvre ces corrections ; il ne valide pas la course résiduelle des appels Shell, les autres fournisseurs ou l’isolation des parseurs.
 
-Exécutable préparé au lot 44 : `C:\Users\Biluf\Documents\Projects\Oxyde-GPUI\target\debug\oxyde.exe`. Fermer les anciennes instances avant de l’ouvrir pour vérifier la bonne version. Les modifications de langue et de thème suivent les préférences habituelles d’Oxyde ; remettre ensuite celles souhaitées.
+Exécutable reconstruit au lot 52 : `C:\Users\Biluf\Documents\Projects\Oxyde-GPUI\target\debug\oxyde.exe`. Fermer les anciennes instances avant de l’ouvrir pour vérifier la bonne version. Les modifications de langue et de thème suivent les préférences habituelles d’Oxyde ; remettre ensuite celles souhaitées.
 
 Jeu de fichiers préparé :
 
 ```text
-C:\Users\Biluf\Documents\Projects\Oxyde-GPUI\target\security-visual-check-7197tp8o
+C:\Users\Biluf\Documents\Projects\Oxyde-GPUI\target\security-visual-check-iz4x5tnl
 ```
 
-Il contient onze petits fichiers, environ 161 Kio au total. Le PNG au-delà du seuil ne fait que 32 769 × 1 pixels ; le GIF limité contient 257 images de 16 × 16 pixels ; le ZIP profond contient un seul octet. Aucun document personnel, exécutable ou volume de décompression massif n’est utilisé.
+Il contient 17 petits fichiers, 164 897 octets au total. Le PNG au-delà du seuil ne fait que 32 769 × 1 pixels ; le GIF limité contient 257 images de 16 × 16 pixels ; le ZIP profond contient un seul octet. Aucun document personnel, exécutable ou volume de décompression massif n’est utilisé.
 
 Pour recréer une session de test indépendante, depuis le dépôt :
 
@@ -56,7 +56,7 @@ Fermer l’instance de test, puis lancer cette session isolée :
 
 ```powershell
 $taskPython = 'C:/Users/Biluf/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe'
-$fixtureRoot = 'C:/Users/Biluf/Documents/Projects/Oxyde-GPUI/target/security-visual-check-7197tp8o'
+$fixtureRoot = 'C:/Users/Biluf/Documents/Projects/Oxyde-GPUI/target/security-visual-check-iz4x5tnl'
 & $taskPython scripts/prepare-security-visual-check.py --launch-cache-unavailable $fixtureRoot
 ```
 
@@ -65,6 +65,29 @@ Seul le processus enfant reçoit ce TEMP privé. Le TEMP du système, les autres
 Ouvrir `archives/01-normal.zip`, puis `lecture.txt`. Vérifier que la notification explique l’indisponibilité et propose **« Extraire et ouvrir… »**, sans demander de nettoyer `%TEMP%`. Cliquer sur le bouton : le sélecteur Windows doit autoriser un seul dossier. Annuler une première fois : aucun fichier permanent ne doit être ajouté. Recommencer et choisir `export-permanent` dans la fixture : `lecture.txt`, qui contient « TÉMOIN À CONSERVER », reste intact ; le fichier extrait devient `lecture (1).txt`, avec une notification indiquant son emplacement. L’ouverture externe peut dépendre de l’application Windows associée aux fichiers texte ; un échec d’association doit rester expliqué.
 
 Fermer cette instance après le test. Relancer ensuite Oxyde normalement pour retrouver son environnement TEMP habituel. Aucune suppression manuelle dans `%TEMP%` n’est nécessaire.
+
+## 4 bis. Corbeille et historique — cinq minutes
+
+Cette étape utilise uniquement le nouveau sous-dossier `corbeille` des fixtures. Les actions sont réalisées par l’utilisateur dans Oxyde ; aucun résultat n’est considéré obtenu à ce stade. Si la corbeille du volume est désactivée dans Windows, signaler cette configuration : une suppression permanente n’est pas une restauration réussie.
+
+1. Supprimer `Annuler école.txt` vers la corbeille, puis Annuler, Rétablir et Annuler. Le nom Unicode et le texte « ÉLÉMENT ORIGINAL À RESTAURER » doivent rester identiques. Les onglets de la corbeille et du dossier doivent refléter les effets sans élément fantôme. Répéter la suppression/restauration directe depuis la corbeille avec `Dossier école` et `Lien école.url` ; le contenu du dossier et l’extension URL doivent être conservés. Il suffit de vérifier le nom de l’URL, sans l’ouvrir.
+2. Supprimer `Conflit école.txt`. Depuis PowerShell, créer le témoin indépendant au même emplacement, sans enregistrer une nouvelle action Oxyde :
+
+```powershell
+Copy-Item -LiteralPath (Join-Path $fixtureRoot 'corbeille\témoin-remplacement.txt') -Destination (Join-Path $fixtureRoot 'corbeille\Conflit école.txt')
+```
+
+Annuler dans Oxyde : le message doit expliquer qu’une destination existe déjà. Le texte « REMPLACEMENT À CONSERVER » reste intact et l’élément original reste dans la corbeille. La restauration directe depuis la corbeille doit aussi refuser ce conflit sans écrasement.
+3. Supprimer `Rétablir école.txt`, puis Annuler. Depuis PowerShell, remplacer son entrée en conservant l’original ailleurs dans la fixture :
+
+```powershell
+Move-Item -LiteralPath (Join-Path $fixtureRoot 'corbeille\Rétablir école.txt') -Destination (Join-Path $fixtureRoot 'corbeille\original-conservé.txt')
+Copy-Item -LiteralPath (Join-Path $fixtureRoot 'corbeille\témoin-remplacement.txt') -Destination (Join-Path $fixtureRoot 'corbeille\Rétablir école.txt')
+```
+
+Rétablir dans Oxyde : le message doit expliquer que l’élément ne correspond plus à l’objet enregistré. Le remplacement et `original-conservé.txt` doivent rester présents et lisibles. Utiliser une fixture neuve pour répéter cette étape ; le script en crée une sans écraser la précédente.
+
+Ce contrôle couvre l’intégration normale et les refus visibles. Il ne reproduit pas une course de remplacement pendant l’appel Shell, ne mesure pas les quotas de Windows et ne teste pas les autres documents de la vraie corbeille.
 
 ## 5. Lisibilité et retour attendu
 
@@ -78,4 +101,4 @@ Retour à donner dans le chat : étape réussie ou échouée, langue, thème, et
 
 `cargo build --bin oxyde --locked --offline` réussi, sans avertissement du projet. Suite finale du lot 43 : **655 réussites**, aucun échec, 17 tests préexistants ignorés. Fixtures PNG/GIF vérifiées avec Pillow : tailles attendues et 12/257 images lisibles ; profondeur ZIP : 65 composants. Un test ponctuel, retiré ensuite, appelle le chargeur de production avec les six aperçus : image normale, refus de dimension, corruption, animation normale, repli fixe et proportions SVG vérifiés sans fenêtre. Le test ponctuel du cache/export vérifie séparément les wrappers de production sans lancer l’application associée ; son résultat est consigné dans l’audit.
 
-Les scripts n’ont pas lancé l’UI pendant la préparation. L’affichage réel, les clics, le sélecteur Windows et l’application externe restent à vérifier. Pas de conclusion générale de sécurité : dossiers de Move, Rename/Delete, sidecars de corbeille, fixation initiale des sources, fournisseurs de volumes et isolation des parseurs restent ouverts dans `AUDIT_SECURITE.md`.
+Les scripts n’ont pas lancé l’UI pendant la préparation. L’affichage réel, les clics, le sélecteur Windows et l’application externe restent à vérifier. Lots 45 à 52 : preuves Move/Rename/Delete, sidecars, préparation des sources, compression, restauration et propriété des temporaires ajoutées. Dernière suite : 719 réussites, aucune erreur, 17 tests préexistants ignorés. Les appels Shell par chemin, les fournisseurs non testés et l’isolation des parseurs restent ouverts dans `AUDIT_SECURITE.md`. Aucune conclusion générale de sécurité.

@@ -886,3 +886,6 @@ trash-restore-ambiguous = Mehrere Papierkorbelemente stammen vom selben Speicher
 trash-restore-changed = Das Papierkorbelement wurde nach der Auswahl geändert. Die Wiederherstellung wurde gestoppt. Aktualisieren Sie den Papierkorb und wählen Sie das Element erneut aus. Bereits wiederhergestellte Elemente bleiben erhalten.
 trash-restore-conflict = Am Zielort der Wiederherstellung existiert bereits eine Datei oder ein Ordner. Sie bleiben erhalten, das betroffene Element bleibt im Papierkorb. Benennen Sie das Ziel um oder verschieben Sie es und versuchen Sie es erneut.
 trash-restore-unavailable = Dieses Element konnte nicht wiederhergestellt werden. Prüfen Sie, ob es noch im Papierkorb liegt und sein ursprünglicher Ordner existiert und zugänglich ist. Versuchen Sie es erneut. Bereits wiederhergestellte Elemente bleiben erhalten.
+
+history-delete-changed = Das Element entspricht nicht mehr dem bei der Löschung erfassten Objekt oder ist nicht verfügbar. Rückgängig oder Wiederholen wurde zum Schutz aktueller Dateien gestoppt. Bereits bearbeitete Elemente bleiben erhalten.
+history-delete-unverified = Oxyde fehlen die Informationen, um diese Löschung sicher rückgängig zu machen oder zu wiederholen. Die Aktion wurde gestoppt. Prüfen Sie den Papierkorb und stellen Sie das gewünschte Element manuell wieder her.

@@ -96,6 +96,20 @@ fn format_datetime(date: NaiveDateTime, format: DateFormat) -> String {
 mod tests {
     use super::*;
     #[test]
+    fn delete_history_failures_are_translated_in_every_language() {
+        use crate::ui::i18n::{I18n, Message};
+        for language in [Language::French, Language::English, Language::German, Language::Spanish, Language::Italian] {
+            let i18n = I18n::for_language(language);
+            for (changed, key) in [(true, Message::HistoryDeleteChanged), (false, Message::HistoryDeleteUnverified)] {
+                let failure = oxyde_lib::models::error::HistoryDeleteFailure { changed, path: "C:/école/空".into() };
+                let detail = format!("TrashError({:?})", failure.to_string());
+                let displayed = error_detail(&detail, &i18n);
+                assert_eq!(displayed, i18n.text(key).to_string());
+                assert!(!displayed.contains("Delete history [")); assert!(displayed.len() > 100);
+            }
+        }
+    }
+    #[test]
     fn trash_restore_failures_are_clear_in_every_language() {
         use crate::ui::i18n::{I18n, Message};
         use oxyde_lib::models::error::{TrashRestoreFailure, TrashRestoreIssue};
@@ -293,6 +307,9 @@ mod tests {
 pub fn error_detail(detail: &str, i18n: &crate::ui::i18n::I18n) -> String {
     use crate::ui::i18n::{FluentArgs, Message};
     use oxyde_lib::models::error::{ArchiveLimitFailure, ArchiveLimitKind};
+    if let Some(changed) = oxyde_lib::models::error::HistoryDeleteFailure::from_message(detail) {
+        return i18n.text(if changed { Message::HistoryDeleteChanged } else { Message::HistoryDeleteUnverified }).to_string();
+    }
     if let Some(issue) = oxyde_lib::models::error::TrashRestoreFailure::from_message(detail) {
         use oxyde_lib::models::error::TrashRestoreIssue;
         let message = match issue {

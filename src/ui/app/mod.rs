@@ -743,6 +743,9 @@ impl OxydeApp {
                     } else if matches!(result, Ok(Ok(Some(_)))) {
                         this.toast(ToastKind::Success, Message::ToastUndo, String::new(), 0, cx);
                     }
+                    let refresh_trash = matches!(&result, Ok(Ok(Some(tx))) if tx.op_type == oxyde_lib::models::TransactionType::Delete)
+                        || matches!(&result, Ok(Err(oxyde_lib::models::CommandError::TrashError(_))) | Err(_));
+                    if refresh_trash { this.refresh_all_tabs(cx); }
                     cx.notify();
                 });
             }
@@ -789,6 +792,9 @@ impl OxydeApp {
                     } else if matches!(result, Ok(Ok(Some(_)))) {
                         this.toast(ToastKind::Success, Message::ToastRedo, String::new(), 0, cx);
                     }
+                    let refresh_trash = matches!(&result, Ok(Ok(Some(tx))) if tx.op_type == oxyde_lib::models::TransactionType::Delete)
+                        || matches!(&result, Ok(Err(oxyde_lib::models::CommandError::TrashError(_))) | Err(_));
+                    if refresh_trash { this.refresh_all_tabs(cx); }
                     cx.notify();
                 });
             }
@@ -2112,6 +2118,7 @@ impl OxydeApp {
                                 this.history.push(Transaction::new(
                                     TransactionType::NewFolder,
                                     TransactionDetails {
+                                        deleted_items: None,
                                         renamed_item_identity: None,
                                         moved_directory_identities: None,
                                         new_folder_identity: identity,

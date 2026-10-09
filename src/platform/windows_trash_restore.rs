@@ -148,6 +148,42 @@ pub(super) fn restore(items: Vec<trash::TrashItem>) -> Result<(), String> {
     Ok(())
 }
 
+pub(super) fn restore_history(
+    items: Vec<trash::TrashItem>,
+    journal: &[crate::models::transaction::HistoryDeletedItem],
+) -> Result<(), String> {
+    use crate::systems::history_delete::failure as history_failure;
+    let mut selected = Vec::new();
+    for entry in journal.iter().filter(|entry| !entry.is_restored()) {
+        let expected = entry
+            .identity
+            .ok_or_else(|| history_failure(&entry.path, false).to_string())?;
+        let mut matching = Vec::new();
+        for item in items
+            .iter()
+            .filter(|item| normalized(&item.original_path()) == normalized(Path::new(&entry.path)))
+        {
+            let candidate = Selection::new(item).map_err(|error| error.to_string())?;
+            if expected
+                .matches(&candidate.payload)
+                .map_err(|_| history_failure(&entry.path, false).to_string())?
+            {
+                matching.push(candidate);
+            }
+        }
+        if matching.len() != 1 {
+            return Err(history_failure(&entry.path, true).to_string());
+        }
+        selected.push((entry, matching.pop().unwrap()));
+    }
+    for (entry, item) in selected {
+        item.restore(&mut || Ok(()))
+            .map_err(|error| error.to_string())?;
+        entry.set_restored(true);
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -220,6 +256,76 @@ mod tests {
             assert!(self.source.exists());
             assert!(self.sidecar.exists());
         }
+    }
+    fn journal(fixture: &Fixture) -> crate::models::transaction::HistoryDeletedItem {
+        let proof = crate::models::transaction::HistoryFileIdentity::from_file(
+            &File::open(&fixture.source).unwrap(),
+        )
+        .unwrap();
+        crate::models::transaction::HistoryDeletedItem::new(
+            fixture.original.to_string_lossy().into_owned(),
+            Some(proof),
+        )
+    }
+    #[test]
+    fn delete_history_restore_refuses_a_unique_later_item_with_the_same_original_path() {
+        let fixture = Fixture::new("selected.txt", 2);
+        let entry = journal(&fixture);
+        let saved = fixture._root.path().join("original-payload");
+        fs::rename(&fixture.source, &saved).unwrap();
+        fs::write(&fixture.source, b"selected contents").unwrap();
+        let error = restore_history(vec![fixture.item.clone()], &[entry.clone()]).unwrap_err();
+        assert_eq!(
+            crate::models::error::HistoryDeleteFailure::from_message(&error),
+            Some(true)
+        );
+        fixture.preserved();
+        assert!(!entry.is_restored());
+        assert!(!fixture.original.exists());
+        assert_eq!(fs::read(saved).unwrap(), b"selected contents");
+    }
+    #[test]
+    fn delete_history_restore_finds_the_recorded_object_among_matching_original_names() {
+        let first = Fixture::new("selected.txt", 2);
+        let second = Fixture::new("selected.txt", 2);
+        let entry = journal(&first);
+        let mut other = second.item.clone();
+        other.original_parent = first.item.original_parent.clone();
+        fs::write(&second.sidecar, metadata(&first.original, 2)).unwrap();
+        restore_history(vec![other, first.item.clone()], &[entry.clone()]).unwrap();
+        assert!(entry.is_restored());
+        assert!(!first.source.exists());
+        assert!(!first.sidecar.exists());
+        second.preserved();
+        assert_eq!(fs::read(&first.original).unwrap(), b"selected contents");
+    }
+    #[test]
+    fn delete_history_restore_tracks_partial_results_and_keeps_retries_safe() {
+        let first = Fixture::new("first.txt", 2);
+        let second = Fixture::new("second.txt", 2);
+        let entries = [journal(&first), journal(&second)];
+        let clone = entries.clone();
+        fs::write(&second.original, b"independent contents").unwrap();
+        let error =
+            restore_history(vec![first.item.clone(), second.item.clone()], &entries).unwrap_err();
+        assert_eq!(
+            TrashRestoreFailure::from_message(&error),
+            Some(TrashRestoreIssue::Conflict)
+        );
+        assert!(clone[0].is_restored());
+        assert!(!clone[1].is_restored());
+        second.preserved();
+        assert_eq!(fs::read(&second.original).unwrap(), b"independent contents");
+        fs::remove_file(&second.original).unwrap();
+        restore_history(vec![first.item.clone(), second.item.clone()], &clone).unwrap();
+        assert!(
+            entries
+                .iter()
+                .all(crate::models::transaction::HistoryDeletedItem::is_restored)
+        );
+        assert_eq!(fs::read(&first.original).unwrap(), b"selected contents");
+        assert_eq!(fs::read(&second.original).unwrap(), b"selected contents");
+        restore_history(Vec::new(), &entries).unwrap();
     }
     #[test]
     fn native_restore_preserves_object_streams_and_shortcut_names_in_both_formats() {

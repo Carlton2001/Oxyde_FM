@@ -20,3 +20,6 @@ pub(crate) mod folder_sizes;
 
 pub(crate) mod path_parents;
 pub(crate) mod archive_open_cache;
+
+#[cfg(target_os = "windows")]
+pub(crate) mod history_delete;

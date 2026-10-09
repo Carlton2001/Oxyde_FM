@@ -886,3 +886,6 @@ trash-restore-ambiguous = Varios elementos de la papelera proceden de la misma u
 trash-restore-changed = El elemento de la papelera cambió después de seleccionarlo. Se detuvo la restauración. Actualice la papelera y vuelva a seleccionar el elemento. Los elementos ya restaurados se conservan.
 trash-restore-conflict = Ya existe un archivo o carpeta en la ubicación de restauración. Se conserva y el elemento afectado sigue en la papelera. Cambie el nombre o mueva el destino e inténtelo de nuevo.
 trash-restore-unavailable = No se pudo restaurar este elemento. Compruebe que sigue en la papelera y que su carpeta original existe y es accesible. Inténtelo de nuevo. Los elementos ya restaurados se conservan.
+
+history-delete-changed = El elemento ya no coincide con el registrado al eliminarlo o no está disponible. Se detuvo Deshacer o Rehacer para conservar los archivos actuales. Los elementos ya procesados se conservan.
+history-delete-unverified = Oxyde no tiene la información necesaria para deshacer o rehacer esta eliminación de forma segura. Se detuvo la acción. Puede comprobar la papelera y restaurar manualmente el elemento deseado.

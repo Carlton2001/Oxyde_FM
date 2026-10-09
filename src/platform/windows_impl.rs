@@ -183,6 +183,9 @@ impl Platform for WindowsPlatform {
     fn restore_trash_items(&self, items: Vec<trash::TrashItem>) -> Result<(), String> {
         super::windows_trash_restore::restore(items)
     }
+    fn restore_trash_history(&self, items: Vec<trash::TrashItem>, journal: &[crate::models::transaction::HistoryDeletedItem]) -> Result<(), String> {
+        super::windows_trash_restore::restore_history(items, journal)
+    }
     fn purge_trash_items(&self, items: Vec<trash::TrashItem>) -> Result<(), String> {
         let paths: Vec<_> = items
             .into_iter()
@@ -835,6 +838,7 @@ mod deletion_history_tests {
             history.push(Transaction::new(
                 TransactionType::Delete,
                 TransactionDetails {
+                    deleted_items: None,
                     renamed_item_identity: None,
                     moved_directory_identities: None,
                     new_folder_identity: None,

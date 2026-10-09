@@ -400,6 +400,9 @@ pub enum Message {
     TrashRestoreChanged,
     TrashRestoreConflict,
     TrashRestoreUnavailable,
+    HistoryDeleteChanged,
+    HistoryDeleteUnverified,
+
 
 
     NetworkMapDescription,
@@ -880,6 +883,9 @@ impl Message {
             Self::TrashRestoreChanged => "trash-restore-changed",
             Self::TrashRestoreConflict => "trash-restore-conflict",
             Self::TrashRestoreUnavailable => "trash-restore-unavailable",
+            Self::HistoryDeleteChanged => "history-delete-changed",
+            Self::HistoryDeleteUnverified => "history-delete-unverified",
+
 
 
             Self::NetworkMapDescription => "network-map-description",
@@ -1511,6 +1517,9 @@ mod tests {
                 Message::TrashRestoreChanged,
                 Message::TrashRestoreConflict,
                 Message::TrashRestoreUnavailable,
+                Message::HistoryDeleteChanged,
+                Message::HistoryDeleteUnverified,
+
 
 
                 Message::NetworkMapDescription,

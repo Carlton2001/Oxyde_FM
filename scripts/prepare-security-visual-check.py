@@ -91,7 +91,8 @@ def main():
     destination = base / "déplacements" / "destination"
     cache = base / "cache-indisponible"
     exported = base / "export-permanent"
-    for directory in (previews, archives, source, destination, cache, exported):
+    trash = base / "corbeille"
+    for directory in (previews, archives, source, destination, cache, exported, trash):
         directory.mkdir(parents=True)
     (previews / "01-normal.png").write_bytes(png(64, 64, (25, 170, 90, 180)))
     (previews / "02-limite-dimensions.png").write_bytes(png(32769, 1, (20, 160, 90, 255)))
@@ -111,6 +112,12 @@ def main():
     (source / "témoin.txt").write_text("Fichier témoin du déplacement.\n", encoding="utf-8")
     (cache / "oxyde-archive-open").write_text("Inert obstruction in private TEMP.\n", encoding="utf-8")
     (exported / "lecture.txt").write_text("TÉMOIN À CONSERVER\n", encoding="utf-8")
+    for name in ("Annuler école.txt", "Conflit école.txt", "Rétablir école.txt"):
+        (trash / name).write_text("ÉLÉMENT ORIGINAL À RESTAURER\n", encoding="utf-8")
+    (trash / "témoin-remplacement.txt").write_text("REMPLACEMENT À CONSERVER\n", encoding="utf-8")
+    (trash / "Lien école.url").write_text("[InternetShortcut]\nURL=https://example.invalid/\n", encoding="utf-8")
+    (trash / "Dossier école").mkdir()
+    (trash / "Dossier école" / "contenu.txt").write_text("CONTENU DU DOSSIER À RESTAURER\n", encoding="utf-8")
     manifest = {str(path.relative_to(base)): path.stat().st_size
                 for path in base.rglob("*") if path.is_file()}
     total = sum(manifest.values())

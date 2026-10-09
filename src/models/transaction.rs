@@ -10,6 +10,7 @@ pub enum TransactionType {
 #[derive(Debug, Clone)]
 pub struct TransactionDetails {
     pub paths: Vec<String>,
+    pub deleted_items: Option<Vec<HistoryDeletedItem>>,
     pub target_dir: Option<String>,
     pub old_path: Option<String>,
     pub new_path: Option<String>,
@@ -115,5 +116,33 @@ impl HistoryDirectoryIdentity {
         // A failed capture invalidates the old proof; it must never be reused.
         *self.current.lock().unwrap() = captured.as_ref().ok().copied();
         captured.map(|_| ())
+    }
+}
+
+/// A deletion records the object before the Shell call. Shared phase tracking
+/// preserves completed effects when a batch fails and history remains reserved.
+#[derive(Debug, Clone)]
+pub struct HistoryDeletedItem {
+    pub path: String,
+    #[cfg(target_os = "windows")]
+    pub(crate) identity: Option<HistoryFileIdentity>,
+    #[cfg(target_os = "windows")]
+    restored: std::sync::Arc<std::sync::atomic::AtomicBool>,
+}
+#[cfg(target_os = "windows")]
+impl HistoryDeletedItem {
+    pub(crate) fn new(path: String, identity: Option<HistoryFileIdentity>) -> Self {
+        Self {
+            path,
+            identity,
+            restored: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        }
+    }
+    pub(crate) fn is_restored(&self) -> bool {
+        self.restored.load(std::sync::atomic::Ordering::Acquire)
+    }
+    pub(crate) fn set_restored(&self, value: bool) {
+        self.restored
+            .store(value, std::sync::atomic::Ordering::Release);
     }
 }

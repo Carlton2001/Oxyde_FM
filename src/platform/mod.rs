@@ -198,6 +198,8 @@ pub trait Platform: Send + Sync {
     /// Blocking native trash operations; callers must run them on a worker.
     fn list_trash_items(&self) -> Result<Vec<trash::TrashItem>, String>;
     fn restore_trash_items(&self, items: Vec<trash::TrashItem>) -> Result<(), String>;
+    #[cfg(target_os = "windows")]
+    fn restore_trash_history(&self, items: Vec<trash::TrashItem>, journal: &[crate::models::transaction::HistoryDeletedItem]) -> Result<(), String>;
     fn purge_trash_items(&self, items: Vec<trash::TrashItem>) -> Result<(), String>;
     fn empty_trash(&self) -> Result<(), String>;
     /// Prevent recursive sidebar expansion into OS-managed branches.

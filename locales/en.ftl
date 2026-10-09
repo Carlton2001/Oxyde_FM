@@ -579,3 +579,6 @@ trash-restore-ambiguous = Several Recycle Bin items came from the same location.
 trash-restore-changed = The Recycle Bin item changed after selection. Restoration stopped. Refresh the Recycle Bin and select the item again. Items already restored were kept.
 trash-restore-conflict = A file or folder already exists at the restore location. It was kept, and the affected item remains in the Recycle Bin. Rename or move the destination and try again.
 trash-restore-unavailable = This item could not be restored. Check that it is still in the Recycle Bin and that its original folder exists and is accessible, then try again. Items already restored were kept.
+
+history-delete-changed = The item no longer matches the object recorded when it was deleted, or it is unavailable. Undo or Redo stopped to preserve current files. Items already processed were kept.
+history-delete-unverified = Oxyde does not have the information needed to undo or redo this deletion safely. The action stopped. You can check the Recycle Bin and manually restore the item you want.

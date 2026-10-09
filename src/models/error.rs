@@ -39,6 +39,37 @@ impl TrashRestoreFailure {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct HistoryDeleteFailure {
+    pub changed: bool,
+    pub path: String,
+}
+impl fmt::Display for HistoryDeleteFailure {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "Delete history [{}]: {}",
+            if self.changed {
+                "changed"
+            } else {
+                "unverified"
+            },
+            self.path
+        )
+    }
+}
+impl std::error::Error for HistoryDeleteFailure {}
+impl HistoryDeleteFailure {
+    pub fn from_message(message: &str) -> Option<bool> {
+        let (_, cause) = message.split_once("Delete history [")?;
+        match cause.split_once("]: ")?.0 {
+            "changed" => Some(true),
+            "unverified" => Some(false),
+            _ => None,
+        }
+    }
+}
+
 /// Stable cause retained through string-based file-operation status.
 #[derive(Clone, Debug)]
 pub struct SourceSelectionFailure {

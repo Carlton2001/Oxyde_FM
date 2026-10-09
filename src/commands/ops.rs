@@ -45,7 +45,7 @@ pub(crate) fn original_trash_path(item: &trash::TrashItem) -> PathBuf {
     get_restoration_paths(item).corrected_path
 }
 
-fn item_with_correct_restore_name(item: &trash::TrashItem) -> trash::TrashItem {
+pub(crate) fn item_with_correct_restore_name(item: &trash::TrashItem) -> trash::TrashItem {
     let mut item = item.clone();
     let original_path = original_trash_path(&item);
     if let Some(name) = original_path.file_name() {
@@ -429,6 +429,7 @@ pub async fn restore_items(paths: Vec<String>) -> Result<Vec<String>, CommandErr
 
 /// Replay the same system deletion policy used by the operation queue.
 /// Recycle Bin capacity is decided by the OS, without a fixed size or item limit.
+#[cfg(not(target_os = "windows"))]
 fn recycle_history_paths(paths: Vec<PathBuf>) -> Result<(), CommandError> {
     if paths.is_empty() {
         return Ok(());
@@ -464,6 +465,9 @@ pub async fn undo_last_action(
                 crate::systems::history_file_undo::undo(&tx.details)?;
             }
             TransactionType::Delete => {
+                #[cfg(target_os = "windows")]
+                crate::systems::history_delete::undo(&tx.details)?;
+                #[cfg(not(target_os = "windows"))]
                 restore_items(tx.details.paths.clone()).await?;
             }
             TransactionType::Rename => {
@@ -503,8 +507,13 @@ pub async fn redo_last_action(
         info!("Redoing transaction: {:?}", tx.op_type);
         match tx.op_type {
             TransactionType::Delete => {
-                let paths: Vec<PathBuf> = tx.details.paths.iter().map(PathBuf::from).collect();
-                recycle_history_paths(paths)?;
+                #[cfg(target_os = "windows")]
+                crate::systems::history_delete::redo(&tx.details)?;
+                #[cfg(not(target_os = "windows"))]
+                {
+                    let paths: Vec<PathBuf> = tx.details.paths.iter().map(PathBuf::from).collect();
+                    recycle_history_paths(paths)?;
+                }
             }
             TransactionType::Copy => {
                 if tx.details.copied_files.is_none()
@@ -936,6 +945,7 @@ mod copy_redo_tests {
         let transaction = Transaction::new(
             TransactionType::Copy,
             TransactionDetails {
+                deleted_items: None,
                 renamed_item_identity: None,
                 moved_directory_identities: None,
                 new_folder_identity: None,
@@ -1025,6 +1035,7 @@ mod copy_redo_tests {
             history.push(Transaction::new(
                 TransactionType::Copy,
                 TransactionDetails {
+                    deleted_items: None,
                     renamed_item_identity: None,
                     moved_directory_identities: None,
                     new_folder_identity: None,
@@ -1165,6 +1176,7 @@ mod copy_redo_tests {
         history.push(Transaction::new(
             TransactionType::Copy,
             TransactionDetails {
+                deleted_items: None,
                 renamed_item_identity: None,
                 moved_directory_identities: None,
                 new_folder_identity: None,
@@ -1273,6 +1285,7 @@ mod copy_redo_tests {
         history.push(Transaction::new(
             TransactionType::Copy,
             TransactionDetails {
+                deleted_items: None,
                 renamed_item_identity: None,
                 moved_directory_identities: None,
                 new_folder_identity: None,
@@ -1555,6 +1568,7 @@ mod history_concurrency_tests {
         Transaction::new(
             TransactionType::Rename,
             TransactionDetails {
+                deleted_items: None,
                 renamed_item_identity: [new, old].into_iter().find_map(|path| {
                     let parents = crate::systems::path_parents::HeldParents::new(path).ok()?;
                     let file = crate::platform::platform()
@@ -1752,6 +1766,7 @@ mod move_undo_rollback_tests {
 
     fn details(source: &std::path::Path, destination: &std::path::Path) -> TransactionDetails {
         TransactionDetails {
+            deleted_items: None,
             renamed_item_identity: None,
             moved_directory_identities: None,
             new_folder_identity: None,
@@ -2001,6 +2016,7 @@ mod new_folder_history_tests {
 
     fn details(path: &std::path::Path) -> TransactionDetails {
         TransactionDetails {
+            deleted_items: None,
             renamed_item_identity: None,
             moved_directory_identities: None,
             new_folder_identity: None,

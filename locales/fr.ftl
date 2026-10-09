@@ -585,3 +585,6 @@ trash-restore-ambiguous = Plusieurs éléments de la corbeille proviennent du m�
 trash-restore-changed = L’élément de la corbeille a changé depuis sa sélection. La restauration a été arrêtée. Actualisez la corbeille puis sélectionnez à nouveau l’élément. Les éléments déjà restaurés sont conservés.
 trash-restore-conflict = Un fichier ou un dossier existe déjà à l’emplacement de restauration. Il a été conservé et l’élément concerné reste dans la corbeille. Renommez ou déplacez la destination puis réessayez.
 trash-restore-unavailable = Cet élément n’a pas pu être restauré. Vérifiez qu’il est toujours dans la corbeille et que son dossier d’origine existe et est accessible, puis réessayez. Les éléments déjà restaurés sont conservés.
+
+history-delete-changed = L’élément ne correspond plus à celui enregistré lors de la suppression, ou il n’est plus disponible. Annuler ou Rétablir a été arrêté pour préserver les fichiers actuels. Les éléments déjà traités sont conservés.
+history-delete-unverified = Oxyde ne dispose pas des informations nécessaires pour annuler ou rétablir cette suppression en toute sécurité. L’action a été arrêtée. Vous pouvez vérifier la corbeille et restaurer manuellement l’élément voulu.

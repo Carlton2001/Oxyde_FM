@@ -441,6 +441,7 @@ mod tests {
 
     fn details(source: &Path, destination: &Path) -> TransactionDetails {
         TransactionDetails {
+            deleted_items: None,
             paths: vec![source.to_string_lossy().into_owned()],
             target_dir: None,
             old_path: None,
