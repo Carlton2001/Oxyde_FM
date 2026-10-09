@@ -406,12 +406,7 @@ impl Platform for WindowsPlatform {
         if paths.is_empty() {
             return Ok(());
         }
-        let mut buffer = Vec::new();
-        for path in paths {
-            buffer.extend(path.to_string_lossy().replace('/', "\\").encode_utf16());
-            buffer.push(0);
-        }
-        buffer.push(0);
+        let buffer = super::windows_shell_delete::source_buffer(paths)?;
         // Explicitly honor the per-volume setting even when the caller requests undo.
         let immediate = |path: &std::path::PathBuf| path.ancestors().last()
             .and_then(|root| read_recycle_bin_config(root.to_string_lossy().into_owned()).ok())

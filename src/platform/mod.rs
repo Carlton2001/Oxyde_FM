@@ -452,3 +452,5 @@ mod linux_source_selection;
 
 #[cfg(target_os = "windows")]
 mod windows_trash_restore;
+#[cfg(target_os = "windows")]
+mod windows_shell_delete;
