@@ -52,7 +52,7 @@ impl UndoIo for NativeIo {
                 from, to, hash, identity, parents.0, parents.1,
             )
         } else {
-            super::history_move::move_file_with_parents(from, to, hash, parents.0, parents.1)
+            Err(super::history_move::move_identity_failure(from, false))
         }
     }
 }
@@ -216,36 +216,26 @@ impl Plan {
                 Err(error) => return Err(error),
             }
             let hash = verified_file(&destination, hashes.get(&destination).copied())?;
-            // Trash sidecars have their own recovery lifecycle. This lot binds
-            // user files; durable sidecar identity is handled separately.
-            let sidecar = details
-                .trash_metadata_backups
-                .as_deref()
-                .unwrap_or_default()
-                .iter()
-                .any(|path| Path::new(path) == destination);
-            let identity = move_identities.get(&destination);
-            if !sidecar {
-                let identity = identity.ok_or_else(|| {
-                    super::history_move::move_identity_failure(&destination, false)
-                })?;
-                let parents = HeldParents::new(&destination)?;
-                let file = parents.open_file(&destination)?;
-                if !identity
-                    .snapshot()
-                    .ok_or_else(|| super::history_move::move_identity_failure(&destination, false))?
-                    .matches(&file)?
-                {
-                    return Err(super::history_move::move_identity_failure(
-                        &destination,
-                        true,
-                    ));
-                }
+            // Recovery sidecars obey the same proof as user files.
+            let identity = move_identities
+                .get(&destination)
+                .ok_or_else(|| super::history_move::move_identity_failure(&destination, false))?;
+            let parents = HeldParents::new(&destination)?;
+            let file = parents.open_file(&destination)?;
+            if !identity
+                .snapshot()
+                .ok_or_else(|| super::history_move::move_identity_failure(&destination, false))?
+                .matches(&file)?
+            {
+                return Err(super::history_move::move_identity_failure(
+                    &destination,
+                    true,
+                ));
             }
             moved_targets.insert(destination.clone());
             files.push(FileMove {
                 identity: None,
-                journal_identity: identity.cloned(),
+                journal_identity: Some(identity.clone()),
                 from: destination,
                 to: original,
                 hash,
@@ -830,6 +820,28 @@ mod tests {
         assert_eq!(fs::read(saved).unwrap(), b"moved content");
         assert_eq!(fs::read(&fixture.partial).unwrap(), b"partial content");
         assert!(fixture.staging().is_empty());
+    }
+
+    #[test]
+    fn trash_sidecars_require_durable_identity_before_undo_and_redo() {
+        let mut fixture = Fixture::new();
+        fixture.details.trash_metadata_backups =
+            Some(vec![fixture.destination.to_string_lossy().into_owned()]);
+        let proof = fixture.details.moved_file_identities.take().unwrap();
+        assert!(
+            matches!(undo(&fixture.details), Err(CommandError::HistoryMove(failure))
+            if failure.issue == crate::models::error::HistoryMoveIssue::Unverified)
+        );
+        fixture.unchanged();
+        fixture.details.moved_file_identities = Some(proof);
+        undo(&fixture.details).unwrap();
+        fixture.details.moved_file_identities = None;
+        assert!(
+            matches!(super::super::history_move_redo::redo(&fixture.details), Err(CommandError::HistoryMove(failure))
+            if failure.issue == crate::models::error::HistoryMoveIssue::Unverified)
+        );
+        assert_eq!(fs::read(&fixture.original).unwrap(), b"moved content");
+        assert!(!fixture.destination.exists());
     }
 
     fn empty_directory_move() -> Fixture {

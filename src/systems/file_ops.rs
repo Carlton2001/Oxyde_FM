@@ -1067,16 +1067,21 @@ impl FileOperationManager {
             // Also finalize fully moved entries after a later cancellation/error.
             for entry in &trash_entries {
                 match platform().detach_trash_metadata(entry) {
-                    Ok(Some((_, backup))) if virtual_effects => {
-                        // Archive transfers already have no filesystem Undo journal.
-                        if let Err(error) = std::fs::remove_file(&backup) {
+                    Ok(Some(metadata)) if virtual_effects => {
+                        // Archive transfers have no filesystem Undo, but cleanup
+                        // still requires the actual detached object's proof/hash.
+                        if let Err(error) = super::file_copy::remove_verified_output_identity(
+                            &metadata.backup, &metadata.hash, metadata.identity.snapshot(),
+                        ) {
                             metadata_errors.push(error.to_string());
                         }
                     }
-                    Ok(Some((source, backup))) => {
+                    Ok(Some(metadata)) => {
                         let mut locked = op.lock().unwrap();
-                        locked.trash_metadata_backups.push(backup.clone());
-                        locked.moved_files.push((source, backup));
+                        locked.trash_metadata_backups.push(metadata.backup.clone());
+                        locked.moved_file_identities.push((metadata.backup.clone(), metadata.identity));
+                        locked.copied_file_hashes.push((metadata.backup.clone(), metadata.hash));
+                        locked.moved_files.push((metadata.source, metadata.backup));
                     }
                     Ok(None) => {}
                     Err(error) => metadata_errors.push(error),

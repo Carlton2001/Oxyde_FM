@@ -10,7 +10,10 @@ pub(super) fn original_path(id: &Path) -> Option<PathBuf> {
         return None;
     }
     let metadata = id.with_file_name(format!("$I{}", name.get(2..)?));
-    parse_original_path(&std::fs::read(metadata).ok()?)
+    let mut file = super::platform()
+        .open_archive_source(&metadata, false)
+        .ok()?;
+    parse_original_path(&metadata_bytes(&mut file).ok()?)
 }
 
 pub(super) fn transfer_entries(
@@ -53,16 +56,27 @@ pub(super) fn transfer_entries(
                     path.display()
                 ));
             }
-            let original_path = original_path(path)
-                .ok_or_else(|| format!("Cannot read original trash name: {}", path.display()))?;
             let name = path
                 .file_name()
                 .ok_or("Invalid trash filename")?
                 .to_string_lossy();
+            let metadata_path = path.with_file_name(format!("$I{}", &name[2..]));
+            let mut metadata_file = super::platform()
+                .open_archive_source(&metadata_path, false)
+                .map_err(|error| error.to_string())?;
+            let bytes = metadata_bytes(&mut metadata_file).map_err(|error| error.to_string())?;
+            let original_path = parse_original_path(&bytes)
+                .ok_or_else(|| format!("Cannot read original trash name: {}", path.display()))?;
+            let metadata_identity =
+                crate::models::transaction::HistoryFileIdentity::from_file(&metadata_file)
+                    .map_err(|error| error.to_string())?;
+            let metadata_hash = blake3::hash(&bytes).to_hex().to_string();
             Ok(super::TrashTransferEntry {
                 path: path.clone(),
                 original_path,
-                metadata_path: path.with_file_name(format!("$I{}", &name[2..])),
+                metadata_path,
+                metadata_identity,
+                metadata_hash,
             })
         })
         .collect()
@@ -70,31 +84,100 @@ pub(super) fn transfer_entries(
 
 pub(super) fn detach_metadata(
     entry: &super::TrashTransferEntry,
-) -> Result<Option<(PathBuf, PathBuf)>, String> {
-    if entry.path.try_exists().map_err(|error| error.to_string())? {
+) -> Result<Option<super::DetachedTrashMetadata>, String> {
+    detach_metadata_checked(entry).map_err(|error| error.to_string())
+}
+
+fn detach_metadata_checked(
+    entry: &super::TrashTransferEntry,
+) -> std::io::Result<Option<super::DetachedTrashMetadata>> {
+    if entry.path.try_exists()? {
         return Ok(None);
     }
-    if original_path(&entry.path).as_ref() != Some(&entry.original_path) {
-        return Err(format!(
-            "Trash metadata changed during transfer: {}",
-            entry.path.display()
+    let parents = crate::systems::path_parents::HeldParents::new(&entry.metadata_path)?;
+    let source = parents.resolved_path(&entry.metadata_path)?;
+    // This handle denies both writers and replacement until validation and rename
+    // finish. No hard-link-by-name or subsequent unlink can adopt another object.
+    let mut file = super::platform().open_copied_file(parents.directory(), &source)?;
+    if !entry.metadata_identity.matches(&file)? {
+        return Err(std::io::Error::other(
+            "Trash metadata was replaced; preserved",
         ));
     }
+    let bytes = metadata_bytes(&mut file)?;
+    if parse_original_path(&bytes).as_ref() != Some(&entry.original_path)
+        || blake3::hash(&bytes).to_hex().as_str() != entry.metadata_hash
+    {
+        return Err(std::io::Error::other(format!(
+            "Trash metadata changed during transfer: {}",
+            entry.path.display()
+        )));
+    }
+    // Capture before mutation: a sidecar without a usable proof stays restorable.
+    let identity = crate::models::transaction::HistoryMoveIdentity::from_file(&file)?;
+    let hash = blake3::hash(&bytes).to_hex().to_string();
     let backup = entry
         .metadata_path
         .with_file_name(format!(".oxyde-trash-{}.tmp", uuid::Uuid::new_v4()));
-    // A hard link reserves a unique name on the source volume without overwriting.
-    std::fs::hard_link(&entry.metadata_path, &backup).map_err(|error| error.to_string())?;
-    let result = super::platform()
-        .set_hidden_attribute(&backup, true)
-        .and_then(|()| {
-            std::fs::remove_file(&entry.metadata_path).map_err(|error| error.to_string())
-        });
-    if let Err(error) = result {
-        let _ = std::fs::remove_file(&backup);
-        return Err(error);
+    super::platform().rename_operation_file(
+        &file,
+        &source,
+        parents.directory(),
+        &parents.resolved_path(&backup)?,
+        false,
+    )?;
+    // The backup already exists and must remain recoverable if cosmetic hiding
+    // fails. Update the retained object, never a substituted path.
+    if let Err(error) = hide_metadata(&file) {
+        log::warn!(
+            "Detached trash metadata remains recoverable at {}: {error}",
+            backup.display()
+        );
     }
-    Ok(Some((entry.metadata_path.clone(), backup)))
+    Ok(Some(super::DetachedTrashMetadata {
+        source: entry.metadata_path.clone(),
+        backup,
+        identity,
+        hash,
+    }))
+}
+
+// Covers the maximal Windows UTF-16 path plus the metadata header, without
+// trusting a malformed length or allocating an unbounded sidecar.
+const MAX_METADATA_BYTES: u64 = 128 * 1024;
+fn metadata_bytes(file: &mut std::fs::File) -> std::io::Result<Vec<u8>> {
+    use std::io::Read;
+    if file.metadata()?.len() > MAX_METADATA_BYTES {
+        return Err(std::io::Error::other("Trash metadata is too large"));
+    }
+    let mut bytes = Vec::new();
+    file.take(MAX_METADATA_BYTES + 1).read_to_end(&mut bytes)?;
+    if bytes.len() as u64 > MAX_METADATA_BYTES {
+        return Err(std::io::Error::other("Trash metadata is too large"));
+    }
+    Ok(bytes)
+}
+
+fn hide_metadata(file: &std::fs::File) -> std::io::Result<()> {
+    use std::os::windows::{fs::MetadataExt, io::AsRawHandle};
+    use windows::Win32::{
+        Foundation::HANDLE,
+        Storage::FileSystem::{FILE_BASIC_INFO, FileBasicInfo, SetFileInformationByHandle},
+    };
+    let attributes = file.metadata()?.file_attributes();
+    let info = FILE_BASIC_INFO {
+        FileAttributes: (attributes & !0x80) | 2,
+        ..Default::default()
+    };
+    unsafe {
+        SetFileInformationByHandle(
+            HANDLE(file.as_raw_handle()),
+            FileBasicInfo,
+            (&info as *const FILE_BASIC_INFO).cast(),
+            std::mem::size_of_val(&info) as u32,
+        )
+        .map_err(|error| std::io::Error::from_raw_os_error((error.code().0 as u32 & 0xffff) as i32))
+    }
 }
 
 fn parse_original_path(bytes: &[u8]) -> Option<PathBuf> {
@@ -138,6 +221,135 @@ mod tests {
             bytes.resize(544, 0);
         }
         bytes
+    }
+
+    fn selected_metadata(
+        path: PathBuf,
+        sidecar: &Path,
+        original: PathBuf,
+    ) -> super::super::TrashTransferEntry {
+        super::super::TrashTransferEntry {
+            path,
+            metadata_path: sidecar.to_path_buf(),
+            original_path: original,
+            metadata_identity: crate::models::transaction::HistoryFileIdentity::from_file(
+                &std::fs::File::open(sidecar).unwrap(),
+            )
+            .unwrap(),
+            metadata_hash: blake3::hash(&std::fs::read(sidecar).unwrap())
+                .to_hex()
+                .to_string(),
+        }
+    }
+
+    #[test]
+    fn metadata_detach_preserves_same_content_replacements_and_in_place_edits_since_selection() {
+        for replacement in [false, true] {
+            let root = tempfile::tempdir().unwrap();
+            let path = root.path().join("$Rfixture.txt");
+            let sidecar = root.path().join("$Ifixture.txt");
+            let saved = root.path().join("saved-metadata");
+            let original = root.path().join("selected.txt");
+            let bytes = metadata(2, &original.to_string_lossy());
+            std::fs::write(&sidecar, &bytes).unwrap();
+            let entry = selected_metadata(path, &sidecar, original.clone());
+            let expected = if replacement {
+                std::fs::rename(&sidecar, &saved).unwrap();
+                bytes.clone()
+            } else {
+                let mut changed = bytes.clone();
+                changed[8] = 42; // Alter size metadata, retain the exact original path.
+                changed
+            };
+            std::fs::write(&sidecar, &expected).unwrap();
+            assert!(detach_metadata(&entry).is_err());
+            assert_eq!(std::fs::read(&sidecar).unwrap(), expected);
+            if replacement {
+                assert_eq!(std::fs::read(&saved).unwrap(), bytes);
+                std::fs::remove_file(&sidecar).unwrap();
+                std::fs::rename(&saved, &sidecar).unwrap();
+            } else {
+                std::fs::write(&sidecar, &bytes).unwrap();
+            }
+            let detached = detach_metadata(&entry).unwrap().unwrap();
+            assert_eq!(std::fs::read(&detached.backup).unwrap(), bytes);
+        }
+    }
+
+    #[test]
+    fn detached_metadata_is_renamed_by_handle_and_returns_a_durable_content_proof() {
+        for version in [1, 2] {
+            let root = tempfile::tempdir().unwrap();
+            let path = root.path().join("$Rfixture.txt");
+            let sidecar = root.path().join("$Ifixture.txt");
+            let original = root.path().join("Documents/Rapport.txt");
+            let bytes = metadata(version, &original.to_string_lossy());
+            std::fs::write(&sidecar, &bytes).unwrap();
+            let entry = selected_metadata(path, &sidecar, original);
+            let detached = detach_metadata(&entry).unwrap().unwrap();
+            assert_eq!(detached.source, sidecar);
+            assert!(!sidecar.exists());
+            assert_eq!(std::fs::read(&detached.backup).unwrap(), bytes);
+            assert_eq!(detached.hash, blake3::hash(&bytes).to_hex().to_string());
+            let file = std::fs::File::open(&detached.backup).unwrap();
+            assert!(
+                detached
+                    .identity
+                    .snapshot()
+                    .unwrap()
+                    .matches(&file)
+                    .unwrap()
+            );
+            assert!(
+                super::super::platform()
+                    .file_attributes(&file.metadata().unwrap(), "")
+                    .0
+            );
+            drop(file);
+            let saved = root.path().join("saved-metadata");
+            std::fs::rename(&detached.backup, &saved).unwrap();
+            std::fs::rename(&saved, &detached.backup).unwrap();
+            crate::systems::file_copy::remove_verified_output_identity(
+                &detached.backup,
+                &detached.hash,
+                detached.identity.snapshot(),
+            )
+            .unwrap();
+            assert!(!detached.backup.exists());
+        }
+    }
+
+    #[test]
+    fn metadata_detach_refuses_changed_or_oversized_source_before_any_effect() {
+        for oversized in [false, true] {
+            let root = tempfile::tempdir().unwrap();
+            let path = root.path().join("$Rfixture.txt");
+            let sidecar = root.path().join("$Ifixture.txt");
+            let original = root.path().join("expected.txt");
+            let bytes = if oversized {
+                vec![0; 128 * 1024 + 1]
+            } else {
+                metadata(2, &root.path().join("independent.txt").to_string_lossy())
+            };
+            std::fs::write(&sidecar, &bytes).unwrap();
+            let entry = selected_metadata(path, &sidecar, original);
+            assert!(detach_metadata(&entry).is_err());
+            assert_eq!(std::fs::read(&sidecar).unwrap(), bytes);
+            assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 1);
+        }
+    }
+
+    #[test]
+    fn metadata_detach_preserves_a_payload_that_has_not_been_removed() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("$Rfixture.txt");
+        let sidecar = root.path().join("$Ifixture.txt");
+        std::fs::write(&path, b"remaining payload").unwrap();
+        std::fs::write(&sidecar, b"remaining metadata").unwrap();
+        let entry = selected_metadata(path.clone(), &sidecar, root.path().join("original.txt"));
+        assert!(detach_metadata(&entry).unwrap().is_none());
+        assert_eq!(std::fs::read(path).unwrap(), b"remaining payload");
+        assert_eq!(std::fs::read(sidecar).unwrap(), b"remaining metadata");
     }
 
     #[test]

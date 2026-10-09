@@ -202,7 +202,7 @@ impl Platform for WindowsPlatform {
     fn trash_transfer_entries(&self, paths: &[std::path::PathBuf]) -> Result<Vec<super::TrashTransferEntry>, String> {
         super::windows_trash::transfer_entries(paths)
     }
-    fn detach_trash_metadata(&self, entry: &super::TrashTransferEntry) -> Result<Option<(std::path::PathBuf, std::path::PathBuf)>, String> {
+    fn detach_trash_metadata(&self, entry: &super::TrashTransferEntry) -> Result<Option<super::DetachedTrashMetadata>, String> {
         super::windows_trash::detach_metadata(entry)
     }
 

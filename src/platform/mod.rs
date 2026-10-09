@@ -33,6 +33,17 @@ pub struct TrashTransferEntry {
     pub path: std::path::PathBuf,
     pub original_path: std::path::PathBuf,
     pub metadata_path: std::path::PathBuf,
+    pub metadata_identity: crate::models::transaction::HistoryFileIdentity,
+    pub metadata_hash: String,
+}
+
+/// A detached sidecar remains bound to its captured contents and object.
+#[derive(Debug)]
+pub struct DetachedTrashMetadata {
+    pub source: std::path::PathBuf,
+    pub backup: std::path::PathBuf,
+    pub identity: crate::models::transaction::HistoryMoveIdentity,
+    pub hash: String,
 }
 
 #[derive(Clone, Copy)]
@@ -187,7 +198,7 @@ pub trait Platform: Send + Sync {
     /// Recognizes actual trash entries; ordinary file paths are omitted.
     fn trash_transfer_entries(&self, paths: &[std::path::PathBuf]) -> Result<Vec<TrashTransferEntry>, String>;
     /// Retain metadata for Undo only when the entire payload has left the trash.
-    fn detach_trash_metadata(&self, entry: &TrashTransferEntry) -> Result<Option<(std::path::PathBuf, std::path::PathBuf)>, String>;
+    fn detach_trash_metadata(&self, entry: &TrashTransferEntry) -> Result<Option<DetachedTrashMetadata>, String>;
 
     /// Final process exit, called only after application cleanup and runtime shutdown.
     /// Windows bypasses DLL detach callbacks that can hang in native graphics drivers.

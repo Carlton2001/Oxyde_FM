@@ -8,7 +8,36 @@ fn cleanup_metadata_backups(transaction: &Transaction) {
         .as_deref()
         .unwrap_or_default()
     {
-        if let Err(error) = std::fs::remove_file(backup) {
+        // No proof means preservation, including when a history entry expires.
+        let identity = transaction
+            .details
+            .moved_file_identities
+            .as_deref()
+            .unwrap_or_default()
+            .iter()
+            .find(|(path, _)| path == backup)
+            .and_then(|(_, proof)| proof.snapshot());
+        let hash = transaction
+            .details
+            .copied_file_hashes
+            .as_deref()
+            .unwrap_or_default()
+            .iter()
+            .find(|(path, _)| path == backup)
+            .map(|(_, hash)| hash.as_str());
+        let result = match (identity, hash) {
+            (Some(identity), Some(hash)) => {
+                crate::systems::file_copy::remove_verified_output_identity(
+                    std::path::Path::new(backup),
+                    hash,
+                    Some(identity),
+                )
+            }
+            _ => Err(std::io::Error::other(
+                "Trash metadata backup has no captured identity/hash; preserved",
+            )),
+        };
+        if let Err(error) = result {
             if error.kind() != std::io::ErrorKind::NotFound {
                 log::warn!("Cannot remove trash metadata backup {backup}: {error}");
             }
@@ -258,6 +287,21 @@ impl HistoryManager {
 mod tests {
     use super::*;
     use crate::models::transaction::{TransactionDetails, TransactionType};
+
+    fn bind_metadata_backup(tx: &mut Transaction, path: &std::path::Path) {
+        let name = path.to_string_lossy().into_owned();
+        let file = std::fs::File::open(path).unwrap();
+        tx.details.moved_file_identities = Some(vec![(
+            name.clone(),
+            crate::models::transaction::HistoryMoveIdentity::from_file(&file).unwrap(),
+        )]);
+        tx.details.copied_file_hashes = Some(vec![(
+            name,
+            blake3::hash(&std::fs::read(path).unwrap())
+                .to_hex()
+                .to_string(),
+        )]);
+    }
 
     fn transaction() -> Transaction {
         Transaction::new(
@@ -514,6 +558,7 @@ mod tests {
         let history = HistoryManager::new();
         let mut tx = transaction();
         tx.details.trash_metadata_backups = Some(vec![backup.to_string_lossy().into_owned()]);
+        bind_metadata_backup(&mut tx, &backup);
         history.push(tx);
         let selected = history.begin_undo().unwrap().unwrap();
         history.push(transaction());
@@ -537,6 +582,7 @@ mod tests {
         let history = HistoryManager::new();
         let mut tx = transaction();
         tx.details.trash_metadata_backups = Some(vec![backup.to_string_lossy().into_owned()]);
+        bind_metadata_backup(&mut tx, &backup);
         history.push(tx);
         assert!(backup.exists());
 
@@ -552,13 +598,71 @@ mod tests {
         std::fs::write(&backup, b"metadata fixture").unwrap();
         let mut tx = transaction();
         tx.details.trash_metadata_backups = Some(vec![backup.to_string_lossy().into_owned()]);
+        bind_metadata_backup(&mut tx, &backup);
         history.push(tx.clone());
         history.begin_undo().unwrap().unwrap().complete();
         history.push(transaction());
         assert!(!backup.exists());
         std::fs::write(&backup, b"metadata fixture").unwrap();
+        // A new detach creates a new journal proof, rather than reusing an expired one.
+        bind_metadata_backup(&mut tx, &backup);
         history.push(tx);
         assert!(history.clear());
         assert!(!backup.exists());
+    }
+    #[test]
+    fn metadata_backup_cleanup_preserves_identical_replacements_in_all_expiry_paths() {
+        for expiry in 0..4 {
+            let root = tempfile::tempdir().unwrap();
+            let backup = root.path().join("metadata.tmp");
+            let saved = root.path().join("original-metadata.tmp");
+            std::fs::write(&backup, b"selected metadata").unwrap();
+            let mut tx = transaction();
+            tx.details.trash_metadata_backups = Some(vec![backup.to_string_lossy().into_owned()]);
+            bind_metadata_backup(&mut tx, &backup);
+            let history = HistoryManager::new();
+            history.push(tx);
+            std::fs::rename(&backup, &saved).unwrap();
+            std::fs::write(&backup, b"selected metadata").unwrap();
+            match expiry {
+                0 => drop(history),
+                1 => {
+                    assert!(history.clear());
+                }
+                2 => {
+                    history.begin_undo().unwrap().unwrap().complete();
+                    history.push(transaction());
+                }
+                _ => {
+                    for _ in 0..100 {
+                        history.push(transaction());
+                    }
+                }
+            }
+            assert_eq!(std::fs::read(&backup).unwrap(), b"selected metadata");
+            assert_eq!(std::fs::read(&saved).unwrap(), b"selected metadata");
+        }
+    }
+
+    #[test]
+    fn metadata_backup_cleanup_requires_identity_and_original_contents() {
+        for issue in 0..3 {
+            let root = tempfile::tempdir().unwrap();
+            let backup = root.path().join("metadata.tmp");
+            std::fs::write(&backup, b"selected metadata").unwrap();
+            let mut tx = transaction();
+            tx.details.trash_metadata_backups = Some(vec![backup.to_string_lossy().into_owned()]);
+            bind_metadata_backup(&mut tx, &backup);
+            match issue {
+                0 => tx.details.moved_file_identities = None,
+                1 => tx.details.copied_file_hashes = None,
+                _ => std::fs::write(&backup, b"independent edits").unwrap(),
+            }
+            let expected = std::fs::read(&backup).unwrap();
+            let history = HistoryManager::new();
+            history.push(tx);
+            assert!(history.clear());
+            assert_eq!(std::fs::read(&backup).unwrap(), expected);
+        }
     }
 }

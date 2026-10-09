@@ -103,43 +103,6 @@ fn move_with(
     .map(|_| ())
 }
 
-pub(super) fn move_file_with_parents(
-    source: &Path,
-    destination: &Path,
-    expected: &str,
-    source_parents: &super::path_parents::HeldParents,
-    destination_parents: &super::path_parents::HeldParents,
-) -> io::Result<()> {
-    move_bound(
-        &NativeIo,
-        source,
-        destination,
-        Some(expected),
-        None,
-        source_parents,
-        destination_parents,
-    )
-    .map(|_| ())
-}
-
-pub(super) fn move_file_without_identity(
-    source: &Path,
-    destination: &Path,
-    expected: Option<&str>,
-    source_parents: &super::path_parents::HeldParents,
-    destination_parents: &super::path_parents::HeldParents,
-) -> io::Result<String> {
-    move_bound(
-        &NativeIo,
-        source,
-        destination,
-        expected,
-        None,
-        source_parents,
-        destination_parents,
-    )
-}
-
 pub(super) fn move_file_with_identity(
     source: &Path,
     destination: &Path,

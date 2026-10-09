@@ -55,8 +55,7 @@ fn transfer_file(
             destination,
         )
     } else {
-        // Only recovery sidecars reach this branch after plan validation.
-        super::history_move::move_file_without_identity(from, to, expected, source, destination)
+        Err(super::history_move::move_identity_failure(from, false))
     }
 }
 
@@ -362,20 +361,12 @@ fn redo_with(details: &TransactionDetails, checkpoint: &mut impl Checkpoint) -> 
             let destination = Path::new(destination);
             let parents = journal.directories.file_parents(source)?;
             let mut file = parents.open_file(source)?;
-            let sidecar = details
-                .trash_metadata_backups
-                .as_deref()
-                .unwrap_or_default()
-                .iter()
-                .any(|path| Path::new(path) == destination);
-            if !sidecar {
-                let identity = identities
-                    .get(destination)
-                    .and_then(|proof| proof.snapshot())
-                    .ok_or_else(|| super::history_move::move_identity_failure(source, false))?;
-                if !identity.matches(&file)? {
-                    return Err(super::history_move::move_identity_failure(source, true));
-                }
+            let identity = identities
+                .get(destination)
+                .and_then(|proof| proof.snapshot())
+                .ok_or_else(|| super::history_move::move_identity_failure(source, false))?;
+            if !identity.matches(&file)? {
+                return Err(super::history_move::move_identity_failure(source, true));
             }
             if let Some(expected) = hashes.get(destination) {
                 if *expected != super::history_move::hash(&mut file)? {
