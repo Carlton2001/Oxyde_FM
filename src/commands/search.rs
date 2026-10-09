@@ -428,199 +428,60 @@ fn search_in_archive(
         None => return results,
     };
 
-    match format {
-        ArchiveFormat::Zip => {
-            if let Ok(file) = File::open(archive_path) {
-                if let Ok(mut archive) = zip::ZipArchive::new(file) {
-                    for i in 0..archive.len() {
-                        if cancellation.load(Ordering::Relaxed) {
-                            break;
-                        }
-                        if let Ok(file) = archive.by_index(i) {
-                            let name_with_path = file.name().replace('\\', "/");
-                            let last_part = name_with_path.split('/').next_back().unwrap_or("");
-                            if last_part.is_empty() {
-                                continue;
-                            }
-
-                            if params.pattern.matches(last_part) {
-                                let is_dir = file.is_dir();
-                                let size = if is_dir { 0 } else { file.size() };
-
-                                // Basic size filter
-                                if !is_dir {
-                                    if let Some(min) = params.min_size {
-                                        if size < min {
-                                            continue;
-                                        }
-                                    }
-                                    if let Some(max) = params.max_size {
-                                        if size > max {
-                                            continue;
-                                        }
-                                    }
-                                }
-
-                                let modified = file
-                                    .last_modified()
-                                    .and_then(|dt| {
-                                        let t: Result<chrono::NaiveDateTime, _> = dt.try_into();
-                                        t.ok()
-                                    })
-                                    .map(|ts| ts.and_utc().timestamp_millis() as u64)
-                                    .unwrap_or(0);
-
-                                if let Some(min) = params.min_date {
-                                    if modified < min {
-                                        continue;
-                                    }
-                                }
-                                if let Some(max) = params.max_date {
-                                    if modified > max {
-                                        continue;
-                                    }
-                                }
-
-                                results.push(FileEntry {
-                                    name: last_part.to_string(),
-                                    path: format!(
-                                        "{}\\{}",
-                                        archive_path.to_string_lossy(),
-                                        name_with_path.replace('/', "\\")
-                                    ),
-                                    is_dir,
-                                    is_hidden: false,
-                                    size,
-                                    modified,
-                                    ..FileEntry::default()
-                                });
-                            }
-                        }
-                    }
-                }
-            }
+    let checkpoint = || {
+        if cancellation.load(Ordering::Relaxed) {
+            Err(std::io::Error::new(
+                std::io::ErrorKind::Interrupted,
+                "cancelled",
+            ))
+        } else {
+            Ok(())
         }
-        ArchiveFormat::Tar
+    };
+    let index = match format {
+        ArchiveFormat::Zip
+        | ArchiveFormat::Tar
         | ArchiveFormat::TarGz
         | ArchiveFormat::TarXz
         | ArchiveFormat::TarZst
         | ArchiveFormat::TarBz2 => {
-            if let Ok(file) = File::open(archive_path) {
-                let reader: Box<dyn Read> = match format {
-                    ArchiveFormat::TarGz => Box::new(flate2::read::GzDecoder::new(file)),
-                    ArchiveFormat::TarXz => Box::new(xz2::read::XzDecoder::new(file)),
-                    ArchiveFormat::TarBz2 => Box::new(bzip2::read::BzDecoder::new(file)),
-                    ArchiveFormat::TarZst => match zstd::stream::read::Decoder::new(file) {
-                        Ok(d) => Box::new(d),
-                        Err(_) => return results,
-                    },
-                    _ => Box::new(file),
-                };
-
-                let mut archive = tar::Archive::new(reader);
-                if let Ok(entries) = archive.entries() {
-                    for entry in entries.flatten() {
-                        if cancellation.load(Ordering::Relaxed) {
-                            break;
-                        }
-                        if let Ok(path) = entry.path() {
-                            let name_with_path = path.to_string_lossy().replace('\\', "/");
-                            let last_part = name_with_path.split('/').next_back().unwrap_or("");
-                            if last_part.is_empty() {
-                                continue;
-                            }
-
-                            if params.pattern.matches(last_part) {
-                                let is_dir = entry.header().entry_type().is_dir();
-                                let size = entry.header().size().unwrap_or(0);
-
-                                if !is_dir {
-                                    if let Some(min) = params.min_size {
-                                        if size < min {
-                                            continue;
-                                        }
-                                    }
-                                    if let Some(max) = params.max_size {
-                                        if size > max {
-                                            continue;
-                                        }
-                                    }
-                                }
-
-                                let modified = entry.header().mtime().unwrap_or(0) * 1000;
-                                if let Some(min) = params.min_date {
-                                    if modified < min {
-                                        continue;
-                                    }
-                                }
-                                if let Some(max) = params.max_date {
-                                    if modified > max {
-                                        continue;
-                                    }
-                                }
-
-                                results.push(FileEntry {
-                                    name: last_part.to_string(),
-                                    path: format!(
-                                        "{}\\{}",
-                                        archive_path.to_string_lossy(),
-                                        name_with_path.replace('/', "\\")
-                                    ),
-                                    is_dir,
-                                    is_hidden: false,
-                                    size,
-                                    modified,
-                                    ..FileEntry::default()
-                                });
-                            }
-                        }
-                    }
+            super::archive_metadata::indexed_files(archive_path, &checkpoint)
+        }
+        ArchiveFormat::SevenZip => {
+            super::archive_seven_open::indexed_files(archive_path, &checkpoint)
+        }
+        ArchiveFormat::Iso => super::archive_iso_open::indexed_files(archive_path, &checkpoint),
+        _ => return results,
+    };
+    match index {
+        Ok(entries) => {
+            for entry in entries {
+                if checkpoint().is_err() {
+                    break;
                 }
+                if !params.pattern.matches(&entry.name) {
+                    continue;
+                }
+                if !entry.is_dir
+                    && (params.min_size.is_some_and(|min| entry.size < min)
+                        || params.max_size.is_some_and(|max| entry.size > max))
+                {
+                    continue;
+                }
+                // ISO and 7z dates remain unavailable, as in the previous readers.
+                if !matches!(format, ArchiveFormat::Iso | ArchiveFormat::SevenZip)
+                    && (params.min_date.is_some_and(|min| entry.modified < min)
+                        || params.max_date.is_some_and(|max| entry.modified > max))
+                {
+                    continue;
+                }
+                results.push(entry);
             }
         }
-        ArchiveFormat::Iso | ArchiveFormat::SevenZip => {
-            let checkpoint = || {
-                if cancellation.load(Ordering::Relaxed) {
-                    Err(std::io::Error::new(
-                        std::io::ErrorKind::Interrupted,
-                        "cancelled",
-                    ))
-                } else {
-                    Ok(())
-                }
-            };
-            let index = match format {
-                ArchiveFormat::SevenZip => {
-                    super::archive_seven_open::indexed_files(archive_path, &checkpoint)
-                }
-                _ => super::archive_iso_open::indexed_files(archive_path, &checkpoint),
-            };
-            match index {
-                Ok(entries) => {
-                    for entry in entries {
-                        if checkpoint().is_err() {
-                            break;
-                        }
-                        if !params.pattern.matches(&entry.name) {
-                            continue;
-                        }
-                        if !entry.is_dir
-                            && (params.min_size.is_some_and(|min| entry.size < min)
-                                || params.max_size.is_some_and(|max| entry.size > max))
-                        {
-                            continue;
-                        }
-                        // ISO and 7z dates remain unavailable, as in the previous readers.
-                        results.push(entry);
-                    }
-                }
-                Err(error) if !cancellation.load(Ordering::Relaxed) => {
-                    log::warn!("Archive search skipped {}: {error}", archive_path.display());
-                }
-                Err(_) => {}
-            }
+        Err(error) if !cancellation.load(Ordering::Relaxed) => {
+            log::warn!("Archive search skipped {}: {error}", archive_path.display());
         }
-        _ => {}
+        Err(_) => {}
     }
 
     results
@@ -629,6 +490,215 @@ fn search_in_archive(
 #[cfg(test)]
 mod archive_search_tests {
     use super::*;
+
+    fn metadata_fixture(path: &std::path::Path, names: &[(&str, tar::EntryType)], mtime: u64) {
+        use std::io::Write;
+        if path.extension().is_some_and(|ext| ext == "zip") {
+            let mut writer = zip::ZipWriter::new(File::create(path).unwrap());
+            for (name, kind) in names {
+                if kind.is_symlink() {
+                    writer
+                        .add_symlink(*name, "safe.txt", zip::write::SimpleFileOptions::default())
+                        .unwrap();
+                } else {
+                    writer
+                        .start_file(
+                            *name,
+                            zip::write::SimpleFileOptions::default()
+                                .last_modified_time(
+                                    zip::DateTime::from_date_and_time(2009, 2, 13, 23, 31, 30)
+                                        .unwrap(),
+                                )
+                                .compression_method(zip::CompressionMethod::Stored),
+                        )
+                        .unwrap();
+                    writer.write_all(b"safe").unwrap();
+                }
+            }
+            writer.finish().unwrap();
+        } else {
+            let mut builder = tar::Builder::new(Vec::new());
+            for (name, kind) in names {
+                let mut header = tar::Header::new_gnu();
+                header.as_mut_bytes()[..name.len()].copy_from_slice(name.as_bytes());
+                header.set_entry_type(*kind);
+                header.set_mode(0o644);
+                header.set_size(4);
+                header.set_mtime(mtime);
+                header.set_cksum();
+                builder.append(&header, &b"safe"[..]).unwrap();
+            }
+            let bytes = builder.into_inner().unwrap();
+            let format = ArchiveFormat::from_path(path).unwrap();
+            let mut contents = Vec::new();
+            match format {
+                ArchiveFormat::Tar => contents = bytes,
+                ArchiveFormat::TarZst => {
+                    contents = zstd::stream::encode_all(&bytes[..], 1).unwrap()
+                }
+                format => {
+                    let mut encoder: Box<dyn Read + '_> = match format {
+                        ArchiveFormat::TarGz => Box::new(flate2::read::GzEncoder::new(
+                            &bytes[..],
+                            flate2::Compression::fast(),
+                        )),
+                        ArchiveFormat::TarXz => Box::new(xz2::read::XzEncoder::new(&bytes[..], 1)),
+                        ArchiveFormat::TarBz2 => Box::new(bzip2::read::BzEncoder::new(
+                            &bytes[..],
+                            bzip2::Compression::fast(),
+                        )),
+                        _ => panic!("unsupported metadata fixture"),
+                    };
+                    encoder.read_to_end(&mut contents).unwrap();
+                }
+            }
+            std::fs::write(path, contents).unwrap();
+        }
+    }
+
+    #[test]
+    fn zip_tar_metadata_search_rejects_unsafe_names_before_returning_results() {
+        let temp = tempfile::tempdir().unwrap();
+        let mut rejected = Vec::new();
+        for extension in ["zip", "tar", "tar.gz", "tar.xz", "tar.zst", "tar.bz2"] {
+            let path = temp.path().join(format!("unsafe.{extension}"));
+            metadata_fixture(
+                &path,
+                &[
+                    ("safe.txt", tar::EntryType::Regular),
+                    ("../outside.txt", tar::EntryType::Regular),
+                ],
+                123,
+            );
+            let result = search_in_archive(&path, &params(), &Arc::new(AtomicBool::new(false)));
+            rejected.push((extension, result.is_empty()));
+        }
+        assert!(
+            rejected.iter().all(|(_, empty)| *empty),
+            "unsafe index rejection: {rejected:?}"
+        );
+    }
+
+    #[test]
+    fn zip_tar_metadata_rejects_special_entries_in_search_and_navigation() {
+        let temp = tempfile::tempdir().unwrap();
+        let mut rejected = Vec::new();
+        for extension in ["zip", "tar", "tar.gz", "tar.xz", "tar.zst", "tar.bz2"] {
+            let path = temp.path().join(format!("link.{extension}"));
+            metadata_fixture(
+                &path,
+                &[
+                    ("safe.txt", tar::EntryType::Regular),
+                    ("link.txt", tar::EntryType::Symlink),
+                ],
+                123,
+            );
+            let navigation = super::super::archive::list_archive_contents(
+                path.to_string_lossy().into_owned(),
+                String::new(),
+            )
+            .is_err();
+            let search =
+                search_in_archive(&path, &params(), &Arc::new(AtomicBool::new(false))).is_empty();
+            rejected.push((extension, navigation, search));
+        }
+        assert!(
+            rejected
+                .iter()
+                .all(|(_, navigation, search)| *navigation && *search),
+            "special index rejection: {rejected:?}"
+        );
+    }
+
+    #[test]
+    fn zip_tar_metadata_rejects_overflowing_tar_dates_without_panicking() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("date.tar");
+        metadata_fixture(&path, &[("safe.txt", tar::EntryType::Regular)], u64::MAX);
+        let result = std::panic::catch_unwind(|| {
+            search_in_archive(&path, &params(), &Arc::new(AtomicBool::new(false)))
+        });
+        let listing = std::panic::catch_unwind(|| {
+            super::super::archive::list_archive_contents(
+                path.to_string_lossy().into_owned(),
+                String::new(),
+            )
+        });
+        assert!(
+            result.is_ok() && listing.is_ok(),
+            "TAR timestamp panicked: search={}, navigation={}",
+            result.is_err(),
+            listing.is_err()
+        );
+        assert!(result.unwrap().is_empty());
+        assert!(listing.unwrap().is_err());
+    }
+
+    #[test]
+    fn zip_tar_metadata_search_preserves_name_size_date_filters_and_cancellation() {
+        let temp = tempfile::tempdir().unwrap();
+        for extension in ["zip", "tar", "tar.gz", "tar.xz", "tar.zst", "tar.bz2"] {
+            let path = temp.path().join(format!("filters.{extension}"));
+            metadata_fixture(
+                &path,
+                &[("folder/Été.txt", tar::EntryType::Regular)],
+                1_234_567_890,
+            );
+            let cancellation = Arc::new(AtomicBool::new(false));
+            let mut options = params();
+            options.pattern = SearchPattern::Literal("ETE".into(), false, true);
+            options.min_size = Some(4);
+            options.max_size = Some(4);
+            options.min_date = Some(1_234_567_890_000);
+            options.max_date = Some(1_234_567_890_000);
+            let result = search_in_archive(&path, &options, &cancellation);
+            assert_eq!(result.len(), 1, "{extension}");
+            assert_eq!(
+                std::path::Path::new(&result[0].path),
+                path.join("folder/Été.txt")
+            );
+            options.max_size = Some(3);
+            assert!(search_in_archive(&path, &options, &cancellation).is_empty());
+            options.max_size = Some(4);
+            options.max_date = Some(1_234_567_889_999);
+            assert!(search_in_archive(&path, &options, &cancellation).is_empty());
+            options.max_date = None;
+            cancellation.store(true, Ordering::Relaxed);
+            assert!(search_in_archive(&path, &options, &cancellation).is_empty());
+        }
+    }
+
+    #[test]
+    fn zip_tar_metadata_zip_names_do_not_require_a_supported_content_codec() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("codec.zip");
+        metadata_fixture(&path, &[("safe.txt", tar::EntryType::Regular)], 123);
+        let mut bytes = std::fs::read(&path).unwrap();
+        let local = bytes.windows(4).position(|b| b == b"PK\x03\x04").unwrap();
+        let central = bytes.windows(4).position(|b| b == b"PK\x01\x02").unwrap();
+        bytes[local + 8..local + 10].copy_from_slice(&0x7fu16.to_le_bytes());
+        bytes[central + 10..central + 12].copy_from_slice(&0x7fu16.to_le_bytes());
+        std::fs::write(&path, bytes).unwrap();
+        assert!(zip::ZipArchive::new(File::open(&path).unwrap())
+            .unwrap()
+            .by_index(0)
+            .is_err());
+        let results = search_in_archive(&path, &params(), &Arc::new(AtomicBool::new(false)));
+        assert_eq!(
+            results.len(),
+            1,
+            "name search constructed a ZIP content decoder"
+        );
+        assert_eq!(
+            super::super::archive::list_archive_contents(
+                path.to_string_lossy().into_owned(),
+                String::new()
+            )
+            .unwrap()
+            .len(),
+            1
+        );
+    }
 
     fn params() -> SearchParams {
         SearchParams {

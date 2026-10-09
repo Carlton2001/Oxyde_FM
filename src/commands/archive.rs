@@ -103,13 +103,13 @@ pub fn list_archive_contents(
     ))?;
 
     match format {
-        ArchiveFormat::Zip => list_zip(path, &internal_path),
         ArchiveFormat::SevenZip => list_seven_zip(path, &internal_path),
-        ArchiveFormat::Tar
+        ArchiveFormat::Zip
+        | ArchiveFormat::Tar
         | ArchiveFormat::TarGz
         | ArchiveFormat::TarXz
         | ArchiveFormat::TarZst
-        | ArchiveFormat::TarBz2 => list_tar(path, &internal_path, format),
+        | ArchiveFormat::TarBz2 => list_indexed_metadata(path, &internal_path),
         ArchiveFormat::Iso => list_iso(path, &internal_path),
         ArchiveFormat::Rar => Err(CommandError::ArchiveError(
             "Rar navigation not supported yet. Please extract it first.".to_string(),
@@ -124,74 +124,41 @@ fn virtual_entry_path(archive: &Path, internal: &str, name: &str) -> Result<Stri
     Ok(path.to_string_lossy().into_owned())
 }
 
-fn list_zip(path: &Path, internal_prefix: &str) -> Result<Vec<FileEntry>, CommandError> {
-    let budget = ArchiveBudget::new(ArchiveLimits::LISTING);
-    let file = File::open(path).map_err(|e| CommandError::IoError(e.to_string()))?;
-    let mut archive =
-        ZipArchive::new(file).map_err(|e| CommandError::ArchiveError(e.to_string()))?;
-    budget.check_entry_count(archive.len())?;
-    let mut entries = Vec::new();
-    let prefix = if internal_prefix.is_empty() {
-        "".to_string()
-    } else {
-        format!("{}/", internal_prefix.trim_end_matches('/'))
-    };
-
-    let mut seen: HashSet<String> = HashSet::new();
-
-    for i in 0..archive.len() {
-        let file = archive
-            .by_index(i)
-            .map_err(|e| CommandError::ArchiveError(e.to_string()))?;
-        let name = file.name().replace('\\', "/");
-        budget.entry(&name, 0)?;
-
-        if name.starts_with(&prefix) && name != prefix {
-            let relative = &name[prefix.len()..];
-            let parts: Vec<&str> = relative
-                .split('/')
-                .filter(|s| !s.is_empty())
-                .collect::<Vec<_>>();
-            if parts.is_empty() {
-                continue;
-            }
-
-            let entry_name = parts[0].to_string();
-            if seen.contains(&entry_name) {
-                continue;
-            }
-            seen.insert(entry_name.clone());
-
-            let is_dir = file.is_dir() || parts.len() > 1;
-            let full_virtual_path = virtual_entry_path(path, internal_prefix, &entry_name)?;
-
-            entries.push(FileEntry {
-                name: entry_name,
-                path: full_virtual_path,
-                is_dir,
-                is_hidden: false,
-                is_system: false,
-                is_symlink: false,
-                is_junction: false,
-                size: if is_dir { 0 } else { file.size() },
-                is_calculated: false,
-                folders_count: None,
-                files_count: None,
-                modified: file
-                    .last_modified()
-                    .and_then(|dt| {
-                        let t: Result<chrono::NaiveDateTime, _> = dt.try_into();
-                        t.ok()
-                    })
-                    .map(|ts| ts.and_utc().timestamp_millis() as u64)
-                    .unwrap_or(0),
-                original_path: None,
-                network_details: None,
-                deleted_time: None,
-            });
+fn list_indexed_metadata(
+    path: &Path,
+    internal_prefix: &str,
+) -> Result<Vec<FileEntry>, CommandError> {
+    let relative_prefix = relative_archive_path(internal_prefix)?;
+    let mut seen = HashSet::new();
+    let mut files = Vec::new();
+    for mut entry in super::archive_metadata::indexed_files(path, &|| Ok(()))? {
+        let relative = Path::new(&entry.path)
+            .strip_prefix(path)
+            .map_err(|_| CommandError::ArchiveError("Invalid archive entry path".into()))?;
+        let Ok(relative) = relative.strip_prefix(&relative_prefix) else {
+            continue;
+        };
+        let mut parts = relative.components();
+        let Some(first) = parts.next() else {
+            continue;
+        };
+        let name = first.as_os_str().to_string_lossy().into_owned();
+        if !seen.insert(name.clone()) {
+            continue;
         }
+        entry.is_dir |= parts.next().is_some();
+        if entry.is_dir {
+            entry.size = 0;
+        }
+        entry.path = path
+            .join(&relative_prefix)
+            .join(&name)
+            .to_string_lossy()
+            .into_owned();
+        entry.name = name;
+        files.push(entry);
     }
-    Ok(entries)
+    Ok(files)
 }
 
 fn list_seven_zip(path: &Path, internal_prefix: &str) -> Result<Vec<FileEntry>, CommandError> {
@@ -246,86 +213,6 @@ fn list_seven_zip(path: &Path, internal_prefix: &str) -> Result<Vec<FileEntry>, 
         }
     }
 
-    Ok(entries)
-}
-
-fn list_tar(
-    path: &Path,
-    internal_prefix: &str,
-    format: ArchiveFormat,
-) -> Result<Vec<FileEntry>, CommandError> {
-    let budget = ArchiveBudget::new(ArchiveLimits::LISTING);
-    let file = File::open(path).map_err(|e| CommandError::IoError(e.to_string()))?;
-    let reader: Box<dyn io::Read> = match format {
-        ArchiveFormat::TarGz => Box::new(GzDecoder::new(file)),
-        ArchiveFormat::TarXz => Box::new(XzDecoder::new(file)),
-        ArchiveFormat::TarBz2 => Box::new(BzDecoder::new(file)),
-        ArchiveFormat::TarZst => {
-            Box::new(ZstdDecoder::new(file).map_err(|e| CommandError::IoError(e.to_string()))?)
-        }
-        _ => Box::new(file),
-    };
-
-    let mut archive = TarArchive::new(BudgetReader {
-        reader,
-        budget: &budget,
-        checkpoint: &|| Ok(()),
-    });
-    let mut entries = Vec::new();
-    let prefix = if internal_prefix.is_empty() {
-        "".to_string()
-    } else {
-        format!("{}/", internal_prefix.trim_end_matches('/'))
-    };
-    let mut seen: HashSet<String> = HashSet::new();
-
-    for entry in archive
-        .entries()
-        .map_err(|e| CommandError::ArchiveError(e.to_string()))?
-    {
-        let entry = entry.map_err(|e| CommandError::ArchiveError(e.to_string()))?;
-        let path_field = entry
-            .path()
-            .map_err(|e| CommandError::ArchiveError(e.to_string()))?;
-        let name = path_field.to_string_lossy().replace('\\', "/");
-        budget.entry(&name, 0)?;
-
-        if name.starts_with(&prefix) && name != prefix {
-            let relative = &name[prefix.len()..];
-            let parts: Vec<&str> = relative
-                .split('/')
-                .filter(|s| !s.is_empty())
-                .collect::<Vec<_>>();
-            if parts.is_empty() {
-                continue;
-            }
-
-            let entry_name = parts[0].to_string();
-            if seen.contains(&entry_name) {
-                continue;
-            }
-            seen.insert(entry_name.clone());
-
-            let is_dir = entry.header().entry_type().is_dir() || parts.len() > 1;
-            entries.push(FileEntry {
-                path: virtual_entry_path(path, internal_prefix, &entry_name)?,
-                name: entry_name,
-                is_dir,
-                is_hidden: false,
-                is_system: false,
-                is_symlink: false,
-                is_junction: false,
-                size: entry.header().size().unwrap_or(0),
-                is_calculated: false,
-                folders_count: None,
-                files_count: None,
-                modified: entry.header().mtime().unwrap_or(0) * 1000,
-                original_path: None,
-                network_details: None,
-                deleted_time: None,
-            });
-        }
-    }
     Ok(entries)
 }
 
