@@ -545,3 +545,11 @@ quick-search-archives-skipped =
     }
 quick-search-archive-skipped-detail = First skipped archive: { $path }. { $reason }
 quick-search-archive-unreadable = This archive is invalid, unsupported, or unreadable.
+
+undo-new-folder-changed = The folder no longer matches the one that was created: { $detail }. Undo stopped to preserve your files.
+undo-new-folder-unverified = The history cannot verify this folder: { $detail }. The folder and its contents have been preserved.
+undo-new-folder-not-empty = The folder now contains files or subfolders: { $detail }. Undo does not delete its contents.
+undo-new-folder-missing = The created folder could not be found: { $detail }. Undo stopped without deleting other items.
+redo-new-folder-conflict = An item already exists at this location: { $detail }. Redo does not replace it.
+redo-new-folder-parent-missing = The parent folder could not be found: { $detail }. Redo does not recreate parent folders.
+redo-new-folder-unverified = The history cannot redo this folder creation: { $detail }. No item was created.

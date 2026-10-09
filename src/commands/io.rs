@@ -131,6 +131,38 @@ fn sort_file_entries(entries: &mut [FileEntry]) {
     });
 }
 
+/// Worker-only local creation: capture the newly created object before closing it.
+pub fn create_local_folder(
+    path: &std::path::Path,
+) -> std::io::Result<Option<crate::models::transaction::HistoryFileIdentity>> {
+    if crate::utils::archive::split_virtual_path(&path.to_string_lossy()).is_some() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "Local folder creation requires a filesystem path",
+        ));
+    }
+    crate::systems::new_folder_history::create(path)
+}
+
+/// Worker-only journal relocation; an independently replaced destination is never adopted.
+pub fn record_created_folder_rename(
+    history: &crate::models::HistoryManager,
+    old: &str,
+    new: &str,
+) -> bool {
+    let captured = (|| {
+        let path = std::path::Path::new(new);
+        let parents = crate::systems::path_parents::HeldParents::new(path)?;
+        let file = crate::platform::platform()
+            .track_operation_directory(parents.directory(), &parents.resolved_path(path)?)?;
+        crate::models::transaction::HistoryFileIdentity::from_file(&file)
+    })();
+    match captured {
+        Ok(identity) => history.relocate_created_folder(old, new, identity),
+        Err(_) => false,
+    }
+}
+
 pub async fn rename_item_controlled(
     old_path: String, new_path: String, quality: String,
     cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,

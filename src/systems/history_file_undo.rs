@@ -649,6 +649,7 @@ mod tests {
             fs::write(&partial, b"partial content").unwrap();
             let name = |path: &Path| path.to_string_lossy().into_owned();
             let details = TransactionDetails {
+                new_folder_identity: None,
                 copied_directory_identities: Some(
                     [directory.parent().unwrap(), directory.as_path()]
                         .into_iter()

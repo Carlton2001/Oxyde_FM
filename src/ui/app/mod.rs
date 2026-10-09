@@ -1421,6 +1421,7 @@ impl OxydeApp {
         };
         let quality = self.archive_quality_for_path(std::path::Path::new(&old_path));
         let cancel = self.rename_cancel.clone();
+        let rename_history = self.history.clone();
         let generation = self.rename_generation;
         let path_for_check = old_path.clone();
         cx.spawn(move |_, cx: &mut AsyncApp| {
@@ -1428,9 +1429,13 @@ impl OxydeApp {
             async move {
                 let runtime = tokio::runtime::Handle::current();
                 let result = tokio::task::spawn_blocking(move || {
-                    runtime.block_on(oxyde_lib::commands::io::rename_item_controlled(
-                        old_path, new_path, quality, cancel,
-                    ))
+                    let result = runtime.block_on(oxyde_lib::commands::io::rename_item_controlled(
+                        old_path.clone(), new_path.clone(), quality, cancel,
+                    ));
+                    if result.is_ok() {
+                        oxyde_lib::commands::io::record_created_folder_rename(&rename_history, &old_path, &new_path);
+                    }
+                    result
                 })
                 .await;
                 handle.update(&mut cx, |this, cx| {
@@ -2076,8 +2081,13 @@ impl OxydeApp {
                                         .replace(['\u{2068}', '\u{2069}'], "")
                                 };
                                 let path = std::path::Path::new(&current_path).join(name);
-                                match oxyde_lib::commands::archive::create_archive_directory_with_quality(&path, &quality) {
-                                    Ok(()) => return Ok(path),
+                                let created = if oxyde_lib::utils::archive::split_virtual_path(&current_path).is_some() {
+                                    oxyde_lib::commands::archive::create_archive_directory_with_quality(&path, &quality).map(|()| None)
+                                } else {
+                                    oxyde_lib::commands::io::create_local_folder(&path)
+                                };
+                                match created {
+                                    Ok(identity) => return Ok((path, identity)),
                                     Err(error)
                                         if error.kind() == std::io::ErrorKind::AlreadyExists =>
                                     {
@@ -2091,7 +2101,7 @@ impl OxydeApp {
                     })
                     .await;
                     handle.update(&mut cx, |this, cx| match created {
-                        Ok(Ok(folder_path)) => {
+                        Ok(Ok((folder_path, identity))) => {
                             this.queue_created_item_rename(
                                 tab_id,
                                 folder_path.to_string_lossy().into_owned(),
@@ -2099,25 +2109,26 @@ impl OxydeApp {
                                 cx,
                             );
                             if oxyde_lib::utils::archive::split_virtual_path(&current_path).is_none() {
-                            this.history.push(Transaction::new(
-                                TransactionType::NewFolder,
-                                TransactionDetails {
-                                    copied_directory_identities: None,
-                                    copied_file_identities: None,
-                                    paths: vec![folder_path.to_string_lossy().into_owned()],
-                                    target_dir: Some(current_path),
-                                    old_path: None,
-                                    new_path: None,
-                                    created_files: None,
-                                    created_dirs: None,
-                                    overwritten_files: None,
-                                    moved_files: None,
-                                    trash_metadata_backups: None,
-                                    moved_dirs: None,
-                                    copied_files: None,
-                                    copied_file_hashes: None,
-                                },
-                            ));
+                                this.history.push(Transaction::new(
+                                    TransactionType::NewFolder,
+                                    TransactionDetails {
+                                        new_folder_identity: identity,
+                                        copied_directory_identities: None,
+                                        copied_file_identities: None,
+                                        paths: vec![folder_path.to_string_lossy().into_owned()],
+                                        target_dir: Some(current_path),
+                                        old_path: None,
+                                        new_path: None,
+                                        created_files: None,
+                                        created_dirs: None,
+                                        overwritten_files: None,
+                                        moved_files: None,
+                                        trash_metadata_backups: None,
+                                        moved_dirs: None,
+                                        copied_files: None,
+                                        copied_file_hashes: None,
+                                    },
+                                ));
                             }
                             this.refresh_all_tabs(cx);
                             this.state.refresh_sidebar();

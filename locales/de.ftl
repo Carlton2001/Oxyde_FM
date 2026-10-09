@@ -852,3 +852,11 @@ quick-search-archives-skipped =
     }
 quick-search-archive-skipped-detail = Erstes übersprungenes Archiv: { $path }. { $reason }
 quick-search-archive-unreadable = Dieses Archiv ist ungültig, wird nicht unterstützt oder kann nicht gelesen werden.
+
+undo-new-folder-changed = Der Ordner entspricht nicht mehr dem ursprünglich erstellten Ordner: { $detail }. Das Rückgängigmachen wurde zum Schutz Ihrer Dateien abgebrochen.
+undo-new-folder-unverified = Der Verlauf kann diesen Ordner nicht überprüfen: { $detail }. Der Ordner und sein Inhalt bleiben erhalten.
+undo-new-folder-not-empty = Der Ordner enthält jetzt Dateien oder Unterordner: { $detail }. Sein Inhalt wird beim Rückgängigmachen nicht gelöscht.
+undo-new-folder-missing = Der erstellte Ordner wurde nicht gefunden: { $detail }. Das Rückgängigmachen wurde abgebrochen, ohne andere Elemente zu löschen.
+redo-new-folder-conflict = An diesem Speicherort existiert bereits ein Element: { $detail }. Es wird beim Wiederherstellen nicht ersetzt.
+redo-new-folder-parent-missing = Der übergeordnete Ordner wurde nicht gefunden: { $detail }. Übergeordnete Ordner werden beim Wiederherstellen nicht neu erstellt.
+redo-new-folder-unverified = Der Verlauf kann die Erstellung dieses Ordners nicht wiederholen: { $detail }. Es wurde kein Element erstellt.

@@ -23,6 +23,7 @@ pub struct TransactionDetails {
     pub copied_file_hashes: Option<Vec<(String, String)>>,
     pub copied_file_identities: Option<Vec<(String, HistoryFileIdentity)>>,
     pub copied_directory_identities: Option<Vec<(String, HistoryDirectoryIdentity)>>,
+    pub new_folder_identity: Option<HistoryFileIdentity>,
 }
 
 #[derive(Debug, Clone)]

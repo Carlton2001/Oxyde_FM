@@ -852,3 +852,11 @@ quick-search-archives-skipped =
     }
 quick-search-archive-skipped-detail = Primer archivo comprimido omitido: { $path }. { $reason }
 quick-search-archive-unreadable = Este archivo comprimido no es válido, no es compatible o no se puede leer.
+
+undo-new-folder-changed = La carpeta ya no corresponde a la que se creó: { $detail }. Se detuvo Deshacer para conservar sus archivos.
+undo-new-folder-unverified = El historial no permite verificar esta carpeta: { $detail }. Se conservan la carpeta y su contenido.
+undo-new-folder-not-empty = La carpeta ahora contiene archivos o subcarpetas: { $detail }. Deshacer no elimina su contenido.
+undo-new-folder-missing = No se encuentra la carpeta creada: { $detail }. Se detuvo Deshacer sin eliminar otros elementos.
+redo-new-folder-conflict = Ya existe un elemento en esta ubicación: { $detail }. Rehacer no lo reemplaza.
+redo-new-folder-parent-missing = No se encuentra la carpeta superior: { $detail }. Rehacer no vuelve a crear las carpetas superiores.
+redo-new-folder-unverified = El historial no permite rehacer la creación de esta carpeta: { $detail }. No se ha creado ningún elemento.

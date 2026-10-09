@@ -551,3 +551,11 @@ quick-search-archives-skipped =
     }
 quick-search-archive-skipped-detail = Première archive ignorée : { $path }. { $reason }
 quick-search-archive-unreadable = Cette archive est invalide, non prise en charge ou illisible.
+
+undo-new-folder-changed = Le dossier ne correspond plus à celui qui a été créé : { $detail }. Annuler est interrompu pour préserver vos fichiers.
+undo-new-folder-unverified = L’historique ne permet pas de vérifier ce dossier : { $detail }. Le dossier et son contenu sont conservés.
+undo-new-folder-not-empty = Le dossier contient maintenant des fichiers ou des sous-dossiers : { $detail }. Annuler ne supprime pas son contenu.
+undo-new-folder-missing = Le dossier créé est introuvable : { $detail }. Annuler est interrompu sans supprimer d’autres éléments.
+redo-new-folder-conflict = Un élément existe déjà à cet emplacement : { $detail }. Rétablir ne le remplace pas.
+redo-new-folder-parent-missing = Le dossier parent est introuvable : { $detail }. Rétablir ne recrée pas les dossiers parents.
+redo-new-folder-unverified = L’historique ne permet pas de rétablir ce dossier : { $detail }. Aucun élément n’a été créé.

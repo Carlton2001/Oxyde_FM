@@ -131,6 +131,20 @@ impl Platform for WindowsPlatform {
     ) -> std::io::Result<()> {
         super::windows_file_moves::remove(file)
     }
+    fn remove_open_empty_directory(
+        &self,
+        directory: &std::fs::File,
+        _path: &std::path::Path,
+    ) -> std::io::Result<()> {
+        let metadata = directory.metadata()?;
+        if !metadata.is_dir() || self.file_attributes(&metadata, "").2 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "Ordinary directory required",
+            ));
+        }
+        super::windows_file_moves::remove(directory)
+    }
     fn replace_open_file(
         &self,
         file: &std::fs::File,
@@ -801,6 +815,7 @@ mod deletion_history_tests {
             history.push(Transaction::new(
                 TransactionType::Delete,
                 TransactionDetails {
+                    new_folder_identity: None,
                     copied_directory_identities: None,
                     copied_file_identities: None,
                     paths: self

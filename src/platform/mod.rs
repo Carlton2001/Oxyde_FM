@@ -155,6 +155,13 @@ pub trait Platform: Send + Sync {
         file: &std::fs::File,
         path: &std::path::Path,
     ) -> std::io::Result<()>;
+    /// Remove an opened ordinary directory only when the kernel finds it empty.
+    /// Windows deletes that held object, without a path reopen or recursive removal.
+    fn remove_open_empty_directory(
+        &self,
+        directory: &std::fs::File,
+        path: &std::path::Path,
+    ) -> std::io::Result<()>;
     /// Blocking native trash operations; callers must run them on a worker.
     fn list_trash_items(&self) -> Result<Vec<trash::TrashItem>, String>;
     fn restore_trash_items(&self, items: Vec<trash::TrashItem>) -> Result<(), String>;

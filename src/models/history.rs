@@ -153,6 +153,35 @@ impl HistoryManager {
         }
     }
 
+    /// Update only an idle NewFolder entry whose recorded object was renamed.
+    /// A reservation's source paths must never change while filesystem work runs.
+    pub(crate) fn relocate_created_folder(
+        &self,
+        old: &str,
+        new: &str,
+        identity: crate::models::transaction::HistoryFileIdentity,
+    ) -> bool {
+        let mut data = self.state.lock().unwrap_or_else(|error| error.into_inner());
+        if data.active {
+            return false;
+        }
+        if let Some(transaction) = data
+            .history
+            .undo_stack
+            .iter_mut()
+            .rev()
+            .find(|transaction| {
+                transaction.op_type == TransactionType::NewFolder
+                    && transaction.details.paths.as_slice() == [old]
+                    && transaction.details.new_folder_identity == Some(identity)
+            })
+        {
+            transaction.details.paths[0] = new.to_owned();
+            return true;
+        }
+        false
+    }
+
     fn begin(&self, direction: Direction) -> Result<Option<HistoryOperation<'_>>, &'static str> {
         let mut data = self.state.lock().unwrap_or_else(|e| e.into_inner());
         if data.active {
@@ -234,6 +263,7 @@ mod tests {
         Transaction::new(
             TransactionType::Copy,
             TransactionDetails {
+                new_folder_identity: None,
                 copied_directory_identities: None,
                 copied_file_identities: None,
                 paths: Vec::new(),

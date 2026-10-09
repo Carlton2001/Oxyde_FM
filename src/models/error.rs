@@ -1,6 +1,28 @@
 use std::fmt;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NewFolderHistoryIssue {
+    Changed,
+    Unverified,
+    NotEmpty,
+    Missing,
+    Conflict,
+    ParentMissing,
+}
+
+#[derive(Clone, Debug)]
+pub struct NewFolderHistoryFailure {
+    pub issue: NewFolderHistoryIssue,
+    pub path: String,
+}
+impl fmt::Display for NewFolderHistoryFailure {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "New-folder history {:?}: {}", self.issue, self.path)
+    }
+}
+impl std::error::Error for NewFolderHistoryFailure {}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum HistoryIdentityIssue {
     Changed,
     Unverified,
@@ -140,6 +162,7 @@ pub enum CommandError {
     ArchiveCache(ArchiveCacheIssue),
     HistoryCopy(HistoryCopyFailure),
     HistoryIdentity(HistoryIdentityFailure),
+    NewFolderHistory(NewFolderHistoryFailure),
     TrashError(String),
     TrashFull(String),
     Other(String),
@@ -159,6 +182,7 @@ impl fmt::Display for CommandError {
             CommandError::ArchiveCache(issue) => issue.fmt(f),
             CommandError::HistoryCopy(failure) => failure.fmt(f),
             CommandError::HistoryIdentity(failure) => failure.fmt(f),
+            CommandError::NewFolderHistory(failure) => failure.fmt(f),
             CommandError::TrashError(msg) => write!(f, "Trash Error: {}", msg),
             CommandError::TrashFull(msg) => write!(f, "Trash Full: {}", msg),
             CommandError::Other(msg) => write!(f, "Error: {}", msg),
@@ -168,6 +192,12 @@ impl fmt::Display for CommandError {
 
 impl From<std::io::Error> for CommandError {
     fn from(err: std::io::Error) -> Self {
+        if let Some(failure) = err
+            .get_ref()
+            .and_then(|error| error.downcast_ref::<NewFolderHistoryFailure>())
+        {
+            return Self::NewFolderHistory(failure.clone());
+        }
         if let Some(failure) = err
             .get_ref()
             .and_then(|e| e.downcast_ref::<HistoryIdentityFailure>())

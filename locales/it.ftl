@@ -852,3 +852,11 @@ quick-search-archives-skipped =
     }
 quick-search-archive-skipped-detail = Primo archivio ignorato: { $path }. { $reason }
 quick-search-archive-unreadable = Questo archivio non è valido, non è supportato o non è leggibile.
+
+undo-new-folder-changed = La cartella non corrisponde più a quella creata: { $detail }. L’annullamento è stato interrotto per preservare i file.
+undo-new-folder-unverified = La cronologia non consente di verificare questa cartella: { $detail }. La cartella e il suo contenuto sono conservati.
+undo-new-folder-not-empty = La cartella ora contiene file o sottocartelle: { $detail }. L’annullamento non elimina il suo contenuto.
+undo-new-folder-missing = La cartella creata non è stata trovata: { $detail }. L’annullamento è stato interrotto senza eliminare altri elementi.
+redo-new-folder-conflict = Esiste già un elemento in questa posizione: { $detail }. Il ripristino non lo sostituisce.
+redo-new-folder-parent-missing = La cartella superiore non è stata trovata: { $detail }. Il ripristino non ricrea le cartelle superiori.
+redo-new-folder-unverified = La cronologia non consente di ripristinare la creazione di questa cartella: { $detail }. Non è stato creato alcun elemento.

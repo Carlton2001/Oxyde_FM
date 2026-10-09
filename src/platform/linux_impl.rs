@@ -285,6 +285,26 @@ impl Platform for LinuxPlatform {
     ) -> std::io::Result<()> {
         std::fs::remove_file(path)
     }
+    fn remove_open_empty_directory(
+        &self,
+        directory: &std::fs::File,
+        path: &std::path::Path,
+    ) -> std::io::Result<()> {
+        let metadata = directory.metadata()?;
+        if !metadata.is_dir() || self.file_attributes(&metadata, "").2 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "Ordinary directory required",
+            ));
+        }
+        let parents = crate::systems::path_parents::HeldParents::new(path)?;
+        // Existing fallback remains path based; no Windows-style atomic claim.
+        self.remove_empty_operation_directory(
+            parents.directory(),
+            &parents.resolved_path(path)?,
+            self.file_identity(directory)?,
+        )
+    }
     fn list_trash_items(&self) -> Result<Vec<trash::TrashItem>, String> {
         trash::os_limited::list().map_err(|error| error.to_string())
     }

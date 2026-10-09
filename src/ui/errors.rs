@@ -2,6 +2,16 @@ use crate::ui::i18n::Message;
 use oxyde_lib::models::CommandError;
 
 pub fn undo_failure(error: &CommandError) -> (Message, String) {
+    if let CommandError::NewFolderHistory(failure) = error {
+        use oxyde_lib::models::error::NewFolderHistoryIssue as Issue;
+        let message = match failure.issue {
+            Issue::Changed | Issue::Conflict => Message::UndoNewFolderChanged,
+            Issue::Unverified => Message::UndoNewFolderUnverified,
+            Issue::NotEmpty => Message::UndoNewFolderNotEmpty,
+            Issue::Missing | Issue::ParentMissing => Message::UndoNewFolderMissing,
+        };
+        return (message, failure.path.clone());
+    }
     if let CommandError::HistoryIdentity(failure) = error {
         let message = match failure.issue {
             oxyde_lib::models::error::HistoryIdentityIssue::Changed => {
@@ -18,6 +28,15 @@ pub fn undo_failure(error: &CommandError) -> (Message, String) {
 }
 
 pub fn redo_failure(error: &CommandError) -> (Message, String) {
+    if let CommandError::NewFolderHistory(failure) = error {
+        use oxyde_lib::models::error::NewFolderHistoryIssue as Issue;
+        let message = match failure.issue {
+            Issue::Changed | Issue::Conflict => Message::RedoNewFolderConflict,
+            Issue::Missing | Issue::ParentMissing => Message::RedoNewFolderParentMissing,
+            Issue::Unverified | Issue::NotEmpty => Message::RedoNewFolderUnverified,
+        };
+        return (message, failure.path.clone());
+    }
     if let CommandError::HistoryCopy(failure) = error {
         let message = match failure.issue {
             oxyde_lib::models::error::HistoryCopyIssue::SourceChanged => {
@@ -72,6 +91,47 @@ pub fn rename_message(error: &CommandError) -> Message {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn new_folder_history_messages_preserve_literal_paths_in_every_language() {
+        use crate::ui::i18n::{I18n, Language};
+        use fluent_bundle::FluentArgs;
+        use oxyde_lib::models::error::{NewFolderHistoryFailure, NewFolderHistoryIssue as Issue};
+        let path = "C:\\Données_日本語\\{ $detail }";
+        for (redo, issue, message) in [
+            (false, Issue::Changed, Message::UndoNewFolderChanged),
+            (false, Issue::Unverified, Message::UndoNewFolderUnverified),
+            (false, Issue::NotEmpty, Message::UndoNewFolderNotEmpty),
+            (false, Issue::Missing, Message::UndoNewFolderMissing),
+            (true, Issue::Conflict, Message::RedoNewFolderConflict),
+            (
+                true,
+                Issue::ParentMissing,
+                Message::RedoNewFolderParentMissing,
+            ),
+            (true, Issue::Unverified, Message::RedoNewFolderUnverified),
+        ] {
+            let error = CommandError::from(std::io::Error::other(NewFolderHistoryFailure {
+                issue,
+                path: path.into(),
+            }));
+            let (actual, detail) = if redo {
+                redo_failure(&error)
+            } else {
+                undo_failure(&error)
+            };
+            assert_eq!(actual, message);
+            assert_eq!(detail, path);
+            for language in Language::ALL {
+                let mut args = FluentArgs::new();
+                args.set("detail", detail.as_str());
+                let rendered = I18n::for_language(language).text_with_args(actual, &args);
+                assert!(rendered.contains(path), "{language:?}: {rendered}");
+                assert!(!rendered.contains(message.key()));
+                assert!(!rendered.contains("New-folder history"));
+            }
+        }
+    }
+
     #[test]
     fn undo_identity_failures_are_translated_and_preserve_literal_paths() {
         use crate::ui::i18n::{I18n, Language};

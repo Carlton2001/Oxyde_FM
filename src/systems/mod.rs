@@ -9,6 +9,7 @@ pub(crate) mod history_move;
 pub(crate) mod history_file_undo;
 pub(crate) mod history_directories;
 pub(crate) mod item_rename;
+pub(crate) mod new_folder_history;
 pub mod quick_access_watcher;
 
 pub(crate) mod folder_sizes;

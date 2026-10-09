@@ -685,6 +685,7 @@ impl FileOperationManager {
                     .map(|p| p.to_string_lossy().to_string());
 
                 let details = TransactionDetails {
+                    new_folder_identity: None,
                     copied_directory_identities: Some(
                         locked
                             .copied_directory_identities
