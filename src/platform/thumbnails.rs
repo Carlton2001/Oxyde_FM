@@ -812,13 +812,8 @@ pub fn get_pdf_thumbnail_raw(path: String) -> Result<RgbaImage, CommandError> {
 
 #[cfg(target_os = "windows")]
 fn shell_thumbnail_raw(path: &str) -> Result<RgbaImage, CommandError> {
-    use std::ffi::c_void;
     use windows::core::PCWSTR;
     use windows::Win32::Foundation::SIZE;
-    use windows::Win32::Graphics::Gdi::{
-        CreateCompatibleDC, DeleteDC, DeleteObject, GetDIBits, GetObjectW, BITMAP, BITMAPINFO,
-        BITMAPINFOHEADER, DIB_RGB_COLORS, HGDIOBJ,
-    };
     use windows::Win32::UI::Shell::{IShellItemImageFactory, SHCreateItemFromParsingName, SIIGBF};
     unsafe {
         let _com = super::windows_com::ComApartment::sta_or_existing()
@@ -832,33 +827,7 @@ fn shell_thumbnail_raw(path: &str) -> Result<RgbaImage, CommandError> {
                 cy: THUMB_SIZE as i32,
             };
             let hbitmap = factory.GetImage(size, SIIGBF(0x8))?;
-            let mut bmp: BITMAP = std::mem::zeroed();
-            GetObjectW(
-                HGDIOBJ(hbitmap.0),
-                std::mem::size_of::<BITMAP>() as i32,
-                Some(&mut bmp as *mut _ as *mut c_void),
-            );
-            let hdc = CreateCompatibleDC(None);
-            let mut bmi: BITMAPINFO = std::mem::zeroed();
-            bmi.bmiHeader.biSize = std::mem::size_of::<BITMAPINFOHEADER>() as u32;
-            bmi.bmiHeader.biWidth = bmp.bmWidth;
-            bmi.bmiHeader.biHeight = -bmp.bmHeight;
-            bmi.bmiHeader.biPlanes = 1;
-            bmi.bmiHeader.biBitCount = 32;
-            let mut pixels = vec![0u8; (bmp.bmWidth * bmp.bmHeight * 4) as usize];
-            GetDIBits(
-                hdc,
-                hbitmap,
-                0,
-                bmp.bmHeight as u32,
-                Some(pixels.as_mut_ptr() as *mut c_void),
-                &mut bmi,
-                DIB_RGB_COLORS,
-            );
-            let _ = DeleteDC(hdc);
-            let _ = DeleteObject(HGDIOBJ(hbitmap.0));
-            RgbaImage::from_raw(bmp.bmWidth as u32, bmp.bmHeight as u32, pixels)
-                .ok_or_else(|| CommandError::Other("Invalid bitmap".to_string()))
+            super::windows_thumbnail_bitmap::into_image(hbitmap)
         })()
     }
 }
