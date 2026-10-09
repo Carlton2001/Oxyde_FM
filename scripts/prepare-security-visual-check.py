@@ -29,13 +29,13 @@ def png(width, height, color):
 
 def gif(frame_count):
     # Reset the LZW dictionary for each literal: always nine-bit codes,
-    # independent of dictionary growth. All frames are distinct 16x16 colors.
+    # independent of dictionary growth. Alternate unmistakable red/blue frames.
     data = bytearray(b"GIF89a" + struct.pack("<HHBBB", 16, 16, 0xF7, 0, 0))
     data.extend(bytes(channel for index in range(256)
-                      for channel in (index, 255 - index, (index * 3) % 256)))
+                      for channel in ((255, 0, 0) if index % 2 == 0 else (0, 0, 255))))
     data.extend(b"\x21\xff\x0bNETSCAPE2.0\x03\x01\x00\x00\x00")
     for frame in range(frame_count):
-        data.extend(b"\x21\xf9\x04\x08\x05\x00\x00\x00")
+        data.extend(b"\x21\xf9\x04\x08\x19\x00\x00\x00")
         data.extend(b"\x2c" + struct.pack("<HHHHB", 0, 0, 16, 16, 0))
         codes = [code for _ in range(256) for code in (256, frame % 256)] + [257]
         packed = bytearray()

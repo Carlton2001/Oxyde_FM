@@ -1039,6 +1039,8 @@ impl Render for PreviewTask {
                 .gap(rems(0.375))
                 .child(
                     img(image)
+                        // GPUI retains the animation clock only for a named image.
+                        .id("tooltip-preview-image")
                         .w(size.width)
                         .h(size.height)
                         .object_fit(ObjectFit::Contain),

@@ -1,18 +1,18 @@
 # Vérification visuelle de sécurité — Windows
 
-Préparation du 9 octobre 2026, actualisée jusqu’au lot 56. **La vérification visuelle n’a pas été effectuée.** Ce protocole est à réaliser par l’utilisateur, sans Computer Use. Il vérifie les changements déjà implémentés ; il ne clôture pas les autres risques de l’audit.
+Préparation du 9 octobre 2026. **Premier retour visuel reçu : archives, corbeille/historique et lisibilité sans anomalie signalée ; aperçus en échec et deux parcours à reprendre après correction.** Ce protocole est à réaliser par l’utilisateur, sans Computer Use. Il vérifie les changements déjà implémentés ; il ne clôture pas les autres risques de l’audit.
 
-**Revue à effectuer par l’utilisateur :** les corrections de cette passe sont codées. Le binaire final contient les lots 53–56 : chemins Shell littéraux, workers d’aperçu, caches/icônes et vidéo isolés. Ce protocole vérifie leur usage, sans valider la course résiduelle Shell, les autres fournisseurs ou les parseurs d’archives.
+**Revue ciblée à reprendre après correction :** GIF, AVI, MOV x265, remplacement après déplacement et cache indisponible. Le retour utilisateur ne valide pas les codecs non testés. Ce protocole vérifie leur usage, sans valider la course résiduelle Shell, les autres fournisseurs ou les parseurs d’archives.
 
-Exécutable final du lot 56 : `C:\Users\Biluf\Documents\Projects\Oxyde-GPUI\target\debug\oxyde.exe`. Fermer les anciennes instances avant de l’ouvrir pour vérifier la bonne version. Les modifications de langue et de thème suivent les préférences habituelles d’Oxyde ; remettre ensuite celles souhaitées.
+Exécutable reconstruit après les corrections du retour visuel (lot 57) : `C:\Users\Biluf\Documents\Projects\Oxyde-GPUI\target\debug\oxyde.exe`. Fermer les anciennes instances avant de l’ouvrir pour vérifier la bonne version. Les modifications de langue et de thème suivent les préférences habituelles d’Oxyde ; remettre ensuite celles souhaitées.
 
 Jeu de fichiers préparé :
 
 ```text
-C:\Users\Biluf\Documents\Projects\Oxyde-GPUI\target\security-visual-check-0_qkhpsg
+C:\Users\Biluf\Documents\Projects\Oxyde-GPUI\target\security-visual-check-xusvjigg
 ```
 
-Il contient 20 petits fichiers, 169 036 octets au total. Le PNG au-delà du seuil ne fait que 32 769 × 1 pixels ; le GIF limité contient 257 images de 16 × 16 pixels ; le ZIP profond contient un seul octet. Aucun document personnel, exécutable ou volume de décompression massif n’est utilisé.
+Ce nouveau jeu contient 20 petits fichiers, 169 036 octets au total. Il conserve les anciens jeux de test ; ses GIF alternent maintenant rouge/bleu de façon nettement visible. Le PNG au-delà du seuil ne fait que 32 769 × 1 pixels ; le GIF limité contient 257 images de 16 × 16 pixels ; le ZIP profond contient un seul octet. Aucun document personnel, exécutable ou volume de décompression massif n’est utilisé.
 
 Pour recréer une session de test indépendante, depuis le dépôt :
 
@@ -32,7 +32,7 @@ Dans Oxyde, ouvrir le sous-dossier `aperçus` via la barre d’adresse. Activer 
 | `01-normal.png` | Image verte semi-transparente, petit format et proportions préservés. |
 | `02-limite-dimensions.png` | « Cette image dépasse les limites de l’aperçu. Le fichier reste accessible. » Aucun chargement infini. |
 | `03-corrompu.png` | Aperçu indisponible, sans spinner permanent ; une image normale reste consultable ensuite. |
-| `04-animation.gif` | Petit carré animé qui change de couleur. |
+| `04-animation.gif` | Carré animé alternant franchement rouge et bleu toutes les 250 ms dans les nouveaux jeux de test. La bulle agrandit le carré ; ce n’est pas sa taille native. |
 | `05-animation-limitee.gif` | Première image fixe, avec « Aperçu fixe : l’animation dépasse les limites de l’aperçu. » |
 | `06-proportions.svg` | Rectangle haut vert/bleu, rapport largeur/hauteur 1:3. |
 | `07-page.pdf` | Page rouge verticale, proportions 1:2, également à 125 %/150 % de mise à l’échelle Windows. |
@@ -49,7 +49,14 @@ Ouvrir `archives/01-normal.zip` : navigation, noms Unicode et lecture des fichie
 
 Déplacer `déplacements/source/témoin.txt` vers `déplacements/destination` avec les actions habituelles d’Oxyde. Utiliser Annuler puis Rétablir, deux fois. Le fichier retrouve la bonne place et son contenu reste lisible.
 
-Après Rétablir, dans l’Explorateur Windows, renommer le témoin présent dans `destination` en `original-conservé.txt`. Copier ce dernier puis renommer **la copie** en `témoin.txt`. Les deux fichiers contiennent ainsi les mêmes octets mais sont des objets distincts. Dans Oxyde, Annuler doit refuser le déplacement, expliquer que le fichier a été remplacé et conserver les deux fichiers. Fermer le message doit laisser la navigation disponible. Ce scénario ne touche que les témoins générés ; ne pas le réaliser sur un document personnel.
+Pour tester le refus après remplacement, utiliser exactement ces noms (aucun fichier `original.txt` n’est nécessaire) :
+
+1. Après le dernier Rétablir dans Oxyde, vérifier que `déplacements/destination/témoin.txt` existe et que `déplacements/source/témoin.txt` est absent.
+2. Dans **l’Explorateur Windows**, ouvrir `déplacements/destination` et renommer `témoin.txt` en `original-conservé.txt`. Saisir seulement le nom du fichier, sans chemin.
+3. Toujours dans **l’Explorateur Windows**, copier puis coller `original-conservé.txt` dans ce même dossier. Renommer le nouveau fichier copié en `témoin.txt`. On doit obtenir deux fichiers : `original-conservé.txt` et `témoin.txt`.
+4. Revenir dans Oxyde et cliquer une seule fois sur Annuler. Oxyde doit refuser le déplacement et expliquer le remplacement. Les deux fichiers doivent rester dans `destination`, et `source/témoin.txt` doit rester absent.
+
+Effectuer les étapes 2 et 3 hors d’Oxyde pour ne pas ajouter une copie ou un renommage à son historique : sinon Annuler ne vise plus le déplacement testé. Fermer le message doit laisser la navigation disponible. Ne réaliser ce scénario que sur les témoins générés.
 
 ## 4. Cache indisponible et sélecteur natif — environ trois minutes
 
@@ -59,9 +66,11 @@ Fermer l’instance de test, puis lancer cette session isolée :
 
 ```powershell
 $taskPython = 'C:/Users/Biluf/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe'
-$fixtureRoot = 'C:/Users/Biluf/Documents/Projects/Oxyde-GPUI/target/security-visual-check-0_qkhpsg'
-& $taskPython scripts/prepare-security-visual-check.py --launch-cache-unavailable $fixtureRoot
+$fixtureRoot = 'C:/Users/Biluf/Documents/Projects/Oxyde-GPUI/target/security-visual-check-xusvjigg'
+& $taskPython 'C:/Users/Biluf/Documents/Projects/Oxyde-GPUI/scripts/prepare-security-visual-check.py' --launch-cache-unavailable $fixtureRoot
 ```
+
+**Copier les trois lignes du bloc entier.** Le `&` au début de la dernière ligne est l’opérateur d’appel PowerShell : il est obligatoire pour exécuter le chemin stocké dans `$taskPython`. Sans lui, PowerShell produit « Jeton inattendu » avant de lancer le script. Ne pas ajouter de `\` de continuation à la fin des lignes.
 
 Seul le processus enfant reçoit ce TEMP privé. Le TEMP du système, les autres applications et le cache utilisateur existant restent hors de ce test. Oxyde conserve ses préférences habituelles.
 
@@ -109,3 +118,12 @@ Les scripts n’ont pas lancé l’UI pendant la préparation. L’affichage ré
 Lots 53–56 : tests du vrai worker et protocole sans interface, PDF à 125 %, Office, icône/cache, AVI MJPEG/RGB32, annulation, délai et paquets invalides vérifiés automatiquement. Les 20 fixtures ont été régénérées sans modifier les sessions précédentes. Aucune validation visuelle n’a été faite par l’agent.
 
 Borne finale du lot 56 : **738 tests permanents réussis**, aucun échec, 17 tests existants ignorés non activés ; compilation sans avertissement. Les neuf aperçus générés ont aussi été contrôlés ponctuellement via les workers réels, sans fenêtre. Le contrôle interactif de ce document reste entièrement à faire.
+
+
+## Retour utilisateur et reprise ciblée — lot 57
+
+Premier passage : archives, corbeille/historique et lisibilité sans anomalie signalée. GIF ordinaire fixe, AVI sans infobulle et MOV x265 bloqué signalés ; déplacement ambigu ; cache non lancé à cause de la commande PowerShell sans `&`. Les trois corrections d’aperçu sont incluses dans le nouveau binaire.
+
+Ne pas refaire toute la procédure : reprendre seulement les GIF/AVI du nouveau jeu, le même MOV x265, puis les sections 3 et 4 ci-dessus. Le GIF limité doit rester fixe avec son avertissement. Son grand carré provient de l’agrandissement dans la bulle. L’AVI s’active désormais en aperçu, avec les codecs disponibles sur Windows.
+
+Validation avant cette reprise : 739 tests permanents réussis, aucun échec ; compilation et build sans avertissement du projet. Le worker vidéo reçoit 1 Gio au lieu de 512 Mio, le worker fixe reste à 512 Mio. Le MOV utilisateur a donné 24 frames via le vrai worker corrigé, première frame en 0,40 seconde. Ces contrôles sans fenêtre ne remplacent pas la confirmation visuelle des corrections. Les autres chantiers techniques ouverts ne sont pas clôturés par cette reprise.

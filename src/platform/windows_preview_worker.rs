@@ -14,6 +14,10 @@ use windows::Win32::System::Pipes::PeekNamedPipe;
 use windows::Win32::System::Threading::WaitForSingleObject;
 
 const MEMORY_BYTES: usize = 512 * 1024 * 1024;
+// Codec allocations precede our 640px downsampling. The 512MiB still-image job
+// stalled a real HEVC MOV, while 1GiB allowed successive frames to be decoded;
+// a separate 1GiB video envelope restores decoding without removing the bound.
+const VIDEO_MEMORY_BYTES: usize = 1024 * 1024 * 1024;
 const DEADLINE: Duration = Duration::from_secs(15);
 pub(super) fn initialize() -> io::Result<()> {
     use windows::Win32::UI::HiDpi::*;
@@ -43,8 +47,8 @@ struct Worker {
     _job: OwnedHandle,
 }
 impl Worker {
-    fn start(mut command: Command) -> io::Result<(Self, ChildStdout)> {
-        let job = job()?;
+    fn start(mut command: Command, memory_bytes: usize) -> io::Result<(Self, ChildStdout)> {
+        let job = job(memory_bytes)?;
         let child = command
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -90,7 +94,7 @@ impl Drop for Worker {
     }
 }
 
-fn job() -> io::Result<OwnedHandle> {
+fn job(memory_bytes: usize) -> io::Result<OwnedHandle> {
     let raw = unsafe { CreateJobObjectW(None, None) }.map_err(native)?;
     let owned = unsafe { OwnedHandle::from_raw_handle(raw.0) };
     let mut info = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
@@ -100,8 +104,8 @@ fn job() -> io::Result<OwnedHandle> {
         | JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
         | JOB_OBJECT_LIMIT_DIE_ON_UNHANDLED_EXCEPTION;
     info.BasicLimitInformation.ActiveProcessLimit = 1;
-    info.ProcessMemoryLimit = MEMORY_BYTES;
-    info.JobMemoryLimit = MEMORY_BYTES;
+    info.ProcessMemoryLimit = memory_bytes;
+    info.JobMemoryLimit = memory_bytes;
     unsafe {
         SetInformationJobObject(
             raw,
@@ -134,7 +138,7 @@ pub(super) fn run_in(
 
 pub(super) fn supervise(command: Command, deadline: Duration) -> io::Result<Vec<u8>> {
     let started = Instant::now();
-    let (mut worker, mut output) = Worker::start(command)?;
+    let (mut worker, mut output) = Worker::start(command, MEMORY_BYTES)?;
     let mut bytes = Vec::new();
     let mut chunk = [0; 64 * 1024];
     let mut exited = None;
@@ -244,7 +248,7 @@ pub(super) fn supervise_stream(
         return Ok(());
     }
     let mut progress = Instant::now();
-    let (mut worker, mut output) = Worker::start(command)?;
+    let (mut worker, mut output) = Worker::start(command, VIDEO_MEMORY_BYTES)?;
     let mut pending = Vec::new();
     let mut chunk = [0; 64 * 1024];
     let mut exited = None;
@@ -352,24 +356,26 @@ mod tests {
     use super::*;
     #[test]
     fn resource_job_has_real_kernel_limits_before_admission() {
-        let job = job().unwrap();
-        let mut info = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
-        unsafe {
-            QueryInformationJobObject(
-                Some(HANDLE(job.as_raw_handle())),
-                JobObjectExtendedLimitInformation,
-                (&mut info as *mut JOBOBJECT_EXTENDED_LIMIT_INFORMATION).cast(),
-                std::mem::size_of_val(&info) as u32,
-                None,
-            )
+        for memory_bytes in [MEMORY_BYTES, VIDEO_MEMORY_BYTES] {
+            let job = job(memory_bytes).unwrap();
+            let mut info = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
+            unsafe {
+                QueryInformationJobObject(
+                    Some(HANDLE(job.as_raw_handle())),
+                    JobObjectExtendedLimitInformation,
+                    (&mut info as *mut JOBOBJECT_EXTENDED_LIMIT_INFORMATION).cast(),
+                    std::mem::size_of_val(&info) as u32,
+                    None,
+                )
+            }
+            .unwrap();
+            assert_eq!(info.ProcessMemoryLimit, memory_bytes);
+            assert_eq!(info.JobMemoryLimit, memory_bytes);
+            assert_eq!(info.BasicLimitInformation.ActiveProcessLimit, 1);
+            assert_eq!(
+                info.BasicLimitInformation.LimitFlags & JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+                JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+            );
         }
-        .unwrap();
-        assert_eq!(info.ProcessMemoryLimit, MEMORY_BYTES);
-        assert_eq!(info.JobMemoryLimit, MEMORY_BYTES);
-        assert_eq!(info.BasicLimitInformation.ActiveProcessLimit, 1);
-        assert_eq!(
-            info.BasicLimitInformation.LimitFlags & JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
-            JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
-        );
     }
 }

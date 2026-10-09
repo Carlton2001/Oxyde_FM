@@ -102,7 +102,7 @@ pub static PREVIEWABLE_EXTENSIONS: Lazy<HashSet<&'static str>> =
     Lazy::new(|| ["png", "jpg", "jpeg", "gif", "bmp", "webp", "svg", "ico"].into());
 
 pub static PREVIEWABLE_VIDEO_EXTENSIONS: Lazy<HashSet<&'static str>> =
-    Lazy::new(|| ["mp4", "webm", "ogv", "mov", "m4v", "3gp", "mp4v"].into());
+    Lazy::new(|| ["mp4", "webm", "ogv", "mov", "m4v", "3gp", "mp4v", "avi"].into());
 
 pub static PREVIEWABLE_OFFICE_EXTENSIONS: Lazy<HashSet<&'static str>> =
     Lazy::new(|| ["docx", "xlsx", "pptx", "odt", "ods", "odp"].into());
@@ -486,6 +486,16 @@ fn rgba_to_bgra(image: &mut image::RgbaImage) {
 #[cfg(test)]
 mod system_icon_tests {
     use super::rgba_to_bgra;
+
+    #[test]
+    fn avi_and_mov_are_routed_to_the_video_preview() {
+        for name in ["09-video.avi", "MOVIE.AVI", "film.mov", "FILM.MOV"] {
+            assert!(matches!(
+                super::get_preview_type(name),
+                super::PreviewType::Video
+            ));
+        }
+    }
 
     #[test]
     fn native_icon_colors_are_converted_for_gpui_without_changing_alpha() {
