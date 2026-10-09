@@ -174,7 +174,112 @@ pub struct QuickSearchState {
     pub query: String,
     pub running: bool,
     pub limited: bool,
+    pub archive_warnings: ArchiveSearchWarnings,
     pub cancellation: Arc<SearchCancellation>,
+}
+
+#[derive(Clone, Default)]
+pub struct ArchiveSearchWarnings {
+    count: u64,
+    first: Option<(String, String)>,
+}
+
+impl ArchiveSearchWarnings {
+    fn record(&mut self, path: String, detail: String) {
+        self.count = self.count.saturating_add(1);
+        if self.first.is_none() {
+            self.first = Some((path, detail));
+        }
+    }
+
+    fn label(&self, i18n: &crate::ui::i18n::I18n) -> SharedString {
+        let mut args = FluentArgs::new();
+        args.set("count", self.count as f64);
+        args.set(
+            "number",
+            crate::ui::format::format_number(self.count, i18n.language()),
+        );
+        i18n.text_with_args(Message::QuickSearchArchivesSkipped, &args)
+    }
+
+    fn detail(&self, i18n: &crate::ui::i18n::I18n) -> String {
+        let Some((path, detail)) = &self.first else {
+            return String::new();
+        };
+        let reason = if oxyde_lib::models::error::ArchiveLimitFailure::from_message(detail)
+            .is_some()
+            || oxyde_lib::models::error::ArchiveSourceConflict::from_message(detail)
+        {
+            crate::ui::format::error_detail(detail, i18n)
+        } else {
+            i18n.text(Message::QuickSearchArchiveUnreadable).to_string()
+        };
+        let mut args = FluentArgs::new();
+        args.set("path", path.clone());
+        args.set("reason", reason);
+        i18n.text_with_args(Message::QuickSearchArchiveSkippedDetail, &args)
+            .to_string()
+    }
+}
+
+#[cfg(test)]
+mod archive_warning_tests {
+    use super::*;
+    use oxyde_lib::models::{
+        error::{ArchiveLimitFailure, ArchiveLimitKind},
+        preferences::Language,
+    };
+
+    #[::core::prelude::v1::test]
+    fn archive_warnings_keep_a_single_sample_and_translate_after_a_language_change() {
+        let mut warnings = ArchiveSearchWarnings::default();
+        let path = "C:\\Données\\日本語 { $count }.zip";
+        warnings.record(path.into(), "technical error in English".into());
+        for language in Language::ALL {
+            let i18n = crate::ui::i18n::I18n::for_language(language);
+            let label = warnings.label(&i18n);
+            let detail = warnings.detail(&i18n);
+            assert!(label.contains('1'));
+            assert!(detail.contains(path));
+            assert!(detail.contains(i18n.text(Message::QuickSearchArchiveUnreadable).as_ref()));
+            assert!(!detail.contains("technical error in English"));
+        }
+        warnings.record("second.zip".into(), "another detail".into());
+        assert_eq!(warnings.count, 2);
+        assert_eq!(warnings.first.as_ref().unwrap().0, path);
+        assert!(!warnings
+            .detail(&crate::ui::i18n::I18n::default())
+            .contains("second.zip"));
+        let french = crate::ui::i18n::I18n::default();
+        assert!(warnings
+            .label(&french)
+            .replace(['\u{2068}', '\u{2069}'], "")
+            .contains("2 archives ignorées"));
+        warnings.count = u64::MAX;
+        warnings.record("third.zip".into(), String::new());
+        assert_eq!(warnings.count, u64::MAX);
+    }
+
+    #[::core::prelude::v1::test]
+    fn archive_warnings_translate_limits_without_losing_the_archive_path() {
+        let mut warnings = ArchiveSearchWarnings::default();
+        let failure = ArchiveLimitFailure {
+            kind: ArchiveLimitKind::Depth,
+            limit: 64,
+        };
+        warnings.record("C:\\deep.zip".into(), format!("Archive Error: {failure}"));
+        for language in Language::ALL {
+            let i18n = crate::ui::i18n::I18n::for_language(language);
+            let detail = warnings.detail(&i18n);
+            assert!(detail.contains("C:\\deep.zip"));
+            assert!(detail.contains("64"));
+            assert!(detail.contains(&crate::ui::format::error_detail(
+                &failure.to_string(),
+                &i18n
+            )));
+            assert!(!detail.contains("Archive limit exceeded"));
+        }
+    }
 }
 
 pub fn search_path(root: &str, query: &str) -> String {
@@ -381,6 +486,19 @@ impl OxydeApp {
                     .child(format!("'{}'", search.query)),
             )
             .child(div().flex_1())
+            .when(search.archive_warnings.count > 0, |bar| {
+                bar.child(
+                    div()
+                        .id(SharedString::from(format!("search-archive-warning-{id}")))
+                        .min_w_0()
+                        .truncate()
+                        .text_color(theme.warning_text)
+                        .tooltip(crate::ui::components::tooltip::Tooltip::text(
+                            search.archive_warnings.detail(&cx.i18n()),
+                        ))
+                        .child(search.archive_warnings.label(&cx.i18n())),
+                )
+            })
             .when(search.running || search.limited, |bar| {
                 bar.child(
                     div()
@@ -668,6 +786,7 @@ impl OxydeApp {
             query: query.clone(),
             running: true,
             limited: false,
+            archive_warnings: ArchiveSearchWarnings::default(),
             cancellation: Arc::new(SearchCancellation(cancellation.clone())),
         });
         tab.search_text = query.clone();
@@ -705,17 +824,15 @@ impl OxydeApp {
                 break;
             }
             let mut events = Vec::new();
-            loop {
+            for _ in 0..256 {
                 match receiver.try_recv() {
                     Ok(event) => events.push(event),
                     Err(std::sync::mpsc::TryRecvError::Empty) => break,
                     Err(std::sync::mpsc::TryRecvError::Disconnected) => {
-                        if !events.iter().any(|event| {
-                            !matches!(
-                                event,
-                                oxyde_lib::commands::search::QuickSearchEvent::Batch(_)
-                            )
-                        }) {
+                        if !events
+                            .iter()
+                            .any(oxyde_lib::commands::search::QuickSearchEvent::is_terminal)
+                        {
                             events.push(oxyde_lib::commands::search::QuickSearchEvent::Failed(
                                 "Search worker disconnected".into(),
                             ));
@@ -727,12 +844,9 @@ impl OxydeApp {
             if events.is_empty() {
                 continue;
             }
-            let done = events.iter().any(|event| {
-                !matches!(
-                    event,
-                    oxyde_lib::commands::search::QuickSearchEvent::Batch(_)
-                )
-            });
+            let done = events
+                .iter()
+                .any(oxyde_lib::commands::search::QuickSearchEvent::is_terminal);
             if this
                 .update(cx, |this, cx| {
                     let Some(tab) = this.state.find_tab_mut(&id) else {
@@ -750,6 +864,11 @@ impl OxydeApp {
                         match event {
                             QuickSearchEvent::Batch(files) => {
                                 tab.files.extend(files);
+                            }
+                            QuickSearchEvent::ArchiveSkipped { path, detail } => {
+                                if let Some(search) = &mut tab.quick_search {
+                                    search.archive_warnings.record(path, detail);
+                                }
                             }
                             QuickSearchEvent::Finished { limited } => {
                                 if let Some(search) = &mut tab.quick_search {

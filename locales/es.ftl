@@ -840,3 +840,11 @@ archive-limit-depth = Procesamiento detenido: una ruta del archivo comprimido su
 archive-limit-time = Procesamiento detenido: se alcanzó el tiempo máximo de procesamiento activo de { $limit } minutos. Las pausas no cuentan.
 archive-limit-decoded = Procesamiento detenido: los datos descomprimidos, incluidas las cabeceras, superan { $limit }.
 archive-source-changed = El archivo comprimido cambió durante la operación. Oxyde detuvo la operación y conservó la versión actual del archivo. Repita la operación con esta versión.
+
+quick-search-archives-skipped =
+    { $count ->
+        [one] Resultados incompletos: { $number } archivo comprimido omitido
+       *[other] Resultados incompletos: { $number } archivos comprimidos omitidos
+    }
+quick-search-archive-skipped-detail = Primer archivo comprimido omitido: { $path }. { $reason }
+quick-search-archive-unreadable = Este archivo comprimido no es válido, no es compatible o no se puede leer.

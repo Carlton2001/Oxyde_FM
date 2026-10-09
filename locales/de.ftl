@@ -840,3 +840,11 @@ archive-limit-depth = Verarbeitung angehalten: Ein Archivpfad überschreitet { $
 archive-limit-time = Verarbeitung angehalten: Die maximale aktive Verarbeitungszeit von { $limit } Minuten wurde erreicht. Pausen zählen nicht mit.
 archive-limit-decoded = Verarbeitung angehalten: Die entpackten Daten einschließlich Headern überschreiten { $limit }.
 archive-source-changed = Das Archiv wurde während des Vorgangs geändert. Oxyde hat den Vorgang angehalten und das aktuelle Archiv beibehalten. Wiederholen Sie den Vorgang mit dieser Version.
+
+quick-search-archives-skipped =
+    { $count ->
+        [one] Unvollständige Ergebnisse: { $number } Archiv übersprungen
+       *[other] Unvollständige Ergebnisse: { $number } Archive übersprungen
+    }
+quick-search-archive-skipped-detail = Erstes übersprungenes Archiv: { $path }. { $reason }
+quick-search-archive-unreadable = Dieses Archiv ist ungültig, wird nicht unterstützt oder kann nicht gelesen werden.

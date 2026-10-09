@@ -25,8 +25,15 @@ static DISK_IO_LOCKS: Lazy<DashMap<u64, Arc<Mutex<()>>>> = Lazy::new(DashMap::ne
 /// Native quick search, independent of the legacy two-panel session.
 pub enum QuickSearchEvent {
     Batch(Vec<FileEntry>),
+    ArchiveSkipped { path: String, detail: String },
     Finished { limited: bool },
     Failed(String),
+}
+
+impl QuickSearchEvent {
+    pub fn is_terminal(&self) -> bool {
+        matches!(self, Self::Finished { .. } | Self::Failed(_))
+    }
 }
 
 #[derive(Clone, Default, serde::Serialize, serde::Deserialize)]
@@ -187,7 +194,9 @@ pub fn advanced_search(
                         && content.as_ref().is_none_or(|r| {
                             file_contains_content(path, r, options.ignore_accents, &cancellation)
                         });
-                    if cancellation.load(Ordering::Relaxed) { return Ok(()); }
+                    if cancellation.load(Ordering::Relaxed) {
+                        return Ok(());
+                    }
                     if matches {
                         let (hidden, system, _) = crate::utils::get_file_attributes(&m, &name);
                         batch.push(FileEntry {
@@ -204,7 +213,22 @@ pub fn advanced_search(
                     }
                     if options.archives && !m.is_dir() && is_archive(path) {
                         // As in Tauri, archive entries are matched by name and metadata.
-                        batch.extend(search_in_archive(path, &params, &cancellation));
+                        match search_archive(path, &params, &cancellation) {
+                            Ok(entries) => batch.extend(entries),
+                            Err(_) if cancellation.load(Ordering::Relaxed) => return Ok(()),
+                            Err(error) => {
+                                log::warn!("Archive search skipped {}: {error}", path.display());
+                                if sender
+                                    .send(QuickSearchEvent::ArchiveSkipped {
+                                        path: path.to_string_lossy().into_owned(),
+                                        detail: error.to_string(),
+                                    })
+                                    .is_err()
+                                {
+                                    return Ok(());
+                                }
+                            }
+                        }
                     }
                 }
                 let remaining = limit.max(1).saturating_sub(count);
@@ -417,15 +441,15 @@ struct SearchParams {
     max_date: Option<u64>,
 }
 
-fn search_in_archive(
+fn search_archive(
     archive_path: &std::path::Path,
     params: &SearchParams,
     cancellation: &Arc<AtomicBool>,
-) -> Vec<FileEntry> {
+) -> Result<Vec<FileEntry>, crate::models::CommandError> {
     let mut results = Vec::new();
     let format = match ArchiveFormat::from_path(archive_path) {
         Some(f) => f,
-        None => return results,
+        None => return Ok(results),
     };
 
     let checkpoint = || {
@@ -451,45 +475,173 @@ fn search_in_archive(
             super::archive_seven_open::indexed_files(archive_path, &checkpoint)
         }
         ArchiveFormat::Iso => super::archive_iso_open::indexed_files(archive_path, &checkpoint),
-        _ => return results,
+        _ => {
+            return Err(crate::models::CommandError::ArchiveError(
+                "Unsupported archive search format".into(),
+            ))
+        }
     };
-    match index {
-        Ok(entries) => {
-            for entry in entries {
-                if checkpoint().is_err() {
-                    break;
-                }
-                if !params.pattern.matches(&entry.name) {
-                    continue;
-                }
-                if !entry.is_dir
-                    && (params.min_size.is_some_and(|min| entry.size < min)
-                        || params.max_size.is_some_and(|max| entry.size > max))
-                {
-                    continue;
-                }
-                // ISO and 7z dates remain unavailable, as in the previous readers.
-                if !matches!(format, ArchiveFormat::Iso | ArchiveFormat::SevenZip)
-                    && (params.min_date.is_some_and(|min| entry.modified < min)
-                        || params.max_date.is_some_and(|max| entry.modified > max))
-                {
-                    continue;
-                }
-                results.push(entry);
-            }
+    for entry in index? {
+        if checkpoint().is_err() {
+            break;
         }
-        Err(error) if !cancellation.load(Ordering::Relaxed) => {
-            log::warn!("Archive search skipped {}: {error}", archive_path.display());
+        if !params.pattern.matches(&entry.name) {
+            continue;
         }
-        Err(_) => {}
+        if !entry.is_dir
+            && (params.min_size.is_some_and(|min| entry.size < min)
+                || params.max_size.is_some_and(|max| entry.size > max))
+        {
+            continue;
+        }
+        // ISO and 7z dates remain unavailable, as in the previous readers.
+        if !matches!(format, ArchiveFormat::Iso | ArchiveFormat::SevenZip)
+            && (params.min_date.is_some_and(|min| entry.modified < min)
+                || params.max_date.is_some_and(|max| entry.modified > max))
+        {
+            continue;
+        }
+        results.push(entry);
     }
 
-    results
+    Ok(results)
+}
+
+#[cfg(test)]
+fn search_in_archive(
+    path: &std::path::Path,
+    params: &SearchParams,
+    cancellation: &Arc<AtomicBool>,
+) -> Vec<FileEntry> {
+    search_archive(path, params, cancellation).unwrap_or_default()
 }
 
 #[cfg(test)]
 mod archive_search_tests {
     use super::*;
+
+    #[test]
+    fn archive_search_warns_and_keeps_results_after_multiple_skipped_archives() {
+        let temp = tempfile::tempdir().unwrap();
+        let extensions = [
+            "zip", "tar", "tar.gz", "tar.xz", "tar.zst", "tar.bz2", "iso", "7z", "rar",
+        ];
+        // More warnings than the channel capacity exercise backpressure too.
+        for extension in extensions {
+            std::fs::write(temp.path().join(format!("broken.{extension}")), b"bad").unwrap();
+        }
+        std::fs::write(temp.path().join("match.txt"), b"valid result").unwrap();
+        let receiver = advanced_search(
+            temp.path().to_string_lossy().into_owned(),
+            AdvancedSearchOptions {
+                query: "match".into(),
+                archives: true,
+                ..Default::default()
+            },
+            100,
+            true,
+            true,
+            Arc::new(AtomicBool::new(false)),
+        );
+        let mut skipped = std::collections::HashSet::new();
+        let mut results = Vec::new();
+        loop {
+            let event = receiver
+                .recv_timeout(std::time::Duration::from_secs(5))
+                .unwrap();
+            let terminal = event.is_terminal();
+            match event {
+                QuickSearchEvent::ArchiveSkipped { path, detail } => {
+                    assert!(!terminal);
+                    assert!(std::path::Path::new(&path).starts_with(temp.path()));
+                    assert!(!detail.is_empty());
+                    skipped.insert(path);
+                }
+                QuickSearchEvent::Batch(batch) => {
+                    assert!(!terminal);
+                    results.extend(batch);
+                }
+                QuickSearchEvent::Finished { limited } => {
+                    assert!(terminal);
+                    assert!(!limited);
+                    break;
+                }
+                QuickSearchEvent::Failed(error) => panic!("{error}"),
+            }
+        }
+        assert_eq!(skipped.len(), extensions.len());
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].name, "match.txt");
+    }
+
+    #[test]
+    fn archive_search_warning_preserves_the_limit_kind_and_threshold() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("deep.zip");
+        let name = format!("{}match.txt", "n/".repeat(64));
+        metadata_fixture(&path, &[(&name, tar::EntryType::Regular)], 123);
+        let receiver = advanced_search(
+            temp.path().to_string_lossy().into_owned(),
+            AdvancedSearchOptions {
+                query: "match".into(),
+                archives: true,
+                ..Default::default()
+            },
+            100,
+            true,
+            true,
+            Arc::new(AtomicBool::new(false)),
+        );
+        let mut warning = None;
+        loop {
+            match receiver
+                .recv_timeout(std::time::Duration::from_secs(5))
+                .unwrap()
+            {
+                QuickSearchEvent::ArchiveSkipped {
+                    path: skipped,
+                    detail,
+                } => {
+                    assert_eq!(std::path::Path::new(&skipped), path);
+                    warning = crate::models::error::ArchiveLimitFailure::from_message(&detail);
+                }
+                QuickSearchEvent::Finished { limited } => {
+                    assert!(!limited);
+                    break;
+                }
+                QuickSearchEvent::Batch(batch) => assert!(batch.is_empty()),
+                QuickSearchEvent::Failed(error) => panic!("{error}"),
+            }
+        }
+        assert_eq!(
+            warning,
+            Some(crate::models::error::ArchiveLimitFailure {
+                kind: crate::models::error::ArchiveLimitKind::Depth,
+                limit: 64,
+            })
+        );
+    }
+
+    #[test]
+    fn archive_search_cancellation_is_not_reported_as_a_skipped_archive() {
+        let temp = tempfile::tempdir().unwrap();
+        std::fs::write(temp.path().join("broken.zip"), b"bad").unwrap();
+        let receiver = advanced_search(
+            temp.path().to_string_lossy().into_owned(),
+            AdvancedSearchOptions {
+                archives: true,
+                ..Default::default()
+            },
+            100,
+            true,
+            true,
+            Arc::new(AtomicBool::new(true)),
+        );
+        assert!(matches!(
+            receiver.recv_timeout(std::time::Duration::from_secs(5)),
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected)
+        ));
+    }
 
     fn metadata_fixture(path: &std::path::Path, names: &[(&str, tar::EntryType)], mtime: u64) {
         use std::io::Write;
@@ -1210,6 +1362,7 @@ mod quick_search_tests {
                 .unwrap()
             {
                 QuickSearchEvent::Batch(batch) => results.extend(batch),
+                QuickSearchEvent::ArchiveSkipped { .. } => {},
                 QuickSearchEvent::Finished { .. } => return results,
                 QuickSearchEvent::Failed(error) => panic!("{error}"),
             }
@@ -1345,6 +1498,7 @@ mod quick_search_tests {
                 .unwrap()
             {
                 QuickSearchEvent::Batch(batch) => count += batch.len(),
+                QuickSearchEvent::ArchiveSkipped { .. } => {},
                 QuickSearchEvent::Finished { limited } => {
                     assert!(limited);
                     assert_eq!(count, 2);
@@ -1373,6 +1527,7 @@ mod quick_search_tests {
         while let Ok(event) = receiver.recv_timeout(std::time::Duration::from_secs(5)) {
             match event {
                 QuickSearchEvent::Batch(batch) => files.extend(batch),
+                QuickSearchEvent::ArchiveSkipped { .. } => {},
                 QuickSearchEvent::Finished { limited } => return (files, limited),
                 QuickSearchEvent::Failed(error) => panic!("{error}"),
             }

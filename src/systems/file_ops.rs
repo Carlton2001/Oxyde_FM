@@ -2814,7 +2814,11 @@ mod tests {
             assert!(!workspace.root().join("remove").exists());
             assert_eq!(std::fs::read_dir(workspace.root()).unwrap().count(), 2);
             drop(workspace);
-            assert_eq!(std::fs::read_dir(directory.path()).unwrap().count(), 1);
+            let remaining = std::fs::read_dir(directory.path())
+                .unwrap()
+                .map(|entry| entry.unwrap().file_name())
+                .collect::<Vec<_>>();
+            assert_eq!(remaining.len(), 1, "{extension}: residual files {remaining:?}");
         }
     }
 

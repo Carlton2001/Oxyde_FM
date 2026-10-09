@@ -840,3 +840,11 @@ archive-limit-depth = Elaborazione interrotta: un percorso dell’archivio super
 archive-limit-time = Elaborazione interrotta: è stato raggiunto il tempo massimo di elaborazione attiva di { $limit } minuti. Le pause non vengono conteggiate.
 archive-limit-decoded = Elaborazione interrotta: i dati decompressi, comprese le intestazioni, superano { $limit }.
 archive-source-changed = L’archivio è cambiato durante l’operazione. Oxyde ha interrotto l’operazione e conservato la versione attuale dell’archivio. Ripeti l’operazione usando questa versione.
+
+quick-search-archives-skipped =
+    { $count ->
+        [one] Risultati incompleti: { $number } archivio ignorato
+       *[other] Risultati incompleti: { $number } archivi ignorati
+    }
+quick-search-archive-skipped-detail = Primo archivio ignorato: { $path }. { $reason }
+quick-search-archive-unreadable = Questo archivio non è valido, non è supportato o non è leggibile.

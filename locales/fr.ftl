@@ -539,3 +539,11 @@ archive-limit-depth = Le traitement est arrêté : un chemin de l’archive dép
 archive-limit-time = Le traitement est arrêté : la durée maximale de { $limit } minutes a été atteinte. Les pauses ne sont pas comptées.
 archive-limit-decoded = Le traitement est arrêté : les données décompressées, en-têtes compris, dépassent { $limit }.
 archive-source-changed = L’archive a changé pendant l’opération. Oxyde a arrêté l’opération et conservé la version actuelle de l’archive. Relancez l’opération depuis cette version.
+
+quick-search-archives-skipped =
+    { $count ->
+        [one] Résultats incomplets : { $number } archive ignorée
+       *[other] Résultats incomplets : { $number } archives ignorées
+    }
+quick-search-archive-skipped-detail = Première archive ignorée : { $path }. { $reason }
+quick-search-archive-unreadable = Cette archive est invalide, non prise en charge ou illisible.

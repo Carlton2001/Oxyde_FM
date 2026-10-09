@@ -278,6 +278,9 @@ pub enum Message {
     QuickSearchResults,
     QuickSearchRunning,
     QuickSearchLimited,
+    QuickSearchArchivesSkipped,
+    QuickSearchArchiveSkippedDetail,
+    QuickSearchArchiveUnreadable,
     QuickSearchEmpty,
     QuickSearchFailed,
     QuickSearchClear,
@@ -723,6 +726,9 @@ impl Message {
             Self::QuickSearchResults => "quick-search-results",
             Self::QuickSearchRunning => "quick-search-running",
             Self::QuickSearchLimited => "quick-search-limited",
+            Self::QuickSearchArchivesSkipped => "quick-search-archives-skipped",
+            Self::QuickSearchArchiveSkippedDetail => "quick-search-archive-skipped-detail",
+            Self::QuickSearchArchiveUnreadable => "quick-search-archive-unreadable",
             Self::QuickSearchEmpty => "quick-search-empty",
             Self::QuickSearchFailed => "quick-search-failed",
             Self::QuickSearchClear => "quick-search-clear",
@@ -1319,6 +1325,9 @@ mod tests {
                 Message::QuickSearchResults,
                 Message::QuickSearchRunning,
                 Message::QuickSearchLimited,
+                Message::QuickSearchArchivesSkipped,
+                Message::QuickSearchArchiveSkippedDetail,
+                Message::QuickSearchArchiveUnreadable,
                 Message::QuickSearchEmpty,
                 Message::QuickSearchFailed,
                 Message::QuickSearchClear,
@@ -1506,6 +1515,8 @@ mod tests {
                 Message::UnknownItem,
             ];
             let mut args = FluentArgs::new();
+            args.set("path", "sample.zip");
+            args.set("reason", "Test reason");
             args.set("error", "Test error");
             args.set("groups", 2);
             args.set("group_count", "2");
