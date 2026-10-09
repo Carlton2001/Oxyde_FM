@@ -168,6 +168,35 @@ impl SelectedEntry {
         self.file
             .ok_or_else(|| io::Error::other("Selected source is a directory"))
     }
+    pub fn size(&self) -> u64 {
+        self.file.as_ref().map_or(0, |file| file.size)
+    }
+    /// Keep the same object and its namespace held through encoder consumption.
+    pub fn open_archive(&self) -> io::Result<(HeldParents, File)> {
+        if let Some(file) = &self.file {
+            return file.open_copy();
+        }
+        let directory = self
+            .directory
+            .as_ref()
+            .ok_or_else(|| SourceSelectionFailure::unverified(&self.path))?;
+        let metadata = directory.file.metadata()?;
+        if !metadata.is_dir() || platform().file_attributes(&metadata, "").2 {
+            return Err(SourceSelectionFailure::changed(&self.path));
+        }
+        Ok((self.parent.parents()?, directory.file.try_clone()?))
+    }
+    pub fn open_retained_archive(&self, input: &File) -> io::Result<(HeldParents, File)> {
+        use std::io::{Seek, SeekFrom};
+        let selected = self
+            .file
+            .as_ref()
+            .ok_or_else(|| SourceSelectionFailure::changed(&self.path))?;
+        selected.verify(input)?;
+        let mut file = input.try_clone()?;
+        file.seek(SeekFrom::Start(0))?;
+        Ok((selected.parents()?, file))
+    }
     pub fn capture_directory(
         &self,
         destination: &Path,

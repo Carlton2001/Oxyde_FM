@@ -879,5 +879,5 @@ undo-rename-unverified = Das Umbenennen kann nicht sicher rückgängig gemacht w
 redo-rename-changed = Das Umbenennen kann nicht wiederholt werden: Die Datei oder der Ordner wurde ersetzt. Das Element bleibt an seinem aktuellen Ort erhalten. { $detail }
 redo-rename-unverified = Das Umbenennen kann nicht sicher wiederholt werden: Die Identität der Datei oder des Ordners konnte nicht überprüft werden. Das Element bleibt erhalten. { $detail }
 
-transfer-source-changed = Die Quelle wurde ersetzt oder ist keine reguläre Datei bzw. kein regulärer Ordner mehr. Die Übertragung wurde gestoppt; bereits übertragene Elemente bleiben erhalten. Prüfen Sie die Quelle und versuchen Sie es erneut.
-transfer-source-unverified = Die Identität der Quelle kann an diesem Speicherort nicht überprüft werden. Die Übertragung wurde gestoppt; bereits übertragene Elemente bleiben erhalten. Versuchen Sie es von einem kompatiblen lokalen Ordner aus.
+transfer-source-changed = Die Quelle wurde ersetzt oder ist keine reguläre Datei bzw. kein regulärer Ordner mehr. Der Vorgang wurde gestoppt; bereits übertragene Elemente bleiben erhalten. Prüfen Sie die Quelle und versuchen Sie es erneut.
+transfer-source-unverified = Die Identität der Quelle kann an diesem Speicherort nicht überprüft werden. Der Vorgang wurde gestoppt; bereits übertragene Elemente bleiben erhalten. Versuchen Sie es von einem kompatiblen lokalen Ordner aus.

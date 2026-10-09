@@ -9,8 +9,8 @@ use std::{
 use windows::Win32::{
     Foundation::{GENERIC_READ, GENERIC_WRITE, HANDLE},
     Storage::FileSystem::{
-        GetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION, DELETE, FILE_READ_ATTRIBUTES,
-        FILE_SHARE_READ, FILE_SHARE_WRITE, FILE_WRITE_ATTRIBUTES,
+        BY_HANDLE_FILE_INFORMATION, DELETE, FILE_READ_ATTRIBUTES, FILE_SHARE_READ,
+        FILE_SHARE_WRITE, FILE_WRITE_ATTRIBUTES, GetFileInformationByHandle,
     },
 };
 
@@ -54,23 +54,42 @@ pub(super) fn create(parent: &File, path: &Path) -> io::Result<(File, File)> {
     // The non-deletable pin keeps staging nonempty; a directory reparse point
     // cannot be installed while children remain. Staging likewise pins its parent.
     if let Err(error) = ordinary_directory(&directory).and_then(|_| ordinary_directory(parent)) {
-        let _ = remove(&directory, pin);
+        let _ = remove(&directory, pin, true);
         return Err(error);
     }
     Ok((directory, pin))
 }
 
-pub(super) fn remove(directory: &File, pin: File) -> io::Result<()> {
-    let output = super::windows_no_reparse::open_entry(
-        directory,
-        OsStr::new("output"),
-        DELETE.0 | FILE_READ_ATTRIBUTES.0 | FILE_WRITE_ATTRIBUTES.0,
-        FILE_SHARE_READ.0 | FILE_SHARE_WRITE.0,
-    );
-    let result = match output {
-        Ok(output) => remove_output(&output),
-        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
-        Err(error) => Err(error),
+pub(super) fn create_output(parent: &File, path: &Path) -> io::Result<File> {
+    ordinary_directory(parent)?;
+    let leaf = path
+        .file_name()
+        .ok_or_else(|| io::Error::other("Archive output has no name"))?;
+    super::windows_no_reparse::create_relative(
+        parent,
+        leaf,
+        false,
+        GENERIC_READ.0 | GENERIC_WRITE.0 | DELETE.0 | FILE_WRITE_ATTRIBUTES.0,
+        FILE_SHARE_READ.0,
+        0x80,
+    )
+}
+
+pub(super) fn remove(directory: &File, pin: File, include_output: bool) -> io::Result<()> {
+    let result = if !include_output {
+        Ok(())
+    } else {
+        let output = super::windows_no_reparse::open_entry(
+            directory,
+            OsStr::new("output"),
+            DELETE.0 | FILE_READ_ATTRIBUTES.0 | FILE_WRITE_ATTRIBUTES.0,
+            FILE_SHARE_READ.0 | FILE_SHARE_WRITE.0,
+        );
+        match output {
+            Ok(output) => remove_output(&output),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+            Err(error) => Err(error),
+        }
     };
     // Drop the pin before deleting the directory, including failure paths.
     let unpin = super::windows_file_moves::remove(&pin);
@@ -120,7 +139,7 @@ pub(super) fn remove_output(output: &File) -> io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::platform::windows_reparse_tests::{junction, Retarget};
+    use crate::platform::windows_reparse_tests::{Retarget, junction};
     use std::fs;
 
     #[test]
@@ -208,7 +227,7 @@ mod tests {
         assert!(retarget_stage.try_apply().is_err());
         assert!(retarget_parent.try_apply().is_err());
         drop((retarget_stage, retarget_parent));
-        remove(&directory, pin).unwrap();
+        remove(&directory, pin, true).unwrap();
         drop(directory);
         assert!(!path.exists());
         assert_eq!(fs::read_dir(&outside).unwrap().count(), 0);
@@ -243,7 +262,7 @@ mod tests {
         fs::create_dir(&outside).unwrap();
         fs::write(outside.join("witness"), b"unchanged").unwrap();
         junction(&path.join("output"), &outside);
-        remove(&directory, pin).unwrap();
+        remove(&directory, pin, true).unwrap();
         drop(directory);
         assert!(!path.exists());
         assert_eq!(fs::read(outside.join("witness")).unwrap(), b"unchanged");
@@ -258,7 +277,7 @@ mod tests {
         let (directory, pin) = create(&parent, &path).unwrap();
         fs::write(path.join("foreign"), b"unchanged").unwrap();
         fs::write(path.join("output"), b"partial").unwrap();
-        remove(&directory, pin).unwrap_err();
+        remove(&directory, pin, true).unwrap_err();
         drop(directory);
         assert_eq!(fs::read(path.join("foreign")).unwrap(), b"unchanged");
         assert!(!path.join("output").exists());
@@ -277,7 +296,7 @@ mod tests {
         let mut permissions = fs::metadata(&witness).unwrap().permissions();
         permissions.set_readonly(true);
         fs::set_permissions(&witness, permissions.clone()).unwrap();
-        remove(&directory, pin).unwrap_err();
+        remove(&directory, pin, true).unwrap_err();
         drop(directory);
         assert!(fs::metadata(&witness).unwrap().permissions().readonly());
         assert_eq!(fs::read(&witness).unwrap(), b"unchanged");

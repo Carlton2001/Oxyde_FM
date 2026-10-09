@@ -11,6 +11,7 @@ use std::{
 
 struct Entry {
     path: PathBuf,
+    destination: PathBuf,
     source: CopiedSource,
     output: CopiedFile,
 }
@@ -54,15 +55,35 @@ impl ArchiveMoveSources {
             removed,
         )
     }
-    pub fn record(&mut self, path: PathBuf, source: CopiedSource, output: CopiedFile) {
+    pub fn record(
+        &mut self,
+        path: PathBuf,
+        destination: PathBuf,
+        source: CopiedSource,
+        output: CopiedFile,
+    ) {
         self.verified = false;
         self.entries.push(Entry {
             path,
+            destination,
             source,
             output,
         });
     }
 
+    pub fn retained_outputs(
+        &self,
+    ) -> io::Result<std::collections::HashMap<PathBuf, std::fs::File>> {
+        self.entries
+            .iter()
+            .map(|entry| {
+                Ok((
+                    entry.output._parents.resolved_path(&entry.destination)?,
+                    entry.output.file.try_clone()?,
+                ))
+            })
+            .collect()
+    }
     pub fn verify_all(&mut self, checkpoint: &mut dyn FnMut() -> io::Result<()>) -> io::Result<()> {
         self.verified = false;
         if let Some(destination) = &self.destination {
@@ -124,7 +145,12 @@ mod tests {
             &mut |_| Ok(()),
         )
         .unwrap();
-        moves.record(source.to_path_buf(), held, output);
+        moves.record(
+            source.to_path_buf(),
+            destination.to_path_buf(),
+            held,
+            output,
+        );
     }
 
     #[test]
@@ -150,7 +176,7 @@ mod tests {
 
     #[test]
     fn archive_move_sources_remove_the_original_after_parent_junction_retargeting() {
-        use crate::platform::windows_reparse_tests::{junction, Retarget};
+        use crate::platform::windows_reparse_tests::{Retarget, junction};
         let root = tempfile::tempdir().unwrap();
         let chosen = root.path().join("chosen");
         let outside = root.path().join("outside");
@@ -195,9 +221,11 @@ mod tests {
         moves.entries[1].output.hash = blake3::hash(b"different").to_hex().to_string();
         assert!(moves.remove_matching(&|_| true, &mut || Ok(())).is_err());
         assert!(moves.verify_all(&mut || Ok(())).is_err());
-        assert!(moves
-            .remove_matching(&|path| path == first, &mut || Ok(()))
-            .is_err());
+        assert!(
+            moves
+                .remove_matching(&|path| path == first, &mut || Ok(()))
+                .is_err()
+        );
         drop(moves);
         assert_eq!(fs::read(first).unwrap(), b"first");
         assert_eq!(fs::read(second).unwrap(), b"second");

@@ -202,14 +202,17 @@ impl Platform for LinuxPlatform {
         if result.is_err() { let _ = std::fs::remove_dir(path); }
         result
     }
-    fn remove_copy_staging(&self, _directory: &std::fs::File, pin: std::fs::File, path: &std::path::Path) -> std::io::Result<()> {
+    fn create_operation_output(&self, _parent: &std::fs::File, path: &std::path::Path) -> std::io::Result<std::fs::File> {
+        std::fs::OpenOptions::new().read(true).write(true).create_new(true).open(path)
+    }
+    fn remove_copy_staging(&self, _directory: &std::fs::File, pin: std::fs::File, path: &std::path::Path, remove_output: bool) -> std::io::Result<()> {
         drop(pin);
         // Unix unlink does not require write permission on the file itself.
-        let result = match std::fs::remove_file(path.join("output")) {
+        let result = if !remove_output { Ok(()) } else { match std::fs::remove_file(path.join("output")) {
             Ok(()) => Ok(()),
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
             Err(error) => Err(error),
-        };
+        }};
         let unpin = std::fs::remove_file(path.join(".pin"));
         result?;
         unpin?;

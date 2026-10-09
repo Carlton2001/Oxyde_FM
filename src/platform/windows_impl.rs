@@ -91,8 +91,11 @@ impl Platform for WindowsPlatform {
     fn create_copy_staging(&self, parent: &std::fs::File, path: &std::path::Path) -> std::io::Result<(std::fs::File, std::fs::File)> {
         super::windows_copy_staging::create(parent, path)
     }
-    fn remove_copy_staging(&self, directory: &std::fs::File, pin: std::fs::File, _path: &std::path::Path) -> std::io::Result<()> {
-        super::windows_copy_staging::remove(directory, pin)
+    fn create_operation_output(&self, parent: &std::fs::File, path: &std::path::Path) -> std::io::Result<std::fs::File> {
+        super::windows_copy_staging::create_output(parent, path)
+    }
+    fn remove_copy_staging(&self, directory: &std::fs::File, pin: std::fs::File, _path: &std::path::Path, remove_output: bool) -> std::io::Result<()> {
+        super::windows_copy_staging::remove(directory, pin, remove_output)
     }
     fn lock_cache_file(&self, path: &std::path::Path) -> std::io::Result<std::fs::File> {
         super::windows_cache::lock_file(path)

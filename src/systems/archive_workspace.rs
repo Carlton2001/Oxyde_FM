@@ -176,6 +176,9 @@ impl ArchiveWorkspace {
     }
 
     pub fn commit(&self, op: &Arc<Mutex<FileOperation>>) -> Result<(), String> {
+        self.commit_with_retained(op, &HashMap::new())
+    }
+    pub fn commit_with_retained(&self, op: &Arc<Mutex<FileOperation>>, retained: &HashMap<PathBuf, std::fs::File>) -> Result<(), String> {
         if !writable(&self.archive) {
             return Err("This archive format is read-only".into());
         }
@@ -205,7 +208,7 @@ impl ArchiveWorkspace {
             .cloned()
             .unwrap_or_else(|| original_quality.clone());
         op.lock().unwrap().compression_quality = quality;
-        let result = FileOperationManager::perform_compress(op, sources, Some(destination.clone()));
+        let result = FileOperationManager::perform_compress_retained(op, sources, Some(destination.clone()), retained);
         op.lock().unwrap().destination = original_destination;
         op.lock().unwrap().compression_quality = original_quality;
         result?;

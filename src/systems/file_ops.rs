@@ -13,15 +13,8 @@ use crate::utils::archive_limits::{ArchiveBudget, ArchiveLimits};
 
 const SPEED_HISTORY_LIMIT: usize = 60;
 
-struct PendingFile(PathBuf);
-
-impl Drop for PendingFile {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_file(&self.0);
-    }
-}
-
 struct ArchiveReader {
+    _parents: super::path_parents::HeldParents,
     input: std::fs::File,
     operation: Arc<Mutex<FileOperation>>,
 }
@@ -954,14 +947,17 @@ impl FileOperationManager {
                 },
             ).map_err(|error| error.to_string())?;
         }
+        let retained_outputs = deferred_moves.as_ref().map(|moves| moves.lock().unwrap().retained_outputs())
+            .transpose().map_err(|error| error.to_string())?.unwrap_or_default();
         // Publish destination first: a failed source rewrite leaves a recoverable copy.
         if let Some(archive) = &target_archive {
-            workspaces.0[archive].commit(op)?;
+            workspaces.0[archive].commit_with_retained(op, &retained_outputs)?;
             changed.remove(archive);
         }
         for archive in changed {
-            workspaces.0[&archive].commit(op)?;
+            workspaces.0[&archive].commit_with_retained(op, &retained_outputs)?;
         }
+        drop(retained_outputs);
         if is_move {
             // Sources have remained held since copy, including during reconstruction.
             deferred_moves.as_ref().unwrap().lock().unwrap().remove_matching(
@@ -1587,7 +1583,7 @@ impl FileOperationManager {
                             moves
                                 .lock()
                                 .unwrap()
-                                .record(src.to_path_buf(), source, output);
+                                .record(src.to_path_buf(), dest.clone(), source, output);
                             processed_files.fetch_add(1, Ordering::Relaxed);
                             continue;
                         }
@@ -2149,42 +2145,47 @@ impl FileOperationManager {
         sources: Vec<PathBuf>,
         destination: Option<PathBuf>,
     ) -> Result<(), String> {
+        Self::perform_compress_prepared(op, sources, destination, &mut || Ok(()))
+    }
+
+    fn perform_compress_prepared(
+        op: &Arc<Mutex<FileOperation>>,
+        sources: Vec<PathBuf>,
+        destination: Option<PathBuf>,
+        after_plan: &mut dyn FnMut() -> std::io::Result<()>,
+    ) -> Result<(), String> {
+        Self::perform_compress_impl(op, sources, destination, after_plan, None)
+    }
+    pub(crate) fn perform_compress_retained(
+        op: &Arc<Mutex<FileOperation>>,
+        sources: Vec<PathBuf>,
+        destination: Option<PathBuf>,
+        retained: &HashMap<PathBuf, std::fs::File>,
+    ) -> Result<(), String> {
+        Self::perform_compress_impl(op, sources, destination, &mut || Ok(()), Some(retained))
+    }
+    fn perform_compress_impl(
+        op: &Arc<Mutex<FileOperation>>,
+        sources: Vec<PathBuf>,
+        destination: Option<PathBuf>,
+        after_plan: &mut dyn FnMut() -> std::io::Result<()>,
+        retained: Option<&HashMap<PathBuf, std::fs::File>>,
+    ) -> Result<(), String> {
         let requested = destination.ok_or("Missing archive destination")?;
         let update_destination = matches!(op.lock().unwrap().op_type, FileOpType::Compress);
-        let target = Self::unique_archive_path(&requested);
-        let parent = target.parent().ok_or("Invalid archive destination")?;
-        let mut entries = Vec::new();
-        let mut total_bytes = 0u64;
-        for source in &sources {
-            let base = source.file_name().ok_or("Invalid source name")?;
-            for item in walkdir::WalkDir::new(source).follow_links(false) {
-                Self::archive_checkpoint(op)?;
-                let item = item.map_err(|error| error.to_string())?;
-                let metadata = item.metadata().map_err(|error| error.to_string())?;
-                if item.file_type().is_symlink() {
-                    return Err(format!(
-                        "Symbolic links cannot be compressed: {}",
-                        item.path().display()
-                    ));
-                }
-                let relative = item
-                    .path()
-                    .strip_prefix(source)
-                    .map_err(|error| error.to_string())?;
-                // Joining an empty relative path to a file name can leave a trailing
-                // separator on Windows. ZIP readers then interpret the file as a directory.
-                let archive_path = if relative.as_os_str().is_empty() {
-                    PathBuf::from(base)
-                } else {
-                    Path::new(base).join(relative)
-                };
-                let name = archive_path.to_string_lossy().replace('\\', "/");
-                if metadata.is_file() {
-                    total_bytes += metadata.len();
-                }
-                entries.push((item.path().to_path_buf(), name, metadata.is_dir()));
-            }
-        }
+        let destination_parents =
+            super::path_parents::HeldParents::new(&requested).map_err(|error| error.to_string())?;
+        let target = Self::unique_archive_path(
+            &destination_parents
+                .resolved_path(&requested)
+                .map_err(|error| error.to_string())?,
+        );
+        let entries = super::compression_sources::plan(&sources, &mut || {
+            Self::archive_checkpoint(op).map_err(std::io::Error::other)
+        })
+        .map_err(|error| error.to_string())?;
+        let total_bytes = entries.iter().map(|entry| entry.source.size()).sum();
+        after_plan().map_err(|error| error.to_string())?;
         {
             let mut locked = op.lock().unwrap();
             if update_destination {
@@ -2198,13 +2199,9 @@ impl FileOperationManager {
                 OpStatus::Running
             };
         }
-        let temp = parent.join(format!(".oxyde-{}.archive.tmp", Uuid::new_v4()));
-        let guard = PendingFile(temp.clone());
-        let file = std::fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&temp)
+        let mut output = super::compression_output::Output::new(&destination_parents)
             .map_err(|error| error.to_string())?;
+        let file = output.file.try_clone().map_err(|error| error.to_string())?;
         let format = requested
             .extension()
             .and_then(|e| e.to_str())
@@ -2214,7 +2211,12 @@ impl FileOperationManager {
             "zip" => {
                 let mut writer = zip::ZipWriter::new(std::io::BufWriter::new(file));
                 let mut buffer = [0u8; 256 * 1024];
-                for (path, name, is_dir) in entries {
+                for entry in entries {
+                    let path = entry.source.path();
+                    let (_source_parents, mut input) =
+                        entry.open(retained).map_err(|error| error.to_string())?;
+                    let is_dir = entry.source.is_dir();
+                    let name = entry.name;
                     Self::archive_checkpoint(op)?;
                     op.lock().unwrap().current_file = Some(path.to_string_lossy().into_owned());
                     let level = if op.lock().unwrap().turbo_flag.load(Ordering::Relaxed) {
@@ -2237,8 +2239,6 @@ impl FileOperationManager {
                         writer
                             .start_file(name, options)
                             .map_err(|error| error.to_string())?;
-                        let mut input =
-                            std::fs::File::open(&path).map_err(|error| error.to_string())?;
                         loop {
                             Self::archive_checkpoint(op)?;
                             let count =
@@ -2254,7 +2254,11 @@ impl FileOperationManager {
                     }
                     op.lock().unwrap().processed_files += 1;
                 }
-                writer.finish().map_err(|error| error.to_string())?;
+                writer
+                    .finish()
+                    .map_err(|error| error.to_string())?
+                    .flush()
+                    .map_err(|error| error.to_string())?;
             }
             "7z" => {
                 let quality = op.lock().unwrap().compression_quality.clone();
@@ -2268,17 +2272,23 @@ impl FileOperationManager {
                 writer.set_content_methods(vec![
                     sevenz_rust2::encoder_options::Lzma2Options::from_level(preset).into(),
                 ]);
-                for (path, name, is_dir) in entries {
+                for selected in entries {
+                    let path = selected.source.path();
+                    let (parents, input) =
+                        selected.open(retained).map_err(|error| error.to_string())?;
+                    let metadata = input.metadata().map_err(|error| error.to_string())?;
+                    let is_dir = metadata.is_dir();
                     Self::archive_checkpoint(op)?;
                     op.lock().unwrap().current_file = Some(path.to_string_lossy().into_owned());
-                    let entry = sevenz_rust2::ArchiveEntry::from_path(&path, name);
+                    let entry = super::compression_sources::seven_entry(selected.name, &metadata);
                     if is_dir {
                         writer
                             .push_archive_entry(entry, None::<ArchiveReader>)
                             .map_err(|e| e.to_string())?;
                     } else {
                         let reader = ArchiveReader {
-                            input: std::fs::File::open(&path).map_err(|e| e.to_string())?,
+                            _parents: parents,
+                            input,
                             operation: op.clone(),
                         };
                         writer
@@ -2301,12 +2311,13 @@ impl FileOperationManager {
                     Self::write_tar_entries(
                         op,
                         entries,
+                        retained,
                         zstd::stream::write::Encoder::new(file, level)
                             .map_err(|e| e.to_string())?,
                     )?;
                 } else {
                     let mut tar_bytes = tar::Builder::new(std::io::BufWriter::new(file));
-                    Self::append_tar_entries(op, entries, &mut tar_bytes)?;
+                    Self::append_tar_entries(op, entries, &mut tar_bytes, retained)?;
                     tar_bytes
                         .into_inner()
                         .map_err(|e| e.to_string())?
@@ -2317,65 +2328,52 @@ impl FileOperationManager {
             _ => return Err("Unsupported compression format".into()),
         }
         Self::archive_checkpoint(op)?;
+        output.file.sync_all().map_err(|error| error.to_string())?;
         let mut final_target = target;
         loop {
-            match std::fs::hard_link(&temp, &final_target) {
+            match output.publish(&destination_parents, &final_target) {
                 Ok(()) => break,
                 Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
                     final_target = Self::unique_archive_path(&final_target);
                 }
-                Err(_) => {
-                    // Filesystems without hard links still get an exclusive publish.
-                    let output = std::fs::OpenOptions::new()
-                        .write(true)
-                        .create_new(true)
-                        .open(&final_target);
-                    match output {
-                        Ok(mut output) => {
-                            let mut partial = PendingFile(final_target.clone());
-                            let mut input =
-                                std::fs::File::open(&temp).map_err(|error| error.to_string())?;
-                            let mut buffer = [0u8; 256 * 1024];
-                            loop {
-                                Self::archive_checkpoint(op)?;
-                                let count =
-                                    input.read(&mut buffer).map_err(|error| error.to_string())?;
-                                if count == 0 {
-                                    break;
-                                }
-                                output
-                                    .write_all(&buffer[..count])
-                                    .map_err(|error| error.to_string())?;
-                            }
-                            output.sync_all().map_err(|error| error.to_string())?;
-                            partial.0 = PathBuf::new();
-                            break;
-                        }
-                        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
-                            final_target = Self::unique_archive_path(&final_target);
-                        }
-                        Err(error) => return Err(error.to_string()),
-                    }
-                }
+                Err(error) => return Err(error.to_string()),
             }
         }
         if update_destination {
-            op.lock().unwrap().destination = Some(final_target);
+            let parent_unchanged = requested.parent().is_some_and(|parent| {
+                std::fs::canonicalize(parent)
+                    .is_ok_and(|resolved| resolved == destination_parents.resolved_directory())
+            });
+            let display_path = if parent_unchanged {
+                requested.with_file_name(
+                    final_target
+                        .file_name()
+                        .ok_or("Archive output has no name")?,
+                )
+            } else {
+                final_target
+            };
+            op.lock().unwrap().destination = Some(display_path);
         }
-        drop(guard);
         Ok(())
     }
 
     fn append_tar_entries<W: Write>(
         op: &Arc<Mutex<FileOperation>>,
-        entries: Vec<(PathBuf, String, bool)>,
+        entries: Vec<super::compression_sources::Entry>,
         writer: &mut tar::Builder<W>,
+        retained: Option<&HashMap<PathBuf, std::fs::File>>,
     ) -> Result<(), String> {
-        for (path, name, is_dir) in entries {
+        for selected in entries {
+            let path = selected.source.path();
+            let (parents, input) = selected.open(retained).map_err(|error| error.to_string())?;
+            let metadata = input.metadata().map_err(|error| error.to_string())?;
+            let name = selected.name;
+            let is_dir = metadata.is_dir();
             Self::archive_checkpoint(op)?;
             op.lock().unwrap().current_file = Some(path.to_string_lossy().into_owned());
             let mut header = tar::Header::new_gnu();
-            header.set_metadata(&std::fs::metadata(&path).map_err(|e| e.to_string())?);
+            header.set_metadata(&metadata);
             if is_dir {
                 writer
                     .append_data(&mut header, name, std::io::empty())
@@ -2386,7 +2384,8 @@ impl FileOperationManager {
                         &mut header,
                         name,
                         ArchiveReader {
-                            input: std::fs::File::open(&path).map_err(|e| e.to_string())?,
+                            _parents: parents,
+                            input,
                             operation: op.clone(),
                         },
                     )
@@ -2399,11 +2398,12 @@ impl FileOperationManager {
 
     fn write_tar_entries<W: Write>(
         op: &Arc<Mutex<FileOperation>>,
-        entries: Vec<(PathBuf, String, bool)>,
+        entries: Vec<super::compression_sources::Entry>,
+        retained: Option<&HashMap<PathBuf, std::fs::File>>,
         encoder: zstd::stream::write::Encoder<'_, W>,
     ) -> Result<(), String> {
         let mut writer = tar::Builder::new(encoder);
-        Self::append_tar_entries(op, entries, &mut writer)?;
+        Self::append_tar_entries(op, entries, &mut writer, retained)?;
         writer
             .into_inner()
             .map_err(|e| e.to_string())?
@@ -2649,6 +2649,93 @@ impl FileOperationManager {
 
 #[cfg(test)]
 mod tests {
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn compression_refuses_source_substitution_before_encoding_for_every_format() {
+        for extension in ["zip", "7z", "tar", "zst"] {
+            let root = tempfile::tempdir().unwrap();
+            let source = root.path().join("source.txt");
+            let saved = root.path().join("saved.txt");
+            let output = root.path().join("output");
+            std::fs::create_dir(&output).unwrap();
+            std::fs::write(&source, b"same bytes").unwrap();
+            let archive = output.join(format!("archive.{extension}"));
+            let error = FileOperationManager::perform_compress_prepared(&operation(), vec![source.clone()], Some(archive.clone()), &mut || {
+                std::fs::rename(&source, &saved)?;
+                std::fs::write(&source, b"same bytes")
+            }).unwrap_err();
+            assert_eq!(crate::models::error::SourceSelectionFailure::from_message(&error), Some(true));
+            assert!(!archive.exists());
+            assert!(std::fs::read_dir(&output).unwrap().next().is_none(), "compression left staging after error: {extension}");
+            assert_eq!(std::fs::read(&source).unwrap(), b"same bytes");
+            assert_eq!(std::fs::read(&saved).unwrap(), b"same bytes");
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn compression_retains_source_and_publication_parents_after_junction_retargeting() {
+        use crate::platform::windows_reparse_tests::{junction, Retarget};
+        for extension in ["zip", "7z", "tar", "zst"] {
+            let root = tempfile::tempdir().unwrap();
+            for folder in ["chosen", "outside-source", "output", "outside-output"] { std::fs::create_dir(root.path().join(folder)).unwrap(); }
+            std::fs::write(root.path().join("chosen/source.txt"), b"selected content").unwrap();
+            std::fs::write(root.path().join("outside-source/source.txt"), b"source witness").unwrap();
+            std::fs::write(root.path().join("outside-output/witness"), b"destination witness").unwrap();
+            let source_link = root.path().join("source-link");
+            let source_template = root.path().join("source-template");
+            let output_link = root.path().join("output-link");
+            let output_template = root.path().join("output-template");
+            junction(&source_link, &root.path().join("chosen"));
+            junction(&source_template, &root.path().join("outside-source"));
+            junction(&output_link, &root.path().join("output"));
+            junction(&output_template, &root.path().join("outside-output"));
+            let source_retarget = Retarget::new(&source_link, &source_template);
+            let output_retarget = Retarget::new(&output_link, &output_template);
+            let archive = output_link.join(format!("archive.{extension}"));
+            let op = Arc::new(Mutex::new(FileOperation::new(FileOpType::Compress, vec![], Some(archive.clone()), None)));
+            FileOperationManager::perform_compress_prepared(&op, vec![source_link.join("source.txt")], Some(archive.clone()), &mut || {
+                source_retarget.apply(); output_retarget.apply(); Ok(())
+            }).unwrap();
+            let produced = root.path().join("output").join(format!("archive.{extension}"));
+            assert!(produced.is_file());
+            assert!(!root.path().join("outside-output").join(format!("archive.{extension}")).exists());
+            let workspace = super::super::archive_workspace::ArchiveWorkspace::open(produced.clone()).unwrap();
+            assert_eq!(std::fs::read(workspace.root().join("source.txt")).unwrap(), b"selected content");
+            assert_eq!(std::fs::read(root.path().join("outside-source/source.txt")).unwrap(), b"source witness");
+            assert_eq!(std::fs::read(root.path().join("outside-output/witness")).unwrap(), b"destination witness");
+            assert_eq!(std::fs::canonicalize(op.lock().unwrap().destination.as_ref().unwrap()).unwrap(), std::fs::canonicalize(produced).unwrap());
+            assert_eq!(std::fs::read_dir(root.path().join("output")).unwrap().count(), 1);
+            drop(workspace);
+            drop((source_retarget, output_retarget));
+            for link in [source_link, source_template, output_link, output_template] { std::fs::remove_dir(link).unwrap(); }
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn compression_preserves_archive_arriving_after_planning_and_uses_current_source_metadata() {
+        for extension in ["zip", "7z", "tar", "zst"] {
+            let root = tempfile::tempdir().unwrap();
+            let source = root.path().join("écriture.txt");
+            let output = root.path().join("output");
+            std::fs::create_dir(&output).unwrap();
+            std::fs::write(&source, b"old").unwrap();
+            let archive = output.join(format!("archive.{extension}"));
+            let op = Arc::new(Mutex::new(FileOperation::new(FileOpType::Compress, vec![], Some(archive.clone()), None)));
+            FileOperationManager::perform_compress_prepared(&op, vec![source.clone()], Some(archive.clone()), &mut || {
+                std::fs::write(&archive, b"new destination witness")?;
+                std::fs::write(&source, b"edited contents longer than the planned length")
+            }).unwrap();
+            assert_eq!(std::fs::read(&archive).unwrap(), b"new destination witness");
+            let produced = op.lock().unwrap().destination.clone().unwrap();
+            let workspace = super::super::archive_workspace::ArchiveWorkspace::open(produced).unwrap();
+            assert_eq!(std::fs::read(workspace.root().join("écriture.txt")).unwrap(), b"edited contents longer than the planned length");
+            assert_eq!(std::fs::read_dir(&output).unwrap().count(), 2);
+        }
+    }
+
     #[test]
     fn extraction_failure_cleans_output_for_all_formats() {
         use super::*;

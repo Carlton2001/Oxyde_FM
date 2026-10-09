@@ -6,6 +6,8 @@ mod copied_source;
 mod destination_tree;
 mod source_directories;
 mod source_selection;
+mod compression_sources;
+mod compression_output;
 pub(crate) mod history_move;
 pub(crate) mod history_move_redo;
 pub(crate) mod history_file_undo;

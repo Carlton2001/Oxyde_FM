@@ -578,5 +578,5 @@ undo-rename-unverified = Impossible d’annuler ce renommage en toute sécurité
 redo-rename-changed = Impossible de rétablir ce renommage : le fichier ou dossier a été remplacé. Il a été conservé à son emplacement actuel. { $detail }
 redo-rename-unverified = Impossible de rétablir ce renommage en toute sécurité : l’identité du fichier ou dossier n’a pas pu être vérifiée. Il a été conservé. { $detail }
 
-transfer-source-changed = La source a été remplacée ou n’est plus un fichier ou dossier ordinaire. Le transfert a été arrêté ; les éléments déjà transférés sont conservés. Vérifiez la source puis réessayez.
-transfer-source-unverified = L’identité de la source ne peut pas être vérifiée sur cet emplacement. Le transfert a été arrêté ; les éléments déjà transférés sont conservés. Essayez depuis un dossier local compatible.
+transfer-source-changed = La source a été remplacée ou n’est plus un fichier ou dossier ordinaire. L’opération a été arrêtée ; les éléments déjà transférés sont conservés. Vérifiez la source puis réessayez.
+transfer-source-unverified = L’identité de la source ne peut pas être vérifiée sur cet emplacement. L’opération a été arrêtée ; les éléments déjà transférés sont conservés. Essayez depuis un dossier local compatible.

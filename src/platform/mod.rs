@@ -129,8 +129,11 @@ pub trait Platform: Send + Sync {
     fn remove_operation_tree(&self, parent: &std::fs::File, path: &std::path::Path, checkpoint: &mut dyn FnMut() -> std::io::Result<()>) -> std::io::Result<()>;
     /// Exclusively create hidden copy staging and a retained non-deletable marker on Windows.
     fn create_copy_staging(&self, parent: &std::fs::File, path: &std::path::Path) -> std::io::Result<(std::fs::File, std::fs::File)>;
+    /// Create a private archive writer relative to staging; retain rename/delete
+    /// access and exclude external writers/replacement on Windows.
+    fn create_operation_output(&self, parent: &std::fs::File, path: &std::path::Path) -> std::io::Result<std::fs::File>;
     /// Remove only staging output and marker, by identity on Windows. Unknown children are preserved.
-    fn remove_copy_staging(&self, directory: &std::fs::File, pin: std::fs::File, path: &std::path::Path) -> std::io::Result<()>;
+    fn remove_copy_staging(&self, directory: &std::fs::File, pin: std::fs::File, path: &std::path::Path, remove_output: bool) -> std::io::Result<()>;
     fn lock_cache_file(&self, path: &std::path::Path) -> std::io::Result<std::fs::File>;
     fn read_cache_file(&self, path: &std::path::Path) -> std::io::Result<std::fs::File>;
     /// Publish an optional preview cache. Windows retains ordinary parents and

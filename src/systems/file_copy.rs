@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 pub(super) struct Staging {
     pub directory: std::fs::File,
     pin: Option<std::fs::File>,
+    pub remove_output_on_drop: bool,
     path: PathBuf,
     pub file: PathBuf,
 }
@@ -24,6 +25,7 @@ impl Staging {
         Ok(Self {
             directory,
             pin: Some(pin),
+            remove_output_on_drop: true,
             file: path.join("output"),
             path,
         })
@@ -32,7 +34,12 @@ impl Staging {
 impl Drop for Staging {
     fn drop(&mut self) {
         if let Some(pin) = self.pin.take() {
-            if let Err(error) = platform().remove_copy_staging(&self.directory, pin, &self.path) {
+            if let Err(error) = platform().remove_copy_staging(
+                &self.directory,
+                pin,
+                &self.path,
+                self.remove_output_on_drop,
+            ) {
                 log::warn!("Cannot clean copy staging {}: {error}", self.path.display());
             }
         }
@@ -490,7 +497,7 @@ mod tests {
 
     #[test]
     fn staging_is_never_created_in_a_new_reparse_target() {
-        use crate::platform::windows_reparse_tests::{junction, Retarget};
+        use crate::platform::windows_reparse_tests::{Retarget, junction};
         let root = tempfile::tempdir().unwrap();
         let source = root.path().join("source");
         let selected = root.path().join("selected");
@@ -538,7 +545,7 @@ mod tests {
 
     #[test]
     fn active_copy_staging_resists_retargeting_and_is_cleaned_after_cancellation() {
-        use crate::platform::windows_reparse_tests::{junction, Retarget};
+        use crate::platform::windows_reparse_tests::{Retarget, junction};
         let fixture = Fixture::new();
         let outside = fixture.root.path().join("outside");
         fs::create_dir(&outside).unwrap();
@@ -578,7 +585,7 @@ mod tests {
 
     #[test]
     fn copy_stays_in_the_selected_parent_after_junction_retargeting() {
-        use crate::platform::windows_reparse_tests::{junction, Retarget};
+        use crate::platform::windows_reparse_tests::{Retarget, junction};
         for replace in [false, true] {
             let root = tempfile::tempdir().unwrap();
             let source_directory = root.path().join("source-directory");
@@ -634,11 +641,13 @@ mod tests {
                 fs::read_dir(&outside).unwrap().count(),
                 if replace { 3 } else { 2 }
             );
-            assert!(fs::read_dir(&selected).unwrap().all(|entry| !entry
-                .unwrap()
-                .file_name()
-                .to_string_lossy()
-                .starts_with(".oxyde-copy-")));
+            assert!(fs::read_dir(&selected).unwrap().all(|entry| {
+                !entry
+                    .unwrap()
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with(".oxyde-copy-")
+            }));
             drop((retarget, source_retarget));
             fs::remove_dir(link).unwrap();
             fs::remove_dir(template).unwrap();
@@ -664,11 +673,13 @@ mod tests {
             }
         }
         fn no_staging(&self) {
-            assert!(fs::read_dir(self.root.path()).unwrap().all(|entry| !entry
-                .unwrap()
-                .file_name()
-                .to_string_lossy()
-                .starts_with(".oxyde-copy-")));
+            assert!(fs::read_dir(self.root.path()).unwrap().all(|entry| {
+                !entry
+                    .unwrap()
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with(".oxyde-copy-")
+            }));
         }
     }
     impl Drop for Fixture {
@@ -780,10 +791,12 @@ mod tests {
         .unwrap_err();
         assert_eq!(error.kind(), ErrorKind::AlreadyExists);
         assert_eq!(fs::read(&fixture.destination).unwrap(), b"foreign content");
-        assert!(fs::metadata(&fixture.source)
-            .unwrap()
-            .permissions()
-            .readonly());
+        assert!(
+            fs::metadata(&fixture.source)
+                .unwrap()
+                .permissions()
+                .readonly()
+        );
         fixture.no_staging();
     }
 
@@ -844,10 +857,12 @@ mod tests {
         .unwrap();
         assert_eq!(hash, blake3::hash(b"").to_hex().to_string());
         assert_eq!(fs::metadata(&fixture.destination).unwrap().len(), 0);
-        assert!(fs::metadata(&fixture.destination)
-            .unwrap()
-            .permissions()
-            .readonly());
+        assert!(
+            fs::metadata(&fixture.destination)
+                .unwrap()
+                .permissions()
+                .readonly()
+        );
         fixture.no_staging();
     }
 
@@ -875,10 +890,12 @@ mod tests {
                 .recv_timeout(std::time::Duration::from_secs(5))
                 .unwrap();
             assert!(!fixture.destination.exists());
-            assert!(fs::File::options()
-                .write(true)
-                .open(&fixture.source)
-                .is_err());
+            assert!(
+                fs::File::options()
+                    .write(true)
+                    .open(&fixture.source)
+                    .is_err()
+            );
             resume_tx.send(()).unwrap();
             worker.join().unwrap().unwrap();
         });
