@@ -1,6 +1,25 @@
 use std::fmt;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HistoryMoveIssue {
+    Changed,
+    Conflict,
+    Unverified,
+    Incomplete,
+}
+#[derive(Clone, Debug)]
+pub struct HistoryMoveFailure {
+    pub issue: HistoryMoveIssue,
+    pub detail: String,
+}
+impl fmt::Display for HistoryMoveFailure {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Move history {:?}: {}", self.issue, self.detail)
+    }
+}
+impl std::error::Error for HistoryMoveFailure {}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum NewFolderHistoryIssue {
     Changed,
     Unverified,
@@ -163,6 +182,7 @@ pub enum CommandError {
     HistoryCopy(HistoryCopyFailure),
     HistoryIdentity(HistoryIdentityFailure),
     NewFolderHistory(NewFolderHistoryFailure),
+    HistoryMove(HistoryMoveFailure),
     TrashError(String),
     TrashFull(String),
     Other(String),
@@ -183,6 +203,7 @@ impl fmt::Display for CommandError {
             CommandError::HistoryCopy(failure) => failure.fmt(f),
             CommandError::HistoryIdentity(failure) => failure.fmt(f),
             CommandError::NewFolderHistory(failure) => failure.fmt(f),
+            CommandError::HistoryMove(failure) => failure.fmt(f),
             CommandError::TrashError(msg) => write!(f, "Trash Error: {}", msg),
             CommandError::TrashFull(msg) => write!(f, "Trash Full: {}", msg),
             CommandError::Other(msg) => write!(f, "Error: {}", msg),
@@ -192,6 +213,13 @@ impl fmt::Display for CommandError {
 
 impl From<std::io::Error> for CommandError {
     fn from(err: std::io::Error) -> Self {
+        if let Some(failure) = err
+            .get_ref()
+            .and_then(|error| error.downcast_ref::<HistoryMoveFailure>())
+        {
+            return Self::HistoryMove(failure.clone());
+        }
+
         if let Some(failure) = err
             .get_ref()
             .and_then(|error| error.downcast_ref::<NewFolderHistoryFailure>())

@@ -6,6 +6,7 @@ mod copied_source;
 mod destination_tree;
 mod source_directories;
 pub(crate) mod history_move;
+pub(crate) mod history_move_redo;
 pub(crate) mod history_file_undo;
 pub(crate) mod history_directories;
 pub(crate) mod item_rename;

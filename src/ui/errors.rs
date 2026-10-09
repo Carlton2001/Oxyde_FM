@@ -28,6 +28,17 @@ pub fn undo_failure(error: &CommandError) -> (Message, String) {
 }
 
 pub fn redo_failure(error: &CommandError) -> (Message, String) {
+    if let CommandError::HistoryMove(failure) = error {
+        use oxyde_lib::models::error::HistoryMoveIssue as Issue;
+        let message = match failure.issue {
+            Issue::Changed => Message::RedoMoveChanged,
+            Issue::Conflict => Message::RedoMoveConflict,
+            Issue::Unverified => Message::RedoMoveUnverified,
+            Issue::Incomplete => Message::RedoMoveIncomplete,
+        };
+        return (message, failure.detail.clone());
+    }
+
     if let CommandError::NewFolderHistory(failure) = error {
         use oxyde_lib::models::error::NewFolderHistoryIssue as Issue;
         let message = match failure.issue {
@@ -91,6 +102,36 @@ pub fn rename_message(error: &CommandError) -> Message {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn redo_move_errors_are_translated_and_keep_literal_paths_in_all_languages() {
+        use crate::ui::i18n::{I18n, Language};
+        use fluent_bundle::FluentArgs;
+        use oxyde_lib::models::error::{HistoryMoveFailure, HistoryMoveIssue as Issue};
+        let path = "C:\\Données_日本語\\{ $detail }";
+        for (issue, expected) in [
+            (Issue::Changed, Message::RedoMoveChanged),
+            (Issue::Conflict, Message::RedoMoveConflict),
+            (Issue::Unverified, Message::RedoMoveUnverified),
+            (Issue::Incomplete, Message::RedoMoveIncomplete),
+        ] {
+            let error = CommandError::from(std::io::Error::other(HistoryMoveFailure {
+                issue,
+                detail: path.into(),
+            }));
+            let (message, detail) = redo_failure(&error);
+            assert_eq!(message, expected);
+            assert_eq!(detail, path);
+            for language in Language::ALL {
+                let mut args = FluentArgs::new();
+                args.set("detail", detail.as_str());
+                let rendered = I18n::for_language(language).text_with_args(message, &args);
+                assert!(rendered.contains(path), "{language:?}: {rendered}");
+                assert!(!rendered.contains(message.key()));
+                assert!(!rendered.contains("Move history"));
+            }
+        }
+    }
+
     #[test]
     fn new_folder_history_messages_preserve_literal_paths_in_every_language() {
         use crate::ui::i18n::{I18n, Language};

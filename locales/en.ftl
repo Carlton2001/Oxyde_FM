@@ -553,3 +553,8 @@ undo-new-folder-missing = The created folder could not be found: { $detail }. Un
 redo-new-folder-conflict = An item already exists at this location: { $detail }. Redo does not replace it.
 redo-new-folder-parent-missing = The parent folder could not be found: { $detail }. Redo does not recreate parent folders.
 redo-new-folder-unverified = The history cannot redo this folder creation: { $detail }. No item was created.
+
+redo-move-changed = The file changed since the operation: { $detail }. Redo Move has stopped to preserve your files.
+redo-move-conflict = An item occupies the destination: { $detail }. Redo Move will not replace it.
+redo-move-unverified = This history cannot safely redo the move: { $detail }. Start the move again from the current files.
+redo-move-incomplete = The move stopped and some items could not return to their original locations. Files or folders have been kept for recovery: { $detail }. Check these locations before retrying.

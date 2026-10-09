@@ -559,3 +559,8 @@ undo-new-folder-missing = Le dossier créé est introuvable : { $detail }. Annul
 redo-new-folder-conflict = Un élément existe déjà à cet emplacement : { $detail }. Rétablir ne le remplace pas.
 redo-new-folder-parent-missing = Le dossier parent est introuvable : { $detail }. Rétablir ne recrée pas les dossiers parents.
 redo-new-folder-unverified = L’historique ne permet pas de rétablir ce dossier : { $detail }. Aucun élément n’a été créé.
+
+redo-move-changed = Le fichier a changé depuis l’opération : { $detail }. Rétablir le déplacement est interrompu pour préserver vos fichiers.
+redo-move-conflict = Un élément occupe la destination : { $detail }. Rétablir le déplacement ne le remplace pas.
+redo-move-unverified = Cet historique ne permet pas de rétablir le déplacement en toute sécurité : { $detail }. Relancez le déplacement depuis les fichiers actuels.
+redo-move-incomplete = Le déplacement a été interrompu et certains éléments n’ont pas pu revenir à leur emplacement initial. Des fichiers ou dossiers sont conservés pour récupération : { $detail }. Vérifiez ces emplacements avant de réessayer.

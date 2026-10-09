@@ -2,87 +2,11 @@ use crate::models::{
     get_file_entry_from_path, CommandError, ConflictEntry, HistoryManager,
     Transaction, TransactionType, TrashEntry,
 };
-use crate::systems::history_move::move_file as move_history_file;
 use crate::utils::path_security::validate_path;
 use log::{info, warn};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-fn rollback_moved_paths(completed: &[(PathBuf, PathBuf)]) -> Vec<String> {
-    let mut errors = Vec::new();
-    for (source, destination) in completed.iter().rev() {
-        if let Err(error) = move_history_file(destination, source, None) {
-            errors.push(format!(
-                "{} → {}: {error}",
-                destination.display(),
-                source.display()
-            ));
-        }
-    }
-    errors
-}
-
-fn remove_empty_dirs(paths: &[PathBuf]) -> Vec<String> {
-    let mut errors = Vec::new();
-    for path in paths.iter().rev() {
-        match std::fs::remove_dir(path) {
-            Ok(()) => {}
-            Err(error)
-                if matches!(
-                    error.kind(),
-                    std::io::ErrorKind::DirectoryNotEmpty | std::io::ErrorKind::NotFound
-                ) => {}
-            Err(error) => errors.push(format!("{}: {error}", path.display())),
-        }
-    }
-    errors
-}
-
-fn create_dir_all_tracked(
-    path: &std::path::Path,
-    created: &mut Vec<PathBuf>,
-) -> std::io::Result<()> {
-    let mut missing = Vec::new();
-    let mut current = path;
-    while !current.exists() {
-        missing.push(current.to_path_buf());
-        current = current.parent().ok_or_else(|| {
-            std::io::Error::new(
-                std::io::ErrorKind::NotFound,
-                "The filesystem root is unavailable",
-            )
-        })?;
-    }
-    missing.reverse();
-    for directory in missing {
-        match std::fs::create_dir(&directory) {
-            Ok(()) => created.push(directory),
-            Err(error)
-                if error.kind() == std::io::ErrorKind::AlreadyExists && directory.is_dir() => {}
-            Err(error) => return Err(error),
-        }
-    }
-    Ok(())
-}
-
-fn hash_file(path: &std::path::Path) -> Result<String, CommandError> {
-    use std::io::Read;
-    let mut file =
-        std::fs::File::open(path).map_err(|error| CommandError::IoError(error.to_string()))?;
-    let mut hasher = blake3::Hasher::new();
-    let mut buffer = [0u8; 128 * 1024];
-    loop {
-        let count = file
-            .read(&mut buffer)
-            .map_err(|error| CommandError::IoError(error.to_string()))?;
-        if count == 0 {
-            break;
-        }
-        hasher.update(&buffer[..count]);
-    }
-    Ok(hasher.finalize().to_hex().to_string())
-}
-
 struct RestorationPaths {
     crate_path: PathBuf,
     corrected_path: PathBuf,
@@ -738,174 +662,7 @@ pub async fn redo_last_action(
                 }
             }
             TransactionType::Move => {
-                if tx.details.moved_files.is_none()
-                    || tx.details.moved_dirs.is_none()
-                    || tx.details.copied_file_hashes.is_none()
-                {
-                    return Err(CommandError::Other(
-                        "This move predates the effect journal and cannot be redone safely"
-                            .to_string(),
-                    ));
-                }
-                if tx
-                    .details
-                    .overwritten_files
-                    .as_ref()
-                    .is_some_and(|files| !files.is_empty())
-                {
-                    return Err(CommandError::Other(
-                        "Redo for replacement operations requires a new conflict resolution"
-                            .to_string(),
-                    ));
-                }
-                let moved = tx.details.moved_files.as_deref().unwrap_or_default();
-                for (source, destination) in moved {
-                    let source = PathBuf::from(source);
-                    let destination = PathBuf::from(destination);
-                    if !source.exists() {
-                        return Err(CommandError::IoError(format!(
-                            "Cannot redo move; source is missing: {}",
-                            source.display()
-                        )));
-                    }
-                    if destination.exists() {
-                        return Err(CommandError::IoError(format!(
-                            "Cannot redo move; destination already exists: {}",
-                            destination.display()
-                        )));
-                    }
-                    let expected_hash = tx
-                        .details
-                        .copied_file_hashes
-                        .as_deref()
-                        .unwrap_or_default()
-                        .iter()
-                        .find(|(path, _)| path == &destination.to_string_lossy())
-                        .map(|(_, hash)| hash.as_str());
-                    if let Some(expected_hash) = expected_hash {
-                        if hash_file(&source)? != expected_hash {
-                            return Err(CommandError::Other(format!(
-                                "Cannot redo move because the source changed since the operation: {}",
-                                source.display()
-                            )));
-                        }
-                    }
-                }
-                let mut completed = Vec::new();
-                let mut recreated_dirs: Vec<PathBuf> = tx
-                    .details
-                    .created_dirs
-                    .as_deref()
-                    .unwrap_or_default()
-                    .iter()
-                    .map(PathBuf::from)
-                    .collect();
-                if let Some(existing) = recreated_dirs.iter().find(|directory| directory.exists()) {
-                    return Err(CommandError::IoError(format!(
-                        "Cannot redo move; destination directory already exists: {}",
-                        existing.display()
-                    )));
-                }
-                recreated_dirs.sort_by_key(|directory| directory.components().count());
-                let mut made_dirs = Vec::new();
-                for directory in &recreated_dirs {
-                    if let Err(error) = create_dir_all_tracked(directory, &mut made_dirs) {
-                        let cleanup_errors = remove_empty_dirs(&made_dirs);
-                        let detail = if cleanup_errors.is_empty() {
-                            String::new()
-                        } else {
-                            format!("; rollback incomplete: {}", cleanup_errors.join(", "))
-                        };
-                        return Err(CommandError::IoError(format!("{error}{detail}")));
-                    }
-                    made_dirs.push(directory.clone());
-                }
-                for (source, destination) in moved {
-                    let source = PathBuf::from(source);
-                    let destination = PathBuf::from(destination);
-                    if let Some(parent) = destination.parent() {
-                        if !parent.exists() {
-                            if let Err(error) = create_dir_all_tracked(parent, &mut made_dirs) {
-                                let rollback_errors = rollback_moved_paths(&completed);
-                                let cleanup_errors = remove_empty_dirs(&made_dirs);
-                                return Err(CommandError::IoError(format!(
-                                    "{error}; rollback errors: {}{}",
-                                    rollback_errors.join(", "),
-                                    if cleanup_errors.is_empty() {
-                                        String::new()
-                                    } else {
-                                        format!(
-                                            "; directory cleanup: {}",
-                                            cleanup_errors.join(", ")
-                                        )
-                                    }
-                                )));
-                            }
-                        }
-                    }
-                    let expected = tx.details.copied_file_hashes
-                        .as_deref()
-                        .unwrap_or_default()
-                        .iter()
-                        .find(|(path, _)| path == &destination.to_string_lossy())
-                        .map(|(_, hash)| hash.as_str());
-                    if let Err(error) = move_history_file(&source, &destination, expected) {
-                        let rollback_errors = rollback_moved_paths(&completed);
-                        let cleanup_errors = remove_empty_dirs(&made_dirs);
-                        return Err(CommandError::IoError(format!(
-                            "{error}; rollback errors: {}{}",
-                            rollback_errors.join(", "),
-                            if cleanup_errors.is_empty() {
-                                String::new()
-                            } else {
-                                format!("; directory cleanup: {}", cleanup_errors.join(", "))
-                            }
-                        )));
-                    }
-                    completed.push((source, destination));
-                }
-                if let Some(directories) = &tx.details.moved_dirs {
-                    let mut directories = directories.clone();
-                    directories.sort_by_key(|(source, _)| {
-                        std::cmp::Reverse(PathBuf::from(source).components().count())
-                    });
-                    let mut removed_sources = Vec::new();
-                    for (source, destination) in directories {
-                        if let Err(error) = create_dir_all_tracked(
-                            std::path::Path::new(&destination),
-                            &mut made_dirs,
-                        ) {
-                            let rollback_errors = rollback_moved_paths(&completed);
-                            let cleanup_errors = remove_empty_dirs(&made_dirs);
-                            return Err(CommandError::IoError(format!(
-                                "{error}; move rollback errors: {}; directory cleanup errors: {}",
-                                rollback_errors.join(", "),
-                                cleanup_errors.join(", ")
-                            )));
-                        }
-                        match std::fs::remove_dir(&source) {
-                            Ok(()) => removed_sources.push(PathBuf::from(source)),
-                            Err(error)
-                                if matches!(
-                                    error.kind(),
-                                    std::io::ErrorKind::DirectoryNotEmpty
-                                        | std::io::ErrorKind::NotFound
-                                ) => {}
-                            Err(error) => {
-                                for removed in removed_sources.iter().rev() {
-                                    let _ = std::fs::create_dir_all(removed);
-                                }
-                                let rollback_errors = rollback_moved_paths(&completed);
-                                let cleanup_errors = remove_empty_dirs(&made_dirs);
-                                return Err(CommandError::IoError(format!(
-                                    "{error}; move rollback errors: {}; directory cleanup errors: {}",
-                                    rollback_errors.join(", "),
-                                    cleanup_errors.join(", ")
-                                )));
-                            }
-                        }
-                    }
-                }
+                crate::systems::history_move_redo::redo(&tx.details)?;
             }
             TransactionType::Rename => {
                 if let (Some(old), Some(new)) =
@@ -1788,22 +1545,6 @@ mod history_concurrency_tests {
 }
 
 #[cfg(test)]
-mod tracked_directory_tests {
-    #[test]
-    fn recreates_nested_directories_below_canonical_root_without_tracking_drive_prefix() {
-        let root = tempfile::tempdir().unwrap();
-        let canonical = std::fs::canonicalize(root.path()).unwrap();
-        let target = canonical.join("one/two");
-        let mut created = Vec::new();
-        super::create_dir_all_tracked(&target, &mut created).unwrap();
-        assert_eq!(created, vec![canonical.join("one"), target.clone()]);
-        assert!(target.is_dir());
-        super::create_dir_all_tracked(&target, &mut created).unwrap();
-        assert_eq!(created.len(), 2);
-    }
-}
-
-#[cfg(test)]
 mod move_undo_rollback_tests {
     use super::*;
     use crate::models::TransactionDetails;
@@ -1880,6 +1621,78 @@ mod move_undo_rollback_tests {
     #[test]
     fn source_directory_cannot_be_replaced_by_a_file() {
         check_directory_failure(false);
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn redo_move_roundtrips_nested_directory_history_twice() {
+        let root = tempfile::tempdir().unwrap();
+        let source_root = root.path().join("source");
+        let source = source_root.join("child/file.txt");
+        let destination_root = root.path().join("destination");
+        let destination = destination_root.join("child/file.txt");
+        std::fs::create_dir_all(destination.parent().unwrap()).unwrap();
+        std::fs::write(&destination, b"moving file").unwrap();
+        let mut journal = details(&source, &destination);
+        journal.created_dirs = Some(vec![
+            destination_root.to_string_lossy().into_owned(),
+            destination.parent().unwrap().to_string_lossy().into_owned(),
+        ]);
+        journal.moved_dirs = Some(vec![
+            (
+                source_root.to_string_lossy().into_owned(),
+                destination_root.to_string_lossy().into_owned(),
+            ),
+            (
+                source.parent().unwrap().to_string_lossy().into_owned(),
+                destination.parent().unwrap().to_string_lossy().into_owned(),
+            ),
+        ]);
+        let transaction = Transaction::new(TransactionType::Move, journal);
+        let history = HistoryManager::new();
+        history.push(transaction.clone());
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .build()
+            .unwrap();
+        for _ in 0..2 {
+            runtime.block_on(undo_last_action(&history)).unwrap();
+            assert_eq!(std::fs::read(&source).unwrap(), b"moving file");
+            assert!(!destination_root.exists());
+            assert_eq!(history.get_state().redo_stack[0].id, transaction.id);
+            runtime.block_on(redo_last_action(&history)).unwrap();
+            assert_eq!(std::fs::read(&destination).unwrap(), b"moving file");
+            assert!(!source_root.exists());
+            assert_eq!(history.get_state().undo_stack[0].id, transaction.id);
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn redo_move_destination_conflict_keeps_history_and_can_retry() {
+        let root = tempfile::tempdir().unwrap();
+        let source = root.path().join("source.txt");
+        let destination = root.path().join("destination.txt");
+        std::fs::write(&destination, b"moving file").unwrap();
+        let transaction = Transaction::new(TransactionType::Move, details(&source, &destination));
+        let history = HistoryManager::new();
+        history.push(transaction.clone());
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .build()
+            .unwrap();
+        runtime.block_on(undo_last_action(&history)).unwrap();
+        std::fs::write(&destination, b"independent").unwrap();
+        let error = runtime.block_on(redo_last_action(&history)).unwrap_err();
+        assert!(
+            matches!(error, CommandError::HistoryMove(failure) if failure.issue == crate::models::error::HistoryMoveIssue::Conflict)
+        );
+        assert_eq!(std::fs::read(&source).unwrap(), b"moving file");
+        assert_eq!(std::fs::read(&destination).unwrap(), b"independent");
+        assert_eq!(history.get_state().redo_stack[0].id, transaction.id);
+        assert!(history.get_state().undo_stack.is_empty());
+        std::fs::remove_file(&destination).unwrap();
+        runtime.block_on(redo_last_action(&history)).unwrap();
+        assert_eq!(std::fs::read(destination).unwrap(), b"moving file");
+        assert!(!source.exists());
     }
 
     #[test]

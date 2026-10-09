@@ -860,3 +860,8 @@ undo-new-folder-missing = No se encuentra la carpeta creada: { $detail }. Se det
 redo-new-folder-conflict = Ya existe un elemento en esta ubicación: { $detail }. Rehacer no lo reemplaza.
 redo-new-folder-parent-missing = No se encuentra la carpeta superior: { $detail }. Rehacer no vuelve a crear las carpetas superiores.
 redo-new-folder-unverified = El historial no permite rehacer la creación de esta carpeta: { $detail }. No se ha creado ningún elemento.
+
+redo-move-changed = El archivo ha cambiado desde la operación: { $detail }. Se ha detenido Rehacer el movimiento para conservar sus archivos.
+redo-move-conflict = Un elemento ocupa el destino: { $detail }. Rehacer el movimiento no lo reemplaza.
+redo-move-unverified = Este historial no permite rehacer el movimiento de forma segura: { $detail }. Inicie el movimiento de nuevo desde los archivos actuales.
+redo-move-incomplete = El movimiento se detuvo y algunos elementos no pudieron volver a su ubicación original. Se han conservado archivos o carpetas para su recuperación: { $detail }. Compruebe estas ubicaciones antes de volver a intentarlo.

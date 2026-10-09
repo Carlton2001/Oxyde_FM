@@ -73,6 +73,7 @@ pub(super) fn hash_file(path: &Path) -> io::Result<String> {
     hash(&mut File::open(path)?)
 }
 
+#[cfg(test)]
 pub(crate) fn move_file(
     source: &Path,
     destination: &Path,
@@ -81,6 +82,7 @@ pub(crate) fn move_file(
     move_with(&NativeIo, source, destination, expected)
 }
 
+#[cfg(test)]
 fn move_with(
     ops: &impl MoveIo,
     source: &Path,
@@ -97,6 +99,25 @@ fn move_with(
         None,
         &source_parents,
         &destination_parents,
+    )
+    .map(|_| ())
+}
+
+pub(super) fn move_file_with_bound_parents(
+    source: &Path,
+    destination: &Path,
+    expected: Option<&str>,
+    source_parents: &super::path_parents::HeldParents,
+    destination_parents: &super::path_parents::HeldParents,
+) -> io::Result<String> {
+    move_bound(
+        &NativeIo,
+        source,
+        destination,
+        expected,
+        None,
+        source_parents,
+        destination_parents,
     )
 }
 
@@ -116,6 +137,7 @@ pub(super) fn move_file_with_parents(
         source_parents,
         destination_parents,
     )
+    .map(|_| ())
 }
 
 pub(super) fn move_file_with_identity(
@@ -135,6 +157,7 @@ pub(super) fn move_file_with_identity(
         source_parents,
         destination_parents,
     )
+    .map(|_| ())
 }
 
 fn move_bound(
@@ -145,7 +168,7 @@ fn move_bound(
     identity: Option<crate::models::transaction::HistoryFileIdentity>,
     source_parents: &super::path_parents::HeldParents,
     destination_parents: &super::path_parents::HeldParents,
-) -> io::Result<()> {
+) -> io::Result<String> {
     let source = source_parents.resolved_path(source)?;
     let destination = destination_parents.resolved_path(destination)?;
     let mut original = source_parents.open_file(&source)?;
@@ -173,7 +196,7 @@ fn move_bound(
         )));
     }
     match ops.rename(&original, &source, &destination, destination_parents) {
-        Ok(()) => return Ok(()),
+        Ok(()) => return Ok(original_hash),
         Err(error) if error.kind() == io::ErrorKind::CrossesDevices && identity.is_none() => {}
         Err(error) => return Err(error),
     }
@@ -202,7 +225,7 @@ fn move_bound(
             ))),
         };
     }
-    Ok(())
+    Ok(original_hash)
 }
 
 #[cfg(test)]

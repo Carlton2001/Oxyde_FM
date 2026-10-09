@@ -860,3 +860,8 @@ undo-new-folder-missing = La cartella creata non è stata trovata: { $detail }. 
 redo-new-folder-conflict = Esiste già un elemento in questa posizione: { $detail }. Il ripristino non lo sostituisce.
 redo-new-folder-parent-missing = La cartella superiore non è stata trovata: { $detail }. Il ripristino non ricrea le cartelle superiori.
 redo-new-folder-unverified = La cronologia non consente di ripristinare la creazione di questa cartella: { $detail }. Non è stato creato alcun elemento.
+
+redo-move-changed = Il file è cambiato dopo l’operazione: { $detail }. Ripeti spostamento è stato interrotto per preservare i tuoi file.
+redo-move-conflict = Un elemento occupa la destinazione: { $detail }. Ripeti spostamento non lo sostituisce.
+redo-move-unverified = Questa cronologia non consente di ripetere lo spostamento in sicurezza: { $detail }. Avvia nuovamente lo spostamento dai file attuali.
+redo-move-incomplete = Lo spostamento è stato interrotto e alcuni elementi non sono tornati nella posizione originale. File o cartelle sono stati conservati per il recupero: { $detail }. Controlla queste posizioni prima di riprovare.
