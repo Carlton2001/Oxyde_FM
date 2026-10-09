@@ -364,6 +364,8 @@ mod windows_thumbnail_bitmap;
 #[cfg(target_os = "windows")]
 mod windows_icon_bitmap;
 #[cfg(target_os = "windows")]
+mod windows_icon_cache;
+#[cfg(target_os = "windows")]
 mod windows_file_moves;
 #[cfg(target_os = "windows")]
 mod windows_file_tree;

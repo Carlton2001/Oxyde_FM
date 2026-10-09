@@ -3,8 +3,6 @@
 use crate::models::CommandError;
 use image::RgbaImage;
 use lazy_static::lazy_static;
-use std::collections::HashMap;
-use std::fs;
 use std::io::Cursor;
 use std::os::windows::ffi::OsStrExt;
 use std::path::PathBuf;
@@ -18,13 +16,12 @@ use windows::Win32::UI::Shell::{
 use windows::Win32::UI::WindowsAndMessaging::HICON;
 
 lazy_static! {
-    static ref ICON_CACHE: Mutex<HashMap<String, Vec<u8>>> = Mutex::new(HashMap::new());
+    static ref ICON_CACHE: Mutex<super::windows_icon_cache::IconCache> = Mutex::new(Default::default());
 }
 
 pub fn purge_icon_cache() {
     let mut cache = ICON_CACHE.lock().unwrap();
     cache.clear();
-    cache.shrink_to_fit();
 }
 
 fn shell_icon_path(path: &str) -> String {
@@ -61,13 +58,15 @@ pub fn extract_icon_png(
     cache_dir: Option<PathBuf>,
     cache_key: String,
 ) -> Result<Vec<u8>, String> {
-    // Check caches before calling the shell (including for network paths).
-    if let Some(data) = ICON_CACHE.lock().unwrap().get(&cache_key).cloned() { return Ok(data); }
-    if let Some(dir) = &cache_dir {
-        if let Ok(data) = fs::read(dir.join(format!("{}.png", cache_key))) {
-            if image::load_from_memory(&data).is_ok() { return Ok(data); }
-        }
-    }
+    super::windows_icon_cache::cached_or_generate(
+        &ICON_CACHE,
+        cache_dir.as_deref(),
+        &cache_key,
+        || generate_icon_png(path, size, use_attributes),
+    )
+}
+
+fn generate_icon_png(path: &str, size: &str, use_attributes: bool) -> Result<Vec<u8>, String> {
     let wide_path: Vec<u16> = std::ffi::OsStr::new(path)
         .encode_wide()
         .chain(std::iter::once(0))
@@ -147,23 +146,6 @@ pub fn extract_icon_png(
 
         if let Err(e) = icon_bitmap.write_to(&mut cursor, image::ImageFormat::Png) {
             return Err(format!("Failed to encode icon to PNG: {}", e));
-        }
-
-        // Save to disk cache
-        if let Some(ref dir) = cache_dir {
-            let _ = fs::create_dir_all(dir);
-            let file_path = dir.join(format!("{}.png", cache_key));
-            let _ = fs::write(file_path, &png_buffer);
-        }
-
-        {
-            let mut cache = ICON_CACHE.lock().unwrap();
-            if cache.len() > 1000 {
-                if let Some(key) = cache.keys().next().cloned() {
-                    cache.remove(&key);
-                }
-            }
-            cache.insert(cache_key, png_buffer.clone());
         }
 
         Ok(png_buffer)
