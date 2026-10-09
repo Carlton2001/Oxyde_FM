@@ -1,7 +1,7 @@
 //! Reversible Copy/Move Undo effects, retained until every filesystem phase succeeds.
 use super::history_move::hash_file;
 use super::path_parents::HeldParents;
-use crate::models::transaction::HistoryFileIdentity;
+use crate::models::transaction::{HistoryDirectoryIdentity, HistoryFileIdentity};
 use crate::models::{CommandError, TransactionDetails};
 use crate::platform::platform;
 use std::collections::{HashMap, HashSet};
@@ -52,6 +52,7 @@ struct FileMove {
     hash: String,
 }
 struct Plan {
+    directory_identities: HashMap<PathBuf, HistoryDirectoryIdentity>,
     identities: HashMap<PathBuf, HistoryFileIdentity>,
     files: Vec<FileMove>,
     discard: Vec<(PathBuf, String)>,
@@ -98,6 +99,27 @@ impl Plan {
                 "This copy overwrote existing files and cannot be undone",
             ));
         }
+        let directory_identities: HashMap<_, _> = details
+            .copied_directory_identities
+            .as_deref()
+            .unwrap_or_default()
+            .iter()
+            .map(|(path, identity)| (PathBuf::from(path), identity.clone()))
+            .collect();
+        for path in created_dirs.iter().map(PathBuf::from) {
+            if directory_identities
+                .get(&path)
+                .and_then(HistoryDirectoryIdentity::snapshot)
+                .is_none()
+            {
+                return Err(io::Error::other(
+                    crate::models::error::HistoryIdentityFailure {
+                        issue: crate::models::error::HistoryIdentityIssue::Unverified,
+                        path: path.to_string_lossy().into_owned(),
+                    },
+                ));
+            }
+        }
         let hashes: HashMap<_, _> = hashes
             .iter()
             .map(|(path, hash)| (PathBuf::from(path), hash))
@@ -124,6 +146,7 @@ impl Plan {
             }
         }
         Ok(Self {
+            directory_identities,
             identities,
             files: vec![],
             source_dirs: vec![],
@@ -191,6 +214,7 @@ impl Plan {
         source_dirs.sort_by_key(|path| path.components().count());
         let remove_dirs = sorted_directories(created_dirs);
         Ok(Self {
+            directory_identities: HashMap::new(),
             identities: HashMap::new(),
             files,
             discard,
@@ -244,6 +268,7 @@ enum Effect {
 }
 #[derive(Default)]
 struct Journal {
+    directory_identities: HashMap<PathBuf, HistoryDirectoryIdentity>,
     effects: Vec<Effect>,
     staging: Vec<(PathBuf, fs::File)>,
     directories: super::history_directories::Directories,
@@ -318,6 +343,9 @@ impl Journal {
             return Ok(());
         };
         ops.before_remove_dir(path)?;
+        if let Some(expected) = self.directory_identities.get(path) {
+            self.directories.verify_history_identity(path, expected)?;
+        }
         if matches!(
             self.directories.remove(path)?,
             super::history_directories::Removal::Deleted
@@ -378,6 +406,9 @@ impl Journal {
                 } => {
                     let result = (|| {
                         let directory = self.directories.create(&path, hidden)?;
+                        if let Some(expected) = self.directory_identities.get(&path) {
+                            expected.refresh_from_file(directory)?;
+                        }
                         platform().restore_journal_directory(directory, &path, permissions, hidden)
                     })();
                     (path, result)
@@ -446,8 +477,14 @@ fn apply_plan(ops: &impl UndoIo, plan: Plan) -> io::Result<()> {
         paths.push(staging_parent(path, &plan.remove_dirs)?.to_path_buf());
     }
     let directories = super::history_directories::Directories::prepare(&paths, &plan.remove_dirs)?;
+    for path in &plan.remove_dirs {
+        if let Some(expected) = plan.directory_identities.get(path) {
+            directories.verify_history_identity(path, expected)?;
+        }
+    }
     let mut journal = Journal::default();
     journal.directories = directories;
+    journal.directory_identities = plan.directory_identities;
     let result = (|| {
         for effect in plan.files {
             if let Some(parent) = effect.to.parent() {
@@ -500,6 +537,42 @@ fn staging_parent<'a>(path: &'a Path, remove_dirs: &[PathBuf]) -> io::Result<&'a
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn copy_directory_without_identity_is_refused_before_any_effect() {
+        let mut fixture = Fixture::new();
+        fixture.details.copied_directory_identities = None;
+        let error = undo_copy(&fixture.details).unwrap_err();
+        assert!(
+            matches!(error, CommandError::HistoryIdentity(failure) if failure.issue == crate::models::error::HistoryIdentityIssue::Unverified)
+        );
+        fixture.unchanged();
+    }
+
+    #[test]
+    fn copy_directory_identity_is_checked_after_planning_before_staging() {
+        let fixture = Fixture::new();
+        let selected = fixture.root.path().join("destination");
+        let displaced = fixture.root.path().join("original-directories");
+        let plan = Plan::copy(&fixture.details).unwrap();
+        fs::rename(&selected, &displaced).unwrap();
+        fs::create_dir(&selected).unwrap();
+        let error = apply_plan(&NativeIo, plan).unwrap_err();
+        assert!(
+            matches!(CommandError::from(error), CommandError::HistoryIdentity(failure) if failure.issue == crate::models::error::HistoryIdentityIssue::Changed)
+        );
+        assert!(selected.is_dir());
+        assert_eq!(fs::read_dir(&selected).unwrap().count(), 0);
+        assert_eq!(
+            fs::read(displaced.join("child/moved.txt")).unwrap(),
+            b"moved content"
+        );
+        assert_eq!(
+            fs::read(displaced.join("child/partial.txt")).unwrap(),
+            b"partial content"
+        );
+        assert!(fixture.staging().is_empty());
+    }
 
     #[test]
     fn copy_without_identity_is_refused_without_guessing_from_contents() {
@@ -576,6 +649,24 @@ mod tests {
             fs::write(&partial, b"partial content").unwrap();
             let name = |path: &Path| path.to_string_lossy().into_owned();
             let details = TransactionDetails {
+                copied_directory_identities: Some(
+                    [directory.parent().unwrap(), directory.as_path()]
+                        .into_iter()
+                        .map(|path| {
+                            (
+                                name(path),
+                                crate::models::transaction::HistoryDirectoryIdentity::from_file(
+                                    &platform()
+                                        .hold_resolved_operation_directory(
+                                            &fs::canonicalize(path).unwrap(),
+                                        )
+                                        .unwrap(),
+                                )
+                                .unwrap(),
+                            )
+                        })
+                        .collect(),
+                ),
                 copied_file_identities: Some(
                     [&destination, &partial]
                         .into_iter()
@@ -824,6 +915,7 @@ mod tests {
         apply_plan(
             &ops,
             Plan {
+                directory_identities: HashMap::new(),
                 identities: HashMap::new(),
                 files: vec![],
                 discard: vec![],
@@ -863,6 +955,7 @@ mod tests {
         apply_plan(
             &ops,
             Plan {
+                directory_identities: HashMap::new(),
                 identities: HashMap::new(),
                 files: vec![],
                 discard: vec![],
@@ -1064,6 +1157,21 @@ mod tests {
                 );
             }
             fixture.unchanged();
+            for (path, identity) in fixture
+                .details
+                .copied_directory_identities
+                .as_ref()
+                .unwrap()
+            {
+                let file = platform()
+                    .hold_resolved_operation_directory(&fs::canonicalize(path).unwrap())
+                    .unwrap();
+                assert!(
+                    identity.snapshot().unwrap().matches(&file).unwrap(),
+                    "rollback did not refresh {}",
+                    path
+                );
+            }
             apply_plan(&NativeIo, Plan::copy(&fixture.details).unwrap()).unwrap();
             assert!(!parent.exists());
             assert!(fixture.staging().is_empty());

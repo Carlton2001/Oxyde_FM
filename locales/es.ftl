@@ -302,7 +302,7 @@ path-error-access-denied = Acceso denegado a esta carpeta. Comprueba tus permiso
 path-error-failed = No se pudo abrir esta carpeta. Comprueba la ruta e inténtalo de nuevo.
 
 undo-failed = No se pudo deshacer: { $detail }
-undo-copy-identity-changed = Este archivo ya no corresponde al objeto copiado originalmente: { $detail }. Se detuvo Deshacer para conservar sus archivos.
+undo-copy-identity-changed = Este elemento ya no corresponde al objeto copiado originalmente: { $detail }. Se detuvo Deshacer para conservar sus archivos.
 undo-copy-unverified = El historial no permite verificar la identidad de esta copia: { $detail }. Se han conservado sus archivos.
 
 undo-overwrite-unavailable = Esta copia no se puede deshacer porque ha reemplazado archivos existentes.

@@ -167,7 +167,7 @@ path-error-failed = Could not open this folder. Check the path and try again.
 
 ## File operations
 undo-failed = Could not undo: { $detail }
-undo-copy-identity-changed = This file no longer matches the original copied object: { $detail }. Undo stopped to preserve your files.
+undo-copy-identity-changed = This item no longer matches the original copied object: { $detail }. Undo stopped to preserve your files.
 undo-copy-unverified = The history cannot verify the identity of this copy: { $detail }. Your files have been preserved.
 undo-overwrite-unavailable = This copy cannot be undone because it replaced existing files.
 redo-failed = Could not redo: { $detail }

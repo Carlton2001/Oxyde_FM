@@ -2102,6 +2102,7 @@ impl OxydeApp {
                             this.history.push(Transaction::new(
                                 TransactionType::NewFolder,
                                 TransactionDetails {
+                                    copied_directory_identities: None,
                                     copied_file_identities: None,
                                     paths: vec![folder_path.to_string_lossy().into_owned()],
                                     target_dir: Some(current_path),

@@ -13,14 +13,14 @@ struct Node {
     identity: FileIdentity,
 }
 
-pub(super) enum Removal {
+pub(crate) enum Removal {
     Deleted,
     Missing,
     NotEmpty,
 }
 
 #[derive(Default)]
-pub(super) struct Directories {
+pub(crate) struct Directories {
     nodes: HashMap<PathBuf, Node>,
     // Only ancestors outside the removal plan deny deletion throughout undo.
     roots: HashMap<PathBuf, HeldParents>,
@@ -105,6 +105,26 @@ impl Directories {
         let node = self.nodes.get(path).unwrap();
         Self::ordinary(&node.file)?;
         Ok(&node.file)
+    }
+
+    pub fn verify_history_identity(
+        &self,
+        path: &Path,
+        expected: &crate::models::transaction::HistoryDirectoryIdentity,
+    ) -> io::Result<()> {
+        let Some(node) = self.nodes.get(path) else {
+            return Ok(());
+        };
+        let snapshot = expected.snapshot().ok_or_else(|| {
+            io::Error::other(crate::models::error::HistoryIdentityFailure {
+                issue: crate::models::error::HistoryIdentityIssue::Unverified,
+                path: path.to_string_lossy().into_owned(),
+            })
+        })?;
+        if !snapshot.matches(&node.file)? {
+            return Err(super::file_copy::identity_changed(path));
+        }
+        Ok(())
     }
 
     pub fn create(&mut self, path: &Path, hidden: bool) -> io::Result<&File> {

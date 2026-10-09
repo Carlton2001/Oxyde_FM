@@ -77,31 +77,35 @@ mod tests {
         use crate::ui::i18n::{I18n, Language};
         use fluent_bundle::FluentArgs;
         use oxyde_lib::models::error::{HistoryIdentityFailure, HistoryIdentityIssue};
-        let path = "C:\\école\\{ $detail }.txt";
-        for (issue, message) in [
-            (
-                HistoryIdentityIssue::Changed,
-                Message::UndoCopyIdentityChanged,
-            ),
-            (
-                HistoryIdentityIssue::Unverified,
-                Message::UndoCopyUnverified,
-            ),
+        for path in [
+            "C:\\école\\{ $detail }.txt",
+            "C:\\dossier_日本語\\{ $detail }",
         ] {
-            let error = CommandError::from(std::io::Error::other(HistoryIdentityFailure {
-                issue,
-                path: path.into(),
-            }));
-            let (actual, detail) = undo_failure(&error);
-            assert_eq!(actual, message);
-            assert_eq!(detail, path);
-            for language in Language::ALL {
-                let mut args = FluentArgs::new();
-                args.set("detail", detail.as_str());
-                let rendered = I18n::for_language(language).text_with_args(actual, &args);
-                assert!(rendered.contains(path), "{language:?}: {rendered}");
-                assert!(!rendered.contains("History file identity"));
-                assert!(!rendered.contains(actual.key()));
+            for (issue, message) in [
+                (
+                    HistoryIdentityIssue::Changed,
+                    Message::UndoCopyIdentityChanged,
+                ),
+                (
+                    HistoryIdentityIssue::Unverified,
+                    Message::UndoCopyUnverified,
+                ),
+            ] {
+                let error = CommandError::from(std::io::Error::other(HistoryIdentityFailure {
+                    issue,
+                    path: path.into(),
+                }));
+                let (actual, detail) = undo_failure(&error);
+                assert_eq!(actual, message);
+                assert_eq!(detail, path);
+                for language in Language::ALL {
+                    let mut args = FluentArgs::new();
+                    args.set("detail", detail.as_str());
+                    let rendered = I18n::for_language(language).text_with_args(actual, &args);
+                    assert!(rendered.contains(path), "{language:?}: {rendered}");
+                    assert!(!rendered.contains("History file identity"));
+                    assert!(!rendered.contains(actual.key()));
+                }
             }
         }
         assert_eq!(

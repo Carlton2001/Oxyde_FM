@@ -97,6 +97,10 @@ pub struct FileOperation {
     pub copied_files: Vec<(PathBuf, PathBuf)>,
     pub copied_file_hashes: Vec<(PathBuf, String)>,
     copied_file_identities: Vec<(PathBuf, crate::models::transaction::HistoryFileIdentity)>,
+    copied_directory_identities: Vec<(
+        PathBuf,
+        crate::models::transaction::HistoryDirectoryIdentity,
+    )>,
     // Internal execution state.
     pub cancel_flag: Arc<AtomicBool>,
     pub pause_flag: Arc<AtomicBool>,
@@ -151,6 +155,7 @@ impl FileOperation {
             copied_files: Vec::new(),
             copied_file_hashes: Vec::new(),
             copied_file_identities: Vec::new(),
+            copied_directory_identities: Vec::new(),
             cancel_flag: self.cancel_flag.clone(),
             pause_flag: self.pause_flag.clone(),
             turbo_flag: self.turbo_flag.clone(),
@@ -197,6 +202,7 @@ impl FileOperation {
             copied_files: Vec::new(),
             copied_file_hashes: Vec::new(),
             copied_file_identities: Vec::new(),
+            copied_directory_identities: Vec::new(),
             cancel_flag: Arc::new(AtomicBool::new(false)),
             pause_flag: Arc::new(AtomicBool::new(false)),
             turbo_flag: Arc::new(AtomicBool::new(false)),
@@ -679,6 +685,15 @@ impl FileOperationManager {
                     .map(|p| p.to_string_lossy().to_string());
 
                 let details = TransactionDetails {
+                    copied_directory_identities: Some(
+                        locked
+                            .copied_directory_identities
+                            .iter()
+                            .map(|(path, identity)| {
+                                (path.to_string_lossy().into_owned(), identity.clone())
+                            })
+                            .collect(),
+                    ),
                     paths: sources_str,
                     target_dir: target_str,
                     old_path: None,
@@ -947,6 +962,7 @@ impl FileOperationManager {
         locked.copied_files.clear();
         locked.copied_file_hashes.clear();
         locked.copied_file_identities.clear();
+        locked.copied_directory_identities.clear();
         Ok(())
     }
 
@@ -977,6 +993,33 @@ impl FileOperationManager {
             }
         }
         workspace.commit(op)
+    }
+
+    fn record_created_copy_directory(
+        operation: &Arc<Mutex<FileOperation>>,
+        tree: &super::destination_tree::DestinationTree,
+        path: &std::path::Path,
+        is_move: bool,
+    ) {
+        let identity = if is_move {
+            None
+        } else {
+            tree.directory_identity(path)
+                .map_err(|error| {
+                    log::warn!(
+                        "Copy directory identity unavailable for {}: {error}",
+                        path.display()
+                    )
+                })
+                .ok()
+        };
+        let mut journal = operation.lock().unwrap();
+        journal.created_dirs.push(path.to_path_buf());
+        if let Some(identity) = identity {
+            journal
+                .copied_directory_identities
+                .push((path.to_path_buf(), identity));
+        }
     }
 
     fn perform_copy(
@@ -1269,9 +1312,14 @@ impl FileOperationManager {
             if cancel_flag.load(Ordering::Relaxed) {
                 break;
             }
-            destination_tree.ensure_directory(directory, &mut || {
-                Self::archive_checkpoint(op).map_err(std::io::Error::other)
-            }, &mut |created| op.lock().unwrap().created_dirs.push(created.to_path_buf()))
+            destination_tree
+                .ensure_directory(
+                    directory,
+                    &mut || Self::archive_checkpoint(op).map_err(std::io::Error::other),
+                    &mut |created| {
+                        Self::record_created_copy_directory(op, &destination_tree, created, is_move)
+                    },
+                )
                 .map_err(|e| format!("Cannot create directory {:?}: {e}", directory))?;
         }
         // A rename preserves the file itself and does not read its contents.
@@ -1281,9 +1329,19 @@ impl FileOperationManager {
             let mut remaining = Vec::new();
             for (source, destination, replace_existing) in files_to_process {
                 Self::archive_checkpoint(op)?;
-                let destination_parents = destination_tree.file_parents(&destination, &mut || {
-                    Self::archive_checkpoint(op).map_err(std::io::Error::other)
-                }, &mut |created| op.lock().unwrap().created_dirs.push(created.to_path_buf()))
+                let destination_parents = destination_tree
+                    .file_parents(
+                        &destination,
+                        &mut || Self::archive_checkpoint(op).map_err(std::io::Error::other),
+                        &mut |created| {
+                            Self::record_created_copy_directory(
+                                op,
+                                &destination_tree,
+                                created,
+                                is_move,
+                            )
+                        },
+                    )
                     .map_err(|e| format!("Cannot hold destination {:?}: {e}", destination))?;
                 match super::path_parents::move_file_with_parents(&source, &destination, replace_existing, destination_parents, &mut || {
                     Self::archive_checkpoint(op).map_err(std::io::Error::other)
@@ -1391,9 +1449,21 @@ impl FileOperationManager {
                     operation.lock().unwrap().current_file =
                         Some(src.to_string_lossy().into_owned());
 
-                    let destination_parents = destination_tree.file_parents(dest, &mut || {
-                        Self::archive_checkpoint(&operation).map_err(std::io::Error::other)
-                    }, &mut |created| operation.lock().unwrap().created_dirs.push(created.to_path_buf()))
+                    let destination_parents = destination_tree
+                        .file_parents(
+                            dest,
+                            &mut || {
+                                Self::archive_checkpoint(&operation).map_err(std::io::Error::other)
+                            },
+                            &mut |created| {
+                                Self::record_created_copy_directory(
+                                    &operation,
+                                    &destination_tree,
+                                    created,
+                                    is_move,
+                                )
+                            },
+                        )
                         .map_err(|e| format!("Cannot hold destination {:?}: {e}", dest))?;
 
                     let source_guard =
@@ -3954,6 +4024,110 @@ mod tests {
         let metadata = std::fs::metadata(&destination).unwrap();
         assert_eq!(metadata.modified().unwrap(), modified);
         assert!(platform().file_attributes(&metadata, "source.txt").0);
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn copy_undo_preserves_a_replacement_directory_containing_the_original_output() {
+        let root = tempfile::tempdir().unwrap();
+        let source = root.path().join("source");
+        let target_dir = root.path().join("target");
+        std::fs::create_dir(&source).unwrap();
+        std::fs::create_dir(&target_dir).unwrap();
+        std::fs::write(source.join("copied.txt"), b"original copied contents").unwrap();
+        let target = target_dir.join("source");
+        let displaced = root.path().join("original-directory");
+        let history = Arc::new(HistoryManager::new());
+        let op = Arc::new(Mutex::new(FileOperation::new(
+            FileOpType::Copy,
+            vec![source],
+            Some(target_dir),
+            None,
+        )));
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        runtime.block_on(async {
+            FileOperationManager::execute_operation(history.clone(), op.clone()).await;
+            assert_eq!(op.lock().unwrap().status, OpStatus::Completed);
+            let proof = history.get_state().undo_stack[0].details.copied_file_identities.as_ref().unwrap()[0].1;
+            std::fs::rename(&target, &displaced).unwrap();
+            std::fs::create_dir(&target).unwrap();
+            std::fs::rename(displaced.join("copied.txt"), target.join("copied.txt")).unwrap();
+            assert!(proof.matches(&std::fs::File::open(target.join("copied.txt")).unwrap()).unwrap());
+            let error = crate::commands::ops::undo_last_action(&history).await.unwrap_err();
+            assert!(matches!(error, crate::models::CommandError::HistoryIdentity(failure) if failure.issue == crate::models::error::HistoryIdentityIssue::Changed));
+            assert_eq!(std::fs::read(target.join("copied.txt")).unwrap(), b"original copied contents");
+            assert!(displaced.is_dir());
+            assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 3);
+            assert_eq!(history.get_state().undo_stack.len(), 1);
+            assert!(history.get_state().redo_stack.is_empty());
+        });
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn copy_undo_preserves_an_empty_directory_replaced_since_creation() {
+        let root = tempfile::tempdir().unwrap();
+        let source = root.path().join("source-empty");
+        let target_dir = root.path().join("target");
+        std::fs::create_dir_all(source.join("nested-empty")).unwrap();
+        std::fs::create_dir(&target_dir).unwrap();
+        let target = target_dir.join("source-empty");
+        let displaced = root.path().join("original-copy");
+        let history = Arc::new(HistoryManager::new());
+        let op = Arc::new(Mutex::new(FileOperation::new(
+            FileOpType::Copy,
+            vec![source],
+            Some(target_dir.clone()),
+            None,
+        )));
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        runtime.block_on(async {
+            FileOperationManager::execute_operation(history.clone(), op.clone()).await;
+            assert_eq!(op.lock().unwrap().status, OpStatus::Completed);
+            let original = platform().hold_resolved_operation_directory(&std::fs::canonicalize(&target).unwrap()).unwrap();
+            let identity = platform().file_identity(&original).unwrap();
+            drop(original);
+            std::fs::rename(&target, &displaced).unwrap();
+            std::fs::create_dir(&target).unwrap();
+            let replacement = platform().hold_resolved_operation_directory(&std::fs::canonicalize(&target).unwrap()).unwrap();
+            assert_ne!(platform().file_identity(&replacement).unwrap(), identity);
+            drop(replacement);
+            let result = crate::commands::ops::undo_last_action(&history).await;
+            assert!(matches!(result, Err(crate::models::CommandError::HistoryIdentity(failure)) if failure.issue == crate::models::error::HistoryIdentityIssue::Changed), "Undo must preserve an independent empty replacement directory");
+            assert!(target.is_dir());
+            assert!(displaced.join("nested-empty").is_dir());
+            assert_eq!(std::fs::read_dir(&target).unwrap().count(), 0);
+            assert_eq!(history.get_state().undo_stack.len(), 1);
+            assert!(history.get_state().redo_stack.is_empty());
+            std::fs::remove_dir(&target).unwrap();
+            std::fs::rename(&displaced, &target).unwrap();
+            let transaction_id = history.get_state().undo_stack[0].id.clone();
+            for _ in 0..2 {
+                let state = history.get_state();
+                assert_eq!(state.undo_stack[0].id, transaction_id);
+                let identities = state.undo_stack[0].details.copied_directory_identities.as_ref().unwrap();
+                assert_eq!(identities.len(), 2);
+                for (path, identity) in identities {
+                    let directory = platform().hold_resolved_operation_directory(&std::fs::canonicalize(path).unwrap()).unwrap();
+                    assert!(identity.snapshot().unwrap().matches(&directory).unwrap());
+                }
+                // Keeping history must not pin either copied directory in place.
+                std::fs::rename(&target, &displaced).unwrap();
+                std::fs::rename(&displaced, &target).unwrap();
+                crate::commands::ops::undo_last_action(&history).await.unwrap();
+                assert!(!target.exists());
+                crate::commands::ops::redo_last_action(&history).await.unwrap();
+                assert!(target.join("nested-empty").is_dir());
+            }
+            crate::commands::ops::undo_last_action(&history).await.unwrap();
+            assert_eq!(std::fs::read_dir(&target_dir).unwrap().count(), 0);
+        });
     }
 
     #[cfg(target_os = "windows")]

@@ -302,7 +302,7 @@ path-error-access-denied = Zugriff auf diesen Ordner verweigert. Prüfen Sie Ihr
 path-error-failed = Ordner konnte nicht geöffnet werden. Prüfen Sie den Pfad und versuchen Sie es erneut.
 
 undo-failed = Rückgängig machen fehlgeschlagen: { $detail }
-undo-copy-identity-changed = Diese Datei entspricht nicht mehr der ursprünglich kopierten Datei: { $detail }. Das Rückgängigmachen wurde zum Schutz Ihrer Dateien abgebrochen.
+undo-copy-identity-changed = Dieses Element entspricht nicht mehr dem ursprünglich kopierten Objekt: { $detail }. Das Rückgängigmachen wurde zum Schutz Ihrer Dateien abgebrochen.
 undo-copy-unverified = Der Verlauf kann die Identität dieser Kopie nicht überprüfen: { $detail }. Ihre Dateien bleiben erhalten.
 
 undo-overwrite-unavailable = Diese Kopie kann nicht rückgängig gemacht werden, da vorhandene Dateien ersetzt wurden.

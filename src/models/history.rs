@@ -234,6 +234,7 @@ mod tests {
         Transaction::new(
             TransactionType::Copy,
             TransactionDetails {
+                copied_directory_identities: None,
                 copied_file_identities: None,
                 paths: Vec::new(),
                 target_dir: None,

@@ -24,6 +24,17 @@ impl DestinationTree {
         })
     }
 
+    pub fn directory_identity(
+        &self,
+        path: &Path,
+    ) -> io::Result<crate::models::transaction::HistoryDirectoryIdentity> {
+        let directories = self.directories.lock().unwrap();
+        let file = directories
+            .get(path)
+            .ok_or_else(|| io::Error::other("Created directory was not retained"))?;
+        crate::models::transaction::HistoryDirectoryIdentity::from_file(file)
+    }
+
     pub fn path(&self) -> &Path {
         self.root.resolved_directory()
     }

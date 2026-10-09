@@ -707,23 +707,40 @@ pub async fn redo_last_action(
                     }
                     created_dirs.sort_by_key(|directory| directory.components().count());
                     let mut made_dirs = Vec::new();
+                    let mut directories =
+                        crate::systems::history_directories::Directories::prepare(
+                            &created_dirs,
+                            &created_dirs,
+                        )?;
+                    let mut identities = Vec::new();
                     for directory in &created_dirs {
-                        if let Err(error) = std::fs::create_dir(directory) {
-                            for made in made_dirs.iter().rev() {
-                                let _ = std::fs::remove_dir(made);
+                        match directories.create(directory, false) {
+                            Ok(file) => {
+                                made_dirs.push(directory.clone());
+                                match crate::models::transaction::HistoryDirectoryIdentity::from_file(file) {
+                                    Ok(identity) => identities.push((directory.to_string_lossy().into_owned(), identity)),
+                                    Err(error) => log::warn!("Redo directory identity unavailable for {}: {error}", directory.display()),
+                                }
                             }
-                            return Err(CommandError::IoError(error.to_string()));
+                            Err(error) => {
+                                return Err(rollback_copy_directories(
+                                    &mut directories,
+                                    &made_dirs,
+                                    CommandError::from(error),
+                                ));
+                            }
                         }
-                        made_dirs.push(directory.clone());
                     }
+                    tx.details.copied_directory_identities = Some(identities);
                     if !files.is_empty() {
                         match perform_copy_with_progress(files, Arc::new(AtomicBool::new(false))) {
                             Ok(identities) => tx.details.copied_file_identities = Some(identities),
                             Err(error) => {
-                                for directory in made_dirs.iter().rev() {
-                                    let _ = std::fs::remove_dir(directory);
-                                }
-                                return Err(error);
+                                return Err(rollback_copy_directories(
+                                    &mut directories,
+                                    &made_dirs,
+                                    error,
+                                ));
                             }
                         }
                     }
@@ -921,6 +938,34 @@ pub async fn redo_last_action(
         operation.complete_with_details(tx.details.clone());
     }
     Ok(transaction)
+}
+
+// Clean only retained directories of a failed Redo; report preserved recovery.
+fn rollback_copy_directories(
+    directories: &mut crate::systems::history_directories::Directories,
+    created: &[PathBuf],
+    error: CommandError,
+) -> CommandError {
+    let errors: Vec<_> = created
+        .iter()
+        .rev()
+        .filter_map(|path| match directories.remove(path) {
+            Ok(crate::systems::history_directories::Removal::NotEmpty) => Some(format!(
+                "{}: recovery content was preserved",
+                path.display()
+            )),
+            Ok(_) => None,
+            Err(error) => Some(format!("{}: {error}", path.display())),
+        })
+        .collect();
+    if errors.is_empty() {
+        error
+    } else {
+        CommandError::IoError(format!(
+            "{error}; rollback incomplete: {}",
+            errors.join("; ")
+        ))
+    }
 }
 
 // Copies files with cancellation and rollback on failure.
@@ -1138,6 +1183,35 @@ mod copy_redo_tests {
     use std::sync::atomic::AtomicBool;
 
     #[test]
+    fn redo_copy_directory_cleanup_preserves_a_late_empty_replacement() {
+        let root = tempfile::tempdir().unwrap();
+        let selected = root.path().join("created-directory");
+        let displaced = root.path().join("original-directory");
+        let mut directories = crate::systems::history_directories::Directories::prepare(
+            std::slice::from_ref(&selected),
+            std::slice::from_ref(&selected),
+        )
+        .unwrap();
+        directories.create(&selected, false).unwrap();
+        std::fs::rename(&selected, &displaced).unwrap();
+        std::fs::create_dir(&selected).unwrap();
+        let error = super::rollback_copy_directories(
+            &mut directories,
+            std::slice::from_ref(&selected),
+            crate::models::CommandError::Other("injected copy failure".into()),
+        );
+        assert!(error.to_string().contains("rollback incomplete"), "{error}");
+        assert!(
+            error.to_string().contains(selected.to_str().unwrap()),
+            "{error}"
+        );
+        assert!(selected.is_dir());
+        assert!(displaced.is_dir());
+        assert_eq!(std::fs::read_dir(&selected).unwrap().count(), 0);
+        assert_eq!(std::fs::read_dir(&displaced).unwrap().count(), 0);
+    }
+
+    #[test]
     fn undo_copy_preserves_a_replacement_with_identical_contents() {
         let root = tempfile::tempdir().unwrap();
         let source = root.path().join("source");
@@ -1152,6 +1226,7 @@ mod copy_redo_tests {
         let transaction = Transaction::new(
             TransactionType::Copy,
             TransactionDetails {
+                copied_directory_identities: None,
                 copied_file_identities: Some(vec![(
                     destination.to_string_lossy().into_owned(),
                     crate::models::transaction::HistoryFileIdentity::from_file(
@@ -1236,6 +1311,17 @@ mod copy_redo_tests {
             history.push(Transaction::new(
                 TransactionType::Copy,
                 TransactionDetails {
+                    copied_directory_identities: Some(vec![(
+                        name(&output_directory),
+                        crate::models::transaction::HistoryDirectoryIdentity::from_file(
+                            &crate::platform::platform()
+                                .hold_resolved_operation_directory(
+                                    &std::fs::canonicalize(&output_directory).unwrap(),
+                                )
+                                .unwrap(),
+                        )
+                        .unwrap(),
+                    )]),
                     copied_file_identities: Some(vec![(
                         destination.to_string_lossy().into_owned(),
                         crate::models::transaction::HistoryFileIdentity::from_file(
@@ -1354,12 +1440,24 @@ mod copy_redo_tests {
         let blocker = root.path().join("directory");
         std::fs::write(&source, b"copied content").unwrap();
         std::fs::write(&destination, b"copied content").unwrap();
-        std::fs::write(&blocker, b"foreign content").unwrap();
+        std::fs::create_dir(&blocker).unwrap();
+        let displaced = root.path().join("original-directory");
         let name = |path: &std::path::Path| path.to_string_lossy().into_owned();
         let history = HistoryManager::new();
         history.push(Transaction::new(
             TransactionType::Copy,
             TransactionDetails {
+                copied_directory_identities: Some(vec![(
+                    name(&blocker),
+                    crate::models::transaction::HistoryDirectoryIdentity::from_file(
+                        &crate::platform::platform()
+                            .hold_resolved_operation_directory(
+                                &std::fs::canonicalize(&blocker).unwrap(),
+                            )
+                            .unwrap(),
+                    )
+                    .unwrap(),
+                )]),
                 copied_file_identities: Some(vec![(
                     destination.to_string_lossy().into_owned(),
                     crate::models::transaction::HistoryFileIdentity::from_file(
@@ -1387,12 +1485,15 @@ mod copy_redo_tests {
         let runtime = tokio::runtime::Builder::new_current_thread()
             .build()
             .unwrap();
+        std::fs::rename(&blocker, &displaced).unwrap();
+        std::fs::write(&blocker, b"foreign content").unwrap();
         assert!(runtime.block_on(undo_last_action(&history)).is_err());
         assert_eq!(std::fs::read(&destination).unwrap(), b"copied content");
         assert_eq!(std::fs::read(&blocker).unwrap(), b"foreign content");
         assert_eq!(history.get_state().undo_stack.len(), 1);
         assert!(history.get_state().redo_stack.is_empty());
-        std::fs::remove_file(blocker).unwrap();
+        std::fs::remove_file(&blocker).unwrap();
+        std::fs::rename(&displaced, &blocker).unwrap();
         runtime.block_on(undo_last_action(&history)).unwrap();
         assert!(!destination.exists());
         assert_eq!(std::fs::read(source).unwrap(), b"copied content");
@@ -1450,6 +1551,7 @@ mod copy_redo_tests {
         history.push(Transaction::new(
             TransactionType::Copy,
             TransactionDetails {
+                copied_directory_identities: None,
                 copied_file_identities: Some(vec![(
                     destination.to_string_lossy().into_owned(),
                     crate::models::transaction::HistoryFileIdentity::from_file(
@@ -1590,6 +1692,7 @@ mod history_concurrency_tests {
         Transaction::new(
             TransactionType::Rename,
             TransactionDetails {
+                copied_directory_identities: None,
                 copied_file_identities: None,
                 paths: vec![],
                 target_dir: None,
@@ -1717,6 +1820,7 @@ mod move_undo_rollback_tests {
 
     fn details(source: &std::path::Path, destination: &std::path::Path) -> TransactionDetails {
         TransactionDetails {
+            copied_directory_identities: None,
             copied_file_identities: None,
             paths: vec![],
             target_dir: None,
