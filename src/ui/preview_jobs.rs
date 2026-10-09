@@ -26,7 +26,7 @@ impl Cancellation {
         self.cancelled.load(Ordering::Acquire)
     }
 
-    async fn cancelled(&self) {
+    pub(crate) async fn cancelled(&self) {
         let mut notified = Box::pin(self.changed.notified());
         // Register before inspecting the flag: cancel must not be lost between them.
         notified.as_mut().enable();

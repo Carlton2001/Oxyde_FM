@@ -59,6 +59,43 @@ def gif(frame_count):
     return bytes(data)
 
 
+def pdf():
+    content = b"1 0 0 rg 0 0 72 144 re f\n"
+    objects = [b"<< /Type /Catalog /Pages 2 0 R >>",
+               b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+               b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 72 144] /Resources << >> /Contents 4 0 R >>",
+               b"<< /Length " + str(len(content)).encode() + b" >>\nstream\n" + content + b"endstream"]
+    data, offsets = bytearray(b"%PDF-1.4\n"), []
+    for index, obj in enumerate(objects, 1):
+        offsets.append(len(data))
+        data.extend(str(index).encode() + b" 0 obj\n" + obj + b"\nendobj\n")
+    xref = len(data)
+    data.extend(b"xref\n0 5\n0000000000 65535 f \n")
+    for offset in offsets:
+        data.extend(f"{offset:010} 00000 n \n".encode())
+    data.extend(f"trailer\n<< /Size 5 /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n".encode())
+    return bytes(data)
+
+
+def video():
+    def chunk(kind, data):
+        return kind + struct.pack("<I", len(data)) + data + (b"\0" if len(data) % 2 else b"")
+
+    def numbers(*values):
+        return struct.pack("<" + "I" * len(values), *values)
+
+    stream = b"vidsDIB\0" + numbers(0, 0, 0, 1, 1, 0, 2, 0, 0xFFFFFFFF, 0) + struct.pack("<4H", 0, 0, 16, 16)
+    bitmap = numbers(40, 16, 16) + struct.pack("<HH", 1, 32) + numbers(0, 1024, 0, 0, 0, 0)
+    strl = b"strl" + chunk(b"strh", stream) + chunk(b"strf", bitmap)
+    header = b"hdrl" + chunk(b"avih", numbers(1_000_000, 0, 0, 0x10, 2, 0, 1, 0, 16, 16, 0, 0, 0, 0)) + chunk(b"LIST", strl)
+    movi, index = bytearray(b"movi"), bytearray()
+    for color in [(0, 0, 255, 0), (255, 0, 0, 0)]:
+        frame = bytes(color) * 16 * 16
+        index.extend(b"00db" + numbers(0x10, len(movi), len(frame)))
+        movi.extend(chunk(b"00db", frame))
+    return chunk(b"RIFF", b"AVI " + chunk(b"LIST", header) + chunk(b"LIST", movi) + chunk(b"idx1", index))
+
+
 def main():
     project = Path(__file__).resolve().parent.parent
     parser = argparse.ArgumentParser(description=__doc__)
@@ -104,6 +141,13 @@ def main():
         'viewBox="0 0 100 300"><rect width="100" height="300" fill="#27ae60"/>'
         '<rect x="20" y="20" width="60" height="260" fill="#2980b9"/></svg>\n',
         encoding="utf-8")
+    (previews / "07-page.pdf").write_bytes(pdf())
+    with zipfile.ZipFile(previews / "08-office.odt", "w") as document:
+        document.writestr("mimetype", "application/vnd.oasis.opendocument.text")
+        document.writestr("content.xml", '<office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" office:version="1.2"><office:body><office:text><text:p>École : aperçu Office.</text:p></office:text></office:body></office:document-content>')
+        document.writestr("Thumbnails/thumbnail.png", png(64, 32, (200, 30, 20, 255)))
+        document.writestr("META-INF/manifest.xml", '<manifest:manifest xmlns:manifest="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0" manifest:version="1.2"><manifest:file-entry manifest:full-path="/" manifest:media-type="application/vnd.oasis.opendocument.text"/><manifest:file-entry manifest:full-path="content.xml" manifest:media-type="text/xml"/><manifest:file-entry manifest:full-path="Thumbnails/thumbnail.png" manifest:media-type="image/png"/></manifest:manifest>')
+    (previews / "09-video.avi").write_bytes(video())
     with zipfile.ZipFile(archives / "01-normal.zip", "w") as archive:
         archive.writestr("lecture.txt", "Archive normale, contenu inoffensif.\n")
         archive.writestr("école_日本語/note.txt", "Nom Unicode.\n")

@@ -1,18 +1,18 @@
 # Vérification visuelle de sécurité — Windows
 
-Préparation du 9 octobre 2026, actualisée jusqu’au lot 52. **La vérification visuelle n’a pas été effectuée.** Ce protocole est à réaliser par l’utilisateur, sans Computer Use. Il vérifie les changements déjà implémentés ; il ne clôture pas les autres risques de l’audit.
+Préparation du 9 octobre 2026, actualisée jusqu’au lot 56. **La vérification visuelle n’a pas été effectuée.** Ce protocole est à réaliser par l’utilisateur, sans Computer Use. Il vérifie les changements déjà implémentés ; il ne clôture pas les autres risques de l’audit.
 
-**Revue reportée :** l’utilisateur demande de finir les corrections avant le contrôle visuel. Le binaire est reconstruit après le lot 52. Ce protocole couvre ces corrections ; il ne valide pas la course résiduelle des appels Shell, les autres fournisseurs ou l’isolation des parseurs.
+**Revue à effectuer par l’utilisateur :** les corrections de cette passe sont codées. Le binaire final contient les lots 53–56 : chemins Shell littéraux, workers d’aperçu, caches/icônes et vidéo isolés. Ce protocole vérifie leur usage, sans valider la course résiduelle Shell, les autres fournisseurs ou les parseurs d’archives.
 
-Exécutable reconstruit au lot 52 : `C:\Users\Biluf\Documents\Projects\Oxyde-GPUI\target\debug\oxyde.exe`. Fermer les anciennes instances avant de l’ouvrir pour vérifier la bonne version. Les modifications de langue et de thème suivent les préférences habituelles d’Oxyde ; remettre ensuite celles souhaitées.
+Exécutable final du lot 56 : `C:\Users\Biluf\Documents\Projects\Oxyde-GPUI\target\debug\oxyde.exe`. Fermer les anciennes instances avant de l’ouvrir pour vérifier la bonne version. Les modifications de langue et de thème suivent les préférences habituelles d’Oxyde ; remettre ensuite celles souhaitées.
 
 Jeu de fichiers préparé :
 
 ```text
-C:\Users\Biluf\Documents\Projects\Oxyde-GPUI\target\security-visual-check-iz4x5tnl
+C:\Users\Biluf\Documents\Projects\Oxyde-GPUI\target\security-visual-check-0_qkhpsg
 ```
 
-Il contient 17 petits fichiers, 164 897 octets au total. Le PNG au-delà du seuil ne fait que 32 769 × 1 pixels ; le GIF limité contient 257 images de 16 × 16 pixels ; le ZIP profond contient un seul octet. Aucun document personnel, exécutable ou volume de décompression massif n’est utilisé.
+Il contient 20 petits fichiers, 169 036 octets au total. Le PNG au-delà du seuil ne fait que 32 769 × 1 pixels ; le GIF limité contient 257 images de 16 × 16 pixels ; le ZIP profond contient un seul octet. Aucun document personnel, exécutable ou volume de décompression massif n’est utilisé.
 
 Pour recréer une session de test indépendante, depuis le dépôt :
 
@@ -35,8 +35,11 @@ Dans Oxyde, ouvrir le sous-dossier `aperçus` via la barre d’adresse. Activer 
 | `04-animation.gif` | Petit carré animé qui change de couleur. |
 | `05-animation-limitee.gif` | Première image fixe, avec « Aperçu fixe : l’animation dépasse les limites de l’aperçu. » |
 | `06-proportions.svg` | Rectangle haut vert/bleu, rapport largeur/hauteur 1:3. |
+| `07-page.pdf` | Page rouge verticale, proportions 1:2, également à 125 %/150 % de mise à l’échelle Windows. |
+| `08-office.odt` | Miniature rouge (pas bleue), avec le fond blanc éventuel du fournisseur Windows ; le repli texte éventuel affiche « École : aperçu Office. » |
+| `09-video.avi` | Carré rouge puis bleu animé. Fermer le survol arrête la lecture ; un PNG/PDF reste consultable pendant la vidéo. |
 
-Passer à un autre fichier, fermer le survol, puis revenir. L’application reste navigable et les autres aperçus actifs restent utilisables. Ce contrôle ne mesure pas le RSS, le GPU ou l’éviction interne de GPUI.
+Passer à un autre fichier, fermer le survol, puis revenir. L’application reste navigable et les autres aperçus actifs restent utilisables. Fermer aussi l’application après plusieurs aperçus PDF/vidéo : aucune attente de fermeture infinie. Si un vrai document dépasse le délai, le message indique les 15 secondes et que le fichier reste accessible ; ne pas chercher à produire une charge énorme pour ce test. Les délais et l’arrêt d’un worker bloqué ont des tests automatisés. Ce contrôle ne mesure pas le RSS, le GPU ou l’éviction interne de GPUI.
 
 ## 2. Archives — environ deux minutes
 
@@ -56,7 +59,7 @@ Fermer l’instance de test, puis lancer cette session isolée :
 
 ```powershell
 $taskPython = 'C:/Users/Biluf/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe'
-$fixtureRoot = 'C:/Users/Biluf/Documents/Projects/Oxyde-GPUI/target/security-visual-check-iz4x5tnl'
+$fixtureRoot = 'C:/Users/Biluf/Documents/Projects/Oxyde-GPUI/target/security-visual-check-0_qkhpsg'
 & $taskPython scripts/prepare-security-visual-check.py --launch-cache-unavailable $fixtureRoot
 ```
 
@@ -102,3 +105,7 @@ Retour à donner dans le chat : étape réussie ou échouée, langue, thème, et
 `cargo build --bin oxyde --locked --offline` réussi, sans avertissement du projet. Suite finale du lot 43 : **655 réussites**, aucun échec, 17 tests préexistants ignorés. Fixtures PNG/GIF vérifiées avec Pillow : tailles attendues et 12/257 images lisibles ; profondeur ZIP : 65 composants. Un test ponctuel, retiré ensuite, appelle le chargeur de production avec les six aperçus : image normale, refus de dimension, corruption, animation normale, repli fixe et proportions SVG vérifiés sans fenêtre. Le test ponctuel du cache/export vérifie séparément les wrappers de production sans lancer l’application associée ; son résultat est consigné dans l’audit.
 
 Les scripts n’ont pas lancé l’UI pendant la préparation. L’affichage réel, les clics, le sélecteur Windows et l’application externe restent à vérifier. Lots 45 à 52 : preuves Move/Rename/Delete, sidecars, préparation des sources, compression, restauration et propriété des temporaires ajoutées. Dernière suite : 719 réussites, aucune erreur, 17 tests préexistants ignorés. Les appels Shell par chemin, les fournisseurs non testés et l’isolation des parseurs restent ouverts dans `AUDIT_SECURITE.md`. Aucune conclusion générale de sécurité.
+
+Lots 53–56 : tests du vrai worker et protocole sans interface, PDF à 125 %, Office, icône/cache, AVI MJPEG/RGB32, annulation, délai et paquets invalides vérifiés automatiquement. Les 20 fixtures ont été régénérées sans modifier les sessions précédentes. Aucune validation visuelle n’a été faite par l’agent.
+
+Borne finale du lot 56 : **738 tests permanents réussis**, aucun échec, 17 tests existants ignorés non activés ; compilation sans avertissement. Les neuf aperçus générés ont aussi été contrôlés ponctuellement via les workers réels, sans fenêtre. Le contrôle interactif de ce document reste entièrement à faire.

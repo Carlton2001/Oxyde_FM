@@ -66,6 +66,17 @@ pub struct FileIdentity {
 /// doit passer par ce trait plutôt qu'appeler directement les API OS.
 pub trait Platform: Send + Sync {
     fn initialize_preview_worker(&self) -> std::io::Result<()> { Ok(()) }
+    #[doc(hidden)]
+    fn decode_preview_worker(&self, _mode: &str, _path: &std::path::Path) -> crate::utils::preview_protocol::Reply {
+        crate::utils::preview_protocol::Reply::Error {limit:false,detail:"Native preview worker unavailable".into()}
+    }
+    #[doc(hidden)]
+    fn decode_video_worker(&self, _path: String, _on_frame: &mut dyn FnMut(image::RgbaImage,std::time::Duration) -> bool) -> Result<(),crate::models::CommandError> {
+        Err(crate::models::CommandError::Other("Native video worker unavailable".into()))
+    }
+    fn stream_preview_worker(&self, _path: &std::path::Path, _on_frame: &mut dyn FnMut(image::RgbaImage, std::time::Duration) -> bool, _cancelled: &dyn Fn() -> bool) -> std::io::Result<()> {
+        Err(std::io::Error::new(std::io::ErrorKind::Unsupported, "Video preview worker unavailable"))
+    }
     /// Windows executes bounded preview parsing in a hidden resource-limited process.
     fn run_preview_worker(&self, _mode: &str, _path: &std::path::Path) -> std::io::Result<Vec<u8>> {
         Err(std::io::Error::new(std::io::ErrorKind::Unsupported, "Preview worker unavailable on this platform"))
@@ -445,7 +456,12 @@ pub fn platform() -> &'static dyn Platform {
 /// Internal worker dispatch; never called by the UI to bypass process isolation.
 #[cfg(target_os = "windows")]
 pub fn local_preview_worker_reply(mode: &str, path: &std::path::Path) -> crate::utils::preview_protocol::Reply {
-    thumbnails::worker_reply(mode, path)
+    platform().decode_preview_worker(mode, path)
+}
+
+#[cfg(target_os = "windows")]
+pub fn local_video_preview_worker(path: String, mut on_frame: impl FnMut(image::RgbaImage,std::time::Duration) -> bool) -> Result<(), crate::models::CommandError> {
+    platform().decode_video_worker(path, &mut on_frame)
 }
 
 #[cfg(target_os = "windows")]

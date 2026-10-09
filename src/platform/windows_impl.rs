@@ -461,6 +461,18 @@ impl Platform for WindowsPlatform {
         super::windows_preview_worker::initialize()
     }
 
+    fn stream_preview_worker(&self, path: &std::path::Path, on_frame: &mut dyn FnMut(image::RgbaImage, std::time::Duration) -> bool, cancelled: &dyn Fn() -> bool) -> std::io::Result<()> {
+        super::windows_preview_worker::stream(path,on_frame,cancelled)
+    }
+
+    fn decode_preview_worker(&self, mode: &str, path: &std::path::Path) -> crate::utils::preview_protocol::Reply {
+        super::thumbnails::worker_reply(mode,path)
+    }
+
+    fn decode_video_worker(&self, path: String, on_frame: &mut dyn FnMut(image::RgbaImage,std::time::Duration) -> bool) -> Result<(),crate::models::CommandError> {
+        super::thumbnails::stream_video_frames_local(path,on_frame,|| false)
+    }
+
     fn set_thread_priority(&self, priority: ThreadPriority) {
         use windows::Win32::System::Threading::{
             GetCurrentThread, SetThreadPriority, THREAD_MODE_BACKGROUND_BEGIN,

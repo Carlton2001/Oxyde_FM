@@ -809,6 +809,9 @@ impl PreviewTask {
                         tokio::sync::mpsc::channel::<(Arc<RenderImage>, Duration)>(4);
 
                     let path_clone = path.clone();
+                    let playback_cancellation = cancellation.clone();
+                    let (completion_tx,completion_rx) = tokio::sync::oneshot::channel();
+                    let failure_cancellation = playback_cancellation.clone();
                     let decode =
                         crate::ui::preview_jobs::load_video(cancellation.clone(), move || {
                             let receiver = tx.clone();
@@ -827,9 +830,12 @@ impl PreviewTask {
                         });
                     cx.background_executor()
                         .spawn(async move {
-                            if let Err(error) = decode.await {
+                            let failure = decode.await.err().map(|error| {
                                 log::warn!("Could not stream tooltip video preview: {error}");
-                            }
+                                crate::ui::image_preview::worker_message(&error)
+                            });
+                            if failure.is_some() { failure_cancellation.cancel(); }
+                            let _ = completion_tx.send(failure);
                         })
                         .detach();
 
@@ -858,12 +864,20 @@ impl PreviewTask {
                         // If we are already late, skip the sleep (drop-frame behaviour).
                         let elapsed = start.elapsed();
                         if pts > elapsed {
-                            cx.background_executor().timer(pts - elapsed).await;
+                            let delay = pts - elapsed;
+                            if std::time::Instant::now().checked_add(delay).is_none() {
+                                playback_cancellation.cancel();
+                                break;
+                            }
+                            let timer = Box::pin(cx.background_executor().timer(delay));
+                            let cancelled = Box::pin(playback_cancellation.cancelled());
+                            if matches!(futures::future::select(timer,cancelled).await, futures::future::Either::Right(_)) { break; }
                         }
                     }
+                    let failure = completion_rx.await.ok().flatten();
                     let _ = this.update(&mut cx, |this, cx| {
-                        if this.data.is_none() {
-                            this.message = Some(Message::PreviewUnavailable);
+                        if failure.is_some() || this.data.is_none() {
+                            this.message = failure.or(Some(Message::PreviewUnavailable));
                             cx.notify();
                         }
                     });

@@ -26,6 +26,41 @@ pub(crate) fn run_if_requested() -> bool {
             return Err(std::io::Error::other("Unexpected preview argument"));
         }
         let path = std::path::Path::new(&path);
+        if mode == "video" {
+            let path = path
+                .to_str()
+                .ok_or_else(|| std::io::Error::other("Video path is not Unicode"))?
+                .to_owned();
+            let mut output = std::io::stdout().lock();
+            let mut send_error = None;
+            let result = oxyde_lib::platform::local_video_preview_worker(path, |image, pts| {
+                let reply = Reply::Images {
+                    frames: vec![image::Frame::new(image)],
+                    limited: false,
+                };
+                match video_packet(reply, pts, &mut output) {
+                    Ok(()) => true,
+                    Err(error) => {
+                        send_error = Some(error);
+                        false
+                    }
+                }
+            });
+            if let Some(error) = send_error {
+                return Err(error);
+            }
+            if let Err(error) = result {
+                video_packet(
+                    Reply::Error {
+                        limit: false,
+                        detail: error.to_string(),
+                    },
+                    std::time::Duration::ZERO,
+                    &mut output,
+                )?;
+            }
+            return Ok(());
+        }
         let reply = if mode == "image" {
             match super::image_preview::load_path_local(
                 path,
@@ -74,4 +109,22 @@ pub(crate) fn run_if_requested() -> bool {
     // stdout has already been flushed, and this worker has no application state.
     let _ = oxyde_lib::platform::platform().finish_process_shutdown();
     true
+}
+
+fn video_packet(
+    reply: Reply,
+    timestamp: std::time::Duration,
+    output: &mut impl Write,
+) -> std::io::Result<()> {
+    let mut bytes = Vec::new();
+    preview_protocol::encode(reply, &mut bytes)?;
+    let length = bytes.len() + 12;
+    if length > 2 * 1024 * 1024 {
+        return Err(std::io::Error::other("Video packet exceeds its limit"));
+    }
+    output.write_all(&(length as u32).to_le_bytes())?;
+    output.write_all(&timestamp.as_secs().to_le_bytes())?;
+    output.write_all(&timestamp.subsec_nanos().to_le_bytes())?;
+    output.write_all(&bytes)?;
+    output.flush()
 }

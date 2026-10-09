@@ -5,7 +5,7 @@ use std::os::windows::{
     process::CommandExt,
 };
 use std::path::Path;
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, ChildStdout, Command, Stdio};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use windows::Win32::Foundation::{ERROR_BROKEN_PIPE, HANDLE, WAIT_OBJECT_0};
@@ -32,6 +32,7 @@ pub(super) fn initialize() -> io::Result<()> {
 }
 // Covers all callers, including those outside the UI admission queue.
 static SLOT: Mutex<()> = Mutex::new(());
+static VIDEO_SLOT: Mutex<()> = Mutex::new(());
 
 fn native(error: windows::core::Error) -> io::Error {
     io::Error::other(error.to_string())
@@ -40,6 +41,38 @@ fn native(error: windows::core::Error) -> io::Error {
 struct Worker {
     child: Child,
     _job: OwnedHandle,
+}
+impl Worker {
+    fn start(mut command: Command) -> io::Result<(Self, ChildStdout)> {
+        let job = job()?;
+        let child = command
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .creation_flags(0x08000000)
+            .spawn()?;
+        let mut worker = Self { child, _job: job };
+        unsafe {
+            AssignProcessToJobObject(
+                HANDLE(worker._job.as_raw_handle()),
+                HANDLE(worker.child.as_raw_handle()),
+            )
+        }
+        .map_err(native)?;
+        let mut start = worker
+            .child
+            .stdin
+            .take()
+            .ok_or_else(|| io::Error::other("Missing preview gate"))?;
+        start.write_all(&[0xA7])?;
+        drop(start);
+        let output = worker
+            .child
+            .stdout
+            .take()
+            .ok_or_else(|| io::Error::other("Missing preview output"))?;
+        Ok((worker, output))
+    }
 }
 impl Drop for Worker {
     fn drop(&mut self) {
@@ -99,35 +132,9 @@ pub(super) fn run_in(
     supervise(command, deadline)
 }
 
-pub(super) fn supervise(mut command: Command, deadline: Duration) -> io::Result<Vec<u8>> {
-    let job = job()?;
+pub(super) fn supervise(command: Command, deadline: Duration) -> io::Result<Vec<u8>> {
     let started = Instant::now();
-    let child = command
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .creation_flags(0x08000000) // CREATE_NO_WINDOW: no console flashes.
-        .spawn()?;
-    let mut worker = Worker { child, _job: job };
-    unsafe {
-        AssignProcessToJobObject(
-            HANDLE(worker._job.as_raw_handle()),
-            HANDLE(worker.child.as_raw_handle()),
-        )
-    }
-    .map_err(native)?;
-    let mut start = worker
-        .child
-        .stdin
-        .take()
-        .ok_or_else(|| io::Error::other("Missing preview gate"))?;
-    start.write_all(&[0xA7])?;
-    drop(start);
-    let mut output = worker
-        .child
-        .stdout
-        .take()
-        .ok_or_else(|| io::Error::other("Missing preview output"))?;
+    let (mut worker, mut output) = Worker::start(command)?;
     let mut bytes = Vec::new();
     let mut chunk = [0; 64 * 1024];
     let mut exited = None;
@@ -180,6 +187,159 @@ pub(super) fn supervise(mut command: Command, deadline: Duration) -> io::Result<
                 return Err(io::Error::other(format!("Preview worker failed: {status}")));
             }
             return Ok(bytes);
+        } else {
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        exited = worker.child.try_wait()?;
+    }
+}
+
+pub(super) fn stream(
+    path: &Path,
+    on_frame: &mut dyn FnMut(image::RgbaImage, Duration) -> bool,
+    cancelled: &dyn Fn() -> bool,
+) -> io::Result<()> {
+    if cancelled() {
+        return Ok(());
+    }
+    let _slot = VIDEO_SLOT
+        .lock()
+        .map_err(|_| io::Error::other("Video worker admission failed"))?;
+    if cancelled() {
+        return Ok(());
+    }
+    stream_in(
+        &std::env::current_exe()?,
+        path,
+        on_frame,
+        cancelled,
+        DEADLINE,
+    )
+}
+
+pub(super) fn stream_in(
+    executable: &Path,
+    path: &Path,
+    on_frame: &mut dyn FnMut(image::RgbaImage, Duration) -> bool,
+    cancelled: &dyn Fn() -> bool,
+    deadline: Duration,
+) -> io::Result<()> {
+    let mut command = Command::new(executable);
+    command
+        .arg("--oxyde-preview-worker-v1")
+        .arg("video")
+        .arg(path);
+    supervise_stream(command, on_frame, cancelled, deadline)
+}
+
+pub(super) fn supervise_stream(
+    command: Command,
+    on_frame: &mut dyn FnMut(image::RgbaImage, Duration) -> bool,
+    cancelled: &dyn Fn() -> bool,
+    deadline: Duration,
+) -> io::Result<()> {
+    use crate::utils::preview_protocol::{self, Reply};
+    const MAX_PACKET: usize = 2 * 1024 * 1024;
+    if cancelled() {
+        return Ok(());
+    }
+    let mut progress = Instant::now();
+    let (mut worker, mut output) = Worker::start(command)?;
+    let mut pending = Vec::new();
+    let mut chunk = [0; 64 * 1024];
+    let mut exited = None;
+    let mut received = false;
+    loop {
+        if cancelled() {
+            return Ok(());
+        }
+        if progress.elapsed() >= deadline {
+            return Err(io::Error::new(
+                io::ErrorKind::TimedOut,
+                "PreviewWorkerTimeout: Video produced no frame for 15 seconds",
+            ));
+        }
+        let mut available = 0;
+        if let Err(error) = unsafe {
+            PeekNamedPipe(
+                HANDLE(output.as_raw_handle()),
+                None,
+                0,
+                None,
+                Some(&mut available),
+                None,
+            )
+        } {
+            if error.code() != windows::core::HRESULT::from_win32(ERROR_BROKEN_PIPE.0) {
+                return Err(native(error));
+            }
+        }
+        if available > 0 {
+            let requested = (available as usize).min(chunk.len());
+            let count = output.read(&mut chunk[..requested])?;
+            if count == 0 {
+                return Err(io::Error::other("Video worker output closed unexpectedly"));
+            }
+            if pending.len() + count > MAX_PACKET + 4 + chunk.len() {
+                return Err(io::Error::other("Video worker buffer exceeds its limit"));
+            }
+            let needed = pending.len() + count;
+            if needed > pending.capacity() {
+                let capacity = needed
+                    .max(pending.capacity().saturating_mul(2))
+                    .min(MAX_PACKET + 4 + chunk.len());
+                pending
+                    .try_reserve_exact(capacity - pending.len())
+                    .map_err(io::Error::other)?;
+            }
+            pending.extend_from_slice(&chunk[..count]);
+            while pending.len() >= 4 {
+                let length = u32::from_le_bytes(pending[..4].try_into().unwrap()) as usize;
+                if !(12..=MAX_PACKET).contains(&length) {
+                    return Err(io::Error::other("Invalid video worker packet size"));
+                }
+                if pending.len() < 4 + length {
+                    break;
+                }
+                let packet = &pending[4..4 + length];
+                let seconds = u64::from_le_bytes(packet[..8].try_into().unwrap());
+                let nanos = u32::from_le_bytes(packet[8..12].try_into().unwrap());
+                if nanos >= 1_000_000_000 || seconds > i64::MAX as u64 / 10_000_000 {
+                    return Err(io::Error::other("Invalid video worker timestamp"));
+                }
+                let reply = preview_protocol::decode(&packet[12..])?;
+                pending.drain(..4 + length);
+                match reply {
+                    Reply::Images {
+                        mut frames,
+                        limited: false,
+                    } if frames.len() == 1 => {
+                        let image = frames.remove(0).into_buffer();
+                        if image.width() > 640 || image.height() > 640 {
+                            return Err(io::Error::other(
+                                "Video worker dimensions exceed their limit",
+                            ));
+                        }
+                        received = true;
+                        if !on_frame(image, Duration::new(seconds, nanos)) {
+                            return Ok(());
+                        }
+                        progress = Instant::now();
+                    }
+                    Reply::Error { detail, .. } => return Err(io::Error::other(detail)),
+                    _ => return Err(io::Error::other("Unexpected video worker reply")),
+                }
+                if cancelled() {
+                    return Ok(());
+                }
+            }
+        } else if let Some(status) = exited {
+            if !std::process::ExitStatus::success(&status) || !pending.is_empty() || !received {
+                return Err(io::Error::other(
+                    "Video worker ended without a complete stream",
+                ));
+            }
+            return Ok(());
         } else {
             std::thread::sleep(Duration::from_millis(5));
         }

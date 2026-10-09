@@ -223,3 +223,126 @@ fn supervisor_bounds_actual_output_and_reaps_a_failed_process() {
     .unwrap_err();
     assert!(error.to_string().contains("failed"), "{error}");
 }
+
+fn chunk(id: &[u8; 4], bytes: &[u8]) -> Vec<u8> {
+    let mut out = id.to_vec();
+    out.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
+    out.extend_from_slice(bytes);
+    if bytes.len() % 2 != 0 {
+        out.push(0);
+    }
+    out
+}
+fn numbers(values: &[u32]) -> Vec<u8> {
+    values
+        .iter()
+        .flat_map(|value| value.to_le_bytes())
+        .collect()
+}
+
+fn tiny_video(path: &Path, jpeg: bool) {
+    let mut frames = Vec::new();
+    for color in [[255, 0, 0, 255], [0, 0, 255, 255]] {
+        if !jpeg {
+            frames.push([color[2], color[1], color[0], 0].repeat(16 * 16));
+            continue;
+        }
+        let mut bytes = std::io::Cursor::new(Vec::new());
+        image::DynamicImage::ImageRgba8(image::RgbaImage::from_pixel(16, 16, image::Rgba(color)))
+            .write_to(&mut bytes, image::ImageFormat::Jpeg)
+            .unwrap();
+        frames.push(bytes.into_inner());
+    }
+    let mut stream = if jpeg {
+        b"vidsMJPG".to_vec()
+    } else {
+        b"vidsDIB\0".to_vec()
+    };
+    stream.extend(numbers(&[0, 0, 0, 1, 10, 0, 2, 0, u32::MAX, 0]));
+    for value in [0u16, 0, 16, 16] {
+        stream.extend(value.to_le_bytes());
+    }
+    let mut bitmap = numbers(&[40, 16, 16]);
+    bitmap.extend(
+        [
+            1u16.to_le_bytes(),
+            if jpeg { 24u16 } else { 32u16 }.to_le_bytes(),
+        ]
+        .concat(),
+    );
+    bitmap.extend(if jpeg { b"MJPG" } else { &[0; 4] });
+    bitmap.extend(numbers(&[if jpeg { 768 } else { 1024 }, 0, 0, 0, 0]));
+    let mut strl = b"strl".to_vec();
+    strl.extend(chunk(b"strh", &stream));
+    strl.extend(chunk(b"strf", &bitmap));
+    let mut header = b"hdrl".to_vec();
+    header.extend(chunk(
+        b"avih",
+        &numbers(&[100_000, 0, 0, 0x10, 2, 0, 1, 0, 16, 16, 0, 0, 0, 0]),
+    ));
+    header.extend(chunk(b"LIST", &strl));
+    let mut movi = b"movi".to_vec();
+    let mut index = Vec::new();
+    for frame in frames {
+        let kind = if jpeg { b"00dc" } else { b"00db" };
+        index.extend(kind);
+        index.extend(numbers(&[0x10, movi.len() as u32, frame.len() as u32]));
+        movi.extend(chunk(kind, &frame));
+    }
+    let mut avi = b"AVI ".to_vec();
+    avi.extend(chunk(b"LIST", &header));
+    avi.extend(chunk(b"LIST", &movi));
+    avi.extend(chunk(b"idx1", &index));
+    std::fs::write(path, chunk(b"RIFF", &avi)).unwrap();
+}
+
+#[test]
+fn actual_video_worker_streams_pixels_timestamps_and_releases_source_on_stop() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("école.avi");
+    for jpeg in [true, false] {
+        tiny_video(&path, jpeg);
+        let mut frames = Vec::new();
+        transport::stream_in(
+            Path::new(env!("CARGO_BIN_EXE_oxyde")),
+            &path,
+            &mut |image, pts| {
+                frames.push((image, pts));
+                frames.len() < 2
+            },
+            &|| false,
+            Duration::from_secs(15),
+        )
+        .unwrap();
+        assert_eq!(frames.len(), 2);
+        assert_eq!(frames[0].0.dimensions(), (640, 640));
+        let first = frames[0].0.get_pixel(320, 320).0;
+        let second = frames[1].0.get_pixel(320, 320).0;
+        assert!(first[0] < 10 && first[2] > 240, "{first:?}");
+        assert!(second[0] > 240 && second[2] < 10, "{second:?}");
+        assert_eq!(frames[0].1, Duration::ZERO);
+        assert!(frames[1].1 > frames[0].1);
+        std::fs::remove_file(&path).unwrap();
+    }
+}
+
+#[test]
+fn stream_supervisor_cancels_stalled_native_work_and_rejects_invalid_packets() {
+    let started = Instant::now();
+    transport::supervise_stream(
+        powershell(
+            "$g=[Console]::OpenStandardInput().ReadByte(); [Threading.Thread]::Sleep(10000)",
+        ),
+        &mut |_, _| panic!("Unexpected frame"),
+        &|| started.elapsed() > Duration::from_millis(300),
+        Duration::from_secs(15),
+    )
+    .unwrap();
+    assert!(started.elapsed() < Duration::from_secs(3));
+    let error = transport::supervise_stream(powershell("$g=[Console]::OpenStandardInput().ReadByte(); $o=[Console]::OpenStandardOutput(); $o.Write([byte[]](255,255,255,255),0,4)"),
+        &mut |_,_| panic!("Invalid packet emitted a frame"), &|| false, Duration::from_secs(10)).unwrap_err();
+    assert!(error.to_string().contains("packet size"), "{error}");
+    let error = transport::supervise_stream(powershell("$g=[Console]::OpenStandardInput().ReadByte(); $o=[Console]::OpenStandardOutput(); $o.Write([byte[]](32,0,0,0,0),0,5)"),
+        &mut |_,_| panic!("Truncated packet emitted a frame"), &|| false, Duration::from_secs(10)).unwrap_err();
+    assert!(error.to_string().contains("complete stream"), "{error}");
+}

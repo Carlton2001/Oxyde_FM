@@ -798,6 +798,18 @@ pub fn stream_video_frames_sync<F>(
     mut on_frame: F,
     cancelled: impl Fn() -> bool,
 ) -> Result<(), CommandError>
+where F: FnMut(RgbaImage,Duration) -> bool,
+{
+    super::platform().stream_preview_worker(Path::new(&path), &mut on_frame, &cancelled)?;
+    Ok(())
+}
+
+#[cfg(target_os = "windows")]
+pub(super) fn stream_video_frames_local<F>(
+    path: String,
+    mut on_frame: F,
+    cancelled: impl Fn() -> bool,
+) -> Result<(), CommandError>
 where
     F: FnMut(RgbaImage, Duration) -> bool,
 {
@@ -1401,7 +1413,7 @@ mod video_stream_tests {
             .to_string_lossy()
             .into_owned();
         let result =
-            stream_video_frames_sync(path, |_, _| panic!("missing file produced image"), || false);
+            stream_video_frames_local(path, |_, _| panic!("missing file produced image"), || false);
         assert!(result.is_err());
     }
 }
