@@ -116,6 +116,7 @@ pub(crate) fn move_file(
     .map(|(size, _)| size)
 }
 
+#[cfg(test)]
 pub(super) fn move_file_with_parents(
     source: &Path,
     destination: &Path,
@@ -125,6 +126,50 @@ pub(super) fn move_file_with_parents(
 ) -> io::Result<(u64, Option<crate::models::transaction::HistoryMoveIdentity>)> {
     let source_parents = HeldParents::new(source)?;
     let file = source_parents.open_mutation(source)?;
+    move_opened_file(
+        source,
+        destination,
+        replace,
+        source_parents,
+        file,
+        destination_parents,
+        checkpoint,
+    )
+}
+
+pub(super) fn move_selected_file_with_parents(
+    selected: &super::source_selection::SelectedFile,
+    destination: &Path,
+    replace: bool,
+    destination_parents: HeldParents,
+    checkpoint: &mut dyn FnMut() -> io::Result<()>,
+) -> io::Result<(u64, Option<crate::models::transaction::HistoryMoveIdentity>)> {
+    let source_parents = selected.parents()?;
+    let source = selected.resolved_path();
+    let file = source_parents
+        .open_mutation(&source)
+        .map_err(|error| selected.open_error(error))?;
+    selected.verify(&file)?;
+    move_opened_file(
+        &source,
+        destination,
+        replace,
+        source_parents,
+        file,
+        destination_parents,
+        checkpoint,
+    )
+}
+
+fn move_opened_file(
+    source: &Path,
+    destination: &Path,
+    replace: bool,
+    source_parents: HeldParents,
+    file: File,
+    destination_parents: HeldParents,
+    checkpoint: &mut dyn FnMut() -> io::Result<()>,
+) -> io::Result<(u64, Option<crate::models::transaction::HistoryMoveIdentity>)> {
     let metadata = file.metadata()?;
     if !metadata.is_file() {
         return Err(io::Error::other("Move source is not an ordinary file"));

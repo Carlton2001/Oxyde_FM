@@ -96,6 +96,25 @@ fn format_datetime(date: NaiveDateTime, format: DateFormat) -> String {
 mod tests {
     use super::*;
     #[test]
+    fn selected_source_failures_explain_partial_results_in_all_languages() {
+        use crate::ui::i18n::{I18n, Message};
+        for language in [Language::French, Language::English, Language::German, Language::Spanish, Language::Italian] {
+            let i18n = I18n::for_language(language);
+            for (changed, key) in [(true, Message::TransferSourceChanged), (false, Message::TransferSourceUnverified)] {
+                let failure = oxyde_lib::models::error::SourceSelectionFailure { changed, path: "C:/écriture/空".into() };
+                let detail = format!("Cannot copy source: {failure}");
+                let displayed = error_detail(&detail, &i18n);
+                assert_eq!(displayed, i18n.text(key).to_string());
+                assert!(!displayed.contains("Source selection ["));
+                assert!(!displayed.starts_with('['));
+                assert!(displayed.len() > 100);
+            }
+            let unrelated = "File missing: source selection.txt";
+            assert_eq!(error_detail(unrelated, &i18n), unrelated);
+        }
+    }
+
+    #[test]
     fn archive_source_conflicts_are_translated_in_all_languages() {
         for (language, expected) in [
             (Language::French, "L’archive a changé"),
@@ -250,6 +269,9 @@ mod tests {
 pub fn error_detail(detail: &str, i18n: &crate::ui::i18n::I18n) -> String {
     use crate::ui::i18n::{FluentArgs, Message};
     use oxyde_lib::models::error::{ArchiveLimitFailure, ArchiveLimitKind};
+    if let Some(changed) = oxyde_lib::models::error::SourceSelectionFailure::from_message(detail) {
+        return i18n.text(if changed { Message::TransferSourceChanged } else { Message::TransferSourceUnverified }).to_string();
+    }
     if oxyde_lib::models::error::ArchiveSourceConflict::from_message(detail) {
         return i18n.text(Message::ArchiveSourceChanged).to_string();
     }

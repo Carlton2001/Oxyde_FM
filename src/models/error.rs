@@ -1,5 +1,51 @@
 use std::fmt;
 
+/// Stable cause retained through string-based file-operation status.
+#[derive(Clone, Debug)]
+pub struct SourceSelectionFailure {
+    pub changed: bool,
+    pub path: String,
+}
+impl fmt::Display for SourceSelectionFailure {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "Source selection [{}]: {}",
+            if self.changed {
+                "changed"
+            } else {
+                "unverified"
+            },
+            self.path
+        )
+    }
+}
+impl std::error::Error for SourceSelectionFailure {}
+impl SourceSelectionFailure {
+    pub(crate) fn changed(path: &std::path::Path) -> std::io::Error {
+        Self::error(path, true)
+    }
+    pub(crate) fn unverified(path: &std::path::Path) -> std::io::Error {
+        Self::error(path, false)
+    }
+    fn error(path: &std::path::Path, changed: bool) -> std::io::Error {
+        std::io::Error::other(Self {
+            changed,
+            path: path.to_string_lossy().into_owned(),
+        })
+    }
+    pub fn from_message(message: &str) -> Option<bool> {
+        let (_, value) = message.split_once("Source selection [")?;
+        if value.starts_with("changed]: ") {
+            Some(true)
+        } else if value.starts_with("unverified]: ") {
+            Some(false)
+        } else {
+            None
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct HistoryUndoRecoveryFailure {
     pub locations: String,

@@ -571,3 +571,6 @@ undo-rename-changed = Cannot undo this rename: the file or folder was replaced. 
 undo-rename-unverified = Cannot safely undo this rename: the file or folder’s identity could not be verified. It was preserved. { $detail }
 redo-rename-changed = Cannot redo this rename: the file or folder was replaced. It was preserved at its current location. { $detail }
 redo-rename-unverified = Cannot safely redo this rename: the file or folder’s identity could not be verified. It was preserved. { $detail }
+
+transfer-source-changed = The source was replaced or is no longer a regular file or folder. The transfer stopped; items already transferred were kept. Check the source and try again.
+transfer-source-unverified = The source identity cannot be verified at this location. The transfer stopped; items already transferred were kept. Try from a compatible local folder.

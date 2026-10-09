@@ -47,6 +47,18 @@ impl Platform for WindowsPlatform {
     fn open_operation_file(&self, parent: &std::fs::File, path: &std::path::Path, read_contents: bool) -> std::io::Result<std::fs::File> {
         super::windows_file_moves::open_relative(parent, path, read_contents)
     }
+    fn track_source_item(&self, parent: &std::fs::File, path: &std::path::Path) -> std::io::Result<std::fs::File> {
+        super::windows_source_selection::track(parent, path)
+    }
+    fn open_source_directory(&self, parent: &std::fs::File, path: &std::path::Path) -> std::io::Result<std::fs::File> {
+        super::windows_source_selection::open(parent, path, true)
+    }
+    fn open_copy_source(&self, parent: &std::fs::File, path: &std::path::Path) -> std::io::Result<std::fs::File> {
+        super::windows_source_selection::open(parent, path, false)
+    }
+    fn enumerate_source_directory(&self, directory: &std::fs::File, visitor: &mut dyn FnMut(std::ffi::OsString) -> std::io::Result<()>) -> std::io::Result<()> {
+        super::windows_file_tree::enumerate(directory, visitor)
+    }
     fn open_copied_file(&self, parent: &std::fs::File, path: &std::path::Path) -> std::io::Result<std::fs::File> {
         super::windows_file_moves::open_copied_relative(parent, path)
     }

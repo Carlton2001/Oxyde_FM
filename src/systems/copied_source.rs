@@ -3,7 +3,9 @@ use super::file_copy::CopiedFile;
 use crate::platform::platform;
 use std::fs::File;
 use std::io;
-use std::path::{Path, PathBuf};
+#[cfg(test)]
+use std::path::Path;
+use std::path::PathBuf;
 
 pub(super) struct CopiedSource {
     file: File,
@@ -11,6 +13,7 @@ pub(super) struct CopiedSource {
     _parents: super::path_parents::HeldParents,
 }
 impl CopiedSource {
+    #[cfg(test)]
     pub fn open(path: &Path) -> io::Result<Self> {
         let parents = super::path_parents::HeldParents::new(path)?;
         let file = parents.open_file(path)?;
@@ -21,6 +24,19 @@ impl CopiedSource {
         Ok(Self {
             file,
             path: path.into(),
+            _parents: parents,
+        })
+    }
+    pub fn open_selected(selected: &super::source_selection::SelectedFile) -> io::Result<Self> {
+        let parents = selected.parents()?;
+        let path = selected.resolved_path();
+        let file = parents
+            .open_file(&path)
+            .map_err(|error| selected.open_error(error))?;
+        selected.verify(&file)?;
+        Ok(Self {
+            file,
+            path,
             _parents: parents,
         })
     }

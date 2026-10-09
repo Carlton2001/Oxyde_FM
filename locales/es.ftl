@@ -878,3 +878,6 @@ undo-rename-changed = No se puede deshacer este cambio de nombre: el archivo o l
 undo-rename-unverified = No se puede deshacer este cambio de nombre de forma segura: no se pudo verificar la identidad del archivo o la carpeta. Se ha conservado. { $detail }
 redo-rename-changed = No se puede rehacer este cambio de nombre: el archivo o la carpeta fue reemplazado. Se ha conservado en su ubicación actual. { $detail }
 redo-rename-unverified = No se puede rehacer este cambio de nombre de forma segura: no se pudo verificar la identidad del archivo o la carpeta. Se ha conservado. { $detail }
+
+transfer-source-changed = El origen se ha sustituido o ya no es un archivo o carpeta normal. La transferencia se ha detenido; los elementos ya transferidos se conservan. Compruebe el origen e inténtelo de nuevo.
+transfer-source-unverified = No se puede verificar la identidad del origen en esta ubicación. La transferencia se ha detenido; los elementos ya transferidos se conservan. Pruebe desde una carpeta local compatible.

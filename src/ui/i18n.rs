@@ -394,6 +394,8 @@ pub enum Message {
     ArchiveLimitTime,
     ArchiveLimitDecoded,
     ArchiveSourceChanged,
+    TransferSourceChanged,
+    TransferSourceUnverified,
 
     NetworkMapDescription,
     NetworkMapHint,
@@ -867,6 +869,8 @@ impl Message {
             Self::ArchiveLimitTime => "archive-limit-time",
             Self::ArchiveLimitDecoded => "archive-limit-decoded",
             Self::ArchiveSourceChanged => "archive-source-changed",
+            Self::TransferSourceChanged => "transfer-source-changed",
+            Self::TransferSourceUnverified => "transfer-source-unverified",
 
             Self::NetworkMapDescription => "network-map-description",
             Self::NetworkMapHint => "network-map-hint",
@@ -1491,6 +1495,8 @@ mod tests {
                 Message::ArchiveLimitTime,
                 Message::ArchiveLimitDecoded,
                 Message::ArchiveSourceChanged,
+                Message::TransferSourceChanged,
+                Message::TransferSourceUnverified,
 
                 Message::NetworkMapDescription,
                 Message::NetworkMapHint,

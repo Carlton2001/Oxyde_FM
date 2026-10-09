@@ -878,3 +878,6 @@ undo-rename-changed = Impossibile annullare questa rinomina: il file o la cartel
 undo-rename-unverified = Impossibile annullare questa rinomina in sicurezza: non è stato possibile verificare l’identità del file o della cartella. L’elemento è stato conservato. { $detail }
 redo-rename-changed = Impossibile ripetere questa rinomina: il file o la cartella è stato sostituito. È stato conservato nella posizione attuale. { $detail }
 redo-rename-unverified = Impossibile ripetere questa rinomina in sicurezza: non è stato possibile verificare l’identità del file o della cartella. L’elemento è stato conservato. { $detail }
+
+transfer-source-changed = L’origine è stata sostituita o non è più un file o una cartella normale. Il trasferimento è stato interrotto; gli elementi già trasferiti vengono conservati. Controlla l’origine e riprova.
+transfer-source-unverified = Non è possibile verificare l’identità dell’origine in questa posizione. Il trasferimento è stato interrotto; gli elementi già trasferiti vengono conservati. Prova da una cartella locale compatibile.

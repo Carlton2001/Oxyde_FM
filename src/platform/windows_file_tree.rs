@@ -1,5 +1,5 @@
 //! Walk/delete retained objects without reopening a pathname or following links.
-use std::ffi::{c_void, OsString};
+use std::ffi::{OsString, c_void};
 use std::fs::File;
 use std::io;
 use std::os::windows::{ffi::OsStringExt, fs::MetadataExt, io::AsRawHandle};
@@ -50,7 +50,7 @@ fn directory_reader(parent: &File, leaf: &std::ffi::OsStr) -> io::Result<File> {
     )
 }
 
-fn next_name(reader: &File, buffer: &mut [u32]) -> io::Result<Option<OsString>> {
+fn next_name(reader: &File, buffer: &mut [u32], restart: bool) -> io::Result<Option<OsString>> {
     let mut status = IoStatusBlock {
         status: 0,
         information: 0,
@@ -68,7 +68,7 @@ fn next_name(reader: &File, buffer: &mut [u32]) -> io::Result<Option<OsString>> 
             12,
             1,
             std::ptr::null(),
-            0,
+            restart as u8,
         )
     };
     if result < 0 {
@@ -100,6 +100,25 @@ fn next_name(reader: &File, buffer: &mut [u32]) -> io::Result<Option<OsString>> 
         .map(|pair| u16::from_le_bytes([pair[0], pair[1]]))
         .collect();
     Ok(Some(OsString::from_wide(&wide)))
+}
+
+pub(super) fn enumerate(
+    directory: &File,
+    visitor: &mut dyn FnMut(OsString) -> io::Result<()>,
+) -> io::Result<()> {
+    let metadata = directory.metadata()?;
+    if !metadata.is_dir() || metadata.file_attributes() & 0x400 != 0 {
+        return Err(io::Error::other("Source directory is no longer ordinary"));
+    }
+    let mut buffer = vec![0u32; (64 * 1024 + 16) / 4];
+    let mut restart = true;
+    while let Some(name) = next_name(directory, &mut buffer, restart)? {
+        restart = false;
+        if name != "." && name != ".." {
+            visitor(name)?;
+        }
+    }
+    Ok(())
 }
 
 pub(super) fn remove(
@@ -135,7 +154,7 @@ pub(super) fn remove(
     let mut buffer = vec![0u32; (64 * 1024 + 16) / 4];
     while let Some(directory) = stack.last() {
         checkpoint()?;
-        let Some(name) = next_name(&directory.reader, &mut buffer)? else {
+        let Some(name) = next_name(&directory.reader, &mut buffer, false)? else {
             let directory = stack.pop().unwrap();
             drop(directory.reader);
             checkpoint()?;

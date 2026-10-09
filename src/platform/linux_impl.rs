@@ -70,6 +70,30 @@ impl Platform for LinuxPlatform {
         }
         self.open_file_for_move(path)
     }
+    fn track_source_item(&self, parent: &std::fs::File, path: &std::path::Path) -> std::io::Result<std::fs::File> {
+        #[cfg(target_os = "linux")]
+        { super::linux_source_selection::open(parent, path, None) }
+        #[cfg(not(target_os = "linux"))]
+        { let _ = (parent, path); Err(std::io::ErrorKind::Unsupported.into()) }
+    }
+    fn open_source_directory(&self, parent: &std::fs::File, path: &std::path::Path) -> std::io::Result<std::fs::File> {
+        #[cfg(target_os = "linux")]
+        { super::linux_source_selection::open(parent, path, Some(true)) }
+        #[cfg(not(target_os = "linux"))]
+        { let _ = (parent, path); Err(std::io::ErrorKind::Unsupported.into()) }
+    }
+    fn open_copy_source(&self, parent: &std::fs::File, path: &std::path::Path) -> std::io::Result<std::fs::File> {
+        #[cfg(target_os = "linux")]
+        { super::linux_source_selection::open(parent, path, Some(false)) }
+        #[cfg(not(target_os = "linux"))]
+        { let _ = (parent, path); Err(std::io::ErrorKind::Unsupported.into()) }
+    }
+    fn enumerate_source_directory(&self, directory: &std::fs::File, visitor: &mut dyn FnMut(std::ffi::OsString) -> std::io::Result<()>) -> std::io::Result<()> {
+        #[cfg(target_os = "linux")]
+        { super::linux_source_selection::enumerate(directory, visitor) }
+        #[cfg(not(target_os = "linux"))]
+        { let _ = (directory, visitor); Err(std::io::ErrorKind::Unsupported.into()) }
+    }
     fn open_copied_file(&self, parent: &std::fs::File, path: &std::path::Path) -> std::io::Result<std::fs::File> {
         self.open_operation_file(parent, path, true)
     }

@@ -5,6 +5,7 @@ pub(crate) mod file_copy;
 mod copied_source;
 mod destination_tree;
 mod source_directories;
+mod source_selection;
 pub(crate) mod history_move;
 pub(crate) mod history_move_redo;
 pub(crate) mod history_file_undo;

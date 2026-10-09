@@ -1,6 +1,6 @@
 //! Capture source directories before moving contents; never rediscover cleanup by name.
 use super::path_parents::HeldParents;
-use crate::platform::{platform, FileIdentity};
+use crate::platform::{FileIdentity, platform};
 use std::{
     collections::HashMap,
     fs::File,
@@ -26,6 +26,7 @@ pub(super) struct SourceDirectories {
 }
 
 impl SourceDirectories {
+    #[cfg(test)]
     pub fn capture(&mut self, path: &Path, destination: &Path) -> io::Result<()> {
         if self.directories.contains_key(path) {
             return Ok(());
@@ -51,6 +52,41 @@ impl SourceDirectories {
             identity,
         });
         self.directories.insert(path.to_path_buf(), directory);
+        Ok(())
+    }
+
+    pub fn capture_bound(
+        &mut self,
+        path: &Path,
+        destination: &Path,
+        parents: HeldParents,
+        selected: &File,
+    ) -> io::Result<()> {
+        if self.directories.contains_key(path) {
+            return Ok(());
+        }
+        let parent = if let Some(parent) = path.parent().and_then(|path| self.directories.get(path))
+        {
+            Arc::clone(parent)
+        } else {
+            let parent = Arc::new(parents.directory().try_clone()?);
+            self.roots.push(parents);
+            parent
+        };
+        // Reopen only the selected child for tracking, permitting later deletion.
+        let directory = Arc::new(platform().track_operation_directory(&parent, path)?);
+        let identity = platform().file_identity(&directory)?;
+        if identity != platform().file_identity(selected)? {
+            return Err(crate::models::error::SourceSelectionFailure::changed(path));
+        }
+        self.entries.push(Entry {
+            path: path.into(),
+            destination: destination.into(),
+            parent,
+            _directory: Arc::clone(&directory),
+            identity,
+        });
+        self.directories.insert(path.into(), directory);
         Ok(())
     }
 
@@ -109,7 +145,7 @@ impl SourceDirectories {
                             "Moved contents, but cannot remove source directory {:?}: {error}",
                             entry.path
                         ),
-                    ))
+                    ));
                 }
             }
             // Drop the selected handle (and its retained parent) before the next entry.
@@ -121,7 +157,7 @@ impl SourceDirectories {
 #[cfg(all(test, target_os = "windows"))]
 mod tests {
     use super::*;
-    use crate::platform::windows_reparse_tests::{junction, Retarget};
+    use crate::platform::windows_reparse_tests::{Retarget, junction};
 
     #[test]
     fn source_directory_cleanup_separates_groups_and_drops_descendant_handles() {

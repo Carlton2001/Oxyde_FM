@@ -94,6 +94,14 @@ pub trait Platform: Send + Sync {
     fn remove_empty_operation_directory(&self, parent: &std::fs::File, path: &std::path::Path, expected: FileIdentity) -> std::io::Result<()>;
     /// Open the basename relative to the retained parent, without following reparse objects.
     fn open_operation_file(&self, parent: &std::fs::File, path: &std::path::Path, read_contents: bool) -> std::io::Result<std::fs::File>;
+    /// Inspect one child of a bound source parent without following its final link.
+    fn track_source_item(&self, parent: &std::fs::File, path: &std::path::Path) -> std::io::Result<std::fs::File>;
+    /// Read/list an ordinary source directory, preventing its rename on Windows.
+    fn open_source_directory(&self, parent: &std::fs::File, path: &std::path::Path) -> std::io::Result<std::fs::File>;
+    /// Read-only snapshot of a bound source; Copy does not require DELETE access.
+    fn open_copy_source(&self, parent: &std::fs::File, path: &std::path::Path) -> std::io::Result<std::fs::File>;
+    /// Enumerate the opened directory itself. Each invocation starts at its beginning.
+    fn enumerate_source_directory(&self, directory: &std::fs::File, visitor: &mut dyn FnMut(std::ffi::OsString) -> std::io::Result<()>) -> std::io::Result<()>;
     /// Hold a rename source, including directories and the reparse entry itself.
     /// Windows prevents replacement after opening and resolves only the held parent's child.
     fn open_rename_item(
@@ -428,3 +436,8 @@ mod windows_shortcuts;
 
 #[cfg(target_os = "windows")]
 mod windows_trash_clipboard;
+
+#[cfg(target_os = "windows")]
+mod windows_source_selection;
+#[cfg(target_os = "linux")]
+mod linux_source_selection;

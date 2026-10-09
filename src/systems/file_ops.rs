@@ -1126,23 +1126,23 @@ impl FileOperationManager {
         {
             return Self::perform_archive_transfer(op, sources, destination, is_move, resolutions);
         }
+        if op.lock().unwrap().cancel_flag.load(Ordering::Relaxed) {
+            return Ok(());
+        }
         let target_dir = destination.ok_or("No destination provided for copy/move".to_string())?;
 
-        let destination_tree = Arc::new(super::destination_tree::DestinationTree::new(&target_dir)
-            .map_err(|e| format!("Cannot hold destination {:?}: {e}", target_dir))?);
+        let destination_tree = Arc::new(
+            super::destination_tree::DestinationTree::new(&target_dir)
+                .map_err(|e| format!("Cannot hold destination {:?}: {e}", target_dir))?,
+        );
         let target_dir = destination_tree.path().to_path_buf();
+        let mut selected_sources = Vec::with_capacity(sources.len());
         let mut canonical_sources = Vec::with_capacity(sources.len());
         for source in &sources {
-            let source_metadata = std::fs::symlink_metadata(source)
-                .map_err(|e| format!("Cannot inspect source {:?}: {e}", source))?;
-            if source_metadata.file_type().is_symlink() {
-                return Err(format!(
-                    "Symbolic-link sources are not supported: {:?}",
-                    source
-                ));
-            }
-            let canonical = std::fs::canonicalize(source)
-                .map_err(|e| format!("Cannot resolve source {:?}: {e}", source))?;
+            Self::archive_checkpoint(op)?;
+            let selected = super::source_selection::SelectedEntry::select(source)
+                .map_err(|error| format!("Cannot select source {:?}: {error}", source))?;
+            let canonical = selected.resolved_path();
             if canonical == target_dir || target_dir.starts_with(&canonical) {
                 return Err(format!(
                     "Destination {:?} is inside source {:?}",
@@ -1158,6 +1158,7 @@ impl FileOperationManager {
                 ));
             }
             canonical_sources.push(canonical);
+            selected_sources.push(selected);
         }
 
         if !trash_entries.is_empty() {
@@ -1169,12 +1170,11 @@ impl FileOperationManager {
                 }
             }
         }
-        let sources_to_copy = sources.clone();
         let mut total_bytes = 0;
         let mut total_files = 0;
 
         // Build the conflict-aware plan before changing any source.
-        if sources_to_copy.is_empty() {
+        if selected_sources.is_empty() {
             return Ok(());
         }
 
@@ -1182,114 +1182,69 @@ impl FileOperationManager {
         let mut files_to_process = Vec::new();
         let mut directories_to_create = Vec::new();
         let mut source_directories = super::source_directories::SourceDirectories::default();
-        let cancel_flag = op.lock().unwrap().cancel_flag.clone();
 
-        for (src, canonical_src) in sources_to_copy.iter().zip(&canonical_sources) {
-            if cancel_flag.load(Ordering::Relaxed) {
-                return Ok(());
-            }
-            if !src.exists() {
-                continue;
-            }
-            let file_name = source_name(src)?;
-            let dest_root = target_dir.join(file_name);
-            if dest_root == *src {
-                return Err(format!("Source and destination are identical: {:?}", src));
-            }
-            if dest_root.exists()
-                && std::fs::canonicalize(&dest_root)
-                    .is_ok_and(|canonical_destination| canonical_destination == *canonical_src)
+        for (selected, canonical_src) in selected_sources.iter().zip(&canonical_sources) {
+            Self::archive_checkpoint(op)?;
+            let src = selected.path();
+            let dest_root = target_dir.join(source_name(src)?);
+            if dest_root == src
+                || (dest_root.exists()
+                    && std::fs::canonicalize(&dest_root)
+                        .is_ok_and(|destination| destination == *canonical_src))
             {
                 return Err(format!("Source and destination are identical: {:?}", src));
             }
-
-            if src.is_dir() {
-                let mut walker = walkdir::WalkDir::new(src).into_iter();
-                while let Some(entry) = walker.next() {
-                    if cancel_flag.load(Ordering::Relaxed) {
-                        return Ok(());
-                    }
-                    let entry = match entry {
-                        Ok(e) => e,
-                        Err(e) => return Err(e.to_string()),
-                    };
-
-                    if entry.file_type().is_symlink() {
-                        return Err(format!(
-                            "Symbolic links are not supported in copy operations: {:?}",
-                            entry.path()
-                        ));
-                    }
-
-                    let relative = entry.path().strip_prefix(src).map_err(|e| e.to_string())?;
-                    let dest_path = dest_root.join(relative);
-
-                    if entry.file_type().is_dir() {
-                        if dest_path.exists() && !dest_path.is_dir() {
-                            let replace = resolutions
-                                .as_ref()
-                                .and_then(|map| Self::get_resolution(entry.path(), map))
-                                == Some(ConflictAction::Replace);
-                            if !replace {
-                                walker.skip_current_dir();
-                                continue;
-                            }
+            let mut walker = super::source_selection::SourceWalk::new(selected.clone());
+            while let Some(entry) = walker
+                .next(&mut || Self::archive_checkpoint(op).map_err(std::io::Error::other))
+                .map_err(|error| format!("Cannot enumerate source {:?}: {error}", src))?
+            {
+                let relative = entry
+                    .path()
+                    .strip_prefix(src)
+                    .map_err(|error| error.to_string())?;
+                let dest_path = if relative.as_os_str().is_empty() {
+                    dest_root.clone()
+                } else {
+                    dest_root.join(relative)
+                };
+                if entry.is_dir() {
+                    if dest_path.exists() && !dest_path.is_dir() {
+                        let replace = resolutions
+                            .as_ref()
+                            .and_then(|map| Self::get_resolution(entry.path(), map))
+                            == Some(ConflictAction::Replace);
+                        if !replace {
+                            walker.skip_current_dir();
+                            continue;
                         }
-                        if is_move || deferred_moves.is_some() {
-                            source_directories.capture(entry.path(), &dest_path).map_err(|error| {
-                                format!("Cannot prepare source directory {:?} for move: {error}", entry.path())
+                    }
+                    if is_move || deferred_moves.is_some() {
+                        entry
+                            .capture_directory(&dest_path, &mut source_directories)
+                            .map_err(|error| {
+                                format!(
+                                    "Cannot prepare source directory {:?} for move: {error}",
+                                    entry.path()
+                                )
                             })?;
-                        }
-                        directories_to_create.push(dest_path);
-                        continue;
                     }
-
-                    // Conflict Handling
-                    let replace_existing = dest_path.exists();
-                    if replace_existing {
-                        if let Some(ref res_map) = resolutions {
-                            match Self::get_resolution(entry.path(), res_map) {
-                                Some(ConflictAction::Skip) => {
-                                    if entry.file_type().is_dir() {
-                                        walker.skip_current_dir();
-                                    }
-                                    continue;
-                                }
-                                Some(ConflictAction::Replace) => {}
-                                None => {
-                                    continue;
-                                }
-                            }
-                        } else {
-                            continue;
-                        }
-                    }
-
-                    let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
-                    total_bytes += size;
-                    total_files += 1;
-                    files_to_process.push((
-                        entry.path().to_path_buf(),
-                        dest_path,
-                        replace_existing,
-                    ));
+                    directories_to_create.push(dest_path);
+                    continue;
                 }
-            } else {
-                let dest_path = dest_root.clone();
                 let replace_existing = dest_path.exists();
-                if replace_existing {
-                    if let Some(ref res_map) = resolutions {
-                        if Self::get_resolution(src, res_map) != Some(ConflictAction::Replace) {
-                            continue;
-                        }
-                    } else {
-                        continue;
-                    }
+                if replace_existing
+                    && resolutions
+                        .as_ref()
+                        .and_then(|map| Self::get_resolution(entry.path(), map))
+                        != Some(ConflictAction::Replace)
+                {
+                    continue;
                 }
-                let size = std::fs::metadata(src).map(|m| m.len()).unwrap_or(0);
-                total_bytes += size;
+                let file = entry.into_file().map_err(|error| error.to_string())?;
+                total_bytes += file.size;
                 total_files += 1;
-                files_to_process.push((src.clone(), dest_path, replace_existing));
+                files_to_process.push((file, dest_path, replace_existing));
             }
         }
 
@@ -1366,20 +1321,27 @@ impl FileOperationManager {
                         },
                     )
                     .map_err(|e| format!("Cannot hold destination {:?}: {e}", destination))?;
-                match super::path_parents::move_file_with_parents(&source, &destination, replace_existing, destination_parents, &mut || {
-                    Self::archive_checkpoint(op).map_err(std::io::Error::other)
-                }) {
+                match super::path_parents::move_selected_file_with_parents(
+                    &source,
+                    &destination,
+                    replace_existing,
+                    destination_parents,
+                    &mut || Self::archive_checkpoint(op).map_err(std::io::Error::other),
+                ) {
                     Ok((size, identity)) => {
                         let mut locked = op.lock().unwrap();
-                        locked.current_file = Some(source.to_string_lossy().into_owned());
+                        locked.current_file = Some(source.path().to_string_lossy().into_owned());
                         if replace_existing {
                             locked.overwritten_files.push(destination.clone());
                         }
                         if let Some(identity) = identity {
-                            locked.moved_file_identities
+                            locked
+                                .moved_file_identities
                                 .push((destination.clone(), identity));
                         }
-                        locked.moved_files.push((source, destination));
+                        locked
+                            .moved_files
+                            .push((source.path().to_path_buf(), destination));
                         processed_bytes_atomic.fetch_add(size, Ordering::Relaxed);
                         processed_files_atomic.fetch_add(1, Ordering::Relaxed);
                         locked.processed_bytes = processed_bytes_atomic.load(Ordering::Relaxed);
@@ -1391,7 +1353,8 @@ impl FileOperationManager {
                     Err(error) => {
                         return Err(format!(
                             "Cannot move {:?} to {:?}: {error}",
-                            source, destination
+                            source.path(),
+                            destination
                         ));
                     }
                 }
@@ -1472,7 +1435,8 @@ impl FileOperationManager {
                         }
                     }
 
-                    let (src, dest, replace_existing): &(PathBuf, PathBuf, bool) = &files[i];
+                    let (selected, dest, replace_existing) = &files[i];
+                    let src = selected.path();
                     operation.lock().unwrap().current_file =
                         Some(src.to_string_lossy().into_owned());
 
@@ -1493,20 +1457,41 @@ impl FileOperationManager {
                         )
                         .map_err(|e| format!("Cannot hold destination {:?}: {e}", dest))?;
 
-                    let source_guard =
-                        if is_move || deferred_moves.is_some() {
-                            Some(super::copied_source::CopiedSource::open(src).map_err(
-                                |error| format!("Cannot hold move source {:?}: {error}", src),
-                            )?)
-                        } else {
-                            None
-                        };
+                    let source_guard = if is_move || deferred_moves.is_some() {
+                        Some(
+                            super::copied_source::CopiedSource::open_selected(selected).map_err(
+                                |error| {
+                                    let message =
+                                        format!("Cannot hold move source {:?}: {error}", src);
+                                    error_share.lock().unwrap().get_or_insert(message.clone());
+                                    message
+                                },
+                            )?,
+                        )
+                    } else {
+                        None
+                    };
+                    let copy_source = if source_guard.is_none() {
+                        Some(selected.open_copy().map_err(|error| {
+                            let message = format!("Cannot hold copy source {:?}: {error}", src);
+                            error_share.lock().unwrap().get_or_insert(message.clone());
+                            message
+                        })?)
+                    } else {
+                        None
+                    };
+                    let source_file = source_guard
+                        .as_ref()
+                        .map(|source| source.file())
+                        .or_else(|| copy_source.as_ref().map(|(_, file)| file))
+                        .expect("selected copy source is held");
+                    let resolved_source = selected.resolved_path();
                     let mut copied = 0;
                     let output = super::file_copy::copy_with_parents(
-                        src,
+                        &resolved_source,
                         dest,
                         *replace_existing,
-                        source_guard.as_ref().map(|source| source.file()),
+                        Some(source_file),
                         destination_parents,
                         &mut |bytes| {
                             processed_bytes
@@ -1553,19 +1538,26 @@ impl FileOperationManager {
                     })?;
                     // Capture from the published output's retained handle, before
                     // it is dropped or a pathname can be substituted.
-                    let copied_identity = match crate::models::transaction::HistoryFileIdentity::from_file(
-                        &output.file,
-                    ) {
-                        Ok(identity) => Some(identity),
-                        Err(error) => {
-                            log::warn!("Copy identity unavailable for {}: {error}", dest.display());
-                            None
-                        }
-                    };
+                    let copied_identity =
+                        match crate::models::transaction::HistoryFileIdentity::from_file(
+                            &output.file,
+                        ) {
+                            Ok(identity) => Some(identity),
+                            Err(error) => {
+                                log::warn!(
+                                    "Copy identity unavailable for {}: {error}",
+                                    dest.display()
+                                );
+                                None
+                            }
+                        };
                     let moved_identity = if is_move {
                         crate::models::transaction::HistoryMoveIdentity::from_file(&output.file)
                             .map_err(|error| {
-                                log::warn!("Move identity unavailable for {}: {error}", dest.display())
+                                log::warn!(
+                                    "Move identity unavailable for {}: {error}",
+                                    dest.display()
+                                )
                             })
                             .ok()
                     } else {
@@ -1577,7 +1569,7 @@ impl FileOperationManager {
                     } else {
                         journal.created_files.push(dest.clone());
                     }
-                    journal.copied_files.push((src.clone(), dest.clone()));
+                    journal.copied_files.push((src.to_path_buf(), dest.clone()));
                     if let Some(identity) = moved_identity {
                         journal.moved_file_identities.push((dest.clone(), identity));
                     }
@@ -1592,7 +1584,10 @@ impl FileOperationManager {
                     drop(journal);
                     if let Some(source) = source_guard {
                         if let Some(moves) = &deferred_moves {
-                            moves.lock().unwrap().record(src.clone(), source, output);
+                            moves
+                                .lock()
+                                .unwrap()
+                                .record(src.to_path_buf(), source, output);
                             processed_files.fetch_add(1, Ordering::Relaxed);
                             continue;
                         }
@@ -1623,7 +1618,7 @@ impl FileOperationManager {
                             .lock()
                             .unwrap()
                             .moved_files
-                            .push((src.clone(), dest.clone()));
+                            .push((src.to_path_buf(), dest.clone()));
                     }
 
                     processed_files.fetch_add(1, Ordering::Relaxed);
@@ -1684,6 +1679,11 @@ impl FileOperationManager {
             return Err("Operation cancelled".to_string());
         }
 
+        // Release planned source directory pins before bottom-up cleanup. Deferred
+        // archive sources retain only the ancestors of their still-held files.
+        drop(files_to_process_arc);
+        drop(selected_sources);
+
         // Final update to ensure 100% progress is shown before completion
         {
             let mut locked = op.lock().unwrap();
@@ -1693,25 +1693,35 @@ impl FileOperationManager {
         }
 
         if let Some(deferred_moves) = deferred_moves {
-            deferred_moves.lock().unwrap().retain_directories(source_directories, destination_tree);
+            deferred_moves
+                .lock()
+                .unwrap()
+                .retain_directories(source_directories, destination_tree);
         } else if is_move {
-            source_directories.remove_empty(
-                &mut || {
-                    if cancel_flag.load(Ordering::Relaxed) {
-                        Err(std::io::Error::new(std::io::ErrorKind::Interrupted, "Operation cancelled"))
-                    } else {
-                        Ok(())
-                    }
-                },
-                &mut |directory, destination| {
-                    let mut journal = op.lock().unwrap();
-                    journal.moved_dirs.push((directory.to_path_buf(), destination.to_path_buf()));
-                    journal.moved_directory_identities.push((
-                        directory.to_path_buf(),
-                        crate::models::transaction::HistoryDirectoryIdentity::vacant(),
-                    ));
-                },
-            ).map_err(|error| error.to_string())?;
+            source_directories
+                .remove_empty(
+                    &mut || {
+                        if cancel_flag.load(Ordering::Relaxed) {
+                            Err(std::io::Error::new(
+                                std::io::ErrorKind::Interrupted,
+                                "Operation cancelled",
+                            ))
+                        } else {
+                            Ok(())
+                        }
+                    },
+                    &mut |directory, destination| {
+                        let mut journal = op.lock().unwrap();
+                        journal
+                            .moved_dirs
+                            .push((directory.to_path_buf(), destination.to_path_buf()));
+                        journal.moved_directory_identities.push((
+                            directory.to_path_buf(),
+                            crate::models::transaction::HistoryDirectoryIdentity::vacant(),
+                        ));
+                    },
+                )
+                .map_err(|error| error.to_string())?;
         }
 
         Ok(())
