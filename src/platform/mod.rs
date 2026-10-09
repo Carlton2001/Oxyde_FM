@@ -114,6 +114,14 @@ pub trait Platform: Send + Sync {
     fn remove_copy_staging(&self, directory: &std::fs::File, pin: std::fs::File, path: &std::path::Path) -> std::io::Result<()>;
     fn lock_cache_file(&self, path: &std::path::Path) -> std::io::Result<std::fs::File>;
     fn read_cache_file(&self, path: &std::path::Path) -> std::io::Result<std::fs::File>;
+    /// Publish an optional preview cache. Windows retains ordinary parents and
+    /// the exclusively created file through write, rename and error cleanup.
+    fn write_preview_cache(
+        &self,
+        path: &std::path::Path,
+        temporary: &std::path::Path,
+        write: &mut dyn FnMut(&mut std::fs::File) -> std::io::Result<()>,
+    ) -> std::io::Result<()>;
     fn open_cache_cleanup(&self, path: &std::path::Path, directory: bool) -> std::io::Result<std::fs::File>;
     fn ensure_archive_directory(&self, path: &std::path::Path) -> std::io::Result<std::fs::File>;
     fn create_archive_file(&self, path: &std::path::Path) -> std::io::Result<std::fs::File>;
@@ -365,6 +373,8 @@ mod windows_thumbnail_bitmap;
 mod windows_icon_bitmap;
 #[cfg(target_os = "windows")]
 mod windows_icon_cache;
+#[cfg(target_os = "windows")]
+mod windows_preview_cache;
 #[cfg(target_os = "windows")]
 mod windows_file_moves;
 #[cfg(target_os = "windows")]

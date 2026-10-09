@@ -202,6 +202,39 @@ impl Platform for LinuxPlatform {
         }
         std::fs::File::open(path)
     }
+    fn write_preview_cache(
+        &self,
+        path: &std::path::Path,
+        temporary: &std::path::Path,
+        write: &mut dyn FnMut(&mut std::fs::File) -> std::io::Result<()>,
+    ) -> std::io::Result<()> {
+        let path = std::path::absolute(path)?;
+        let temporary = std::path::absolute(temporary)?;
+        if path == temporary || path.parent() != temporary.parent() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "Cache staging requires a separate sibling path",
+            ));
+        }
+        std::fs::create_dir_all(
+            path.parent()
+                .ok_or_else(|| std::io::Error::other("Cache has no parent"))?,
+        )?;
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temporary)?;
+        let result = (|| {
+            write(&mut file)?;
+            file.sync_all()?;
+            drop(file);
+            std::fs::rename(&temporary, &path)
+        })();
+        if result.is_err() {
+            let _ = std::fs::remove_file(&temporary);
+        }
+        result
+    }
     fn open_cache_cleanup(&self, _path: &std::path::Path, _directory: bool) -> std::io::Result<std::fs::File> {
         // Unix flock cannot prove that external readers have closed a file.
         Err(std::io::Error::new(std::io::ErrorKind::Unsupported, "Safe cache eviction requires Windows sharing checks"))

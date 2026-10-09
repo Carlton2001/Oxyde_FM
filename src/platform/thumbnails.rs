@@ -89,7 +89,11 @@ fn load_thumbnail_image(
 }
 
 fn load_cached_thumbnail(path: &Path) -> Result<image::DynamicImage, CommandError> {
-    load_thumbnail_image(path, CACHE_DECODE_LIMITS)
+    let file = super::platform().read_cache_file(path)?;
+    if file.metadata()?.len() > CACHE_DECODE_LIMITS.encoded_bytes {
+        return Err(encoded_thumbnail_limit_error(CACHE_DECODE_LIMITS));
+    }
+    decode_thumbnail_image(file, CACHE_DECODE_LIMITS, Some(image::ImageFormat::Jpeg))
 }
 
 fn load_source_thumbnail(path: &Path) -> Result<image::DynamicImage, CommandError> {
@@ -300,7 +304,6 @@ fn cached_thumbnail_in(
         let cache_dir = cache_file.parent().ok_or_else(|| {
             CommandError::Other("Thumbnail cache has no parent directory".to_string())
         })?;
-        fs::create_dir_all(cache_dir)?;
         let temp_id = CACHE_TEMP_ID.fetch_add(1, Ordering::Relaxed);
         let name = cache_file.file_stem().unwrap_or_default().to_string_lossy();
         let temp_file = cache_dir.join(format!("{name}.{}.{}.tmp", std::process::id(), temp_id));
@@ -320,32 +323,13 @@ fn write_thumbnail_cache(
     temp_file: &Path,
     image: &RgbaImage,
 ) -> Result<(), CommandError> {
-    // A failed exclusive creation never grants ownership of this path. In
-    // particular, do not remove a pre-existing file when create_new fails.
-    let mut file = fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(temp_file)?;
-    let write_result = (|| -> Result<(), CommandError> {
+    super::platform().write_preview_cache(cache_file, temp_file, &mut |file| {
         let rgb = image::DynamicImage::ImageRgba8(image.clone()).to_rgb8();
-        image::codecs::jpeg::JpegEncoder::new_with_quality(&mut file, 75)
+        image::codecs::jpeg::JpegEncoder::new_with_quality(file, 75)
             .encode_image(&image::DynamicImage::ImageRgb8(rgb))
-            .map_err(|error| CommandError::Other(error.to_string()))?;
-        file.sync_all()?;
-        // Close the writer before publication or cleanup, including on errors.
-        drop(file);
-        fs::rename(temp_file, cache_file)?;
-        Ok(())
-    })();
-    if write_result.is_err() {
-        if let Err(error) = fs::remove_file(temp_file) {
-            log::warn!(
-                "Could not clean thumbnail staging file {}: {error}",
-                temp_file.display()
-            );
-        }
-    }
-    write_result
+            .map_err(std::io::Error::other)
+    })?;
+    Ok(())
 }
 
 #[cfg(test)]
@@ -517,6 +501,46 @@ mod thumbnail_cache_write_tests {
         )
         .is_err());
         assert_eq!(fs::read_dir(root.path()).unwrap().count(), 0);
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn cache_junction_does_not_publish_into_its_target() {
+        let root = tempfile::tempdir().unwrap();
+        let outside = root.path().join("outside");
+        fs::create_dir(&outside).unwrap();
+        fs::write(outside.join("entry.jpg"), b"independent destination marker").unwrap();
+        let cache = root.path().join("cache");
+        crate::platform::windows_reparse_tests::junction(&cache, &outside);
+        let result = write_thumbnail_cache(
+            &cache.join("entry.jpg"),
+            &cache.join("entry.tmp"),
+            &generated_image(),
+        );
+        let bytes = fs::read(outside.join("entry.jpg")).unwrap();
+        fs::remove_dir(&cache).unwrap();
+        assert!(result.is_err(), "Cache publication followed a junction");
+        assert_eq!(bytes, b"independent destination marker");
+        assert_eq!(fs::read_dir(&outside).unwrap().count(), 1);
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn cache_junction_does_not_supply_a_thumbnail() {
+        let root = tempfile::tempdir().unwrap();
+        let outside = root.path().join("outside");
+        fs::create_dir(&outside).unwrap();
+        write_thumbnail_cache(
+            &outside.join("entry.jpg"),
+            &outside.join("entry.tmp"),
+            &generated_image(),
+        )
+        .unwrap();
+        let cache = root.path().join("cache");
+        crate::platform::windows_reparse_tests::junction(&cache, &outside);
+        let result = load_cached_thumbnail(&cache.join("entry.jpg"));
+        fs::remove_dir(&cache).unwrap();
+        assert!(result.is_err(), "Cache read followed a junction");
     }
 }
 

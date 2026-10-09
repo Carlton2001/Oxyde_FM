@@ -1,9 +1,11 @@
 use image::RgbaImage;
 use std::collections::{HashMap, VecDeque};
-use std::fs;
-use std::io::{Cursor, Read};
+use std::io::{Cursor, Read, Write};
 use std::path::Path;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
+
+static CACHE_TEMP_ID: AtomicU64 = AtomicU64::new(0);
 
 const MAX_PNG_BYTES: usize = 1024 * 1024;
 const MAX_ICON_SIDE: u32 = 256;
@@ -87,7 +89,9 @@ fn read_png(input: impl Read) -> Result<Vec<u8>, String> {
 }
 
 pub(super) fn read_cached_png(path: &Path) -> Result<Vec<u8>, String> {
-    let file = fs::File::open(path).map_err(|error| error.to_string())?;
+    let file = super::platform()
+        .read_cache_file(path)
+        .map_err(|error| error.to_string())?;
     if file.metadata().map_err(|error| error.to_string())?.len() > MAX_PNG_BYTES as u64 {
         return Err(encoded_size_error());
     }
@@ -132,8 +136,10 @@ pub(super) fn cached_or_generate(
     let bytes = generate()?;
     decode_icon_png(&bytes)?;
     if let (Some(directory), Some(path)) = (directory, &path) {
-        let _ = fs::create_dir_all(directory);
-        let _ = fs::write(path, &bytes);
+        let temp_id = CACHE_TEMP_ID.fetch_add(1, Ordering::Relaxed);
+        let temporary = directory.join(format!("{key}.{}.{}.tmp", std::process::id(), temp_id));
+        let _ = super::platform()
+            .write_preview_cache(path, &temporary, &mut |file| file.write_all(&bytes));
     }
     memory
         .lock()
@@ -145,6 +151,7 @@ pub(super) fn cached_or_generate(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
 
     fn png(width: u32, height: u32) -> Vec<u8> {
         let image = RgbaImage::from_pixel(width, height, image::Rgba([201, 43, 17, 255]));
@@ -406,5 +413,30 @@ mod tests {
         );
         assert!(!directory.path().join("entry.png").exists());
         assert!(memory.lock().unwrap().entries.is_empty());
+    }
+
+    #[test]
+    fn junction_cache_is_ignored_without_reading_or_writing_its_target() {
+        let root = tempfile::tempdir().unwrap();
+        let outside = root.path().join("outside");
+        fs::create_dir(&outside).unwrap();
+        let previous = png(1, 1);
+        fs::write(outside.join("entry.png"), &previous).unwrap();
+        let directory = root.path().join("cache");
+        super::super::windows_reparse_tests::junction(&directory, &outside);
+        let memory = Mutex::new(IconCache::default());
+        let expected = png(32, 32);
+        let calls = std::cell::Cell::new(0);
+        let output = cached_or_generate(&memory, Some(&directory), "entry", || {
+            calls.set(calls.get() + 1);
+            Ok(expected.clone())
+        })
+        .unwrap();
+        fs::remove_dir(directory).unwrap();
+        assert_eq!(calls.get(), 1);
+        assert_eq!(output, expected);
+        assert_eq!(fs::read(outside.join("entry.png")).unwrap(), previous);
+        assert_eq!(fs::read_dir(outside).unwrap().count(), 1);
+        assert_eq!(memory.lock().unwrap().get("entry").unwrap(), expected);
     }
 }

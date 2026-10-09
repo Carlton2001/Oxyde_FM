@@ -88,6 +88,14 @@ impl Platform for WindowsPlatform {
     fn read_cache_file(&self, path: &std::path::Path) -> std::io::Result<std::fs::File> {
         super::windows_cache::read_file(path)
     }
+    fn write_preview_cache(
+        &self,
+        path: &std::path::Path,
+        temporary: &std::path::Path,
+        write: &mut dyn FnMut(&mut std::fs::File) -> std::io::Result<()>,
+    ) -> std::io::Result<()> {
+        super::windows_preview_cache::write(path, temporary, write)
+    }
     fn open_cache_cleanup(&self, path: &std::path::Path, directory: bool) -> std::io::Result<std::fs::File> {
         super::windows_cache::open_cleanup(path, directory)
     }
