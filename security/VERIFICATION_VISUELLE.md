@@ -133,14 +133,14 @@ Validation avant cette reprise : 739 tests permanents réussis, aucun échec ; c
 
 Annuler/Rétablir après remplacement et cache indisponible/sélecteur : sans anomalie de fonctionnement signalée. Le chemin natif étendu affiché dans le refus et la présentation des notifications sont corrigés. La vidéo était toujours lente et l’AVI semblait fixe ; de nouvelles corrections de timing, boucle, redimensionnement natif et transport sont incluses. Le sélecteur Windows est conservé ; créer un sélecteur Oxyde constitue un chantier distinct reporté à la demande de l’utilisateur.
 
-Reprendre seulement les points modifiés :
+Contrôles de la reprise ciblée du lot 58, validée par le retour utilisateur ci-dessous :
 
 1. **Vidéo :** dans le même jeu `security-visual-check-xusvjigg`, `09-video.avi` doit alterner rouge/bleu environ chaque seconde, aussi aux reprises de boucle. Le même MOV x265 doit jouer à la vitesse normale. Fermer le survol interrompt toujours la lecture ; PNG/PDF restent consultables pendant une vidéo.
 2. **Fenêtre :** déplacer et redimensionner, fermer immédiatement puis relancer. Position et dimensions doivent être retrouvées ; essayer aussi après maximisation, puis restauration. Sur plusieurs écrans, les coordonnées négatives sont permises ; si un écran disparaît, la fenêtre doit rester accessible.
 3. **Transferts :** utiliser seulement les témoins générés. Déplacer un fichier dans son dossier actuel doit être ignoré sans dialogue ni nouvelle action à annuler. Copier/coller dans ce dossier doit créer `témoin - Copie.txt`, puis `témoin - Copie (2).txt` en français ; Annuler/Rétablir vise la copie réellement créée. L’original et les copies précédentes restent intacts. Le suffixe suit la langue active. Une copie de dossier utilise aussi un nom distinct.
 4. **Notifications :** reprendre le refus après remplacement déjà vérifié, et éventuellement le cache indisponible seulement pour contrôler sa présentation. Le chemin doit apparaître comme `C:\Users\...`, ou `\\serveur\partage\...` pour UNC, sans préfixe `\\?\`. La croix reste en haut à droite ; les messages longs peuvent atteindre 40 rem si la fenêtre le permet. « Extraire et ouvrir… » doit être un bouton rempli lisible. Aucune modification de curseur.
 
-Ces changements ont des validations sans fenêtre ; leur rendu et la sauvegarde à la fermeture demandent cette confirmation ciblée. Les autres risques techniques de l’audit ne sont pas clôturés.
+La reprise ciblée est terminée selon le retour utilisateur du 10 octobre 2026 : « tout fonctionne ». Ce retour global porte sur les aperçus AVI/MOV, la géométrie de la fenêtre, les transferts sur soi et la présentation des notifications après le commit `1b4df95`. Aucun détail supplémentaire par scénario ou configuration n’a été fourni. Les autres risques techniques de l’audit ne sont pas clôturés.
 
 Validation automatisée du lot 58 : **751 tests permanents réussis**, aucun échec ; 17 tests préexistants ignorés non activés. Le diagnostic ponctuel du MOV reste distinct de cette suite.
 
