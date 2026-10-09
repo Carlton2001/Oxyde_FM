@@ -76,6 +76,18 @@ impl ArchiveBudget {
         self.check_time()
     }
 
+    /// Reader consumers retry Interrupted as a transient IO failure. A stop
+    /// requested by the application must escape those retry loops immediately.
+    pub fn reader_checkpoint(&self, checkpoint: &dyn Fn() -> io::Result<()>) -> io::Result<()> {
+        self.checkpoint(checkpoint).map_err(|error| {
+            if error.kind() == io::ErrorKind::Interrupted {
+                io::Error::other(error)
+            } else {
+                error
+            }
+        })
+    }
+
     pub fn check_time(&self) -> io::Result<()> {
         if self
             .started
@@ -194,7 +206,7 @@ impl<R: Read> Read for BudgetReader<'_, R> {
         if buffer.is_empty() {
             return Ok(0);
         }
-        self.budget.checkpoint(self.checkpoint)?;
+        self.budget.reader_checkpoint(self.checkpoint)?;
         let remaining = self.budget.decoded_limit() - self.budget.decoded.get();
         let length = buffer
             .len()
@@ -217,6 +229,90 @@ impl<R: Read> Read for BudgetReader<'_, R> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn retrying_consumers_do_not_swallow_a_checkpoint_cancellation() {
+        let mut observed = Vec::new();
+        for consumer in ["read_exact", "read_to_end", "copy"] {
+            let budget = ArchiveBudget::new(limits());
+            let calls = Cell::new(0);
+            let checkpoint = || {
+                calls.set(calls.get() + 1);
+                if calls.get() == 1 {
+                    Err(io::Error::new(io::ErrorKind::Interrupted, "cancelled once"))
+                } else {
+                    Ok(())
+                }
+            };
+            let mut source = io::Cursor::new(b"safe");
+            let mut reader = BudgetReader {
+                reader: &mut source,
+                budget: &budget,
+                checkpoint: &checkpoint,
+            };
+            let result = match consumer {
+                "read_exact" => reader.read_exact(&mut [0; 4]),
+                "read_to_end" => reader.read_to_end(&mut Vec::new()).map(|_| ()),
+                _ => io::copy(&mut reader, &mut io::sink()).map(|_| ()),
+            };
+            if let Err(error) = &result {
+                assert_eq!(error.kind(), io::ErrorKind::Other);
+                let cause = error
+                    .get_ref()
+                    .unwrap()
+                    .downcast_ref::<io::Error>()
+                    .unwrap();
+                assert_eq!(cause.kind(), io::ErrorKind::Interrupted);
+                assert_eq!(cause.to_string(), "cancelled once");
+            }
+            observed.push((consumer, result.is_err(), calls.get(), source.position()));
+        }
+        assert!(
+            observed
+                .iter()
+                .all(|(_, failed, calls, position)| *failed && *calls == 1 && *position == 0),
+            "checkpoint cancellation was retried: {observed:?}"
+        );
+    }
+
+    #[test]
+    fn retrying_consumers_still_retry_underlying_io_interruptions() {
+        struct Source {
+            bytes: io::Cursor<&'static [u8]>,
+            interrupted: bool,
+        }
+        impl Read for Source {
+            fn read(&mut self, bytes: &mut [u8]) -> io::Result<usize> {
+                if !self.interrupted {
+                    self.interrupted = true;
+                    Err(io::Error::new(io::ErrorKind::Interrupted, "transient IO"))
+                } else {
+                    self.bytes.read(bytes)
+                }
+            }
+        }
+        let budget = ArchiveBudget::new(limits());
+        let calls = Cell::new(0);
+        let checkpoint = || {
+            calls.set(calls.get() + 1);
+            Ok(())
+        };
+        let mut reader = BudgetReader {
+            reader: Source {
+                bytes: io::Cursor::new(b"safe"),
+                interrupted: false,
+            },
+            budget: &budget,
+            checkpoint: &checkpoint,
+        };
+        assert_eq!(reader.read(&mut []).unwrap(), 0);
+        assert_eq!(calls.get(), 0);
+        let mut bytes = [0; 4];
+        reader.read_exact(&mut bytes).unwrap();
+        assert_eq!(&bytes, b"safe");
+        assert_eq!(calls.get(), 2);
+        assert_eq!(budget.decoded.get(), 4);
+    }
+
     fn limits() -> ArchiveLimits {
         ArchiveLimits {
             max_bytes: 8,
@@ -264,6 +360,22 @@ mod tests {
                 limit: 0
             })
         );
+        let mut source = io::Cursor::new(b"safe");
+        let mut expired_reader = BudgetReader {
+            reader: &mut source,
+            budget: &expired,
+            checkpoint: &|| Ok(()),
+        };
+        let error = expired_reader.read_exact(&mut [0; 4]).unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::TimedOut);
+        assert_eq!(
+            ArchiveLimitFailure::from_message(&error.to_string()),
+            Some(ArchiveLimitFailure {
+                kind: ArchiveLimitKind::Seconds,
+                limit: 0,
+            })
+        );
+        assert_eq!(source.position(), 0);
         let mut reader = BudgetReader {
             reader: io::repeat(0),
             budget: &budget,

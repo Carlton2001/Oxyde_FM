@@ -441,6 +441,28 @@ mod tests {
     }
 
     #[test]
+    fn retrying_iso_header_read_does_not_swallow_a_checkpoint_cancellation() {
+        let (_folder, archive) = fixture();
+        let target = tempfile::tempdir().unwrap();
+        let calls = std::cell::Cell::new(0);
+        let error = extract_with_checkpoint(&archive, "ROOT.TXT", target.path(), limits(), &|| {
+            calls.set(calls.get() + 1);
+            if calls.get() == 2 {
+                Err(io::Error::new(
+                    io::ErrorKind::Interrupted,
+                    "cancelled in ISO header",
+                ))
+            } else {
+                Ok(())
+            }
+        })
+        .expect_err("ISO preparation continued after cancellation");
+        assert!(error.to_string().contains("cancelled in ISO header"));
+        assert_eq!(calls.get(), 2);
+        assert_eq!(fs::read_dir(target.path()).unwrap().count(), 0);
+    }
+
+    #[test]
     fn targeted_iso_open_reads_only_selected_extents_and_preserves_external_names() {
         for extension in ["iso", "ISO", "img"] {
             let (folder, initial) = fixture();

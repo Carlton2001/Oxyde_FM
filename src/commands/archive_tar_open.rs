@@ -24,7 +24,7 @@ impl Read for SeekReader<'_> {
 
 impl Seek for SeekReader<'_> {
     fn seek(&mut self, position: SeekFrom) -> io::Result<u64> {
-        self.inner.budget.checkpoint(self.inner.checkpoint)?;
+        self.inner.budget.reader_checkpoint(self.inner.checkpoint)?;
         let position = self.inner.reader.seek(position)?;
         self.inner.budget.check_time()?;
         // tar's seek iterator can otherwise skip a truncated payload past EOF.
@@ -343,6 +343,45 @@ mod tests {
             max_entries: 4,
             ..ArchiveLimits::OPEN_FILE
         }
+    }
+
+    #[test]
+    fn retrying_tar_header_reads_do_not_swallow_a_checkpoint_cancellation() {
+        let bytes = tar_bytes(&[("selected.txt", tar::EntryType::Regular, b"safe")]);
+        let mut observed = Vec::new();
+        for extension in TAR_EXTENSIONS {
+            let temp = tempfile::tempdir().unwrap();
+            let archive = write_archive(temp.path(), extension, &bytes);
+            let target = tempfile::tempdir().unwrap();
+            let calls = std::cell::Cell::new(0);
+            let result =
+                extract_with_checkpoint(&archive, "selected.txt", target.path(), limits(), &|| {
+                    calls.set(calls.get() + 1);
+                    if calls.get() == 1 {
+                        Err(io::Error::new(
+                            io::ErrorKind::Interrupted,
+                            "cancelled in TAR header",
+                        ))
+                    } else {
+                        Ok(())
+                    }
+                });
+            if let Err(error) = &result {
+                assert!(error.to_string().contains("cancelled in TAR header"));
+            }
+            observed.push((
+                extension,
+                result.is_err(),
+                calls.get(),
+                fs::read_dir(target.path()).unwrap().count(),
+            ));
+        }
+        assert!(
+            observed
+                .iter()
+                .all(|(_, failed, calls, outputs)| *failed && *calls == 1 && *outputs == 0),
+            "TAR preparation continued after cancellation: {observed:?}"
+        );
     }
 
     #[test]

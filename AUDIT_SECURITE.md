@@ -10,7 +10,7 @@ La priorité est de sécuriser les chemins d'archives : les essais ont confirmé
 
 ## Avancement des six chantiers annoncés
 
-État actualisé au dix-neuvième lot. Ces six points sont des chantiers de tailles différentes, et non six étapes presque achevées. Les lots de concurrence Windows détaillés ci-dessous appartiennent principalement au premier point ; leur nombre ne constitue pas un pourcentage d’achèvement de l’audit.
+État actualisé au vingtième lot. Ces six points sont des chantiers de tailles différentes, et non six étapes presque achevées. Les lots de concurrence Windows détaillés ci-dessous appartiennent principalement au premier point ; leur nombre ne constitue pas un pourcentage d’achèvement de l’audit.
 
 | Point annoncé dans la conversation | État et limite actuelle |
 | --- | --- |
@@ -21,7 +21,7 @@ La priorité est de sécuriser les chemins d'archives : les essais ont confirmé
 | 5. Dépendances non maintenues | Analyse Windows effectuée et version retirée corrigée. Les trois alertes de maintenance consignées dans le second lot restent ouvertes ; elles ne sont pas assimilées à trois vulnérabilités confirmées. |
 | 6. Validation finale des messages et du sélecteur | Tests automatisés des traductions, seuils et états réalisés. Vérification visuelle et essai interactif du sélecteur non effectués, conformément à la consigne de ne pas utiliser Computer Use. Les commits sont identifiés dans chaque lot. |
 
-**Borne du dix-neuvième lot :** le lecteur ISO commun du lot 18 est commité sous `b8165f9`. Le nouveau lot fait utiliser l’index seul à la recherche 7z, partage les contrôles de noms/types avec la navigation, conserve les causes structurées des limites en extraction complète et rend l’annulation définitive pendant les lectures d’en-tête. Les deux défauts reproduits de recherche et de propagation des erreurs sont corrigés dans les scénarios testés. Le lot reste non commité. L’isolation et les allocations internes des parseurs, la concurrence générale, les trois alertes de maintenance et la vérification visuelle restent des chantiers ouverts ; les parcours 7z ne sont pas déclarés intégralement certifiés.
+**Borne du vingtième lot :** le lot 7z est commité sous `e8adb95`. Le nouveau lot centralise l’annulation définitive à la frontière des lecteurs de budget, puis l’utilise dans les sources 7z et les positionnements TAR. Il corrige la reprise indue après annulation reproduite dans les consommateurs standards du lecteur commun et dans la préparation ISO. Les quatre nouveaux tests distinguent cette annulation des interruptions transitoires d’I/O et conservent les scénarios TAR testés. Le lot reste non commité. L’isolation des parseurs, les allocations internes, la concurrence générale, les trois alertes de maintenance et la vérification visuelle restent ouvertes ; cette correction ne les clôture pas.
 
 ## 1. Bloquer les sorties du dossier d'extraction
 
@@ -938,7 +938,46 @@ Le retrait de `iso9660_core` au lot 18 avait changé le verrou sans actualiser l
 
 La révision locale propre de la base est vérifiée par Git : `5701a6d2a6158d5d4a933df5141a0415c285075d`, datée du 8 octobre 2026 à 13:59:15 +02:00, avec 1 294 avis. Aucune récupération réseau n’est effectuée ; cette actualisation du verrou n’affirme pas que la base locale contient les avis ultérieurs à sa date. Les trois alertes de maintenance restent ouvertes au chantier 5 et ne sont pas assimilées à trois exploitations confirmées.
 
-Ce dix-neuvième lot reste non commité après le commit `b8165f9` du lot ISO.
+Ce dix-neuvième lot a été commité sous `e8adb95` (`fix(security): validate 7z metadata and preserve archive controls`).
 
 
 **Validation finale du dix-neuvième lot :** `cargo check --all-targets --locked --offline` réussi sans avertissement du projet ; `cargo test --all-targets --locked --offline --quiet` : 351 tests de bibliothèque et 116 tests d’interface réussis, soit 467 réussites, 17 tests préexistants ignorés et aucun échec. Les 19 tests 7z ciblés passent également séparément. `git diff --check` réussi ; les cinq fichiers modifiés vérifiés en UTF-8 strict, avec empreinte normalisée du verrou vérifiée contre le rapport RustSec resynchronisé. Le contrôle RustSec local sort avec le code zéro, en conservant explicitement la date de sa base et ses trois alertes de maintenance.
+
+
+## Vingtième lot — annulation définitive dans les lecteurs communs — 9 octobre 2026
+
+### Défaut confirmé, conditions et reproduction
+
+Base de reproduction : `master`, `e8adb95`. Le lot précédent avait corrigé ce comportement dans la source d’en-tête 7z ; la relecture du lecteur commun montre que `src/utils/archive_limits.rs::BudgetReader::read` renvoie encore directement les annulations `Interrupted` de son checkpoint.
+
+`Read::read_exact`, `Read::read_to_end` et `io::copy` interprètent cette catégorie comme une interruption transitoire à réessayer. Un arrêt demandé par l’application peut donc être relancé automatiquement. Le test `retrying_consumers_do_not_swallow_a_checkpoint_cancellation` injecte un unique arrêt dans le checkpoint, avec quatre octets bénins en mémoire. Avant correction, les trois consommateurs retournent un succès, consomment les quatre octets et rappellent le checkpoint deux ou trois fois. Une annulation persistante peut au contraire entretenir les réessais jusqu’à un autre échec ou à l’échéance coopérative ; ce délai d’attente prolongé n’est pas mesuré par la reproduction ponctuelle.
+
+Le défaut est également reproduit sur le parcours réel `src/commands/archive_iso_open.rs::extract_with_checkpoint`, lors du deuxième point de contrôle pendant la lecture du descripteur. La préparation ignore alors l’arrêt injecté et retourne un chemin temporaire `ROOT.TXT`, alors qu’elle aurait dû échouer avant toute sortie. Cela concerne la propagation du contrôle d’arrêt et les ressources utilisées ; aucune corruption mémoire ni élévation de privilèges n’est démontrée.
+
+Commande : `cargo test --lib --locked --offline retrying_ -- --nocapture`. Premier passage avant correction : deux échecs confirmés (lecteur commun et préparation ISO) et un succès de conservation du comportement TAR. Les fixtures ISO et TAR sont générées dans leurs seuls dossiers temporaires. Le test TAR couvre `.tar`, `.tar.zst`, `.tar.gz`, `.tar.xz` et `.tar.bz2` : ces cinq parcours s’arrêtent déjà au premier contrôle choisi avant correction ; ils ne sont pas présentés comme cinq nouvelles reproductions du défaut.
+
+### Correction et portée
+
+`src/utils/archive_limits.rs::ArchiveBudget::reader_checkpoint` fournit maintenant la conversion commune : une erreur `Interrupted` produite par le checkpoint est enveloppée dans une erreur terminale `Other`, avec la cause I/O originale et son texte. Les consommateurs ne la réessaient donc plus comme une interruption transitoire. Les autres catégories, dont `TimedOut` et les marqueurs structurés de seuil, restent intactes.
+
+`BudgetReader::read` utilise cette frontière, ce qui protège ses consommateurs ISO, TAR et 7z sans ajouter une variante par format. `src/commands/archive_seven_open.rs::CheckedSource::{read,seek}` partage cette même méthode ; sa conversion locale du lot précédent est supprimée. `src/commands/archive_tar_open.rs::SeekReader::seek` l’utilise aussi avant le positionnement. Le code de production ISO n’a pas besoin d’un correctif distinct ; il dépend du lecteur commun.
+
+Les erreurs `Interrupted` provenant de la source I/O elle-même sont conservées pour permettre les réessais ordinaires. Les checkpoints exécutés directement hors d’un lecteur, notamment `ArchiveBudget::copy`, conservent leur catégorie d’annulation originale : ils ne sont pas soumis à cette boucle automatique de lecture. Les pauses continuent d’être exclues du délai coopératif par le mécanisme existant. Aucun plafond, politique de cache, nom de fichier ni texte d’interface n’est modifié. Pour l’utilisateur, la préparation concernée échoue au contrôle d’arrêt au lieu de continuer à produire le fichier ; le traitement d’une source valide suit le parcours existant.
+
+### Tests et limites restantes
+
+Quatre nouveaux tests vérifient :
+
+- Le refus immédiat par les trois consommateurs standards, avec un seul checkpoint et position de source toujours nulle ; la cause encapsulée conserve `Interrupted` et le texte d’arrêt.
+- La préparation ISO interrompue au deuxième contrôle, avec destination vide.
+- L’arrêt TAR au premier contrôle dans les cinq variantes, avec destination vide.
+- Une véritable interruption transitoire du lecteur sous-jacent suivie d’une lecture réussie, sans double imputation des octets au budget. Une lecture vide conserve son comportement sans appeler le checkpoint.
+
+Le test préexistant de causes structurées est étendu à une lecture exacte avec budget expiré : l’erreur reste `TimedOut`, le marqueur `seconds` et son seuil nul injecté sont conservés, et aucun octet source n’est consommé. Le scénario préexistant d’annulation pendant une copie directe conserve aussi son assertion `ErrorKind::Interrupted`.
+
+Après correction, les quatre tests ciblés passent. Ce lot ne garantit pas l’interruption forcée d’un appel système bloqué, d’allocations ou de calculs internes sans nouveau contrôle ; l’isolation du chantier 3 reste ouverte. Une annulation après le début d’une copie peut toujours laisser un contenu partiel selon les règles de nettoyage de l’appelant. Aucun essai d’interface, Computer Use, changement de dépendance, activation de test ignoré ni push. Le rapport RustSec du lot précédent reste lié au même verrou, qui n’a pas changé.
+
+Ce vingtième lot reste non commité après le commit `e8adb95` du lot 7z.
+
+
+**Validation finale du vingtième lot :** `cargo check --all-targets --locked --offline` réussi sans avertissement du projet ; `cargo test --all-targets --locked --offline --quiet` : 355 tests de bibliothèque et 116 tests d’interface réussis, soit 471 réussites, 17 tests préexistants ignorés et aucun échec. Les quatre tests ciblés passent également séparément ; le passage avant correction avait deux échecs et un succès TAR. `git diff --check` réussi ; les cinq fichiers modifiés vérifiés en UTF-8 strict. L’empreinte RustSec enregistrée correspond toujours au verrou inchangé ; aucune nouvelle analyse de base distante n’est revendiquée.

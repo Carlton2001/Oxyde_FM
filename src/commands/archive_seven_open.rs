@@ -41,20 +41,6 @@ pub(super) struct CheckedSource<'a> {
     checkpoint: &'a dyn Fn() -> io::Result<()>,
 }
 
-impl CheckedSource<'_> {
-    fn check(&self) -> io::Result<()> {
-        self.budget.checkpoint(self.checkpoint).map_err(|error| {
-            // read_exact retries Interrupted; a cooperative cancellation must
-            // be terminal instead of being retried inside the header parser.
-            if error.kind() == io::ErrorKind::Interrupted {
-                io::Error::other(error)
-            } else {
-                error
-            }
-        })
-    }
-}
-
 pub(super) fn checked_reader<'a>(
     file: File,
     budget: &'a ArchiveBudget,
@@ -135,7 +121,7 @@ fn indexed_with_limits(
 }
 impl Read for CheckedSource<'_> {
     fn read(&mut self, bytes: &mut [u8]) -> io::Result<usize> {
-        self.check()?;
+        self.budget.reader_checkpoint(self.checkpoint)?;
         let count = self.file.read(bytes)?;
         self.budget.check_time()?;
         Ok(count)
@@ -143,7 +129,7 @@ impl Read for CheckedSource<'_> {
 }
 impl Seek for CheckedSource<'_> {
     fn seek(&mut self, position: SeekFrom) -> io::Result<u64> {
-        self.check()?;
+        self.budget.reader_checkpoint(self.checkpoint)?;
         let position = self.file.seek(position)?;
         self.budget.check_time()?;
         Ok(position)
