@@ -2112,6 +2112,7 @@ impl OxydeApp {
                                 this.history.push(Transaction::new(
                                     TransactionType::NewFolder,
                                     TransactionDetails {
+                                        moved_directory_identities: None,
                                         new_folder_identity: identity,
                                         moved_file_identities: None,
                                         copied_directory_identities: None,

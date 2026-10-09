@@ -861,7 +861,7 @@ redo-new-folder-conflict = Esiste già un elemento in questa posizione: { $detai
 redo-new-folder-parent-missing = La cartella superiore non è stata trovata: { $detail }. Il ripristino non ricrea le cartelle superiori.
 redo-new-folder-unverified = La cronologia non consente di ripristinare la creazione di questa cartella: { $detail }. Non è stato creato alcun elemento.
 
-redo-move-changed = Il file è cambiato dopo l’operazione: { $detail }. Ripeti spostamento è stato interrotto per preservare i tuoi file.
+redo-move-changed = Il file o la cartella è cambiato dopo l’operazione: { $detail }. Ripeti spostamento è stato interrotto per preservare i tuoi file.
 redo-move-conflict = Un elemento occupa la destinazione: { $detail }. Ripeti spostamento non lo sostituisce.
 redo-move-unverified = Questa cronologia non consente di ripetere lo spostamento in sicurezza: { $detail }. Avvia nuovamente lo spostamento dai file attuali.
 redo-move-incomplete = Lo spostamento è stato interrotto e alcuni elementi non sono tornati nella posizione originale. File o cartelle sono stati conservati per il recupero: { $detail }. Controlla queste posizioni prima di riprovare.
@@ -871,5 +871,5 @@ preview-unavailable = Impossibile caricare questa anteprima. Prova ad aprire il 
 preview-image-limit = Questa immagine supera i limiti dell’anteprima. Il file rimane accessibile.
 preview-animation-static = Anteprima statica: l’animazione supera i limiti dell’anteprima.
 
-undo-move-changed = Impossibile annullare questo spostamento: il file è stato sostituito. È stato conservato nella posizione attuale. { $detail }
-undo-move-unverified = Impossibile annullare questo spostamento in sicurezza: non è stato possibile verificare l’identità del file. Il file è stato conservato. { $detail }
+undo-move-changed = Impossibile annullare questo spostamento: il file o la cartella è stato sostituito o ricreato. È stato conservato nella posizione attuale. { $detail }
+undo-move-unverified = Impossibile annullare questo spostamento in sicurezza: non è stato possibile verificare l’identità del file o della cartella. L’elemento è stato conservato. { $detail }

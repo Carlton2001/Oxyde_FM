@@ -2,7 +2,9 @@
 
 Préparation du 9 octobre 2026, après les lots 42 et 43. **La vérification visuelle n’a pas été effectuée.** Ce protocole est à réaliser par l’utilisateur, sans Computer Use. Il vérifie les changements déjà implémentés ; il ne clôture pas les autres risques de l’audit.
 
-Exécutable construit : `C:\Users\Biluf\Documents\Projects\Oxyde-GPUI\target\debug\oxyde.exe`. Fermer les anciennes instances avant de l’ouvrir pour vérifier la bonne version. Les modifications de langue et de thème suivent les préférences habituelles d’Oxyde ; remettre ensuite celles souhaitées.
+**Revue reportée :** l’utilisateur demande de finir les corrections avant le contrôle visuel. Le binaire préparé au lot 44 précède les lots suivants ; il sera reconstruit avant la prochaine remise. Ne pas lancer ce protocole comme validation du code en cours.
+
+Exécutable préparé au lot 44 : `C:\Users\Biluf\Documents\Projects\Oxyde-GPUI\target\debug\oxyde.exe`. Fermer les anciennes instances avant de l’ouvrir pour vérifier la bonne version. Les modifications de langue et de thème suivent les préférences habituelles d’Oxyde ; remettre ensuite celles souhaitées.
 
 Jeu de fichiers préparé :
 

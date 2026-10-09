@@ -861,7 +861,7 @@ redo-new-folder-conflict = Ya existe un elemento en esta ubicación: { $detail }
 redo-new-folder-parent-missing = No se encuentra la carpeta superior: { $detail }. Rehacer no vuelve a crear las carpetas superiores.
 redo-new-folder-unverified = El historial no permite rehacer la creación de esta carpeta: { $detail }. No se ha creado ningún elemento.
 
-redo-move-changed = El archivo ha cambiado desde la operación: { $detail }. Se ha detenido Rehacer el movimiento para conservar sus archivos.
+redo-move-changed = El archivo o la carpeta ha cambiado desde la operación: { $detail }. Se ha detenido Rehacer el movimiento para conservar sus archivos.
 redo-move-conflict = Un elemento ocupa el destino: { $detail }. Rehacer el movimiento no lo reemplaza.
 redo-move-unverified = Este historial no permite rehacer el movimiento de forma segura: { $detail }. Inicie el movimiento de nuevo desde los archivos actuales.
 redo-move-incomplete = El movimiento se detuvo y algunos elementos no pudieron volver a su ubicación original. Se han conservado archivos o carpetas para su recuperación: { $detail }. Compruebe estas ubicaciones antes de volver a intentarlo.
@@ -871,5 +871,5 @@ preview-unavailable = No se pudo cargar esta vista previa. Intente abrir el arch
 preview-image-limit = Esta imagen supera los límites de la vista previa. El archivo sigue siendo accesible.
 preview-animation-static = Vista previa estática: la animación supera los límites de la vista previa.
 
-undo-move-changed = No se puede deshacer este movimiento: el archivo fue reemplazado. Se ha conservado en su ubicación actual. { $detail }
-undo-move-unverified = No se puede deshacer este movimiento de forma segura: no se pudo verificar la identidad del archivo. El archivo se ha conservado. { $detail }
+undo-move-changed = No se puede deshacer este movimiento: el archivo o la carpeta fue reemplazado o creado de nuevo. Se ha conservado en su ubicación actual. { $detail }
+undo-move-unverified = No se puede deshacer este movimiento de forma segura: no se pudo verificar la identidad del archivo o la carpeta. Se ha conservado. { $detail }

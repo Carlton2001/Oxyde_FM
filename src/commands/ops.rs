@@ -968,6 +968,7 @@ mod copy_redo_tests {
         let transaction = Transaction::new(
             TransactionType::Copy,
             TransactionDetails {
+                moved_directory_identities: None,
                 new_folder_identity: None,
                 moved_file_identities: None,
                 copied_directory_identities: None,
@@ -1055,6 +1056,7 @@ mod copy_redo_tests {
             history.push(Transaction::new(
                 TransactionType::Copy,
                 TransactionDetails {
+                    moved_directory_identities: None,
                     new_folder_identity: None,
                     moved_file_identities: None,
                     copied_directory_identities: Some(vec![(
@@ -1193,6 +1195,7 @@ mod copy_redo_tests {
         history.push(Transaction::new(
             TransactionType::Copy,
             TransactionDetails {
+                moved_directory_identities: None,
                 new_folder_identity: None,
                 moved_file_identities: None,
                 copied_directory_identities: Some(vec![(
@@ -1299,6 +1302,7 @@ mod copy_redo_tests {
         history.push(Transaction::new(
             TransactionType::Copy,
             TransactionDetails {
+                moved_directory_identities: None,
                 new_folder_identity: None,
                 moved_file_identities: None,
                 copied_directory_identities: None,
@@ -1442,6 +1446,7 @@ mod history_concurrency_tests {
         Transaction::new(
             TransactionType::Rename,
             TransactionDetails {
+                moved_directory_identities: None,
                 new_folder_identity: None,
                 moved_file_identities: None,
                 copied_directory_identities: None,
@@ -1631,6 +1636,7 @@ mod move_undo_rollback_tests {
 
     fn details(source: &std::path::Path, destination: &std::path::Path) -> TransactionDetails {
         TransactionDetails {
+            moved_directory_identities: None,
             new_folder_identity: None,
             moved_file_identities: std::fs::File::open(destination).ok().map(|file| {
                 vec![(
@@ -1681,6 +1687,41 @@ mod move_undo_rollback_tests {
                 .to_string_lossy()
                 .into_owned(),
         )]);
+        journal.moved_directory_identities = Some(
+            journal
+                .moved_dirs
+                .as_ref()
+                .unwrap()
+                .iter()
+                .map(|(path, _)| {
+                    (
+                        path.clone(),
+                        crate::models::transaction::HistoryDirectoryIdentity::vacant(),
+                    )
+                })
+                .collect(),
+        );
+        journal.copied_directory_identities = Some(
+            journal
+                .created_dirs
+                .as_ref()
+                .unwrap()
+                .iter()
+                .map(|path| {
+                    (
+                        path.clone(),
+                        crate::models::transaction::HistoryDirectoryIdentity::from_file(
+                            &crate::platform::platform()
+                                .hold_resolved_operation_directory(
+                                    &std::fs::canonicalize(path).unwrap(),
+                                )
+                                .unwrap(),
+                        )
+                        .unwrap(),
+                    )
+                })
+                .collect(),
+        );
         let history = HistoryManager::new();
         history.push(Transaction::new(TransactionType::Move, journal));
         let runtime = tokio::runtime::Builder::new_current_thread()
@@ -1734,6 +1775,41 @@ mod move_undo_rollback_tests {
                 destination.parent().unwrap().to_string_lossy().into_owned(),
             ),
         ]);
+        journal.moved_directory_identities = Some(
+            journal
+                .moved_dirs
+                .as_ref()
+                .unwrap()
+                .iter()
+                .map(|(path, _)| {
+                    (
+                        path.clone(),
+                        crate::models::transaction::HistoryDirectoryIdentity::vacant(),
+                    )
+                })
+                .collect(),
+        );
+        journal.copied_directory_identities = Some(
+            journal
+                .created_dirs
+                .as_ref()
+                .unwrap()
+                .iter()
+                .map(|path| {
+                    (
+                        path.clone(),
+                        crate::models::transaction::HistoryDirectoryIdentity::from_file(
+                            &crate::platform::platform()
+                                .hold_resolved_operation_directory(
+                                    &std::fs::canonicalize(path).unwrap(),
+                                )
+                                .unwrap(),
+                        )
+                        .unwrap(),
+                    )
+                })
+                .collect(),
+        );
         let transaction = Transaction::new(TransactionType::Move, journal);
         let history = HistoryManager::new();
         history.push(transaction.clone());
@@ -1808,6 +1884,7 @@ mod new_folder_history_tests {
 
     fn details(path: &std::path::Path) -> TransactionDetails {
         TransactionDetails {
+            moved_directory_identities: None,
             new_folder_identity: None,
             moved_file_identities: None,
             paths: vec![path.to_string_lossy().into_owned()],

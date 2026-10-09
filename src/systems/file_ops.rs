@@ -92,6 +92,7 @@ pub struct FileOperation {
     pub created_dirs: Vec<PathBuf>,
     pub overwritten_files: Vec<PathBuf>,
     pub moved_files: Vec<(PathBuf, PathBuf)>,
+    moved_directory_identities: Vec<(PathBuf, crate::models::transaction::HistoryDirectoryIdentity)>,
     moved_file_identities: Vec<(PathBuf, crate::models::transaction::HistoryMoveIdentity)>,
     trash_metadata_backups: Vec<PathBuf>,
     pub moved_dirs: Vec<(PathBuf, PathBuf)>,
@@ -151,6 +152,7 @@ impl FileOperation {
             created_dirs: Vec::new(),
             overwritten_files: Vec::new(),
             moved_files: Vec::new(),
+            moved_directory_identities: Vec::new(),
             moved_file_identities: Vec::new(),
             trash_metadata_backups: Vec::new(),
             moved_dirs: Vec::new(),
@@ -199,6 +201,7 @@ impl FileOperation {
             created_dirs: Vec::new(),
             overwritten_files: Vec::new(),
             moved_files: Vec::new(),
+            moved_directory_identities: Vec::new(),
             moved_file_identities: Vec::new(),
             trash_metadata_backups: Vec::new(),
             moved_dirs: Vec::new(),
@@ -688,6 +691,11 @@ impl FileOperationManager {
                     .map(|p| p.to_string_lossy().to_string());
 
                 let details = TransactionDetails {
+                    moved_directory_identities: Some(
+                        locked.moved_directory_identities.iter()
+                            .map(|(path, identity)| (path.to_string_lossy().into_owned(), identity.clone()))
+                            .collect(),
+                    ),
                     new_folder_identity: None,
                     moved_file_identities: Some(
                         locked.moved_file_identities.iter()
@@ -975,6 +983,7 @@ impl FileOperationManager {
         locked.copied_file_identities.clear();
         locked.copied_directory_identities.clear();
         locked.moved_file_identities.clear();
+        locked.moved_directory_identities.clear();
         Ok(())
     }
 
@@ -1011,20 +1020,16 @@ impl FileOperationManager {
         operation: &Arc<Mutex<FileOperation>>,
         tree: &super::destination_tree::DestinationTree,
         path: &std::path::Path,
-        is_move: bool,
+        _is_move: bool,
     ) {
-        let identity = if is_move {
-            None
-        } else {
-            tree.directory_identity(path)
-                .map_err(|error| {
-                    log::warn!(
-                        "Copy directory identity unavailable for {}: {error}",
-                        path.display()
-                    )
-                })
-                .ok()
-        };
+        let identity = tree.directory_identity(path)
+            .map_err(|error| {
+                log::warn!(
+                    "Copy/Move directory identity unavailable for {}: {error}",
+                    path.display()
+                )
+            })
+            .ok();
         let mut journal = operation.lock().unwrap();
         journal.created_dirs.push(path.to_path_buf());
         if let Some(identity) = identity {
@@ -1693,7 +1698,12 @@ impl FileOperationManager {
                     }
                 },
                 &mut |directory, destination| {
-                    op.lock().unwrap().moved_dirs.push((directory.to_path_buf(), destination.to_path_buf()));
+                    let mut journal = op.lock().unwrap();
+                    journal.moved_dirs.push((directory.to_path_buf(), destination.to_path_buf()));
+                    journal.moved_directory_identities.push((
+                        directory.to_path_buf(),
+                        crate::models::transaction::HistoryDirectoryIdentity::vacant(),
+                    ));
                 },
             ).map_err(|error| error.to_string())?;
         }
@@ -4149,6 +4159,82 @@ mod tests {
                 assert!(!target.exists());
                 crate::commands::ops::redo_last_action(&history).await.unwrap();
                 assert!(target.join("nested-empty").is_dir());
+            }
+            crate::commands::ops::undo_last_action(&history).await.unwrap();
+            assert_eq!(std::fs::read_dir(&target_dir).unwrap().count(), 0);
+        });
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn move_directory_history_captures_native_proofs_and_preserves_replacements() {
+        let root = tempfile::tempdir().unwrap();
+        let source = root.path().join("source-empty");
+        let target_dir = root.path().join("target");
+        std::fs::create_dir_all(source.join("nested-empty")).unwrap();
+        std::fs::create_dir(&target_dir).unwrap();
+        let target = target_dir.join("source-empty");
+        let displaced = root.path().join("original-copy");
+        let history = Arc::new(HistoryManager::new());
+        let op = Arc::new(Mutex::new(FileOperation::new(
+            FileOpType::Move,
+            vec![source.clone()],
+            Some(target_dir.clone()),
+            None,
+        )));
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        runtime.block_on(async {
+            FileOperationManager::execute_operation(history.clone(), op.clone()).await;
+            assert_eq!(op.lock().unwrap().status, OpStatus::Completed);
+            assert!(!source.exists());
+            let state = history.get_state();
+            let restored = state.undo_stack[0].details.moved_directory_identities.as_ref().unwrap();
+            assert_eq!(restored.len(), 2);
+            assert!(restored.iter().all(|(_, proof)| proof.snapshot().is_none()));
+            let original = platform().hold_resolved_operation_directory(&std::fs::canonicalize(&target).unwrap()).unwrap();
+            let identity = platform().file_identity(&original).unwrap();
+            drop(original);
+            std::fs::rename(&target, &displaced).unwrap();
+            std::fs::create_dir(&target).unwrap();
+            let replacement = platform().hold_resolved_operation_directory(&std::fs::canonicalize(&target).unwrap()).unwrap();
+            assert_ne!(platform().file_identity(&replacement).unwrap(), identity);
+            drop(replacement);
+            let result = crate::commands::ops::undo_last_action(&history).await;
+            assert!(matches!(result, Err(crate::models::CommandError::HistoryMove(failure)) if failure.issue == crate::models::error::HistoryMoveIssue::Changed), "Undo must preserve an independent empty replacement directory");
+            assert!(target.is_dir());
+            assert!(displaced.join("nested-empty").is_dir());
+            assert_eq!(std::fs::read_dir(&target).unwrap().count(), 0);
+            assert_eq!(history.get_state().undo_stack.len(), 1);
+            assert!(history.get_state().redo_stack.is_empty());
+            std::fs::remove_dir(&target).unwrap();
+            std::fs::rename(&displaced, &target).unwrap();
+            let transaction_id = history.get_state().undo_stack[0].id.clone();
+            for _ in 0..2 {
+                let state = history.get_state();
+                assert_eq!(state.undo_stack[0].id, transaction_id);
+                let identities = state.undo_stack[0].details.copied_directory_identities.as_ref().unwrap();
+                assert_eq!(identities.len(), 2);
+                for (path, identity) in identities {
+                    let directory = platform().hold_resolved_operation_directory(&std::fs::canonicalize(path).unwrap()).unwrap();
+                    assert!(identity.snapshot().unwrap().matches(&directory).unwrap());
+                }
+                // Keeping history must not pin either copied directory in place.
+                std::fs::rename(&target, &displaced).unwrap();
+                std::fs::rename(&displaced, &target).unwrap();
+                crate::commands::ops::undo_last_action(&history).await.unwrap();
+                assert!(!target.exists());
+                assert!(source.join("nested-empty").is_dir());
+                let state = history.get_state();
+                for (path, proof) in state.redo_stack[0].details.moved_directory_identities.as_ref().unwrap() {
+                    let handle = platform().hold_resolved_operation_directory(&std::fs::canonicalize(path).unwrap()).unwrap();
+                    assert!(proof.snapshot().unwrap().matches(&handle).unwrap());
+                }
+                crate::commands::ops::redo_last_action(&history).await.unwrap();
+                assert!(target.join("nested-empty").is_dir());
+                assert!(!source.exists());
             }
             crate::commands::ops::undo_last_action(&history).await.unwrap();
             assert_eq!(std::fs::read_dir(&target_dir).unwrap().count(), 0);

@@ -560,7 +560,7 @@ redo-new-folder-conflict = Un élément existe déjà à cet emplacement : { $de
 redo-new-folder-parent-missing = Le dossier parent est introuvable : { $detail }. Rétablir ne recrée pas les dossiers parents.
 redo-new-folder-unverified = L’historique ne permet pas de rétablir ce dossier : { $detail }. Aucun élément n’a été créé.
 
-redo-move-changed = Le fichier a changé depuis l’opération : { $detail }. Rétablir le déplacement est interrompu pour préserver vos fichiers.
+redo-move-changed = Le fichier ou dossier a changé depuis l’opération : { $detail }. Rétablir le déplacement est interrompu pour préserver vos fichiers.
 redo-move-conflict = Un élément occupe la destination : { $detail }. Rétablir le déplacement ne le remplace pas.
 redo-move-unverified = Cet historique ne permet pas de rétablir le déplacement en toute sécurité : { $detail }. Relancez le déplacement depuis les fichiers actuels.
 redo-move-incomplete = Le déplacement a été interrompu et certains éléments n’ont pas pu revenir à leur emplacement initial. Des fichiers ou dossiers sont conservés pour récupération : { $detail }. Vérifiez ces emplacements avant de réessayer.
@@ -570,5 +570,5 @@ preview-unavailable = Impossible de charger cet aperçu. Essayez d’ouvrir le f
 preview-image-limit = Cette image dépasse les limites de l’aperçu. Le fichier reste accessible.
 preview-animation-static = Aperçu fixe : l’animation dépasse les limites de l’aperçu.
 
-undo-move-changed = Impossible d’annuler ce déplacement : le fichier a été remplacé. Il a été conservé à son emplacement actuel. { $detail }
-undo-move-unverified = Impossible d’annuler ce déplacement en toute sécurité : l’identité du fichier n’a pas pu être vérifiée. Le fichier a été conservé. { $detail }
+undo-move-changed = Impossible d’annuler ce déplacement : le fichier ou dossier a été remplacé ou recréé. Il a été conservé à son emplacement actuel. { $detail }
+undo-move-unverified = Impossible d’annuler ce déplacement en toute sécurité : l’identité du fichier ou dossier n’a pas pu être vérifiée. Il a été conservé. { $detail }

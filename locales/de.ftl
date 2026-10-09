@@ -861,7 +861,7 @@ redo-new-folder-conflict = An diesem Speicherort existiert bereits ein Element: 
 redo-new-folder-parent-missing = Der übergeordnete Ordner wurde nicht gefunden: { $detail }. Übergeordnete Ordner werden beim Wiederherstellen nicht neu erstellt.
 redo-new-folder-unverified = Der Verlauf kann die Erstellung dieses Ordners nicht wiederholen: { $detail }. Es wurde kein Element erstellt.
 
-redo-move-changed = Die Datei wurde seit dem Vorgang geändert: { $detail }. Die Wiederholung des Verschiebens wurde zum Schutz Ihrer Dateien angehalten.
+redo-move-changed = Die Datei oder der Ordner wurde seit dem Vorgang geändert: { $detail }. Die Wiederholung des Verschiebens wurde zum Schutz Ihrer Dateien angehalten.
 redo-move-conflict = Am Ziel befindet sich bereits ein Element: { $detail }. Die Wiederholung des Verschiebens ersetzt es nicht.
 redo-move-unverified = Mit diesem Verlauf lässt sich das Verschieben nicht sicher wiederholen: { $detail }. Starten Sie das Verschieben mit den aktuellen Dateien erneut.
 redo-move-incomplete = Das Verschieben wurde angehalten und einige Elemente konnten nicht an ihren ursprünglichen Ort zurückkehren. Dateien oder Ordner wurden zur Wiederherstellung behalten: { $detail }. Prüfen Sie diese Orte vor einem erneuten Versuch.
@@ -871,5 +871,5 @@ preview-unavailable = Diese Vorschau konnte nicht geladen werden. Versuchen Sie,
 preview-image-limit = Dieses Bild überschreitet die Vorschaugrenzen. Die Datei bleibt zugänglich.
 preview-animation-static = Standbild: Die Animation überschreitet die Vorschaugrenzen.
 
-undo-move-changed = Dieses Verschieben kann nicht rückgängig gemacht werden: Die Datei wurde ersetzt. Sie bleibt an ihrem aktuellen Ort erhalten. { $detail }
-undo-move-unverified = Dieses Verschieben kann nicht sicher rückgängig gemacht werden: Die Identität der Datei konnte nicht überprüft werden. Die Datei bleibt erhalten. { $detail }
+undo-move-changed = Dieses Verschieben kann nicht rückgängig gemacht werden: Die Datei oder der Ordner wurde ersetzt oder neu erstellt. Das Element bleibt an seinem aktuellen Ort erhalten. { $detail }
+undo-move-unverified = Dieses Verschieben kann nicht sicher rückgängig gemacht werden: Die Identität der Datei oder des Ordners konnte nicht überprüft werden. Das Element bleibt erhalten. { $detail }

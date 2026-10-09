@@ -75,6 +75,7 @@ enum Effect {
     },
 }
 struct Journal {
+    directory_identities: HashMap<PathBuf, crate::models::transaction::HistoryDirectoryIdentity>,
     directories: Directories,
     effects: Vec<Effect>,
     finished: bool,
@@ -85,7 +86,13 @@ impl Journal {
         let mut ancestor = path;
         loop {
             match self.directories.directory(ancestor) {
-                Ok(_) => break,
+                Ok(_) => {
+                    if let Some(expected) = self.directory_identities.get(ancestor) {
+                        self.directories
+                            .verify_history_identity(ancestor, expected)?;
+                    }
+                    break;
+                }
                 Err(error) if error.kind() == io::ErrorKind::NotFound => {
                     missing.push(ancestor.to_path_buf());
                     ancestor = ancestor
@@ -106,6 +113,9 @@ impl Journal {
             .create(path, false)
             .map_err(|error| at(error, path))?;
         self.effects.push(Effect::Created(path.to_path_buf()));
+        if let Some(expected) = self.directory_identities.get(path) {
+            expected.refresh_from_file(self.directories.directory(path)?)?;
+        }
         Ok(())
     }
     fn transfer(
@@ -132,6 +142,9 @@ impl Journal {
     fn remove(&mut self, path: &Path, checkpoint: &mut impl Checkpoint) -> io::Result<()> {
         let metadata = self.directories.metadata(path)?;
         checkpoint.before(Phase::Remove, path)?;
+        if let Some(expected) = self.directory_identities.get(path) {
+            self.directories.verify_history_identity(path, expected)?;
+        }
         if let (Some(metadata), Removal::Deleted) = (metadata, self.directories.remove(path)?) {
             self.effects.push(Effect::Removed {
                 path: path.to_path_buf(),
@@ -198,6 +211,9 @@ impl Journal {
                             ));
                         }
                         let directory = self.directories.create(&path, hidden)?;
+                        if let Some(expected) = self.directory_identities.get(&path) {
+                            expected.refresh_from_file(directory)?;
+                        }
                         platform().restore_journal_directory(directory, &path, permissions, hidden)
                     })();
                     if result.is_err() {
@@ -225,7 +241,16 @@ impl Drop for Journal {
 }
 
 pub(crate) fn redo(details: &TransactionDetails) -> Result<(), CommandError> {
-    redo_with(details, &mut Native).map_err(CommandError::from)
+    redo_with(details, &mut Native).map_err(|error| match CommandError::from(error) {
+        CommandError::HistoryIdentity(failure) => CommandError::HistoryMove(HistoryMoveFailure {
+            issue: match failure.issue {
+                crate::models::error::HistoryIdentityIssue::Changed => Issue::Changed,
+                crate::models::error::HistoryIdentityIssue::Unverified => Issue::Unverified,
+            },
+            detail: failure.path,
+        }),
+        other => other,
+    })
 }
 fn redo_with(details: &TransactionDetails, checkpoint: &mut impl Checkpoint) -> io::Result<()> {
     let (Some(moved), Some(moved_dirs), Some(hashes)) = (
@@ -274,6 +299,32 @@ fn redo_with(details: &TransactionDetails, checkpoint: &mut impl Checkpoint) -> 
         .collect();
     removed.sort_by_key(|path| std::cmp::Reverse(path.components().count()));
     removed.dedup();
+    let mut directory_identities: HashMap<_, _> = details
+        .copied_directory_identities
+        .as_deref()
+        .unwrap_or_default()
+        .iter()
+        .map(|(path, identity)| (PathBuf::from(path), identity.clone()))
+        .collect();
+    for path in &created {
+        if !directory_identities.contains_key(path) {
+            return Err(super::history_move::move_identity_failure(path, false));
+        }
+    }
+    let restored: HashMap<_, _> = details
+        .moved_directory_identities
+        .as_deref()
+        .unwrap_or_default()
+        .iter()
+        .map(|(path, identity)| (PathBuf::from(path), identity.clone()))
+        .collect();
+    for path in &removed {
+        let identity = restored
+            .get(path)
+            .filter(|proof| proof.snapshot().is_some())
+            .ok_or_else(|| super::history_move::move_identity_failure(path, false))?;
+        directory_identities.insert(path.clone(), identity.clone());
+    }
     let mut paths = created.clone();
     for (source, destination) in moved.iter().chain(moved_dirs) {
         for path in [source, destination] {
@@ -286,11 +337,25 @@ fn redo_with(details: &TransactionDetails, checkpoint: &mut impl Checkpoint) -> 
     }
     let directories = Directories::prepare(&paths, &removed)?;
     let mut journal = Journal {
+        directory_identities,
         directories,
         effects: Vec::new(),
         finished: false,
     };
     let result = (|| {
+        // Bind restored source directories before moving any of their files.
+        for path in removed.iter().rev() {
+            journal.directories.directory(path).map_err(|error| {
+                if error.kind() == io::ErrorKind::NotFound {
+                    super::history_move::move_identity_failure(path, true)
+                } else {
+                    error
+                }
+            })?;
+            journal
+                .directories
+                .verify_history_identity(path, &journal.directory_identities[path])?;
+        }
         // Validate all existing sources and destinations before the first effect.
         for (source, destination) in moved {
             let source = Path::new(source);
@@ -404,6 +469,7 @@ mod tests {
             )]),
             copied_file_identities: None,
             copied_directory_identities: None,
+            moved_directory_identities: None,
             new_folder_identity: None,
             moved_file_identities: Some(vec![(
                 destination.to_string_lossy().into_owned(),
@@ -414,6 +480,41 @@ mod tests {
             )]),
             trash_metadata_backups: None,
         }
+    }
+    // Fixtures begin after a successful logical Undo: destinations do not yet
+    // exist, while every source proof must describe the current legitimate object.
+    fn directory_proofs(tx: &mut TransactionDetails) {
+        tx.copied_directory_identities = Some(
+            tx.created_dirs
+                .as_deref()
+                .unwrap_or_default()
+                .iter()
+                .map(|path| {
+                    (
+                        path.clone(),
+                        crate::models::transaction::HistoryDirectoryIdentity::vacant(),
+                    )
+                })
+                .collect(),
+        );
+        tx.moved_directory_identities = Some(
+            tx.moved_dirs
+                .as_deref()
+                .unwrap_or_default()
+                .iter()
+                .map(|(path, _)| {
+                    (
+                        path.clone(),
+                        crate::models::transaction::HistoryDirectoryIdentity::from_file(
+                            &platform()
+                                .hold_resolved_operation_directory(&fs::canonicalize(path).unwrap())
+                                .unwrap(),
+                        )
+                        .unwrap(),
+                    )
+                })
+                .collect(),
+        );
     }
     struct Hook<F>(F);
     impl<F: FnMut(Phase, &Path) -> io::Result<()>> Checkpoint for Hook<F> {
@@ -456,6 +557,7 @@ mod tests {
         let displaced = root.path().join("displaced");
         let directories = Directories::prepare(std::slice::from_ref(&created), &[]).unwrap();
         let mut journal = Journal {
+            directory_identities: HashMap::new(),
             directories,
             effects: vec![],
             finished: false,
@@ -490,6 +592,7 @@ mod tests {
             link.join("new").to_string_lossy().into_owned(),
             link.join("new/child").to_string_lossy().into_owned(),
         ]);
+        directory_proofs(&mut tx);
         let retarget = Retarget::new(&link, &template);
         let mut once = false;
         redo_with(
@@ -553,10 +656,12 @@ mod tests {
         tx.created_dirs = Some(vec![
             destination.parent().unwrap().to_string_lossy().into_owned(),
         ]);
+        directory_proofs(&mut tx);
         tx.moved_dirs = Some(vec![(
             parent.to_string_lossy().into_owned(),
             destination.parent().unwrap().to_string_lossy().into_owned(),
         )]);
+        directory_proofs(&mut tx);
         redo_with(
             &tx,
             &mut Hook(|phase, path: &Path| {
@@ -586,10 +691,12 @@ mod tests {
         tx.created_dirs = Some(vec![
             destination.parent().unwrap().to_string_lossy().into_owned(),
         ]);
+        directory_proofs(&mut tx);
         tx.moved_dirs = Some(vec![(
             parent.to_string_lossy().into_owned(),
             destination.parent().unwrap().to_string_lossy().into_owned(),
         )]);
+        directory_proofs(&mut tx);
         redo_with(
             &tx,
             &mut Hook(|phase, path: &Path| {
@@ -601,8 +708,13 @@ mod tests {
         )
         .unwrap();
         assert_eq!(fs::read(parent.join("late.txt")).unwrap(), b"independent");
-        assert_eq!(fs::read(destination).unwrap(), b"moving file");
+        assert_eq!(fs::read(&destination).unwrap(), b"moving file");
         assert!(!source.exists());
+        super::super::history_file_undo::undo(&tx).unwrap();
+        assert_eq!(fs::read(&source).unwrap(), b"moving file");
+        assert_eq!(fs::read(parent.join("late.txt")).unwrap(), b"independent");
+        redo(&tx).unwrap();
+        assert_eq!(fs::read(parent.join("late.txt")).unwrap(), b"independent");
     }
 
     #[test]
@@ -628,6 +740,7 @@ mod tests {
         tx.created_dirs = Some(vec![
             destination.parent().unwrap().to_string_lossy().into_owned(),
         ]);
+        directory_proofs(&mut tx);
         tx.moved_dirs = Some(vec![
             (
                 first.to_string_lossy().into_owned(),
@@ -638,6 +751,7 @@ mod tests {
                 destination.parent().unwrap().to_string_lossy().into_owned(),
             ),
         ]);
+        directory_proofs(&mut tx);
         let error = redo_with(
             &tx,
             &mut Hook(|phase, path: &Path| {
@@ -652,6 +766,25 @@ mod tests {
         assert_eq!(fs::read(&source).unwrap(), b"moving file");
         assert!(second.is_dir());
         assert!(!destination.parent().unwrap().exists());
+        let restored = tx
+            .moved_directory_identities
+            .as_ref()
+            .unwrap()
+            .iter()
+            .find(|(path, _)| Path::new(path) == first)
+            .unwrap()
+            .1
+            .snapshot()
+            .unwrap();
+        assert!(
+            restored
+                .matches(
+                    &platform()
+                        .hold_resolved_operation_directory(&fs::canonicalize(&first).unwrap())
+                        .unwrap()
+                )
+                .unwrap()
+        );
         assert!(!fs::metadata(&first).unwrap().permissions().readonly());
         assert!(
             platform()
@@ -661,6 +794,10 @@ mod tests {
         let mut permissions = fs::metadata(&first).unwrap().permissions();
         permissions.set_readonly(false);
         fs::set_permissions(&first, permissions).unwrap();
+        redo_with(&tx, &mut Native).unwrap();
+        assert_eq!(fs::read(&destination).unwrap(), b"moving file");
+        assert!(!first.exists());
+        assert!(!second.exists());
     }
 
     #[test]
@@ -670,6 +807,7 @@ mod tests {
         let path = canonical.join("one/two");
         let directories = Directories::prepare(std::slice::from_ref(&path), &[]).unwrap();
         let mut journal = Journal {
+            directory_identities: HashMap::new(),
             directories,
             effects: vec![],
             finished: false,
@@ -730,6 +868,7 @@ mod tests {
             parent.to_string_lossy().into_owned(),
             destination.parent().unwrap().to_string_lossy().into_owned(),
         )]);
+        directory_proofs(&mut tx);
         let result = redo_with(&tx, &mut Native);
         assert!(result.is_err());
         assert_eq!(fs::read(&source).unwrap(), b"moving file");
@@ -807,6 +946,7 @@ mod tests {
                 destination.parent().unwrap().to_string_lossy().into_owned(),
             ),
         ]);
+        directory_proofs(&mut tx);
         let error = redo_with(
             &tx,
             &mut Hook(|phase, path: &Path| {

@@ -19,6 +19,7 @@ pub struct TransactionDetails {
     pub moved_files: Option<Vec<(String, String)>>,
     pub moved_file_identities: Option<Vec<(String, HistoryMoveIdentity)>>,
     pub trash_metadata_backups: Option<Vec<String>>,
+    pub moved_directory_identities: Option<Vec<(String, HistoryDirectoryIdentity)>>,
     pub moved_dirs: Option<Vec<(String, String)>>,
     pub copied_files: Option<Vec<(String, String)>>,
     pub copied_file_hashes: Option<Vec<(String, String)>>,
@@ -89,6 +90,13 @@ pub struct HistoryDirectoryIdentity {
 pub type HistoryMoveIdentity = HistoryDirectoryIdentity;
 
 impl HistoryDirectoryIdentity {
+    /// No object exists yet: only an exclusive journal creation may supply its proof.
+    pub(crate) fn vacant() -> Self {
+        Self {
+            current: std::sync::Arc::new(std::sync::Mutex::new(None)),
+        }
+    }
+
     pub(crate) fn from_file(file: &std::fs::File) -> std::io::Result<Self> {
         Ok(Self {
             current: std::sync::Arc::new(std::sync::Mutex::new(Some(

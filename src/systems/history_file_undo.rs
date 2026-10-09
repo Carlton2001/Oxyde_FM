@@ -279,8 +279,54 @@ impl Plan {
             .collect();
         source_dirs.sort_by_key(|path| path.components().count());
         let remove_dirs = sorted_directories(created_dirs);
+        let mut directory_identities: HashMap<_, _> = details
+            .copied_directory_identities
+            .as_deref()
+            .unwrap_or_default()
+            .iter()
+            .map(|(path, identity)| (PathBuf::from(path), identity.clone()))
+            .collect();
+        for path in &remove_dirs {
+            if directory_identities
+                .get(path)
+                .and_then(HistoryDirectoryIdentity::snapshot)
+                .is_none()
+            {
+                return Err(super::history_move::move_identity_failure(path, false));
+            }
+        }
+        let restored: HashMap<_, _> = details
+            .moved_directory_identities
+            .as_deref()
+            .unwrap_or_default()
+            .iter()
+            .map(|(path, identity)| (PathBuf::from(path), identity.clone()))
+            .collect();
+        for path in &source_dirs {
+            let proof = restored
+                .get(path)
+                .ok_or_else(|| super::history_move::move_identity_failure(path, false))?;
+            // The initial source was removed. A later Redo may keep our restored
+            // directory if independent children arrive; accept only that same object.
+            match fs::symlink_metadata(path) {
+                Ok(_) => {
+                    let snapshot = proof
+                        .snapshot()
+                        .ok_or_else(|| super::history_move::move_identity_failure(path, true))?;
+                    let parents = HeldParents::new(path)?;
+                    let directory =
+                        platform().track_operation_directory(parents.directory(), path)?;
+                    if !snapshot.matches(&directory)? {
+                        return Err(super::history_move::move_identity_failure(path, true));
+                    }
+                }
+                Err(error) if error.kind() == ErrorKind::NotFound => {}
+                Err(error) => return Err(error),
+            }
+            directory_identities.insert(path.clone(), proof.clone());
+        }
         Ok(Self {
-            directory_identities: HashMap::new(),
+            directory_identities,
             identities,
             files,
             discard,
@@ -348,7 +394,13 @@ impl Journal {
         let mut current = path;
         loop {
             match self.directories.directory(current) {
-                Ok(_) => break,
+                Ok(_) => {
+                    if let Some(expected) = self.directory_identities.get(current) {
+                        self.directories
+                            .verify_history_identity(current, expected)?;
+                    }
+                    break;
+                }
                 Err(error) if error.kind() == ErrorKind::NotFound => {
                     missing.push(current.to_path_buf());
                     current = current.parent().ok_or_else(|| {
@@ -361,7 +413,10 @@ impl Journal {
         for path in missing.into_iter().rev() {
             ops.before_create_dir(&path)?;
             self.directories.create(&path, false)?;
-            self.effects.push(Effect::CreatedDir(path));
+            self.effects.push(Effect::CreatedDir(path.clone()));
+            if let Some(expected) = self.directory_identities.get(&path) {
+                expected.refresh_from_file(self.directories.directory(&path)?)?;
+            }
         }
         Ok(())
     }
@@ -595,7 +650,21 @@ fn apply_plan(ops: &impl UndoIo, plan: Plan) -> io::Result<()> {
     for (path, _) in &plan.discard {
         paths.push(staging_parent(path, &plan.remove_dirs)?.to_path_buf());
     }
-    let directories = super::history_directories::Directories::prepare(&paths, &plan.remove_dirs)?;
+    let mut directories =
+        super::history_directories::Directories::prepare(&paths, &plan.remove_dirs)?;
+    for path in &plan.source_dirs {
+        match directories.directory(path) {
+            Ok(_) => {
+                let expected = &plan.directory_identities[path];
+                if expected.snapshot().is_none() {
+                    return Err(super::history_move::move_identity_failure(path, true));
+                }
+                directories.verify_history_identity(path, expected)?;
+            }
+            Err(error) if error.kind() == ErrorKind::NotFound => {}
+            Err(error) => return Err(error),
+        }
+    }
     for path in &plan.remove_dirs {
         if let Some(expected) = plan.directory_identities.get(path) {
             directories.verify_history_identity(path, expected)?;
@@ -763,6 +832,176 @@ mod tests {
         assert!(fixture.staging().is_empty());
     }
 
+    fn empty_directory_move() -> Fixture {
+        let mut fixture = Fixture::new();
+        fs::remove_file(&fixture.destination).unwrap();
+        fs::remove_file(&fixture.partial).unwrap();
+        fixture.details.created_files = Some(vec![]);
+        fixture.details.moved_files = Some(vec![]);
+        fixture.details.copied_file_hashes = Some(vec![]);
+        let source = fixture.original.parent().unwrap();
+        let destination = fixture.destination.parent().unwrap().parent().unwrap();
+        fixture.details.moved_dirs = Some(vec![
+            (
+                source.to_string_lossy().into_owned(),
+                destination.to_string_lossy().into_owned(),
+            ),
+            (
+                source.join("child").to_string_lossy().into_owned(),
+                destination.join("child").to_string_lossy().into_owned(),
+            ),
+        ]);
+        fixture.details.moved_directory_identities = Some(
+            fixture
+                .details
+                .moved_dirs
+                .as_ref()
+                .unwrap()
+                .iter()
+                .map(|(path, _)| (path.clone(), HistoryDirectoryIdentity::vacant()))
+                .collect(),
+        );
+        fixture
+    }
+
+    #[test]
+    fn move_directory_replacement_before_undo_is_preserved_and_original_can_retry() {
+        let fixture = empty_directory_move();
+        let selected = fixture.destination.parent().unwrap();
+        let saved = fixture.root.path().join("original-directory");
+        fs::rename(selected, &saved).unwrap();
+        fs::create_dir(selected).unwrap();
+        assert!(
+            matches!(undo(&fixture.details), Err(CommandError::HistoryMove(failure))
+            if failure.issue == crate::models::error::HistoryMoveIssue::Changed)
+        );
+        assert!(selected.is_dir());
+        assert!(saved.is_dir());
+        assert!(!fixture.original.parent().unwrap().exists());
+        fs::remove_dir(selected).unwrap();
+        fs::rename(&saved, selected).unwrap();
+        for _ in 0..2 {
+            undo(&fixture.details).unwrap();
+            assert!(fixture.original.parent().unwrap().join("child").is_dir());
+            assert!(!selected.parent().unwrap().exists());
+            super::super::history_move_redo::redo(&fixture.details).unwrap();
+            assert!(selected.is_dir());
+            assert!(!fixture.original.parent().unwrap().exists());
+        }
+    }
+
+    #[test]
+    fn move_directory_missing_proof_is_refused_before_any_effect() {
+        for source in [false, true] {
+            let mut fixture = empty_directory_move();
+            if source {
+                fixture.details.moved_directory_identities = None;
+            } else {
+                fixture.details.copied_directory_identities = None;
+            }
+            assert!(
+                matches!(undo(&fixture.details), Err(CommandError::HistoryMove(failure))
+                if failure.issue == crate::models::error::HistoryMoveIssue::Unverified)
+            );
+            assert!(fixture.destination.parent().unwrap().is_dir());
+            assert!(!fixture.original.parent().unwrap().exists());
+        }
+    }
+
+    #[test]
+    fn move_directory_independent_source_arrival_is_preserved_before_undo() {
+        for after_plan in [false, true] {
+            let fixture = empty_directory_move();
+            let plan = after_plan.then(|| Plan::new(&fixture.details).unwrap());
+            let source = fixture.original.parent().unwrap();
+            fs::create_dir(source).unwrap();
+            fs::write(source.join("witness.txt"), b"independent").unwrap();
+            let error = if let Some(plan) = plan {
+                apply_plan(&NativeIo, plan).unwrap_err()
+            } else {
+                undo_with(&NativeIo, &fixture.details).unwrap_err()
+            };
+            assert!(
+                matches!(CommandError::from(error), CommandError::HistoryMove(failure)
+                if failure.issue == crate::models::error::HistoryMoveIssue::Changed)
+            );
+            assert_eq!(
+                fs::read(source.join("witness.txt")).unwrap(),
+                b"independent"
+            );
+            assert!(fixture.destination.parent().unwrap().is_dir());
+        }
+    }
+
+    #[test]
+    fn move_directory_replacement_after_planning_is_preserved_before_undo() {
+        let fixture = empty_directory_move();
+        let plan = Plan::new(&fixture.details).unwrap();
+        let selected = fixture.destination.parent().unwrap();
+        let saved = fixture.root.path().join("original-directory");
+        fs::rename(selected, &saved).unwrap();
+        fs::create_dir(selected).unwrap();
+        let error = apply_plan(&NativeIo, plan).unwrap_err();
+        assert!(
+            matches!(CommandError::from(error), CommandError::HistoryIdentity(failure)
+            if failure.issue == crate::models::error::HistoryIdentityIssue::Changed)
+        );
+        assert!(selected.is_dir());
+        assert!(saved.is_dir());
+        assert!(!fixture.original.parent().unwrap().exists());
+    }
+
+    #[test]
+    fn move_directory_restored_source_replacement_is_preserved_before_redo() {
+        let fixture = empty_directory_move();
+        undo(&fixture.details).unwrap();
+        let source = fixture.original.parent().unwrap();
+        let saved = fixture.root.path().join("original-source");
+        fs::rename(source, &saved).unwrap();
+        fs::create_dir(source).unwrap();
+        assert!(
+            matches!(super::super::history_move_redo::redo(&fixture.details),
+            Err(CommandError::HistoryMove(failure)) if failure.issue == crate::models::error::HistoryMoveIssue::Changed)
+        );
+        assert!(source.is_dir());
+        assert!(saved.join("child").is_dir());
+        assert!(
+            !fixture
+                .destination
+                .parent()
+                .unwrap()
+                .parent()
+                .unwrap()
+                .exists()
+        );
+        fs::remove_dir(source).unwrap();
+        fs::rename(saved, source).unwrap();
+        super::super::history_move_redo::redo(&fixture.details).unwrap();
+        undo(&fixture.details).unwrap();
+    }
+
+    #[test]
+    fn move_directory_undo_rollback_refreshes_proofs_for_retry() {
+        let fixture = empty_directory_move();
+        let child = fixture.destination.parent().unwrap();
+        let parent = child.parent().unwrap();
+        let ops = FaultIo {
+            remove: |path: &Path| {
+                if path == parent {
+                    assert!(!child.exists());
+                    return Err(io::Error::other("injected failure after child removal"));
+                }
+                Ok(())
+            },
+        };
+        assert!(undo_with(&ops, &fixture.details).is_err());
+        assert!(child.is_dir());
+        assert!(!fixture.original.parent().unwrap().exists());
+        undo(&fixture.details).unwrap();
+        super::super::history_move_redo::redo(&fixture.details).unwrap();
+        undo(&fixture.details).unwrap();
+    }
+
     struct Fixture {
         root: tempfile::TempDir,
         original: PathBuf,
@@ -884,6 +1123,7 @@ mod tests {
             fs::write(&partial, b"partial content").unwrap();
             let name = |path: &Path| path.to_string_lossy().into_owned();
             let details = TransactionDetails {
+                moved_directory_identities: None,
                 new_folder_identity: None,
                 moved_file_identities: Some(vec![(
                     name(&destination),
@@ -1069,6 +1309,22 @@ mod tests {
         }
         let mut fixture = Fixture::new();
         let arrival = fixture.root.path().join("new-empty");
+        fs::create_dir(&arrival).unwrap();
+        fixture
+            .details
+            .copied_directory_identities
+            .as_mut()
+            .unwrap()
+            .push((
+                arrival.to_string_lossy().into_owned(),
+                HistoryDirectoryIdentity::from_file(
+                    &platform()
+                        .hold_resolved_operation_directory(&fs::canonicalize(&arrival).unwrap())
+                        .unwrap(),
+                )
+                .unwrap(),
+            ));
+        fs::remove_dir(&arrival).unwrap();
         fixture
             .details
             .created_dirs
@@ -1535,6 +1791,16 @@ mod tests {
             failure.to_string_lossy().into_owned(),
             String::new(),
         )]);
+        fixture.details.moved_directory_identities = Some(
+            fixture
+                .details
+                .moved_dirs
+                .as_ref()
+                .unwrap()
+                .iter()
+                .map(|(path, _)| (path.clone(), HistoryDirectoryIdentity::vacant()))
+                .collect(),
+        );
         let error = undo_with(&CreateError(failure.clone()), &fixture.details).unwrap_err();
         assert_eq!(error.to_string(), "injected directory creation error");
         assert!(!failure.parent().unwrap().exists());

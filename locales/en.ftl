@@ -554,7 +554,7 @@ redo-new-folder-conflict = An item already exists at this location: { $detail }.
 redo-new-folder-parent-missing = The parent folder could not be found: { $detail }. Redo does not recreate parent folders.
 redo-new-folder-unverified = The history cannot redo this folder creation: { $detail }. No item was created.
 
-redo-move-changed = The file changed since the operation: { $detail }. Redo Move has stopped to preserve your files.
+redo-move-changed = The file or folder changed since the operation: { $detail }. Redo Move has stopped to preserve your files.
 redo-move-conflict = An item occupies the destination: { $detail }. Redo Move will not replace it.
 redo-move-unverified = This history cannot safely redo the move: { $detail }. Start the move again from the current files.
 redo-move-incomplete = The move stopped and some items could not return to their original locations. Files or folders have been kept for recovery: { $detail }. Check these locations before retrying.
@@ -564,5 +564,5 @@ preview-unavailable = This preview could not be loaded. Try opening the file dir
 preview-image-limit = This image exceeds the preview limits. The file remains accessible.
 preview-animation-static = Still preview: the animation exceeds the preview limits.
 
-undo-move-changed = Cannot undo this move: the file was replaced. It was preserved at its current location. { $detail }
-undo-move-unverified = Cannot safely undo this move: the file’s identity could not be verified. The file was preserved. { $detail }
+undo-move-changed = Cannot undo this move: the file or folder was replaced or recreated. It was preserved at its current location. { $detail }
+undo-move-unverified = Cannot safely undo this move: the file or folder’s identity could not be verified. It was preserved. { $detail }
