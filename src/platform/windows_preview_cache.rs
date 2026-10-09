@@ -62,6 +62,20 @@ pub(super) fn write(
     temporary: &Path,
     write: &mut dyn FnMut(&mut File) -> io::Result<()>,
 ) -> io::Result<()> {
+    write_with_policy(
+        path,
+        temporary,
+        write,
+        super::windows_preview_quota::Policy::default(),
+    )
+}
+
+fn write_with_policy(
+    path: &Path,
+    temporary: &Path,
+    write: &mut dyn FnMut(&mut File) -> io::Result<()>,
+    policy: super::windows_preview_quota::Policy,
+) -> io::Result<()> {
     let path = std::path::absolute(path)?;
     let temporary = std::path::absolute(temporary)?;
     if path == temporary || path.parent() != temporary.parent() {
@@ -107,6 +121,20 @@ pub(super) fn write(
     for directory in &held {
         ordinary_directory(directory)?;
     }
+    let destination = path
+        .file_name()
+        .ok_or_else(|| io::Error::other("Cache has no name"))?;
+    let _lease = if super::windows_preview_quota::recognized(destination) {
+        Some(super::windows_preview_quota::admit(
+            parent,
+            destination,
+            leaf,
+            &staged.file,
+            policy,
+        )?)
+    } else {
+        None
+    };
     super::windows_file_moves::rename_relative(&staged.file, parent, &path, true)?;
     staged.published = true;
     Ok(())
@@ -283,5 +311,269 @@ mod tests {
             assert_eq!(result.unwrap_err().kind(), io::ErrorKind::InvalidInput);
         }
         assert_eq!(fs::read_dir(root.path()).unwrap().count(), 0);
+    }
+
+    #[test]
+    fn persistent_cache_count_remains_at_most_4096() {
+        let root = tempfile::tempdir().unwrap();
+        for index in 0..4096 {
+            fs::write(root.path().join(format!("{index:064x}_small.png")), b"x").unwrap();
+        }
+        let destination = root.path().join(format!("{:064x}_small.png", 4096));
+        let temporary = root.path().join("incoming.tmp");
+        write(&destination, &temporary, &mut |file| {
+            file.write_all(b"incoming bytes")
+        })
+        .unwrap();
+        let entries = fs::read_dir(root.path())
+            .unwrap()
+            .filter(|entry| {
+                entry
+                    .as_ref()
+                    .unwrap()
+                    .path()
+                    .extension()
+                    .is_some_and(|extension| extension == "png")
+            })
+            .count();
+        assert!(entries <= 4096, "Preview disk cache kept {entries} entries");
+        assert_eq!(fs::read(destination).unwrap(), b"incoming bytes");
+    }
+
+    fn cache_path(root: &Path, index: u32) -> std::path::PathBuf {
+        root.join(format!("{index:064x}_small.png"))
+    }
+    fn quota(bytes: u64, entries: usize) -> super::super::windows_preview_quota::Policy {
+        super::super::windows_preview_quota::Policy {
+            bytes,
+            entries,
+            entry_bytes: bytes,
+            maintenance_time: std::time::Duration::from_secs(5),
+            ..Default::default()
+        }
+    }
+    fn seed(root: &Path, index: u32, bytes: &[u8], age: u64) {
+        let path = cache_path(root, index);
+        fs::write(&path, bytes).unwrap();
+        File::options()
+            .write(true)
+            .open(&path)
+            .unwrap()
+            .set_times(
+                fs::FileTimes::new()
+                    .set_modified(std::time::UNIX_EPOCH + std::time::Duration::from_secs(age)),
+            )
+            .unwrap();
+    }
+
+    #[test]
+    fn disk_quota_evicts_oldest_closed_entries_on_count_or_byte_pressure() {
+        for policy in [quota(100, 2), quota(8, 10)] {
+            let root = tempfile::tempdir().unwrap();
+            seed(root.path(), 1, b"1111", 100);
+            seed(root.path(), 2, b"2222", 200);
+            let destination = cache_path(root.path(), 3);
+            write_with_policy(
+                &destination,
+                &root.path().join("entry.tmp"),
+                &mut |file| file.write_all(b"3333"),
+                policy,
+            )
+            .unwrap();
+            assert!(!cache_path(root.path(), 1).exists());
+            assert_eq!(fs::read(cache_path(root.path(), 2)).unwrap(), b"2222");
+            assert_eq!(fs::read(destination).unwrap(), b"3333");
+        }
+    }
+
+    #[test]
+    fn disk_quota_skips_open_oldest_entry_and_evicts_the_next() {
+        let root = tempfile::tempdir().unwrap();
+        seed(root.path(), 1, b"1111", 100);
+        seed(root.path(), 2, b"2222", 200);
+        let reader = File::open(cache_path(root.path(), 1)).unwrap();
+        write_with_policy(
+            &cache_path(root.path(), 3),
+            &root.path().join("entry.tmp"),
+            &mut |file| file.write_all(b"3333"),
+            quota(8, 2),
+        )
+        .unwrap();
+        assert_eq!(fs::read(cache_path(root.path(), 1)).unwrap(), b"1111");
+        assert!(!cache_path(root.path(), 2).exists());
+        assert_eq!(fs::read(cache_path(root.path(), 3)).unwrap(), b"3333");
+        drop(reader);
+    }
+
+    #[test]
+    fn disk_quota_preserves_unknown_and_readonly_entries_when_full() {
+        let root = tempfile::tempdir().unwrap();
+        fs::write(root.path().join("user.png"), b"user witness").unwrap();
+        seed(root.path(), 1, b"1111", 100);
+        let mut permissions = fs::metadata(cache_path(root.path(), 1))
+            .unwrap()
+            .permissions();
+        permissions.set_readonly(true);
+        fs::set_permissions(cache_path(root.path(), 1), permissions.clone()).unwrap();
+        let result = write_with_policy(
+            &cache_path(root.path(), 2),
+            &root.path().join("entry.tmp"),
+            &mut |file| file.write_all(b"new"),
+            quota(100, 2),
+        );
+        assert!(result.is_err());
+        assert_eq!(
+            fs::read(root.path().join("user.png")).unwrap(),
+            b"user witness"
+        );
+        assert_eq!(fs::read(cache_path(root.path(), 1)).unwrap(), b"1111");
+        assert!(!cache_path(root.path(), 2).exists());
+        assert!(!root.path().join("entry.tmp").exists());
+        permissions.set_readonly(false);
+        fs::set_permissions(cache_path(root.path(), 1), permissions).unwrap();
+    }
+
+    #[test]
+    fn disk_quota_replacement_counts_the_destination_only_once() {
+        let root = tempfile::tempdir().unwrap();
+        seed(root.path(), 1, b"1111", 100);
+        seed(root.path(), 2, b"2222", 200);
+        write_with_policy(
+            &cache_path(root.path(), 1),
+            &root.path().join("entry.tmp"),
+            &mut |file| file.write_all(b"new1"),
+            quota(8, 2),
+        )
+        .unwrap();
+        assert_eq!(fs::read(cache_path(root.path(), 1)).unwrap(), b"new1");
+        assert_eq!(fs::read(cache_path(root.path(), 2)).unwrap(), b"2222");
+    }
+
+    #[test]
+    fn disk_quota_eviction_unlinks_cache_without_altering_an_external_hard_link() {
+        let root = tempfile::tempdir().unwrap();
+        let cache = root.path().join("cache");
+        fs::create_dir(&cache).unwrap();
+        let outside = root.path().join("outside");
+        fs::write(&outside, b"outside witness").unwrap();
+        fs::hard_link(&outside, cache_path(&cache, 1)).unwrap();
+        write_with_policy(
+            &cache_path(&cache, 2),
+            &cache.join("entry.tmp"),
+            &mut |file| file.write_all(b"new"),
+            quota(100, 1),
+        )
+        .unwrap();
+        assert!(!cache_path(&cache, 1).exists());
+        assert_eq!(fs::read(outside).unwrap(), b"outside witness");
+    }
+
+    #[test]
+    fn disk_quota_lock_contention_leaves_existing_cache_and_cleans_staging() {
+        let root = tempfile::tempdir().unwrap();
+        seed(root.path(), 1, b"1111", 100);
+        let lock = root.path().join(".preview-cache-lock");
+        fs::write(&lock, b"lease witness").unwrap();
+        let reader = File::open(&lock).unwrap();
+        let error = write_with_policy(
+            &cache_path(root.path(), 2),
+            &root.path().join("entry.tmp"),
+            &mut |file| file.write_all(b"new"),
+            quota(100, 2),
+        )
+        .unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::WouldBlock);
+        assert_eq!(fs::read(&lock).unwrap(), b"lease witness");
+        assert_eq!(fs::read(cache_path(root.path(), 1)).unwrap(), b"1111");
+        assert!(!root.path().join("entry.tmp").exists());
+        drop(reader);
+    }
+
+    #[test]
+    fn disk_quota_scan_and_time_limits_abort_without_eviction() {
+        for policy in [
+            super::super::windows_preview_quota::Policy {
+                scan_entries: 1,
+                ..quota(100, 2)
+            },
+            super::super::windows_preview_quota::Policy {
+                maintenance_time: std::time::Duration::ZERO,
+                ..quota(100, 2)
+            },
+        ] {
+            let root = tempfile::tempdir().unwrap();
+            seed(root.path(), 1, b"1111", 100);
+            let result = write_with_policy(
+                &cache_path(root.path(), 2),
+                &root.path().join("entry.tmp"),
+                &mut |file| file.write_all(b"new"),
+                policy,
+            );
+            assert!(result.is_err());
+            assert_eq!(fs::read(cache_path(root.path(), 1)).unwrap(), b"1111");
+            assert!(!cache_path(root.path(), 2).exists());
+            assert!(!root.path().join("entry.tmp").exists());
+        }
+    }
+
+    #[test]
+    fn disk_quota_rejects_an_oversized_entry_without_evicting() {
+        let root = tempfile::tempdir().unwrap();
+        seed(root.path(), 1, b"1111", 100);
+        let mut policy = quota(100, 1);
+        policy.entry_bytes = 4;
+        let result = write_with_policy(
+            &cache_path(root.path(), 2),
+            &root.path().join("entry.tmp"),
+            &mut |file| file.write_all(b"12345"),
+            policy,
+        );
+        assert!(result.is_err());
+        assert_eq!(fs::read(cache_path(root.path(), 1)).unwrap(), b"1111");
+        assert!(!cache_path(root.path(), 2).exists());
+        assert!(!root.path().join("entry.tmp").exists());
+    }
+
+    #[test]
+    fn disk_quota_prefers_closed_recognized_staging_over_completed_previews() {
+        let root = tempfile::tempdir().unwrap();
+        seed(root.path(), 1, b"1111", 100);
+        let abandoned = root.path().join(format!("{:064x}_small.123.7.tmp", 2));
+        fs::write(&abandoned, b"abandoned bytes").unwrap();
+        write_with_policy(
+            &cache_path(root.path(), 3),
+            &root.path().join("entry.tmp"),
+            &mut |file| file.write_all(b"new"),
+            quota(100, 2),
+        )
+        .unwrap();
+        assert!(!abandoned.exists());
+        assert_eq!(fs::read(cache_path(root.path(), 1)).unwrap(), b"1111");
+        assert_eq!(fs::read(cache_path(root.path(), 3)).unwrap(), b"new");
+    }
+
+    #[test]
+    fn disk_quota_preserves_active_recognized_staging() {
+        let root = tempfile::tempdir().unwrap();
+        seed(root.path(), 1, b"1111", 100);
+        let active = root.path().join(format!("{:064x}.123.7.tmp", 2));
+        let mut writer = File::options()
+            .read(true)
+            .write(true)
+            .create_new(true)
+            .open(&active)
+            .unwrap();
+        writer.write_all(b"active bytes").unwrap();
+        write_with_policy(
+            &cache_path(root.path(), 3),
+            &root.path().join("entry.tmp"),
+            &mut |file| file.write_all(b"new"),
+            quota(100, 2),
+        )
+        .unwrap();
+        assert_eq!(fs::read(&active).unwrap(), b"active bytes");
+        assert!(!cache_path(root.path(), 1).exists());
+        assert_eq!(fs::read(cache_path(root.path(), 3)).unwrap(), b"new");
+        drop(writer);
     }
 }

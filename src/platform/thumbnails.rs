@@ -542,6 +542,25 @@ mod thumbnail_cache_write_tests {
         fs::remove_dir(&cache).unwrap();
         assert!(result.is_err(), "Cache read followed a junction");
     }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn occupied_disk_quota_lease_keeps_the_generated_thumbnail_usable() {
+        let root = tempfile::tempdir().unwrap();
+        let lease = root.path().join(".preview-cache-lock");
+        fs::write(&lease, b"lease witness").unwrap();
+        let reader = fs::File::open(&lease).unwrap();
+        let destination = root.path().join(format!("{:064x}.jpg", 1));
+        let expected = generated_image();
+        assert_eq!(
+            cached_thumbnail_in(&destination, || Ok(expected.clone())).unwrap(),
+            expected
+        );
+        assert!(!destination.exists());
+        assert_eq!(fs::read(&lease).unwrap(), b"lease witness");
+        assert_eq!(fs::read_dir(root.path()).unwrap().count(), 1);
+        drop(reader);
+    }
 }
 
 pub fn get_thumbnail_raw(path: String) -> Result<RgbaImage, CommandError> {

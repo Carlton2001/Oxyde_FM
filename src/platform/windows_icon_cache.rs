@@ -439,4 +439,23 @@ mod tests {
         assert_eq!(fs::read_dir(outside).unwrap().count(), 1);
         assert_eq!(memory.lock().unwrap().get("entry").unwrap(), expected);
     }
+
+    #[test]
+    fn occupied_disk_quota_lease_keeps_the_generated_icon_usable_in_memory() {
+        let root = tempfile::tempdir().unwrap();
+        let lease = root.path().join(".preview-cache-lock");
+        fs::write(&lease, b"lease witness").unwrap();
+        let reader = fs::File::open(&lease).unwrap();
+        let key = format!("{:064x}_small", 1);
+        let memory = Mutex::new(IconCache::default());
+        let expected = png(32, 32);
+        let output =
+            cached_or_generate(&memory, Some(root.path()), &key, || Ok(expected.clone())).unwrap();
+        assert_eq!(output, expected);
+        assert_eq!(memory.lock().unwrap().get(&key).unwrap(), expected);
+        assert!(!root.path().join(format!("{key}.png")).exists());
+        assert_eq!(fs::read(&lease).unwrap(), b"lease witness");
+        assert_eq!(fs::read_dir(root.path()).unwrap().count(), 1);
+        drop(reader);
+    }
 }
