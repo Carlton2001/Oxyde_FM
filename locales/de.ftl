@@ -865,3 +865,5 @@ redo-move-changed = Die Datei wurde seit dem Vorgang geändert: { $detail }. Die
 redo-move-conflict = Am Ziel befindet sich bereits ein Element: { $detail }. Die Wiederholung des Verschiebens ersetzt es nicht.
 redo-move-unverified = Mit diesem Verlauf lässt sich das Verschieben nicht sicher wiederholen: { $detail }. Starten Sie das Verschieben mit den aktuellen Dateien erneut.
 redo-move-incomplete = Das Verschieben wurde angehalten und einige Elemente konnten nicht an ihren ursprünglichen Ort zurückkehren. Dateien oder Ordner wurden zur Wiederherstellung behalten: { $detail }. Prüfen Sie diese Orte vor einem erneuten Versuch.
+
+undo-recovery-incomplete = Das Rückgängigmachen wurde angehalten und einige Elemente konnten nicht an ihren ursprünglichen Ort zurückkehren. Dateien oder Ordner wurden zur Wiederherstellung behalten. Prüfen Sie diese Orte vor einem erneuten Versuch: { $detail }.

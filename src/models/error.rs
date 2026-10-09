@@ -1,5 +1,17 @@
 use std::fmt;
 
+#[derive(Clone, Debug)]
+pub struct HistoryUndoRecoveryFailure {
+    pub locations: String,
+    pub technical_detail: String,
+}
+impl fmt::Display for HistoryUndoRecoveryFailure {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.technical_detail)
+    }
+}
+impl std::error::Error for HistoryUndoRecoveryFailure {}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum HistoryMoveIssue {
     Changed,
@@ -183,6 +195,7 @@ pub enum CommandError {
     HistoryIdentity(HistoryIdentityFailure),
     NewFolderHistory(NewFolderHistoryFailure),
     HistoryMove(HistoryMoveFailure),
+    HistoryUndoRecovery(HistoryUndoRecoveryFailure),
     TrashError(String),
     TrashFull(String),
     Other(String),
@@ -204,6 +217,7 @@ impl fmt::Display for CommandError {
             CommandError::HistoryIdentity(failure) => failure.fmt(f),
             CommandError::NewFolderHistory(failure) => failure.fmt(f),
             CommandError::HistoryMove(failure) => failure.fmt(f),
+            CommandError::HistoryUndoRecovery(failure) => failure.fmt(f),
             CommandError::TrashError(msg) => write!(f, "Trash Error: {}", msg),
             CommandError::TrashFull(msg) => write!(f, "Trash Full: {}", msg),
             CommandError::Other(msg) => write!(f, "Error: {}", msg),
@@ -213,6 +227,13 @@ impl fmt::Display for CommandError {
 
 impl From<std::io::Error> for CommandError {
     fn from(err: std::io::Error) -> Self {
+        if let Some(failure) = err
+            .get_ref()
+            .and_then(|error| error.downcast_ref::<HistoryUndoRecoveryFailure>())
+        {
+            return Self::HistoryUndoRecovery(failure.clone());
+        }
+
         if let Some(failure) = err
             .get_ref()
             .and_then(|error| error.downcast_ref::<HistoryMoveFailure>())

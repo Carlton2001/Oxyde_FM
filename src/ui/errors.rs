@@ -2,6 +2,10 @@ use crate::ui::i18n::Message;
 use oxyde_lib::models::CommandError;
 
 pub fn undo_failure(error: &CommandError) -> (Message, String) {
+    if let CommandError::HistoryUndoRecovery(failure) = error {
+        return (Message::UndoRecoveryIncomplete, failure.locations.clone());
+    }
+
     if let CommandError::NewFolderHistory(failure) = error {
         use oxyde_lib::models::error::NewFolderHistoryIssue as Issue;
         let message = match failure.issue {
@@ -102,6 +106,29 @@ pub fn rename_message(error: &CommandError) -> Message {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn undo_recovery_error_translates_locations_without_exposing_technical_details() {
+        use crate::ui::i18n::{I18n, Language};
+        use fluent_bundle::FluentArgs;
+        use oxyde_lib::models::error::HistoryUndoRecoveryFailure;
+        let locations = "C:\\Données_日本語\\{ $detail }\nD:\\Récupération\\output";
+        let error = CommandError::from(std::io::Error::other(HistoryUndoRecoveryFailure {
+            locations: locations.into(),
+            technical_detail: "technical reason hidden from UI".into(),
+        }));
+        let (message, detail) = undo_failure(&error);
+        assert_eq!(message, Message::UndoRecoveryIncomplete);
+        assert_eq!(detail, locations);
+        for language in Language::ALL {
+            let mut args = FluentArgs::new();
+            args.set("detail", detail.as_str());
+            let rendered = I18n::for_language(language).text_with_args(message, &args);
+            assert!(rendered.contains(locations), "{language:?}: {rendered}");
+            assert!(!rendered.contains(message.key()));
+            assert!(!rendered.contains("technical reason hidden from UI"));
+        }
+    }
+
     #[test]
     fn redo_move_errors_are_translated_and_keep_literal_paths_in_all_languages() {
         use crate::ui::i18n::{I18n, Language};

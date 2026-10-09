@@ -865,3 +865,5 @@ redo-move-changed = El archivo ha cambiado desde la operación: { $detail }. Se 
 redo-move-conflict = Un elemento ocupa el destino: { $detail }. Rehacer el movimiento no lo reemplaza.
 redo-move-unverified = Este historial no permite rehacer el movimiento de forma segura: { $detail }. Inicie el movimiento de nuevo desde los archivos actuales.
 redo-move-incomplete = El movimiento se detuvo y algunos elementos no pudieron volver a su ubicación original. Se han conservado archivos o carpetas para su recuperación: { $detail }. Compruebe estas ubicaciones antes de volver a intentarlo.
+
+undo-recovery-incomplete = Se ha detenido la acción de deshacer y algunos elementos no pudieron volver a su ubicación original. Se han conservado archivos o carpetas para su recuperación. Compruebe estas ubicaciones antes de volver a intentarlo: { $detail }.

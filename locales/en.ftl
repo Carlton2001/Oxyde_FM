@@ -558,3 +558,5 @@ redo-move-changed = The file changed since the operation: { $detail }. Redo Move
 redo-move-conflict = An item occupies the destination: { $detail }. Redo Move will not replace it.
 redo-move-unverified = This history cannot safely redo the move: { $detail }. Start the move again from the current files.
 redo-move-incomplete = The move stopped and some items could not return to their original locations. Files or folders have been kept for recovery: { $detail }. Check these locations before retrying.
+
+undo-recovery-incomplete = Undo stopped and some items could not return to their original locations. Files or folders have been kept for recovery. Check these locations before retrying: { $detail }.

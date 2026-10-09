@@ -564,3 +564,5 @@ redo-move-changed = Le fichier a changé depuis l’opération : { $detail }. R�
 redo-move-conflict = Un élément occupe la destination : { $detail }. Rétablir le déplacement ne le remplace pas.
 redo-move-unverified = Cet historique ne permet pas de rétablir le déplacement en toute sécurité : { $detail }. Relancez le déplacement depuis les fichiers actuels.
 redo-move-incomplete = Le déplacement a été interrompu et certains éléments n’ont pas pu revenir à leur emplacement initial. Des fichiers ou dossiers sont conservés pour récupération : { $detail }. Vérifiez ces emplacements avant de réessayer.
+
+undo-recovery-incomplete = L’annulation a été interrompue et certains éléments n’ont pas pu revenir à leur emplacement initial. Des fichiers ou dossiers ont été conservés pour récupération. Vérifiez ces emplacements avant de réessayer : { $detail }.

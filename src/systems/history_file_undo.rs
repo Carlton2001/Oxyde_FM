@@ -274,6 +274,7 @@ struct Journal {
     directories: super::history_directories::Directories,
     discarded: Vec<(PathBuf, String, Option<HistoryFileIdentity>)>,
     finished: bool,
+    recovery_locations: Vec<PathBuf>,
 }
 impl Journal {
     fn ensure_dir(&mut self, ops: &impl UndoIo, path: &Path) -> io::Result<()> {
@@ -363,6 +364,11 @@ impl Journal {
         for (path, pin) in self.staging.drain(..) {
             if let Err(error) = self.directories.clean_stage(&path, pin) {
                 if error.kind() != ErrorKind::NotFound {
+                    self.recovery_locations.push(
+                        self.directories
+                            .resolved(&path)
+                            .unwrap_or_else(|_| path.clone()),
+                    );
                     errors.push(format!("staging retained at {}: {error}", path.display()));
                 }
             }
@@ -371,10 +377,19 @@ impl Journal {
     }
     fn rollback(&mut self) -> Vec<String> {
         let mut errors = Vec::new();
+        let mut blocked_parents: Vec<PathBuf> = Vec::new();
         while let Some(effect) = self.effects.pop() {
             let (path, result) = match effect {
                 Effect::Move(effect) => {
                     let result = (|| {
+                        if blocked_parents
+                            .iter()
+                            .any(|parent| effect.from.starts_with(parent))
+                        {
+                            return Err(io::Error::other(
+                                "Undo parent could not be restored; file retained for recovery",
+                            ));
+                        }
                         let source = self.directories.file_parents(&effect.to)?;
                         let destination = self.directories.file_parents(&effect.from)?;
                         NativeIo.move_file(
@@ -405,16 +420,32 @@ impl Journal {
                     hidden,
                 } => {
                     let result = (|| {
+                        if blocked_parents
+                            .iter()
+                            .any(|parent| path.starts_with(parent))
+                        {
+                            return Err(io::Error::other(
+                                "Undo ancestor could not be restored; replacement preserved",
+                            ));
+                        }
                         let directory = self.directories.create(&path, hidden)?;
                         if let Some(expected) = self.directory_identities.get(&path) {
                             expected.refresh_from_file(directory)?;
                         }
                         platform().restore_journal_directory(directory, &path, permissions, hidden)
                     })();
+                    if result.is_err() {
+                        blocked_parents.push(path.clone());
+                    }
                     (path, result)
                 }
             };
             if let Err(error) = result {
+                self.recovery_locations.push(
+                    self.directories
+                        .resolved(&path)
+                        .unwrap_or_else(|_| path.clone()),
+                );
                 errors.push(format!("{}: {error}", path.display()));
             }
         }
@@ -509,9 +540,22 @@ fn apply_plan(ops: &impl UndoIo, plan: Plan) -> io::Result<()> {
         return if errors.is_empty() {
             Err(error)
         } else {
+            journal.recovery_locations.sort();
+            journal.recovery_locations.dedup();
+            let locations = journal
+                .recovery_locations
+                .iter()
+                .map(|path| path.to_string_lossy().into_owned())
+                .collect::<Vec<_>>()
+                .join("\n");
+            let technical_detail = format!("{error}; rollback incomplete: {}", errors.join("; "));
+            log::error!("Undo recovery incomplete: {technical_detail}");
             Err(io::Error::new(
                 error.kind(),
-                format!("{error}; rollback incomplete: {}", errors.join("; ")),
+                crate::models::error::HistoryUndoRecoveryFailure {
+                    locations,
+                    technical_detail,
+                },
             ))
         };
     }
@@ -839,6 +883,245 @@ mod tests {
     }
 
     #[cfg(target_os = "windows")]
+    fn exercise_undo_restoration_replacement(copy: bool) {
+        let fixture = Fixture::new();
+        let selected = fixture.destination.parent().unwrap().to_path_buf();
+        let parent = selected.parent().unwrap().to_path_buf();
+        let ops = FaultIo {
+            remove: |path: &Path| {
+                if path == parent {
+                    assert!(!selected.exists());
+                    fs::create_dir(&selected)?;
+                    fs::write(selected.join("independent.txt"), b"independent contents")?;
+                    return Err(io::Error::other("injected restoration conflict"));
+                }
+                Ok(())
+            },
+        };
+        let result = if copy {
+            apply_plan(&ops, Plan::copy(&fixture.details).unwrap())
+        } else {
+            undo_with(&ops, &fixture.details)
+        };
+        let error = result.unwrap_err();
+        let failure = error
+            .get_ref()
+            .unwrap()
+            .downcast_ref::<crate::models::error::HistoryUndoRecoveryFailure>()
+            .unwrap();
+        assert!(
+            failure
+                .technical_detail
+                .contains("injected restoration conflict")
+        );
+        let locations: Vec<_> = failure
+            .locations
+            .lines()
+            .map(|path| fs::canonicalize(path).unwrap())
+            .collect();
+        assert!(
+            locations.contains(&fs::canonicalize(&selected).unwrap()),
+            "{}",
+            failure.locations
+        );
+        for path in fixture.staging() {
+            assert!(
+                locations.contains(&fs::canonicalize(path).unwrap()),
+                "{}",
+                failure.locations
+            );
+        }
+        assert_eq!(
+            fs::read(selected.join("independent.txt")).unwrap(),
+            b"independent contents"
+        );
+        assert!(
+            !fixture.destination.exists(),
+            "Undo rollback recovered a file into an independent replacement directory"
+        );
+        assert!(
+            !fixture.partial.exists(),
+            "Undo rollback recovered partial output into a replacement directory"
+        );
+        let mut recovery: Vec<_> = fixture
+            .staging()
+            .iter()
+            .map(|path| fs::read(path.join("output")).unwrap())
+            .collect();
+        if copy {
+            assert!(!fixture.original.exists());
+            recovery.sort();
+            assert_eq!(
+                recovery,
+                vec![b"moved content".to_vec(), b"partial content".to_vec()]
+            );
+        } else {
+            assert_eq!(fs::read(&fixture.original).unwrap(), b"moved content");
+            assert_eq!(recovery, vec![b"partial content".to_vec()]);
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn copy_undo_rollback_preserves_a_replacement_after_directory_restoration_fails() {
+        exercise_undo_restoration_replacement(true);
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn move_undo_rollback_preserves_a_replacement_after_directory_restoration_fails() {
+        exercise_undo_restoration_replacement(false);
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn undo_rollback_blocks_descendants_of_an_unrestored_parent() {
+        let fixture = Fixture::new();
+        let selected = fixture.destination.parent().unwrap().to_path_buf();
+        let parent = selected.parent().unwrap().to_path_buf();
+        let trigger = fixture.root.path().join("last-empty");
+        fs::create_dir(&trigger).unwrap();
+        let mut plan = Plan::copy(&fixture.details).unwrap();
+        plan.remove_dirs.push(trigger.clone());
+        let ops = FaultIo {
+            remove: |path: &Path| {
+                if path == trigger {
+                    assert!(!parent.exists());
+                    fs::create_dir(&parent)?;
+                    fs::write(parent.join("independent.txt"), b"independent contents")?;
+                    return Err(io::Error::other("injected parent restoration conflict"));
+                }
+                Ok(())
+            },
+        };
+        let error = apply_plan(&ops, plan).unwrap_err();
+        assert!(matches!(
+            CommandError::from(error),
+            CommandError::HistoryUndoRecovery(_)
+        ));
+        assert_eq!(
+            fs::read(parent.join("independent.txt")).unwrap(),
+            b"independent contents"
+        );
+        assert!(
+            !selected.exists(),
+            "Rollback created descendants inside an independent replacement parent"
+        );
+        assert!(trigger.is_dir());
+        let mut contents: Vec<_> = fixture
+            .staging()
+            .iter()
+            .map(|path| fs::read(path.join("output")).unwrap())
+            .collect();
+        contents.sort();
+        assert_eq!(
+            contents,
+            vec![b"moved content".to_vec(), b"partial content".to_vec()]
+        );
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn undo_unwind_preserves_replacements_and_staged_recovery() {
+        let fixture = Fixture::new();
+        let selected = fixture.destination.parent().unwrap().to_path_buf();
+        let parent = selected.parent().unwrap().to_path_buf();
+        let ops = FaultIo {
+            remove: |path: &Path| {
+                if path == parent {
+                    assert!(!selected.exists());
+                    fs::create_dir(&selected).unwrap();
+                    fs::write(selected.join("independent.txt"), b"independent contents").unwrap();
+                    panic!("injected Undo panic after directory replacement");
+                }
+                Ok(())
+            },
+        };
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            apply_plan(&ops, Plan::copy(&fixture.details).unwrap())
+        }));
+        assert!(result.is_err());
+        assert_eq!(
+            fs::read(selected.join("independent.txt")).unwrap(),
+            b"independent contents"
+        );
+        assert!(!fixture.destination.exists());
+        assert!(!fixture.partial.exists());
+        let mut contents: Vec<_> = fixture
+            .staging()
+            .iter()
+            .map(|path| fs::read(path.join("output")).unwrap())
+            .collect();
+        contents.sort();
+        assert_eq!(
+            contents,
+            vec![b"moved content".to_vec(), b"partial content".to_vec()]
+        );
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn undo_rollback_restores_files_outside_a_blocked_parent() {
+        let mut fixture = Fixture::new();
+        let safe = fixture.root.path().join("safe.txt");
+        fs::write(&safe, b"safe contents").unwrap();
+        let name = safe.to_string_lossy().into_owned();
+        fixture
+            .details
+            .created_files
+            .as_mut()
+            .unwrap()
+            .push(name.clone());
+        fixture.details.copied_file_hashes.as_mut().unwrap().push((
+            name.clone(),
+            blake3::hash(b"safe contents").to_hex().to_string(),
+        ));
+        fixture
+            .details
+            .copied_file_identities
+            .as_mut()
+            .unwrap()
+            .push((
+                name,
+                HistoryFileIdentity::from_file(&fs::File::open(&safe).unwrap()).unwrap(),
+            ));
+        let selected = fixture.destination.parent().unwrap().to_path_buf();
+        let parent = selected.parent().unwrap().to_path_buf();
+        let ops = FaultIo {
+            remove: |path: &Path| {
+                if path == parent {
+                    fs::create_dir(&selected)?;
+                    fs::write(selected.join("independent.txt"), b"independent contents")?;
+                    return Err(io::Error::other("injected isolated restoration conflict"));
+                }
+                Ok(())
+            },
+        };
+        let error = apply_plan(&ops, Plan::copy(&fixture.details).unwrap()).unwrap_err();
+        assert!(matches!(
+            CommandError::from(error),
+            CommandError::HistoryUndoRecovery(_)
+        ));
+        assert_eq!(fs::read(&safe).unwrap(), b"safe contents");
+        assert_eq!(
+            fs::read(selected.join("independent.txt")).unwrap(),
+            b"independent contents"
+        );
+        assert!(!fixture.destination.exists());
+        assert!(!fixture.partial.exists());
+        let mut contents: Vec<_> = fixture
+            .staging()
+            .iter()
+            .map(|path| fs::read(path.join("output")).unwrap())
+            .collect();
+        contents.sort();
+        assert_eq!(
+            contents,
+            vec![b"moved content".to_vec(), b"partial content".to_vec()]
+        );
+    }
+
+    #[cfg(target_os = "windows")]
     #[test]
     fn copy_undo_retains_recovery_without_writing_through_a_new_junction() {
         use crate::platform::windows_reparse_tests::{Retarget, junction};
@@ -1080,8 +1363,8 @@ mod tests {
             "{error}"
         );
         assert_eq!(fs::read(&fixture.partial).unwrap(), b"foreign content");
-        assert_eq!(fs::read(&fixture.destination).unwrap(), b"moved content");
-        assert!(!fixture.original.exists());
+        assert!(!fixture.destination.exists());
+        assert_eq!(fs::read(&fixture.original).unwrap(), b"moved content");
         let staging = fixture.staging();
         assert_eq!(staging.len(), 1);
         assert_eq!(

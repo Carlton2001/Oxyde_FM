@@ -865,3 +865,5 @@ redo-move-changed = Il file è cambiato dopo l’operazione: { $detail }. Ripeti
 redo-move-conflict = Un elemento occupa la destinazione: { $detail }. Ripeti spostamento non lo sostituisce.
 redo-move-unverified = Questa cronologia non consente di ripetere lo spostamento in sicurezza: { $detail }. Avvia nuovamente lo spostamento dai file attuali.
 redo-move-incomplete = Lo spostamento è stato interrotto e alcuni elementi non sono tornati nella posizione originale. File o cartelle sono stati conservati per il recupero: { $detail }. Controlla queste posizioni prima di riprovare.
+
+undo-recovery-incomplete = L’annullamento è stato interrotto e alcuni elementi non sono tornati nella posizione originale. File o cartelle sono stati conservati per il recupero. Controlla queste posizioni prima di riprovare: { $detail }.
