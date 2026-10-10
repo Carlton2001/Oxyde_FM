@@ -388,10 +388,12 @@ impl ArchiveWorkspace {
         if let Err(error) = hook(Stage::AfterBackup, &archive, &backup).and_then(|()| self._parents.rename(&rebuilt, &destination, &archive, false)) {
             return match hook(Stage::BeforeRollback, &archive, &backup).and_then(|()| self._parents.rename(&original, &backup, &archive, false)) {
                 Ok(()) => Err(error.to_string()),
-                Err(restore) => Err(format!("{error}; original kept at {}: {restore}", backup.display())),
+                Err(restore) => { super::archive_recovery::retained(&backup); Err(format!("{error}; original kept at {}: {restore}", backup.display())) },
             };
         }
-        if let Err(error) = hook(Stage::BeforeBackupRemoval, &archive, &backup).and_then(|()| platform().remove_open_file(&original, &backup)) { log::warn!("Archive updated, original backup retained at {}: {error}", backup.display()); }
+        super::archive_recovery::published(&archive);
+        FileOperationManager::archive_publication_finished(op);
+        if let Err(error) = hook(Stage::BeforeBackupRemoval, &archive, &backup).and_then(|()| platform().remove_open_file(&original, &backup)) { super::archive_recovery::retained(&backup); log::warn!("Archive updated, original backup retained at {}: {error}", backup.display()); }
         Ok(())
     }
 }
@@ -472,6 +474,9 @@ pub(crate) fn mutation_operation(quality: &str) -> Arc<Mutex<FileOperation>> {
 }
 
 pub fn create_directory(path: &Path, quality: &str) -> Result<(), std::io::Error> {
+    super::archive_recovery::scope(|| create_directory_inner(path, quality))
+}
+fn create_directory_inner(path: &Path, quality: &str) -> Result<(), std::io::Error> {
     let Some((archive, internal)) = virtual_source(path) else {
         return std::fs::create_dir(path);
     };
@@ -492,6 +497,9 @@ pub fn create_directory(path: &Path, quality: &str) -> Result<(), std::io::Error
 /// Opens a file from an archive using a cache that survives the shell launch.
 /// A new extraction gets its own directory; applications can keep files open.
 pub fn external_file(path: &Path) -> Result<PathBuf, crate::models::CommandError> {
+    super::archive_recovery::scope(|| external_file_inner(path))
+}
+fn external_file_inner(path: &Path) -> Result<PathBuf, crate::models::CommandError> {
     let Some((archive, internal)) = virtual_source(path) else { return Ok(path.to_path_buf()); };
     let cache = super::archive_open_cache::CacheEntry::new()?;
     #[cfg(all(target_os = "windows", not(test)))]
@@ -596,6 +604,9 @@ fn prepare_selection_owned(archive: PathBuf, internal: &str, target: &mut super:
 }
 
 pub fn export_file(path: &Path, folder: &Path) -> Result<PathBuf, crate::models::CommandError> {
+    super::archive_recovery::scope(|| export_file_inner(path, folder))
+}
+fn export_file_inner(path: &Path, folder: &Path) -> Result<PathBuf, crate::models::CommandError> {
     use crate::models::CommandError;
     let (archive, internal) = virtual_source(path).ok_or_else(|| CommandError::ArchiveError("Archive file not found".into()))?;
     let _folder_guard = super::path_parents::HeldParents::new(&folder.join(".oxyde-extract"))?;

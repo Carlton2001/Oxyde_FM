@@ -402,6 +402,10 @@ pub enum Message {
     ArchiveListingMetadataLimit,
     ArchiveListingWorkerFailed,
     ArchiveSourceChanged,
+    ArchiveProcessingFailed,
+    ArchiveRecoveryCompleted,
+    ArchiveRecoveryStopped,
+    ArchiveRecoveryMore,
     TransferSourceChanged,
     TransferSourceUnverified,
     TrashRestoreAmbiguous,
@@ -893,6 +897,10 @@ impl Message {
             Self::ArchiveListingMetadataLimit => "archive-listing-metadata-limit",
             Self::ArchiveListingWorkerFailed => "archive-listing-worker-failed",
             Self::ArchiveSourceChanged => "archive-source-changed",
+            Self::ArchiveProcessingFailed => "archive-processing-failed",
+            Self::ArchiveRecoveryCompleted => "archive-recovery-completed",
+            Self::ArchiveRecoveryStopped => "archive-recovery-stopped",
+            Self::ArchiveRecoveryMore => "archive-recovery-more",
             Self::TransferSourceChanged => "transfer-source-changed",
             Self::TransferSourceUnverified => "transfer-source-unverified",
             Self::TrashRestoreAmbiguous => "trash-restore-ambiguous",
@@ -1526,6 +1534,10 @@ mod tests {
                 Message::ArchiveCacheExtract,
                 Message::ArchiveCacheExported,
                 Message::ArchiveLimitBytes,
+                Message::ArchiveProcessingFailed,
+                Message::ArchiveRecoveryCompleted,
+                Message::ArchiveRecoveryStopped,
+                Message::ArchiveRecoveryMore,
                 Message::ArchiveLimitSourceBytes,
                 Message::ArchiveLimitEncodedBytes,
                 Message::ArchiveLimitEntries,
@@ -1687,6 +1699,7 @@ mod tests {
             args.set("duration", "1.2 s");
             args.set("speed", "42 Mo/s");
             args.set("limit", "256 Mo");
+            args.set("locations", "C:/école/récupération");
             for message in messages {
                 let pattern = i18n
                     .active

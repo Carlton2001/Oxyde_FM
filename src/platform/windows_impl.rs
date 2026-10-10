@@ -22,6 +22,7 @@ impl Platform for WindowsPlatform {
     fn file_identity(&self, file: &std::fs::File) -> std::io::Result<super::FileIdentity> {
         super::windows_archive_source::identity(file)
     }
+    fn retained_file_path(&self, file: &std::fs::File, _fallback: &std::path::Path) -> std::io::Result<std::path::PathBuf> { super::windows_archive_source::path(file) }
     fn system_executable(&self, executable: super::SystemExecutable) -> std::io::Result<std::path::PathBuf> {
         super::windows_executables::resolve(executable)
     }

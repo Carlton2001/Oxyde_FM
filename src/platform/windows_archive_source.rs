@@ -15,6 +15,16 @@ fn io_error(error: windows::core::Error) -> io::Error {
     io::Error::from_raw_os_error((error.code().0 as u32 & 0xffff) as i32)
 }
 
+pub(super) fn path(file: &File) -> io::Result<std::path::PathBuf> {
+    use std::os::windows::ffi::OsStringExt;
+    use windows::Win32::Storage::FileSystem::{GetFinalPathNameByHandleW, GETFINALPATHNAMEBYHANDLE_FLAGS};
+    let mut buffer = vec![0u16; 32768];
+    let count = unsafe { GetFinalPathNameByHandleW(HANDLE(file.as_raw_handle()), &mut buffer, GETFINALPATHNAMEBYHANDLE_FLAGS(0)) };
+    if count == 0 { return Err(io::Error::last_os_error()); }
+    if count as usize >= buffer.len() { return Err(io::Error::other("Retained path exceeds native limit")); }
+    Ok(std::ffi::OsString::from_wide(&buffer[..count as usize]).into())
+}
+
 pub(super) fn open(path: &Path, allow_changes: bool) -> io::Result<File> {
     let share = if allow_changes {
         FILE_SHARE_READ.0 | FILE_SHARE_WRITE.0 | FILE_SHARE_DELETE.0

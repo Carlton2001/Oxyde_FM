@@ -101,10 +101,12 @@ impl Drop for Staging {
     fn drop(&mut self) {
         if let Err(error) = self.clean_owned_output() {
             log::warn!("Copy output preserved at {}: {error}", self.file.display());
+            super::archive_recovery::retained(&platform().retained_file_path(&self.directory, &self.path).unwrap_or(self.path.clone()));
         }
         if let Some(pin) = self.pin.take() {
             if let Err(error) = platform().remove_copy_staging(&self.directory, pin, &self.path) {
                 log::warn!("Cannot clean copy staging {}: {error}", self.path.display());
+                super::archive_recovery::retained(&platform().retained_file_path(&self.directory, &self.path).unwrap_or(self.path.clone()));
             }
         }
     }

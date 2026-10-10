@@ -190,6 +190,7 @@ pub async fn rename_item_controlled_with_identity(
     let old_pb = validate_path(&old_path)?;
     let new_pb = validate_path(&new_path)?;
     if let Some((archive, internal)) = crate::systems::archive_workspace::virtual_source(&old_pb) {
+        return crate::systems::archive_recovery::scope(|| {
         use crate::systems::archive_workspace::{
             mutation_operation, virtual_source, writable, ArchiveWorkspace, mutation_locks,
         };
@@ -217,10 +218,11 @@ pub async fn rename_item_controlled_with_identity(
             crate::systems::file_ops::FileOperationManager::archive_checkpoint(&operation)
                 .map_err(std::io::Error::other)
         })?;
-        return workspace
+        workspace
             .commit(&operation)
             .map(|_| None)
-            .map_err(CommandError::ArchiveError);
+            .map_err(CommandError::ArchiveError)
+        });
     }
     validate_rename_target(&old_pb, &new_pb)?;
     info!("Renaming {:?} to {:?}", old_pb, new_pb);

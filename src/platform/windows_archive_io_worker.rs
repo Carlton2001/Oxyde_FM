@@ -74,13 +74,29 @@ pub(super) fn run(
     handler: &mut dyn FnMut(Frame) -> io::Result<Frame>,
 ) -> io::Result<Duration> {
     let _slot = admission(&operation, controls)?;
+    let mut parent_failed = false;
     let stats = run_in(
         &crate::utils::archive_io_protocol::worker_executable()?,
         operation.clone(),
         controls,
-        handler,
+        &mut |frame| {
+            let result = handler(frame);
+            parent_failed |= result.is_err();
+            result
+        },
         deadline(&operation),
-    )?;
+    )
+    .map_err(|error| {
+        if (parent_failed && error.to_string() != invalid().to_string())
+            || error.kind() == io::ErrorKind::Interrupted
+            || ArchiveLimitFailure::from_message(&error.to_string()).is_some()
+            || ArchiveSourceConflict::from_message(&error.to_string())
+        {
+            return error;
+        }
+        log::warn!("Archive worker failure: {error:?}");
+        io::Error::other(crate::models::error::ArchiveProcessingFailure)
+    })?;
     log::debug!(
         "Archive worker peak committed memory: {} bytes",
         stats.peak_memory
@@ -149,7 +165,10 @@ pub(super) fn failure(frame: &Frame) -> io::Error {
     match cause {
         FailureKind::SourceChanged => io::Error::other(ArchiveSourceConflict),
         FailureKind::Cancelled => cancelled(),
-        FailureKind::Corrupt | FailureKind::Unsupported => io::Error::other(detail.clone()),
+        FailureKind::Corrupt | FailureKind::Unsupported | FailureKind::Worker => {
+            log::warn!("Archive codec failure: {detail:?}");
+            io::Error::other(crate::models::error::ArchiveProcessingFailure)
+        }
         _ => invalid(),
     }
 }
@@ -445,6 +464,30 @@ pub(super) fn supervise(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn worker_error_text_cannot_inject_limits_or_recovery_locations() {
+        let frame = Frame::new(Message::Failure {
+            cause: FailureKind::Corrupt,
+            limit: 0,
+            detail: format!(
+                "{}; {}",
+                ArchiveLimitFailure {
+                    kind: ArchiveLimitKind::Bytes,
+                    limit: 4
+                },
+                crate::models::error::ArchiveRecoveryFailure {
+                    completed: true,
+                    locations: vec!["C:/foreign".into()],
+                    omitted: 0,
+                    cause: String::new()
+                }
+            ),
+        });
+        let error = failure(&frame).to_string();
+        assert!(crate::models::error::ArchiveProcessingFailure::from_message(&error));
+        assert!(ArchiveLimitFailure::from_message(&error).is_none());
+        assert!(crate::models::error::ArchiveRecoveryFailure::from_message(&error).is_none());
+    }
     #[test]
     fn worker_limits_must_equal_admitted_thresholds_and_encode_bytes_have_their_own_cause() {
         use crate::utils::archive_io_protocol::{Format, Limits, Quality};

@@ -344,6 +344,15 @@ fn rebuild_refuses_foreign_workspace_objects_and_changed_original_bytes() {
             assert!(result.is_err());
             assert_eq!(fs::read(&archive).unwrap(), before);
             let root = roots.lock().unwrap()[0].clone();
+            let recovery = oxyde_lib::models::error::ArchiveRecoveryFailure::from_message(
+                &result.unwrap_err().to_string(),
+            )
+            .unwrap();
+            assert!(!recovery.completed);
+            assert!(recovery
+                .locations
+                .iter()
+                .any(|path| Path::new(path) == root));
             assert_eq!(
                 fs::read(root.join(if replace { "docs/original" } else { "foreign" })).unwrap(),
                 b"foreign"
@@ -419,6 +428,15 @@ fn native_rebuild_rolls_back_or_keeps_original_backup_on_publication_failure() {
             assert!(result.is_err());
             let backup = backup.lock().unwrap().clone().unwrap();
             if collision {
+                let recovery = oxyde_lib::models::error::ArchiveRecoveryFailure::from_message(
+                    &result.unwrap_err().to_string(),
+                )
+                .unwrap();
+                assert!(!recovery.completed);
+                assert!(recovery
+                    .locations
+                    .iter()
+                    .any(|path| Path::new(path) == backup));
                 assert_eq!(fs::read(&archive).unwrap(), b"foreign replacement");
                 assert_eq!(fs::read(&backup).unwrap(), before);
             } else {
@@ -500,6 +518,101 @@ fn replacing_a_workspace_file_uses_owned_deletion_and_exclusive_publication() {
         .unwrap();
         let mut result = zip::ZipArchive::new(fs::File::open(archive).unwrap()).unwrap();
         assert_eq!(result.by_name("file").unwrap().size(), 11);
+    });
+}
+
+#[test]
+fn a_completed_update_reports_a_retained_backup_instead_of_silent_success() {
+    use oxyde_lib::utils::archive_mutation_test::{with_hook_for_tests, Stage};
+    native(|| {
+        let temp = tempfile::tempdir().unwrap();
+        let archive = temp.path().join("cleanup.zip");
+        zip(&archive, "original", b"safe", false);
+        let before = fs::read(&archive).unwrap();
+        let backup = Arc::new(Mutex::new(None::<PathBuf>));
+        let observed = backup.clone();
+        let result = with_hook_for_tests(
+            move |stage, _, path| {
+                if stage == Stage::BeforeBackupRemoval {
+                    *observed.lock().unwrap() = Some(path.into());
+                    return Err(std::io::Error::other("injected cleanup failure"));
+                }
+                Ok(())
+            },
+            || {
+                oxyde_lib::commands::archive::create_archive_directory_with_quality(
+                    &archive.join("new"),
+                    "fast",
+                )
+            },
+        );
+        let report = oxyde_lib::models::error::ArchiveRecoveryFailure::from_message(
+            &result.unwrap_err().to_string(),
+        )
+        .unwrap();
+        assert!(report.completed);
+        let backup = backup.lock().unwrap().clone().unwrap();
+        assert!(report
+            .locations
+            .iter()
+            .any(|path| Path::new(path) == backup));
+        assert_eq!(fs::read(backup).unwrap(), before);
+        let mut result = zip::ZipArchive::new(fs::File::open(&archive).unwrap()).unwrap();
+        assert!(result.by_name("new/").unwrap().is_dir());
+    });
+}
+
+#[test]
+fn interrupted_transfer_reports_the_already_published_destination() {
+    use oxyde_lib::utils::archive_mutation_test::{with_hook_for_tests, Stage};
+    native(|| {
+        let temp = tempfile::tempdir().unwrap();
+        let source = temp.path().join("source.zip");
+        let target = temp.path().join("target.zip");
+        zip(&source, "chosen", b"safe", false);
+        FileOperationManager::perform_compress(
+            &operation(FileOpType::Compress),
+            vec![],
+            Some(target.clone()),
+        )
+        .unwrap();
+        let before = fs::read(&source).unwrap();
+        let op = operation(FileOpType::Move);
+        let cancel = op.lock().unwrap().cancel_flag.clone();
+        let result = with_hook_for_tests(
+            move |stage, _, archive| {
+                if stage == Stage::BeforeOriginalCheck
+                    && archive.file_name().is_some_and(|name| name == "source.zip")
+                {
+                    cancel.store(true, Ordering::Relaxed);
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::Interrupted,
+                        "Operation cancelled",
+                    ));
+                }
+                Ok(())
+            },
+            || {
+                FileOperationManager::perform_copy(
+                    &op,
+                    vec![source.join("chosen")],
+                    Some(target.clone()),
+                    true,
+                    None,
+                )
+            },
+        );
+        let report =
+            oxyde_lib::models::error::ArchiveRecoveryFailure::from_message(&result.unwrap_err())
+                .unwrap();
+        assert!(!report.completed);
+        assert!(report
+            .locations
+            .iter()
+            .any(|path| Path::new(path) == fs::canonicalize(&target).unwrap()));
+        assert_eq!(fs::read(source).unwrap(), before);
+        let mut result = zip::ZipArchive::new(fs::File::open(target).unwrap()).unwrap();
+        assert_eq!(result.by_name("chosen").unwrap().size(), 4);
     });
 }
 

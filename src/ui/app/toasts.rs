@@ -102,6 +102,7 @@ impl OxydeApp {
                             &toast.detail,
                         )
                         .is_some()
+                        || oxyde_lib::models::error::ArchiveRecoveryFailure::from_message(&toast.detail).is_some()
                 });
                 cx.notify();
             });

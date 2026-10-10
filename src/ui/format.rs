@@ -264,6 +264,22 @@ mod tests {
         }
     }
     #[test]
+    fn archive_recovery_and_processing_errors_are_localized_without_worker_details() {
+        use crate::ui::i18n::Message;
+        use oxyde_lib::models::error::{ArchiveRecoveryFailure, ArchiveProcessingFailure};
+        for language in [Language::French, Language::English, Language::German, Language::Spanish, Language::Italian] {
+            let i18n = crate::ui::i18n::I18n::for_language(language);
+            let path = "C:/école/{$literal}/archive-backup";
+            for completed in [false, true] {
+                let error = ArchiveRecoveryFailure { completed, locations: vec![path.into()], omitted: 2, cause: ArchiveProcessingFailure.to_string() };
+                let text = error_detail(&format!("Archive Error: {error}"), &i18n);
+                assert!(text.contains(path)); assert!(text.contains('2'));
+                assert!(!text.contains("[archive-recovery]") && !text.contains("[archive-worker-failed]") && !text.contains("archive-recovery-"));
+                assert!(text.contains(i18n.text(Message::ArchiveProcessingFailed).as_ref()));
+            }
+        }
+    }
+    #[test]
     fn numbers_sizes_and_boundaries_follow_language() {
         assert_eq!(
             format_number(u64::MAX, Language::English),
@@ -345,6 +361,18 @@ mod tests {
 pub fn error_detail(detail: &str, i18n: &crate::ui::i18n::I18n) -> String {
     use crate::ui::i18n::{FluentArgs, Message};
     use oxyde_lib::models::error::{ArchiveLimitFailure, ArchiveLimitKind};
+    if let Some(recovery) = oxyde_lib::models::error::ArchiveRecoveryFailure::from_message(detail) {
+        let mut args = FluentArgs::new();
+        args.set("locations", recovery.locations.iter().map(|path| display_paths(path)).collect::<Vec<_>>().join("\n"));
+        let mut text = i18n.text_with_args(if recovery.completed { Message::ArchiveRecoveryCompleted } else { Message::ArchiveRecoveryStopped }, &args).to_string();
+        let cause = &recovery.cause;
+        if ArchiveLimitFailure::from_message(cause).is_some() || oxyde_lib::models::error::ArchiveProcessingFailure::from_message(cause) || oxyde_lib::models::error::ArchiveSourceConflict::from_message(cause) || oxyde_lib::models::error::SourceSelectionFailure::from_message(cause).is_some() {
+            text.push('\n'); text.push_str(&error_detail(cause, i18n));
+        }
+        if recovery.omitted > 0 { args.set("count", format_number(recovery.omitted, i18n.language())); text.push('\n'); text.push_str(&i18n.text_with_args(Message::ArchiveRecoveryMore, &args)); }
+        return text;
+    }
+    if oxyde_lib::models::error::ArchiveProcessingFailure::from_message(detail) { return i18n.text(Message::ArchiveProcessingFailed).to_string(); }
     if let Some(failure) = oxyde_lib::models::error::ArchiveListingFailure::from_message(detail) {
         return match failure {
             oxyde_lib::models::error::ArchiveListingFailure::MetadataLimit => {

@@ -83,6 +83,7 @@ pub struct FileOperation {
     pub archive_qualities: HashMap<String, String>,
     pub copy_name_suffix: String,
     archive_path_mappings: Vec<(PathBuf, PathBuf)>,
+    archive_publication_finished: bool,
     #[cfg(all(target_os = "windows", not(test)))]
     archive_owned_roots: Vec<(PathBuf, std::sync::Weak<Mutex<super::archive_owned_tree::OwnedTree>>)>,
     #[cfg(all(target_os = "windows", not(test)))]
@@ -149,6 +150,7 @@ impl FileOperation {
             archive_qualities: self.archive_qualities.clone(),
             copy_name_suffix: self.copy_name_suffix.clone(),
             archive_path_mappings: self.archive_path_mappings.clone(),
+            archive_publication_finished: self.archive_publication_finished,
             #[cfg(all(target_os = "windows", not(test)))]
             archive_owned_roots: Vec::new(),
             #[cfg(all(target_os = "windows", not(test)))]
@@ -204,6 +206,7 @@ impl FileOperation {
             archive_qualities: HashMap::new(),
             copy_name_suffix: "Copie".into(),
             archive_path_mappings: Vec::new(),
+            archive_publication_finished: false,
             #[cfg(all(target_os = "windows", not(test)))]
             archive_owned_roots: Vec::new(),
             #[cfg(all(target_os = "windows", not(test)))]
@@ -640,9 +643,9 @@ impl FileOperationManager {
             .map(|started| started.elapsed().as_millis().min(u64::MAX as u128) as u64);
         // If it was cancelled, keep Cancelled status
         let finished_before_cancel = final_status == OpStatus::Completed
-            && locked.total_files > 0
-            && locked.processed_files == locked.total_files;
-        if locked.cancel_flag.load(Ordering::Relaxed) && !finished_before_cancel {
+            && (locked.archive_publication_finished || (locked.total_files > 0 && locked.processed_files == locked.total_files));
+        let recovery = matches!(&final_status, OpStatus::Error(detail) if crate::models::error::ArchiveRecoveryFailure::from_message(detail).is_some());
+        if locked.cancel_flag.load(Ordering::Relaxed) && !finished_before_cancel && !recovery {
             locked.status = OpStatus::Cancelled;
         } else {
             locked.status = final_status.clone();
@@ -1054,6 +1057,7 @@ impl FileOperationManager {
         path: &std::path::Path,
         _is_move: bool,
     ) {
+        { let mappings = operation.lock().unwrap().archive_path_mappings.clone(); if !mappings.is_empty() && !mappings.iter().any(|(root, _)| path.starts_with(root)) { super::archive_recovery::published(tree.path()); } }
         #[cfg(all(target_os = "windows", not(test)))]
         if let Err(error) = tree.retained_directory(path).and_then(|file| Self::capture_archive_creation(operation, path, &file, true)) {
             operation.lock().unwrap().archive_cleanup_error = Some(error.to_string());
@@ -1115,6 +1119,9 @@ impl FileOperationManager {
         is_move: bool,
         resolutions: Option<HashMap<String, ConflictAction>>,
     ) -> Result<(), String> {
+        super::archive_recovery::scope(|| Self::perform_copy_scoped(op, sources, destination, is_move, resolutions))
+    }
+    fn perform_copy_scoped(op: &Arc<Mutex<FileOperation>>, sources: Vec<PathBuf>, destination: Option<PathBuf>, is_move: bool, resolutions: Option<HashMap<String, ConflictAction>>) -> Result<(), String> {
         let trash_entries = platform().trash_transfer_entries(&sources)?;
         let virtual_effects = destination.as_ref().is_some_and(|path| {
             crate::systems::archive_workspace::virtual_destination(path).is_some()
@@ -1483,6 +1490,10 @@ impl FileOperationManager {
         };
 
         let mut handles = Vec::with_capacity(concurrency);
+        let recovery_target = {
+            let mappings = op.lock().unwrap().archive_path_mappings.clone();
+            (!mappings.is_empty() && !mappings.iter().any(|(root, _)| target_dir.starts_with(root))).then(|| target_dir.clone())
+        };
 
         let error_captured = Arc::new(Mutex::new(None));
 
@@ -1498,8 +1509,10 @@ impl FileOperationManager {
             let operation = op.clone();
             let destination_tree = destination_tree.clone();
             let deferred_moves = deferred_moves.clone();
+            let recovery_context = super::archive_recovery::context();
+            let recovery_target = recovery_target.clone();
 
-            let handle = std::thread::spawn(move || {
+            let handle = std::thread::spawn(move || super::archive_recovery::with_context(recovery_context, || {
                 let _priority_guard = RestoreNormalPriority;
                 let mut is_in_background_mode = false;
 
@@ -1652,6 +1665,7 @@ impl FileOperationManager {
                     })?;
                     // Capture from the published output's retained handle, before
                     // it is dropped or a pathname can be substituted.
+                    if let Some(target) = &recovery_target { super::archive_recovery::published(target); }
                     #[cfg(all(target_os = "windows", not(test)))]
                     Self::capture_archive_creation(&operation, dest, &output.file, false).map_err(|error| error.to_string())?;
                     let copied_identity =
@@ -1746,7 +1760,7 @@ impl FileOperationManager {
                 }
 
                 Ok::<(), String>(())
-            });
+            }));
             handles.push(handle);
         }
 
@@ -1893,6 +1907,9 @@ impl FileOperationManager {
 
     #[doc(hidden)]
     pub fn perform_delete(op: &Arc<Mutex<FileOperation>>, sources: Vec<PathBuf>) -> Result<(), String> {
+        super::archive_recovery::scope(|| Self::perform_delete_scoped(op, sources))
+    }
+    fn perform_delete_scoped(op: &Arc<Mutex<FileOperation>>, sources: Vec<PathBuf>) -> Result<(), String> {
         let (cancel_flag, pause_flag, turbo_flag) = {
             let locked = op.lock().unwrap();
             (
@@ -2262,6 +2279,7 @@ impl FileOperationManager {
             locked.speed_sample_at = Some(previous);
         }
     }
+    pub(crate) fn archive_publication_finished(op: &Arc<Mutex<FileOperation>>) { op.lock().unwrap().archive_publication_finished = true; }
 
     fn unique_archive_path(path: &Path) -> PathBuf {
         if !path.exists() {
@@ -2297,7 +2315,11 @@ impl FileOperationManager {
         sources: Vec<PathBuf>,
         destination: Option<PathBuf>,
     ) -> Result<(), String> {
-        Self::perform_compress_prepared(op, sources, destination, &mut || Ok(()))
+        super::archive_recovery::scope(|| {
+            Self::perform_compress_prepared(op, sources, destination, &mut || Ok(()))?;
+            if let Some(destination) = &op.lock().unwrap().destination { super::archive_recovery::published(destination); }
+            Ok(())
+        })
     }
 
     fn perform_compress_prepared(
@@ -2325,7 +2347,7 @@ impl FileOperationManager {
     }
     #[doc(hidden)]
     pub fn perform_compress_with_limits_for_tests(op: &Arc<Mutex<FileOperation>>, sources: Vec<PathBuf>, destination: Option<PathBuf>, limits: ArchiveLimits) -> Result<(), String> {
-        Self::perform_compress_impl(op, sources, destination, &mut || Ok(()), None, Some(limits), None, None, None)
+        super::archive_recovery::scope(|| Self::perform_compress_impl(op, sources, destination, &mut || Ok(()), None, Some(limits), None, None, None))
     }
     fn perform_compress_impl(
         op: &Arc<Mutex<FileOperation>>,
@@ -2522,6 +2544,7 @@ impl FileOperationManager {
             }
         }
         if let Some(completed) = completed { *completed = Some(output.file.try_clone().map_err(|e| e.to_string())?); }
+        Self::archive_publication_finished(op);
         if update_destination {
             let parent_unchanged = requested.parent().is_some_and(|parent| {
                 std::fs::canonicalize(parent)
@@ -2603,7 +2626,10 @@ impl FileOperationManager {
         sources: Vec<PathBuf>,
         destination: Option<PathBuf>,
     ) -> Result<(), String> {
-        Self::perform_extract_with_limits(op, sources, destination, ArchiveLimits::EXTRACTION)
+        super::archive_recovery::scope(|| {
+            Self::perform_extract_with_limits(op, sources, destination, ArchiveLimits::EXTRACTION)?;
+            Self::archive_publication_finished(op); Ok(())
+        })
     }
 
     fn perform_extract_with_limits(

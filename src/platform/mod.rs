@@ -103,6 +103,7 @@ pub trait Platform: Send + Sync {
     /// mode keeps the identity alive while permitting subsequent external edits.
     fn open_archive_source(&self, path: &std::path::Path, allow_changes: bool) -> std::io::Result<std::fs::File>;
     fn file_identity(&self, file: &std::fs::File) -> std::io::Result<FileIdentity>;
+    fn retained_file_path(&self, file: &std::fs::File, fallback: &std::path::Path) -> std::io::Result<std::path::PathBuf>;
     fn system_executable(&self, executable: SystemExecutable) -> std::io::Result<std::path::PathBuf>;
     /// Holds an ordinary directory without following a reparse point. On Windows
     /// the handle denies deletion/renaming until it is dropped.

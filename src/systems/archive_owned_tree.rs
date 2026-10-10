@@ -91,11 +91,20 @@ impl OwnedTree {
         match Self::created(&path, &file) {
             Ok(tree) => Ok(tree),
             Err(error) => {
-                let _ = platform().remove_empty_operation_directory(
-                    parents.directory(),
-                    &path,
-                    platform().file_identity(&file)?,
-                );
+                if platform()
+                    .remove_empty_operation_directory(
+                        parents.directory(),
+                        &path,
+                        platform().file_identity(&file)?,
+                    )
+                    .is_err()
+                {
+                    super::archive_recovery::retained(
+                        &platform()
+                            .retained_file_path(&file, &path)
+                            .unwrap_or(path.clone()),
+                    );
+                }
                 Err(error)
             }
         }
@@ -446,6 +455,7 @@ impl OwnedTree {
         self.tree.take();
     }
     pub fn keep(&mut self) {
+        super::archive_recovery::published(self.path());
         self.cleanup = false;
         self.release();
     }
@@ -457,6 +467,7 @@ impl Drop for OwnedTree {
         if !self.cleanup {
             return;
         }
+        let mut preserved = false;
         for (_, entry) in self.files.drain() {
             let result = (|| {
                 let file = platform().open_copied_file(&entry.parent, &entry.path)?;
@@ -467,6 +478,7 @@ impl Drop for OwnedTree {
             })();
             if let Err(error) = result {
                 if error.kind() != io::ErrorKind::NotFound {
+                    preserved = true;
                     log::warn!(
                         "Archive cleanup preserved {}: {error}",
                         entry.path.display()
@@ -483,6 +495,7 @@ impl Drop for OwnedTree {
                 entry.identity,
             ) {
                 if error.kind() != io::ErrorKind::NotFound {
+                    preserved = true;
                     log::warn!(
                         "Archive cleanup preserved {}: {error}",
                         entry.path.display()
@@ -496,13 +509,27 @@ impl Drop for OwnedTree {
                 self.path(),
                 self.root.identity,
             ) {
+                if error.kind() == io::ErrorKind::NotFound {
+                    preserved |= platform()
+                        .retained_file_path(&self.root.tracking, self.path())
+                        .is_ok_and(|path| path != self.path());
+                }
                 if error.kind() != io::ErrorKind::NotFound {
+                    preserved = true;
                     log::warn!(
                         "Archive recovery retained at {}: {error}",
                         self.path().display()
                     );
                 }
+            } else {
+                preserved = false;
             }
+        }
+        if preserved {
+            let path = platform()
+                .retained_file_path(&self.root.tracking, self.path())
+                .unwrap_or_else(|_| self.path().to_path_buf());
+            super::archive_recovery::retained(&path);
         }
     }
 }
@@ -511,6 +538,27 @@ impl Drop for OwnedTree {
 mod tests {
     use super::*;
     use std::io::Write;
+    #[test]
+    fn recovery_reports_the_current_name_of_a_retained_root() {
+        let temp = tempfile::tempdir().unwrap();
+        let moved = temp.path().join("moved");
+        let result = super::super::archive_recovery::scope::<(), String>(|| {
+            let mut tree = OwnedTree::temporary(temp.path()).unwrap();
+            let original = tree.path().to_path_buf();
+            tree.release();
+            std::fs::rename(original, &moved).unwrap();
+            drop(tree);
+            Ok(())
+        })
+        .unwrap_err();
+        let report = crate::models::error::ArchiveRecoveryFailure::from_message(&result).unwrap();
+        assert!(report.completed);
+        assert_eq!(
+            Path::new(&report.locations[0]),
+            std::fs::canonicalize(&moved).unwrap()
+        );
+        assert!(moved.is_dir());
+    }
     #[test]
     fn business_mutations_keep_creation_proofs_and_preserve_unknown_children() {
         let temp = tempfile::tempdir().unwrap();

@@ -283,6 +283,41 @@ impl fmt::Display for ArchiveSourceConflict {
 }
 impl std::error::Error for ArchiveSourceConflict {}
 
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ArchiveRecoveryFailure {
+    pub completed: bool,
+    pub locations: Vec<String>,
+    pub omitted: u64,
+    pub cause: String,
+}
+impl ArchiveRecoveryFailure {
+    pub const MARKER: &str = "Archive recovery [archive-recovery]: ";
+    pub fn from_message(message: &str) -> Option<Self> {
+        let (_, value) = message.split_once(Self::MARKER)?;
+        if value.len() > 2 * 1024 * 1024 { return None; }
+        let result: Self = serde_json::from_str(value).ok()?;
+        if result.locations.is_empty() || result.locations.len() > 8 || result.locations.iter().map(String::len).sum::<usize>() > 256 * 1024 || result.cause.len() > 16 * 1024 { return None; }
+        Some(result)
+    }
+}
+impl fmt::Display for ArchiveRecoveryFailure {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}{}", Self::MARKER, serde_json::to_string(self).map_err(|_| fmt::Error)?) }
+}
+impl std::error::Error for ArchiveRecoveryFailure {}
+impl From<ArchiveRecoveryFailure> for String { fn from(value: ArchiveRecoveryFailure) -> Self { value.to_string() } }
+impl From<ArchiveRecoveryFailure> for std::io::Error { fn from(value: ArchiveRecoveryFailure) -> Self { Self::other(value) } }
+impl From<ArchiveRecoveryFailure> for CommandError { fn from(value: ArchiveRecoveryFailure) -> Self { Self::ArchiveError(value.to_string()) } }
+
+#[derive(Clone, Copy, Debug)]
+pub struct ArchiveProcessingFailure;
+impl ArchiveProcessingFailure {
+    pub const MARKER: &str = "Archive processing failed [archive-worker-failed]";
+    pub fn from_message(message: &str) -> bool { message.contains(Self::MARKER) }
+}
+impl fmt::Display for ArchiveProcessingFailure { fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { f.write_str(Self::MARKER) } }
+impl std::error::Error for ArchiveProcessingFailure {}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ArchiveLimitKind {
     Bytes,

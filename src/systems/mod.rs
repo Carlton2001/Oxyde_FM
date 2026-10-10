@@ -1,4 +1,5 @@
 pub(crate) mod archive_workspace;
+pub(crate) mod archive_recovery;
 #[cfg(all(target_os = "windows", not(test)))]
 pub(crate) mod archive_io;
 #[cfg(all(target_os = "windows", not(test)))]
