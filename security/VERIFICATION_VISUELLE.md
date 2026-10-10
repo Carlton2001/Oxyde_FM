@@ -1,19 +1,21 @@
 # Vérification visuelle de sécurité — Windows
 
-## Reprise ciblée après ton retour — lots 66–67
+## Validation visuelle acquise — 10 octobre 2026, lots 66–67
 
-Ton retour valide sans anomalie signalée les aperçus, la navigation dans les archives, l'ouverture/extraction et les messages (points 1, 3, 4 et 6). **Seuls les points 2 et 5 sont à reprendre**, après les corrections du statut Shell et du retour à la ligne de l'avertissement. Aucun Computer Use ni contrôle visuel de ces deux corrections par l'agent.
+Ton retour « Tests OK » valide la reprise ciblée des points 2 et 5 après les corrections du statut Shell et du retour à la ligne de l'avertissement. Les aperçus, la navigation dans les archives, l'ouverture/extraction et les messages (points 1, 3, 4 et 6) étaient déjà validés sans anomalie signalée. **La vérification visuelle de cette passe est terminée.** Cette validation vient de l'utilisateur ; aucun Computer Use ni contrôle visuel par l'agent.
 
-Exécutable à utiliser : `C:\Users\Biluf\Documents\Projects\Oxyde-GPUI\target\debug\oxyde.exe`, après fermeture d'une ancienne instance. Nouveau jeu indépendant prêt :
+Exécutable préparé pour cette reprise : `C:\Users\Biluf\Documents\Projects\Oxyde-GPUI\target\debug\oxyde.exe`, après fermeture d'une ancienne instance. Jeu indépendant préparé :
 
 ```text
 C:\Users\Biluf\Documents\Projects\Oxyde-GPUI\target\security-visual-check-palyjsiu
 ```
 
+### Scénarios de référence de la reprise validée
+
 1. **Suppression et historique :** dans le sous-dossier de test `corbeille` (qui est un dossier ordinaire du jeu, pas la corbeille Windows), supprimer `Annuler école.txt` vers la corbeille Windows. L'opération doit réussir ; les vues source/corbeille doivent se mettre à jour sans F5. Utiliser Annuler, Rétablir puis Annuler : nom et contenu du fichier doivent être conservés. Refaire avec `Dossier école`. Supprimer uniquement `page.html`, sans sélectionner `page_files` : ce dossier compagnon et son contenu doivent rester présents ; Annuler restitue `page.html`. Ne pas vider la corbeille ni utiliser de documents personnels. Les anciennes suppressions effectuées par le binaire fautif ne reçoivent pas rétroactivement un historique ; la fixture neuve permet de vérifier une nouvelle action.
 2. **Infobulle des avertissements :** lancer la recherche avancée avec recherche dans les archives sur le nouveau jeu, puis survoler le compteur d'archives ignorées. Le chemin et l'explication doivent rester entièrement dans la bulle, sur plusieurs lignes si nécessaire. Vérifier aussi après réduction de la fenêtre ou augmentation de l'échelle d'interface, puis dans une autre langue ; remettre tes préférences habituelles ensuite. Une recherche de `note` permet de conserver des résultats normaux en présence de la ZIP corrompue/limitée.
 
-Les tests automatisés des callbacks et de l'historique utilisent seulement des renommages privés ; la vraie suppression/restauration et la présentation restent à confirmer ici. Validation finale : **782 tests réussis**, aucun échec, 17 tests préexistants ignorés non activés ; check et build sans avertissement. Détails au lot 67 de `AUDIT_SECURITE.md`. Les risques structurels ouverts dans l'audit restent distincts de ces deux régressions.
+Les tests automatisés des callbacks et de l'historique utilisent seulement des renommages privés ; le retour utilisateur confirme le fonctionnement visuel de cette reprise, sans détailler chaque variante de fenêtre, de langue ou de volume. Aucun nouvel essai n'est demandé pour cette passe. Validation automatisée de la borne : **782 tests réussis**, aucun échec, 17 tests préexistants ignorés non activés ; check et build sans avertissement. Détails au lot 67 de `AUDIT_SECURITE.md`. Les risques structurels ouverts dans l'audit restent distincts de ces deux régressions.
 
 ## Historique des protocoles et retours antérieurs
 
