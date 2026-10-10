@@ -2479,10 +2479,27 @@ impl FileOperationManager {
         destination: Option<PathBuf>,
         limits: ArchiveLimits,
     ) -> Result<(), String> {
+        Self::perform_extract_prepared(op, sources, destination, limits, &mut || Ok(()))
+    }
+
+    fn perform_extract_prepared(
+        op: &Arc<Mutex<FileOperation>>,
+        sources: Vec<PathBuf>,
+        destination: Option<PathBuf>,
+        limits: ArchiveLimits,
+        before_extract: &mut dyn FnMut() -> std::io::Result<()>,
+    ) -> Result<(), String> {
         let budget = ArchiveBudget::new(limits);
         let checkpoint = || Self::archive_checkpoint(op).map_err(std::io::Error::other);
         let source = sources.first().ok_or("Missing archive")?;
         let requested = destination.ok_or("Missing extraction destination")?;
+        budget.checkpoint(&checkpoint).map_err(|error| error.to_string())?;
+        let parents = super::path_parents::HeldParents::new(source).map_err(|error| error.to_string())?;
+        let source = parents.resolved_path(source).map_err(|error| error.to_string())?;
+        // Keep the selected object stable across preparation, provenance reads,
+        // pause/resume and the complete traversal. No later reopen by pathname.
+        let file = platform().open_archive_source(&source, false).map_err(|error| error.to_string())?;
+        before_extract().map_err(|error| error.to_string())?;
         let mut target = Self::unique_archive_path(&requested);
         loop {
             match std::fs::create_dir(&target) {
@@ -2505,7 +2522,7 @@ impl FileOperationManager {
         let extraction_root = crate::utils::archive_security::ExtractionRoot::new(&target)
             .map_err(|error| error.to_string())?;
         let provenance = platform()
-            .read_file_provenance(source)
+            .read_file_provenance(&source)
             .map_err(|error| error.to_string())?;
         {
             let mut locked = op.lock().unwrap();
@@ -2520,22 +2537,24 @@ impl FileOperationManager {
             .extension()
             .is_some_and(|ext| ext.eq_ignore_ascii_case("zip"))
         {
-            let file = std::fs::File::open(source).map_err(|error| error.to_string())?;
             let mut archive = zip::ZipArchive::new(file).map_err(|error| error.to_string())?;
             budget
                 .check_entry_count(archive.len())
                 .map_err(|error| error.to_string())?;
             let mut total_bytes = 0u64;
             for index in 0..archive.len() {
-                let entry = archive.by_index(index).map_err(|error| error.to_string())?;
                 budget
                     .checkpoint(&checkpoint)
                     .map_err(|error| error.to_string())?;
+                let entry = archive.by_index_raw(index).map_err(|error| error.to_string())?;
+                if entry.unix_mode().is_some_and(|mode| mode & 0o170000 == 0o120000) {
+                    return Err("Archive contains a symbolic link".into());
+                }
                 budget
                     .entry(entry.name(), if entry.is_dir() { 0 } else { entry.size() })
                     .map_err(|error| error.to_string())?;
                 total_bytes = total_bytes
-                    .checked_add(entry.size())
+                    .checked_add(if entry.is_dir() { 0 } else { entry.size() })
                     .ok_or("Archive size overflow")?;
             }
             {
@@ -2549,18 +2568,13 @@ impl FileOperationManager {
                     .checkpoint(&checkpoint)
                     .map_err(|error| error.to_string())?;
                 let mut entry = archive.by_index(index).map_err(|error| error.to_string())?;
-                if entry
-                    .unix_mode()
-                    .is_some_and(|mode| mode & 0o170000 == 0o120000)
-                {
-                    return Err("Archive contains a symbolic link".into());
-                }
                 let destination = extraction_root
                     .destination(entry.name(), entry.is_dir())
                     .map_err(|error| error.to_string())?;
                 let output = &destination.path;
                 op.lock().unwrap().current_file = Some(output.to_string_lossy().into_owned());
                 if !entry.is_dir() {
+                    let mut copied = 0u64;
                     let mut file = platform()
                         .create_archive_file(output)
                         .map_err(|error| error.to_string())?;
@@ -2578,7 +2592,11 @@ impl FileOperationManager {
                             .map_err(|error| error.to_string())?;
                         file.write_all(&buffer[..count])
                             .map_err(|error| error.to_string())?;
+                        copied += count as u64;
                         Self::archive_progress(op, count as u64);
+                    }
+                    if copied != entry.size() {
+                        return Err("Truncated ZIP member".into());
                     }
                     if let Some(data) = provenance.as_deref() {
                         platform()
@@ -2590,11 +2608,12 @@ impl FileOperationManager {
             }
         } else {
             Self::archive_checkpoint(op)?;
-            crate::commands::archive::extract_archive_with_limits(
-                source.to_string_lossy().into_owned(),
-                target.to_string_lossy().into_owned(),
+            crate::commands::archive::extract_open_archive_with_budget(
+                &source,
+                file,
+                &target.to_string_lossy(),
                 &checkpoint,
-                limits,
+                &budget,
             )
             .map_err(|error| error.to_string())?;
             let mut locked = op.lock().unwrap();
@@ -2834,6 +2853,88 @@ mod tests {
                 assert!(archive.is_file());
             }
         }
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn extraction_retains_source_and_provenance_through_parent_retargeting() {
+        use crate::platform::windows_reparse_tests::{junction, Retarget};
+        for extension in ["zip", "7z", "tar", "zst", "iso"] {
+            let temp = tempfile::tempdir().unwrap();
+            let chosen = temp.path().join("chosen");
+            let outside = temp.path().join("outside");
+            std::fs::create_dir(&chosen).unwrap();
+            std::fs::create_dir(&outside).unwrap();
+            let archive = chosen.join(format!("source.{extension}"));
+            let foreign = outside.join(format!("source.{extension}"));
+            if extension == "iso" {
+                crate::commands::archive::test_iso_image(&archive);
+                crate::commands::archive::test_iso_image(&foreign);
+            } else {
+                for (folder, content) in [(&chosen, &b"safe"[..]), (&outside, &b"evil"[..])] {
+                    let source = folder.join("selected.txt");
+                    std::fs::write(&source, content).unwrap();
+                    FileOperationManager::perform_compress(&operation(), vec![source], Some(folder.join(format!("source.{extension}")))).unwrap();
+                }
+            }
+            let original = std::fs::read(&archive).unwrap();
+            let foreign_bytes = std::fs::read(&foreign).unwrap();
+            let provenance = b"[ZoneTransfer]\r\nZoneId=3\r\n";
+            platform().write_file_provenance(&archive, provenance).unwrap();
+            let link = temp.path().join("link");
+            let template = temp.path().join("template");
+            junction(&link, &chosen);
+            junction(&template, &outside);
+            let retarget = Retarget::new(&link, &template);
+            let target = temp.path().join("output");
+            let op = operation();
+            let called = std::cell::Cell::new(false);
+            FileOperationManager::perform_extract_prepared(&op, vec![link.join(format!("source.{extension}"))], Some(target.clone()), ArchiveLimits::EXTRACTION, &mut || {
+                called.set(true);
+                assert!(std::fs::File::options().write(true).open(&archive).is_err());
+                assert!(std::fs::rename(&archive, chosen.join("moved.archive")).is_err());
+                retarget.apply();
+                Ok(())
+            }).unwrap();
+            assert!(called.get());
+            let output = target.join(if extension == "iso" { "ROOT.TXT" } else { "selected.txt" });
+            let expected = if extension == "iso" { &b"root"[..] } else { &b"safe"[..] };
+            assert_eq!(std::fs::read(&output).unwrap(), expected);
+            assert_eq!(platform().read_file_provenance(&output).unwrap().as_deref(), Some(&provenance[..]));
+            assert_eq!(std::fs::read(&archive).unwrap(), original);
+            assert_eq!(std::fs::read(&foreign).unwrap(), foreign_bytes);
+            assert!(std::fs::File::options().write(true).open(&archive).is_ok());
+            drop(retarget);
+            for path in [link, template] { std::fs::remove_dir(path).unwrap(); }
+        }
+    }
+
+    #[test]
+    fn extraction_source_errors_precede_destination_creation() {
+        let temp = tempfile::tempdir().unwrap();
+        let target = temp.path().join("output");
+        assert!(FileOperationManager::perform_extract(&operation(), vec![temp.path().join("missing.zip")], Some(target.clone())).is_err());
+        assert!(!target.exists());
+        assert_eq!(std::fs::read_dir(temp.path()).unwrap().count(), 0);
+    }
+
+    #[test]
+    fn zip_full_extraction_validates_late_entries_before_writing_early_files() {
+        let temp = tempfile::tempdir().unwrap();
+        let archive = temp.path().join("unsafe.zip");
+        let mut zip = zip::ZipWriter::new(std::fs::File::create(&archive).unwrap());
+        for name in ["early.txt", "file:stream"] {
+            zip.start_file(name, zip::write::SimpleFileOptions::default()).unwrap();
+            zip.write_all(b"safe").unwrap();
+        }
+        zip.finish().unwrap();
+        let target = tempfile::tempdir().unwrap();
+        let file = platform().open_archive_source(&archive, false).unwrap();
+        assert!(crate::commands::archive::extract_open_archive_with_budget(&archive, file, &target.path().to_string_lossy(), &|| Ok(()), &ArchiveBudget::new(ArchiveLimits::EXTRACTION)).is_err());
+        assert_eq!(std::fs::read_dir(target.path()).unwrap().count(), 0);
+        let output = temp.path().join("output");
+        assert!(FileOperationManager::perform_extract(&operation(), vec![archive], Some(output.clone())).is_err());
+        assert!(!output.exists());
     }
 
     #[test]

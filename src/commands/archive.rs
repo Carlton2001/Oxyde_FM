@@ -282,6 +282,7 @@ pub(crate) fn extract_archive_with_checkpoint(
     )
 }
 
+#[cfg(test)]
 pub(crate) fn extract_archive_with_limits(
     archive_path: String,
     target_dir: String,
@@ -291,7 +292,9 @@ pub(crate) fn extract_archive_with_limits(
     let budget = ArchiveBudget::new(limits);
     budget.checkpoint(checkpoint)?;
     let archive = validate_path(&archive_path)?;
-    let file = File::open(&archive)?;
+    let parents = crate::systems::path_parents::HeldParents::new(&archive)?;
+    let archive = parents.resolved_path(&archive)?;
+    let file = platform().open_archive_source(&archive, false)?;
     extract_open_archive_with_budget(&archive, file, &target_dir, checkpoint, &budget)
 }
 
@@ -325,8 +328,8 @@ pub(crate) fn extract_open_archive_with_budget(
             budget.check_entry_count(archive.len())?;
             for index in 0..archive.len() {
                 budget.checkpoint(checkpoint)?;
-                let mut entry = archive
-                    .by_index(index)
+                let entry = archive
+                    .by_index_raw(index)
                     .map_err(|e| CommandError::ArchiveError(e.to_string()))?;
                 if entry
                     .unix_mode()
@@ -337,10 +340,19 @@ pub(crate) fn extract_open_archive_with_budget(
                     ));
                 }
                 budget.entry(entry.name(), if entry.is_dir() { 0 } else { entry.size() })?;
+            }
+            for index in 0..archive.len() {
+                budget.checkpoint(checkpoint)?;
+                let mut entry = archive
+                    .by_index(index)
+                    .map_err(|e| CommandError::ArchiveError(e.to_string()))?;
                 let destination = root.destination(entry.name(), entry.is_dir())?;
                 if !entry.is_dir() {
                     let mut output = platform().create_archive_file(&destination.path)?;
-                    budget.copy(&mut entry, &mut output, checkpoint)?;
+                    let size = entry.size();
+                    if budget.copy(&mut entry, &mut output, checkpoint)? != size {
+                        return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "Truncated ZIP member").into());
+                    }
                     if let Some(data) = provenance.as_deref() {
                         platform().write_file_provenance(&destination.path, data)?;
                     }
