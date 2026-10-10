@@ -2,6 +2,8 @@
 
 Date de mise à jour : 10 octobre 2026.
 
+**Pour reprendre les points ouverts : lire [AUDIT_SECURITE_RELIQUAT.md](AUDIT_SECURITE_RELIQUAT.md).** Ce document court distingue priorités proposées, limites à cadrer et décisions déjà prises, avec des identifiants et critères de fin. Le présent audit conserve le bilan et les preuves historiques ; les anciennes mentions « encore à faire » ne remplacent pas l'état actuel du reliquat.
+
 Base examinée : `master`, commit `8be1ebef191342d493bb8c18136143a5bb307ab9`.
 
 Ce document reprend les corrections décrites dans la conversation, à partir de la lecture du code et des essais locaux réalisés pendant cette session. Les sections 1 à 5 décrivent l'état observé sur le commit de référence avant correction ; le suivi des correctifs figure en fin de document. Les audits précédents ne sont pas considérés comme une validation de sécurité. Aucun outil Computer Use n'a été utilisé.
