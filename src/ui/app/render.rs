@@ -1,0 +1,376 @@
+use super::*;
+
+impl Render for OxydeApp {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let reference = crate::ui::scale::normalized_reference(self.config.ui_rem_size);
+        crate::ui::scale::set_reference(reference);
+        _window.set_rem_size(px(reference as f32));
+        let zoom_handle = cx.entity();
+        let theme = *cx.theme();
+        use crate::ui::components::sidebar::render_sidebar;
+        use crate::ui::style::TNUM;
+
+        let handle = self.handle.clone().expect("handle set");
+        let window_handle = _window.window_handle();
+        self.prepare_created_item_rename(_window, cx);
+
+        let size = _window.viewport_size();
+        if self.network_force_focus_pending {
+            self.network_force_focus_pending = false;
+            if let Some(confirmation) = &self.network_force_confirmation {
+                _window.focus(&confirmation.focus, cx);
+            }
+        }
+        if self.network_focus_restore {
+            self.network_focus_restore = false;
+            _window.focus(&self.focus_handle, cx);
+        }
+        if let Some(dialog) = self.network_dialog.as_ref().filter(|dialog| dialog.busy) {
+            if !dialog.focus.is_focused(_window) { _window.focus(&dialog.focus, cx); }
+        }
+        let win_w = size.width.as_f32();
+        let win_h = size.height.as_f32();
+
+        self.list_width = (win_w - self.sidebar_display_width() - logical(3.0)).max(1.0);
+        self.list_height = (win_h - crate::ui::components::title_bar::titlebar_h()).max(1.0);
+
+        if let Some(DragTarget::SelectionRectangle {
+            ref pane_id,
+            current_pos,
+            ..
+        }) = self.drag_target
+        {
+            let p_id = pane_id.clone();
+            let pos = current_pos;
+            self.handle_selection_drag(p_id, pos, cx);
+        }
+        self.shift_delete = _window.modifiers().shift;
+        self.measure_metadata_columns(_window, cx);
+        self.clamp_scrolls();
+        self.follow_active_path(cx);
+
+        let settings_keyboard = handle.clone();
+        let mut root = div()
+            .on_key_down(move |event, window, cx| {
+                let handled = settings_keyboard.update(cx, |this, cx| this.handle_file_key(event, window, cx));
+                if handled { cx.stop_propagation(); return; }
+                let peek = settings_keyboard.update(cx, |this, cx| {
+                    if this.focus_handle.is_focused(window) && this.peek_shortcut_matches(&event.keystroke) {
+                        this.peek_selected(cx);
+                        true
+                    } else { false }
+                });
+                if peek { cx.stop_propagation(); return; }
+                if event.keystroke.key == "escape" {
+                    settings_keyboard.update(cx, |this, cx| {
+                        if !this.context_menus.is_empty() {
+                            this.context_menus.clear();
+                            cx.stop_propagation();
+                            cx.notify();
+                            return;
+                        }
+                        if this.settings_open {
+                            if this.settings_picker.is_some() {
+                                this.settings_picker = None;
+                                this.settings_submenu_bounds = None;
+                            } else {
+                                this.settings_open = false;
+                                this.settings_about_open = false;
+                            }
+                            cx.stop_propagation();
+                            cx.notify();
+                        }
+                    });
+                }
+            })
+            .track_focus(&self.focus_handle)
+            .size_full()
+            .bg(cx.theme().background)
+            .text_color(cx.theme().text)
+            .font_family("Inter")
+            .flex()
+            .flex_col()
+            .text_size(rems(0.8125))
+            .font_weight(crate::ui::style::DEFAULT_FONT_WEIGHT)
+            .child(canvas(|_, _, _| (), move |_, _, window, _| {
+                // Low-level capture listeners must be installed during paint.
+                let zoom_handle = zoom_handle.clone();
+                window.on_mouse_event(move |event: &ScrollWheelEvent, phase, window, cx| {
+                    if phase == DispatchPhase::Capture && event.modifiers.control {
+                        let delta = event.delta.pixel_delta(window.line_height());
+                        if delta.y != px(0.0) {
+                            zoom_handle.update(cx, |this, cx| {
+                                let current = this.ui_rem_size();
+                                let next = if delta.y > px(0.0) { current + 1 } else { current.saturating_sub(1) };
+                                this.set_ui_rem_size(next, window, cx);
+                            });
+                            cx.stop_propagation();
+                        }
+                    }
+                });
+            }).absolute().size_full())
+            .on_action(cx.listener(Self::on_action_tout_selectionner))
+            .on_action(cx.listener(Self::on_action_annuler))
+            .on_action(cx.listener(Self::on_action_refaire))
+            .on_action(cx.listener(|this, _: &Actualiser, window, cx| this.refresh_active_view(window, cx)))
+            .on_action(cx.listener(Self::on_action_copier))
+            .on_action(cx.listener(|this, _: &CopierNom, _, cx| this.execute_copy_text(true, cx)))
+            .on_action(cx.listener(|this, _: &CopierChemin, _, cx| this.execute_copy_text(false, cx)))
+            .on_action(cx.listener(Self::on_action_couper))
+            .on_action(cx.listener(Self::on_action_coller))
+            .on_action(cx.listener(Self::on_action_ouvrir))
+            .on_action(cx.listener(Self::on_action_renommer))
+            .on_action(cx.listener(Self::on_action_supprimer));
+
+        root = root.on_modifiers_changed({
+            let h = handle.clone();
+            move |e: &ModifiersChangedEvent, _, cx| {
+                let modifier = if e.modifiers.control {
+                    Some(true) // Ctrl → always copy
+                } else if e.modifiers.shift {
+                    Some(false) // Shift → always move
+                } else {
+                    None // auto → determined by drive context
+                };
+                h.update(cx, |this, cx| {
+                    if this.shift_delete != e.modifiers.shift {
+                        this.shift_delete = e.modifiers.shift;
+                        cx.notify();
+                    }
+                    if this.drag_modifier_copy != modifier {
+                        this.drag_modifier_copy = modifier;
+                        this.update_drag_copy_mode(cx);
+                    }
+                });
+            }
+        });
+
+        root.text_style().font_features = Some(TNUM.clone());
+
+        root = root
+            .on_mouse_exit({
+                let h = handle.clone();
+                move |_, _, cx| {
+                    if let Some(panel) = h.read(cx).operations_panel_view.clone() {
+                        panel.update(cx, |panel, cx| panel.finish_drag(cx));
+                    }
+                    h.update(cx, |this, cx| this.finish_pointer_drag(cx));
+                }
+            })
+            .on_mouse_move({
+                let h = handle.clone();
+                move |e, window, cx| {
+                    if !e.dragging() {
+                        if let Some(panel) = h.read(cx).operations_panel_view.clone() {
+                            panel.update(cx, |panel, cx| panel.finish_drag(cx));
+                        }
+                    }
+                    h.update(cx, |this, cx| this.handle_pointer_move(e, window, cx));
+                }
+            })
+            .on_mouse_up(MouseButton::Left, {
+                let h = handle.clone();
+                move |_, _window, cx| {
+                    h.update(cx, |this, cx| {
+                        this.finish_pointer_drag(cx);
+                    });
+                }
+            })
+            .on_mouse_down(MouseButton::Navigate(NavigationDirection::Back), {
+                let h = handle.clone();
+                move |_, _, cx| {
+                    h.update(cx, |v, cx| {
+                        let p_id = v.state.active_pane_id.clone();
+                        v.go_back(&p_id, cx)
+                    });
+                }
+            })
+            .on_mouse_down(MouseButton::Navigate(NavigationDirection::Forward), {
+                let h = handle.clone();
+                move |_, _, cx| {
+                    h.update(cx, |v, cx| {
+                        let p_id = v.state.active_pane_id.clone();
+                        v.go_forward(&p_id, cx)
+                    });
+                }
+            })
+            .child({
+                // ── Custom title bar ──────────────────────────────────────
+                use crate::ui::components::title_bar::render_title_bar;
+                render_title_bar(self, handle.clone(), _window.is_maximized(), cx)
+            })
+            .child({
+                // ── Horizontal content area (sidebar + panes) ─────────────
+                let layout_tree = self.state.layout.clone();
+                div()
+                    .flex()
+                    .flex_1()
+                    .w_full()
+                    .overflow_hidden()
+                    .child(
+                        div()
+                            .w(px(self.sidebar_display_width()))
+                            .h_full()
+                            .flex_none()
+                            .child(render_sidebar(self, handle.clone(), cx)),
+                    )
+                    .child(
+                        div()
+                            .id("sidebar-resize-handle")
+                            .group("sidebar-resize-handle")
+                            .relative()
+                            .w(rems(0.0625))
+                            .bg(theme.border)
+                            .cursor(CursorStyle::ResizeLeftRight)
+                            .h_full()
+                            .flex_none()
+                            .flex()
+                            .justify_center()
+                            .child(
+                                deferred(div()
+                                    .group("sidebar-resize-hit-area")
+                                    .absolute()
+                                    .left(rems(-0.0625))
+                                    .w(rems(0.1875))
+                                    .h_full()
+                                    .occlude()
+                                    .cursor(CursorStyle::ResizeLeftRight)
+                                    .child(
+                                        div()
+                                            .absolute()
+                                            .left(rems(0.0625))
+                                            .top_0()
+                                            .bottom_0()
+                                            .w(rems(0.0625))
+                                            .group_hover("sidebar-resize-hit-area", |s| {
+                                                s.bg(theme.accent.opacity(0.6))
+                                            }),
+                                    )
+                                    .on_mouse_down(MouseButton::Left, {
+                                        let h = handle.clone();
+                                        move |e, _, cx| {
+                                            cx.stop_propagation();
+                                            h.update(cx, |this, cx| {
+                                                this.drag_target = Some(DragTarget::SidebarResize);
+                                                this.grab_offset = e.position.x.as_f32() - this.sidebar_display_width();
+                                                cx.notify();
+                                            });
+                                        }
+                                    })),
+                            )
+                            .child(
+                                div()
+                                    .w(rems(0.0625))
+                                    .h_full()
+                                    .bg(theme.border)
+                                    .group_hover("sidebar-resize-handle", |s| {
+                                        s.bg(theme.accent.opacity(0.6))
+                                    }),
+                            )
+                            .on_mouse_down(MouseButton::Left, {
+                                let h = handle.clone();
+                                move |e, _, cx| {
+                                    h.update(cx, |this, _| {
+                                        this.drag_target = Some(DragTarget::SidebarResize);
+                                        this.grab_offset =
+                                            e.position.x.as_f32() - this.sidebar_display_width();
+                                    });
+                                }
+                            }),
+                    )
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .h_full()
+                            .overflow_hidden()
+                            .child(self.render_layout_node(&layout_tree, handle.clone(), cx)),
+                    )
+            });
+
+        // Keep modal content below transient context menus in the render tree:
+        // a text field inside the rename dialog can open its own context menu.
+        if self.network_force_confirmation.is_some() {
+            root = root.child(deferred(crate::ui::components::network_dialog::render_force_confirmation(self, handle.clone(), _window, cx)));
+        } else if self.network_dialog.is_some() {
+            root = root.child(deferred(crate::ui::components::network_dialog::render_network_dialog(self, handle.clone(), _window, cx)));
+        }
+        if self.editing_path.is_some() && !self.inline_rename {
+            root = root.child(deferred(
+                crate::ui::components::rename_dialog::render_rename_dialog(
+                    self,
+                    handle.clone(),
+                    cx,
+                ),
+            ));
+        }
+
+        root = self.render_context_menus(root, handle.clone(), window_handle, win_h, _window, cx);
+
+        // SETTINGS OVERLAY
+        if self.operations_panel_open {
+            if let Some(panel) = self.operations_panel_view.clone() {
+                root = root.child(deferred(panel));
+            }
+        }
+
+        if self.settings_open {
+            use crate::ui::components::settings::render_settings_panel;
+            root = root.child(deferred(render_settings_panel(self, handle.clone(), _window, cx)));
+        }
+
+        if self.properties_dialog.is_some() { root = root.child(deferred(properties::render(self, handle.clone(), _window, cx))); }
+        if self.pending_trash_delete.is_some() { root = root.child(deferred(trash_settings::render_delete_confirmation(self, handle.clone(), _window, cx))); }
+        if self.trash_settings.is_some() { root = root.child(deferred(trash_settings::render(self, handle.clone(), cx))); }
+        if self.settings_confirmation.is_some() {
+            root = root.child(deferred(
+                crate::ui::components::settings::render_settings_confirmation(
+                    self, handle.clone(), _window, cx,
+                ),
+            ));
+        }
+
+        let conflict_system_icons = self.use_system_icons();
+        if let Some(pending) = self.pending_file_operations.front_mut() {
+            root = root.child(deferred(
+                crate::ui::components::conflict_dialog::render_conflict_dialog(
+                    pending,
+                    conflict_system_icons,
+                    _window,
+                    handle.clone(),
+                    cx,
+                ),
+            ));
+        }
+
+        if let Some((key, detail)) = self.file_operation_notice.clone() {
+            let mut args = FluentArgs::new();
+            args.set("detail", crate::ui::format::error_detail(&detail, cx.i18n()));
+            let message = cx.i18n().text_with_args(key, &args);
+            let close_handle = handle.clone();
+            let theme = *cx.theme();
+            root = root.child(deferred(
+                crate::ui::components::modal::Modal::new(
+                    "operation-notice",
+                    cx.i18n().text(Message::OperationFailed),
+                    div().text_color(theme.text_muted).child(message),
+                )
+                .title_icon("icons/circle-x.svg")
+                .action(
+                    crate::ui::components::modal::action_button("operation-notice-close")
+                        .hover(|d| d.bg(theme.control_hover))
+                        .child(cx.i18n().text(Message::Close))
+                        .on_mouse_down(MouseButton::Left, move |_, _, cx| {
+                            close_handle.update(cx, |this, cx| {
+                                this.file_operation_notice = None;
+                                cx.notify();
+                            });
+                        }),
+                ),
+            ));
+        }
+
+        root = root.child(deferred(self.render_toasts(_window, cx)));
+        root
+    }
+}

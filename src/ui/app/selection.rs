@@ -1,10 +1,24 @@
-use crate::ui::app::{DragTarget, OxydeApp};
+use crate::ui::app::{DragTarget, OxydeApp, ToutSelectionner};
 use crate::ui::scale::logical;
 
 use crate::ui::workspace::ViewMode;
 use gpui::*;
 
 impl OxydeApp {
+    pub fn on_action_tout_selectionner(
+        &mut self,
+        _: &ToutSelectionner,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.execute_tout_selectionner(cx);
+    }
+
+    pub fn execute_tout_selectionner(&mut self, cx: &mut Context<Self>) {
+        let pane_id = self.state.active_pane_id.clone();
+        self.select_all(&pane_id, cx);
+    }
+
     pub(super) fn move_file_selection(&mut self, key: &str, shift: bool, cx: &mut Context<Self>) {
         use crate::ui::date_groups::{display_rows, DisplayRow};
         let pane_id = self.state.active_pane_id.clone();

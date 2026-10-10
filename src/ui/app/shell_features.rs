@@ -6,6 +6,67 @@ use std::sync::{
 use std::time::{Duration, Instant};
 
 impl OxydeApp {
+    pub fn on_action_ouvrir(&mut self, _: &Ouvrir, _: &mut Window, cx: &mut Context<Self>) {
+        self.execute_ouvrir(cx);
+    }
+
+    /// Shell handlers may pump Windows messages. Never invoke them while GPUI
+    /// holds the App/Entity borrow for a mouse or keyboard callback.
+    pub(crate) fn open_external_item(&mut self, path: String, cx: &mut Context<Self>) {
+        let source = path.clone();
+        cx.spawn(async move |this, cx| {
+            let result = tokio::task::spawn_blocking(move || {
+                let path = oxyde_lib::commands::archive::prepare_archive_file_for_open(std::path::Path::new(&path))?;
+                oxyde_lib::platform::platform().open_item(&path.to_string_lossy())
+                    .map_err(oxyde_lib::models::CommandError::SystemError)
+            }).await;
+            let error = match result {
+                Ok(Ok(())) => return,
+                Ok(Err(oxyde_lib::models::CommandError::ArchiveCache(issue))) => {
+                    let _ = this.update(cx, |this, cx| this.archive_cache_failed(issue, source, cx));
+                    return;
+                }
+                Ok(Err(error)) => error.to_string(),
+                Err(error) => error.to_string(),
+            };
+            let _ = this.update(cx, |this, cx| {
+                this.toast(ToastKind::Error, Message::OpenItemFailed, error, 0, cx);
+                cx.notify();
+            });
+        }).detach();
+    }
+
+    pub(crate) fn open_file_item(
+        &mut self,
+        pane_id: &str,
+        path: String,
+        is_dir: bool,
+        cx: &mut Context<Self>,
+    ) {
+        let navigable_archive =
+            oxyde_lib::utils::archive::is_navigable_archive(std::path::Path::new(&path));
+        if oxyde_lib::utils::disk_image::needs_mount_for_browsing(std::path::Path::new(&path)) {
+            self.open_disk_image(pane_id.to_string(), path, false, cx);
+        } else if is_dir || navigable_archive {
+            self.open_directory_item(pane_id, path, false, cx);
+        } else {
+            self.open_external_item(path, cx);
+        }
+    }
+
+    pub fn execute_ouvrir(&mut self, cx: &mut Context<Self>) {
+        let pane_id = self.state.active_pane_id.clone();
+        if let Some(pane) = self.state.layout.find_pane(&pane_id) {
+            let tab = pane.active_tab();
+            let paths: Vec<(String, bool)> = tab.files.iter()
+                .filter(|entry| tab.selected_paths.contains(&entry.path))
+                .map(|entry| (entry.path.clone(), entry.is_dir)).collect();
+            for (path, is_dir) in paths {
+                self.open_file_item(&pane_id, path, is_dir, cx);
+            }
+        }
+    }
+
     pub(crate) fn refresh_quick_access(&mut self, cx: &mut Context<Self>) {
         self.quick_access_request = self.quick_access_request.wrapping_add(1);
         let request = self.quick_access_request;

@@ -1,4 +1,5 @@
-use super::OxydeApp;
+use super::{drive_watchers, OxydeApp, ToastKind};
+use crate::ui::i18n::Message;
 use crate::ui::components::sidebar::sidebar_paths_equal;
 use gpui::*;
 use notify::{Config, PollWatcher, RecommendedWatcher, RecursiveMode, Watcher};
@@ -124,6 +125,173 @@ fn merge_drive_roots(
 }
 
 impl OxydeApp {
+    pub(crate) fn eject_usb_drive(&mut self, path: String, cx: &mut Context<Self>) {
+        self.context_menus.clear();
+        if self.ejecting_drive || !self.state.drives.iter()
+            .any(|drive| drive.path == path && drive.is_usb()) {
+            cx.notify();
+            return;
+        }
+        self.ejecting_drive = true;
+        self.drive_refresh_epoch = self.drive_refresh_epoch.wrapping_add(1);
+        self.drive_details_task = None;
+        self.sidebar_follow_task = None;
+        self.pending_sidebar_requests.clear();
+        self.pending_watchers.clear();
+        let watchers = std::mem::take(&mut self._path_watchers);
+        self.reconcile_watchers(cx);
+        cx.notify();
+        cx.spawn(async move |this, cx| {
+            let result = tokio::task::spawn_blocking(move || {
+                // Release watches and wait for their handles to close before PnP.
+                for (watched_path, watcher) in watchers {
+                    watcher.release(&watched_path)?;
+                }
+                oxyde_lib::platform::platform().eject_drive(&path)?;
+                Ok::<_, String>(oxyde_lib::commands::system::get_drives(Some(false)))
+            }).await;
+            let _ = this.update(cx, |this, cx| {
+                this.ejecting_drive = false;
+                let error = match result {
+                    Ok(Ok(drives)) => {
+                        this.apply_drive_snapshot(drives, cx);
+                        None
+                    },
+                    Ok(Err(error)) => Some(error),
+                    Err(error) => Some(error.to_string()),
+                };
+                if let Some(error) = error {
+                    this.toast(ToastKind::Error, Message::EjectDriveFailed, error, 0, cx);
+                }
+                this.reconcile_watchers(cx);
+                cx.notify();
+            });
+        }).detach();
+    }
+
+    fn start_drive_refresh_task(&mut self, cx: &mut Context<Self>) {
+        let h = self.handle.clone().expect("handle set");
+        self._drive_refresh_task = Some(cx.spawn(move |_, cx: &mut AsyncApp| {
+            let mut cx = cx.clone();
+            async move {
+                use std::sync::atomic::{AtomicU64, Ordering};
+                let revision = std::sync::Arc::new(AtomicU64::new(0));
+                let registration_revision = revision.clone();
+                let registration = tokio::task::spawn_blocking(move || {
+                    oxyde_lib::platform::platform().watch_drive_changes(registration_revision)
+                }).await;
+                let _registration = match registration {
+                    Ok(Ok(guard)) => guard,
+                    Ok(Err(error)) => { log::warn!("Drive notifications unavailable: {error}"); None }
+                    Err(error) => { log::warn!("Drive notification worker failed: {error}"); None }
+                };
+                let mut schedule = drive_watchers::DriveRefreshSchedule::new(
+                    _registration.is_some(), std::time::Instant::now());
+                loop {
+                    let paused = h.update(&mut cx, |this, _| this.ejecting_drive);
+                    let observed = revision.load(Ordering::Acquire);
+                    if !paused && schedule.due(observed, std::time::Instant::now()) {
+                        let details_due = schedule.details_due;
+                        let epoch = h.update(&mut cx, |this, _| this.drive_refresh_epoch);
+                        if let Ok(roots) = tokio::task::spawn_blocking(|| {
+                            oxyde_lib::platform::platform().list_drive_roots()
+                        }).await {
+                            h.update(&mut cx, |this, cx| {
+                                if this.ejecting_drive || this.drive_refresh_epoch != epoch
+                                    || revision.load(Ordering::Acquire) != observed { return; }
+                                let changed = roots.len() != this.state.drives.len()
+                                    || roots.iter().any(|root| !this.state.drives.iter()
+                                        .any(|old| old.path == root.path && old.drive_type == root.drive_type));
+                                if changed {
+                                    this.drive_refresh_epoch = this.drive_refresh_epoch.wrapping_add(1);
+                                }
+                                this.apply_drive_roots(roots, cx);
+                                if changed || details_due {
+                                    this.refresh_disk_images(cx);
+                                }
+                                if changed || details_due || this.drive_details_task.is_none() {
+                                    this.request_drive_details(cx);
+                                }
+                                let roots: Vec<_> = this.state.drives.iter()
+                                    .map(|drive| drive.path.clone()).collect();
+                                for root in roots {
+                                    this.request_sidebar_nodes(root, false, cx);
+                                }
+                                this.reconcile_watchers(cx);
+                            });
+                        }
+                    }
+                    cx.background_executor().timer(std::time::Duration::from_millis(100)).await;
+                }
+            }
+        }));
+    }
+    pub fn start_watcher_task(&mut self, cx: &mut Context<Self>) {
+        self.start_drive_refresh_task(cx);
+        self.start_shell_features_task(cx);
+        self.start_calendar_task(cx);
+        self.refresh_disk_images(cx);
+        let changes = self.watcher_changes.clone();
+        let h = self.handle.clone().expect("handle set");
+        self._watcher_task = Some(cx.spawn(move |_, cx: &mut AsyncApp| {
+            let mut cx = cx.clone();
+            async move {
+                loop {
+                    cx.background_executor()
+                        .timer(std::time::Duration::from_millis(500))
+                        .await;
+                    let clipboard_has_files = tokio::task::spawn_blocking(|| {
+                        oxyde_lib::platform::platform().clipboard_has_file_format()
+                    }).await.unwrap_or(false);
+                    h.update(&mut cx, |this, cx| {
+                        if this.clipboard_has_files != clipboard_has_files {
+                            this.clipboard_has_files = clipboard_has_files;
+                            cx.notify();
+                        }
+                    });
+                    let changed: Vec<String> = if let Ok(mut q) = changes.lock() {
+                        q.drain(..).collect()
+                    } else {
+                        vec![]
+                    };
+                    if !changed.is_empty() {
+                        h.update(&mut cx, |this, cx| {
+                            if this.ejecting_drive { return; }
+                            // Refresh only affected expanded paths off the UI thread.
+                            for path in &changed {
+                                if this.state.expanded_paths.contains(path)
+                                    || this.state.drives.iter().any(|drive| &drive.path == path) {
+                                    this.request_sidebar_nodes(path.clone(), true, cx);
+                                }
+                            }
+
+                            // Reload every affected tab (active = full refresh, inactive = files only).
+                            let mut reloads: Vec<(String, usize, String)> = Vec::new();
+                            this.state.layout.visit_panes(&mut |p| {
+                                for (idx, tab) in p.tabs.iter().enumerate() {
+                                    let watched =
+                                        oxyde_lib::utils::archive::split_virtual_path(&tab.path)
+                                            .and_then(|(archive, _)| {
+                                                archive.parent().map(|parent| {
+                                                    parent.to_string_lossy().into_owned()
+                                                })
+                                            })
+                                            .unwrap_or_else(|| tab.path.clone());
+                                    if changed.contains(&watched) {
+                                        reloads.push((p.id.clone(), idx, tab.path.clone()));
+                                    }
+                                }
+                            });
+                            for (pane_id, tab_idx, path) in reloads {
+                                this.refresh_tab_files(&pane_id, tab_idx, path, cx);
+                            }
+                        });
+                    }
+                }
+            }
+        }));
+    }
+
     pub(super) fn apply_drive_roots(
         &mut self,
         roots: Vec<oxyde_lib::models::DriveInfo>,

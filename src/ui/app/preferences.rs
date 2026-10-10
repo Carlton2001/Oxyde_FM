@@ -1,10 +1,20 @@
 use super::OxydeApp;
 use crate::ui::i18n::{I18n, I18nContext, Language, Message};
 use crate::ui::theme::{OxydeTheme, ThemeId};
-use gpui::{Context, Window};
+use gpui::{Context, Pixels, Point, Window};
 use oxyde_lib::models::ConfigManager;
 
 impl OxydeApp {
+    pub(crate) fn persist_operations_panel_position(
+        &mut self,
+        position: Point<Pixels>,
+        cx: &mut Context<Self>,
+    ) {
+        self.operations_panel_position = Some(position);
+        self.config.operations_panel_position = Some([position.x.as_f32(), position.y.as_f32()]);
+        self.save_preferences(cx);
+    }
+
     pub(crate) fn default_turbo_mode(&self) -> bool { self.config.default_turbo_mode }
 
     pub(crate) fn toggle_default_turbo(&mut self, cx: &mut Context<Self>) {
