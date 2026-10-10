@@ -458,6 +458,10 @@ impl Platform for WindowsPlatform {
         super::windows_preview_worker::run(mode, path)
     }
 
+    fn list_archive_directory(&self, path: &std::path::Path, internal: &str) -> Result<Vec<crate::models::FileEntry>, crate::models::CommandError> {
+        super::windows_archive_worker::run(path, internal)
+    }
+
     fn initialize_preview_worker(&self) -> std::io::Result<()> {
         super::windows_preview_worker::initialize()
     }

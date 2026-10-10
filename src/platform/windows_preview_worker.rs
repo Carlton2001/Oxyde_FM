@@ -140,8 +140,26 @@ pub(super) fn run_in(
 }
 
 pub(super) fn supervise(command: Command, deadline: Duration) -> io::Result<Vec<u8>> {
+    supervise_bounded(
+        command,
+        deadline,
+        MEMORY_BYTES,
+        crate::utils::preview_protocol::MAX_REPLY,
+        "PreviewWorkerTimeout: Preview exceeded 15 seconds",
+    )
+}
+
+/// Shared native resource supervision; admission and response validation belong
+/// to each caller. A parser is never run locally on transport failure.
+pub(super) fn supervise_bounded(
+    command: Command,
+    deadline: Duration,
+    memory_bytes: usize,
+    max_reply: usize,
+    timeout_detail: &str,
+) -> io::Result<Vec<u8>> {
     let started = Instant::now();
-    let (mut worker, mut output) = Worker::start(command, MEMORY_BYTES)?;
+    let (mut worker, mut output) = Worker::start(command, memory_bytes)?;
     let mut bytes = Vec::new();
     let mut chunk = [0; 64 * 1024];
     let mut exited = None;
@@ -149,7 +167,7 @@ pub(super) fn supervise(command: Command, deadline: Duration) -> io::Result<Vec<
         if started.elapsed() >= deadline {
             return Err(io::Error::new(
                 io::ErrorKind::TimedOut,
-                "PreviewWorkerTimeout: Preview exceeded 15 seconds",
+                timeout_detail.to_owned(),
             ));
         }
         let mut available = 0;
@@ -176,14 +194,17 @@ pub(super) fn supervise(command: Command, deadline: Duration) -> io::Result<Vec<
                     "Preview worker output closed unexpectedly",
                 ));
             }
-            if bytes.len() + count > crate::utils::preview_protocol::MAX_REPLY {
-                return Err(io::Error::other("Preview worker output exceeds its limit"));
+            if bytes.len() + count > max_reply {
+                return Err(io::Error::new(
+                    io::ErrorKind::FileTooLarge,
+                    "Worker output exceeds its limit",
+                ));
             }
             let needed = bytes.len() + count;
             if needed > bytes.capacity() {
                 let capacity = needed
                     .max(bytes.capacity().saturating_mul(2))
-                    .min(crate::utils::preview_protocol::MAX_REPLY);
+                    .min(max_reply);
                 bytes
                     .try_reserve_exact(capacity - bytes.len())
                     .map_err(io::Error::other)?;

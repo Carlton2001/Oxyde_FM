@@ -208,6 +208,7 @@ pub fn render_file_list(
             TabLoadStatus::Ready => Some(cx.i18n().text(if active_tab.quick_search.is_some() { Message::QuickSearchEmpty } else { Message::FolderEmpty }).to_string()),
             TabLoadStatus::Error(message) => Some(cx.i18n().text(*message).to_string()),
             TabLoadStatus::ArchiveLimit(failure) => Some(crate::ui::format::error_detail(&failure.to_string(), cx.i18n())),
+            TabLoadStatus::ArchiveListing(failure) => Some(crate::ui::format::error_detail(&failure.to_string(), cx.i18n())),
         }
     };
 
@@ -1135,6 +1136,7 @@ fn render_grid_file_list(
             TabLoadStatus::Ready => Some(cx.i18n().text(if tab.quick_search.is_some() { Message::QuickSearchEmpty } else { Message::FolderEmpty }).to_string()),
             TabLoadStatus::Error(message) => Some(cx.i18n().text(*message).to_string()),
             TabLoadStatus::ArchiveLimit(failure) => Some(crate::ui::format::error_detail(&failure.to_string(), cx.i18n())),
+            TabLoadStatus::ArchiveListing(failure) => Some(crate::ui::format::error_detail(&failure.to_string(), cx.i18n())),
         }
     };
     let folders = files.iter().filter(|file| file.is_dir).count();

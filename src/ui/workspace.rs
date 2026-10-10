@@ -184,6 +184,7 @@ pub enum TabLoadStatus {
     Ready,
     Error(Message),
     ArchiveLimit(oxyde_lib::models::error::ArchiveLimitFailure),
+    ArchiveListing(oxyde_lib::models::error::ArchiveListingFailure),
 }
 
 #[derive(Clone)]

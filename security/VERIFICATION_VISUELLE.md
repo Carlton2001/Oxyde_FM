@@ -146,6 +146,11 @@ Validation automatisée du lot 58 : **751 tests permanents réussis**, aucun éc
 
 Compilation et reconstruction sans avertissement du projet ; utiliser `target/debug/oxyde.exe` pour cette reprise.
 
-## Reprise après le retour par élément du Shell — lot 59
+## Reprise après le retour par élément du Shell — lots 59–60
 
 La validation précédente du lot 58 reste acquise pour ses parcours. L’implémentation Windows des nouvelles suppressions suivies et de Rétablir Delete passe maintenant par IFileOperation ; les callbacks et reprises sont contrôlés automatiquement sans vraie suppression. Après les derniers changements de code, contrôler uniquement avec un nouveau fichier et un nouveau dossier jetables dans le jeu généré : suppression vers la corbeille, Annuler, puis Rétablir ; observer la mise à jour de la liste et la possibilité de restaurer. Ne pas vider la corbeille ni utiliser de documents personnels. Vérifier aussi qu’un dossier compagnon non sélectionné reste en place. Les erreurs tardives injectées restent des tests automatisés ; ne pas provoquer une erreur en remplaçant des fichiers personnels. Cette reprise native n’a pas encore été exécutée par l’agent ou l’utilisateur.
+
+
+## Reprise ciblée de navigation — lot 61
+
+Après la fin des modifications, utiliser uniquement les archives du jeu généré : ouvrir une ZIP et son sous-dossier, puis une 7z, une TAR compressée et l'ISO. Vérifier liste/grille, noms et navigation de retour, avec les aperçus habituels disponibles en parallèle. Les erreurs de worker/délai et de taille des métadonnées restent couvertes automatiquement ; il n'est pas nécessaire de créer une archive énorme pour cette revue. La recherche, l'extraction et les modifications d'archive conservent leurs parcours précédents. Cette reprise visuelle n'a pas été exécutée.

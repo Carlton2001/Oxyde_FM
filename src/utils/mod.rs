@@ -1,6 +1,7 @@
 use std::fs::Metadata;
 
 pub mod archive;
+pub mod archive_listing_protocol;
 pub(crate) mod archive_limits;
 pub mod archive_security;
 pub mod disk_image;

@@ -894,3 +894,6 @@ preview-timed-out = Questa anteprima ha superato il limite di 15 secondi. Il fil
 copy-name-suffix = Copia
 shell-delete-completed-error = Windows ha eliminato questo elemento, poi ha segnalato un errore. L’operazione completata rimane nella cronologia. Controlla la cartella e il Cestino prima di riprovare.
 shell-delete-unconfirmed = Windows non ha confermato l’eliminazione di questo elemento. L’eliminazione potrebbe essere stata parziale. Controlla la cartella e il Cestino prima di riprovare.
+
+archive-listing-metadata-limit = Impossibile mostrare il contenuto: l’elenco dei file supera { $limit }. Questo limite riguarda nomi e informazioni dei file, non le dimensioni decompresse. È possibile tentare l’estrazione con i limiti abituali.
+archive-listing-worker-failed = Impossibile leggere il contenuto di questo archivio: il processo di lettura non è riuscito o la sua risposta non è valida. L’archivio non è stato modificato. È possibile riprovare o tentare l’estrazione con i limiti abituali.

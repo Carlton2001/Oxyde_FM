@@ -93,6 +93,9 @@ pub fn redo_failure(error: &CommandError) -> (Message, String) {
 }
 
 pub fn path_load_status(error: &CommandError) -> crate::ui::workspace::TabLoadStatus {
+    if let Some(failure) = oxyde_lib::models::error::ArchiveListingFailure::from_message(&error.to_string()) {
+        return crate::ui::workspace::TabLoadStatus::ArchiveListing(failure);
+    }
     if let Some(failure) =
         oxyde_lib::models::error::ArchiveLimitFailure::from_message(&error.to_string())
     {

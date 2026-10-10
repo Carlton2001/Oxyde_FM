@@ -1,4 +1,6 @@
 pub mod archive;
+#[doc(hidden)]
+pub mod archive_worker;
 mod archive_iso_open;
 mod archive_metadata;
 mod archive_seven_open;

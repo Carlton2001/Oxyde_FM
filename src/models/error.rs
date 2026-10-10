@@ -293,6 +293,28 @@ pub enum ArchiveLimitKind {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ArchiveListingFailure {
+    MetadataLimit,
+    WorkerFailed,
+}
+impl fmt::Display for ArchiveListingFailure {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::MetadataLimit => "Archive listing failed [metadata-limit]",
+            Self::WorkerFailed => "Archive listing failed [worker-failed]",
+        })
+    }
+}
+impl std::error::Error for ArchiveListingFailure {}
+impl ArchiveListingFailure {
+    pub fn from_message(detail: &str) -> Option<Self> {
+        if detail.contains("Archive listing failed [metadata-limit]") { Some(Self::MetadataLimit) }
+        else if detail.contains("Archive listing failed [worker-failed]") { Some(Self::WorkerFailed) }
+        else { None }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ArchiveLimitFailure {
     pub kind: ArchiveLimitKind,
     pub limit: u64,

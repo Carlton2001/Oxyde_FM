@@ -10,6 +10,9 @@ impl LinuxPlatform {
 }
 
 impl Platform for LinuxPlatform {
+    fn list_archive_directory(&self, path: &std::path::Path, internal: &str) -> Result<Vec<crate::models::FileEntry>, crate::models::CommandError> {
+        crate::commands::archive::list_archive_contents_local(path.to_string_lossy().into_owned(), internal.into())
+    }
     fn open_archive_source(&self, path: &std::path::Path, _allow_changes: bool) -> std::io::Result<std::fs::File> {
         let file = std::fs::File::open(path)?;
         if !file.metadata()?.is_file() {return Err(std::io::Error::other("Archive source is not a regular file"));}

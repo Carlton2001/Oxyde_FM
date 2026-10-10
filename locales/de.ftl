@@ -894,3 +894,6 @@ preview-timed-out = Diese Vorschau hat das Zeitlimit von 15 Sekunden überschrit
 copy-name-suffix = Kopie
 shell-delete-completed-error = Windows hat dieses Element gelöscht und anschließend einen Fehler gemeldet. Der abgeschlossene Vorgang bleibt im Verlauf erhalten. Prüfen Sie den Ordner und den Papierkorb, bevor Sie es erneut versuchen.
 shell-delete-unconfirmed = Windows hat das Löschen dieses Elements nicht bestätigt. Der Löschvorgang wurde möglicherweise nur teilweise ausgeführt. Prüfen Sie den Ordner und den Papierkorb, bevor Sie es erneut versuchen.
+
+archive-listing-metadata-limit = Der Inhalt kann nicht angezeigt werden: Die Dateiliste überschreitet { $limit }. Diese Grenze betrifft Namen und Dateiinformationen, nicht die entpackte Dateigröße. Sie können das Entpacken mit den üblichen Grenzen versuchen.
+archive-listing-worker-failed = Der Inhalt dieses Archivs kann nicht gelesen werden: Der Leseprozess ist fehlgeschlagen oder seine Antwort ist ungültig. Das Archiv wurde nicht verändert. Sie können es erneut versuchen oder mit den üblichen Grenzen entpacken.

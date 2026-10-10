@@ -95,6 +95,24 @@ pub fn list_archive_contents(
     archive_path: String,
     internal_path: String,
 ) -> Result<Vec<FileEntry>, CommandError> {
+    // Library unit fixtures exercise parser/operations locally: their executable
+    // is Rust's test harness, not the headless app. Integration tests launch the
+    // actual binary with the production Windows supervisor and protocol.
+    #[cfg(test)]
+    { list_archive_contents_local(archive_path, internal_path) }
+    #[cfg(not(test))]
+    {
+        let path = validate_path(&archive_path)?;
+        relative_archive_path(&internal_path)?;
+        platform().list_archive_directory(&path, &internal_path)
+    }
+}
+
+/// Parser entry used inside the headless worker, and directly on Linux.
+pub(crate) fn list_archive_contents_local(
+    archive_path: String,
+    internal_path: String,
+) -> Result<Vec<FileEntry>, CommandError> {
     let path_buf = validate_path(&archive_path)?;
     let path = path_buf.as_path();
     relative_archive_path(&internal_path)?;

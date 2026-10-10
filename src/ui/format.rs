@@ -113,6 +113,25 @@ mod tests {
         }
     }
     #[test]
+    fn archive_listing_failures_are_clear_and_distinct_from_file_size_in_all_languages() {
+        use oxyde_lib::models::error::ArchiveListingFailure;
+        use crate::ui::i18n::{I18n, Message};
+        for language in [Language::French, Language::English, Language::German, Language::Spanish, Language::Italian] {
+            let i18n=I18n::for_language(language);
+            for failure in [ArchiveListingFailure::MetadataLimit,ArchiveListingFailure::WorkerFailed] {
+                let backend_error=oxyde_lib::models::CommandError::ArchiveError(failure.to_string());
+                assert!(matches!(crate::ui::errors::path_load_status(&backend_error), crate::ui::workspace::TabLoadStatus::ArchiveListing(actual) if actual==failure));
+                let displayed=error_detail(&format!("Archive Error: {failure}"), &i18n);
+                assert!(!displayed.contains("Archive listing failed") && !displayed.contains("{$") && !displayed.contains("[archive-listing-"), "{displayed}");
+                assert!(displayed.len()>100);
+                match failure {
+                    ArchiveListingFailure::MetadataLimit => assert!(displayed.contains("32")),
+                    ArchiveListingFailure::WorkerFailed => assert_eq!(displayed,i18n.text(Message::ArchiveListingWorkerFailed).to_string()),
+                }
+            }
+        }
+    }
+    #[test]
     fn delete_history_failures_are_translated_in_every_language() {
         use crate::ui::i18n::{I18n, Message};
         for language in [Language::French, Language::English, Language::German, Language::Spanish, Language::Italian] {
@@ -324,6 +343,16 @@ mod tests {
 pub fn error_detail(detail: &str, i18n: &crate::ui::i18n::I18n) -> String {
     use crate::ui::i18n::{FluentArgs, Message};
     use oxyde_lib::models::error::{ArchiveLimitFailure, ArchiveLimitKind};
+    if let Some(failure) = oxyde_lib::models::error::ArchiveListingFailure::from_message(detail) {
+        return match failure {
+            oxyde_lib::models::error::ArchiveListingFailure::MetadataLimit => {
+                let mut args = FluentArgs::new();
+                args.set("limit", format_size(oxyde_lib::utils::archive_listing_protocol::MAX_REPLY as u64, false, true, i18n.language()));
+                i18n.text_with_args(Message::ArchiveListingMetadataLimit, &args).to_string()
+            }
+            oxyde_lib::models::error::ArchiveListingFailure::WorkerFailed => i18n.text(Message::ArchiveListingWorkerFailed).to_string(),
+        };
+    }
     if let Some(completed) = oxyde_lib::models::error::ShellDeleteFailure::from_message(detail) {
         return i18n.text(if completed { Message::ShellDeleteCompletedError } else { Message::ShellDeleteUnconfirmed }).to_string();
     }
