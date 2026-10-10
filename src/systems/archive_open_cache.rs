@@ -12,6 +12,18 @@ const MAX_SCAN_NODES: usize = 65_536;
 const MAX_SCAN_DEPTH: usize = 80;
 const MAX_PENDING_ENTRIES: usize = 4;
 
+thread_local! { static TEST_BASE: std::cell::RefCell<Option<PathBuf>> = const { std::cell::RefCell::new(None) }; }
+pub(crate) fn with_test_base<T>(base: &Path, run: impl FnOnce() -> T) -> T {
+    struct Restore(Option<PathBuf>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            TEST_BASE.with(|base| *base.borrow_mut() = self.0.take());
+        }
+    }
+    let _restore = Restore(TEST_BASE.with(|value| value.replace(Some(base.into()))));
+    run()
+}
+
 #[derive(Clone, Copy)]
 struct Policy {
     max_bytes: u64,
@@ -60,16 +72,25 @@ pub(crate) struct CacheEntry {
     // and inter-process lease until the temporary directory is gone.
     _guard: ExtractionRoot,
     marker: File,
-    directory: Option<tempfile::TempDir>,
+    #[cfg(all(target_os = "windows", not(test)))]
+    payload_owner: Option<super::archive_owned_tree::OwnedTree>,
+    directory: Option<CacheDirectory>,
     _session: Session,
     payload: PathBuf,
     policy: Policy,
     created: u64,
 }
 
+#[cfg(any(not(target_os = "windows"), test))]
+type CacheDirectory = tempfile::TempDir;
+#[cfg(all(target_os = "windows", not(test)))]
+type CacheDirectory = super::archive_owned_tree::OwnedTree;
+
 impl CacheEntry {
     pub fn new() -> io::Result<Self> {
-        let base = std::env::temp_dir();
+        let base = TEST_BASE
+            .with(|value| value.borrow().clone())
+            .unwrap_or_else(std::env::temp_dir);
         let started = Instant::now();
         loop {
             match Self::prepare(&base, Policy::DEFAULT, seconds(SystemTime::now())?) {
@@ -118,16 +139,28 @@ impl CacheEntry {
             _lock: Some(lock),
         };
         session.make_room(policy, now, 0, None)?;
+        #[cfg(any(not(target_os = "windows"), test))]
         let directory = tempfile::Builder::new()
             .prefix("entry-")
             .tempdir_in(&session.root)?;
+        #[cfg(all(target_os = "windows", not(test)))]
+        let mut directory =
+            super::archive_owned_tree::OwnedTree::temporary_prefix(&session.root, "entry-")?;
+        #[cfg(all(target_os = "windows", not(test)))]
+        directory.ensure_directory(&directory.path().join("data"))?;
         let entry_guard = ExtractionRoot::new(directory.path())?;
         let payload = entry_guard.destination("data", true)?.path;
         let mut marker = platform().create_archive_file(&directory.path().join(OWNER))?;
+        #[cfg(all(target_os = "windows", not(test)))]
+        directory.adopt_created_file(&directory.path().join(OWNER), &marker)?;
         serde_json::to_writer(
             &mut marker,
             &Owner {
-                version: 2,
+                version: if cfg!(all(target_os = "windows", not(test))) {
+                    3
+                } else {
+                    2
+                },
                 created: now,
                 original: None,
             },
@@ -137,6 +170,8 @@ impl CacheEntry {
         let mut entry = Self {
             _guard: entry_guard,
             marker,
+            #[cfg(all(target_os = "windows", not(test)))]
+            payload_owner: None,
             directory: Some(directory),
             _session: session,
             payload,
@@ -181,7 +216,11 @@ impl CacheEntry {
         serde_json::to_writer(
             &mut self.marker,
             &Owner {
-                version: 2,
+                version: if cfg!(all(target_os = "windows", not(test))) {
+                    3
+                } else {
+                    2
+                },
                 created: self.created,
                 original: Some(original),
             },
@@ -197,8 +236,21 @@ impl CacheEntry {
             scan.bytes,
             Some(directory),
         )?;
+        #[cfg(all(target_os = "windows", not(test)))]
+        if let Some(owner) = &mut self.payload_owner {
+            owner.keep();
+        }
         let _ = self.directory.take().unwrap().keep();
         Ok(path)
+    }
+    #[cfg(all(target_os = "windows", not(test)))]
+    pub fn finish_owned(
+        mut self,
+        path: PathBuf,
+        owner: super::archive_owned_tree::OwnedTree,
+    ) -> io::Result<PathBuf> {
+        self.payload_owner = Some(owner);
+        self.finish(path)
     }
 }
 
@@ -278,7 +330,7 @@ impl Session {
             let owner = read_owner(&path).ok();
             if owner
                 .as_ref()
-                .is_some_and(|owner| owner.version == 2 && owner.original.is_none())
+                .is_some_and(|owner| matches!(owner.version, 2 | 3) && owner.original.is_none())
             {
                 // A live preparation keeps its marker and directory open.
                 // Traversing it would race decoder writes and TempDir cleanup.
@@ -364,13 +416,17 @@ impl Session {
             return Err(io::Error::other("Cache owner record is too large"));
         }
         let owner: Owner = serde_json::from_slice(&bytes)?;
+        // A crash before completion supplies no persistent ownership proof.
+        if owner.version == 3 && owner.original.is_none() {
+            return Ok(false);
+        }
         let abandoned = owner.version == 2 && owner.original.is_none();
         let required_age = if pressure || abandoned {
             policy.launch_grace
         } else {
             policy.retention
         };
-        if !matches!(owner.version, 1 | 2)
+        if !matches!(owner.version, 1 | 2 | 3)
             || now.saturating_sub(owner.created) < required_age.as_secs()
             || (pressure && owner.version == 1 && owner.original.is_none())
         {
@@ -780,5 +836,34 @@ mod tests {
         let third = CacheEntry::prepare(base.path(), policy, now + 122).unwrap();
         assert!(!abandoned.exists());
         drop(third);
+    }
+    #[test]
+    fn version_three_abandoned_preparation_never_adopts_unknown_children() {
+        use std::io::{Seek, SeekFrom};
+        let base = tempfile::tempdir().unwrap();
+        let now = seconds(SystemTime::now()).unwrap();
+        let policy = Policy {
+            max_entries: 10,
+            ..policy()
+        };
+        let mut entry = CacheEntry::prepare(base.path(), policy, now).unwrap();
+        entry.marker.set_len(0).unwrap();
+        entry.marker.seek(SeekFrom::Start(0)).unwrap();
+        serde_json::to_writer(
+            &mut entry.marker,
+            &Owner {
+                version: 3,
+                created: now,
+                original: None,
+            },
+        )
+        .unwrap();
+        entry.marker.sync_all().unwrap();
+        let unknown = entry.payload().join("foreign");
+        fs::write(&unknown, b"keep").unwrap();
+        let _ = entry.directory.take().unwrap().keep();
+        drop(entry);
+        drop(CacheEntry::prepare(base.path(), policy, now + 122).unwrap());
+        assert_eq!(fs::read(unknown).unwrap(), b"keep");
     }
 }

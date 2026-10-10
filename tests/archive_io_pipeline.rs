@@ -12,6 +12,8 @@ use std::{
 };
 #[path = "support/iso.rs"]
 mod iso;
+#[path = "support/seven_crc.rs"]
+mod seven_crc;
 
 fn native<T>(run: impl FnOnce() -> T) -> T {
     with_worker_executable_for_tests(Path::new(env!("CARGO_BIN_EXE_oxyde")), run)
@@ -192,5 +194,130 @@ fn workspace_decode_uses_native_worker_before_parent_owned_reconstruction() {
         let mut archive = zip::ZipArchive::new(fs::File::open(path).unwrap()).unwrap();
         assert_eq!(archive.by_name("docs/original").unwrap().size(), 4);
         assert!(archive.by_name("docs/new/").unwrap().is_dir());
+    });
+}
+
+#[test]
+fn production_selected_cache_and_permanent_export_cover_all_eight_families() {
+    native(|| {
+        let temp = tempfile::tempdir().unwrap();
+        let base = temp.path().join("cache");
+        fs::create_dir(&base).unwrap();
+        oxyde_lib::commands::archive::with_archive_cache_base_for_tests(&base, || {
+            for (index, (source, name, expected)) in fixtures(temp.path()).into_iter().enumerate() {
+                let provenance = b"[ZoneTransfer]\r\nZoneId=3\r\n";
+                oxyde_lib::platform::platform()
+                    .write_file_provenance(&source, provenance)
+                    .unwrap();
+                let before = fs::read(&source).unwrap();
+                let virtual_file = source.join(name);
+                let cached =
+                    oxyde_lib::commands::archive::prepare_archive_file_for_open(&virtual_file)
+                        .unwrap();
+                assert_eq!(fs::read(&cached).unwrap(), expected);
+                let payload = cached
+                    .ancestors()
+                    .find(|path| path.file_name().is_some_and(|name| name == "data"))
+                    .unwrap();
+                let files: Vec<_> = walkdir::WalkDir::new(payload)
+                    .into_iter()
+                    .map(Result::unwrap)
+                    .filter(|entry| entry.file_type().is_file())
+                    .collect();
+                assert_eq!(files.len(), 1);
+                let folder = temp.path().join(format!("export-{index}"));
+                fs::create_dir(&folder).unwrap();
+                let first =
+                    oxyde_lib::commands::archive::extract_archive_file_to(&virtual_file, &folder)
+                        .unwrap();
+                let second =
+                    oxyde_lib::commands::archive::extract_archive_file_to(&virtual_file, &folder)
+                        .unwrap();
+                assert_ne!(first, second);
+                assert_eq!(fs::read(&first).unwrap(), expected);
+                assert_eq!(fs::read(&second).unwrap(), expected);
+                assert_eq!(fs::read_dir(&folder).unwrap().count(), 2);
+                for path in [&cached, &first, &second] {
+                    assert_eq!(
+                        oxyde_lib::platform::platform()
+                            .read_file_provenance(path)
+                            .unwrap()
+                            .as_deref(),
+                        Some(&provenance[..])
+                    );
+                }
+                assert_eq!(fs::read(source).unwrap(), before);
+            }
+        });
+    });
+}
+
+#[test]
+fn selected_failure_keeps_cache_and_export_clean_and_refuses_missing_or_directory_members() {
+    native(|| {
+        let temp = tempfile::tempdir().unwrap();
+        let base = temp.path().join("cache");
+        fs::create_dir(&base).unwrap();
+        oxyde_lib::commands::archive::with_archive_cache_base_for_tests(&base, || {
+            let source = temp.path().join("bad.zip");
+            zip(&source, "docs/safe", b"safe", true);
+            let export = temp.path().join("export");
+            fs::create_dir(&export).unwrap();
+            for name in ["docs/safe", "missing", "docs"] {
+                assert!(oxyde_lib::commands::archive::prepare_archive_file_for_open(
+                    &source.join(name)
+                )
+                .is_err());
+                assert!(oxyde_lib::commands::archive::extract_archive_file_to(
+                    &source.join(name),
+                    &export
+                )
+                .is_err());
+                assert_eq!(fs::read_dir(&export).unwrap().count(), 0);
+                assert_eq!(
+                    fs::read_dir(base.join("oxyde-archive-open/v1"))
+                        .unwrap()
+                        .count(),
+                    1
+                ); // only the cache lease
+            }
+            assert!(!temp.path().join("outside").exists());
+        });
+    });
+}
+
+#[test]
+fn selected_seven_wrapper_verifies_unselected_block_crc_tail_before_publication() {
+    native(|| {
+        let temp = tempfile::tempdir().unwrap();
+        let base = temp.path().join("cache");
+        fs::create_dir(&base).unwrap();
+        oxyde_lib::commands::archive::with_archive_cache_base_for_tests(&base, || {
+            let source = temp.path().join("block.7z");
+            let folder = temp.path().join("export");
+            fs::create_dir(&folder).unwrap();
+            for corrupt in [true, false] {
+                seven_crc::block_crc_fixture_with_method(&source, corrupt, 0);
+                let virtual_file = source.join("selected.txt");
+                let cached =
+                    oxyde_lib::commands::archive::prepare_archive_file_for_open(&virtual_file);
+                let exported =
+                    oxyde_lib::commands::archive::extract_archive_file_to(&virtual_file, &folder);
+                if corrupt {
+                    assert!(cached.is_err());
+                    assert!(exported.is_err());
+                    assert_eq!(fs::read_dir(&folder).unwrap().count(), 0);
+                    assert_eq!(
+                        fs::read_dir(base.join("oxyde-archive-open/v1"))
+                            .unwrap()
+                            .count(),
+                        1
+                    );
+                } else {
+                    assert_eq!(fs::read(cached.unwrap()).unwrap(), b"safe");
+                    assert_eq!(fs::read(exported.unwrap()).unwrap(), b"safe");
+                }
+            }
+        });
     });
 }

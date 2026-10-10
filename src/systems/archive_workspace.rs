@@ -1,4 +1,5 @@
 //! Temporary filesystem views used to edit archives without touching the original.
+#[cfg(any(not(target_os = "windows"), test))]
 use crate::commands::archive::{
     extract_iso_file_for_open, extract_seven_file_for_open,
     extract_tar_file_for_open, extract_zip_file_for_open,
@@ -126,6 +127,7 @@ impl ArchiveWorkspace {
         Self::open_in_directory_controlled(archive, checkpoint, limits, directory, op)
     }
 
+    #[cfg(any(not(target_os = "windows"), test))]
     fn open_in_directory(
         archive: PathBuf,
         checkpoint: &dyn Fn() -> std::io::Result<()>,
@@ -390,8 +392,18 @@ pub fn create_directory(path: &Path, quality: &str) -> Result<(), std::io::Error
 pub fn external_file(path: &Path) -> Result<PathBuf, crate::models::CommandError> {
     let Some((archive, internal)) = virtual_source(path) else { return Ok(path.to_path_buf()); };
     let cache = super::archive_open_cache::CacheEntry::new()?;
+    #[cfg(all(target_os = "windows", not(test)))]
+    let result = {
+        let mut owner = super::archive_owned_tree::OwnedTree::new(cache.payload(), false)?;
+        let destination = prepare_selection_owned(archive, &internal, &mut owner, ArchiveLimits::OPEN_FILE).map_err(crate::models::CommandError::ArchiveError)?;
+        cache.finish_owned(destination, owner)
+    };
+    #[cfg(any(not(target_os = "windows"), test))]
+    let result = {
     let destination = prepare_selection(archive, &internal, cache.payload()).map_err(crate::models::CommandError::ArchiveError)?;
-    cache.finish(destination).map_err(|error| {
+    cache.finish(destination)
+    };
+    result.map_err(|error| {
         log::warn!("Archive cache admission failed: {error}");
         let issue = if error.kind() == std::io::ErrorKind::WouldBlock {
             crate::models::error::ArchiveCacheIssue::Busy
@@ -403,10 +415,12 @@ pub fn external_file(path: &Path) -> Result<PathBuf, crate::models::CommandError
     })
 }
 
+#[cfg(any(not(target_os = "windows"), test))]
 fn prepare_selection(archive: PathBuf, internal: &str, target: &Path) -> Result<PathBuf, String> {
     prepare_selection_with_limits(archive, internal, target, ArchiveLimits::OPEN_FILE)
 }
 
+#[cfg(any(not(target_os = "windows"), test))]
 fn prepare_selection_with_limits(
     archive: PathBuf,
     internal: &str,
@@ -468,11 +482,28 @@ fn prepare_selection_with_limits(
 
 /// Explicit fallback chosen in Oxyde: publish a permanent copy without using
 /// the managed cache or overwriting an existing destination.
+#[cfg(all(target_os = "windows", not(test)))]
+fn prepare_selection_owned(archive: PathBuf, internal: &str, target: &mut super::archive_owned_tree::OwnedTree, limits: ArchiveLimits) -> Result<PathBuf, String> {
+    let requested = crate::utils::archive_security::relative_archive_path(internal).map_err(|e| e.to_string())?;
+    if requested.as_os_str().is_empty() { return Err("Archive item is not a file".into()); }
+    let parents = super::path_parents::HeldParents::new(&archive).map_err(|e| e.to_string())?;
+    let source = parents.resolved_path(&archive).map_err(|e| e.to_string())?;
+    let file = crate::platform::platform().open_archive_source(&source, false).map_err(|e| e.to_string())?;
+    super::archive_io::decode(&source, file, target, Some(internal), &ArchiveBudget::new(limits), None).map_err(|e| e.to_string())?;
+    Ok(target.path().join(requested))
+}
+
 pub fn export_file(path: &Path, folder: &Path) -> Result<PathBuf, crate::models::CommandError> {
     use crate::models::CommandError;
     let (archive, internal) = virtual_source(path).ok_or_else(|| CommandError::ArchiveError("Archive file not found".into()))?;
     let _folder_guard = super::path_parents::HeldParents::new(&folder.join(".oxyde-extract"))?;
+    #[cfg(any(not(target_os = "windows"), test))]
     let staging = tempfile::Builder::new().prefix(".oxyde-extract-").tempdir_in(folder)?;
+    #[cfg(all(target_os = "windows", not(test)))]
+    let mut staging = super::archive_owned_tree::OwnedTree::temporary(folder)?;
+    #[cfg(all(target_os = "windows", not(test)))]
+    let selected = prepare_selection_owned(archive, &internal, &mut staging, ArchiveLimits::OPEN_FILE).map_err(CommandError::ArchiveError)?;
+    #[cfg(any(not(target_os = "windows"), test))]
     let selected = prepare_selection(archive, &internal, staging.path()).map_err(CommandError::ArchiveError)?;
     let name = selected.file_name().ok_or_else(|| CommandError::PathError("File has no name".into()))?;
     let stem = selected.file_stem().unwrap_or(name).to_string_lossy();

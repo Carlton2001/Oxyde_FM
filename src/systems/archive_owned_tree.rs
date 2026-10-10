@@ -26,7 +26,6 @@ pub(crate) struct OwnedTree {
 }
 
 impl OwnedTree {
-    #[cfg(test)]
     pub fn new(path: &Path, remove_root: bool) -> io::Result<Self> {
         Self::new_expected(path, remove_root, None)
     }
@@ -69,10 +68,13 @@ impl OwnedTree {
         Self::new_expected(path, true, Some(platform().file_identity(file)?))
     }
     pub fn temporary(parent: &Path) -> io::Result<Self> {
+        Self::temporary_prefix(parent, ".oxyde-work-")
+    }
+    pub fn temporary_prefix(parent: &Path, prefix: &str) -> io::Result<Self> {
         let parents = HeldParents::new(&parent.join(".oxyde-work-root"))?;
         let path = parents
             .resolved_directory()
-            .join(format!(".oxyde-work-{}", uuid::Uuid::new_v4()));
+            .join(format!("{prefix}{}", uuid::Uuid::new_v4()));
         let file = platform().create_journal_directory(parents.directory(), &path, false)?;
         match Self::created(&path, &file) {
             Ok(tree) => Ok(tree),
@@ -163,26 +165,28 @@ impl OwnedTree {
                 .unwrap()
                 .file_parents(path, &mut || Ok(()), &mut |_| {})?;
         let file = platform().create_operation_output(parents.directory(), path)?;
-        let result = (|| {
-            let parent = self.parent(path)?.try_clone()?;
-            let tracking = platform().track_source_item(&parent, path)?;
-            let identity = platform().file_identity(&tracking)?;
-            if platform().file_identity(&file)? != identity {
-                return Err(io::Error::other("Created archive output changed"));
-            }
-            self.files.push(Owned {
-                path: path.into(),
-                parent,
-                tracking,
-                identity,
-            });
-            Ok(())
-        })();
+        let result = self.adopt_created_file(path, &file);
         if let Err(error) = result {
             let _ = platform().remove_copied_file(&file, path);
             return Err(error);
         }
         Ok(file)
+    }
+    pub fn adopt_created_file(&mut self, path: &Path, file: &File) -> io::Result<()> {
+        let path = self.resolved(path)?;
+        let parent = self.parent(&path)?.try_clone()?;
+        let tracking = platform().track_source_item(&parent, &path)?;
+        let identity = platform().file_identity(&tracking)?;
+        if platform().file_identity(file)? != identity {
+            return Err(io::Error::other("Created archive output changed"));
+        }
+        self.files.push(Owned {
+            path,
+            parent,
+            tracking,
+            identity,
+        });
+        Ok(())
     }
     pub fn check(&self) -> io::Result<()> {
         self.tree.as_ref().unwrap().check_all(&mut || Ok(()))

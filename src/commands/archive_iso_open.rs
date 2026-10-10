@@ -4,10 +4,14 @@ use crate::models::{CommandError, FileEntry};
 use crate::platform::platform;
 use crate::systems::path_parents::HeldParents;
 use crate::utils::archive_limits::{ArchiveBudget, ArchiveLimits, BudgetReader};
-use crate::utils::archive_security::{relative_archive_path, ExtractionRoot};
+use crate::utils::archive_security::relative_archive_path;
+#[cfg(any(not(target_os = "windows"), test))]
+use crate::utils::archive_security::ExtractionRoot;
 use std::collections::HashSet;
 use std::fs::File;
-use std::io::{self, Read, Seek, SeekFrom, Write};
+use std::io::{self, Read, Seek, SeekFrom};
+#[cfg(any(not(target_os = "windows"), test))]
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 fn invalid(message: &str) -> io::Error {
@@ -263,6 +267,7 @@ fn image<'a>(
     })
 }
 
+#[cfg(any(not(target_os = "windows"), test))]
 fn copy_extents<R: Read + Seek>(
     image: &mut Image<'_, R>,
     extents: &[Extent],
@@ -446,6 +451,7 @@ impl<R: Read + Seek> Read for ExtentReader<'_, '_, R> {
     }
 }
 
+#[cfg(any(not(target_os = "windows"), test))]
 pub(crate) fn extract_iso_file_for_open(
     archive: &Path,
     internal: &str,
@@ -455,6 +461,7 @@ pub(crate) fn extract_iso_file_for_open(
     extract_with_checkpoint(archive, internal, target, limits, &|| Ok(()))
 }
 
+#[cfg(any(not(target_os = "windows"), test))]
 fn extract_with_checkpoint(
     archive: &Path,
     internal: &str,
