@@ -503,7 +503,7 @@ impl OxydeApp {
                         .min_w_0()
                         .truncate()
                         .text_color(theme.warning_text)
-                        .tooltip(crate::ui::components::tooltip::Tooltip::text(
+                        .tooltip(crate::ui::components::tooltip::Tooltip::wrapped_text(
                             search.archive_warnings.detail(&cx.i18n()),
                         ))
                         .child(search.archive_warnings.label(&cx.i18n())),

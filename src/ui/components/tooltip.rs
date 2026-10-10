@@ -120,6 +120,7 @@ mod filename_tests {
 /// Un composant de bulle d'aide (Tooltip) dans le style Oxyde.
 pub struct Tooltip {
     title: SharedString,
+    wrap_title: bool,
     meta: Option<SharedString>,
     shortcut: Option<SharedString>,
     file_info: Option<FileInfo>,
@@ -256,7 +257,7 @@ impl Tooltip {
                     tooltip.shortcut = Some(if app.read(cx).shift_delete { "Shift+Del" } else { "Del" }.into());
                     cx.notify();
                 }).detach();
-                Self { title, meta: None, shortcut: Some(if window.modifiers().shift { "Shift+Del" } else { "Del" }.into()), file_info: None, preview_view: None }
+                Self { title, wrap_title: false, meta: None, shortcut: Some(if window.modifiers().shift { "Shift+Del" } else { "Del" }.into()), file_info: None, preview_view: None }
             }).into()
         }
     }
@@ -275,7 +276,7 @@ impl Tooltip {
     }
     pub fn for_network(file: oxyde_lib::models::FileEntry) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
         move |_, cx| cx.new(|_| Self {
-            title: file.name.clone().into(), meta: None, shortcut: None,
+            title: file.name.clone().into(), wrap_title: false, meta: None, shortcut: None,
             file_info: Some(FileInfo { location: None, network: Some(file.clone()), ext: "Réseau".into(), size: (0, false, false), date: 0 }),
             preview_view: None,
         }).into()
@@ -288,7 +289,7 @@ impl Tooltip {
         let title = title.into();
         move |_, cx| {
             cx.new(|_| Self {
-                title: title.clone(), meta: None, shortcut: shortcut.clone(),
+                title: title.clone(), wrap_title: false, meta: None, shortcut: shortcut.clone(),
                 file_info: None, preview_view: None,
             }).into()
         }
@@ -297,10 +298,24 @@ impl Tooltip {
     pub fn text(
         title: impl Into<SharedString>,
     ) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
-        let title = title.into();
+        Self::plain_text(title.into(), false)
+    }
+
+    /// Full notices and paths wrap within the bubble without truncation.
+    pub fn wrapped_text(
+        title: impl Into<SharedString>,
+    ) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
+        Self::plain_text(title.into(), true)
+    }
+
+    fn plain_text(
+        title: SharedString,
+        wrap_title: bool,
+    ) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
         move |_, cx| {
             cx.new(|_| Self {
                 title: title.clone(),
+                wrap_title,
                 meta: None,
                 shortcut: None,
                 file_info: None,
@@ -320,6 +335,7 @@ impl Tooltip {
         move |_, cx| {
             cx.new(|_| Self {
                 title: title.clone(),
+                wrap_title: false,
                 meta: Some(meta.clone()),
                 shortcut: None,
                 file_info: None,
@@ -339,6 +355,7 @@ impl Tooltip {
         move |_, cx| {
             cx.new(|_| Self {
                 title: SharedString::from(name.clone()),
+                wrap_title: false,
                 meta: None,
                 shortcut: None,
                 file_info: Some(FileInfo {
@@ -422,6 +439,7 @@ impl Tooltip {
 
             Self {
                 title: SharedString::from(name),
+                wrap_title: false,
                 meta: None,
                 shortcut: None,
                 file_info: Some(FileInfo { location, network: None, ext, size, date }),
@@ -583,13 +601,25 @@ impl Render for Tooltip {
                 }
             }
             wrap(tooltip_width).into_iter().map(|range| self.title[range].to_string().into()).collect()
+        } else if self.wrap_title {
+            let mut font = window.text_style().font();
+            font.family = "Inter".into();
+            font.weight = FontWeight::MEDIUM;
+            font.features = TNUM.clone();
+            let line = window.text_system().shape_line(self.title.clone(), rem_pixels(rems(0.75)), &[TextRun {
+                len: self.title.len(), font, color: theme.text, background_color: None,
+                underline: None, strikethrough: None,
+            }], None);
+            tooltip_width = (line.width + chrome + px(1.0)).min(maximum_width);
+            location_line_ranges(&self.title, (tooltip_width - chrome - px(1.0)).as_f32().max(1.0), |index| line.x_for_index(index).as_f32())
+                .into_iter().map(|range| self.title[range].to_string().into()).collect()
         } else {
             vec![self.title.clone()]
         };
 
         let mut box_div = div()
             .max_w(tooltip_width)
-            .when(self.file_info.is_some(), |tooltip| tooltip.w(tooltip_width))
+            .when(self.file_info.is_some() || self.wrap_title, |tooltip| tooltip.w(tooltip_width))
             .bg(theme.surface)
             .border(rems(0.0625))
             .border_color(theme.border)

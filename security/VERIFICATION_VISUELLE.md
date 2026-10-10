@@ -1,5 +1,22 @@
 # Vérification visuelle de sécurité — Windows
 
+## Reprise ciblée après ton retour — lots 66–67
+
+Ton retour valide sans anomalie signalée les aperçus, la navigation dans les archives, l'ouverture/extraction et les messages (points 1, 3, 4 et 6). **Seuls les points 2 et 5 sont à reprendre**, après les corrections du statut Shell et du retour à la ligne de l'avertissement. Aucun Computer Use ni contrôle visuel de ces deux corrections par l'agent.
+
+Exécutable à utiliser : `C:\Users\Biluf\Documents\Projects\Oxyde-GPUI\target\debug\oxyde.exe`, après fermeture d'une ancienne instance. Nouveau jeu indépendant prêt :
+
+```text
+C:\Users\Biluf\Documents\Projects\Oxyde-GPUI\target\security-visual-check-palyjsiu
+```
+
+1. **Suppression et historique :** dans le sous-dossier de test `corbeille` (qui est un dossier ordinaire du jeu, pas la corbeille Windows), supprimer `Annuler école.txt` vers la corbeille Windows. L'opération doit réussir ; les vues source/corbeille doivent se mettre à jour sans F5. Utiliser Annuler, Rétablir puis Annuler : nom et contenu du fichier doivent être conservés. Refaire avec `Dossier école`. Supprimer uniquement `page.html`, sans sélectionner `page_files` : ce dossier compagnon et son contenu doivent rester présents ; Annuler restitue `page.html`. Ne pas vider la corbeille ni utiliser de documents personnels. Les anciennes suppressions effectuées par le binaire fautif ne reçoivent pas rétroactivement un historique ; la fixture neuve permet de vérifier une nouvelle action.
+2. **Infobulle des avertissements :** lancer la recherche avancée avec recherche dans les archives sur le nouveau jeu, puis survoler le compteur d'archives ignorées. Le chemin et l'explication doivent rester entièrement dans la bulle, sur plusieurs lignes si nécessaire. Vérifier aussi après réduction de la fenêtre ou augmentation de l'échelle d'interface, puis dans une autre langue ; remettre tes préférences habituelles ensuite. Une recherche de `note` permet de conserver des résultats normaux en présence de la ZIP corrompue/limitée.
+
+Les tests automatisés des callbacks et de l'historique utilisent seulement des renommages privés ; la vraie suppression/restauration et la présentation restent à confirmer ici. Validation finale : **782 tests réussis**, aucun échec, 17 tests préexistants ignorés non activés ; check et build sans avertissement. Détails au lot 67 de `AUDIT_SECURITE.md`. Les risques structurels ouverts dans l'audit restent distincts de ces deux régressions.
+
+## Historique des protocoles et retours antérieurs
+
 ## Reprise à effectuer maintenant — 10 octobre 2026, lot 65
 
 **Le code de cette passe est terminé et le binaire est prêt.** La validation du lot 58 (« tout fonctionne ») reste acquise. Cette reprise couvre les modifications ultérieures et le délai d'affichage du chargement, sans refaire tous les anciens essais. Aucun contrôle visuel n'a été effectué par l'agent et aucun outil Computer Use n'a été utilisé.
