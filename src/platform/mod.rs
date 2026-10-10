@@ -79,6 +79,7 @@ impl ShellDeleteOutcome {
 /// doit passer par ce trait plutôt qu'appeler directement les API OS.
 pub trait Platform: Send + Sync {
     fn list_archive_directory(&self, path: &std::path::Path, internal: &str) -> Result<Vec<crate::models::FileEntry>, crate::models::CommandError>;
+    fn index_archive_contents(&self, path: &std::path::Path, checkpoint: &dyn Fn() -> std::io::Result<()>) -> Result<Vec<crate::models::FileEntry>, crate::models::CommandError>;
     fn initialize_preview_worker(&self) -> std::io::Result<()> { Ok(()) }
     #[doc(hidden)]
     fn decode_preview_worker(&self, _mode: &str, _path: &std::path::Path) -> crate::utils::preview_protocol::Reply {

@@ -462,25 +462,7 @@ fn search_archive(
             Ok(())
         }
     };
-    let index = match format {
-        ArchiveFormat::Zip
-        | ArchiveFormat::Tar
-        | ArchiveFormat::TarGz
-        | ArchiveFormat::TarXz
-        | ArchiveFormat::TarZst
-        | ArchiveFormat::TarBz2 => {
-            super::archive_metadata::indexed_files(archive_path, &checkpoint)
-        }
-        ArchiveFormat::SevenZip => {
-            super::archive_seven_open::indexed_files(archive_path, &checkpoint)
-        }
-        ArchiveFormat::Iso => super::archive_iso_open::indexed_files(archive_path, &checkpoint),
-        _ => {
-            return Err(crate::models::CommandError::ArchiveError(
-                "Unsupported archive search format".into(),
-            ))
-        }
-    };
+    let index = super::archive::index_archive_contents(archive_path, &checkpoint);
     for entry in index? {
         if checkpoint().is_err() {
             break;

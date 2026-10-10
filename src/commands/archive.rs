@@ -142,6 +142,24 @@ fn virtual_entry_path(archive: &Path, internal: &str, name: &str) -> Result<Stri
     Ok(path.to_string_lossy().into_owned())
 }
 
+/// Complete index for search; production Windows parsing is delegated through
+/// Platform. Unit fixtures use the local parser instead of the Rust test runner.
+pub(crate) fn index_archive_contents(path: &Path, checkpoint: &dyn Fn() -> io::Result<()>) -> Result<Vec<FileEntry>, CommandError> {
+    #[cfg(test)]
+    { index_archive_contents_local(path, checkpoint) }
+    #[cfg(not(test))]
+    { platform().index_archive_contents(path, checkpoint) }
+}
+
+pub(crate) fn index_archive_contents_local(path: &Path, checkpoint: &dyn Fn() -> io::Result<()>) -> Result<Vec<FileEntry>, CommandError> {
+    match ArchiveFormat::from_path(path) {
+        Some(ArchiveFormat::Zip | ArchiveFormat::Tar | ArchiveFormat::TarGz | ArchiveFormat::TarXz | ArchiveFormat::TarZst | ArchiveFormat::TarBz2) => super::archive_metadata::indexed_files(path, checkpoint),
+        Some(ArchiveFormat::SevenZip) => super::archive_seven_open::indexed_files(path, checkpoint),
+        Some(ArchiveFormat::Iso) => super::archive_iso_open::indexed_files(path, checkpoint),
+        _ => Err(CommandError::ArchiveError("Unsupported archive search format".into())),
+    }
+}
+
 fn list_indexed_metadata(
     path: &Path,
     internal_prefix: &str,

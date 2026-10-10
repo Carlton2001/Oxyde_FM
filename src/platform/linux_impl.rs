@@ -10,6 +10,9 @@ impl LinuxPlatform {
 }
 
 impl Platform for LinuxPlatform {
+    fn index_archive_contents(&self, path: &std::path::Path, checkpoint: &dyn Fn() -> std::io::Result<()>) -> Result<Vec<crate::models::FileEntry>, crate::models::CommandError> {
+        crate::commands::archive::index_archive_contents_local(path, checkpoint)
+    }
     fn list_archive_directory(&self, path: &std::path::Path, internal: &str) -> Result<Vec<crate::models::FileEntry>, crate::models::CommandError> {
         crate::commands::archive::list_archive_contents_local(path.to_string_lossy().into_owned(), internal.into())
     }

@@ -10,6 +10,43 @@ pub const MAX_REPLY: usize = 32 * 1024 * 1024;
 const MAX_ENTRIES: usize = 100_000;
 const MAX_ERROR: usize = 4096;
 const MAGIC: &[u8; 8] = b"OXYARCH1";
+const INDEX_MAGIC: &[u8; 8] = b"OXYARIX1";
+#[derive(Clone, Copy)]
+enum Mode {
+    Directory,
+    Index,
+}
+impl Mode {
+    fn magic(self) -> &'static [u8; 8] {
+        match self {
+            Self::Directory => MAGIC,
+            Self::Index => INDEX_MAGIC,
+        }
+    }
+    fn validate(self, name: &str) -> io::Result<()> {
+        match self {
+            Self::Directory => validate_name(name),
+            Self::Index => {
+                let relative = relative_archive_path(name)?;
+                if relative.as_os_str().is_empty()
+                    || relative.to_string_lossy().replace('\\', "/") != name
+                {
+                    return Err(invalid());
+                }
+                if relative.components().count() > 64 {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        ArchiveLimitFailure {
+                            kind: ArchiveLimitKind::Depth,
+                            limit: 64,
+                        },
+                    ));
+                }
+                Ok(())
+            }
+        }
+    }
+}
 
 fn invalid() -> io::Error {
     io::Error::new(
@@ -49,6 +86,29 @@ pub fn encode(
     result: Result<Vec<FileEntry>, CommandError>,
     output: &mut impl Write,
 ) -> io::Result<()> {
+    encode_mode(result, output, Mode::Directory)
+}
+
+pub fn encode_index(
+    mut result: Result<Vec<FileEntry>, CommandError>,
+    archive: &Path,
+    output: &mut impl Write,
+) -> io::Result<()> {
+    if let Ok(entries) = &mut result {
+        for entry in entries {
+            let relative = Path::new(&entry.path)
+                .strip_prefix(archive)
+                .map_err(|_| invalid())?;
+            entry.name = relative.to_string_lossy().replace('\\', "/");
+        }
+    }
+    encode_mode(result, output, Mode::Index)
+}
+fn encode_mode(
+    result: Result<Vec<FileEntry>, CommandError>,
+    output: &mut impl Write,
+    mode: Mode,
+) -> io::Result<()> {
     match result {
         Ok(entries) => {
             if entries.len() > MAX_ENTRIES {
@@ -57,7 +117,7 @@ pub fn encode(
             let mut size = 13usize;
             let mut seen = HashSet::new();
             for entry in &entries {
-                validate_name(&entry.name)?;
+                mode.validate(&entry.name)?;
                 if !seen.insert(&entry.name) {
                     return Err(invalid());
                 }
@@ -69,7 +129,7 @@ pub fn encode(
                     return Err(metadata_limit());
                 }
             }
-            output.write_all(MAGIC)?;
+            output.write_all(mode.magic())?;
             output.write_all(&[0])?;
             output.write_all(&(entries.len() as u32).to_le_bytes())?;
             for entry in entries {
@@ -89,7 +149,7 @@ pub fn encode(
             while !detail.is_char_boundary(end) {
                 end -= 1;
             }
-            output.write_all(MAGIC)?;
+            output.write_all(mode.magic())?;
             output.write_all(&[1])?;
             output.write_all(&(end as u32).to_le_bytes())?;
             output.write_all(&detail.as_bytes()[..end])?;
@@ -122,7 +182,26 @@ pub fn decode(
     archive: &Path,
     internal: &str,
 ) -> Result<Vec<FileEntry>, CommandError> {
-    decode_io(bytes, archive, internal).map_err(|error| {
+    decode_mode(bytes, archive, internal, Mode::Directory, &|| Ok(()))
+}
+pub fn decode_index(
+    bytes: &[u8],
+    archive: &Path,
+    checkpoint: &dyn Fn() -> io::Result<()>,
+) -> Result<Vec<FileEntry>, CommandError> {
+    decode_mode(bytes, archive, "", Mode::Index, checkpoint)
+}
+fn decode_mode(
+    bytes: &[u8],
+    archive: &Path,
+    internal: &str,
+    mode: Mode,
+    checkpoint: &dyn Fn() -> io::Result<()>,
+) -> Result<Vec<FileEntry>, CommandError> {
+    decode_io(bytes, archive, internal, mode, checkpoint).map_err(|error| {
+        if error.kind() == io::ErrorKind::Interrupted {
+            return CommandError::IoError(error.to_string());
+        }
         let detail = error.to_string();
         CommandError::ArchiveError(
             if ArchiveListingFailure::from_message(&detail).is_some()
@@ -139,14 +218,17 @@ fn decode_io(
     mut bytes: &[u8],
     archive: &Path,
     internal: &str,
+    mode: Mode,
+    checkpoint: &dyn Fn() -> io::Result<()>,
 ) -> io::Result<Result<Vec<FileEntry>, CommandError>> {
+    checkpoint()?;
     if bytes.len() > MAX_REPLY {
         return Err(metadata_limit());
     }
     let parent = archive.join(relative_archive_path(internal)?);
     let mut magic = [0; 8];
     bytes.read_exact(&mut magic)?;
-    if &magic != MAGIC {
+    if &magic != mode.magic() {
         return Err(invalid());
     }
     let mut status = [0];
@@ -184,6 +266,7 @@ fn decode_io(
     entries.try_reserve_exact(count).map_err(|_| invalid())?;
     let mut seen = HashSet::new();
     for _ in 0..count {
+        checkpoint()?;
         let length = read_u32(&mut bytes)? as usize;
         let mut flags = [0];
         bytes.read_exact(&mut flags)?;
@@ -193,7 +276,8 @@ fn decode_io(
         let size = read_u64(&mut bytes)?;
         let modified = read_u64(&mut bytes)?;
         let name = text(&mut bytes, length)?;
-        validate_name(name)?;
+        mode.validate(name)?;
+        let relative = relative_archive_path(name)?;
         metadata_bytes = name
             .len()
             .checked_mul(2)
@@ -206,8 +290,15 @@ fn decode_io(
             return Err(invalid());
         }
         entries.push(FileEntry {
-            name: name.into(),
-            path: parent.join(name).to_string_lossy().into_owned(),
+            name: match mode {
+                Mode::Directory => name.into(),
+                Mode::Index => relative
+                    .file_name()
+                    .ok_or_else(invalid)?
+                    .to_string_lossy()
+                    .into_owned(),
+            },
+            path: parent.join(&relative).to_string_lossy().into_owned(),
             is_dir: flags[0] & 1 != 0,
             is_hidden: flags[0] & 2 != 0,
             is_system: flags[0] & 4 != 0,
@@ -219,6 +310,7 @@ fn decode_io(
     if !bytes.is_empty() {
         return Err(invalid());
     }
+    checkpoint()?;
     Ok(Ok(entries))
 }
 
@@ -347,5 +439,105 @@ mod tests {
             ArchiveListingFailure::from_message(&error.to_string()),
             Some(ArchiveListingFailure::MetadataLimit)
         ));
+    }
+    #[test]
+    fn index_preserves_full_paths_and_basename_without_accepting_directory_reply_or_foreign_roots()
+    {
+        let archive = Path::new("selected.zip");
+        let entries = ["docs/école.txt", "other/école.txt"]
+            .into_iter()
+            .map(|relative| FileEntry {
+                name: "école.txt".into(),
+                path: archive.join(relative).to_string_lossy().into_owned(),
+                size: 12,
+                modified: 34,
+                ..FileEntry::default()
+            })
+            .collect();
+        let mut reply = Vec::new();
+        encode_index(Ok(entries), archive, &mut reply).unwrap();
+        let entries = decode_index(&reply, archive, &|| Ok(())).unwrap();
+        assert_eq!(entries.len(), 2);
+        assert!(entries
+            .iter()
+            .all(|entry| entry.name == "école.txt" && entry.size == 12 && entry.modified == 34));
+        assert_eq!(
+            entries[0].path,
+            archive.join("docs").join("école.txt").to_string_lossy()
+        );
+        assert_ne!(entries[0].path, entries[1].path);
+        assert!(decode(&reply, archive, "").is_err());
+        assert!(decode_index(&bytes("a"), archive, &|| Ok(())).is_err());
+        let mut output = Vec::new();
+        assert!(encode_index(
+            Ok(vec![FileEntry {
+                path: "foreign.txt".into(),
+                ..FileEntry::default()
+            }]),
+            archive,
+            &mut output
+        )
+        .is_err());
+        assert!(output.is_empty());
+        for end in 0..reply.len() {
+            assert!(decode_index(&reply[..end], archive, &|| Ok(())).is_err());
+        }
+    }
+    #[test]
+    fn index_rejects_escaping_aliases_duplicate_paths_and_depth_before_publication() {
+        let archive = Path::new("selected.zip");
+        let deep = std::iter::repeat_n("a", 65).collect::<Vec<_>>().join("/");
+        for name in [
+            "../outside",
+            "C:/outside",
+            "/outside",
+            "a/./b",
+            "a//b",
+            "a\\b",
+            "a/../b",
+            "a/NUL",
+            &deep,
+        ] {
+            let mut reply = INDEX_MAGIC.to_vec();
+            reply.push(0);
+            reply.extend_from_slice(&1u32.to_le_bytes());
+            reply.extend_from_slice(&(name.len() as u32).to_le_bytes());
+            reply.push(0);
+            reply.extend_from_slice(&[0; 16]);
+            reply.extend_from_slice(name.as_bytes());
+            assert!(decode_index(&reply, archive, &|| Ok(())).is_err(), "{name}");
+        }
+        let mut reply = INDEX_MAGIC.to_vec();
+        reply.extend_from_slice(&bytes("a")[8..]);
+        reply[9..13].copy_from_slice(&2u32.to_le_bytes());
+        reply.extend_from_slice(&reply[13..].to_vec());
+        assert!(decode_index(&reply, archive, &|| Ok(())).is_err());
+    }
+    #[test]
+    fn index_decoding_cancellation_discards_partial_results() {
+        let archive = Path::new("selected.zip");
+        let mut reply = Vec::new();
+        let entries = (0..3)
+            .map(|index| FileEntry {
+                path: archive
+                    .join(format!("docs/f{index}"))
+                    .to_string_lossy()
+                    .into_owned(),
+                ..FileEntry::default()
+            })
+            .collect();
+        encode_index(Ok(entries), archive, &mut reply).unwrap();
+        let calls = std::cell::Cell::new(0);
+        let checkpoint = || {
+            calls.set(calls.get() + 1);
+            if calls.get() >= 3 {
+                Err(io::Error::new(io::ErrorKind::Interrupted, "cancelled"))
+            } else {
+                Ok(())
+            }
+        };
+        let error = decode_index(&reply, archive, &checkpoint).unwrap_err();
+        assert!(error.to_string().contains("cancelled"));
+        assert!(ArchiveListingFailure::from_message(&error.to_string()).is_none());
     }
 }

@@ -209,6 +209,7 @@ impl ArchiveSearchWarnings {
         let reason = if oxyde_lib::models::error::ArchiveLimitFailure::from_message(detail)
             .is_some()
             || oxyde_lib::models::error::ArchiveSourceConflict::from_message(detail)
+            || oxyde_lib::models::error::ArchiveListingFailure::from_message(detail).is_some()
         {
             crate::ui::format::error_detail(detail, i18n)
         } else {
@@ -278,6 +279,15 @@ mod archive_warning_tests {
                 &i18n
             )));
             assert!(!detail.contains("Archive limit exceeded"));
+        }
+        for failure in [oxyde_lib::models::error::ArchiveListingFailure::MetadataLimit,oxyde_lib::models::error::ArchiveListingFailure::WorkerFailed] {
+            let mut warnings=ArchiveSearchWarnings::default();warnings.record("C:\\index.zip".into(),failure.to_string());
+            for language in Language::ALL {
+                let i18n=crate::ui::i18n::I18n::for_language(language);
+                let detail=warnings.detail(&i18n);
+                assert!(detail.contains("C:\\index.zip") && detail.contains(&crate::ui::format::error_detail(&failure.to_string(),&i18n)));
+                assert!(!detail.contains("Archive listing failed"));
+            }
         }
     }
 }

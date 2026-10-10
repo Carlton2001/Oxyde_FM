@@ -154,3 +154,8 @@ La validation précédente du lot 58 reste acquise pour ses parcours. L’implé
 ## Reprise ciblée de navigation — lot 61
 
 Après la fin des modifications, utiliser uniquement les archives du jeu généré : ouvrir une ZIP et son sous-dossier, puis une 7z, une TAR compressée et l'ISO. Vérifier liste/grille, noms et navigation de retour, avec les aperçus habituels disponibles en parallèle. Les erreurs de worker/délai et de taille des métadonnées restent couvertes automatiquement ; il n'est pas nécessaire de créer une archive énorme pour cette revue. La recherche, l'extraction et les modifications d'archive conservent leurs parcours précédents. Cette reprise visuelle n'a pas été exécutée.
+
+
+## Reprise ciblée de recherche — lot 62
+
+Après la fin des modifications, lancer une recherche avancée avec recherche dans les archives sur le jeu généré, vérifier un résultat d'un sous-dossier et son emplacement, puis arrêter et relancer la recherche. Vérifier qu'une archive corrompue ou limitée produit un avertissement et laisse apparaître les autres résultats. Les annulations de parseur bloqué restent des tests automatisés ; aucun gros fichier ni document personnel nécessaire. La recherche rapide et les filtres habituels ne changent pas. Revue visuelle non exécutée.

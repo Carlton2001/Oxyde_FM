@@ -158,12 +158,32 @@ pub(super) fn supervise_bounded(
     max_reply: usize,
     timeout_detail: &str,
 ) -> io::Result<Vec<u8>> {
+    supervise_checked(
+        command,
+        deadline,
+        memory_bytes,
+        max_reply,
+        timeout_detail,
+        &|| Ok(()),
+    )
+}
+
+pub(super) fn supervise_checked(
+    command: Command,
+    deadline: Duration,
+    memory_bytes: usize,
+    max_reply: usize,
+    timeout_detail: &str,
+    checkpoint: &dyn Fn() -> io::Result<()>,
+) -> io::Result<Vec<u8>> {
+    checkpoint()?;
     let started = Instant::now();
     let (mut worker, mut output) = Worker::start(command, memory_bytes)?;
     let mut bytes = Vec::new();
     let mut chunk = [0; 64 * 1024];
     let mut exited = None;
     loop {
+        checkpoint()?;
         if started.elapsed() >= deadline {
             return Err(io::Error::new(
                 io::ErrorKind::TimedOut,

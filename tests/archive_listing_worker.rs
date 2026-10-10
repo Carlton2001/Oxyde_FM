@@ -25,6 +25,14 @@ fn listing(path: &Path, internal: &str) -> Result<Vec<models::FileEntry>, models
         Duration::from_secs(120),
     )
 }
+fn index(path: &Path) -> Result<Vec<models::FileEntry>, models::CommandError> {
+    windows_archive_worker::index_in(
+        Path::new(env!("CARGO_BIN_EXE_oxyde")),
+        path,
+        Duration::from_secs(120),
+        &|| Ok(()),
+    )
+}
 fn zip(path: &Path, unsafe_name: bool) {
     let mut writer = zip::ZipWriter::new(std::fs::File::create(path).unwrap());
     for name in [
@@ -60,6 +68,10 @@ fn actual_worker_lists_zip_tar_compressions_seven_zip_and_iso_without_writing_so
         archive.join("docs").join("école.txt").to_string_lossy()
     );
     assert_eq!(nested[0].size, 4);
+    let all = index(&archive).unwrap();
+    assert_eq!(all.len(), 2);
+    assert!(all.iter().any(|entry| entry.name == "école.txt"
+        && Path::new(&entry.path) == archive.join("docs").join("école.txt")));
     assert_eq!(std::fs::read(&archive).unwrap(), before);
     let mut builder = tar::Builder::new(Vec::new());
     let mut header = tar::Header::new_gnu();
@@ -89,6 +101,11 @@ fn actual_worker_lists_zip_tar_compressions_seven_zip_and_iso_without_writing_so
         let entry = listing(&path, "docs").unwrap().remove(0);
         assert_eq!(entry.name, "école.txt");
         assert_eq!(entry.size, 4);
+        let all = index(&path).unwrap();
+        assert_eq!(all.len(), 1);
+        assert_eq!(all[0].path, entry.path);
+        assert_eq!(all[0].name, entry.name);
+        assert_eq!(all[0].modified, entry.modified);
         assert_eq!(std::fs::read(&path).unwrap(), data);
     }
     let path = directory.path().join("école.7z");
@@ -102,6 +119,7 @@ fn actual_worker_lists_zip_tar_compressions_seven_zip_and_iso_without_writing_so
         .unwrap();
     writer.finish().unwrap();
     assert_eq!(listing(&path, "docs").unwrap()[0].size, 4);
+    assert_eq!(index(&path).unwrap()[0].name, "école.txt");
     let path = directory.path().join("image.iso");
     iso_fixture(&path);
     let root = listing(&path, "").unwrap();
@@ -109,6 +127,11 @@ fn actual_worker_lists_zip_tar_compressions_seven_zip_and_iso_without_writing_so
         .iter()
         .any(|entry| entry.name == "DOCS" && entry.is_dir));
     assert_eq!(listing(&path, "DOCS").unwrap()[0].name, "README.TXT");
+    assert!(index(&path)
+        .unwrap()
+        .iter()
+        .any(|entry| entry.name == "README.TXT"
+            && Path::new(&entry.path) == path.join("DOCS").join("README.TXT")));
     assert_eq!(std::fs::read_dir(directory.path()).unwrap().count(), 8);
     // Terminated workers release their read handles before the caller returns.
     for item in std::fs::read_dir(directory.path()).unwrap() {
@@ -122,6 +145,7 @@ fn actual_worker_refuses_unsafe_names_corruption_and_invalid_requests_without_si
     let path = directory.path().join("unsafe.zip");
     zip(&path, true);
     assert!(listing(&path, "").is_err());
+    assert!(index(&path).is_err());
     assert!(!directory.path().join("outside.txt").exists());
     assert!(listing(&path, "../outside").is_err());
     assert!(listing(&path, "C:\\outside").is_err());
@@ -171,6 +195,54 @@ fn supervisor_times_out_bounds_stdout_and_refuses_failed_or_malformed_children_w
         assert!(matches!(ArchiveListingFailure::from_message(&error.to_string()),Some(ArchiveListingFailure::WorkerFailed)),"{error}");
     }
     assert_eq!(listing(&path, "").unwrap().len(), 2);
+}
+
+#[test]
+fn index_supervisor_cancellation_stops_stalled_child_and_never_launches_when_already_cancelled() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("valid with spaces.zip");
+    zip(&path, false);
+    let stopped = || {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::Interrupted,
+            "cancelled",
+        ))
+    };
+    let error = windows_archive_worker::index_in(
+        Path::new("C:/nonexistent-test-worker.exe"),
+        &path,
+        Duration::from_secs(120),
+        &stopped,
+    )
+    .unwrap_err();
+    assert!(error.to_string().contains("cancelled"));
+    assert!(ArchiveListingFailure::from_message(&error.to_string()).is_none());
+    let started = Instant::now();
+    let checkpoint = || {
+        if started.elapsed() > Duration::from_millis(200) {
+            stopped()
+        } else {
+            Ok(())
+        }
+    };
+    let error = windows_archive_worker::supervise_index(
+        powershell(
+            "$g=[Console]::OpenStandardInput().ReadByte(); [Threading.Thread]::Sleep(10000)",
+        ),
+        &path,
+        Duration::from_secs(120),
+        &checkpoint,
+    )
+    .unwrap_err();
+    assert!(started.elapsed() < Duration::from_secs(4));
+    assert!(error.to_string().contains("cancelled"));
+    assert!(ArchiveListingFailure::from_message(&error.to_string()).is_none());
+    for script in ["$g=[Console]::OpenStandardInput().ReadByte(); exit 9", "$g=[Console]::OpenStandardInput().ReadByte(); [Console]::OpenStandardOutput().WriteByte(0)"] {
+        let error=windows_archive_worker::supervise_index(powershell(script),&path,Duration::from_secs(10),&||Ok(())).unwrap_err();
+        assert!(matches!(ArchiveListingFailure::from_message(&error.to_string()),Some(ArchiveListingFailure::WorkerFailed)));
+    }
+    assert_eq!(index(&path).unwrap().len(), 2);
+    std::fs::remove_file(&path).unwrap();
 }
 
 fn iso_fixture(path: &Path) {
