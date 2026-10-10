@@ -1,8 +1,10 @@
 # Vérification visuelle de sécurité — Windows
 
-## Nouveau binaire à valider — 10 octobre 2026, lot 75
+## Validation visuelle acquise — 10 octobre 2026, lot 75
 
-**Le code d'isolation Windows est terminé. Les tests visuels de ce nouveau binaire attendent votre retour.** La validation des lots 66–67 ci-dessous reste acquise pour cette ancienne passe. Aucun Computer Use ni lancement d'interface par l'agent.
+Votre retour « Tests visuels OK » valide la passe d'isolation Windows livrée au commit `243140d`, sans anomalie signalée. **Le chantier est terminé côté code et validation visuelle dans son périmètre défini.** Cette validation vient de l'utilisateur ; aucun Computer Use ni lancement d'interface par l'agent. Le retour ne détaille pas chaque variante du protocole et ne clôture pas les limites structurelles consignées dans l'audit. La validation des lots 66–67 reste acquise pour cette ancienne passe.
+
+### Protocole de référence de la passe validée
 
 Fermer l'ancienne instance, puis lancer `C:\Users\Biluf\Documents\Projects\Oxyde-GPUI\target\debug\oxyde.exe`. Jeu neuf indépendant :
 
@@ -40,7 +42,7 @@ $fixtureRoot = 'C:/Users/Biluf/Documents/Projects/Oxyde-GPUI/target/security-vis
 
 Seul le processus enfant reçoit le TEMP privé ; aucune variable système ni cache existant n'est modifié. Dans le nouveau jeu, ouvrir `archives/01-normal.zip/école_日本語/note.txt`. La notification de cache indisponible doit proposer « Extraire et ouvrir… ». Annuler une fois le sélecteur, puis recommencer et choisir `destinations/export`. Le témoin `note.txt` (« TÉMOIN À CONSERVER ») reste intact ; le membre extrait reçoit un suffixe de collision, avec son contenu Unicode attendu. Refaire avec 7z, TAR et ses compressions, ISO/IMG ; les sorties précédentes restent intactes. Fermer cette instance, puis relancer Oxyde normalement. Le lanceur n'a pas été exécuté par l'agent.
 
-Validation automatisée : **852 tests réussis**, aucun échec, 17 ignorés préexistants ; check de toutes les cibles et build sans avertissement du projet. Les callbacks de récupération ont été revérifiés avec les 163 tests d'interface après leur raccordement final. Le plafond mémoire par worker et les essais de fautes ne valident ni un sandbox de permissions ni un budget global. La compilation Linux tentée est bloquée par le sysroot/Fontconfig de l'environnement croisé ; Linux conserve son comportement local. Bilan et autres limites dans [AUDIT_SECURITE.md](../AUDIT_SECURITE.md). Pour une anomalie, relever fixture, action et résultat ; aucun nouveau résultat visuel n'est supposé avant votre retour.
+Validation automatisée : **852 tests réussis**, aucun échec, 17 ignorés préexistants ; check de toutes les cibles et build sans avertissement du projet. Les callbacks de récupération ont été revérifiés avec les 163 tests d'interface après leur raccordement final. Le plafond mémoire par worker et les essais de fautes ne valident ni un sandbox de permissions ni un budget global. La compilation Linux tentée est bloquée par le sysroot/Fontconfig de l'environnement croisé ; Linux conserve son comportement local. Bilan et autres limites dans [AUDIT_SECURITE.md](../AUDIT_SECURITE.md). Pour une anomalie, relever fixture, action et résultat ; le retour « Tests visuels OK » est consigné en tête de ce document.
 
 ## Validation visuelle acquise — 10 octobre 2026, lots 66–67
 

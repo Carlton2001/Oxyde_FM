@@ -3,7 +3,7 @@
 Date : 10 octobre 2026. Lot 68 : cadrage documentaire, avant implémentation.
 Base de reprise : `master`, `c0f9c58` (arbre propre au début du cadrage).
 
-État actuel : fin du code Windows au lot 75, validations automatisées et binaire prêts ; nouveaux tests visuels à effectuer par l'utilisateur. Le cadrage d'origine et les bornes successives sont conservés ci-dessous. Les limites structurelles hors périmètre restent ouvertes.
+État actuel : chantier Windows terminé dans son périmètre défini, code et validation visuelle utilisateur acquis au lot 75. Le retour « Tests visuels OK » concerne la livraison `243140d`. Le cadrage d'origine et les bornes successives sont conservés ci-dessous. Les limites structurelles hors périmètre restent ouvertes.
 
 ## Point de départ et résultat attendu
 
@@ -149,7 +149,7 @@ Le code est terminé seulement lorsque **tous** les points suivants sont établi
 7. L’audit distingue les garanties obtenues des limites encore ouvertes. Les commits locaux couvrent chaque lot, aucune modification du chantier ne reste non commitée ; les fichiers utilisateur indépendants sont préservés. Aucun push.
 8. Le binaire final et un jeu neuf de petites fixtures sont prêts. Le protocole visuel ciblé couvre extraction/ouverture/export, modification et transfert d’archives, pause/reprise/annulation/progression, erreurs traduites et fermeture avec une opération en cours. Aucune nouvelle validation visuelle n’est déduite de celle de `c0f9c58`.
 
-La clôture visuelle est distincte de la fin du code : elle interviendra seulement après le retour de l’utilisateur sur ce nouveau binaire. Le lot 68 n’en demande pas et ne rouvre pas la passe précédente.
+La clôture visuelle est distincte de la fin du code : elle exige le retour de l’utilisateur sur le nouveau binaire. Le retour « Tests visuels OK » sur la livraison du lot 75 est maintenant acquis. Le lot 68 n’en demandait pas et ne rouvrait pas la passe précédente.
 
 ## Réalisation — lot 69a : socle de transport et admission
 
@@ -235,4 +235,4 @@ La dernière revue a raccordé les récupérations au panneau d'opérations, à 
 
 Validation finale : `cargo check --all-targets --locked --offline`, `cargo test --all-targets --locked --offline` et `cargo build --bin oxyde --locked --offline` réussis sans avertissement du projet ; **852 tests réussis**, aucun échec, 17 ignorés préexistants (640 bibliothèque, 163 interface, 49 intégrations). Aucun changement de Cargo.toml/Cargo.lock ni des trois dépendances conservées. La cible Linux installée a été tentée ; la dépendance Fontconfig ne peut être compilée sans configuration du sysroot et de `pkg-config`, donc aucune validation Linux d'Oxyde n'est acquise. Aucun Computer Use, lancement d'interface, suivi automatique ou push.
 
-`examples/prepare_archive_isolation_visual.rs` crée un nouveau dossier sous `target`, sans toucher aux sessions précédentes, puis vérifie les neuf archives normales par extraction native et comparaison des contenus/noms/dossiers vides. Le jeu courant compte **53 fichiers, 773 691 octets hors manifeste**, avec témoins de refus, collision d'export et TEMP privé pour le scénario utilisateur de cache indisponible. Le binaire final et le nouveau protocole sont en tête de [VERIFICATION_VISUELLE.md](VERIFICATION_VISUELLE.md). L'audit actuel distingue les garanties Windows obtenues des droits inchangés, budgets globaux absents, limites Shell/fournisseurs, appels parent bloquants, fidélité d'un worker compromis, cache abandonné sans preuve persistante et atomicité multi-archives absente. Le code du périmètre est terminé ; la validation visuelle de ce nouveau binaire reste ouverte jusqu'au retour utilisateur.
+`examples/prepare_archive_isolation_visual.rs` crée un nouveau dossier sous `target`, sans toucher aux sessions précédentes, puis vérifie les neuf archives normales par extraction native et comparaison des contenus/noms/dossiers vides. Le jeu courant compte **53 fichiers, 773 691 octets hors manifeste**, avec témoins de refus, collision d'export et TEMP privé pour le scénario utilisateur de cache indisponible. Le binaire final et le nouveau protocole sont en tête de [VERIFICATION_VISUELLE.md](VERIFICATION_VISUELLE.md). L'audit actuel distingue les garanties Windows obtenues des droits inchangés, budgets globaux absents, limites Shell/fournisseurs, appels parent bloquants, fidélité d'un worker compromis, cache abandonné sans preuve persistante et atomicité multi-archives absente. Le code du périmètre et sa validation visuelle sont terminés : retour utilisateur « Tests visuels OK » sur la livraison `243140d`, sans anomalie signalée. Les tests automatisés n'ont pas été relancés pour cette clôture documentaire et aucune nouvelle série de travaux n'est engagée.
