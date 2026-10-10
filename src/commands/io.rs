@@ -213,7 +213,7 @@ pub async fn rename_item_controlled_with_identity(
             .path(&target_internal)
             .map_err(CommandError::PathError)?;
         validate_rename_target(&source, &destination)?;
-        crate::systems::item_rename::rename_with_checkpoint(&source, &destination, &mut || {
+        workspace.rename(&source, &destination, &mut || {
             crate::systems::file_ops::FileOperationManager::archive_checkpoint(&operation)
                 .map_err(std::io::Error::other)
         })?;

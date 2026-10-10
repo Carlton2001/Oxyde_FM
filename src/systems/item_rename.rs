@@ -8,6 +8,7 @@ pub(crate) fn rename(source: &Path, destination: &Path) -> io::Result<()> {
     rename_with_checkpoint(source, destination, &mut || Ok(()))
 }
 
+#[cfg(any(not(target_os = "windows"), test))]
 pub(crate) fn rename_with_checkpoint(
     source: &Path,
     destination: &Path,

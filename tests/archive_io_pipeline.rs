@@ -198,6 +198,312 @@ fn workspace_decode_uses_native_worker_before_parent_owned_reconstruction() {
 }
 
 #[test]
+fn native_mutations_and_transfers_preserve_all_four_reconstruction_formats() {
+    native(|| {
+        let temp = tempfile::tempdir().unwrap();
+        let source = temp.path().join("école");
+        fs::create_dir(&source).unwrap();
+        fs::write(source.join("note.txt"), b"original").unwrap();
+        let added = temp.path().join("added");
+        fs::create_dir(&added).unwrap();
+        fs::write(added.join("copy.txt"), b"copied").unwrap();
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        for extension in ["zip", "7z", "tar", "tar.zst"] {
+            let archive = temp.path().join(format!("mutate.{extension}"));
+            FileOperationManager::perform_compress(
+                &operation(FileOpType::Compress),
+                vec![source.clone()],
+                Some(archive.clone()),
+            )
+            .unwrap();
+            let before = fs::read(&archive).unwrap();
+            let provenance = b"[ZoneTransfer]\r\nZoneId=3\r\n";
+            oxyde_lib::platform::platform()
+                .write_file_provenance(&archive, provenance)
+                .unwrap();
+            let roots = Arc::new(Mutex::new(Vec::<PathBuf>::new()));
+            let observed = roots.clone();
+            oxyde_lib::utils::archive_mutation_test::with_hook_for_tests(
+                move |stage, root, _| {
+                    if stage == oxyde_lib::utils::archive_mutation_test::Stage::BeforeRebuild {
+                        observed.lock().unwrap().push(root.into());
+                    }
+                    Ok(())
+                },
+                || {
+                    FileOperationManager::perform_copy(
+                        &operation(FileOpType::Copy),
+                        vec![added.clone()],
+                        Some(archive.clone()),
+                        false,
+                        None,
+                    )
+                    .unwrap();
+                    runtime
+                        .block_on(oxyde_lib::commands::io::rename_item_controlled(
+                            archive.join("added").to_string_lossy().into_owned(),
+                            archive.join("renamed").to_string_lossy().into_owned(),
+                            "fast".into(),
+                            Arc::new(std::sync::atomic::AtomicBool::new(false)),
+                        ))
+                        .unwrap();
+                    FileOperationManager::perform_delete(
+                        &operation(FileOpType::Delete),
+                        vec![archive.join("école")],
+                    )
+                    .unwrap();
+                },
+            );
+            for root in roots.lock().unwrap().iter() {
+                assert!(!root.exists(), "workspace leaked: {}", root.display());
+            }
+            assert_ne!(fs::read(&archive).unwrap(), before);
+            assert_eq!(
+                oxyde_lib::platform::platform()
+                    .read_file_provenance(&archive)
+                    .unwrap()
+                    .as_deref(),
+                Some(&provenance[..])
+            );
+            let destination = temp.path().join(format!("destination.{extension}"));
+            FileOperationManager::perform_compress(
+                &operation(FileOpType::Compress),
+                vec![],
+                Some(destination.clone()),
+            )
+            .unwrap();
+            FileOperationManager::perform_copy(
+                &operation(FileOpType::Move),
+                vec![archive.join("renamed")],
+                Some(destination.clone()),
+                true,
+                None,
+            )
+            .unwrap();
+            let output = temp.path().join(format!("out-{extension}"));
+            FileOperationManager::perform_extract(
+                &operation(FileOpType::Extract),
+                vec![destination],
+                Some(output.clone()),
+            )
+            .unwrap();
+            assert_eq!(
+                fs::read(output.join("renamed/copy.txt")).unwrap(),
+                b"copied"
+            );
+            let output = temp.path().join(format!("empty-{extension}"));
+            FileOperationManager::perform_extract(
+                &operation(FileOpType::Extract),
+                vec![archive],
+                Some(output.clone()),
+            )
+            .unwrap();
+            assert_eq!(fs::read_dir(output).unwrap().count(), 0);
+            assert!(fs::read_dir(temp.path()).unwrap().all(|entry| !entry
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .starts_with(".oxyde-")));
+        }
+    });
+}
+
+#[test]
+fn rebuild_refuses_foreign_workspace_objects_and_changed_original_bytes() {
+    use oxyde_lib::utils::archive_mutation_test::{with_hook_for_tests, Stage};
+    native(|| {
+        let temp = tempfile::tempdir().unwrap();
+        for replace in [false, true] {
+            let archive = temp.path().join(format!("foreign-{replace}.zip"));
+            zip(&archive, "docs/original", b"safe", false);
+            let before = fs::read(&archive).unwrap();
+            let roots = Arc::new(Mutex::new(Vec::<PathBuf>::new()));
+            let observed = roots.clone();
+            let result = with_hook_for_tests(
+                move |stage, root, _| {
+                    if stage == Stage::BeforeRebuild {
+                        observed.lock().unwrap().push(root.into());
+                        let path = root.join(if replace { "docs/original" } else { "foreign" });
+                        if replace {
+                            fs::remove_file(&path)?;
+                        }
+                        fs::write(path, b"foreign")?;
+                    }
+                    Ok(())
+                },
+                || {
+                    oxyde_lib::commands::archive::create_archive_directory_with_quality(
+                        &archive.join("docs/new"),
+                        "fast",
+                    )
+                },
+            );
+            assert!(result.is_err());
+            assert_eq!(fs::read(&archive).unwrap(), before);
+            let root = roots.lock().unwrap()[0].clone();
+            assert_eq!(
+                fs::read(root.join(if replace { "docs/original" } else { "foreign" })).unwrap(),
+                b"foreign"
+            );
+            assert!(!root.join("docs/new").exists());
+            fs::remove_dir_all(root).unwrap(); // This test owns its complete fixture, including the injected witness.
+        }
+        let archive = temp.path().join("changed.zip");
+        zip(&archive, "original", b"safe", false);
+        let before = fs::read(&archive).unwrap();
+        let modified = fs::metadata(&archive).unwrap().modified().unwrap();
+        let result = with_hook_for_tests(
+            move |stage, _, archive| {
+                if stage == Stage::BeforeOriginalCheck {
+                    let mut bytes = fs::read(archive)?;
+                    bytes[0] ^= 1;
+                    fs::write(archive, bytes)?;
+                    fs::File::options()
+                        .write(true)
+                        .open(archive)?
+                        .set_modified(modified)?;
+                }
+                Ok(())
+            },
+            || {
+                oxyde_lib::commands::archive::create_archive_directory_with_quality(
+                    &archive.join("new"),
+                    "fast",
+                )
+            },
+        );
+        assert!(
+            oxyde_lib::models::error::ArchiveSourceConflict::from_message(
+                &result.unwrap_err().to_string()
+            )
+        );
+        let mut changed = before;
+        changed[0] ^= 1;
+        assert_eq!(fs::read(archive).unwrap(), changed);
+    });
+}
+
+#[test]
+fn native_rebuild_rolls_back_or_keeps_original_backup_on_publication_failure() {
+    use oxyde_lib::utils::archive_mutation_test::{with_hook_for_tests, Stage};
+    native(|| {
+        let temp = tempfile::tempdir().unwrap();
+        for collision in [false, true] {
+            let archive = temp.path().join(format!("rollback-{collision}.zip"));
+            zip(&archive, "original", b"safe", false);
+            let before = fs::read(&archive).unwrap();
+            let backup = Arc::new(Mutex::new(None::<PathBuf>));
+            let observed = backup.clone();
+            let result = with_hook_for_tests(
+                move |stage, archive, saved| {
+                    if stage == Stage::AfterBackup {
+                        *observed.lock().unwrap() = Some(saved.into());
+                        if collision {
+                            fs::write(archive, b"foreign replacement")?;
+                            return Ok(());
+                        }
+                        return Err(std::io::Error::other("injected publication failure"));
+                    }
+                    Ok(())
+                },
+                || {
+                    oxyde_lib::commands::archive::create_archive_directory_with_quality(
+                        &archive.join("new"),
+                        "fast",
+                    )
+                },
+            );
+            assert!(result.is_err());
+            let backup = backup.lock().unwrap().clone().unwrap();
+            if collision {
+                assert_eq!(fs::read(&archive).unwrap(), b"foreign replacement");
+                assert_eq!(fs::read(&backup).unwrap(), before);
+            } else {
+                assert_eq!(fs::read(&archive).unwrap(), before);
+                assert!(!backup.exists());
+            }
+            assert!(fs::read_dir(temp.path()).unwrap().all(|entry| !entry
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .starts_with(".oxyde-work-")));
+        }
+    });
+}
+
+#[test]
+fn native_commit_finishes_publication_after_backup_even_if_cancel_arrives() {
+    use oxyde_lib::utils::archive_mutation_test::{with_hook_for_tests, Stage};
+    native(|| {
+        let temp = tempfile::tempdir().unwrap();
+        let archive = temp.path().join("cancel.zip");
+        zip(&archive, "original", b"safe", false);
+        let operation = operation(FileOpType::Copy);
+        let cancel = operation.lock().unwrap().cancel_flag.clone();
+        let source = temp.path().join("added");
+        fs::write(&source, b"new").unwrap();
+        with_hook_for_tests(
+            move |stage, _, _| {
+                if stage == Stage::AfterBackup {
+                    cancel.store(true, Ordering::Relaxed);
+                }
+                Ok(())
+            },
+            || {
+                FileOperationManager::perform_copy(
+                    &operation,
+                    vec![source],
+                    Some(archive.clone()),
+                    false,
+                    None,
+                )
+            },
+        )
+        .unwrap();
+        let mut result = zip::ZipArchive::new(fs::File::open(archive).unwrap()).unwrap();
+        assert_eq!(result.by_name("added").unwrap().size(), 3);
+        assert!(operation
+            .lock()
+            .unwrap()
+            .cancel_flag
+            .load(Ordering::Relaxed));
+        assert!(fs::read_dir(temp.path()).unwrap().all(|entry| !entry
+            .unwrap()
+            .file_name()
+            .to_string_lossy()
+            .starts_with(".oxyde-")));
+    });
+}
+
+#[test]
+fn replacing_a_workspace_file_uses_owned_deletion_and_exclusive_publication() {
+    native(|| {
+        let temp = tempfile::tempdir().unwrap();
+        let archive = temp.path().join("replace.zip");
+        zip(&archive, "file", b"old", false);
+        let source = temp.path().join("file");
+        fs::write(&source, b"replacement").unwrap();
+        let resolutions = std::collections::HashMap::from([(
+            source.to_string_lossy().into_owned(),
+            oxyde_lib::models::ConflictAction::Replace,
+        )]);
+        FileOperationManager::perform_copy(
+            &operation(FileOpType::Copy),
+            vec![source],
+            Some(archive.clone()),
+            false,
+            Some(resolutions),
+        )
+        .unwrap();
+        let mut result = zip::ZipArchive::new(fs::File::open(archive).unwrap()).unwrap();
+        assert_eq!(result.by_name("file").unwrap().size(), 11);
+    });
+}
+
+#[test]
 fn production_selected_cache_and_permanent_export_cover_all_eight_families() {
     native(|| {
         let temp = tempfile::tempdir().unwrap();

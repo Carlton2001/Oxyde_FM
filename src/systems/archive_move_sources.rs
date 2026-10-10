@@ -40,6 +40,21 @@ impl ArchiveMoveSources {
         checkpoint: &mut dyn FnMut() -> io::Result<()>,
         removed: &mut dyn FnMut(&Path, &Path),
     ) -> io::Result<()> {
+        self.remove_directories_matching_observed(
+            matches,
+            checkpoint,
+            &mut |source, destination, _| {
+                removed(source, destination);
+                Ok(())
+            },
+        )
+    }
+    pub fn remove_directories_matching_observed(
+        &mut self,
+        matches: &dyn Fn(&Path) -> bool,
+        checkpoint: &mut dyn FnMut() -> io::Result<()>,
+        removed: &mut dyn FnMut(&Path, &Path, crate::platform::FileIdentity) -> io::Result<()>,
+    ) -> io::Result<()> {
         if !self.verified {
             return Err(io::Error::other(
                 "Archive move source has not been verified",
@@ -48,7 +63,7 @@ impl ArchiveMoveSources {
         let Some(destination) = &self.destination else {
             return Ok(());
         };
-        self.directories.remove_matching(
+        self.directories.remove_matching_observed(
             matches,
             checkpoint,
             &mut |path, checkpoint| destination.check_directory(path, checkpoint),
@@ -103,6 +118,14 @@ impl ArchiveMoveSources {
         matches: &dyn Fn(&Path) -> bool,
         checkpoint: &mut dyn FnMut() -> io::Result<()>,
     ) -> io::Result<()> {
+        self.remove_matching_observed(matches, checkpoint, &mut |_, _| Ok(()))
+    }
+    pub fn remove_matching_observed(
+        &mut self,
+        matches: &dyn Fn(&Path) -> bool,
+        checkpoint: &mut dyn FnMut() -> io::Result<()>,
+        removed: &mut dyn FnMut(&Path, crate::platform::FileIdentity) -> io::Result<()>,
+    ) -> io::Result<()> {
         if !self.verified {
             return Err(io::Error::other(
                 "Archive move source has not been verified",
@@ -114,6 +137,7 @@ impl ArchiveMoveSources {
                 self.entries.push(entry);
                 continue;
             }
+            let identity = crate::platform::platform().file_identity(entry.source.file())?;
             entry.source.remove_verified(checkpoint).map_err(|error| {
                 io::Error::new(
                     error.kind(),
@@ -123,6 +147,7 @@ impl ArchiveMoveSources {
                     ),
                 )
             })?;
+            removed(&entry.path, identity)?;
             // Keep the output alive until native source removal has completed.
             drop(entry.output);
         }
@@ -176,7 +201,7 @@ mod tests {
 
     #[test]
     fn archive_move_sources_remove_the_original_after_parent_junction_retargeting() {
-        use crate::platform::windows_reparse_tests::{Retarget, junction};
+        use crate::platform::windows_reparse_tests::{junction, Retarget};
         let root = tempfile::tempdir().unwrap();
         let chosen = root.path().join("chosen");
         let outside = root.path().join("outside");
@@ -221,11 +246,9 @@ mod tests {
         moves.entries[1].output.hash = blake3::hash(b"different").to_hex().to_string();
         assert!(moves.remove_matching(&|_| true, &mut || Ok(())).is_err());
         assert!(moves.verify_all(&mut || Ok(())).is_err());
-        assert!(
-            moves
-                .remove_matching(&|path| path == first, &mut || Ok(()))
-                .is_err()
-        );
+        assert!(moves
+            .remove_matching(&|path| path == first, &mut || Ok(()))
+            .is_err());
         drop(moves);
         assert_eq!(fs::read(first).unwrap(), b"first");
         assert_eq!(fs::read(second).unwrap(), b"second");

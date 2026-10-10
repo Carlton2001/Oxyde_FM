@@ -89,7 +89,9 @@ pub(crate) fn decode(
         selected.is_some() || matches!(format, Format::Zip | Format::SevenZip | Format::Iso),
     )?;
     let size = source.metadata()?.len();
-    let provenance = platform().read_file_provenance(path)?;
+    let provenance_parent = super::path_parents::HeldParents::new(path)?;
+    let provenance =
+        platform().read_archive_output_provenance(provenance_parent.directory(), &source, path)?;
     let mut output: Option<File> = None;
     let mut decoded = 0u64;
     let decoded_limit = limits

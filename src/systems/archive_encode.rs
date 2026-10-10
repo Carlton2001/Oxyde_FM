@@ -47,6 +47,7 @@ pub(super) fn run(
     path: &Path,
     entries: &[Planned],
     retained: Option<&HashMap<PathBuf, File>>,
+    expected: Option<&HashMap<PathBuf, crate::platform::FileIdentity>>,
     output: &mut File,
     budget: &ArchiveBudget,
     op: &Arc<Mutex<FileOperation>>,
@@ -90,6 +91,15 @@ pub(super) fn run(
                     }
                     let planned = entries.get(id as usize).ok_or_else(invalid)?;
                     let (parents, file) = planned.open(retained)?;
+                    if let Some(expected) = expected {
+                        if expected.get(&planned.source.resolved_path())
+                            != Some(&platform().file_identity(&file)?)
+                        {
+                            return Err(crate::models::error::SourceSelectionFailure::changed(
+                                planned.source.path(),
+                            ));
+                        }
+                    }
                     let metadata = file.metadata()?;
                     if metadata.is_dir() != planned.source.is_dir()
                         || (!metadata.is_dir() && metadata.len() != planned.source.size())

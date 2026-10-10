@@ -183,6 +183,23 @@ pub(super) fn write_output_provenance(
     stream.sync_all()
 }
 
+pub(super) fn read_output_provenance(parent: &File, file: &File, path: &Path) -> io::Result<Option<Vec<u8>>> {
+    let leaf = path.file_name().ok_or_else(|| io::Error::other("Archive source has no name"))?;
+    let selected = super::windows_source_selection::track(parent, path)?;
+    let identity = super::platform().file_identity(file)?;
+    if super::platform().file_identity(&selected)? != identity { return Err(io::Error::other("Archive provenance source changed")); }
+    let stream = match super::windows_no_reparse::read_provenance_stream(parent, leaf) {
+        Ok(stream) => stream,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error),
+    };
+    if super::platform().file_identity(&stream)? != identity { return Err(io::Error::other("Archive provenance stream belongs to another object")); }
+    let mut data = Vec::new();
+    stream.take(MAX_PROVENANCE_BYTES + 1).read_to_end(&mut data)?;
+    if data.len() as u64 > MAX_PROVENANCE_BYTES { return Err(io::Error::new(io::ErrorKind::InvalidData, "Internet provenance exceeds the size limit")); }
+    Ok(Some(data))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

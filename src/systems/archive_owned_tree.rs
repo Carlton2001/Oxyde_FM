@@ -20,9 +20,20 @@ pub(crate) struct OwnedTree {
     tree: Option<DestinationTree>,
     root: Owned,
     directories: HashMap<PathBuf, Owned>,
-    files: Vec<Owned>,
+    files: HashMap<PathBuf, Owned>,
+    name_bytes: usize,
     cleanup: bool,
     remove_root: bool,
+}
+
+impl std::fmt::Debug for OwnedTree {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("OwnedTree")
+            .field("path", &self.path())
+            .field("files", &self.files.len())
+            .field("directories", &self.directories.len())
+            .finish()
+    }
 }
 
 impl OwnedTree {
@@ -59,7 +70,8 @@ impl OwnedTree {
                 identity,
             },
             directories: HashMap::new(),
-            files: Vec::new(),
+            files: HashMap::new(),
+            name_bytes: 0,
             cleanup: true,
             remove_root,
         })
@@ -133,6 +145,9 @@ impl OwnedTree {
                 identity,
             },
         );
+        self.name_bytes = self.name_bytes.saturating_add(path.as_os_str().len());
+        self.check_journal_path(path)?;
+        self.check_journal_budget()?;
         Ok(())
     }
     pub fn ensure_directory(&mut self, path: &Path) -> io::Result<()> {
@@ -146,10 +161,16 @@ impl OwnedTree {
                     created.push(path.to_path_buf())
                 });
         // Record creations even if a later component fails.
+        let mut capture_error = None;
         for path in created {
-            self.capture_directory(&path)?;
+            if let Err(error) = self.capture_directory(&path) {
+                capture_error.get_or_insert(error);
+            }
         }
         drop(result?);
+        if let Some(error) = capture_error {
+            return Err(error);
+        }
         Ok(())
     }
     pub fn create_file(&mut self, path: &Path) -> io::Result<File> {
@@ -180,12 +201,220 @@ impl OwnedTree {
         if platform().file_identity(file)? != identity {
             return Err(io::Error::other("Created archive output changed"));
         }
-        self.files.push(Owned {
-            path,
-            parent,
-            tracking,
-            identity,
-        });
+        let old = self.files.insert(
+            path.clone(),
+            Owned {
+                path: path.clone(),
+                parent,
+                tracking,
+                identity,
+            },
+        );
+        self.name_bytes = self
+            .name_bytes
+            .saturating_sub(old.map_or(0, |entry| entry.path.as_os_str().len()))
+            .saturating_add(path.as_os_str().len());
+        self.check_journal_path(&path)?;
+        self.check_journal_budget()
+    }
+    pub fn adopt_created_directory(&mut self, path: &Path, file: &File) -> io::Result<()> {
+        let path = self.resolved(path)?;
+        let parent = self.parent(&path)?.try_clone()?;
+        let tracking = platform().track_operation_directory(&parent, &path)?;
+        let identity = platform().file_identity(&tracking)?;
+        if platform().file_identity(file)? != identity {
+            return Err(io::Error::other("Created archive directory changed"));
+        }
+        let old = self.directories.insert(
+            path.clone(),
+            Owned {
+                path: path.clone(),
+                parent,
+                tracking,
+                identity,
+            },
+        );
+        self.name_bytes = self
+            .name_bytes
+            .saturating_sub(old.map_or(0, |entry| entry.path.as_os_str().len()))
+            .saturating_add(path.as_os_str().len());
+        self.check_journal_path(&path)?;
+        self.check_journal_budget()
+    }
+    fn check_journal_budget(&self) -> io::Result<()> {
+        use crate::models::error::{ArchiveLimitFailure, ArchiveLimitKind};
+        let limits = crate::utils::archive_limits::ArchiveLimits::WORKSPACE;
+        if self.files.len().saturating_add(self.directories.len()) > limits.max_entries {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                ArchiveLimitFailure {
+                    kind: ArchiveLimitKind::Entries,
+                    limit: limits.max_entries as u64,
+                },
+            ));
+        }
+        if self.name_bytes > 64 * 1024 * 1024 {
+            return Err(io::Error::other("Archive workspace journal names exceeded"));
+        }
+        Ok(())
+    }
+    fn check_journal_path(&self, path: &Path) -> io::Result<()> {
+        let relative = path.strip_prefix(self.path()).map_err(io::Error::other)?;
+        if relative.components().count()
+            > crate::utils::archive_limits::ArchiveLimits::WORKSPACE.max_depth
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                crate::models::error::ArchiveLimitFailure {
+                    kind: crate::models::error::ArchiveLimitKind::Depth,
+                    limit: crate::utils::archive_limits::ArchiveLimits::WORKSPACE.max_depth as u64,
+                },
+            ));
+        }
+        if relative.to_string_lossy().len() > crate::utils::archive_io_protocol::MAX_NAME {
+            return Err(io::Error::other("Archive workspace name exceeded"));
+        }
+        Ok(())
+    }
+    pub fn identities(&self) -> HashMap<PathBuf, FileIdentity> {
+        self.files
+            .values()
+            .chain(self.directories.values())
+            .map(|entry| (entry.path.clone(), entry.identity))
+            .collect()
+    }
+    pub fn verify_owned(&self, path: &Path, file: &File) -> io::Result<()> {
+        let expected = if path == self.path() {
+            Some(self.root.identity)
+        } else {
+            self.files
+                .get(path)
+                .or_else(|| self.directories.get(path))
+                .map(|entry| entry.identity)
+        };
+        if expected != Some(platform().file_identity(file)?) {
+            return Err(crate::models::error::SourceSelectionFailure::changed(path));
+        }
+        Ok(())
+    }
+    pub fn forget_removed(&mut self, path: &Path, identity: FileIdentity) -> io::Result<()> {
+        let selected = self
+            .files
+            .get(path)
+            .or_else(|| self.directories.get(path))
+            .ok_or_else(|| io::Error::other("Removed archive source was not owned"))?;
+        if selected.identity != identity {
+            return Err(crate::models::error::SourceSelectionFailure::changed(path));
+        }
+        self.name_bytes = self.name_bytes.saturating_sub(path.as_os_str().len());
+        self.files.remove(path);
+        self.directories.remove(path);
+        Ok(())
+    }
+    pub fn root_identity(&self) -> FileIdentity {
+        self.root.identity
+    }
+    pub fn create_directory(&mut self, path: &Path) -> io::Result<()> {
+        let path = self.resolved(path)?;
+        let parent = self.parent(&path)?.try_clone()?;
+        let file = platform().create_journal_directory(&parent, &path, false)?;
+        self.adopt_created_directory(&path, &file)
+    }
+    pub fn validate_rename(
+        &self,
+        source: &Path,
+        destination: &Path,
+        checkpoint: &mut dyn FnMut() -> io::Result<()>,
+    ) -> io::Result<()> {
+        let source = self.resolved(source)?;
+        let destination = self.resolved(destination)?;
+        let selected = self
+            .files
+            .get(&source)
+            .or_else(|| self.directories.get(&source))
+            .ok_or_else(|| io::Error::other("Archive rename source is not owned"))?;
+        let parent = self.parent(&source)?;
+        let destination_parent = self.parent(&destination)?;
+        let file = platform()
+            .open_rename_item(parent, &source)
+            .map_err(|e| io::Error::new(e.kind(), format!("Archive rename open: {e}")))?;
+        if platform().file_identity(&file)? != selected.identity {
+            return Err(io::Error::other(
+                "Archive rename source replaced; preserving it",
+            ));
+        }
+        checkpoint()?;
+        match platform().track_source_item(destination_parent, &destination) {
+            Ok(_) => {
+                return Err(io::Error::new(
+                    io::ErrorKind::AlreadyExists,
+                    "Rename target already exists",
+                ))
+            }
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error),
+        }
+        self.check_journal_path(&destination)?;
+        Ok(())
+    }
+    pub fn remove_selected(
+        &mut self,
+        path: &Path,
+        checkpoint: &mut dyn FnMut() -> io::Result<()>,
+    ) -> io::Result<()> {
+        let path = self.resolved(path)?;
+        let files: Vec<_> = self
+            .files
+            .keys()
+            .filter(|key| key.starts_with(&path))
+            .cloned()
+            .collect();
+        for key in files {
+            checkpoint()?;
+            let entry = self.files.remove(&key).unwrap();
+            let result = (|| {
+                let file = platform().open_copied_file(&entry.parent, &entry.path)?;
+                if platform().file_identity(&file)? != entry.identity {
+                    return Err(io::Error::other(
+                        "Archive deletion source replaced; preserving it",
+                    ));
+                }
+                platform().remove_copied_file(&file, &entry.path)
+            })();
+            if let Err(error) = result {
+                self.files.insert(key, entry);
+                return Err(error);
+            }
+            self.name_bytes = self.name_bytes.saturating_sub(entry.path.as_os_str().len());
+            drop(entry); // Release the last tracker before deleting an empty ancestor.
+        }
+        let mut directories: Vec<_> = self
+            .directories
+            .keys()
+            .filter(|key| key.starts_with(&path))
+            .cloned()
+            .collect();
+        directories.sort_by_key(|key| std::cmp::Reverse(key.components().count()));
+        for key in directories {
+            checkpoint()?;
+            let entry = self.directories.remove(&key).unwrap();
+            if let Err(error) = platform().remove_empty_operation_directory(
+                &entry.parent,
+                &entry.path,
+                entry.identity,
+            ) {
+                self.directories.insert(key, entry);
+                return Err(error);
+            }
+            self.name_bytes = self.name_bytes.saturating_sub(entry.path.as_os_str().len());
+            drop(entry);
+        }
+        self.name_bytes = self
+            .files
+            .keys()
+            .chain(self.directories.keys())
+            .map(|path| path.as_os_str().len())
+            .sum();
         Ok(())
     }
     #[cfg(test)]
@@ -228,7 +457,7 @@ impl Drop for OwnedTree {
         if !self.cleanup {
             return;
         }
-        for entry in self.files.drain(..).rev() {
+        for (_, entry) in self.files.drain() {
             let result = (|| {
                 let file = platform().open_copied_file(&entry.parent, &entry.path)?;
                 if platform().file_identity(&file)? != entry.identity {
@@ -282,6 +511,44 @@ impl Drop for OwnedTree {
 mod tests {
     use super::*;
     use std::io::Write;
+    #[test]
+    fn business_mutations_keep_creation_proofs_and_preserve_unknown_children() {
+        let temp = tempfile::tempdir().unwrap();
+        let mut tree = OwnedTree::temporary(temp.path()).unwrap();
+        let root = tree.path().to_path_buf();
+        assert_eq!(
+            tree.root_identity(),
+            platform().file_identity(&tree.root.tracking).unwrap()
+        );
+        drop(tree.create_file(&root.join("folder/owned")).unwrap());
+        tree.release();
+        tree.create_directory(&root.join("added")).unwrap();
+        let selected = platform()
+            .track_operation_directory(&tree.root.tracking, &root.join("added"))
+            .unwrap();
+        tree.verify_owned(&root.join("added"), &selected).unwrap();
+        let identity = platform().file_identity(&selected).unwrap();
+        drop(selected);
+        platform()
+            .remove_empty_operation_directory(&tree.root.tracking, &root.join("added"), identity)
+            .unwrap();
+        tree.forget_removed(&root.join("added"), identity).unwrap();
+        tree.create_directory(&root.join("added")).unwrap();
+        tree.validate_rename(&root.join("folder"), &root.join("renamed"), &mut || Ok(()))
+            .unwrap();
+        assert!(tree.identities().contains_key(&root.join("folder/owned")));
+        std::fs::write(root.join("folder/foreign"), b"keep").unwrap();
+        assert!(tree
+            .remove_selected(&root.join("folder"), &mut || Ok(()))
+            .is_err());
+        assert_eq!(std::fs::read(root.join("folder/foreign")).unwrap(), b"keep");
+        assert!(!root.join("folder/owned").exists());
+        tree.remove_selected(&root.join("added"), &mut || Ok(()))
+            .unwrap();
+        drop(tree);
+        assert!(!root.join("added").exists());
+        assert_eq!(std::fs::read(root.join("folder/foreign")).unwrap(), b"keep");
+    }
     #[test]
     fn cleanup_preserves_foreign_children_and_removes_only_owned_outputs() {
         let temp = tempfile::tempdir().unwrap();

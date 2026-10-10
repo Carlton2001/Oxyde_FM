@@ -105,6 +105,15 @@ impl SourceDirectories {
         before_remove: &mut dyn FnMut(&Path, &mut dyn FnMut() -> io::Result<()>) -> io::Result<()>,
         removed: &mut dyn FnMut(&Path, &Path),
     ) -> io::Result<()> {
+        self.remove_matching_observed(matches, checkpoint, before_remove, &mut |source, destination, _| { removed(source, destination); Ok(()) })
+    }
+    pub fn remove_matching_observed(
+        &mut self,
+        matches: &dyn Fn(&Path) -> bool,
+        checkpoint: &mut dyn FnMut() -> io::Result<()>,
+        before_remove: &mut dyn FnMut(&Path, &mut dyn FnMut() -> io::Result<()>) -> io::Result<()>,
+        removed: &mut dyn FnMut(&Path, &Path, FileIdentity) -> io::Result<()>,
+    ) -> io::Result<()> {
         self.entries
             .sort_by_key(|entry| std::cmp::Reverse(entry.path.components().count()));
         // Shared directory references must disappear bottom-up, including those
@@ -132,7 +141,7 @@ impl SourceDirectories {
                 &entry.path,
                 entry.identity,
             ) {
-                Ok(()) => removed(&entry.path, &entry.destination),
+                Ok(()) => removed(&entry.path, &entry.destination, entry.identity)?,
                 Err(error)
                     if matches!(
                         error.kind(),

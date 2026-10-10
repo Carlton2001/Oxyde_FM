@@ -3,6 +3,8 @@ use std::fs::Metadata;
 pub mod archive;
 pub mod archive_listing_protocol;
 pub mod archive_io_protocol;
+#[doc(hidden)]
+pub mod archive_mutation_test;
 pub mod archive_io_stream;
 pub mod archive_io_state;
 pub(crate) mod archive_limits;

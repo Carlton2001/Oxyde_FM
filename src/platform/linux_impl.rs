@@ -287,6 +287,7 @@ impl Platform for LinuxPlatform {
         Ok(())
     }
     fn write_archive_output_provenance(&self, _parent: &std::fs::File, _file: &std::fs::File, _path: &std::path::Path, _data: &[u8]) -> std::io::Result<()> { Ok(()) }
+    fn read_archive_output_provenance(&self, _parent: &std::fs::File, _file: &std::fs::File, _path: &std::path::Path) -> std::io::Result<Option<Vec<u8>>> { Ok(None) }
     fn replace_open_file(
         &self,
         _file: &std::fs::File,

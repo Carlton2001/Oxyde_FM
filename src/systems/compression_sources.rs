@@ -25,6 +25,44 @@ impl Entry {
         self.source.open_archive()
     }
 }
+
+#[cfg(target_os = "windows")]
+pub(super) fn remap(
+    entries: &mut [Entry],
+    source: &Path,
+    destination: &Path,
+    limits: crate::utils::archive_limits::ArchiveLimits,
+) -> io::Result<()> {
+    let budget = crate::utils::archive_limits::ArchiveBudget::new(limits);
+    let mut names = std::collections::HashSet::new();
+    let mut bytes = 0usize;
+    for entry in entries {
+        let path = Path::new(&entry.name);
+        if let Ok(relative) = path.strip_prefix(source) {
+            entry.name = if relative.as_os_str().is_empty() {
+                destination.to_path_buf()
+            } else {
+                destination.join(relative)
+            }
+            .to_string_lossy()
+            .replace('\\', "/");
+        }
+        crate::utils::archive_security::relative_archive_path(&entry.name)?;
+        budget.entry(&entry.name, entry.source.size())?;
+        bytes = bytes
+            .checked_add(entry.name.len())
+            .ok_or_else(|| io::Error::other("Archive names exceeded"))?;
+        if entry.name.len() > crate::utils::archive_io_protocol::MAX_NAME
+            || bytes > 64 * 1024 * 1024
+            || !names.insert(entry.name.to_lowercase())
+        {
+            return Err(io::Error::other(
+                "Archive rename creates invalid or duplicate names",
+            ));
+        }
+    }
+    Ok(())
+}
 #[cfg(any(not(target_os = "windows"), test))]
 pub(super) fn plan(
     sources: &[PathBuf],
@@ -229,6 +267,46 @@ mod tests {
             &[left.join("same"), right.join("same")],
             &mut || Ok(()),
             Some(&ArchiveBudget::new(value))
+        )
+        .is_err());
+    }
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn logical_archive_rename_keeps_open_sources_and_revalidates_names() {
+        let temp = tempfile::tempdir().unwrap();
+        let folder = temp.path().join("folder");
+        std::fs::create_dir(&folder).unwrap();
+        std::fs::write(folder.join("file"), b"safe").unwrap();
+        let mut entries = plan(&[folder.clone()], &mut || Ok(())).unwrap();
+        let original = entries[1].source.resolved_path();
+        remap(
+            &mut entries,
+            Path::new("folder"),
+            Path::new("école"),
+            crate::utils::archive_limits::ArchiveLimits::WORKSPACE,
+        )
+        .unwrap();
+        assert_eq!(entries[0].name, "école");
+        assert_eq!(entries[1].name, "école/file");
+        assert_eq!(entries[1].source.resolved_path(), original);
+        let (_parents, file) = entries[1].open(None).unwrap();
+        assert_eq!(file.metadata().unwrap().len(), 4);
+        assert!(remap(
+            &mut entries,
+            Path::new("école"),
+            Path::new("../escape"),
+            crate::utils::archive_limits::ArchiveLimits::WORKSPACE
+        )
+        .is_err());
+        let mut entries = plan(&[folder], &mut || Ok(())).unwrap();
+        assert!(remap(
+            &mut entries,
+            Path::new("folder"),
+            Path::new("a/b"),
+            crate::utils::archive_limits::ArchiveLimits {
+                max_depth: 2,
+                ..crate::utils::archive_limits::ArchiveLimits::WORKSPACE
+            }
         )
         .is_err());
     }

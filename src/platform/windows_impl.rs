@@ -134,6 +134,7 @@ impl Platform for WindowsPlatform {
     fn write_archive_output_provenance(&self, parent: &std::fs::File, file: &std::fs::File, path: &std::path::Path, data: &[u8]) -> std::io::Result<()> {
         super::windows_archive_security::write_output_provenance(parent, file, path, data)
     }
+    fn read_archive_output_provenance(&self, parent: &std::fs::File, file: &std::fs::File, path: &std::path::Path) -> std::io::Result<Option<Vec<u8>>> { super::windows_archive_security::read_output_provenance(parent, file, path) }
     fn copy_file_with_progress(
         &self,
         source: &std::path::Path,

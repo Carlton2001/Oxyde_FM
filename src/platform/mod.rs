@@ -186,6 +186,7 @@ pub trait Platform: Send + Sync {
     fn write_file_provenance(&self, path: &std::path::Path, data: &[u8]) -> std::io::Result<()>;
     /// Mark the exclusively created output relative to its retained parent.
     fn write_archive_output_provenance(&self, parent: &std::fs::File, file: &std::fs::File, path: &std::path::Path, data: &[u8]) -> std::io::Result<()>;
+    fn read_archive_output_provenance(&self, parent: &std::fs::File, file: &std::fs::File, path: &std::path::Path) -> std::io::Result<Option<Vec<u8>>>;
     /// Blocking copy with native metadata/streams where supported. The callback
     /// Reports main-stream bytes; only an absent destination is accepted.
     /// A supplied source handle must already hold the same source path/identity.

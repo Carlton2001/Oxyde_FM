@@ -127,6 +127,11 @@ pub(super) fn open_provenance_stream(parent: &File, leaf: &OsStr) -> io::Result<
         true,
     ) // all sharing; FILE_OVERWRITE_IF, confined to this stream.
 }
+pub(super) fn read_provenance_stream(parent: &File, leaf: &OsStr) -> io::Result<File> {
+    let mut name = leaf_name(leaf)?;
+    name.extend(":Zone.Identifier".encode_utf16());
+    open_name(name, parent.as_raw_handle(), Some(false), windows::Win32::Foundation::GENERIC_READ.0, 7, 1, true)
+}
 
 /// Exclusively create one child of an already retained directory.
 pub(super) fn create_relative(

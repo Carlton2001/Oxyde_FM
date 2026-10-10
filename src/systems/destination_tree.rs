@@ -39,6 +39,11 @@ impl DestinationTree {
         self.root.resolved_directory()
     }
 
+    #[cfg(all(target_os = "windows", not(test)))]
+    pub fn retained_directory(&self, path: &Path) -> io::Result<File> {
+        self.directories.lock().unwrap().get(path).ok_or_else(|| io::Error::other("Created directory was not retained"))?.try_clone()
+    }
+
     #[cfg(target_os = "windows")]
     pub fn retained_identity(&self, path: &Path) -> io::Result<crate::platform::FileIdentity> {
         if path == self.path() {

@@ -83,6 +83,10 @@ pub struct FileOperation {
     pub archive_qualities: HashMap<String, String>,
     pub copy_name_suffix: String,
     archive_path_mappings: Vec<(PathBuf, PathBuf)>,
+    #[cfg(all(target_os = "windows", not(test)))]
+    archive_owned_roots: Vec<(PathBuf, std::sync::Weak<Mutex<super::archive_owned_tree::OwnedTree>>)>,
+    #[cfg(all(target_os = "windows", not(test)))]
+    archive_cleanup_error: Option<String>,
     pub turbo: bool,
     pub resolutions: Option<HashMap<String, ConflictAction>>,
     pub created_files: Vec<PathBuf>,
@@ -145,6 +149,10 @@ impl FileOperation {
             archive_qualities: self.archive_qualities.clone(),
             copy_name_suffix: self.copy_name_suffix.clone(),
             archive_path_mappings: self.archive_path_mappings.clone(),
+            #[cfg(all(target_os = "windows", not(test)))]
+            archive_owned_roots: Vec::new(),
+            #[cfg(all(target_os = "windows", not(test)))]
+            archive_cleanup_error: None,
             turbo: self.turbo,
             resolutions: None,
             created_files: Vec::new(),
@@ -196,6 +204,10 @@ impl FileOperation {
             archive_qualities: HashMap::new(),
             copy_name_suffix: "Copie".into(),
             archive_path_mappings: Vec::new(),
+            #[cfg(all(target_os = "windows", not(test)))]
+            archive_owned_roots: Vec::new(),
+            #[cfg(all(target_os = "windows", not(test)))]
+            archive_cleanup_error: None,
             turbo: false,
             resolutions,
             created_files: Vec::new(),
@@ -901,6 +913,8 @@ impl FileOperationManager {
             .values()
             .map(|workspace| (workspace.root().to_path_buf(), workspace.archive.clone()))
             .collect();
+        #[cfg(all(target_os = "windows", not(test)))]
+        { op.lock().unwrap().archive_owned_roots = workspaces.0.values().map(|workspace| (workspace.root().to_path_buf(), workspace.cleanup_owner())).collect(); }
         Self::archive_checkpoint(op)?;
         let mapped_resolutions = resolutions
             .map(|resolutions| {
@@ -939,8 +953,15 @@ impl FileOperationManager {
             let mut moves = deferred_moves.as_ref().unwrap().lock().unwrap();
             moves.verify_all(&mut || Self::archive_checkpoint(op).map_err(std::io::Error::other))
                 .map_err(|error| error.to_string())?;
-            moves.remove_matching(&|source| workspaces.display(source) != source,
-                &mut || Self::archive_checkpoint(op).map_err(std::io::Error::other))
+            moves.remove_matching_observed(&|source| workspaces.display(source) != source,
+                &mut || Self::archive_checkpoint(op).map_err(std::io::Error::other),
+                &mut |source, _identity| {
+                    #[cfg(all(target_os = "windows", not(test)))]
+                    for workspace in workspaces.0.values() { if source.starts_with(workspace.root()) { workspace.forget_removed(source, _identity)?; } }
+                    #[cfg(any(not(target_os = "windows"), test))]
+                    let _ = source;
+                    Ok(())
+                })
                 .map_err(|error| error.to_string())?;
             drop(moves);
             for (source, _) in &copied {
@@ -950,15 +971,18 @@ impl FileOperationManager {
                     }
                 }
             }
-            deferred_moves.as_ref().unwrap().lock().unwrap().remove_directories_matching(
+            deferred_moves.as_ref().unwrap().lock().unwrap().remove_directories_matching_observed(
                 &|source| workspaces.display(source) != source,
                 &mut || Self::archive_checkpoint(op).map_err(std::io::Error::other),
-                &mut |source, _| {
+                &mut |source, _, _identity| {
                     for (archive, workspace) in &workspaces.0 {
                         if source.starts_with(workspace.root()) {
+                            #[cfg(all(target_os = "windows", not(test)))]
+                            workspace.forget_removed(source, _identity)?;
                             changed.insert(archive.clone());
                         }
                     }
+                    Ok(())
                 },
             ).map_err(|error| error.to_string())?;
         }
@@ -1019,11 +1043,7 @@ impl FileOperationManager {
         for path in internal {
             Self::archive_checkpoint(op)?;
             let path = workspace.path(&path)?;
-            if path.is_dir() {
-                std::fs::remove_dir_all(&path).map_err(|e| e.to_string())?;
-            } else if path.exists() {
-                std::fs::remove_file(&path).map_err(|e| e.to_string())?;
-            }
+            workspace.remove(&path, &mut || Self::archive_checkpoint(op).map_err(std::io::Error::other)).map_err(|e| e.to_string())?;
         }
         workspace.commit(op)
     }
@@ -1034,6 +1054,10 @@ impl FileOperationManager {
         path: &std::path::Path,
         _is_move: bool,
     ) {
+        #[cfg(all(target_os = "windows", not(test)))]
+        if let Err(error) = tree.retained_directory(path).and_then(|file| Self::capture_archive_creation(operation, path, &file, true)) {
+            operation.lock().unwrap().archive_cleanup_error = Some(error.to_string());
+        }
         let identity = tree.directory_identity(path)
             .map_err(|error| {
                 log::warn!(
@@ -1051,7 +1075,40 @@ impl FileOperationManager {
         }
     }
 
-    fn perform_copy(
+    #[cfg(all(target_os = "windows", not(test)))]
+    fn capture_archive_creation(operation: &Arc<Mutex<FileOperation>>, path: &Path, file: &std::fs::File, directory: bool) -> std::io::Result<()> {
+        let owners = operation.lock().unwrap().archive_owned_roots.clone();
+        for (root, owner) in owners {
+            if path.starts_with(root) {
+                let owner = owner.upgrade().ok_or_else(|| std::io::Error::other("Archive workspace ownership expired"))?;
+                let mut tree = owner.lock().map_err(|_| std::io::Error::other("Archive workspace ownership unavailable"))?;
+                if directory { tree.adopt_created_directory(path, file)?; } else { tree.adopt_created_file(path, file)?; }
+            }
+        }
+        Ok(())
+    }
+
+    #[cfg(all(target_os = "windows", not(test)))]
+    fn verify_archive_item(operation: &Arc<Mutex<FileOperation>>, path: &Path, file: &std::fs::File) -> std::io::Result<()> {
+        let owners = operation.lock().unwrap().archive_owned_roots.clone();
+        for (root, owner) in owners {
+            if path.starts_with(root) { owner.upgrade().ok_or_else(|| std::io::Error::other("Archive ownership expired"))?.lock().unwrap().verify_owned(path, file)?; }
+        }
+        Ok(())
+    }
+
+    #[cfg(all(target_os = "windows", not(test)))]
+    fn remove_archive_replacement(operation: &Arc<Mutex<FileOperation>>, path: &Path) -> std::io::Result<bool> {
+        Self::archive_checkpoint(operation).map_err(std::io::Error::other)?;
+        let owners = operation.lock().unwrap().archive_owned_roots.clone();
+        for (root, owner) in owners {
+            if path.starts_with(root) { owner.upgrade().ok_or_else(|| std::io::Error::other("Archive ownership expired"))?.lock().unwrap().remove_selected(path, &mut || Ok(()))?; return Ok(true); }
+        }
+        Ok(false)
+    }
+
+    #[doc(hidden)]
+    pub fn perform_copy(
         op: &Arc<Mutex<FileOperation>>,
         sources: Vec<PathBuf>,
         destination: Option<PathBuf>,
@@ -1147,6 +1204,14 @@ impl FileOperationManager {
                 .map_err(|e| format!("Cannot hold destination {:?}: {e}", target_dir))?,
         );
         let target_dir = destination_tree.path().to_path_buf();
+        #[cfg(all(target_os = "windows", not(test)))]
+        let archive_budget = (!op.lock().unwrap().archive_owned_roots.is_empty()).then(|| ArchiveBudget::new(ArchiveLimits::WORKSPACE));
+        #[cfg(all(target_os = "windows", not(test)))]
+        if let Some(budget) = &archive_budget { budget.check_entry_count(sources.len()).map_err(|e| e.to_string())?; }
+        #[cfg(all(target_os = "windows", not(test)))]
+        let mut archive_entries = 0usize;
+        #[cfg(all(target_os = "windows", not(test)))]
+        let mut archive_name_bytes = 0usize;
         let mut selected_sources = Vec::with_capacity(sources.len());
         let mut canonical_sources = Vec::with_capacity(sources.len());
         for source in &sources {
@@ -1213,10 +1278,19 @@ impl FileOperationManager {
                 if selected.is_dir() { fresh_copy_directories.push(dest_root.clone()); }
             }
             let mut walker = super::source_selection::SourceWalk::new(selected.clone());
-            while let Some(entry) = walker
-                .next(&mut || Self::archive_checkpoint(op).map_err(std::io::Error::other))
+            loop {
+                #[cfg(all(target_os = "windows", not(test)))]
+                if let Some(budget) = &archive_budget { walker.bound_pending(budget.limits().max_entries.saturating_sub(archive_entries), budget.limits().max_entries); }
+                let Some(entry) = walker
+                .next(&mut || {
+                    #[cfg(all(target_os = "windows", not(test)))]
+                    if let Some(budget) = &archive_budget { return budget.checkpoint_mut(&mut || Self::archive_checkpoint(op).map_err(std::io::Error::other)); }
+                    Self::archive_checkpoint(op).map_err(std::io::Error::other)
+                })
                 .map_err(|error| format!("Cannot enumerate source {:?}: {error}", src))?
-            {
+                else { break; };
+                #[cfg(all(target_os = "windows", not(test)))]
+                { let (_parents, file) = entry.open_archive().map_err(|e| e.to_string())?; Self::verify_archive_item(op, &entry.resolved_path(), &file).map_err(|e| e.to_string())?; }
                 let relative = entry
                     .path()
                     .strip_prefix(src)
@@ -1226,6 +1300,14 @@ impl FileOperationManager {
                 } else {
                     dest_root.join(relative)
                 };
+                #[cfg(all(target_os = "windows", not(test)))]
+                if let Some(budget) = &archive_budget {
+                    let name = dest_path.strip_prefix(&target_dir).map_err(|e| e.to_string())?.to_string_lossy().replace('\\', "/");
+                    budget.entry(&name, entry.size()).map_err(|e| e.to_string())?;
+                    archive_name_bytes = archive_name_bytes.checked_add(name.len()).ok_or("Archive transfer names exceeded")?;
+                    if name.len() > crate::utils::archive_io_protocol::MAX_NAME || archive_name_bytes > 64 * 1024 * 1024 { return Err("Archive transfer names exceeded".into()); }
+                    archive_entries += 1;
+                }
                 if entry.is_dir() {
                     if dest_path.exists() && !dest_path.is_dir() {
                         let replace = resolutions
@@ -1480,6 +1562,8 @@ impl FileOperationManager {
                             },
                         )
                         .map_err(|e| format!("Cannot hold destination {:?}: {e}", dest))?;
+                    #[cfg(all(target_os = "windows", not(test)))]
+                    { Self::archive_checkpoint(&operation)?; Self::verify_archive_item(&operation, dest.parent().ok_or("Missing copy parent")?, destination_parents.directory()).map_err(|e| e.to_string())?; }
 
                     let source_guard = if is_move || deferred_moves.is_some() {
                         Some(
@@ -1511,7 +1595,7 @@ impl FileOperationManager {
                         .expect("selected copy source is held");
                     let resolved_source = selected.resolved_path();
                     let mut copied = 0;
-                    let output = super::file_copy::copy_with_parents(
+                    let output = super::file_copy::copy_with_parents_observed(
                         &resolved_source,
                         dest,
                         *replace_existing,
@@ -1545,6 +1629,12 @@ impl FileOperationManager {
                             }
                             Ok(())
                         },
+                        Some(&mut || {
+                            #[cfg(all(target_os = "windows", not(test)))]
+                            { return Self::remove_archive_replacement(&operation, dest); }
+                            #[cfg(any(not(target_os = "windows"), test))]
+                            { Ok(false) }
+                        }),
                     )
                     .map_err(|error| {
                         let message = match error.kind() {
@@ -1562,6 +1652,8 @@ impl FileOperationManager {
                     })?;
                     // Capture from the published output's retained handle, before
                     // it is dropped or a pathname can be substituted.
+                    #[cfg(all(target_os = "windows", not(test)))]
+                    Self::capture_archive_creation(&operation, dest, &output.file, false).map_err(|error| error.to_string())?;
                     let copied_identity =
                         match crate::models::transaction::HistoryFileIdentity::from_file(
                             &output.file,
@@ -1799,7 +1891,8 @@ impl FileOperationManager {
         }
     }
 
-    fn perform_delete(op: &Arc<Mutex<FileOperation>>, sources: Vec<PathBuf>) -> Result<(), String> {
+    #[doc(hidden)]
+    pub fn perform_delete(op: &Arc<Mutex<FileOperation>>, sources: Vec<PathBuf>) -> Result<(), String> {
         let (cancel_flag, pause_flag, turbo_flag) = {
             let locked = op.lock().unwrap();
             (
@@ -2121,6 +2214,8 @@ impl FileOperationManager {
     }
 
     pub(crate) fn archive_checkpoint(op: &Arc<Mutex<FileOperation>>) -> Result<(), String> {
+        #[cfg(all(target_os = "windows", not(test)))]
+        if let Some(error) = &op.lock().unwrap().archive_cleanup_error { return Err(error.clone()); }
         let (cancel, pause, turbo) = {
             let locked = op.lock().unwrap();
             (
@@ -2211,19 +2306,26 @@ impl FileOperationManager {
         destination: Option<PathBuf>,
         after_plan: &mut dyn FnMut() -> std::io::Result<()>,
     ) -> Result<(), String> {
-        Self::perform_compress_impl(op, sources, destination, after_plan, None, None)
+        Self::perform_compress_impl(op, sources, destination, after_plan, None, None, None, None, None)
     }
+    #[cfg(any(not(target_os = "windows"), test))]
     pub(crate) fn perform_compress_retained(
         op: &Arc<Mutex<FileOperation>>,
         sources: Vec<PathBuf>,
         destination: Option<PathBuf>,
         retained: &HashMap<PathBuf, std::fs::File>,
     ) -> Result<(), String> {
-        Self::perform_compress_impl(op, sources, destination, &mut || Ok(()), Some(retained), None)
+        Self::perform_compress_impl(op, sources, destination, &mut || Ok(()), Some(retained), None, None, None, None)
+    }
+    #[cfg(all(target_os = "windows", not(test)))]
+    pub(crate) fn perform_compress_workspace(op: &Arc<Mutex<FileOperation>>, sources: Vec<PathBuf>, destination: PathBuf, retained: &HashMap<PathBuf, std::fs::File>, expected: &HashMap<PathBuf, crate::platform::FileIdentity>, rename: Option<(&Path, &Path)>) -> Result<std::fs::File, String> {
+        let mut completed = None;
+        Self::perform_compress_impl(op, sources, Some(destination), &mut || Ok(()), Some(retained), None, Some(expected), Some(&mut completed), rename)?;
+        completed.ok_or_else(|| "Archive output ownership unavailable".into())
     }
     #[doc(hidden)]
     pub fn perform_compress_with_limits_for_tests(op: &Arc<Mutex<FileOperation>>, sources: Vec<PathBuf>, destination: Option<PathBuf>, limits: ArchiveLimits) -> Result<(), String> {
-        Self::perform_compress_impl(op, sources, destination, &mut || Ok(()), None, Some(limits))
+        Self::perform_compress_impl(op, sources, destination, &mut || Ok(()), None, Some(limits), None, None, None)
     }
     fn perform_compress_impl(
         op: &Arc<Mutex<FileOperation>>,
@@ -2232,6 +2334,9 @@ impl FileOperationManager {
         after_plan: &mut dyn FnMut() -> std::io::Result<()>,
         retained: Option<&HashMap<PathBuf, std::fs::File>>,
         _limits: Option<ArchiveLimits>,
+        _expected: Option<&HashMap<PathBuf, crate::platform::FileIdentity>>,
+        completed: Option<&mut Option<std::fs::File>>,
+        _rename: Option<(&Path, &Path)>,
     ) -> Result<(), String> {
         let requested = destination.ok_or("Missing archive destination")?;
         let update_destination = matches!(op.lock().unwrap().op_type, FileOpType::Compress);
@@ -2245,7 +2350,9 @@ impl FileOperationManager {
         #[cfg(all(target_os = "windows", not(test)))]
         let budget = ArchiveBudget::new(_limits.unwrap_or(if retained.is_some() { ArchiveLimits::WORKSPACE } else { ArchiveLimits::EXTRACTION }));
         #[cfg(all(target_os = "windows", not(test)))]
-        let entries = super::compression_sources::plan_controlled(&sources, &mut || Self::archive_checkpoint(op).map_err(std::io::Error::other), Some(&budget)).map_err(|e| super::archive_encode::source_failure(e).to_string())?;
+        let mut entries = super::compression_sources::plan_controlled(&sources, &mut || Self::archive_checkpoint(op).map_err(std::io::Error::other), Some(&budget)).map_err(|e| super::archive_encode::source_failure(e).to_string())?;
+        #[cfg(all(target_os = "windows", not(test)))]
+        if let Some((source, destination)) = _rename { super::compression_sources::remap(&mut entries, source, destination, budget.limits()).map_err(|e| e.to_string())?; }
         #[cfg(any(not(target_os = "windows"), test))]
         let entries = super::compression_sources::plan(&sources, &mut || {
             Self::archive_checkpoint(op).map_err(std::io::Error::other)
@@ -2271,7 +2378,7 @@ impl FileOperationManager {
         #[cfg(all(target_os = "windows", not(test)))]
         {
             { let mut op = op.lock().unwrap(); op.processed_files = 0; op.processed_bytes = 0; op.speed_sample_at = Some(std::time::Instant::now()); op.speed_sample_bytes = 0; op.bytes_per_second = 0; }
-            super::archive_encode::run(&requested, &entries, retained, &mut output.file, &budget, op).map_err(|e| e.to_string())?;
+            super::archive_encode::run(&requested, &entries, retained, _expected, &mut output.file, &budget, op).map_err(|e| e.to_string())?;
         }
         #[cfg(any(not(target_os = "windows"), test))]
         {
@@ -2414,6 +2521,7 @@ impl FileOperationManager {
                 Err(error) => return Err(error.to_string()),
             }
         }
+        if let Some(completed) = completed { *completed = Some(output.file.try_clone().map_err(|e| e.to_string())?); }
         if update_destination {
             let parent_unchanged = requested.parent().is_some_and(|parent| {
                 std::fs::canonicalize(parent)

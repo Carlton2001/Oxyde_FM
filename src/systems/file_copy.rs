@@ -158,6 +158,7 @@ fn copy_verified_with_checkpoint(
         Some(expected),
         destination_parents,
         progress,
+        None,
     )
     .map(|output| {
         let identity = crate::models::transaction::HistoryFileIdentity::from_file(&output.file)
@@ -218,6 +219,14 @@ pub(super) fn copy_with_parents(
     destination_parents: super::path_parents::HeldParents,
     progress: &mut dyn FnMut(u64) -> io::Result<()>,
 ) -> io::Result<CopiedFile> {
+    copy_with_parents_observed(source, destination, replace, held_source, destination_parents, progress, None)
+}
+pub(super) fn copy_with_parents_observed(
+    source: &Path, destination: &Path, replace: bool,
+    held_source: Option<&std::fs::File>, destination_parents: super::path_parents::HeldParents,
+    progress: &mut dyn FnMut(u64) -> io::Result<()>,
+    before_replace: Option<&mut dyn FnMut() -> io::Result<bool>>,
+) -> io::Result<CopiedFile> {
     copy_with_parents_checked(
         source,
         destination,
@@ -226,6 +235,7 @@ pub(super) fn copy_with_parents(
         None,
         destination_parents,
         progress,
+        before_replace,
     )
 }
 
@@ -237,6 +247,7 @@ fn copy_with_parents_checked(
     expected: Option<&str>,
     destination_parents: super::path_parents::HeldParents,
     progress: &mut dyn FnMut(u64) -> io::Result<()>,
+    before_replace: Option<&mut dyn FnMut() -> io::Result<bool>>,
 ) -> io::Result<CopiedFile> {
     let source_parents = super::path_parents::HeldParents::new(source)?;
     let source = source_parents.resolved_path(source)?;
@@ -260,10 +271,11 @@ fn copy_with_parents_checked(
         // The output is still private: failure never publishes unexpected bytes.
         return Err(history_source_changed(&source));
     }
-    if replace {
+    let exclusive = if replace { if let Some(before_replace) = before_replace { before_replace()? } else { false } } else { false };
+    if replace && !exclusive {
         check_replacement(&destination)?;
     }
-    destination_parents.rename(&output, &staging.file, &destination, replace)?;
+    destination_parents.rename(&output, &staging.file, &destination, replace && !exclusive)?;
     Ok(CopiedFile {
         file: output,
         hash,
@@ -538,6 +550,7 @@ mod tests {
             Some("expected journal hash"),
             parents,
             &mut |_| Ok(()),
+            None,
         );
         let error = match result {
             Ok(_) => panic!("unverified output was published"),
