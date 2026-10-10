@@ -42,7 +42,10 @@ impl Receipt {
         }
     }
     fn post(&mut self, result: HRESULT) {
-        if self.preflight && result == S_OK {
+        // A completed native recycle/remove can report that the Shell should
+        // not traverse children (also observed for files), rather than S_OK.
+        // Do not accept all nonnegative HRESULTs: skips/pending are not receipts.
+        if self.preflight && matches!(result, S_OK | COPYENGINE_S_DONT_PROCESS_CHILDREN) {
             self.completed = true;
         } else {
             self.fail(format!(
@@ -319,19 +322,30 @@ mod tests {
 
     #[test]
     fn completed_root_survives_later_error_and_abort_but_skips_never_become_success() {
-        let mut receipt = Receipt {
-            preflight: true,
-            ..Default::default()
-        };
-        receipt.post(S_OK);
-        let outcome = receipt.outcome(Err(Error::from_hresult(E_FAIL)), true);
-        assert!(outcome.completed);
-        assert!(outcome.error.is_some());
+        for status in [S_OK, COPYENGINE_S_DONT_PROCESS_CHILDREN] {
+            let mut receipt = Receipt { preflight: true, ..Default::default() };
+            receipt.post(status);
+            let outcome = receipt.outcome(Ok(()), false);
+            assert!(outcome.completed);
+            assert!(outcome.error.is_none());
+            // A later error must still retain the completed root's receipt.
+            let outcome = receipt.outcome(Err(Error::from_hresult(E_FAIL)), true);
+            assert!(outcome.completed);
+            assert!(outcome.error.is_some());
+            let mut unchecked = Receipt::default();
+            unchecked.post(status);
+            assert!(!unchecked.outcome(Ok(()), false).completed);
+        }
         for status in [
             E_FAIL,
             HRESULT(1),
             COPYENGINE_S_USER_IGNORED,
             COPYENGINE_S_PENDING_DELETE,
+            COPYENGINE_S_PENDING,
+            COPYENGINE_S_USER_RETRY,
+            COPYENGINE_S_ALREADY_DONE,
+            COPYENGINE_E_USER_CANCELLED,
+            COPYENGINE_E_CANCELLED,
         ] {
             let mut receipt = Receipt {
                 preflight: true,
@@ -346,6 +360,57 @@ mod tests {
         receipt.post(S_OK);
         assert!(!receipt.outcome(Ok(()), false).completed);
         assert!(Receipt::default().outcome(Ok(()), false).error.is_some());
+    }
+
+    #[test]
+    fn native_sink_accepts_observed_recycle_status_for_unicode_files_and_directories() {
+        std::thread::spawn(|| {
+            let _apartment = Apartment::new().unwrap();
+            for directory in [false, true] {
+                let temp = tempfile::tempdir().unwrap();
+                let path = temp.path().join(if directory { "Dossier école" } else { "Annuler école.txt" });
+                if directory {
+                    fs::create_dir(&path).unwrap();
+                    fs::write(path.join("contenu.txt"), b"witness").unwrap();
+                } else {
+                    fs::write(&path, b"witness").unwrap();
+                }
+                let proof = {
+                    let parents = HeldParents::new(&path).unwrap();
+                    let file = super::super::platform().track_source_item(parents.directory(), &parents.resolved_path(&path).unwrap()).unwrap();
+                    HistoryFileIdentity::from_file(&file).unwrap()
+                };
+                let root = item(&path);
+                let child_or_sibling = if directory {
+                    path.join("contenu.txt")
+                } else {
+                    let sibling = temp.path().join("other.txt");
+                    fs::write(&sibling, b"other").unwrap();
+                    sibling
+                };
+                let unrelated = item(&child_or_sibling);
+                let receipt = Arc::new(Mutex::new(Receipt::default()));
+                let sink: IFileOperationProgressSink = DeleteSink {
+                    root: root.clone(), path: path.clone(), proof: Some(proof), receipt: receipt.clone(),
+                }.into();
+                unsafe {
+                    sink.PreDeleteItem(0, &unrelated).unwrap();
+                    sink.PostDeleteItem(0, &unrelated, COPYENGINE_S_DONT_PROCESS_CHILDREN, None).unwrap();
+                    assert!(!receipt.lock().unwrap().completed);
+                    sink.PreDeleteItem(0, &root).unwrap();
+                    // Only a private rename: this test never touches the Recycle Bin.
+                    fs::rename(&path, temp.path().join("saved")).unwrap();
+                    sink.PostDeleteItem(0, &root, COPYENGINE_S_DONT_PROCESS_CHILDREN, None).unwrap();
+                    sink.FinishOperations(S_OK).unwrap();
+                }
+                let outcome = receipt.lock().unwrap().outcome(Ok(()), false);
+                assert!(outcome.completed);
+                assert!(outcome.error.is_none());
+                let saved = temp.path().join("saved");
+                let content = if directory { saved.join("contenu.txt") } else { saved };
+                assert_eq!(fs::read(content).unwrap(), b"witness");
+            }
+        }).join().unwrap();
     }
 
     #[test]
