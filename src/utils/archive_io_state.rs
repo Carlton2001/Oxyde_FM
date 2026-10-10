@@ -1,8 +1,16 @@
 //! Parent-side extraction admission. Check before interpreting any filesystem effect.
 use super::archive_io_protocol::{invalid, Entry, Frame, Limits, Message};
 use super::archive_security::relative_archive_path;
+use crate::models::error::{ArchiveLimitFailure, ArchiveLimitKind};
 use std::collections::{HashMap, HashSet};
 use std::io;
+
+fn exceeded(kind: ArchiveLimitKind, limit: u64) -> io::Error {
+    io::Error::new(
+        io::ErrorKind::InvalidData,
+        ArchiveLimitFailure { kind, limit },
+    )
+}
 
 pub const MAX_MANIFEST_NAMES: usize = 64 * 1024 * 1024;
 
@@ -58,17 +66,16 @@ impl ExtractionState {
         }
         match &frame.message {
             Message::Entry { entry } => {
-                if self.sealed
-                    || self.active.is_some()
-                    || entry.id != self.entries.len() as u64
-                    || self.entries.len() as u64 >= self.limits.entries
-                {
+                if self.sealed || self.active.is_some() || entry.id != self.entries.len() as u64 {
                     return Err(invalid());
+                }
+                if self.entries.len() as u64 >= self.limits.entries {
+                    return Err(exceeded(ArchiveLimitKind::Entries, self.limits.entries));
                 }
                 entry.validate()?;
                 let path = relative_archive_path(&entry.name)?;
                 if path.components().count() as u64 > self.limits.depth {
-                    return Err(invalid());
+                    return Err(exceeded(ArchiveLimitKind::Depth, self.limits.depth));
                 }
                 let key = path.to_string_lossy().replace('\\', "/").to_lowercase();
                 if self.names.contains(&key) {
@@ -90,7 +97,7 @@ impl ExtractionState {
                     self.declared
                         .checked_add(entry.size)
                         .filter(|n| *n <= self.limits.bytes)
-                        .ok_or_else(invalid)?
+                        .ok_or_else(|| exceeded(ArchiveLimitKind::Bytes, self.limits.bytes))?
                 } else {
                     self.declared
                 };
@@ -143,7 +150,7 @@ impl ExtractionState {
                     .written
                     .checked_add(frame.data.len() as u64)
                     .filter(|n| *n <= self.limits.bytes)
-                    .ok_or_else(invalid)?;
+                    .ok_or_else(|| exceeded(ArchiveLimitKind::Bytes, self.limits.bytes))?;
                 self.active = Some((*id, count));
                 self.written = written;
             }

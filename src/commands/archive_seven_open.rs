@@ -4,7 +4,9 @@ use crate::platform::platform;
 use crate::systems::path_parents::HeldParents;
 use crate::utils::archive_limits::{ArchiveBudget, ArchiveLimits, BudgetReader};
 use crate::utils::archive_security::{relative_archive_path, ExtractionRoot};
-use sevenz_rust2::{Archive, ArchiveEntry, ArchiveReader, BlockDecoder, Password};
+use sevenz_rust2::{Archive, ArchiveEntry, BlockDecoder, Password};
+#[cfg(any(not(target_os = "windows"), test))]
+use sevenz_rust2::ArchiveReader;
 use std::fs::{self, File};
 use std::io::{self, Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
@@ -41,6 +43,7 @@ pub(super) struct CheckedSource<'a> {
     checkpoint: &'a dyn Fn() -> io::Result<()>,
 }
 
+#[cfg(any(not(target_os = "windows"), test))]
 pub(super) fn checked_reader<'a>(
     file: File,
     budget: &'a ArchiveBudget,

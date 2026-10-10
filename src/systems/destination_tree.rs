@@ -39,6 +39,15 @@ impl DestinationTree {
         self.root.resolved_directory()
     }
 
+    #[cfg(target_os = "windows")]
+    pub fn retained_identity(&self, path: &Path) -> io::Result<crate::platform::FileIdentity> {
+        if path == self.path() {
+            return platform().file_identity(self.root.directory());
+        }
+        let directories = self.directories.lock().unwrap();
+        platform().file_identity(directories.get(path).ok_or_else(|| io::Error::other("Directory was not retained"))?)
+    }
+
     pub fn check_all(&self, checkpoint: &mut dyn FnMut() -> io::Result<()>) -> io::Result<()> {
         checkpoint()?;
         ordinary(self.root.directory())?;

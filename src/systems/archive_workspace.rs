@@ -1,8 +1,10 @@
 //! Temporary filesystem views used to edit archives without touching the original.
 use crate::commands::archive::{
-    extract_iso_file_for_open, extract_open_archive_with_budget, extract_seven_file_for_open,
+    extract_iso_file_for_open, extract_seven_file_for_open,
     extract_tar_file_for_open, extract_zip_file_for_open,
 };
+#[cfg(any(not(target_os = "windows"), test))]
+use crate::commands::archive::extract_open_archive_with_budget;
 use crate::systems::file_ops::{FileOpType, FileOperation, FileOperationManager};
 use crate::utils::archive::{split_virtual_path, ArchiveFormat};
 use crate::utils::archive_limits::{ArchiveBudget, ArchiveLimits};
@@ -11,6 +13,10 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock, Mutex, MutexGuard, Weak};
 
 type MutationMutex = Arc<Mutex<()>>;
+#[cfg(any(not(target_os = "windows"), test))]
+type WorkspaceDirectory = tempfile::TempDir;
+#[cfg(all(target_os = "windows", not(test)))]
+type WorkspaceDirectory = super::archive_owned_tree::OwnedTree;
 static MUTATION_LOCKS: LazyLock<Mutex<HashMap<PathBuf, Weak<Mutex<()>>>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
@@ -80,7 +86,7 @@ pub(crate) fn writable(path: &Path) -> bool {
 
 pub(crate) struct ArchiveWorkspace {
     pub archive: PathBuf,
-    directory: tempfile::TempDir,
+    directory: WorkspaceDirectory,
     length: u64,
     modified: Option<std::time::SystemTime>,
     original_identity: crate::platform::FileIdentity,
@@ -98,10 +104,11 @@ impl ArchiveWorkspace {
         archive: PathBuf,
         op: &Arc<Mutex<FileOperation>>,
     ) -> Result<Self, String> {
-        Self::open_with_checkpoint(
+        Self::open_controlled(
             archive,
             &|| FileOperationManager::archive_checkpoint(op).map_err(std::io::Error::other),
             ArchiveLimits::WORKSPACE,
+            Some(op),
         )
     }
     fn open_with_checkpoint(
@@ -109,18 +116,31 @@ impl ArchiveWorkspace {
         checkpoint: &dyn Fn() -> std::io::Result<()>,
         limits: ArchiveLimits,
     ) -> Result<Self, String> {
+        Self::open_controlled(archive, checkpoint, limits, None)
+    }
+    fn open_controlled(archive: PathBuf, checkpoint: &dyn Fn() -> std::io::Result<()>, limits: ArchiveLimits, op: Option<&Arc<Mutex<FileOperation>>>) -> Result<Self, String> {
+        #[cfg(any(not(target_os = "windows"), test))]
         let directory = tempfile::tempdir().map_err(|e| e.to_string())?;
-        Self::open_in_directory(archive, checkpoint, limits, directory)
+        #[cfg(all(target_os = "windows", not(test)))]
+        let directory = super::archive_owned_tree::OwnedTree::temporary(&std::env::temp_dir()).map_err(|e| e.to_string())?;
+        Self::open_in_directory_controlled(archive, checkpoint, limits, directory, op)
     }
 
     fn open_in_directory(
         archive: PathBuf,
         checkpoint: &dyn Fn() -> std::io::Result<()>,
         limits: ArchiveLimits,
-        directory: tempfile::TempDir,
+        directory: WorkspaceDirectory,
     ) -> Result<Self, String> {
+        Self::open_in_directory_controlled(archive, checkpoint, limits, directory, None)
+    }
+    fn open_in_directory_controlled(archive: PathBuf, checkpoint: &dyn Fn() -> std::io::Result<()>, limits: ArchiveLimits, directory: WorkspaceDirectory, _op: Option<&Arc<Mutex<FileOperation>>>) -> Result<Self, String> {
+        #[cfg(all(target_os = "windows", not(test)))]
+        let mut directory = directory;
         let archive = crate::utils::path_security::validate_path(&archive.to_string_lossy()).map_err(|e| e.to_string())?;
+        let display_archive = archive.clone();
         let parents = super::path_parents::HeldParents::new(&archive).map_err(|e| e.to_string())?;
+        let archive = parents.resolved_path(&archive).map_err(|e| e.to_string())?;
         let budget = ArchiveBudget::new(limits);
         budget.checkpoint(checkpoint).map_err(|e| e.to_string())?;
         let mut source = crate::platform::platform().open_archive_source(&archive, false).map_err(|e| e.to_string())?;
@@ -129,6 +149,7 @@ impl ArchiveWorkspace {
         let original_hash = fingerprint(&mut source, checkpoint, &budget).map_err(|e| e.to_string())?;
         use std::io::{Seek, SeekFrom};
         source.seek(SeekFrom::Start(0)).map_err(|e| e.to_string())?;
+        #[cfg(any(not(target_os = "windows"), test))]
         extract_open_archive_with_budget(
             &archive,
             source.try_clone().map_err(|e| e.to_string())?,
@@ -137,6 +158,8 @@ impl ArchiveWorkspace {
             &budget,
         )
         .map_err(|e| e.to_string())?;
+        #[cfg(all(target_os = "windows", not(test)))]
+        super::archive_io::decode(&archive, source.try_clone().map_err(|e| e.to_string())?, &mut directory, None, &budget, _op).map_err(|e| e.to_string())?;
         // Never follow archive-provided links when copying or rebuilding a workspace.
         for entry in walkdir::WalkDir::new(directory.path()).follow_links(false) {
             if entry.map_err(|e| e.to_string())?.file_type().is_symlink() {
@@ -153,8 +176,10 @@ impl ArchiveWorkspace {
         if fingerprint(&mut source, checkpoint, &budget).map_err(|e| e.to_string())? != original_hash {
             return Err(crate::models::error::ArchiveSourceConflict.to_string());
         }
+        #[cfg(all(target_os = "windows", not(test)))]
+        directory.release();
         Ok(Self {
-            archive,
+            archive: display_archive,
             directory,
             length: metadata.len(),
             modified: metadata.modified().ok(),
@@ -406,7 +431,10 @@ fn prepare_selection_with_limits(
     ) {
         extract_tar_file_for_open(&archive, internal, target, limits).map_err(|e| e.to_string())?
     } else {
+        #[cfg(any(not(target_os = "windows"), test))]
         let directory = tempfile::Builder::new().prefix(".oxyde-work-").tempdir_in(target).map_err(|e| e.to_string())?;
+        #[cfg(all(target_os = "windows", not(test)))]
+        let directory = super::archive_owned_tree::OwnedTree::temporary(target).map_err(|e| e.to_string())?;
         let workspace = ArchiveWorkspace::open_in_directory(archive, &|| Ok(()), limits, directory)?;
         let source = workspace.path(&internal)?;
         if !source.is_file() {

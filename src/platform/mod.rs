@@ -80,7 +80,7 @@ impl ShellDeleteOutcome {
 pub trait Platform: Send + Sync {
     fn run_archive_io_worker(&self, operation: crate::utils::archive_io_protocol::Operation,
         controls: &dyn Fn() -> std::io::Result<crate::utils::archive_io_protocol::Control>,
-        handler: &mut dyn FnMut(crate::utils::archive_io_protocol::Frame) -> std::io::Result<crate::utils::archive_io_protocol::Frame>) -> std::io::Result<()>;
+        handler: &mut dyn FnMut(crate::utils::archive_io_protocol::Frame) -> std::io::Result<crate::utils::archive_io_protocol::Frame>) -> std::io::Result<std::time::Duration>;
     fn list_archive_directory(&self, path: &std::path::Path, internal: &str) -> Result<Vec<crate::models::FileEntry>, crate::models::CommandError>;
     fn index_archive_contents(&self, path: &std::path::Path, checkpoint: &dyn Fn() -> std::io::Result<()>) -> Result<Vec<crate::models::FileEntry>, crate::models::CommandError>;
     fn initialize_preview_worker(&self) -> std::io::Result<()> { Ok(()) }
@@ -184,6 +184,8 @@ pub trait Platform: Send + Sync {
     /// Read/write bounded native Internet provenance; unsupported platforms use None.
     fn read_file_provenance(&self, path: &std::path::Path) -> std::io::Result<Option<Vec<u8>>>;
     fn write_file_provenance(&self, path: &std::path::Path, data: &[u8]) -> std::io::Result<()>;
+    /// Mark the exclusively created output relative to its retained parent.
+    fn write_archive_output_provenance(&self, parent: &std::fs::File, file: &std::fs::File, path: &std::path::Path, data: &[u8]) -> std::io::Result<()>;
     /// Blocking copy with native metadata/streams where supported. The callback
     /// Reports main-stream bytes; only an absent destination is accepted.
     /// A supplied source handle must already hold the same source path/identity.

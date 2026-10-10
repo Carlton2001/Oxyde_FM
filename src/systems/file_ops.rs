@@ -2143,7 +2143,7 @@ impl FileOperationManager {
         Ok(())
     }
 
-    fn archive_progress(op: &Arc<Mutex<FileOperation>>, bytes: u64) {
+    pub(crate) fn archive_progress(op: &Arc<Mutex<FileOperation>>, bytes: u64) {
         let mut locked = op.lock().unwrap();
         locked.processed_bytes += bytes;
         let now = std::time::Instant::now();
@@ -2193,7 +2193,8 @@ impl FileOperationManager {
         unreachable!()
     }
 
-    pub(crate) fn perform_compress(
+    #[doc(hidden)]
+    pub fn perform_compress(
         op: &Arc<Mutex<FileOperation>>,
         sources: Vec<PathBuf>,
         destination: Option<PathBuf>,
@@ -2465,7 +2466,8 @@ impl FileOperationManager {
         Ok(())
     }
 
-    fn perform_extract(
+    #[doc(hidden)]
+    pub fn perform_extract(
         op: &Arc<Mutex<FileOperation>>,
         sources: Vec<PathBuf>,
         destination: Option<PathBuf>,
@@ -2500,6 +2502,28 @@ impl FileOperationManager {
         // pause/resume and the complete traversal. No later reopen by pathname.
         let file = platform().open_archive_source(&source, false).map_err(|error| error.to_string())?;
         before_extract().map_err(|error| error.to_string())?;
+        #[cfg(all(target_os = "windows", not(test)))]
+        {
+            let target_parents = super::path_parents::HeldParents::new(&requested).map_err(|e| e.to_string())?;
+            let mut target = Self::unique_archive_path(&target_parents.resolved_path(&requested).map_err(|e| e.to_string())?);
+            let tracking = loop {
+                match platform().create_journal_directory(target_parents.directory(), &target, false) {
+                    Ok(file) => break file,
+                    Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => target = Self::unique_archive_path(&target),
+                    Err(error) => return Err(error.to_string()),
+                }
+            };
+            let mut tree = match super::archive_owned_tree::OwnedTree::created(&target, &tracking) {
+                Ok(tree) => tree,
+                Err(error) => { let _ = platform().remove_empty_operation_directory(target_parents.directory(), &target, platform().file_identity(&tracking).map_err(|e| e.to_string())?); return Err(error.to_string()); }
+            };
+            { let mut op = op.lock().unwrap(); op.destination = Some(target); op.total_files = 0; op.total_bytes = 0; op.status = OpStatus::Running; }
+            super::archive_io::decode(&source, file, &mut tree, None, &budget, Some(op)).map_err(|e| e.to_string())?;
+            tree.keep();
+            return Ok(());
+        }
+        #[cfg(any(not(target_os = "windows"), test))]
+        {
         let mut target = Self::unique_archive_path(&requested);
         loop {
             match std::fs::create_dir(&target) {
@@ -2622,6 +2646,7 @@ impl FileOperationManager {
         }
         guard.0 = PathBuf::new();
         Ok(())
+        }
     }
 
     pub fn set_turbo(&self, id: &str, enabled: bool) {

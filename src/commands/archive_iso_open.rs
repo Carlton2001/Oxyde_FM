@@ -320,6 +320,7 @@ pub(super) fn list_iso(archive: &Path, internal: &str) -> Result<Vec<FileEntry>,
         .collect())
 }
 
+#[cfg(any(not(target_os = "windows"), test))]
 pub(super) fn extract_iso(
     file: File,
     root: &ExtractionRoot,

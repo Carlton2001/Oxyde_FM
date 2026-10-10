@@ -141,6 +141,12 @@ fn encoded(format: Format, quality: Quality) -> Vec<u8> {
                     bytes[offset as usize..end as usize].to_vec(),
                 ));
             }
+            if matches!(frame.message, Message::Decoded { .. }) {
+                return Ok(Frame::new(Message::Ack {
+                    pause: false,
+                    turbo: false,
+                }));
+            }
             state.accept(&frame)?;
             if matches!(frame.message, Message::Chunk { .. }) {
                 extracted.extend_from_slice(&frame.data);

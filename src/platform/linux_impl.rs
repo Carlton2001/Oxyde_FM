@@ -12,7 +12,7 @@ impl LinuxPlatform {
 impl Platform for LinuxPlatform {
     fn run_archive_io_worker(&self, _operation: crate::utils::archive_io_protocol::Operation,
         _controls: &dyn Fn() -> std::io::Result<crate::utils::archive_io_protocol::Control>,
-        _handler: &mut dyn FnMut(crate::utils::archive_io_protocol::Frame) -> std::io::Result<crate::utils::archive_io_protocol::Frame>) -> std::io::Result<()> {
+        _handler: &mut dyn FnMut(crate::utils::archive_io_protocol::Frame) -> std::io::Result<crate::utils::archive_io_protocol::Frame>) -> std::io::Result<std::time::Duration> {
         Err(std::io::Error::new(std::io::ErrorKind::Unsupported, "Archive process isolation is unavailable on this platform"))
     }
     fn index_archive_contents(&self, path: &std::path::Path, checkpoint: &dyn Fn() -> std::io::Result<()>) -> Result<Vec<crate::models::FileEntry>, crate::models::CommandError> {
@@ -286,6 +286,7 @@ impl Platform for LinuxPlatform {
     fn write_file_provenance(&self, _path: &std::path::Path, _data: &[u8]) -> std::io::Result<()> {
         Ok(())
     }
+    fn write_archive_output_provenance(&self, _parent: &std::fs::File, _file: &std::fs::File, _path: &std::path::Path, _data: &[u8]) -> std::io::Result<()> { Ok(()) }
     fn replace_open_file(
         &self,
         _file: &std::fs::File,

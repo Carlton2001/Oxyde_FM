@@ -1,24 +1,27 @@
 pub(crate) use super::archive_iso_open::extract_iso_file_for_open;
-use super::archive_iso_open::{extract_iso, list_iso};
+use super::archive_iso_open::list_iso;
+#[cfg(any(not(target_os = "windows"), test))]
+use super::archive_iso_open::extract_iso;
 pub(crate) use super::archive_seven_open::extract_seven_file_for_open;
 pub(crate) use super::archive_tar_open::extract_tar_file_for_open;
 use crate::models::{CommandError, FileEntry};
 use crate::platform::platform;
 pub use crate::utils::archive::{is_archive, split_virtual_path, ArchiveFormat};
-use crate::utils::archive_limits::{ArchiveBudget, ArchiveLimits, BudgetReader};
+use crate::utils::archive_limits::{ArchiveBudget, ArchiveLimits};
+#[cfg(any(not(target_os = "windows"), test))]
+use crate::utils::archive_limits::BudgetReader;
 use crate::utils::archive_security::{relative_archive_path, ExtractionRoot};
 use crate::utils::path_security::validate_path;
-use bzip2::read::BzDecoder;
-use flate2::read::GzDecoder;
-use log::info;
+#[cfg(any(not(target_os = "windows"), test))]
+use {bzip2::read::BzDecoder, flate2::read::GzDecoder, log::info};
 use std::collections::HashSet;
+#[cfg(any(not(target_os = "windows"), test))]
 use std::fs::{self, File};
 use std::io;
 use std::path::{Path, PathBuf};
-use tar::Archive as TarArchive;
-use xz2::read::XzDecoder;
+#[cfg(any(not(target_os = "windows"), test))]
+use {tar::Archive as TarArchive, xz2::read::XzDecoder, zstd::stream::read::Decoder as ZstdDecoder};
 use zip::ZipArchive;
-use zstd::stream::read::Decoder as ZstdDecoder;
 
 pub fn create_archive_directory_with_quality(
     path: &Path,
@@ -299,6 +302,7 @@ pub(crate) fn extract_archive_with_limits(
 }
 
 /// Decode the opened source itself, without resolving its pathname again.
+#[cfg(any(not(target_os = "windows"), test))]
 pub(crate) fn extract_open_archive_with_budget(
     path: &Path,
     file: File,
@@ -439,6 +443,7 @@ pub(crate) fn extract_open_archive_with_budget(
     Ok(())
 }
 
+#[cfg(any(not(target_os = "windows"), test))]
 fn decompress_seven_zip_with_checkpoint(
     file: File,
     root: &ExtractionRoot,

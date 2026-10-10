@@ -18,6 +18,31 @@ pub struct Control {
     pub turbo: bool,
 }
 
+thread_local! {
+    static TEST_EXECUTABLE: std::cell::RefCell<Option<std::path::PathBuf>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Scoped integration-test injection; normal application sessions use current_exe.
+#[doc(hidden)]
+pub fn with_worker_executable_for_tests<T>(path: &std::path::Path, run: impl FnOnce() -> T) -> T {
+    struct Restore(Option<std::path::PathBuf>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            TEST_EXECUTABLE.with(|value| *value.borrow_mut() = self.0.take());
+        }
+    }
+    let _restore = Restore(TEST_EXECUTABLE.with(|value| value.replace(Some(path.into()))));
+    run()
+}
+
+#[cfg(target_os = "windows")]
+#[doc(hidden)]
+pub fn worker_executable() -> std::io::Result<std::path::PathBuf> {
+    TEST_EXECUTABLE
+        .with(|value| value.borrow().clone())
+        .map_or_else(std::env::current_exe, Ok)
+}
+
 pub fn invalid() -> io::Error {
     io::Error::new(
         io::ErrorKind::InvalidData,

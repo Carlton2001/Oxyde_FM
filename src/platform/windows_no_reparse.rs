@@ -113,6 +113,21 @@ pub(super) fn open_relative(
     )
 }
 
+/// The sole allowed alternate-stream name is supplied by the parent, never IPC.
+pub(super) fn open_provenance_stream(parent: &File, leaf: &OsStr) -> io::Result<File> {
+    let mut name = leaf_name(leaf)?;
+    name.extend(":Zone.Identifier".encode_utf16());
+    open_name(
+        name,
+        parent.as_raw_handle(),
+        Some(false),
+        windows::Win32::Foundation::GENERIC_READ.0 | windows::Win32::Foundation::GENERIC_WRITE.0,
+        7,
+        5,
+        true,
+    ) // all sharing; FILE_OVERWRITE_IF, confined to this stream.
+}
+
 /// Exclusively create one child of an already retained directory.
 pub(super) fn create_relative(
     parent: &File,

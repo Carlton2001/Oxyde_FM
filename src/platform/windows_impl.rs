@@ -13,7 +13,7 @@ impl WindowsPlatform {
 impl Platform for WindowsPlatform {
     fn run_archive_io_worker(&self, operation: crate::utils::archive_io_protocol::Operation,
         controls: &dyn Fn() -> std::io::Result<crate::utils::archive_io_protocol::Control>,
-        handler: &mut dyn FnMut(crate::utils::archive_io_protocol::Frame) -> std::io::Result<crate::utils::archive_io_protocol::Frame>) -> std::io::Result<()> {
+        handler: &mut dyn FnMut(crate::utils::archive_io_protocol::Frame) -> std::io::Result<crate::utils::archive_io_protocol::Frame>) -> std::io::Result<std::time::Duration> {
         super::windows_archive_io_worker::run(operation, controls, handler)
     }
     fn open_archive_source(&self, path: &std::path::Path, allow_changes: bool) -> std::io::Result<std::fs::File> {
@@ -130,6 +130,9 @@ impl Platform for WindowsPlatform {
     }
     fn write_file_provenance(&self, path: &std::path::Path, data: &[u8]) -> std::io::Result<()> {
         super::windows_archive_security::write_provenance(path, data)
+    }
+    fn write_archive_output_provenance(&self, parent: &std::fs::File, file: &std::fs::File, path: &std::path::Path, data: &[u8]) -> std::io::Result<()> {
+        super::windows_archive_security::write_output_provenance(parent, file, path, data)
     }
     fn copy_file_with_progress(
         &self,

@@ -72,10 +72,10 @@ pub(super) fn run(
     operation: Operation,
     controls: &dyn Fn() -> io::Result<Control>,
     handler: &mut dyn FnMut(Frame) -> io::Result<Frame>,
-) -> io::Result<()> {
+) -> io::Result<Duration> {
     let _slot = admission(&operation, controls)?;
     let stats = run_in(
-        &std::env::current_exe()?,
+        &crate::utils::archive_io_protocol::worker_executable()?,
         operation.clone(),
         controls,
         handler,
@@ -85,10 +85,11 @@ pub(super) fn run(
         "Archive worker peak committed memory: {} bytes",
         stats.peak_memory
     );
-    Ok(())
+    Ok(stats.active)
 }
 pub(super) struct Stats {
     pub peak_memory: usize,
+    pub active: Duration,
 }
 pub(super) fn run_in(
     executable: &Path,
@@ -377,6 +378,7 @@ pub(super) fn supervise(
                 .map_err(|e| io::Error::other(e.to_string()))?;
                 return Ok(Stats {
                     peak_memory: info.PeakJobMemoryUsed,
+                    active,
                 });
             }
         }

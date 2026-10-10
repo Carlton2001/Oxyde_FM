@@ -61,6 +61,25 @@ struct ChunkWriter<'a, T> {
     id: u64,
     offset: u64,
 }
+
+struct ReportedReader<'a, R, T> {
+    reader: R,
+    connection: &'a Connection<T>,
+}
+impl<R: Read, T: Exchange> Read for ReportedReader<'_, R, T> {
+    fn read(&mut self, bytes: &mut [u8]) -> io::Result<usize> {
+        let count = self.reader.read(bytes)?;
+        if count != 0 {
+            notify(
+                self.connection,
+                Frame::new(Message::Decoded {
+                    bytes: count as u64,
+                }),
+            )?;
+        }
+        Ok(count)
+    }
+}
 impl<T: Exchange> Write for ChunkWriter<'_, T> {
     fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
         let count = bytes.len().min(MAX_BLOCK);
@@ -487,7 +506,10 @@ fn decode_seven<T: Exchange>(
             sevenz_rust2::BlockDecoder::new(1, block, &archive, &password, &mut source)
                 .for_each_entries(&mut |candidate, input| {
                     let mut input = BudgetReader {
-                        reader: input,
+                        reader: ReportedReader {
+                            reader: input,
+                            connection,
+                        },
                         budget,
                         checkpoint,
                     };
@@ -593,7 +615,10 @@ fn decode_tar<T: Exchange + 'static>(
     // a fresh source cursor. The hash ties the two traversals to the selected data.
     let mut selection = None;
     let mut archive = tar::Archive::new(BudgetReader {
-        reader: tar_reader(connection, format, size)?,
+        reader: ReportedReader {
+            reader: tar_reader(connection, format, size)?,
+            connection,
+        },
         budget,
         checkpoint,
     });
@@ -629,7 +654,10 @@ fn decode_tar<T: Exchange + 'static>(
         let second = ArchiveBudget::new(budget.limits());
         let check = || budget.checkpoint(checkpoint);
         let mut archive = tar::Archive::new(BudgetReader {
-            reader: tar_reader(connection, format, size)?,
+            reader: ReportedReader {
+                reader: tar_reader(connection, format, size)?,
+                connection,
+            },
             budget: &second,
             checkpoint: &check,
         });
@@ -844,7 +872,7 @@ mod tests {
                         entry: self.metadata.get(*id as usize).ok_or_else(invalid)?.clone(),
                     }));
                 }
-                Message::Checkpoint | Message::Flush => {}
+                Message::Checkpoint | Message::Flush | Message::Decoded { .. } => {}
                 _ => {
                     if let Some(state) = &mut self.state {
                         state.accept(&frame)?;

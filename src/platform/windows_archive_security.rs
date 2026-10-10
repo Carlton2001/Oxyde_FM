@@ -131,6 +131,58 @@ pub(super) fn write_provenance(path: &Path, data: &[u8]) -> io::Result<()> {
     stream.sync_all()
 }
 
+pub(super) fn write_output_provenance(
+    parent: &File,
+    file: &File,
+    path: &Path,
+    data: &[u8],
+) -> io::Result<()> {
+    if data.len() as u64 > MAX_PROVENANCE_BYTES {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "Internet provenance exceeds the size limit",
+        ));
+    }
+    let metadata = file.metadata()?;
+    let parent_metadata = parent.metadata()?;
+    if !metadata.is_file()
+        || !parent_metadata.is_dir()
+        || super::platform().file_attributes(&metadata, "").2
+        || super::platform().file_attributes(&parent_metadata, "").2
+    {
+        return Err(io::Error::other(
+            "Archive provenance requires ordinary retained objects",
+        ));
+    }
+    let leaf = path
+        .file_name()
+        .ok_or_else(|| io::Error::other("Archive output has no name"))?;
+    let selected = super::windows_source_selection::track(parent, path)?;
+    if super::platform().file_identity(&selected)? != super::platform().file_identity(file)? {
+        return Err(io::Error::other("Archive provenance output changed"));
+    }
+    let mut stream =
+        super::windows_no_reparse::open_provenance_stream(parent, leaf).map_err(|error| {
+            io::Error::new(
+                error.kind(),
+                format!("Archive provenance stream open: {error}"),
+            )
+        })?;
+    if super::platform().file_identity(&stream).map_err(|error| {
+        io::Error::new(
+            error.kind(),
+            format!("Archive provenance stream identity: {error}"),
+        )
+    })? != super::platform().file_identity(file)?
+    {
+        return Err(io::Error::other(
+            "Archive provenance stream belongs to another object",
+        ));
+    }
+    stream.write_all(data)?;
+    stream.sync_all()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
