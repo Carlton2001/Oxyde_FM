@@ -178,7 +178,13 @@ fn encode<T: Exchange>(
                 notify(connection, Frame::new(Message::Begin { id }))?;
                 let options = zip::write::SimpleFileOptions::default()
                     .compression_method(zip::CompressionMethod::Deflated)
-                    .compression_level(Some(level));
+                    .compression_level(Some(
+                        if connection.lock().map_err(|_| invalid())?.turbo() {
+                            1
+                        } else {
+                            level
+                        },
+                    ));
                 if entry.directory {
                     writer
                         .add_directory(format!("{}/", entry.name.trim_end_matches('/')), options)
@@ -315,8 +321,9 @@ fn decode<T: Exchange + 'static>(
     let requested = selected.map(relative_archive_path).transpose()?;
     match format {
         Format::Zip => {
-            let mut archive = zip::ZipArchive::new(Reader::new(connection.clone(), 0, size))
-                .map_err(io::Error::other)?;
+            let mut archive =
+                zip::ZipArchive::new(io::BufReader::new(Reader::new(connection.clone(), 0, size)))
+                    .map_err(io::Error::other)?;
             budget.check_entry_count(archive.len())?;
             let mut selection = None;
             for index in 0..archive.len() {

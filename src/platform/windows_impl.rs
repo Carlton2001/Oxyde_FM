@@ -11,6 +11,11 @@ impl WindowsPlatform {
 }
 
 impl Platform for WindowsPlatform {
+    fn run_archive_io_worker(&self, operation: crate::utils::archive_io_protocol::Operation,
+        controls: &dyn Fn() -> std::io::Result<crate::utils::archive_io_protocol::Control>,
+        handler: &mut dyn FnMut(crate::utils::archive_io_protocol::Frame) -> std::io::Result<crate::utils::archive_io_protocol::Frame>) -> std::io::Result<()> {
+        super::windows_archive_io_worker::run(operation, controls, handler)
+    }
     fn open_archive_source(&self, path: &std::path::Path, allow_changes: bool) -> std::io::Result<std::fs::File> {
         super::windows_archive_source::open(path, allow_changes)
     }

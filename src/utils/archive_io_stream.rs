@@ -5,6 +5,9 @@ use std::sync::{Arc, Mutex};
 
 pub trait Exchange {
     fn exchange(&mut self, frame: Frame) -> io::Result<Frame>;
+    fn turbo(&self) -> bool {
+        false
+    }
 }
 
 /// Codecs can retain several readers while sharing one ordered IPC conversation.

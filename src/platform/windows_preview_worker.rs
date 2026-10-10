@@ -42,12 +42,20 @@ fn native(error: windows::core::Error) -> io::Error {
     io::Error::other(error.to_string())
 }
 
-struct Worker {
-    child: Child,
-    _job: OwnedHandle,
+pub(super) struct Worker {
+    pub(super) child: Child,
+    pub(super) _job: OwnedHandle,
 }
 impl Worker {
-    fn start(mut command: Command, memory_bytes: usize) -> io::Result<(Self, std::fs::File)> {
+    fn start(command: Command, memory_bytes: usize) -> io::Result<(Self, std::fs::File)> {
+        let (worker, output, input) = Self::start_duplex(command, memory_bytes)?;
+        drop(input);
+        Ok((worker, output))
+    }
+    pub(super) fn start_duplex(
+        mut command: Command,
+        memory_bytes: usize,
+    ) -> io::Result<(Self, std::fs::File, std::process::ChildStdin)> {
         let job = job(memory_bytes)?;
         // Suggest enough capacity for one bounded video packet to reduce small
         // transfers through the polled pipe. Windows may choose another size.
@@ -77,8 +85,7 @@ impl Worker {
             .take()
             .ok_or_else(|| io::Error::other("Missing preview gate"))?;
         start.write_all(&[0xA7])?;
-        drop(start);
-        Ok((worker, output))
+        Ok((worker, output, start))
     }
 }
 impl Drop for Worker {

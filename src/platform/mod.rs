@@ -78,6 +78,9 @@ impl ShellDeleteOutcome {
 /// Toute fonctionnalité native (lecteurs, ouverture, raccourcis, etc.)
 /// doit passer par ce trait plutôt qu'appeler directement les API OS.
 pub trait Platform: Send + Sync {
+    fn run_archive_io_worker(&self, operation: crate::utils::archive_io_protocol::Operation,
+        controls: &dyn Fn() -> std::io::Result<crate::utils::archive_io_protocol::Control>,
+        handler: &mut dyn FnMut(crate::utils::archive_io_protocol::Frame) -> std::io::Result<crate::utils::archive_io_protocol::Frame>) -> std::io::Result<()>;
     fn list_archive_directory(&self, path: &std::path::Path, internal: &str) -> Result<Vec<crate::models::FileEntry>, crate::models::CommandError>;
     fn index_archive_contents(&self, path: &std::path::Path, checkpoint: &dyn Fn() -> std::io::Result<()>) -> Result<Vec<crate::models::FileEntry>, crate::models::CommandError>;
     fn initialize_preview_worker(&self) -> std::io::Result<()> { Ok(()) }
@@ -507,5 +510,7 @@ mod windows_shell_delete_tracked;
 mod windows_preview_worker;
 #[cfg(target_os = "windows")]
 mod windows_archive_worker;
+#[cfg(target_os = "windows")]
+mod windows_archive_io_worker;
 #[cfg(target_os = "windows")]
 mod windows_icon_pixels;

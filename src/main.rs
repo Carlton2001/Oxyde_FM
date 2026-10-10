@@ -64,6 +64,8 @@ fn initialize_logging() {
 
 fn main() {
     #[cfg(target_os = "windows")]
+    if oxyde_lib::commands::archive_io_worker::run_if_requested() { return; }
+    #[cfg(target_os = "windows")]
     if oxyde_lib::commands::archive_worker::run_if_requested() { return; }
     #[cfg(target_os = "windows")]
     if crate::ui::preview_worker::run_if_requested() { return; }

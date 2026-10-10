@@ -11,6 +11,13 @@ pub const HEADER: usize = 40;
 const MAGIC: &[u8; 4] = b"OXAI";
 const VERSION: u16 = 1;
 
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Control {
+    pub cancelled: bool,
+    pub paused: bool,
+    pub turbo: bool,
+}
+
 pub fn invalid() -> io::Error {
     io::Error::new(
         io::ErrorKind::InvalidData,
@@ -367,24 +374,10 @@ impl Wire {
     pub fn read(&mut self, input: &mut impl Read) -> io::Result<Frame> {
         let mut header = [0u8; HEADER];
         input.read_exact(&mut header)?;
-        if &header[..4] != MAGIC
-            || u16::from_le_bytes(header[4..6].try_into().unwrap()) != VERSION
-            || header[6..8] != [0, 0]
-            || header[8..24] != self.session
-            || u64::from_le_bytes(header[24..32].try_into().unwrap()) != self.receive
-        {
-            return Err(invalid());
-        }
+        self.frame_size(&header)?;
         let next = self.receive.checked_add(1).ok_or_else(invalid)?;
         let metadata_len = u32::from_le_bytes(header[32..36].try_into().unwrap()) as usize;
         let data_len = u32::from_le_bytes(header[36..40].try_into().unwrap()) as usize;
-        if metadata_len == 0
-            || metadata_len > MAX_METADATA
-            || data_len > MAX_BLOCK
-            || HEADER + metadata_len + data_len > MAX_FRAME
-        {
-            return Err(invalid());
-        }
         let mut metadata = vec![0; metadata_len];
         input.read_exact(&mut metadata)?;
         let message: Message = serde_json::from_slice(&metadata).map_err(|_| invalid())?;
@@ -398,6 +391,32 @@ impl Wire {
         input.read_exact(&mut data)?;
         self.receive = next;
         Ok(Frame { message, data })
+    }
+
+    /// Inspect a polled pipe header before reserving space for its body.
+    pub fn frame_size(&self, header: &[u8]) -> io::Result<usize> {
+        if header.len() != HEADER {
+            return Err(invalid());
+        }
+        if &header[..4] != MAGIC
+            || u16::from_le_bytes(header[4..6].try_into().unwrap()) != VERSION
+            || header[6..8] != [0, 0]
+            || header[8..24] != self.session
+            || u64::from_le_bytes(header[24..32].try_into().unwrap()) != self.receive
+        {
+            return Err(invalid());
+        }
+        self.receive.checked_add(1).ok_or_else(invalid)?;
+        let metadata_len = u32::from_le_bytes(header[32..36].try_into().unwrap()) as usize;
+        let data_len = u32::from_le_bytes(header[36..40].try_into().unwrap()) as usize;
+        if metadata_len == 0
+            || metadata_len > MAX_METADATA
+            || data_len > MAX_BLOCK
+            || HEADER + metadata_len + data_len > MAX_FRAME
+        {
+            return Err(invalid());
+        }
+        Ok(HEADER + metadata_len + data_len)
     }
 }
 

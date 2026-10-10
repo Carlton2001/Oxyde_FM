@@ -10,6 +10,11 @@ impl LinuxPlatform {
 }
 
 impl Platform for LinuxPlatform {
+    fn run_archive_io_worker(&self, _operation: crate::utils::archive_io_protocol::Operation,
+        _controls: &dyn Fn() -> std::io::Result<crate::utils::archive_io_protocol::Control>,
+        _handler: &mut dyn FnMut(crate::utils::archive_io_protocol::Frame) -> std::io::Result<crate::utils::archive_io_protocol::Frame>) -> std::io::Result<()> {
+        Err(std::io::Error::new(std::io::ErrorKind::Unsupported, "Archive process isolation is unavailable on this platform"))
+    }
     fn index_archive_contents(&self, path: &std::path::Path, checkpoint: &dyn Fn() -> std::io::Result<()>) -> Result<Vec<crate::models::FileEntry>, crate::models::CommandError> {
         crate::commands::archive::index_archive_contents_local(path, checkpoint)
     }
