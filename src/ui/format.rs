@@ -235,6 +235,8 @@ mod tests {
                     format_number(100_000, language),
                 ),
                 (ArchiveLimitKind::Depth, 64, "64".into()),
+                (ArchiveLimitKind::SourceBytes, 64 * 1024 * 1024 * 1024, format_size(64 * 1024 * 1024 * 1024, false, true, language)),
+                (ArchiveLimitKind::EncodedBytes, 64 * 1024 * 1024, format_size(64 * 1024 * 1024, false, true, language)),
                 (ArchiveLimitKind::Seconds, 120, "2".into()),
                 (
                     ArchiveLimitKind::Decoded,
@@ -380,13 +382,15 @@ pub fn error_detail(detail: &str, i18n: &crate::ui::i18n::I18n) -> String {
     };
     let message = match failure.kind {
         ArchiveLimitKind::Bytes => Message::ArchiveLimitBytes,
+        ArchiveLimitKind::SourceBytes => Message::ArchiveLimitSourceBytes,
+        ArchiveLimitKind::EncodedBytes => Message::ArchiveLimitEncodedBytes,
         ArchiveLimitKind::Entries => Message::ArchiveLimitEntries,
         ArchiveLimitKind::Depth => Message::ArchiveLimitDepth,
         ArchiveLimitKind::Seconds => Message::ArchiveLimitTime,
         ArchiveLimitKind::Decoded => Message::ArchiveLimitDecoded,
     };
     let limit = match failure.kind {
-        ArchiveLimitKind::Bytes | ArchiveLimitKind::Decoded => {
+        ArchiveLimitKind::Bytes | ArchiveLimitKind::SourceBytes | ArchiveLimitKind::EncodedBytes | ArchiveLimitKind::Decoded => {
             format_size(failure.limit, false, true, i18n.language())
         }
         ArchiveLimitKind::Seconds => format_number(failure.limit.div_ceil(60), i18n.language()),

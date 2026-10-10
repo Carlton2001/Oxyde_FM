@@ -195,6 +195,8 @@ pub enum FailureKind {
     Cancelled,
     Worker,
     Bytes,
+    SourceBytes,
+    EncodedBytes,
     Entries,
     Depth,
     Seconds,
@@ -322,6 +324,8 @@ impl Message {
                     || (!matches!(
                         cause,
                         FailureKind::Bytes
+                            | FailureKind::SourceBytes
+                            | FailureKind::EncodedBytes
                             | FailureKind::Entries
                             | FailureKind::Depth
                             | FailureKind::Seconds

@@ -3,8 +3,10 @@ use super::{
     path_parents::HeldParents,
     source_selection::{SelectedEntry, SourceWalk},
 };
+#[cfg(any(not(target_os = "windows"), test))]
+use std::fs::Metadata;
 use std::{
-    fs::{File, Metadata},
+    fs::File,
     io,
     path::{Path, PathBuf},
 };
@@ -23,23 +25,52 @@ impl Entry {
         self.source.open_archive()
     }
 }
+#[cfg(any(not(target_os = "windows"), test))]
 pub(super) fn plan(
     sources: &[PathBuf],
     checkpoint: &mut dyn FnMut() -> io::Result<()>,
 ) -> io::Result<Vec<Entry>> {
+    plan_controlled(sources, checkpoint, None)
+}
+pub(super) fn plan_controlled(
+    sources: &[PathBuf],
+    checkpoint: &mut dyn FnMut() -> io::Result<()>,
+    budget: Option<&crate::utils::archive_limits::ArchiveBudget>,
+) -> io::Result<Vec<Entry>> {
+    if let Some(budget) = budget {
+        budget.check_entry_count(sources.len())?;
+    }
+    let mut check = || {
+        if let Some(budget) = budget {
+            budget.checkpoint_mut(checkpoint)
+        } else {
+            checkpoint()
+        }
+    };
     let mut roots = Vec::with_capacity(sources.len());
     for path in sources {
-        checkpoint()?;
+        check()?;
         roots.push(SelectedEntry::select(path)?);
     }
     let mut entries = Vec::new();
+    let mut names = std::collections::HashSet::new();
+    let mut name_bytes = 0usize;
     for root in roots {
         let source = root.path().to_path_buf();
         let base = source
             .file_name()
             .ok_or_else(|| io::Error::other("Invalid compression source name"))?;
         let mut walk = SourceWalk::new(root);
-        while let Some(source_entry) = walk.next(checkpoint)? {
+        loop {
+            if let Some(budget) = budget {
+                walk.bound_pending(
+                    budget.limits().max_entries.saturating_sub(entries.len()),
+                    budget.limits().max_entries,
+                );
+            }
+            let Some(source_entry) = walk.next(&mut check)? else {
+                break;
+            };
             let relative = source_entry
                 .path()
                 .strip_prefix(&source)
@@ -50,15 +81,34 @@ pub(super) fn plan(
             } else {
                 Path::new(base).join(relative)
             };
+            let name = archive_path.to_string_lossy().replace('\\', "/");
+            if let Some(budget) = budget {
+                budget.entry(&name, source_entry.size())?;
+                if name.len() > crate::utils::archive_io_protocol::MAX_NAME {
+                    return Err(crate::utils::archive_io_protocol::invalid());
+                }
+                name_bytes = name_bytes
+                    .checked_add(name.len())
+                    .filter(|n| *n <= crate::utils::archive_io_state::MAX_MANIFEST_NAMES)
+                    .ok_or_else(crate::utils::archive_io_protocol::invalid)?;
+                if !names.insert(
+                    crate::utils::archive_security::relative_archive_path(&name)?
+                        .to_string_lossy()
+                        .to_lowercase(),
+                ) {
+                    return Err(io::Error::other("Ambiguous archive source names"));
+                }
+            }
             entries.push(Entry {
                 source: source_entry,
-                name: archive_path.to_string_lossy().replace('\\', "/"),
+                name,
             });
         }
     }
     Ok(entries)
 }
 /// Match the dependency's from_path timestamps without resolving a pathname again.
+#[cfg(any(not(target_os = "windows"), test))]
 pub(super) fn seven_entry(name: String, metadata: &Metadata) -> sevenz_rust2::ArchiveEntry {
     let mut entry = if metadata.is_dir() {
         sevenz_rust2::ArchiveEntry::new_directory(&name)
@@ -108,5 +158,78 @@ mod tests {
         );
         assert_eq!(std::fs::read(source).unwrap(), b"same bytes");
         assert_eq!(std::fs::read(foreign).unwrap(), b"same bytes");
+    }
+    #[test]
+    fn bounded_plan_limits_pending_children_before_accumulation_and_validates_names() {
+        use crate::models::error::{ArchiveLimitFailure, ArchiveLimitKind};
+        use crate::utils::archive_limits::{ArchiveBudget, ArchiveLimits};
+        let temp = tempfile::tempdir().unwrap();
+        let folder = temp.path().join("tree");
+        std::fs::create_dir(&folder).unwrap();
+        std::fs::write(folder.join("a"), b"1234").unwrap();
+        std::fs::write(folder.join("b"), b"1234").unwrap();
+        let value = ArchiveLimits {
+            max_entries: 2,
+            max_bytes: 8,
+            max_depth: 2,
+            ..ArchiveLimits::EXTRACTION
+        };
+        let error = plan_controlled(
+            &[folder.clone()],
+            &mut || Ok(()),
+            Some(&ArchiveBudget::new(value)),
+        )
+        .err()
+        .unwrap();
+        assert_eq!(
+            ArchiveLimitFailure::from_message(&error.to_string()),
+            Some(ArchiveLimitFailure {
+                kind: ArchiveLimitKind::Entries,
+                limit: 2
+            })
+        );
+        let value = ArchiveLimits {
+            max_entries: 3,
+            ..value
+        };
+        assert_eq!(
+            plan_controlled(
+                &[folder.clone()],
+                &mut || Ok(()),
+                Some(&ArchiveBudget::new(value))
+            )
+            .unwrap()
+            .len(),
+            3
+        );
+        let error = plan_controlled(
+            &[folder],
+            &mut || Ok(()),
+            Some(&ArchiveBudget::new(ArchiveLimits {
+                max_depth: 1,
+                ..value
+            })),
+        )
+        .err()
+        .unwrap();
+        assert_eq!(
+            ArchiveLimitFailure::from_message(&error.to_string())
+                .unwrap()
+                .kind,
+            ArchiveLimitKind::Depth
+        );
+        let left = temp.path().join("left");
+        let right = temp.path().join("right");
+        std::fs::create_dir(&left).unwrap();
+        std::fs::create_dir(&right).unwrap();
+        for parent in [&left, &right] {
+            std::fs::write(parent.join("same"), b"safe").unwrap();
+        }
+        assert!(plan_controlled(
+            &[left.join("same"), right.join("same")],
+            &mut || Ok(()),
+            Some(&ArchiveBudget::new(value))
+        )
+        .is_err());
     }
 }

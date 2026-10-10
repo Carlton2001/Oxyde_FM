@@ -321,3 +321,278 @@ fn selected_seven_wrapper_verifies_unselected_block_crc_tail_before_publication(
         });
     });
 }
+
+#[test]
+fn production_encoder_roundtrips_all_formats_qualities_dates_and_incompressible_sources() {
+    native(|| {
+        let temp = tempfile::tempdir().unwrap();
+        let folder = temp.path().join("école_日本語");
+        fs::create_dir(&folder).unwrap();
+        fs::create_dir(folder.join("empty-dir")).unwrap();
+        fs::write(folder.join("empty.txt"), []).unwrap();
+        let path = folder.join("data.bin");
+        let mut random = 0xdeadbeefu32;
+        let content: Vec<_> = (0..(1024 * 1024 + 13))
+            .map(|_| {
+                random ^= random << 13;
+                random ^= random >> 17;
+                random ^= random << 5;
+                random as u8
+            })
+            .collect();
+        fs::write(&path, &content).unwrap();
+        let modified = std::time::UNIX_EPOCH + Duration::new(1234567890, 123456700);
+        fs::File::options()
+            .write(true)
+            .open(&path)
+            .unwrap()
+            .set_times(fs::FileTimes::new().set_modified(modified))
+            .unwrap();
+        let other = temp.path().join("other.txt");
+        fs::write(&other, b"second selection").unwrap();
+        for extension in ["zip", "7z", "tar", "tar.zst"] {
+            for quality in ["fast", "normal", "best"] {
+                let archive = temp.path().join(format!("roundtrip-{quality}.{extension}"));
+                let op = operation(FileOpType::Compress);
+                op.lock().unwrap().compression_quality = quality.into();
+                FileOperationManager::perform_compress(
+                    &op,
+                    vec![folder.clone(), other.clone()],
+                    Some(archive.clone()),
+                )
+                .unwrap();
+                {
+                    let op = op.lock().unwrap();
+                    assert_eq!(op.total_bytes, op.processed_bytes);
+                    assert_eq!(op.total_files, op.processed_files);
+                }
+                let target = temp.path().join(format!("decoded-{quality}-{extension}"));
+                FileOperationManager::perform_extract(
+                    &operation(FileOpType::Extract),
+                    vec![archive],
+                    Some(target.clone()),
+                )
+                .unwrap();
+                let data = target.join("école_日本語/data.bin");
+                assert_eq!(fs::read(&data).unwrap(), content);
+                assert_eq!(
+                    fs::read(target.join("other.txt")).unwrap(),
+                    b"second selection"
+                );
+                assert!(target.join("école_日本語/empty-dir").is_dir());
+                assert_eq!(
+                    fs::metadata(target.join("école_日本語/empty.txt"))
+                        .unwrap()
+                        .len(),
+                    0
+                );
+                if extension != "zip" {
+                    let actual = fs::metadata(&data).unwrap().modified().unwrap();
+                    if extension == "7z" {
+                        assert_eq!(actual, modified);
+                    } else {
+                        assert_eq!(
+                            actual
+                                .duration_since(std::time::UNIX_EPOCH)
+                                .unwrap()
+                                .as_secs(),
+                            1234567890
+                        );
+                    }
+                }
+            }
+        }
+        assert_eq!(fs::read(path).unwrap(), content);
+    });
+}
+
+#[test]
+fn production_compression_boundaries_fail_before_worker_or_staging_and_preserve_collision() {
+    use oxyde_lib::{
+        models::error::{ArchiveLimitFailure, ArchiveLimitKind},
+        utils::ArchiveLimits,
+    };
+    native(|| {
+        let temp = tempfile::tempdir().unwrap();
+        let source = temp.path().join("source");
+        fs::write(&source, b"1234").unwrap();
+        let target = temp.path().join("archive.zip");
+        let limits = ArchiveLimits {
+            max_entries: 1,
+            max_bytes: 4,
+            max_depth: 1,
+            ..ArchiveLimits::EXTRACTION
+        };
+        let error =
+            with_worker_executable_for_tests(&temp.path().join("missing-worker.exe"), || {
+                FileOperationManager::perform_compress_with_limits_for_tests(
+                    &operation(FileOpType::Compress),
+                    vec![source.clone()],
+                    Some(target.clone()),
+                    ArchiveLimits {
+                        max_bytes: 3,
+                        ..limits
+                    },
+                )
+            })
+            .unwrap_err();
+        assert_eq!(
+            ArchiveLimitFailure::from_message(&error),
+            Some(ArchiveLimitFailure {
+                kind: ArchiveLimitKind::SourceBytes,
+                limit: 3
+            })
+        );
+        assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 1);
+        fs::write(&target, b"existing").unwrap();
+        let op = operation(FileOpType::Compress);
+        FileOperationManager::perform_compress_with_limits_for_tests(
+            &op,
+            vec![source.clone()],
+            Some(target.clone()),
+            limits,
+        )
+        .unwrap();
+        assert_eq!(fs::read(&target).unwrap(), b"existing");
+        assert_ne!(op.lock().unwrap().destination.as_ref(), Some(&target));
+        let folder = temp.path().join("tree");
+        fs::create_dir(&folder).unwrap();
+        fs::write(folder.join("file"), b"x").unwrap();
+        for (limits, expected) in [
+            (
+                ArchiveLimits {
+                    max_entries: 1,
+                    max_depth: 2,
+                    ..limits
+                },
+                ArchiveLimitKind::Entries,
+            ),
+            (
+                ArchiveLimits {
+                    max_entries: 2,
+                    ..limits
+                },
+                ArchiveLimitKind::Depth,
+            ),
+            (
+                ArchiveLimits {
+                    max_duration: Duration::ZERO,
+                    ..limits
+                },
+                ArchiveLimitKind::Seconds,
+            ),
+        ] {
+            let rejected = temp.path().join("rejected.zip");
+            let error = FileOperationManager::perform_compress_with_limits_for_tests(
+                &operation(FileOpType::Compress),
+                vec![folder.clone()],
+                Some(rejected.clone()),
+                limits,
+            )
+            .unwrap_err();
+            assert_eq!(
+                ArchiveLimitFailure::from_message(&error).unwrap().kind,
+                expected
+            );
+            assert!(!rejected.exists());
+        }
+        assert_eq!(fs::read(source).unwrap(), b"1234");
+    });
+}
+
+#[test]
+fn production_turbo_changes_new_zip_entry_level_and_empty_encoders_finish() {
+    native(|| {
+        let temp = tempfile::tempdir().unwrap();
+        let source = temp.path().join("source");
+        fs::write(&source, vec![b'x'; 1024 * 1024]).unwrap();
+        let mut sizes = Vec::new();
+        for turbo in [false, true] {
+            let archive = temp.path().join(format!("turbo-{turbo}.zip"));
+            let op = operation(FileOpType::Compress);
+            {
+                let op = op.lock().unwrap();
+                op.turbo_flag.store(turbo, Ordering::Relaxed);
+            }
+            op.lock().unwrap().compression_quality = "best".into();
+            FileOperationManager::perform_compress(
+                &op,
+                vec![source.clone()],
+                Some(archive.clone()),
+            )
+            .unwrap();
+            let mut zip = zip::ZipArchive::new(fs::File::open(archive).unwrap()).unwrap();
+            sizes.push(zip.by_index(0).unwrap().compressed_size());
+        }
+        assert!(sizes[0] < sizes[1]);
+        for extension in ["zip", "7z", "tar", "tar.zst"] {
+            let archive = temp.path().join(format!("empty.{extension}"));
+            FileOperationManager::perform_compress(
+                &operation(FileOpType::Compress),
+                vec![],
+                Some(archive.clone()),
+            )
+            .unwrap();
+            let target = temp.path().join(format!("empty-{extension}"));
+            FileOperationManager::perform_extract(
+                &operation(FileOpType::Extract),
+                vec![archive],
+                Some(target.clone()),
+            )
+            .unwrap();
+            assert_eq!(fs::read_dir(target).unwrap().count(), 0);
+        }
+    });
+}
+
+#[test]
+fn production_encoding_pause_cancel_and_launch_failure_never_publish() {
+    let temp = tempfile::tempdir().unwrap();
+    let source = temp.path().join("source");
+    fs::write(&source, vec![42; 16 * 1024 * 1024]).unwrap();
+    let archive = temp.path().join("result.zip");
+    let op = operation(FileOpType::Compress);
+    let (work, input, target) = (op.clone(), source.clone(), archive.clone());
+    let child = std::thread::spawn(move || {
+        native(|| FileOperationManager::perform_compress(&work, vec![input], Some(target)))
+    });
+    let started = Instant::now();
+    loop {
+        if op.lock().unwrap().processed_bytes >= 65536 {
+            break;
+        }
+        assert!(started.elapsed() < Duration::from_secs(15));
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    op.lock().unwrap().pause_flag.store(true, Ordering::Relaxed);
+    std::thread::sleep(Duration::from_millis(200));
+    let bytes = op.lock().unwrap().processed_bytes;
+    std::thread::sleep(Duration::from_millis(150));
+    assert_eq!(op.lock().unwrap().processed_bytes, bytes);
+    assert!(fs::File::options().write(true).open(&source).is_err());
+    op.lock()
+        .unwrap()
+        .cancel_flag
+        .store(true, Ordering::Relaxed);
+    assert!(child.join().unwrap().is_err());
+    assert!(!archive.exists());
+    assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 1);
+    let error = with_worker_executable_for_tests(&temp.path().join("absent.exe"), || {
+        FileOperationManager::perform_compress(
+            &operation(FileOpType::Compress),
+            vec![source.clone()],
+            Some(archive.clone()),
+        )
+    });
+    assert!(error.is_err());
+    assert!(!archive.exists());
+    assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 1);
+    native(|| {
+        FileOperationManager::perform_compress(
+            &operation(FileOpType::Compress),
+            vec![source],
+            Some(archive),
+        )
+        .unwrap()
+    });
+}

@@ -1,6 +1,8 @@
 pub(crate) mod archive_workspace;
 #[cfg(all(target_os = "windows", not(test)))]
 pub(crate) mod archive_io;
+#[cfg(all(target_os = "windows", not(test)))]
+mod archive_encode;
 #[cfg(target_os = "windows")]
 pub(crate) mod archive_owned_tree;
 mod archive_move_sources;

@@ -118,7 +118,15 @@ impl<T: Exchange> Write for Writer<T> {
             .cursor
             .checked_add(length as u64)
             .filter(|end| *end <= self.limit)
-            .ok_or_else(invalid)?;
+            .ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    crate::models::error::ArchiveLimitFailure {
+                        kind: crate::models::error::ArchiveLimitKind::EncodedBytes,
+                        limit: self.limit,
+                    },
+                )
+            })?;
         let response = exchange(
             &self.connection,
             Frame::data(

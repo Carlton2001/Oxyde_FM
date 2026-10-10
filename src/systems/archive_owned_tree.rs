@@ -188,8 +188,21 @@ impl OwnedTree {
         });
         Ok(())
     }
+    #[cfg(test)]
     pub fn check(&self) -> io::Result<()> {
         self.tree.as_ref().unwrap().check_all(&mut || Ok(()))
+    }
+    pub fn check_at(&self, directory: &Path) -> io::Result<()> {
+        self.tree
+            .as_ref()
+            .unwrap()
+            .check_directory(directory, &mut || Ok(()))
+    }
+    pub fn check_controlled(
+        &self,
+        checkpoint: &mut dyn FnMut() -> io::Result<()>,
+    ) -> io::Result<()> {
+        self.tree.as_ref().unwrap().check_all(checkpoint)
     }
     pub fn mark(&self, path: &Path, file: &File, data: &[u8]) -> io::Result<()> {
         let parents =
@@ -283,6 +296,8 @@ mod tests {
             .unwrap();
         drop(output);
         tree.check().unwrap();
+        tree.check_at(tree.path()).unwrap();
+        tree.check_controlled(&mut || Ok(())).unwrap();
         std::fs::write(root.join("new/foreign"), b"keep").unwrap();
         drop(tree);
         assert!(!path.exists());

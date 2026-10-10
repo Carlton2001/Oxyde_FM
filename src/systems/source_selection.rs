@@ -218,17 +218,20 @@ impl SelectedEntry {
 pub(super) struct SourceWalk {
     stack: Vec<SelectedEntry>,
     pending: Option<SelectedEntry>,
+    capacity: Option<(usize, usize)>,
 }
 impl SourceWalk {
     pub fn new(root: SelectedEntry) -> Self {
         Self {
             stack: vec![root],
             pending: None,
+            capacity: None,
         }
     }
     pub fn skip_current_dir(&mut self) {
         self.pending = None;
     }
+    pub fn bound_pending(&mut self, remaining: usize, limit: usize) { self.capacity = Some((remaining, limit)); }
     pub fn next(
         &mut self,
         checkpoint: &mut dyn FnMut() -> io::Result<()>,
@@ -243,6 +246,11 @@ impl SourceWalk {
             let mut children = Vec::new();
             platform().enumerate_source_directory(&directory.file, &mut |name| {
                 checkpoint()?;
+                if let Some((remaining, limit)) = self.capacity {
+                    if self.stack.len().saturating_add(children.len()) >= remaining {
+                        return Err(io::Error::new(io::ErrorKind::InvalidData, crate::models::error::ArchiveLimitFailure { kind: crate::models::error::ArchiveLimitKind::Entries, limit: limit as u64 }));
+                    }
+                }
                 children.push(SelectedEntry::child(
                     entry.path.join(name),
                     Arc::clone(&directory),

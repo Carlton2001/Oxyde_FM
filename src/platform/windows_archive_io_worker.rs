@@ -125,6 +125,8 @@ pub(super) fn failure(frame: &Frame) -> io::Error {
     };
     let kind = match cause {
         FailureKind::Bytes => Some(ArchiveLimitKind::Bytes),
+        FailureKind::SourceBytes => Some(ArchiveLimitKind::SourceBytes),
+        FailureKind::EncodedBytes => Some(ArchiveLimitKind::EncodedBytes),
         FailureKind::Entries => Some(ArchiveLimitKind::Entries),
         FailureKind::Depth => Some(ArchiveLimitKind::Depth),
         FailureKind::Seconds => Some(ArchiveLimitKind::Seconds),
@@ -154,6 +156,47 @@ pub(super) fn failure(frame: &Frame) -> io::Error {
 
 /// One bounded input queue, one bounded completion queue. A blocked pipe writer
 /// never blocks the supervisor's timeout/cancellation loop or an unbounded join.
+fn checked_failure(frame: &Frame, operation: &Operation) -> io::Error {
+    let error = failure(frame);
+    let Some(mut value) = ArchiveLimitFailure::from_message(&error.to_string()) else {
+        return error;
+    };
+    let (limits, output) = match operation {
+        Operation::Decode { limits, .. } => (limits, None),
+        Operation::Encode {
+            limits,
+            output_limit,
+            ..
+        } => (limits, Some(*output_limit)),
+    };
+    let expected = match value.kind {
+        ArchiveLimitKind::Bytes | ArchiveLimitKind::SourceBytes => limits.bytes,
+        ArchiveLimitKind::EncodedBytes => match output {
+            Some(value) => value,
+            None => return invalid(),
+        },
+        ArchiveLimitKind::Entries => limits.entries,
+        ArchiveLimitKind::Depth => limits.depth,
+        ArchiveLimitKind::Seconds => limits.seconds,
+        ArchiveLimitKind::Decoded => match limits
+            .entries
+            .checked_mul(4096)
+            .and_then(|n| limits.bytes.checked_add(n))
+        {
+            Some(value) => value,
+            None => return invalid(),
+        },
+    };
+    if value.limit != expected || (value.kind == ArchiveLimitKind::SourceBytes && output.is_none())
+    {
+        return invalid();
+    }
+    if value.kind == ArchiveLimitKind::Bytes && output.is_some() {
+        value.kind = ArchiveLimitKind::SourceBytes;
+    }
+    io::Error::new(error.kind(), value)
+}
+
 pub(super) fn supervise(
     command: Command,
     session: [u8; 16],
@@ -182,7 +225,12 @@ pub(super) fn supervise(
         })?;
     let mut wire = Wire::new(session);
     let mut outgoing = Vec::new();
-    wire.write(&mut outgoing, &Frame::new(Message::Start { operation }))?;
+    wire.write(
+        &mut outgoing,
+        &Frame::new(Message::Start {
+            operation: operation.clone(),
+        }),
+    )?;
     let mut pending_output = Some(outgoing);
     let mut writes = 0usize;
     let mut bytes = Vec::with_capacity(HEADER);
@@ -324,7 +372,7 @@ pub(super) fn supervise(
                         return Err(invalid());
                     }
                     if matches!(frame.message, Message::Failure { .. }) {
-                        return Err(failure(&frame));
+                        return Err(checked_failure(&frame, &operation));
                     }
                     if control.paused {
                         wire.write(
@@ -397,6 +445,57 @@ pub(super) fn supervise(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn worker_limits_must_equal_admitted_thresholds_and_encode_bytes_have_their_own_cause() {
+        use crate::utils::archive_io_protocol::{Format, Limits, Quality};
+        let limits = Limits {
+            entries: 2,
+            bytes: 4,
+            depth: 1,
+            seconds: 2,
+        };
+        let operation = Operation::Encode {
+            format: Format::Zip,
+            quality: Quality::Fast,
+            entries: 1,
+            output_limit: 100,
+            limits,
+        };
+        let frame = |cause, limit| {
+            Frame::new(Message::Failure {
+                cause,
+                limit,
+                detail: String::new(),
+            })
+        };
+        assert_eq!(
+            ArchiveLimitFailure::from_message(
+                &checked_failure(&frame(FailureKind::Bytes, 4), &operation).to_string()
+            )
+            .unwrap()
+            .kind,
+            ArchiveLimitKind::SourceBytes
+        );
+        assert_eq!(
+            ArchiveLimitFailure::from_message(
+                &checked_failure(&frame(FailureKind::EncodedBytes, 100), &operation).to_string()
+            )
+            .unwrap()
+            .kind,
+            ArchiveLimitKind::EncodedBytes
+        );
+        for (cause, limit) in [
+            (FailureKind::Bytes, 5),
+            (FailureKind::EncodedBytes, 99),
+            (FailureKind::Entries, 3),
+            (FailureKind::Seconds, 3),
+            (FailureKind::Decoded, u64::MAX),
+        ] {
+            let error = checked_failure(&frame(cause, limit), &operation);
+            assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+            assert!(ArchiveLimitFailure::from_message(&error.to_string()).is_none());
+        }
+    }
     #[test]
     fn bulk_admission_is_cancelable_and_does_not_hold_the_targeted_slot() {
         let _bulk = BULK.lock().unwrap();

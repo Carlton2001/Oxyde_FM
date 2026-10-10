@@ -6,7 +6,8 @@ use std::io::{self, Read, Write};
 use std::time::{Duration, Instant};
 
 #[derive(Clone, Copy)]
-pub(crate) struct ArchiveLimits {
+#[doc(hidden)]
+pub struct ArchiveLimits {
     pub max_entries: usize,
     pub max_bytes: u64,
     pub max_depth: usize,
@@ -53,6 +54,18 @@ fn exceeded(kind: ArchiveLimitKind, limit: u64) -> io::Error {
 }
 
 impl ArchiveBudget {
+    pub(crate) fn checkpoint_mut(
+        &self,
+        checkpoint: &mut dyn FnMut() -> io::Result<()>,
+    ) -> io::Result<()> {
+        self.check_time()?;
+        let started = Instant::now();
+        let result = checkpoint();
+        self.checkpoint_time
+            .set(self.checkpoint_time.get().saturating_add(started.elapsed()));
+        result?;
+        self.check_time()
+    }
     #[cfg(all(target_os = "windows", not(test)))]
     pub(crate) fn remaining(&self) -> io::Result<Duration> {
         self.check_time()?;

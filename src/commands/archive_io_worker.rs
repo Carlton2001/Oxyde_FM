@@ -41,7 +41,7 @@ impl<R: Read, W: Write> Client<R, W> {
             if checkpoint {
                 return Ok(Frame::new(Message::Ack {
                     pause: false,
-                    turbo: false,
+                    turbo: self.turbo,
                 }));
             }
             return self.wire.read(&mut self.input);
@@ -51,6 +51,7 @@ impl<R: Read, W: Write> Client<R, W> {
 }
 impl<R: Read, W: Write> Exchange for Client<R, W> {
     fn exchange(&mut self, frame: Frame) -> io::Result<Frame> {
+        let checkpoint = frame.message == Message::Checkpoint;
         // Rendezvous before every resource/content request, including codec
         // header reads and encoder flushes that bypass higher-level checkpoints.
         if frame.message != Message::Checkpoint {
@@ -73,7 +74,9 @@ impl<R: Read, W: Write> Exchange for Client<R, W> {
             turbo,
         } = reply.message
         {
-            self.turbo = turbo;
+            if checkpoint {
+                self.turbo = turbo;
+            }
             return Ok(Frame::new(Message::Ack {
                 pause: false,
                 turbo: false,
@@ -86,12 +89,54 @@ impl<R: Read, W: Write> Exchange for Client<R, W> {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::utils::archive_io_stream::Exchange;
+    #[test]
+    fn data_ack_does_not_reset_turbo_and_pause_resume_keeps_control_value() {
+        for paused in [false, true] {
+            let session = [3; 16];
+            let mut wire = Wire::new(session);
+            let mut input = Vec::new();
+            wire.write(
+                &mut input,
+                &Frame::new(Message::Ack {
+                    pause: paused,
+                    turbo: true,
+                }),
+            )
+            .unwrap();
+            if paused {
+                wire.write(&mut input, &Frame::new(Message::Resume { turbo: true }))
+                    .unwrap();
+            }
+            wire.write(
+                &mut input,
+                &Frame::new(Message::Ack {
+                    pause: false,
+                    turbo: false,
+                }),
+            )
+            .unwrap();
+            let mut output = Vec::new();
+            let mut client = Client::new(input.as_slice(), &mut output, session);
+            client
+                .exchange(Frame::new(Message::Begin { id: 0 }))
+                .unwrap();
+            assert!(client.turbo());
+        }
+    }
+}
+
 pub fn error_frame(error: &crate::models::CommandError) -> Frame {
     let detail = error.to_string();
     let (cause, limit) = if let Some(failure) = ArchiveLimitFailure::from_message(&detail) {
         (
             match failure.kind {
                 ArchiveLimitKind::Bytes => FailureKind::Bytes,
+                ArchiveLimitKind::SourceBytes => FailureKind::SourceBytes,
+                ArchiveLimitKind::EncodedBytes => FailureKind::EncodedBytes,
                 ArchiveLimitKind::Entries => FailureKind::Entries,
                 ArchiveLimitKind::Depth => FailureKind::Depth,
                 ArchiveLimitKind::Seconds => FailureKind::Seconds,

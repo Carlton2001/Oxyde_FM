@@ -6,6 +6,8 @@ pub mod archive_io_protocol;
 pub mod archive_io_stream;
 pub mod archive_io_state;
 pub(crate) mod archive_limits;
+#[doc(hidden)]
+pub use archive_limits::ArchiveLimits;
 pub mod archive_security;
 pub mod disk_image;
 pub mod path_security;

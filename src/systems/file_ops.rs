@@ -1,6 +1,7 @@
 use crate::models::ConflictAction;
 use crate::models::{HistoryManager, Transaction, TransactionDetails, TransactionType};
 use std::collections::HashMap;
+#[cfg(any(not(target_os = "windows"), test))]
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
@@ -13,11 +14,13 @@ use crate::utils::archive_limits::{ArchiveBudget, ArchiveLimits};
 
 const SPEED_HISTORY_LIMIT: usize = 60;
 
+#[cfg(any(not(target_os = "windows"), test))]
 struct ArchiveReader {
     _parents: super::path_parents::HeldParents,
     input: std::fs::File,
     operation: Arc<Mutex<FileOperation>>,
 }
+#[cfg(any(not(target_os = "windows"), test))]
 impl Read for ArchiveReader {
     fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
         FileOperationManager::archive_checkpoint(&self.operation).map_err(std::io::Error::other)?;
@@ -2208,7 +2211,7 @@ impl FileOperationManager {
         destination: Option<PathBuf>,
         after_plan: &mut dyn FnMut() -> std::io::Result<()>,
     ) -> Result<(), String> {
-        Self::perform_compress_impl(op, sources, destination, after_plan, None)
+        Self::perform_compress_impl(op, sources, destination, after_plan, None, None)
     }
     pub(crate) fn perform_compress_retained(
         op: &Arc<Mutex<FileOperation>>,
@@ -2216,7 +2219,11 @@ impl FileOperationManager {
         destination: Option<PathBuf>,
         retained: &HashMap<PathBuf, std::fs::File>,
     ) -> Result<(), String> {
-        Self::perform_compress_impl(op, sources, destination, &mut || Ok(()), Some(retained))
+        Self::perform_compress_impl(op, sources, destination, &mut || Ok(()), Some(retained), None)
+    }
+    #[doc(hidden)]
+    pub fn perform_compress_with_limits_for_tests(op: &Arc<Mutex<FileOperation>>, sources: Vec<PathBuf>, destination: Option<PathBuf>, limits: ArchiveLimits) -> Result<(), String> {
+        Self::perform_compress_impl(op, sources, destination, &mut || Ok(()), None, Some(limits))
     }
     fn perform_compress_impl(
         op: &Arc<Mutex<FileOperation>>,
@@ -2224,6 +2231,7 @@ impl FileOperationManager {
         destination: Option<PathBuf>,
         after_plan: &mut dyn FnMut() -> std::io::Result<()>,
         retained: Option<&HashMap<PathBuf, std::fs::File>>,
+        _limits: Option<ArchiveLimits>,
     ) -> Result<(), String> {
         let requested = destination.ok_or("Missing archive destination")?;
         let update_destination = matches!(op.lock().unwrap().op_type, FileOpType::Compress);
@@ -2234,6 +2242,11 @@ impl FileOperationManager {
                 .resolved_path(&requested)
                 .map_err(|error| error.to_string())?,
         );
+        #[cfg(all(target_os = "windows", not(test)))]
+        let budget = ArchiveBudget::new(_limits.unwrap_or(if retained.is_some() { ArchiveLimits::WORKSPACE } else { ArchiveLimits::EXTRACTION }));
+        #[cfg(all(target_os = "windows", not(test)))]
+        let entries = super::compression_sources::plan_controlled(&sources, &mut || Self::archive_checkpoint(op).map_err(std::io::Error::other), Some(&budget)).map_err(|e| super::archive_encode::source_failure(e).to_string())?;
+        #[cfg(any(not(target_os = "windows"), test))]
         let entries = super::compression_sources::plan(&sources, &mut || {
             Self::archive_checkpoint(op).map_err(std::io::Error::other)
         })
@@ -2255,6 +2268,13 @@ impl FileOperationManager {
         }
         let mut output = super::compression_output::Output::new(&destination_parents)
             .map_err(|error| error.to_string())?;
+        #[cfg(all(target_os = "windows", not(test)))]
+        {
+            { let mut op = op.lock().unwrap(); op.processed_files = 0; op.processed_bytes = 0; op.speed_sample_at = Some(std::time::Instant::now()); op.speed_sample_bytes = 0; op.bytes_per_second = 0; }
+            super::archive_encode::run(&requested, &entries, retained, &mut output.file, &budget, op).map_err(|e| e.to_string())?;
+        }
+        #[cfg(any(not(target_os = "windows"), test))]
+        {
         let file = output.file.try_clone().map_err(|error| error.to_string())?;
         let format = requested
             .extension()
@@ -2381,6 +2401,7 @@ impl FileOperationManager {
             }
             _ => return Err("Unsupported compression format".into()),
         }
+        }
         Self::archive_checkpoint(op)?;
         output.file.sync_all().map_err(|error| error.to_string())?;
         let mut final_target = target;
@@ -2412,6 +2433,7 @@ impl FileOperationManager {
         Ok(())
     }
 
+    #[cfg(any(not(target_os = "windows"), test))]
     fn append_tar_entries<W: Write>(
         op: &Arc<Mutex<FileOperation>>,
         entries: Vec<super::compression_sources::Entry>,
@@ -2450,6 +2472,7 @@ impl FileOperationManager {
         writer.finish().map_err(|e| e.to_string())
     }
 
+    #[cfg(any(not(target_os = "windows"), test))]
     fn write_tar_entries<W: Write>(
         op: &Arc<Mutex<FileOperation>>,
         entries: Vec<super::compression_sources::Entry>,

@@ -286,6 +286,8 @@ impl std::error::Error for ArchiveSourceConflict {}
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ArchiveLimitKind {
     Bytes,
+    SourceBytes,
+    EncodedBytes,
     Entries,
     Depth,
     Seconds,
@@ -323,6 +325,8 @@ impl fmt::Display for ArchiveLimitFailure {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let kind = match self.kind {
             ArchiveLimitKind::Bytes => "bytes",
+            ArchiveLimitKind::SourceBytes => "source-bytes",
+            ArchiveLimitKind::EncodedBytes => "encoded-bytes",
             ArchiveLimitKind::Entries => "entries",
             ArchiveLimitKind::Depth => "depth",
             ArchiveLimitKind::Seconds => "seconds",
@@ -342,6 +346,8 @@ impl ArchiveLimitFailure {
         let (kind, limit) = value.split_once(':')?;
         let kind = match kind {
             "bytes" => ArchiveLimitKind::Bytes,
+            "source-bytes" => ArchiveLimitKind::SourceBytes,
+            "encoded-bytes" => ArchiveLimitKind::EncodedBytes,
             "entries" => ArchiveLimitKind::Entries,
             "depth" => ArchiveLimitKind::Depth,
             "seconds" => ArchiveLimitKind::Seconds,

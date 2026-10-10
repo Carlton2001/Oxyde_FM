@@ -207,7 +207,13 @@ pub(crate) fn decode(
                     }
                     file.set_times(times)?;
                     file.sync_all()?;
-                    target.check()?;
+                    target.check_at(
+                        target
+                            .path()
+                            .join(relative_archive_path(&entry.name)?)
+                            .parent()
+                            .ok_or_else(invalid)?,
+                    )?;
                     if let Some(data) = &provenance {
                         target.mark(
                             &target.path().join(relative_archive_path(&entry.name)?),
@@ -221,7 +227,7 @@ pub(crate) fn decode(
                 }
             }
             Message::Finished => {
-                target.check()?;
+                target.check_at(target.path())?;
             }
             Message::ManifestEnd => {}
             _ => return Err(invalid()),
@@ -235,5 +241,19 @@ pub(crate) fn decode(
     if !state.finished() {
         return Err(invalid());
     }
+    let parent_check = || loop {
+        let current = control()?;
+        if current.cancelled {
+            return Err(io::Error::new(
+                io::ErrorKind::Interrupted,
+                "Operation cancelled",
+            ));
+        }
+        if !current.paused {
+            return Ok(());
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    };
+    target.check_controlled(&mut || budget.checkpoint(&parent_check))?;
     Ok(())
 }
