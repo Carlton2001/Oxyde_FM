@@ -840,6 +840,7 @@ archive-cache-extract = Estrai e apri…
 archive-cache-exported = File estratto: { $detail }
 archive-limit-bytes = Elaborazione interrotta: la dimensione totale decompressa supera il limite di { $limit } per questa azione. Non viene considerata la dimensione compressa dell’archivio.
 archive-processing-failed = L’elaborazione dell’archivio non è riuscita. Il file potrebbe essere danneggiato o richiedere troppe risorse.
+archive-recovery-notice = File conservati
 archive-recovery-completed = L’azione è terminata, ma alcuni file o cartelle sono stati conservati. Controlla questi percorsi prima di eliminarli: { $locations }
 archive-recovery-stopped = L’azione non è stata completata. Alcuni file o cartelle sono stati conservati, inclusi risultati già pubblicati. Controlla questi percorsi prima di riprovare: { $locations }
 archive-recovery-more = Altri { $count } percorsi sono riportati nel registro dell’applicazione.

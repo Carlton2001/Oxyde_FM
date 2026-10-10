@@ -1450,6 +1450,10 @@ impl OxydeApp {
                 handle.update(&mut cx, |this, cx| {
                     let current_attempt = this.rename_generation == generation
                         && this.editing_path.as_deref() == Some(path_for_check.as_str());
+                    let recovery = match &result {
+                        Ok(Err(error)) => this.archive_recovery_notice(&error.to_string(), cx),
+                        _ => false,
+                    };
                     if let Ok(Ok(())) = &result {
                         this.reconcile_watchers(cx);
                     }
@@ -1468,8 +1472,15 @@ impl OxydeApp {
                         }
                         Ok(Err(error)) => {
                             log::warn!("Rename failed: {error:?}");
-                            this.rename_error = Some(crate::ui::errors::rename_message(&error));
-                            this.rename_shake_id = this.rename_shake_id.wrapping_add(1);
+                            if recovery {
+                                this.editing_path = None;
+                                this.editing_view = None;
+                                this.inline_rename = false;
+                                this.rename_error = None;
+                            } else {
+                                this.rename_error = Some(crate::ui::errors::rename_message(&error));
+                                this.rename_shake_id = this.rename_shake_id.wrapping_add(1);
+                            }
                             cx.notify();
                         }
                         Err(error) => {
@@ -2001,7 +2012,8 @@ impl OxydeApp {
                             handle.update(&mut cx, |this, cx| {
                                 log::warn!("File operation failed: {error}");
                                 this.operations_panel_open = true;
-                                this.file_operation_notice = Some((Message::TransferFailed, error));
+                                let recovery = this.archive_recovery_notice(&error, cx);
+                                this.file_operation_notice = Some((if recovery { Message::ArchiveRecoveryNotice } else { Message::TransferFailed }, error));
                                 cx.notify();
                             });
                             break;
@@ -2155,7 +2167,12 @@ impl OxydeApp {
                             this.reconcile_watchers(cx);
                             cx.notify();
                         }
-                        Ok(Err(error)) => this.toast(ToastKind::Error, Message::ToastFailed, error.to_string(), 0, cx),
+                        Ok(Err(error)) => {
+                            let detail = error.to_string();
+                            if !this.archive_recovery_notice(&detail, cx) {
+                                this.toast(ToastKind::Error, Message::ToastFailed, detail, 0, cx);
+                            }
+                        }
                         Err(error) => this.toast(ToastKind::Error, Message::ToastFailed, error.to_string(), 0, cx),
                     });
                 }

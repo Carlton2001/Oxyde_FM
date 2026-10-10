@@ -81,6 +81,75 @@ fn fixtures(root: &Path) -> Vec<(PathBuf, &'static str, &'static [u8])> {
 }
 
 #[test]
+fn production_truncated_archives_fail_without_publishing_in_all_eight_families() {
+    native(|| {
+        let temp = tempfile::tempdir().unwrap();
+        for (index, (archive, _, _)) in fixtures(temp.path()).into_iter().enumerate() {
+            let bytes = fs::read(&archive).unwrap();
+            let truncated = &bytes[..32.min(bytes.len() / 2)];
+            fs::write(&archive, truncated).unwrap();
+            let output = temp.path().join(format!("output-{index}"));
+            let error = FileOperationManager::perform_extract(
+                &operation(FileOpType::Extract),
+                vec![archive.clone()],
+                Some(output.clone()),
+            )
+            .unwrap_err();
+            assert!(
+                oxyde_lib::models::error::ArchiveProcessingFailure::from_message(&error),
+                "{}: {error}",
+                archive.display()
+            );
+            assert!(!output.exists());
+            assert_eq!(fs::read(&archive).unwrap(), truncated);
+            fs::OpenOptions::new().write(true).open(&archive).unwrap();
+        }
+    });
+}
+
+#[test]
+fn native_rebuild_rejects_an_original_replaced_with_identical_content_and_date() {
+    use oxyde_lib::utils::archive_mutation_test::{with_hook_for_tests, Stage};
+    native(|| {
+        let temp = tempfile::tempdir().unwrap();
+        let archive = temp.path().join("identity.zip");
+        let saved = temp.path().join("original-saved.zip");
+        zip(&archive, "original", b"safe", false);
+        let before = fs::read(&archive).unwrap();
+        let modified = fs::metadata(&archive).unwrap().modified().unwrap();
+        let bytes = before.clone();
+        let moved = saved.clone();
+        let error = with_hook_for_tests(
+            move |stage, _, original| {
+                if stage == Stage::BeforeOriginalCheck {
+                    fs::rename(original, &moved)?;
+                    fs::write(original, &bytes)?;
+                    fs::File::options()
+                        .write(true)
+                        .open(original)?
+                        .set_times(fs::FileTimes::new().set_modified(modified))?;
+                }
+                Ok(())
+            },
+            || {
+                oxyde_lib::commands::archive::create_archive_directory_with_quality(
+                    &archive.join("new"),
+                    "fast",
+                )
+            },
+        )
+        .unwrap_err();
+        assert!(
+            oxyde_lib::models::error::ArchiveSourceConflict::from_message(&error.to_string()),
+            "{error}"
+        );
+        assert_eq!(fs::read(&archive).unwrap(), before);
+        assert_eq!(fs::read(&saved).unwrap(), before);
+        assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 2);
+    });
+}
+
+#[test]
 fn production_full_extraction_uses_the_worker_for_all_eight_families() {
     native(|| {
         let temp = tempfile::tempdir().unwrap();
@@ -980,7 +1049,13 @@ fn production_encoding_pause_cancel_and_launch_failure_never_publish() {
         if op.lock().unwrap().processed_bytes >= 65536 {
             break;
         }
-        assert!(started.elapsed() < Duration::from_secs(15));
+        // Other round-trip cases share the bulk admission. Its wait is separate
+        // from the active worker deadline and can include several 7z qualities.
+        if child.is_finished() || started.elapsed() >= Duration::from_secs(90) {
+            op.lock().unwrap().cancel_flag.store(true, Ordering::Relaxed);
+            let result = child.join().unwrap();
+            panic!("Encoder did not reach its first bytes after admission: {result:?}");
+        }
         std::thread::sleep(Duration::from_millis(2));
     }
     op.lock().unwrap().pause_flag.store(true, Ordering::Relaxed);

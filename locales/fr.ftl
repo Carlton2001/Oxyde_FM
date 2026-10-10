@@ -539,6 +539,7 @@ archive-cache-extract = Extraire et ouvrir…
 archive-cache-exported = Fichier extrait : { $detail }
 archive-limit-bytes = Le traitement est arrêté : la taille totale décompressée dépasse la limite de { $limit } pour cette action. La taille compressée de l’archive n’est pas la taille prise en compte.
 archive-processing-failed = Le traitement de l’archive a échoué. Le fichier peut être endommagé ou nécessiter trop de ressources.
+archive-recovery-notice = Fichiers conservés
 archive-recovery-completed = L’action est terminée, mais des fichiers ou dossiers ont été conservés. Vérifiez ces emplacements avant de les supprimer : { $locations }
 archive-recovery-stopped = L’action n’a pas été menée à son terme. Des fichiers ou dossiers ont été conservés, y compris les résultats déjà publiés. Vérifiez ces emplacements avant de réessayer : { $locations }
 archive-recovery-more = { $count } autres emplacements sont consignés dans le journal de l’application.

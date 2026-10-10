@@ -1,5 +1,47 @@
 # Vérification visuelle de sécurité — Windows
 
+## Nouveau binaire à valider — 10 octobre 2026, lot 75
+
+**Le code d'isolation Windows est terminé. Les tests visuels de ce nouveau binaire attendent votre retour.** La validation des lots 66–67 ci-dessous reste acquise pour cette ancienne passe. Aucun Computer Use ni lancement d'interface par l'agent.
+
+Fermer l'ancienne instance, puis lancer `C:\Users\Biluf\Documents\Projects\Oxyde-GPUI\target\debug\oxyde.exe`. Jeu neuf indépendant :
+
+```text
+C:\Users\Biluf\Documents\Projects\Oxyde-GPUI\target\security-visual-isolation-f3f20243-b344-4e62-9e43-78447ec003f5
+```
+
+Il contient 53 fichiers, 773 691 octets hors manifeste. Les neuf archives normales (huit familles, plus IMG) ont été extraites par le worker natif et comparées au contenu attendu. `manifest.json` consigne les tailles et empreintes BLAKE3 ; `references` conserve les sorties de comparaison. Les anciens jeux restent présents. Pour obtenir un autre jeu indépendant depuis le dépôt :
+
+```powershell
+cargo build --bin oxyde --locked --offline
+cargo run --example prepare_archive_isolation_visual --locked --offline
+```
+
+Le générateur ne lance ni interface ni application associée. Toutes les manipulations ci-dessous utilisent uniquement les copies de ce jeu.
+
+| Parcours | Manipulation et résultat attendu |
+| --- | --- |
+| Navigation, ouverture et extraction | Dans `archives`, ouvrir les fichiers `01-normal.zip` à `09-normal.img`. Le membre de référence est `école_日本語/note.txt` pour ZIP/7z/TAR et TAR compressées, `DOCS/README.TXT` pour ISO/IMG. Noms Unicode, navigation et ouverture externe doivent fonctionner ; les dossiers/fichiers vides restent présents. Extraire les huit familles vers `destinations/extraction` et comparer à `references`. Refaire une extraction : les premières sorties restent intactes. |
+| Création et reconstruction | Créer des archives ZIP/7z/TAR/TAR.ZST depuis `sources/école_日本語`, puis les rouvrir. Dans les quatre copies `modification/travail.*`, créer un dossier, copier `sources/école_日本語/note.txt`, renommer un fichier et un dossier interne, puis supprimer seulement un objet de fixture. Revenir dans l'archive : contenu et noms reflètent chaque action sans F5 ; les originaux de `archives` restent intacts. Une modification d'ISO/IMG ou TAR.GZ/XZ/BZ2 doit rester refusée. |
+| Transferts et collisions | Dans `transfert`, copier puis déplacer `source.zip/note.txt` vers `cible.7z`, ou en sens inverse avec les autres copies. Après copie, le membre source reste présent ; après déplacement réussi, il disparaît seulement de l'archive source. Tester une collision avec le membre déjà copié, choisir les résolutions existantes, puis copier un membre vers `destinations/transfert`. Vérifier les deux vues et les contenus. Les transferts entre archives peuvent avoir des effets partiels : si un message « Fichiers conservés » apparaît, ses emplacements doivent rester visibles et les vues refléter les effets publiés. Ne pas provoquer de panne sur des documents personnels. |
+| Pause, reprise, turbo, annulation et concurrence | Si une opération est encore active, utiliser les contrôles du panneau : une pause confirmée stabilise progression/vitesse, une reprise continue, une annulation ne publie pas une nouvelle archive incomplète. Pendant l'opération, naviguer dans une autre archive, lancer une recherche de `note` incluant les archives et survoler `aperçus/image.png` ou `document.pdf`. Si ces petites fixtures terminent trop vite pour cliquer, noter ce fait : pause, délai, annulation et workers bloqués sont déjà vérifiés automatiquement, sans archive géante. |
+| Refus et langues | Extraire `10-corrompu.zip`, `11-chemin-refuse.zip` et `12-profondeur-refusee.zip`. Attendre une erreur lisible, sans attente permanente, marqueur interne ni clé de traduction ; aucune `sortie-interdite.txt` ne doit apparaître hors de la sortie. L'archive source reste intacte. Changer de langue avec une notification encore affichée : son texte doit suivre la langue et ses chemins rester littéraux. Vérifier la lisibilité après réduction de fenêtre et dans les thèmes habituels. Les récupérations ne disparaissent pas par délai ; la croix et la limite de cinq notifications restent celles de l'interface. Les échecs de nettoyage/rollback sont injectés automatiquement, ils ne doivent pas être provoqués manuellement. |
+| Fermeture | Après un aperçu PDF, fermer normalement Oxyde. Si une opération d'archive est encore active ou en pause, fermer l'application puis la relancer : pas de processus worker persistant ni blocage de fermeture. Avec une opération trop rapide, le scénario d'arrêt en cours reste couvert automatiquement ; ne pas créer de charge volumineuse. |
+
+### Export permanent et sélecteur, avec cache indisponible
+
+Ce scénario utilise le bouton existant « Extraire et ouvrir… ». Fermer l'instance normale. La commande suivante, **à lancer par l'utilisateur**, réutilise le lanceur du dépôt avec le TEMP privé du nouveau jeu :
+
+```powershell
+$taskPython = 'C:/Users/Biluf/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe'
+$fixtureRoot = 'C:/Users/Biluf/Documents/Projects/Oxyde-GPUI/target/security-visual-isolation-f3f20243-b344-4e62-9e43-78447ec003f5'
+& $taskPython 'C:/Users/Biluf/Documents/Projects/Oxyde-GPUI/scripts/prepare-security-visual-check.py' --launch-cache-unavailable $fixtureRoot
+```
+
+Seul le processus enfant reçoit le TEMP privé ; aucune variable système ni cache existant n'est modifié. Dans le nouveau jeu, ouvrir `archives/01-normal.zip/école_日本語/note.txt`. La notification de cache indisponible doit proposer « Extraire et ouvrir… ». Annuler une fois le sélecteur, puis recommencer et choisir `destinations/export`. Le témoin `note.txt` (« TÉMOIN À CONSERVER ») reste intact ; le membre extrait reçoit un suffixe de collision, avec son contenu Unicode attendu. Refaire avec 7z, TAR et ses compressions, ISO/IMG ; les sorties précédentes restent intactes. Fermer cette instance, puis relancer Oxyde normalement. Le lanceur n'a pas été exécuté par l'agent.
+
+Validation automatisée : **852 tests réussis**, aucun échec, 17 ignorés préexistants ; check de toutes les cibles et build sans avertissement du projet. Les callbacks de récupération ont été revérifiés avec les 163 tests d'interface après leur raccordement final. Le plafond mémoire par worker et les essais de fautes ne valident ni un sandbox de permissions ni un budget global. La compilation Linux tentée est bloquée par le sysroot/Fontconfig de l'environnement croisé ; Linux conserve son comportement local. Bilan et autres limites dans [AUDIT_SECURITE.md](../AUDIT_SECURITE.md). Pour une anomalie, relever fixture, action et résultat ; aucun nouveau résultat visuel n'est supposé avant votre retour.
+
 ## Validation visuelle acquise — 10 octobre 2026, lots 66–67
 
 Ton retour « Tests OK » valide la reprise ciblée des points 2 et 5 après les corrections du statut Shell et du retour à la ligne de l'avertissement. Les aperçus, la navigation dans les archives, l'ouverture/extraction et les messages (points 1, 3, 4 et 6) étaient déjà validés sans anomalie signalée. **La vérification visuelle de cette passe est terminée.** Cette validation vient de l'utilisateur ; aucun Computer Use ni contrôle visuel par l'agent.

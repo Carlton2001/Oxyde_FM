@@ -113,6 +113,53 @@ pub(crate) fn scope<T, E: std::fmt::Display + From<ArchiveRecoveryFailure>>(
 mod tests {
     use super::*;
     #[test]
+    fn recovery_messages_reject_unknown_fields_and_excessive_allocations() {
+        let valid = ArchiveRecoveryFailure {
+            completed: false,
+            locations: vec!["C:/école/{$literal}".into()],
+            omitted: 0,
+            cause: String::new(),
+        };
+        assert_eq!(
+            ArchiveRecoveryFailure::from_message(&format!("Archive Error: {valid}")),
+            Some(valid.clone())
+        );
+        let mut value = serde_json::to_value(&valid).unwrap();
+        value["worker_path"] = "C:/foreign".into();
+        assert!(ArchiveRecoveryFailure::from_message(&format!(
+            "{}{}",
+            ArchiveRecoveryFailure::MARKER,
+            value
+        ))
+        .is_none());
+        for error in [
+            ArchiveRecoveryFailure {
+                locations: vec![],
+                ..valid.clone()
+            },
+            ArchiveRecoveryFailure {
+                locations: vec!["C:/w".into(); 9],
+                ..valid.clone()
+            },
+            ArchiveRecoveryFailure {
+                locations: vec!["x".repeat(256 * 1024 + 1)],
+                ..valid.clone()
+            },
+            ArchiveRecoveryFailure {
+                cause: "x".repeat(16 * 1024 + 1),
+                ..valid
+            },
+        ] {
+            assert!(ArchiveRecoveryFailure::from_message(&error.to_string()).is_none());
+        }
+        assert!(ArchiveRecoveryFailure::from_message(&format!(
+            "{}{}",
+            ArchiveRecoveryFailure::MARKER,
+            "x".repeat(2 * 1024 * 1024 + 1)
+        ))
+        .is_none());
+    }
+    #[test]
     fn scopes_report_owned_locations_after_cleanup_and_keep_thread_context_bounded() {
         let result = scope::<(), String>(|| {
             let context = context();

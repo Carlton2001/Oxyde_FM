@@ -840,6 +840,7 @@ archive-cache-extract = Entpacken und öffnen…
 archive-cache-exported = Datei entpackt: { $detail }
 archive-limit-bytes = Verarbeitung angehalten: Die gesamte entpackte Größe überschreitet die Grenze von { $limit } für diese Aktion. Die komprimierte Archivgröße wird nicht zugrunde gelegt.
 archive-processing-failed = Die Archivverarbeitung ist fehlgeschlagen. Die Datei ist möglicherweise beschädigt oder benötigt zu viele Ressourcen.
+archive-recovery-notice = Aufbewahrte Dateien
 archive-recovery-completed = Die Aktion wurde abgeschlossen, aber einige Dateien oder Ordner wurden behalten. Prüfen Sie diese Speicherorte, bevor Sie sie löschen: { $locations }
 archive-recovery-stopped = Die Aktion wurde nicht abgeschlossen. Einige Dateien oder Ordner wurden behalten, einschließlich bereits veröffentlichter Ergebnisse. Prüfen Sie diese Speicherorte, bevor Sie es erneut versuchen: { $locations }
 archive-recovery-more = { $count } weitere Speicherorte sind im Anwendungsprotokoll verzeichnet.

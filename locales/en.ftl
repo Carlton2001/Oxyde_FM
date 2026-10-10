@@ -533,6 +533,7 @@ archive-cache-extract = Extract and open…
 archive-cache-exported = File extracted: { $detail }
 archive-limit-bytes = Processing stopped: the total decompressed size exceeds the { $limit } limit for this action. The compressed archive size is not the size being measured.
 archive-processing-failed = Archive processing failed. The file may be damaged or require too many resources.
+archive-recovery-notice = Retained files
 archive-recovery-completed = The action completed, but some files or folders were kept. Check these locations before deleting them: { $locations }
 archive-recovery-stopped = The action did not complete. Some files or folders were kept, including results already published. Check these locations before trying again: { $locations }
 archive-recovery-more = { $count } other locations are recorded in the application log.

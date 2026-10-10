@@ -641,15 +641,7 @@ impl FileOperationManager {
         locked.duration_ms = locked
             .started_at
             .map(|started| started.elapsed().as_millis().min(u64::MAX as u128) as u64);
-        // If it was cancelled, keep Cancelled status
-        let finished_before_cancel = final_status == OpStatus::Completed
-            && (locked.archive_publication_finished || (locked.total_files > 0 && locked.processed_files == locked.total_files));
-        let recovery = matches!(&final_status, OpStatus::Error(detail) if crate::models::error::ArchiveRecoveryFailure::from_message(detail).is_some());
-        if locked.cancel_flag.load(Ordering::Relaxed) && !finished_before_cancel && !recovery {
-            locked.status = OpStatus::Cancelled;
-        } else {
-            locked.status = final_status.clone();
-        }
+        Self::finish_status(&mut locked, final_status.clone());
         locked.speed_history.clear();
 
         // Record exact filesystem effects, including partial or cancelled work,
@@ -2281,6 +2273,12 @@ impl FileOperationManager {
     }
     pub(crate) fn archive_publication_finished(op: &Arc<Mutex<FileOperation>>) { op.lock().unwrap().archive_publication_finished = true; }
 
+    fn finish_status(operation: &mut FileOperation, result: OpStatus) {
+        let completed = result == OpStatus::Completed && (operation.archive_publication_finished || (operation.total_files > 0 && operation.processed_files == operation.total_files));
+        let recovery = matches!(&result, OpStatus::Error(detail) if crate::models::error::ArchiveRecoveryFailure::from_message(detail).is_some());
+        operation.status = if operation.cancel_flag.load(Ordering::Relaxed) && !completed && !recovery { OpStatus::Cancelled } else { result };
+    }
+
     fn unique_archive_path(path: &Path) -> PathBuf {
         if !path.exists() {
             return path.to_path_buf();
@@ -2903,6 +2901,22 @@ impl FileOperationManager {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn late_cancellation_preserves_publication_and_recovery_status() {
+        let mut op = FileOperation::new(FileOpType::Extract, vec![], None, None);
+        op.cancel_flag.store(true, Ordering::Relaxed);
+        FileOperationManager::finish_status(&mut op, OpStatus::Completed);
+        assert_eq!(op.status, OpStatus::Cancelled);
+        op.archive_publication_finished = true;
+        FileOperationManager::finish_status(&mut op, OpStatus::Completed);
+        assert_eq!(op.status, OpStatus::Completed);
+        let recovery = OpStatus::Error(crate::models::error::ArchiveRecoveryFailure { completed: false, locations: vec!["C:/published.zip".into()], omitted: 0, cause: "cancelled".into() }.to_string());
+        FileOperationManager::finish_status(&mut op, recovery.clone());
+        assert_eq!(op.status, recovery);
+        FileOperationManager::finish_status(&mut op, OpStatus::Error("cancelled before publication".into()));
+        assert_eq!(op.status, OpStatus::Cancelled);
+    }
 
     #[cfg(target_os = "windows")]
     #[test]

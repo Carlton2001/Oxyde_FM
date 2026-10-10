@@ -1,9 +1,10 @@
 #![cfg(target_os = "windows")]
 mod utils {
-    pub use oxyde_lib::utils::{archive_io_protocol, preview_protocol};
+    pub use oxyde_lib::utils::{archive_io_protocol, archive_listing_protocol, preview_protocol};
 }
 mod models {
     pub use oxyde_lib::models::error;
+    pub use oxyde_lib::models::*;
 }
 mod commands {
     pub use oxyde_lib::commands::archive_io_worker;
@@ -11,6 +12,9 @@ mod commands {
 #[allow(dead_code)]
 #[path = "../src/platform/windows_archive_io_worker.rs"]
 mod windows_archive_io_worker;
+#[allow(dead_code)]
+#[path = "../src/platform/windows_archive_worker.rs"]
+mod windows_archive_worker;
 #[allow(dead_code)]
 #[path = "../src/platform/windows_preview_worker.rs"]
 mod windows_preview_worker;
@@ -226,6 +230,115 @@ fn confirmed_pause_excludes_elapsed_time_and_produces_no_effects() {
     .unwrap();
     assert!(started.elapsed() >= Duration::from_millis(1800));
     assert!(effects > 1 && state.finished());
+}
+
+#[test]
+fn listing_search_and_preview_advance_while_archive_io_is_confirmed_paused() {
+    use std::sync::{atomic::AtomicUsize, mpsc, Arc};
+    let directory = tempfile::tempdir().unwrap();
+    let bytes = encoded(Format::Zip, Quality::Fast);
+    let archive = directory.path().join("source.zip");
+    std::fs::write(&archive, &bytes).unwrap();
+    let image = directory.path().join("source.png");
+    image::RgbaImage::from_pixel(2, 1, image::Rgba([11, 22, 33, 255]))
+        .save(&image)
+        .unwrap();
+    let paused = Arc::new(AtomicBool::new(true));
+    let effects = Arc::new(AtomicUsize::new(0));
+    let pause_control = paused.clone();
+    let observed = effects.clone();
+    let (ready, waiting) = mpsc::channel();
+    let child = std::thread::spawn(move || {
+        let started = Instant::now();
+        let sent = AtomicBool::new(false);
+        let mut state = ExtractionState::new(limits(), Some("école_日本語.txt"), true).unwrap();
+        let result = windows_archive_io_worker::run_in(
+            Path::new(env!("CARGO_BIN_EXE_oxyde")),
+            Operation::Decode {
+                format: Format::Zip,
+                source_size: bytes.len() as u64,
+                selected: Some("école_日本語.txt".into()),
+                limits: limits(),
+            },
+            &|| {
+                // Surviving longer than the active deadline proves that pause was
+                // acknowledged; a worker that never acknowledged would have exited.
+                if started.elapsed() >= Duration::from_secs(3)
+                    && !sent.swap(true, Ordering::Relaxed)
+                {
+                    let _ = ready.send(());
+                }
+                Ok(Control {
+                    paused: pause_control.load(Ordering::Relaxed),
+                    ..Control::default()
+                })
+            },
+            &mut |frame| {
+                assert!(!pause_control.load(Ordering::Relaxed));
+                observed.fetch_add(1, Ordering::Relaxed);
+                if let Message::Read {
+                    source: 0,
+                    offset,
+                    length,
+                } = frame.message
+                {
+                    return Ok(Frame::data(
+                        Message::Bytes { source: 0, offset },
+                        bytes[offset as usize..offset as usize + length as usize].to_vec(),
+                    ));
+                }
+                state.accept(&frame)?;
+                Ok(Frame::new(Message::Ack {
+                    pause: false,
+                    turbo: false,
+                }))
+            },
+            Duration::from_secs(2),
+        );
+        result.unwrap();
+        assert!(state.finished());
+    });
+    let run = || {
+        waiting.recv_timeout(Duration::from_secs(12)).unwrap();
+        assert_eq!(effects.load(Ordering::Relaxed), 0);
+        let executable = Path::new(env!("CARGO_BIN_EXE_oxyde"));
+        assert_eq!(
+            windows_archive_worker::run_in(executable, &archive, "", Duration::from_secs(15))
+                .unwrap()
+                .len(),
+            1
+        );
+        assert_eq!(
+            windows_archive_worker::index_in(
+                executable,
+                &archive,
+                Duration::from_secs(15),
+                &|| Ok(())
+            )
+            .unwrap()
+            .len(),
+            1
+        );
+        let reply =
+            windows_preview_worker::run_in(executable, "image", &image, Duration::from_secs(15))
+                .unwrap();
+        let utils::preview_protocol::Reply::Images { frames, limited } =
+            utils::preview_protocol::decode(&reply).unwrap()
+        else {
+            panic!("Expected image");
+        };
+        assert!(!limited);
+        assert_eq!(
+            frames[0].buffer().as_raw(),
+            &[33, 22, 11, 255, 33, 22, 11, 255]
+        );
+        assert_eq!(effects.load(Ordering::Relaxed), 0);
+    };
+    // Release even when a separate worker fails, so this fixture owns no orphan.
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(run));
+    paused.store(false, Ordering::Relaxed);
+    child.join().unwrap();
+    result.unwrap();
 }
 
 fn powershell(script: &str) -> Command {

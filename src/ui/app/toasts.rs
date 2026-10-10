@@ -19,6 +19,15 @@ pub(crate) struct Toast {
 }
 
 impl OxydeApp {
+    pub(crate) fn archive_recovery_notice(&mut self, detail: &str, cx: &mut Context<Self>) -> bool {
+        let Some(recovery) = oxyde_lib::models::error::ArchiveRecoveryFailure::from_message(detail) else { return false; };
+        self.refresh_all_tabs(cx);
+        self.state.refresh_sidebar();
+        self.reconcile_watchers(cx);
+        self.toast(if recovery.completed { ToastKind::Info } else { ToastKind::Error }, Message::ArchiveRecoveryNotice, detail.into(), 0, cx);
+        true
+    }
+
     pub(crate) fn change_favorite(&mut self, path: String, remove: bool, cx: &mut Context<Self>) {
         cx.spawn(async move |this, cx| {
             let result = tokio::task::spawn_blocking(move || {
@@ -220,7 +229,7 @@ impl OxydeApp {
                 let mut args = FluentArgs::new();
                 args.set(
                     "detail",
-                    if toast.kind == ToastKind::Error {
+                    if toast.kind == ToastKind::Error || oxyde_lib::models::error::ArchiveRecoveryFailure::from_message(&toast.detail).is_some() {
                         crate::ui::format::error_detail(&toast.detail, cx.i18n())
                     } else {
                         crate::ui::format::display_paths(&toast.detail)
@@ -237,7 +246,7 @@ impl OxydeApp {
                     ToastKind::Error => ("icons/circle-x.svg", theme.toast_error),
                 };
                 let message = cx.i18n().text_with_args(toast.message, &args);
-                let width = if source.is_some() || message.chars().count() > 120 { 40.0 } else { 24.0 };
+                let width = if source.is_some() || toast.message == Message::ArchiveRecoveryNotice || message.chars().count() > 120 { 40.0 } else { 24.0 };
                 div()
                     .id(("toast", id))
                     .max_w(
@@ -271,6 +280,9 @@ impl OxydeApp {
                             .flex_col()
                             .gap(rems(0.5))
                             .child(message)
+                            .when(toast.message == Message::ArchiveRecoveryNotice, |column| {
+                                column.child(crate::ui::format::error_detail(&toast.detail, cx.i18n()))
+                            })
                             .when_some(source, |column, source| {
                                 column.child(
                                     div()
