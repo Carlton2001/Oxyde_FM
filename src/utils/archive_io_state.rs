@@ -210,6 +210,7 @@ mod tests {
                 modified: None,
                 created: None,
                 accessed: None,
+                mode: 0o644,
             },
         })
     }

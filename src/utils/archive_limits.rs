@@ -53,6 +53,9 @@ fn exceeded(kind: ArchiveLimitKind, limit: u64) -> io::Error {
 }
 
 impl ArchiveBudget {
+    pub(crate) fn limits(&self) -> ArchiveLimits {
+        self.limits
+    }
     pub fn new(limits: ArchiveLimits) -> Self {
         Self {
             limits,

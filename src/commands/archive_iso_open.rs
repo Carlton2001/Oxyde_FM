@@ -14,14 +14,14 @@ fn invalid(message: &str) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message)
 }
 
-struct Image<'a> {
-    file: File,
+struct Image<'a, R = File> {
+    file: R,
     length: u64,
     budget: &'a ArchiveBudget,
     checkpoint: &'a dyn Fn() -> io::Result<()>,
 }
 
-impl Image<'_> {
+impl<R: Read + Seek> Image<'_, R> {
     fn check_range(&self, offset: u64, length: u64) -> io::Result<()> {
         if offset
             .checked_add(length)
@@ -123,7 +123,7 @@ fn record(bytes: &[u8], block_size: u64) -> io::Result<Record> {
     })
 }
 
-fn root_record(image: &mut Image<'_>) -> io::Result<(u64, Record)> {
+fn root_record<R: Read + Seek>(image: &mut Image<'_, R>) -> io::Result<(u64, Record)> {
     let mut offset = 16 * 2048;
     loop {
         let mut descriptor = [0u8; 2048];
@@ -153,7 +153,7 @@ fn root_record(image: &mut Image<'_>) -> io::Result<(u64, Record)> {
     }
 }
 
-fn index(image: &mut Image<'_>) -> Result<Vec<Entry>, CommandError> {
+fn index<R: Read + Seek>(image: &mut Image<'_, R>) -> Result<Vec<Entry>, CommandError> {
     let (block_size, root) = root_record(image)?;
     let mut directories = vec![(PathBuf::new(), root.extent)];
     let mut visited = HashSet::new();
@@ -263,7 +263,11 @@ fn image<'a>(
     })
 }
 
-fn copy_extents(image: &mut Image<'_>, extents: &[Extent], output: &mut File) -> io::Result<()> {
+fn copy_extents<R: Read + Seek>(
+    image: &mut Image<'_, R>,
+    extents: &[Extent],
+    output: &mut File,
+) -> io::Result<()> {
     let mut buffer = [0u8; 64 * 1024];
     for extent in extents {
         let mut offset = 0;
@@ -342,6 +346,103 @@ pub(super) fn extract_iso(
         }
     }
     Ok(())
+}
+
+/// The same checked ISO index, with a seekable source and streamed output only.
+pub(super) fn stream_iso<R: Read + Seek>(
+    source: R,
+    length: u64,
+    selected: Option<&Path>,
+    budget: &ArchiveBudget,
+    checkpoint: &dyn Fn() -> io::Result<()>,
+    entry_callback: &mut dyn FnMut(
+        &crate::utils::archive_io_protocol::Entry,
+        Option<&mut dyn Read>,
+    ) -> io::Result<()>,
+    manifest_end: &mut dyn FnMut() -> io::Result<()>,
+) -> Result<(), CommandError> {
+    let mut image = Image {
+        file: source,
+        length,
+        budget,
+        checkpoint,
+    };
+    let entries = index(&mut image)?;
+    let mut found = false;
+    for (id, entry) in entries.iter().enumerate() {
+        let chosen = selected.is_none_or(|selected| entry.path == selected);
+        if chosen {
+            if selected.is_some() && entry.directory {
+                return Err(invalid("Archive item is not a file").into());
+            }
+            budget.declare_bytes(entry.size()?)?;
+            found = true;
+        }
+        let meta = iso_meta(id as u64, entry)?;
+        entry_callback(&meta, None)?;
+    }
+    if selected.is_some() && !found {
+        return Err(invalid("Archive file not found").into());
+    }
+    manifest_end()?;
+    for (id, entry) in entries.iter().enumerate() {
+        if selected.is_some_and(|selected| entry.path != selected) {
+            continue;
+        }
+        let meta = iso_meta(id as u64, entry)?;
+        let mut reader = ExtentReader {
+            image: &mut image,
+            extents: &entry.extents,
+            index: 0,
+            offset: 0,
+        };
+        entry_callback(&meta, Some(&mut reader))?;
+    }
+    Ok(())
+}
+
+fn iso_meta(id: u64, entry: &Entry) -> io::Result<crate::utils::archive_io_protocol::Entry> {
+    Ok(crate::utils::archive_io_protocol::Entry {
+        id,
+        name: entry
+            .path
+            .to_str()
+            .ok_or_else(|| invalid("Invalid ISO entry encoding"))?
+            .replace('\\', "/"),
+        directory: entry.directory,
+        size: entry.size()?,
+        modified: None,
+        created: None,
+        accessed: None,
+        mode: 0o644,
+    })
+}
+
+struct ExtentReader<'a, 'b, R> {
+    image: &'a mut Image<'b, R>,
+    extents: &'a [Extent],
+    index: usize,
+    offset: u64,
+}
+impl<R: Read + Seek> Read for ExtentReader<'_, '_, R> {
+    fn read(&mut self, bytes: &mut [u8]) -> io::Result<usize> {
+        while let Some(extent) = self.extents.get(self.index) {
+            if self.offset == extent.length {
+                self.index += 1;
+                self.offset = 0;
+                continue;
+            }
+            let count = (extent.length - self.offset).min(bytes.len() as u64) as usize;
+            if count == 0 {
+                return Ok(0);
+            }
+            self.image
+                .read_at(extent.offset + self.offset, &mut bytes[..count])?;
+            self.offset += count as u64;
+            return Ok(count);
+        }
+        Ok(0)
+    }
 }
 
 pub(crate) fn extract_iso_file_for_open(

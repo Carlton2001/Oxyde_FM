@@ -1,5 +1,7 @@
 pub mod archive;
 #[doc(hidden)]
+pub mod archive_io_codec;
+#[doc(hidden)]
 pub mod archive_worker;
 mod archive_iso_open;
 mod archive_metadata;

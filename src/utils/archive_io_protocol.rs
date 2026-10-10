@@ -72,6 +72,40 @@ pub struct Timestamp {
     pub nanos: u32,
 }
 
+impl Timestamp {
+    pub fn from_system(time: std::time::SystemTime) -> io::Result<Self> {
+        let nanos = match time.duration_since(std::time::UNIX_EPOCH) {
+            Ok(duration) => duration.as_nanos() as i128,
+            Err(error) => -(error.duration().as_nanos() as i128),
+        };
+        Ok(Self {
+            seconds: nanos
+                .div_euclid(1_000_000_000)
+                .try_into()
+                .map_err(|_| invalid())?,
+            nanos: nanos.rem_euclid(1_000_000_000) as u32,
+        })
+    }
+
+    pub fn system(self) -> io::Result<std::time::SystemTime> {
+        if self.nanos >= 1_000_000_000 {
+            return Err(invalid());
+        }
+        let nanos = self.seconds as i128 * 1_000_000_000 + self.nanos as i128;
+        let magnitude = nanos.unsigned_abs();
+        let duration = std::time::Duration::new(
+            (magnitude / 1_000_000_000) as u64,
+            (magnitude % 1_000_000_000) as u32,
+        );
+        if nanos >= 0 {
+            std::time::UNIX_EPOCH.checked_add(duration)
+        } else {
+            std::time::UNIX_EPOCH.checked_sub(duration)
+        }
+        .ok_or_else(invalid)
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct Entry {
@@ -79,6 +113,7 @@ pub struct Entry {
     pub name: String,
     pub directory: bool,
     pub size: u64,
+    pub mode: u32,
     pub modified: Option<Timestamp>,
     pub created: Option<Timestamp>,
     pub accessed: Option<Timestamp>,
@@ -86,8 +121,18 @@ pub struct Entry {
 
 impl Entry {
     pub fn validate(&self) -> io::Result<()> {
-        validate_name(&self.name)?;
+        if self.directory
+            && self.name.len() <= MAX_NAME
+            && super::archive_security::relative_archive_path(&self.name)?
+                .as_os_str()
+                .is_empty()
+        {
+            // Preserve harmless root-directory markers found in TAR and 7z.
+        } else {
+            validate_name(&self.name)?;
+        }
         if (self.directory && self.size != 0)
+            || self.mode & !0o7777 != 0
             || [self.modified, self.created, self.accessed]
                 .into_iter()
                 .flatten()
@@ -442,6 +487,7 @@ mod tests {
             modified: None,
             created: None,
             accessed: None,
+            mode: 0o644,
         };
         for name in ["../escape", "C:escape", "a:b", "CON", "", "a/../b"] {
             assert!(Entry {
