@@ -1,5 +1,39 @@
 # Vérification visuelle de sécurité — Windows
 
+## Reprise à effectuer maintenant — 10 octobre 2026, lot 65
+
+**Le code de cette passe est terminé et le binaire est prêt.** La validation du lot 58 (« tout fonctionne ») reste acquise. Cette reprise couvre les modifications ultérieures et le délai d'affichage du chargement, sans refaire tous les anciens essais. Aucun contrôle visuel n'a été effectué par l'agent et aucun outil Computer Use n'a été utilisé.
+
+Exécutable : `C:\Users\Biluf\Documents\Projects\Oxyde-GPUI\target\debug\oxyde.exe`. Fermer une ancienne instance avant de lancer celui-ci. Nouveau jeu indépendant :
+
+```text
+C:\Users\Biluf\Documents\Projects\Oxyde-GPUI\target\security-visual-check-luj0zp_m
+```
+
+Il contient 27 fichiers témoins (245 321 octets hors manifeste), avec ZIP, TAR, TAR.GZ, 7z et ISO, une archive corrompue et des fichiers de corbeille jetables. Les anciens jeux sont conservés. Le script crée toujours un nouveau dossier, sans écraser les fichiers d'une session précédente :
+
+```powershell
+$taskPython = 'C:/Users/Biluf/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe'
+& $taskPython scripts/prepare-security-visual-check.py
+```
+
+### Contrôles ciblés — environ dix minutes
+
+| Parcours | Manipulation et résultat attendu |
+| --- | --- |
+| Chargement des aperçus | Dans `aperçus`, survoler PNG/GIF/PDF/AVI normaux : un aperçu rapide s'affiche directement, sans flash « Chargement de l'aperçu ». Si un aperçu prend plus d'une seconde, ce texte apparaît pendant l'attente, puis disparaît au résultat. Les erreurs apparaissent sans délai artificiel. Fermer le survol puis passer à un autre fichier ne fait pas revenir un ancien chargement. Les fichiers étant petits, l'absence de texte de chargement est normale ; ne pas fabriquer une charge énorme pour le provoquer. |
+| Suppression suivie | Dans `corbeille`, supprimer uniquement `Annuler école.txt` puis un des dossiers témoins : Annuler, Rétablir, Annuler doivent restituer contenu et nom, sans ligne fantôme. Supprimer seulement `page.html` : `page_files` et son contenu doivent rester présents. Restaurer `page.html`. Ne pas vider la corbeille ni utiliser de documents personnels. |
+| Navigation dans les archives | Ouvrir `archives/01-normal.zip`, `03-normal.tar`, `03-normal.tar.gz`, `04-normal.7z`, `05-normal.iso`. Entrer dans `école_日本語` (ZIP/TAR/7z), ou `DOCS` (ISO), puis revenir ; vérifier noms, liste/grille et navigation. Pour l'ISO, le fichier est `README.TXT`. Une lecture de PNG/PDF doit rester disponible en parallèle. |
+| Ouverture et extraction | Ouvrir `note.txt` dans ZIP/TAR/7z et `README.TXT` dans l'ISO : le bon petit contenu doit être présenté par l'application associée. Utiliser « Extraire l'archive » sur ZIP et TAR.GZ, puis comparer les fichiers extraits aux noms/contenus attendus. Refaire une extraction : la première sortie doit rester intacte. Une compression des petits fichiers extraits puis sa réouverture vérifie aussi le parcours de reconstruction existant. Les erreurs de partage/concurrence sont testées automatiquement ; aucune manipulation de documents personnels requise. |
+| Recherche d'archives | Dans le nouveau jeu, lancer une recherche avancée avec recherche dans les archives, chercher `note` puis `README` sans filtre de taille/date : vérifier les chemins virtuels et les résultats des sous-dossiers. `06-corrompu.zip` et le ZIP limité doivent produire un avertissement en laissant les autres résultats disponibles. Si la recherche est encore active, arrêter puis relancer ; si elle termine trop vite, ne pas chercher à la ralentir. Les annulations de workers bloqués sont déjà testées automatiquement. |
+| Messages | Ouvrir `06-corrompu.zip` et `02-limite-profondeur.zip` : erreur lisible, pas d'attente permanente ni clé de traduction brute, archive d'origine toujours présente. Vérifier que les notifications restent lisibles et qu'un changement de langue actualise une erreur encore affichée. |
+
+Si une anomalie apparaît, noter le nom de la fixture, l'action exacte et le résultat observé. Les clics, le Shell Windows réel, les notifications et les applications associées restent à confirmer par l'utilisateur. Les dix essais ponctuels de fixtures ont utilisé les modes de lecture internes sans fenêtre ; ce ne sont pas des essais visuels ni un nouveau test du superviseur natif.
+
+**Validation automatisée :** 781 tests permanents réussis (604 bibliothèque, 162 interface, 15 intégrations), aucun échec, 17 tests préexistants ignorés non activés. `cargo check --all-targets --locked --offline` et `cargo build --bin oxyde --locked --offline` passent sans avertissement du projet. Aucun push ni lancement d'UI. Cette borne ne clôture pas les risques structurels décrits dans `AUDIT_SECURITE.md` (isolation complète de l'extraction/reconstruction, budgets globaux, courses Shell et fournisseurs non validés).
+
+## Historique des essais précédents
+
 Préparation du 9 octobre 2026. **Premier retour visuel reçu : archives, corbeille/historique et lisibilité sans anomalie signalée ; aperçus en échec et deux parcours à reprendre après correction.** Ce protocole est à réaliser par l’utilisateur, sans Computer Use. Il vérifie les changements déjà implémentés ; il ne clôture pas les autres risques de l’audit.
 
 **Revue ciblée à reprendre après correction :** GIF, AVI, MOV x265, remplacement après déplacement et cache indisponible. Le retour utilisateur ne valide pas les codecs non testés. Ce protocole vérifie leur usage, sans valider la course résiduelle Shell, les autres fournisseurs ou les parseurs d’archives.

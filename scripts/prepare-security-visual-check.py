@@ -12,6 +12,8 @@ import struct
 import subprocess
 import os
 import tempfile
+import io
+import tarfile
 import zipfile
 import zlib
 
@@ -96,6 +98,78 @@ def video():
     return chunk(b"RIFF", b"AVI " + chunk(b"LIST", header) + chunk(b"LIST", movi) + chunk(b"idx1", index))
 
 
+def seven_copy(name, contents):
+    """One small COPY block with a CRC, matching the Rust archive fixtures."""
+    names = b"\0" + (name + "\0").encode("utf-16le")
+    assert len(contents) < 128 and len(names) < 128
+    header = bytearray([1, 4, 6, 0, 1, 9, len(contents), 0,
+                        7, 11, 1, 0, 1, 1, 0, 12, len(contents), 10, 1])
+    header.extend(struct.pack("<I", binascii.crc32(contents)))
+    header.extend([0, 8, 13, 1, 0, 0, 5, 1, 17, len(names)])
+    header.extend(names)
+    header.extend([0, 0])
+    start = struct.pack("<QQI", len(contents), len(header), binascii.crc32(header))
+    return (b"7z\xbc\xaf\x27\x1c\0\x04"
+            + struct.pack("<I", binascii.crc32(start)) + start + contents + header)
+
+
+def iso_image():
+    """The small ISO9660 ROOT.TXT/DOCS/README.TXT fixture used by Rust tests."""
+    def record(name, sector, length, directory):
+        data = bytearray(33 + len(name) + (len(name) % 2 == 0))
+        data[0] = len(data)
+        struct.pack_into("<I", data, 2, sector)
+        struct.pack_into(">I", data, 6, sector)
+        struct.pack_into("<I", data, 10, length)
+        struct.pack_into(">I", data, 14, length)
+        data[18:25] = bytes([126, 10, 10, 12, 0, 0, 0])
+        data[25] = 2 if directory else 0
+        data[28:32] = b"\1\0\0\1"
+        data[32] = len(name)
+        data[33:33 + len(name)] = name
+        return data
+
+    data = bytearray(32 * 2048)
+    primary = bytearray(2048)
+    primary[:7] = b"\1CD001\1"
+    primary[8:72] = b" " * 64
+    primary[40:45] = b"OXYDE"
+    primary[80:88] = struct.pack("<I", 32) + struct.pack(">I", 32)
+    for offset in [120, 124]:
+        primary[offset:offset + 4] = b"\1\0\0\1"
+    primary[128:132] = struct.pack("<H", 2048) + struct.pack(">H", 2048)
+    primary[132:140] = struct.pack("<I", 22) + struct.pack(">I", 22)
+    struct.pack_into("<I", primary, 140, 18)
+    struct.pack_into(">I", primary, 148, 19)
+    primary[156:190] = record(b"\0", 20, 2048, True)
+    primary[190:813] = b" " * 623
+    for offset in [813, 830, 847, 864]:
+        primary[offset:offset + 16] = b"0" * 16
+    primary[881] = 1
+    data[16 * 2048:17 * 2048] = primary
+    data[17 * 2048:17 * 2048 + 7] = b"\xffCD001\1"
+    for sector, endian in [(18, "<"), (19, ">")]:
+        for offset, name, extent in [(0, b"\0", 20), (10, b"DOCS", 21)]:
+            pos = sector * 2048 + offset
+            data[pos] = len(name)
+            struct.pack_into(endian + "I", data, pos + 2, extent)
+            struct.pack_into(endian + "H", data, pos + 6, 1)
+            data[pos + 8:pos + 8 + len(name)] = name
+    for sector, records in [
+        (20, [record(b"\0", 20, 2048, True), record(b"\1", 20, 2048, True),
+              record(b"DOCS", 21, 2048, True), record(b"ROOT.TXT;1", 22, 4, False)]),
+        (21, [record(b"\0", 21, 2048, True), record(b"\1", 20, 2048, True),
+              record(b"README.TXT;1", 23, 11, False)]),
+    ]:
+        pos = sector * 2048
+        for entry in records:
+            data[pos:pos + len(entry)] = entry
+            pos += len(entry)
+    data[22 * 2048:22 * 2048 + 4] = b"root"
+    data[23 * 2048:23 * 2048 + 11] = b"ISO content"
+    return data
+
+
 def main():
     project = Path(__file__).resolve().parent.parent
     parser = argparse.ArgumentParser(description=__doc__)
@@ -153,6 +227,19 @@ def main():
         archive.writestr("école_日本語/note.txt", "Nom Unicode.\n")
     with zipfile.ZipFile(archives / "02-limite-profondeur.zip", "w") as archive:
         archive.writestr("/".join(["d"] * 64 + ["note.txt"]), "x")
+    # Small navigation/search/open/extract samples. No helper executable,
+    # optional Python package, external document or large payload is needed.
+    contents = "Archive normale, contenu inoffensif.\n".encode("utf-8")
+    for suffix, mode in [("tar", "w"), ("tar.gz", "w:gz")]:
+        with tarfile.open(archives / f"03-normal.{suffix}", mode) as archive:
+            for name in ["lecture.txt", "école_日本語/note.txt"]:
+                entry = tarfile.TarInfo(name)
+                entry.size = len(contents)
+                entry.mtime = 1_234_567_890
+                archive.addfile(entry, io.BytesIO(contents))
+    (archives / "04-normal.7z").write_bytes(seven_copy("école_日本語/note.txt", contents))
+    (archives / "05-normal.iso").write_bytes(iso_image())
+    (archives / "06-corrompu.zip").write_bytes(b"Inert damaged archive fixture.\n")
     (source / "témoin.txt").write_text("Fichier témoin du déplacement.\n", encoding="utf-8")
     (cache / "oxyde-archive-open").write_text("Inert obstruction in private TEMP.\n", encoding="utf-8")
     (exported / "lecture.txt").write_text("TÉMOIN À CONSERVER\n", encoding="utf-8")
@@ -162,6 +249,9 @@ def main():
     (trash / "Lien école.url").write_text("[InternetShortcut]\nURL=https://example.invalid/\n", encoding="utf-8")
     (trash / "Dossier école").mkdir()
     (trash / "Dossier école" / "contenu.txt").write_text("CONTENU DU DOSSIER À RESTAURER\n", encoding="utf-8")
+    (trash / "page.html").write_text("<!doctype html><p>Témoin inoffensif.</p>\n", encoding="utf-8")
+    (trash / "page_files").mkdir()
+    (trash / "page_files" / "contenu.txt").write_text("DOSSIER COMPAGNON À CONSERVER\n", encoding="utf-8")
     manifest = {str(path.relative_to(base)): path.stat().st_size
                 for path in base.rglob("*") if path.is_file()}
     total = sum(manifest.values())
