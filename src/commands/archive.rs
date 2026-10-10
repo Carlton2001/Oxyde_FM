@@ -42,21 +42,33 @@ pub(crate) fn extract_zip_file_for_open(
     target: &Path,
     limits: ArchiveLimits,
 ) -> Result<PathBuf, CommandError> {
+    extract_zip_file_with_checkpoint(archive_path, internal, target, limits, &|| Ok(()))
+}
+
+fn extract_zip_file_with_checkpoint(
+    archive_path: &Path,
+    internal: &str,
+    target: &Path,
+    limits: ArchiveLimits,
+    checkpoint: &dyn Fn() -> io::Result<()>,
+) -> Result<PathBuf, CommandError> {
     let requested = relative_archive_path(internal)?;
     if requested.as_os_str().is_empty() {
         return Err(CommandError::ArchiveError(
             "Archive item is not a file".into(),
         ));
     }
+    let parents = crate::systems::path_parents::HeldParents::new(archive_path)?;
+    let archive_path = parents.resolved_path(archive_path)?;
     let budget = ArchiveBudget::new(limits);
-    let mut archive = ZipArchive::new(File::open(archive_path)?)
+    let mut archive = ZipArchive::new(platform().open_archive_source(&archive_path, false)?)
         .map_err(|e| CommandError::ArchiveError(e.to_string()))?;
     budget.check_entry_count(archive.len())?;
     let mut selected = None;
     for index in 0..archive.len() {
-        budget.checkpoint(&|| Ok(()))?;
+        budget.checkpoint(checkpoint)?;
         let entry = archive
-            .by_index(index)
+            .by_index_raw(index)
             .map_err(|e| CommandError::ArchiveError(e.to_string()))?;
         budget.entry(entry.name(), 0)?;
         if entry
@@ -77,14 +89,18 @@ pub(crate) fn extract_zip_file_for_open(
     }
     let index =
         selected.ok_or_else(|| CommandError::ArchiveError("Archive file not found".into()))?;
-    let provenance = platform().read_file_provenance(archive_path)?;
+    budget.checkpoint(checkpoint)?;
+    let provenance = platform().read_file_provenance(&archive_path)?;
     let root = ExtractionRoot::new(target)?;
     let destination = root.destination(internal, false)?;
     let mut output = platform().create_archive_file(&destination.path)?;
     let mut entry = archive
         .by_index(index)
         .map_err(|e| CommandError::ArchiveError(e.to_string()))?;
-    budget.copy(&mut entry, &mut output, &|| Ok(()))?;
+    let size = entry.size();
+    if budget.copy(&mut entry, &mut output, checkpoint)? != size {
+        return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "Truncated ZIP member").into());
+    }
     if let Some(data) = provenance.as_deref() {
         platform().write_file_provenance(&destination.path, data)?;
     }
@@ -603,6 +619,102 @@ mod archive_tests {
         let second = tempfile::tempdir().unwrap();
         assert!(extract_zip_file_for_open(&archive, "other.txt", second.path(), limits).is_err());
         assert!(fs::read_dir(second.path()).unwrap().next().is_none());
+    }
+
+    #[test]
+    fn targeted_zip_preflight_does_not_construct_unselected_decoders() {
+        use std::io::Write;
+        let temp = tempfile::tempdir().unwrap();
+        let archive = temp.path().join("metadata-only.zip");
+        let mut zip = zip::ZipWriter::new(File::create(&archive).unwrap());
+        for name in ["selected.txt", "other.txt"] {
+            zip.start_file(name, zip::write::SimpleFileOptions::default()
+                .compression_method(zip::CompressionMethod::Stored)).unwrap();
+            zip.write_all(b"safe").unwrap();
+        }
+        zip.finish().unwrap();
+        let mut bytes = fs::read(&archive).unwrap();
+        // A valid index whose unselected member uses an unsupported codec.
+        // Change matching local/central headers only, without decoding data.
+        let mut patched = 0;
+        for offset in 0..bytes.len().saturating_sub(46) {
+            let (name, method) = match &bytes[offset..offset + 4] {
+                b"PK\x03\x04" => (offset + 30, offset + 8),
+                b"PK\x01\x02" => (offset + 46, offset + 10),
+                _ => continue,
+            };
+            if bytes.get(name..name + 9) == Some(&b"other.txt"[..]) {
+                bytes[method..method + 2].copy_from_slice(&200u16.to_le_bytes());
+                patched += 1;
+            }
+        }
+        assert_eq!(patched, 2);
+        fs::write(&archive, bytes).unwrap();
+        let output = tempfile::tempdir().unwrap();
+        let selected = extract_zip_file_for_open(&archive, "selected.txt", output.path(), ArchiveLimits::OPEN_FILE).unwrap();
+        assert_eq!(fs::read(selected).unwrap(), b"safe");
+        let refused = tempfile::tempdir().unwrap();
+        assert!(extract_zip_file_for_open(&archive, "other.txt", refused.path(), ArchiveLimits::OPEN_FILE).is_err());
+    }
+
+    #[test]
+    fn targeted_zip_cancellation_precedes_destination_creation() {
+        use std::io::Write;
+        let temp = tempfile::tempdir().unwrap();
+        let archive = temp.path().join("cancel.zip");
+        let mut zip = zip::ZipWriter::new(File::create(&archive).unwrap());
+        zip.start_file("safe.txt", zip::write::SimpleFileOptions::default()).unwrap();
+        zip.write_all(b"safe").unwrap();
+        zip.finish().unwrap();
+        let output = tempfile::tempdir().unwrap();
+        let error = extract_zip_file_with_checkpoint(&archive, "safe.txt", output.path(), ArchiveLimits::OPEN_FILE, &|| {
+            Err(io::Error::new(io::ErrorKind::Interrupted, "cancelled before ZIP output"))
+        }).unwrap_err();
+        assert!(error.to_string().contains("cancelled before ZIP output"));
+        assert_eq!(fs::read_dir(output.path()).unwrap().count(), 0);
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn targeted_zip_retains_source_and_provenance_after_parent_retargeting() {
+        use crate::platform::windows_reparse_tests::{junction, Retarget};
+        use std::io::Write;
+        let temp = tempfile::tempdir().unwrap();
+        let chosen = temp.path().join("chosen");
+        let outside = temp.path().join("outside");
+        fs::create_dir(&chosen).unwrap();
+        fs::create_dir(&outside).unwrap();
+        for (folder, content) in [(&chosen, &b"safe"[..]), (&outside, &b"evil"[..])] {
+            let mut zip = zip::ZipWriter::new(File::create(folder.join("source.zip")).unwrap());
+            zip.start_file("safe.txt", zip::write::SimpleFileOptions::default()).unwrap();
+            zip.write_all(content).unwrap();
+            zip.finish().unwrap();
+        }
+        let archive = chosen.join("source.zip");
+        let provenance = b"[ZoneTransfer]\r\nZoneId=3\r\n";
+        platform().write_file_provenance(&archive, provenance).unwrap();
+        let link = temp.path().join("link");
+        let template = temp.path().join("template");
+        junction(&link, &chosen);
+        junction(&template, &outside);
+        let retarget = Retarget::new(&link, &template);
+        let changed = std::cell::Cell::new(false);
+        let output = tempfile::tempdir().unwrap();
+        let result = extract_zip_file_with_checkpoint(&link.join("source.zip"), "safe.txt", output.path(), ArchiveLimits::OPEN_FILE, &|| {
+            if !changed.replace(true) {
+                assert!(File::options().write(true).open(&archive).is_err());
+                assert!(fs::rename(&archive, chosen.join("moved.zip")).is_err());
+                retarget.apply();
+            }
+            Ok(())
+        }).unwrap();
+        assert!(changed.get());
+        assert_eq!(fs::read(&result).unwrap(), b"safe");
+        assert_eq!(platform().read_file_provenance(&result).unwrap().as_deref(), Some(&provenance[..]));
+        drop(retarget);
+        fs::remove_dir(link).unwrap();
+        fs::remove_dir(template).unwrap();
+        assert!(File::options().write(true).open(&archive).is_ok());
     }
 
     #[test]
