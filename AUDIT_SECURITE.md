@@ -16,6 +16,8 @@ La priorité est de sécuriser les chemins d'archives : les essais ont confirmé
 
 ## Avancement des six chantiers annoncés
 
+**Chantier suivant préparé — lot 68, sans implémentation :** le [cadrage de l’isolation des archives](security/ISOLATION_ARCHIVES.md) fixe, depuis `master` à `c0f9c58`, les parcours Windows à migrer, le courtier conservant les objets et publications, les budgets, les lots et les critères de fin. Il couvre extraction complète/ciblée, workspaces et encodage partagé compression/reconstruction. L’isolation reste ouverte ; la borne de 782 tests et la validation visuelle des lots 66–67 restent historiques et acquises. Aucun nouvel essai visuel demandé avant la fin du code, aucune modification Rust à ce lot. Les trois dépendances non maintenues sont conservées ; pas de Computer Use, de suivi automatique ou de push.
+
 État actualisé au soixante-septième lot, après le retour utilisateur « Tests OK » validant la reprise visuelle ciblée. Ces six points sont des chantiers de tailles différentes, et non six étapes presque achevées. Les lots de concurrence Windows détaillés ci-dessous appartiennent principalement au premier point ; leur nombre ne constitue pas un pourcentage d’achèvement de l’audit.
 
 | Point annoncé dans la conversation | État et limite actuelle |
