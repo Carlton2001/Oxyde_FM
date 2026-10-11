@@ -12,6 +12,44 @@ Ce document décrit les conventions à suivre pour faire évoluer l'interface GP
 - `locales/{fr,en,de,es,it}.ftl` contiennent les catalogues embarqués.
 - `src/ui/format.rs` centralise les formats de nombres, dates et tailles.
 
+## Organisation fine des composants et des vues
+
+La structure des modules doit permettre de trouver une responsabilité sans parcourir un fichier monolithique. Lors d'une nouvelle fonctionnalité ou d'une extension significative, examiner d'abord les composants existants et les frontières du module concerné.
+
+### Taille et critères d'extraction
+
+Viser généralement **200 à 600 lignes de production par fichier**. Au-delà de **800 lignes**, examiner le découpage avant d'ajouter une responsabilité et expliquer pourquoi un fichier plus grand reste cohérent. Compter séparément les tests : un module bien isolé accompagné de nombreux tests ne devient pas automatiquement une priorité de refactoring.
+
+La taille est un signal ; les critères principaux sont le mélange de responsabilités, les fonctions de rendu difficiles à parcourir, les groupes d'événements distincts et la répétition d'une structure stable. Ne pas créer de petits modules artificiels pour respecter un nombre de lignes.
+
+Extraire une section de rendu ou un groupe de fonctions auxiliaires cohérent même s'il n'a qu'un usage. La création d'un composant partagé exige, elle, plusieurs usages partageant réellement présentation ou comportement. Préserver les différences entre modes Détails/Grille, Simple/Avancé ou entre fenêtres plutôt que les masquer derrière une abstraction à nombreux drapeaux.
+
+### Façade et sous-modules
+
+- Garder un composant simple dans un seul fichier. Pour un composant complexe, utiliser une façade `nom.rs` avec un répertoire `nom/` de sous-modules, ou `nom/mod.rs` si cette organisation existe déjà. Ne pas conserver simultanément les deux façades pour le même module Rust.
+- La façade déclare les sous-modules, expose les points d'entrée et assemble leurs résultats. Elle peut conserver les types d'état dont les enfants ont besoin ; elle ne doit pas devenir le réceptacle de toutes les interactions.
+- Nommer les sous-modules selon leur rôle réel : par exemple `headers`, `details`, `grid`, `comparison`, `validation` ou `thumbnails`. Éviter les fichiers fourre-tout `helpers`/`utils` et les découpages numérotés sans responsabilité explicite.
+- Pour les grandes vues, séparer naturellement initialisation/cycle de vie, parcours fonctionnels et sections de rendu. Répartir les blocs `impl` d'une même vue dans ses modules enfants lorsque cela conserve les champs privés et les méthodes existantes.
+- Garder les helpers propres à une section dans son module. Ne les remonter dans un module commun qu'en présence d'un partage réel. Extraire vers `components/` ou `elements/` uniquement lorsqu'une réutilisation entre vues le justifie.
+- Conserver une hiérarchie peu profonde et des dépendances lisibles. Les modules de présentation ne doivent pas importer toute une façade pour accéder à un helper ni créer de dépendance circulaire entre sections.
+- Utiliser des réexportations ciblées pour préserver les imports externes. Les sous-modules restent privés par défaut ; préférer la portée minimale nécessaire (`pub(super)` ou `pub(crate)` selon les appelants) plutôt qu'un accès public généralisé.
+
+Ces noms sont des exemples de responsabilités, pas une arborescence obligatoire pour chaque composant. Ajouter uniquement les sous-modules nécessaires.
+
+### État et contrats entre modules
+
+L'état métier, les décisions et les opérations de fichiers appartiennent à la vue appelante dans `src/ui/app/`. Les composants de présentation reçoivent les données, options et callbacks dont ils ont besoin. Un composant peut posséder un état d'interaction local — focus, défilement ou expansion — lorsque son cycle de vie lui appartient réellement.
+
+Lorsqu'un composant existant possède déjà des règles fonctionnelles, leur extraction doit d'abord préserver son comportement et ses interfaces. Un déplacement de code ne doit pas devenir implicitement une migration de ces règles vers une autre couche.
+
+Privilégier des paramètres explicites et limités. Si plusieurs sections partagent un ensemble stable de données de présentation, un petit type dédié peut clarifier leur contrat ; ne pas créer une copie du modèle global, un nouvel état redondant ou un contexte fourre-tout. Ne pas imposer une nouvelle abstraction uniquement pour éviter quelques paramètres.
+
+### Préservation et vérification
+
+Procéder par extractions cohérentes et vérifiables, en privilégiant le déplacement du code existant. Préserver les identifiants GPUI, types d'actions et d'assets, handles de focus et de défilement, captures de closures, phases et propagation des événements, ordre des overlays, géométrie et virtualisation. Conserver les propriétaires des tâches et abonnements, références faibles et protections contre les résultats obsolètes.
+
+Après une extraction, vérifier la compilation et les parcours réellement touchés ; un rendu qui compile peut encore changer le focus, le scroll ou les interactions. Appliquer les règles de validation ci-dessous et signaler les contrôles impossibles dans l'environnement. Éviter les réécritures fonctionnelles et les refactorisations de modules voisins dans la même étape.
+
 ## Thèmes
 
 Le thème actif est accessible avec `cx.theme()`. Les 13 thèmes de `ThemeId::ALL`, définis dans `src/models/preferences.rs`, reprennent Oxyde, Ayu, GitHub, One, Solarized et Windows en variantes claires et sombres, ainsi que Monokai sombre. Les identifiants historiques `dark` et `light` restent ceux des thèmes Oxyde. Les libellés Fluent paramétrés traduisent Clair/Sombre (Light/Dark), avec une icône Lucide Sun/Moon à gauche de chaque choix.

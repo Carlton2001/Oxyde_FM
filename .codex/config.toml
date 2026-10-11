@@ -1,0 +1,19 @@
+[features]
+multi_agent = true
+
+[agents]
+enabled = true
+default_subagent_model = "gpt-6.1-sol"
+default_subagent_reasoning_effort = "medium"
+
+[agents.explorer]
+description = "Analyse le code Rust et les dépendances sans modifier les fichiers."
+config_file = "agents/explorer.toml"
+
+[agents.implementer]
+description = "Effectue les refactorisations Rust en préservant le comportement."
+config_file = "agents/implementer.toml"
+
+[agents.reviewer]
+description = "Vérifie les changements, les tests et les risques de régression."
+config_file = "agents/reviewer.toml"
