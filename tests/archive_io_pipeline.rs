@@ -16,7 +16,10 @@ mod iso;
 mod seven_crc;
 
 fn native<T>(run: impl FnOnce() -> T) -> T {
-    with_worker_executable_for_tests(Path::new(env!("CARGO_BIN_EXE_oxyde")), run)
+    with_worker_executable_for_tests(
+        Path::new(env!("CARGO_BIN_EXE_oxyde-archive-io-worker")),
+        run,
+    )
 }
 fn operation(kind: FileOpType) -> Arc<Mutex<FileOperation>> {
     Arc::new(Mutex::new(FileOperation::new(kind, vec![], None, None)))
@@ -1052,7 +1055,10 @@ fn production_encoding_pause_cancel_and_launch_failure_never_publish() {
         // Other round-trip cases share the bulk admission. Its wait is separate
         // from the active worker deadline and can include several 7z qualities.
         if child.is_finished() || started.elapsed() >= Duration::from_secs(90) {
-            op.lock().unwrap().cancel_flag.store(true, Ordering::Relaxed);
+            op.lock()
+                .unwrap()
+                .cancel_flag
+                .store(true, Ordering::Relaxed);
             let result = child.join().unwrap();
             panic!("Encoder did not reach its first bytes after admission: {result:?}");
         }

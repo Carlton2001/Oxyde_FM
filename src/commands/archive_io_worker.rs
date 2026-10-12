@@ -206,6 +206,6 @@ pub fn run_if_requested() -> bool {
     if let Err(error) = result {
         let _ = writeln!(io::stderr(), "Archive IO worker failed: {error}");
     }
-    let _ = crate::platform::platform().finish_process_shutdown();
+    let _ = crate::platform::finish_archive_worker_shutdown();
     true
 }

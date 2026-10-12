@@ -22,7 +22,8 @@ thread_local! {
     static TEST_EXECUTABLE: std::cell::RefCell<Option<std::path::PathBuf>> = const { std::cell::RefCell::new(None) };
 }
 
-/// Scoped integration-test injection; normal application sessions use current_exe.
+/// Scoped integration-test injection; Windows production uses the dedicated
+/// archive executable next to the application, never a local-codec fallback.
 #[doc(hidden)]
 pub fn with_worker_executable_for_tests<T>(path: &std::path::Path, run: impl FnOnce() -> T) -> T {
     struct Restore(Option<std::path::PathBuf>);
@@ -40,7 +41,13 @@ pub fn with_worker_executable_for_tests<T>(path: &std::path::Path, run: impl FnO
 pub fn worker_executable() -> std::io::Result<std::path::PathBuf> {
     TEST_EXECUTABLE
         .with(|value| value.borrow().clone())
-        .map_or_else(std::env::current_exe, Ok)
+        .map_or_else(
+            || {
+                Ok(std::env::current_exe()?
+                    .with_file_name("oxyde-archive-io-worker.exe"))
+            },
+            Ok,
+        )
 }
 
 pub fn invalid() -> io::Error {

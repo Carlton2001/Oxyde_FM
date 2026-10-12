@@ -491,6 +491,19 @@ pub fn platform() -> &'static dyn Platform {
     INSTANCE.get_or_init(CurrentPlatform::new)
 }
 
+/// Static dispatch avoids linking every native Platform operation into the
+/// headless archive executable. Preserve the same final shutdown contract.
+pub(crate) fn finish_archive_worker_shutdown() -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        <CurrentPlatform as Platform>::finish_process_shutdown(&CurrentPlatform::new())
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        platform().finish_process_shutdown()
+    }
+}
+
 /// Internal worker dispatch; never called by the UI to bypass process isolation.
 #[cfg(target_os = "windows")]
 pub fn local_preview_worker_reply(mode: &str, path: &std::path::Path) -> crate::utils::preview_protocol::Reply {

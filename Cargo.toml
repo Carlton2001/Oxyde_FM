@@ -4,6 +4,7 @@ version = "1.1.6"
 description = "Modern and fast file manager"
 authors = ["Carlton2001"]
 edition = "2021"
+default-run = "oxyde"
 
 # GPUI refreshes the scene while the native window moves. Keep development
 # builds responsive while preserving debug information and assertions.
