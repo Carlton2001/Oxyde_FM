@@ -482,6 +482,10 @@ pub(super) fn render_operation_card(
                 .child(speed.unwrap_or_else(|| {
                     if final_state {
                         String::new()
+                    } else if matches!(operation.status, OpStatus::Running)
+                        && ratio.is_some_and(|value| value >= 1.0)
+                    {
+                        i18n.text(Message::OpsFinalizing).to_string()
                     } else {
                         i18n.text(Message::OpsSpeedWaiting).to_string()
                     }

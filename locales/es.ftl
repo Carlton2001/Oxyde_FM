@@ -238,6 +238,7 @@ operations-duration = Duración: { $duration }
 operations-average = Promedio: { $speed }
 
 operations-speed-waiting = Esperando...
+operations-finalizing = Finalizando…
 
 operations-pause = Pausar
 

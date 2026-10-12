@@ -131,6 +131,7 @@ operations-remaining = Time remaining: { $seconds } s
 operations-duration = Duration: { $duration }
 operations-average = Average: { $speed }
 operations-speed-waiting = Waiting
+operations-finalizing = Finalizing…
 operations-pause = Pause
 operations-resume = Resume
 operations-stop = Cancel operation
