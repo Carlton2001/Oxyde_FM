@@ -192,9 +192,13 @@ impl OxydeApp {
                     let observed = revision.load(Ordering::Acquire);
                     if !paused && schedule.due(observed, std::time::Instant::now()) {
                         let details_due = schedule.details_due;
-                        let epoch = h.update(&mut cx, |this, _| this.drive_refresh_epoch);
-                        if let Ok(roots) = tokio::task::spawn_blocking(|| {
-                            oxyde_lib::platform::platform().list_drive_roots()
+                        let (epoch, policy_revision) = h.update(&mut cx, |this, _| {
+                            (this.drive_refresh_epoch, this.trash_delete_policy.revision())
+                        });
+                        if let Ok((roots, policies)) = tokio::task::spawn_blocking(|| {
+                            let roots = oxyde_lib::platform::platform().list_drive_roots();
+                            let policies = super::trash_settings::read_drive_policy(&roots);
+                            (roots, policies)
                         }).await {
                             h.update(&mut cx, |this, cx| {
                                 if this.ejecting_drive || this.drive_refresh_epoch != epoch
@@ -206,6 +210,9 @@ impl OxydeApp {
                                     this.drive_refresh_epoch = this.drive_refresh_epoch.wrapping_add(1);
                                 }
                                 this.apply_drive_roots(roots, cx);
+                                if this.trash_delete_policy.replace(policy_revision, policies) {
+                                    cx.notify();
+                                }
                                 if changed || details_due {
                                     this.refresh_disk_images(cx);
                                 }

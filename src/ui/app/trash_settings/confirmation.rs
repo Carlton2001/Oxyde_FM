@@ -62,8 +62,8 @@ pub(crate) fn render_delete_confirmation(
         .child(
             Modal::new(
                 "trash-delete-confirmation",
-                cx.i18n().text(if pending.permanent { Message::TrashDeletePermanent } else { Message::Delete }),
-                div().child(cx.i18n().text(if pending.permanent { Message::TrashPermanentDeletePrompt } else { Message::TrashDeletePrompt })),
+                cx.i18n().text(if pending.permanent_prompt { Message::TrashDeletePermanent } else { Message::Delete }),
+                div().child(cx.i18n().text(if pending.permanent_prompt { Message::TrashPermanentDeletePrompt } else { Message::TrashDeletePrompt })),
             )
             .title_icon("icons/trash-2.svg")
             .on_backdrop_dismiss(move |window, cx| {
@@ -90,7 +90,7 @@ pub(crate) fn render_delete_confirmation(
                     .track_focus(&pending.confirm_focus)
                     .bg(theme.accent)
                     .text_color(theme.text_on_accent)
-                    .child(cx.i18n().text(if pending.permanent { Message::TrashDeletePermanent } else { Message::Delete }))
+                    .child(cx.i18n().text(if pending.permanent_prompt { Message::TrashDeletePermanent } else { Message::Delete }))
                     .on_mouse_down(MouseButton::Left, move |_, window, cx| {
                         handle.update(cx, |this, cx| {
                             if let Some(pending) = this.pending_trash_delete.take() {

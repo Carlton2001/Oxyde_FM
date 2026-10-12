@@ -40,6 +40,9 @@ impl OxydeApp {
     }
 
     pub fn execute_supprimer(&mut self, cx: &mut Context<Self>) {
+        if self.trash_delete_check_pending || self.pending_trash_delete.is_some() {
+            return;
+        }
         if self.state.find_pane(&self.state.active_pane_id).is_some_and(|pane| pane.active_tab().path == "trash://") {
             self.execute_trash_action(false, false, cx);
             return;
@@ -51,7 +54,25 @@ impl OxydeApp {
                 return;
             }
             if self.config.confirm_delete {
-                self.pending_trash_delete = Some(trash_settings::PendingDelete { paths, permanent: self.shift_delete, focus: cx.focus_handle(), confirm_focus: cx.focus_handle() }); cx.notify(); return;
+                let permanent = self.shift_delete;
+                self.trash_delete_check_pending = true;
+                cx.spawn(async move |this, cx| {
+                    let snapshot = paths.clone();
+                    let permanent_prompt = permanent || tokio::task::spawn_blocking(move || {
+                        super::deletion_policy::selection_deletes_permanently(&snapshot)
+                    }).await.unwrap_or(false);
+                    let _ = this.update(cx, |this, cx| {
+                        this.trash_delete_check_pending = false;
+                        if this.pending_trash_delete.is_none() {
+                            this.pending_trash_delete = Some(trash_settings::PendingDelete {
+                                paths, permanent, permanent_prompt,
+                                focus: cx.focus_handle(), confirm_focus: cx.focus_handle(),
+                            });
+                            cx.notify();
+                        }
+                    });
+                }).detach();
+                return;
             }
             self.queue_trash_delete(paths, self.shift_delete, cx);
 

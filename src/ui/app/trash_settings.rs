@@ -4,11 +4,13 @@ use oxyde_lib::models::DriveInfo;
 
 mod actions;
 mod confirmation;
+mod deletion_policy;
 mod render;
 mod settings;
 
 pub(crate) use confirmation::render_delete_confirmation;
 pub(crate) use render::render;
+pub(crate) use deletion_policy::{DeletePolicy, read_drive_policy};
 
 pub(crate) struct TrashSettings {
     drives: Vec<DriveInfo>,
@@ -48,6 +50,7 @@ fn capacity_mb(value: &str, percent: bool, total_bytes: u64) -> Option<u64> {
 pub(crate) struct PendingDelete {
     pub paths: Vec<String>,
     pub permanent: bool,
+    pub permanent_prompt: bool,
     pub focus: FocusHandle,
     pub confirm_focus: FocusHandle,
 }

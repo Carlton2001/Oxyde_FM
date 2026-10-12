@@ -237,6 +237,7 @@ pub fn render_top_bar(
         )
         .child({
             let mut actions = div().flex().items_center().gap_1().ml_1().flex_shrink_0();
+            let permanent_delete = view.shift_delete || view.pane_delete_is_permanent(&pane_id);
             for (visible, id, icon, label, tip, action) in [
                 (parent_path.is_some(), "up-btn", "icons/arrow-up.svg", Message::Up, "Alt+↑".into(), 0u8),
                 (!is_trash_path && has_undo_entry, "undo-btn", "icons/undo-2.svg", Message::Undo,
@@ -247,7 +248,8 @@ pub fn render_top_bar(
                 (selected && !is_trash_path && !is_network_neighborhood, "copy-btn", "icons/copy.svg", Message::Copy, "Ctrl+C".into(), 4),
                 (ordinary && view.clipboard_has_files, "paste-btn", "icons/clipboard-paste.svg", Message::Paste, "Ctrl+V".into(), 5),
                 (selected && !is_trash_path && !is_network_neighborhood && oxyde_lib::utils::archive::split_virtual_path(&current_path).is_none(),
-                    "delete-btn", "icons/trash.svg", Message::Delete, String::new(), 6),
+                    "delete-btn", if permanent_delete { "icons/trash-2.svg" } else { "icons/trash.svg" },
+                    if permanent_delete { Message::TrashDeletePermanent } else { Message::Delete }, String::new(), 6),
                 (is_trash_path && selected, "trash-delete-btn", "icons/trash-2.svg", Message::TrashDeletePermanent, String::new(), 7),
                 (is_trash_path, "trash-restore-btn", "icons/rotate-ccw.svg", Message::TrashRestoreSelection, String::new(), 8),
                 (is_trash_path, "trash-restore-all-btn", "icons/rotate-ccw.svg", Message::TrashRestoreAll, String::new(), 9),
@@ -259,7 +261,7 @@ pub fn render_top_bar(
                     && (action < 7 || (!view.trash_busy && if action < 9 { selected } else { !active_tab.files.is_empty() }));
                 let mut button = div().id(id).min_w(rems(1.5)).h_6().px(rems(0.125)).flex().items_center().justify_center().rounded_md()
                     .when(show_tooltips && (action == 1 || action == 2), |d| d.tooltip(Tooltip::with_meta(_cx.i18n().text(label), tip.clone())))
-                    .when(show_tooltips && action == 6, |d| d.tooltip(Tooltip::for_delete(handle.clone())))
+                    .when(show_tooltips && action == 6, |d| d.tooltip(Tooltip::for_delete(handle.clone(), pane_id.clone())))
                     .when(show_tooltips && action != 1 && action != 2 && action != 6, |d| d.tooltip(Tooltip::with_shortcut(_cx.i18n().text(label),
                         (!tip.is_empty()).then(|| SharedString::from(tip)))));
                 if enabled {
@@ -289,7 +291,7 @@ pub fn render_top_bar(
                         });
                 }
                 actions = actions.child(button.child(svg().path(icon).size_4()
-                    .text_color(if !enabled { icon_disabled } else if action == 7 || action == 10 { theme.error } else { icon_active }))
+                    .text_color(if !enabled { icon_disabled } else if action == 7 || action == 10 || (action == 6 && permanent_delete) { theme.error } else { icon_active }))
                     .when(action == 9 || action == 10, |button| button.child(
                         div().ml(rems(0.125)).text_size(rems(0.625)).text_color(theme.text_muted)
                             .child(_cx.i18n().text(Message::TrashAll))

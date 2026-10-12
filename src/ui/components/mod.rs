@@ -34,7 +34,8 @@ pub(crate) fn context_menu_sections(items: Vec<dropdown::DropdownItem>, i18n: &I
         }
         let group = if [Message::OpenFileLocation, Message::Open, Message::PeekOpen, Message::OpenNewTab, Message::ExpandAll, Message::CollapseAll]
             .iter().any(|message| item.label == i18n.text(*message).as_ref()) { 0 }
-            else if item.label == i18n.text(Message::Delete).as_ref() { 2 }
+            else if [Message::Delete, Message::TrashDeletePermanent].iter()
+                .any(|message| item.label == i18n.text(*message).as_ref()) { 2 }
             else if item.label == i18n.text(Message::Properties).as_ref() { 3 }
             else if item.label == i18n.text(Message::SortBy).as_ref() { 4 }
             else if item.label == i18n.text(Message::MoreOptions).as_ref() { 5 }
@@ -481,9 +482,10 @@ fn oxyde_context_menu_items_raw(
         on_hover: None,
     });
 
+    let permanent = view.pane_delete_is_permanent(&view.state.active_pane_id);
     items.push(crate::ui::components::dropdown::DropdownItem {
-        label: i18n.text(Message::Delete).to_string(),
-        icon: Some(IconName::Trash),
+        label: i18n.text(if permanent { Message::TrashDeletePermanent } else { Message::Delete }).to_string(),
+        icon: Some(if permanent { IconName::TrashPermanent } else { IconName::Trash }),
         badge: None,
         stay_open: false,
         has_submenu: false,

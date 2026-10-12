@@ -223,18 +223,20 @@ impl OxydeApp {
             .collect();
         let confirm = dialog.confirm;
         dialog.busy = true;
+        self.trash_delete_policy.invalidate();
         cx.notify();
         cx.spawn(async move |this, cx| {
             let result = tokio::task::spawn_blocking(move || {
-                for config in changed {
-                    oxyde_lib::platform::platform().set_recycle_bin_config(config)?;
+                for config in &changed {
+                    oxyde_lib::platform::platform().set_recycle_bin_config(config.clone())?;
                 }
-                Ok::<_, String>(())
+                Ok::<_, String>(changed)
             })
             .await;
             let _ = this.update(cx, |this, cx| {
                 match result {
-                    Ok(Ok(())) => {
+                    Ok(Ok(configs)) => {
+                        this.trash_delete_policy.saved(&configs);
                         this.config.confirm_delete = confirm;
                         this.save_preferences(cx);
                         this.trash_settings = None;

@@ -57,13 +57,17 @@ impl Tooltip {
     pub fn for_drive(name: String, drive: oxyde_lib::models::DriveInfo) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
         move |_, cx| cx.new(|_| DriveTooltip { name: name.clone().into(), drive: drive.clone() }).into()
     }
-    pub fn for_delete(handle: Entity<crate::ui::app::OxydeApp>) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
+    pub fn for_delete(handle: Entity<crate::ui::app::OxydeApp>, pane_id: String) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
         move |window, cx| {
-            let title = cx.i18n().text(if window.modifiers().shift { Message::TrashDeletePermanent } else { Message::Delete });
+            let permanent = window.modifiers().shift || handle.read(cx).pane_delete_is_permanent(&pane_id);
+            let title = cx.i18n().text(if permanent { Message::TrashDeletePermanent } else { Message::Delete });
+            let pane_id = pane_id.clone();
             cx.new(|cx| {
-                cx.observe(&handle, |tooltip: &mut Self, app, cx| {
-                    tooltip.title = cx.i18n().text(if app.read(cx).shift_delete { Message::TrashDeletePermanent } else { Message::Delete });
-                    tooltip.shortcut = Some(if app.read(cx).shift_delete { "Shift+Del" } else { "Del" }.into());
+                cx.observe(&handle, move |tooltip: &mut Self, app, cx| {
+                    let app = app.read(cx);
+                    let permanent = app.shift_delete || app.pane_delete_is_permanent(&pane_id);
+                    tooltip.title = cx.i18n().text(if permanent { Message::TrashDeletePermanent } else { Message::Delete });
+                    tooltip.shortcut = Some(if app.shift_delete { "Shift+Del" } else { "Del" }.into());
                     cx.notify();
                 }).detach();
                 Self { title, wrap_title: false, meta: None, shortcut: Some(if window.modifiers().shift { "Shift+Del" } else { "Del" }.into()), file_info: None, fixed_bounds: None, preview_view: None }

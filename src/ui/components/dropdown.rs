@@ -16,6 +16,10 @@ fn context_shortcut(label: &str, i18n: &I18n, shift: bool) -> Option<&'static st
         .find_map(|(message, shortcut)| (label == i18n.text(message).as_ref()).then_some(shortcut))
 }
 
+#[cfg(test)]
+#[path = "dropdown/tests/delete_shortcuts.rs"]
+mod delete_shortcuts;
+
 #[derive(Clone)]
 pub enum IconName {
     ChartBar,
