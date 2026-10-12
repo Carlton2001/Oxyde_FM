@@ -541,4 +541,8 @@ mod windows_archive_worker;
 #[cfg(target_os = "windows")]
 mod windows_archive_io_worker;
 #[cfg(target_os = "windows")]
+mod windows_worker_sandbox;
+#[cfg(target_os = "windows")]
+mod windows_process_launch;
+#[cfg(target_os = "windows")]
 mod windows_icon_pixels;

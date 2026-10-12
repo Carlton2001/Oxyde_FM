@@ -5,6 +5,9 @@ mod utils {
 #[allow(dead_code)]
 #[path = "../src/platform/windows_preview_worker.rs"]
 mod transport;
+#[allow(dead_code)]
+#[path = "../src/platform/windows_process_launch.rs"]
+mod windows_process_launch;
 use oxyde_lib::utils::preview_protocol::{self, Reply};
 use std::path::Path;
 use std::time::{Duration, Instant};

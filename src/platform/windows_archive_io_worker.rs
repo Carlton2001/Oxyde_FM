@@ -1,5 +1,5 @@
 //! Polled duplex archive supervision. No codec or pathname requests in this layer.
-use super::windows_preview_worker::Worker;
+use super::windows_worker_sandbox::Worker;
 use crate::models::error::{ArchiveLimitFailure, ArchiveLimitKind, ArchiveSourceConflict};
 use crate::utils::archive_io_protocol::{
     invalid, Control, FailureKind, Frame, Message, Operation, Wire, HEADER, MAX_FRAME,
@@ -226,7 +226,8 @@ pub(super) fn supervise(
     memory: usize,
 ) -> io::Result<Stats> {
     check(controls)?;
-    let (mut worker, mut output, mut input) = Worker::start_duplex(command, memory)?;
+    let (mut worker, mut output, mut input) =
+        Worker::start_duplex_checked(command, memory, &|| check(controls).map(|_| ()))?;
     let (send, receive) = mpsc::sync_channel::<Vec<u8>>(1);
     let (completed, completions) = mpsc::sync_channel(1);
     // Dropping the job/child at every exit closes the child's input reader and
@@ -430,6 +431,11 @@ pub(super) fn supervise(
                     || pending_output.is_some()
                     || writes != 0
                 {
+                    #[cfg(test)]
+                    eprintln!(
+                        "Archive LPAC worker exit without complete protocol: {status}; terminal={}",
+                        terminal_at.is_some()
+                    );
                     return Err(invalid());
                 }
                 let mut info = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();

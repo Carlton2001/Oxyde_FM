@@ -594,10 +594,12 @@ impl Platform for WindowsPlatform {
             };
             result?;
         } else {
-            std::process::Command::new(self.system_executable(super::SystemExecutable::Explorer).map_err(|error| error.to_string())?)
-                .arg(path)
-                .spawn()
-                .map_err(|e| e.to_string())?;
+            let mut command = std::process::Command::new(
+                self.system_executable(super::SystemExecutable::Explorer)
+                    .map_err(|error| error.to_string())?,
+            );
+            command.arg(path);
+            super::windows_process_launch::spawn(command).map_err(|e| e.to_string())?;
         }
         Ok(())
     }
@@ -637,9 +639,9 @@ impl Platform for WindowsPlatform {
         if path == "__network_vincinity__" {
             std::thread::spawn(|| {
                 let Ok(explorer) = super::platform().system_executable(super::SystemExecutable::Explorer) else { return; };
-                let _ = std::process::Command::new(explorer)
-                    .arg("ms-settings:network")
-                    .spawn();
+                let mut command = std::process::Command::new(explorer);
+                command.arg("ms-settings:network");
+                let _ = super::windows_process_launch::spawn(command);
             });
             return;
         }

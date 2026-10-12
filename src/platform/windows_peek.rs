@@ -117,7 +117,7 @@ pub(super) fn open_peek(path: &str) -> Result<(), String> {
     if let Some(parent) = std::path::Path::new(path).parent() {
         command.current_dir(parent);
     }
-    command.spawn().map_err(|error| error.to_string())?;
+    super::windows_process_launch::spawn(command).map_err(|error| error.to_string())?;
     Ok(())
 }
 

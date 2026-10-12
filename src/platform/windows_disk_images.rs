@@ -94,7 +94,8 @@ fn run(script: &str, path: Option<&str>) -> Result<String, String> {
     if let Some(path) = path {
         command.env("OXYDE_DISK_IMAGE_PATH", path);
     }
-    let output = command.output().map_err(|error| error.to_string())?;
+    let output = super::windows_process_launch::output(command)
+        .map_err(|error| error.to_string())?;
     if !output.status.success() {
         return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
     }

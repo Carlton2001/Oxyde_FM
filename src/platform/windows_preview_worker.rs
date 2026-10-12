@@ -64,13 +64,12 @@ impl Worker {
         unsafe { CreatePipe(&mut read, &mut write, None, 2 * 1024 * 1024) }.map_err(native)?;
         let output = std::fs::File::from(unsafe { OwnedHandle::from_raw_handle(read.0) });
         let input = std::fs::File::from(unsafe { OwnedHandle::from_raw_handle(write.0) });
-        let child = command
+        command
             .stdin(Stdio::piped())
             .stdout(Stdio::from(input))
             .stderr(Stdio::null())
-            .creation_flags(0x08000000)
-            .spawn()?;
-        drop(command); // Close the parent's copy of the pipe writer.
+            .creation_flags(0x08000000);
+        let child = super::windows_process_launch::spawn(command)?;
         let mut worker = Self { child, _job: job };
         unsafe {
             AssignProcessToJobObject(
@@ -104,7 +103,7 @@ impl Drop for Worker {
     }
 }
 
-fn job(memory_bytes: usize) -> io::Result<OwnedHandle> {
+pub(super) fn job(memory_bytes: usize) -> io::Result<OwnedHandle> {
     let raw = unsafe { CreateJobObjectW(None, None) }.map_err(native)?;
     let owned = unsafe { OwnedHandle::from_raw_handle(raw.0) };
     let mut info = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();

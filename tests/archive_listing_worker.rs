@@ -12,6 +12,9 @@ mod windows_archive_worker;
 #[allow(dead_code)]
 #[path = "../src/platform/windows_preview_worker.rs"]
 mod windows_preview_worker;
+#[allow(dead_code)]
+#[path = "../src/platform/windows_process_launch.rs"]
+mod windows_process_launch;
 use models::error::{ArchiveLimitFailure, ArchiveLimitKind, ArchiveListingFailure};
 use std::io::Write;
 use std::path::Path;
