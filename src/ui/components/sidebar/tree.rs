@@ -83,7 +83,10 @@ pub(super) fn render_sidebar_tree(
         .w_full()
         .h_full()
         .bg(theme.sidebar)
-        .on_scroll_wheel(_cx.listener(|_, _, _, cx| cx.notify()))
+        .on_scroll_wheel(_cx.listener(|_, _, window, cx| {
+            crate::ui::components::tooltip::hover::dismiss(window, cx);
+            cx.notify();
+        }))
         // Inset the virtual list itself so selection backgrounds keep both margins.
         .overflow_hidden()
         .relative()
@@ -99,6 +102,10 @@ pub(super) fn render_sidebar_tree(
                         .left(rems(0.5))
                         .right(rems(1.125)) // 12 px scrollbar track + 6 px clear margin.
                         .overflow_hidden()
+                        .child(crate::ui::components::tooltip::hover::region_container(
+                            handle.clone(), crate::ui::components::tooltip::hover::HoverRegion::DirectoryTree,
+                            px(0.0), px(0.0), _cx,
+                        ))
                         .child(div()
                         .relative()
                         .h_full()

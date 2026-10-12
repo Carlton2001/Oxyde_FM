@@ -3,6 +3,7 @@ use super::menus::{directory_context_menu, drive_context_menu, location_context_
 use super::{pinned_display_name, sidebar_paths_equal, sidebar_item_height, sidebar_row_h};
 use crate::ui::app::{ContextMenuContent, ContextMenuInstance, FileDragData, FileDragPreview, OxydeApp};
 use crate::ui::components::tooltip::Tooltip;
+use crate::ui::components::tooltip::hover::{HoverRegion, SharedTooltipExt};
 use crate::ui::i18n::{I18nContext, Message};
 use crate::ui::scale::logical;
 use crate::ui::theme::OxydeTheme;
@@ -73,9 +74,9 @@ pub(super) fn render_sidebar_rows(
                     .when(show_tooltips, |d| {
                         let name = pinned_display_name(item, cx.i18n());
                         if path == "__network_vincinity__" || path == "trash://" {
-                            d.tooltip(Tooltip::text(name))
+                            d.shared_tooltip(h.clone(), HoverRegion::DirectoryTree, format!("pinned:{path}"), cx, Tooltip::text(name))
                         } else {
-                            d.tooltip(Tooltip::with_meta(name, path.clone()))
+                            d.shared_tooltip(h.clone(), HoverRegion::DirectoryTree, format!("pinned:{path}"), cx, Tooltip::with_meta(name, path.clone()))
                         }
                     })
                     // Left click → select + navigate
@@ -192,7 +193,7 @@ pub(super) fn render_sidebar_rows(
                     .items_center()
                     .relative().when(is_sel, |d| d.bg(sel_bg).child(div().absolute().left_0().top_0().bottom_0().w(rems(0.1875)).bg(theme.accent)))
                     .hover(move |s| s.bg(hov_bg))
-                    .when(show_tooltips, |d| d.tooltip(Tooltip::for_drive(label.clone(), drive.clone())))
+                    .when(show_tooltips, |d| d.shared_tooltip(h.clone(), HoverRegion::DirectoryTree, format!("drive:{path}"), cx, Tooltip::for_drive(label.clone(), drive.clone())))
                     // Left click → select + navigate (single) / toggle (double)
                     .on_mouse_down(MouseButton::Left, {
                         let h = h.clone(); let p = path.clone();
@@ -329,7 +330,7 @@ pub(super) fn render_sidebar_rows(
                     .when(is_dimmed, |d| d.opacity(0.5))
                     .relative().when(is_sel, |d| d.bg(sel_bg).child(div().absolute().left_0().top_0().bottom_0().w(rems(0.1875)).bg(theme.accent)))
                     .hover(move |s| s.bg(hov_bg))
-                    .tooltip(Tooltip::with_meta(node.name.clone(), path.clone()))
+                    .when(show_tooltips, |d| d.shared_tooltip(h.clone(), HoverRegion::DirectoryTree, format!("directory:{path}"), cx, Tooltip::with_meta(node.name.clone(), path.clone())))
                     // Left click → select + navigate / toggle on double
                     .on_mouse_down(MouseButton::Left, {
                         let h = h.clone(); let p = path.clone();

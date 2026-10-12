@@ -2,6 +2,10 @@ mod assets;
 mod presentation;
 mod preview;
 mod video;
+mod placement;
+pub(crate) mod hover;
+mod pdf_cache;
+mod position;
 
 use video::CancelVideoPreview;
 use crate::ui::components::icons::{get_preview_type, PreviewType};
@@ -9,6 +13,10 @@ use crate::ui::format::format_date;
 use crate::ui::i18n::{I18nContext, Message};
 use gpui::*;
 use std::sync::Arc;
+
+pub(crate) fn invalidate_pdf_preview(path: &str) {
+    pdf_cache::invalidate(path);
+}
 
 /// Un composant de bulle d'aide (Tooltip) dans le style Oxyde.
 pub struct Tooltip {
@@ -18,6 +26,7 @@ pub struct Tooltip {
     shortcut: Option<SharedString>,
     file_info: Option<FileInfo>,
     preview_view: Option<Entity<PreviewTask>>,
+    fixed_bounds: Option<std::rc::Rc<std::cell::Cell<Bounds<Pixels>>>>,
 }
 
 struct FileInfo {
@@ -35,6 +44,16 @@ enum PreviewData {
 }
 
 impl Tooltip {
+    pub(super) fn ready_for_handover(&self, cx: &mut App) -> bool {
+        self.preview_view.as_ref().map(|preview| preview.read(cx).clone())
+            .is_none_or(|preview| preview.ready_for_handover(cx))
+    }
+    pub(crate) fn fixed_path(title: SharedString, bounds: std::rc::Rc<std::cell::Cell<Bounds<Pixels>>>) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
+        move |_, cx| cx.new(|_| Self {
+            title: title.clone(), wrap_title: true, meta: None, shortcut: None,
+            file_info: None, preview_view: None, fixed_bounds: Some(bounds.clone()),
+        }).into()
+    }
     pub fn for_drive(name: String, drive: oxyde_lib::models::DriveInfo) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
         move |_, cx| cx.new(|_| DriveTooltip { name: name.clone().into(), drive: drive.clone() }).into()
     }
@@ -47,7 +66,7 @@ impl Tooltip {
                     tooltip.shortcut = Some(if app.read(cx).shift_delete { "Shift+Del" } else { "Del" }.into());
                     cx.notify();
                 }).detach();
-                Self { title, wrap_title: false, meta: None, shortcut: Some(if window.modifiers().shift { "Shift+Del" } else { "Del" }.into()), file_info: None, preview_view: None }
+                Self { title, wrap_title: false, meta: None, shortcut: Some(if window.modifiers().shift { "Shift+Del" } else { "Del" }.into()), file_info: None, fixed_bounds: None, preview_view: None }
             }).into()
         }
     }
@@ -68,7 +87,7 @@ impl Tooltip {
         move |_, cx| cx.new(|_| Self {
             title: file.name.clone().into(), wrap_title: false, meta: None, shortcut: None,
             file_info: Some(FileInfo { location: None, network: Some(file.clone()), ext: "Réseau".into(), size: (0, false, false), date: 0 }),
-            preview_view: None,
+            fixed_bounds: None, preview_view: None,
         }).into()
     }
     /// Keep action labels and their optional keyboard shortcut on one line.
@@ -80,7 +99,7 @@ impl Tooltip {
         move |_, cx| {
             cx.new(|_| Self {
                 title: title.clone(), wrap_title: false, meta: None, shortcut: shortcut.clone(),
-                file_info: None, preview_view: None,
+                file_info: None, fixed_bounds: None, preview_view: None,
             }).into()
         }
     }
@@ -109,7 +128,7 @@ impl Tooltip {
                 meta: None,
                 shortcut: None,
                 file_info: None,
-                preview_view: None,
+                fixed_bounds: None, preview_view: None,
             })
             .into()
         }
@@ -129,7 +148,7 @@ impl Tooltip {
                 meta: Some(meta.clone()),
                 shortcut: None,
                 file_info: None,
-                preview_view: None,
+                fixed_bounds: None, preview_view: None,
             })
             .into()
         }
@@ -155,7 +174,7 @@ impl Tooltip {
                     size,
                     date,
                 }),
-                preview_view: None,
+                fixed_bounds: None, preview_view: None,
             })
             .into()
         }
@@ -233,6 +252,7 @@ impl Tooltip {
                 meta: None,
                 shortcut: None,
                 file_info: Some(FileInfo { location, network: None, ext, size, date }),
+                fixed_bounds: None,
                 preview_view,
             }
         })
@@ -251,6 +271,7 @@ struct DuplicateResultTooltip {
 
 #[derive(Clone)]
 pub struct PreviewTask {
+    maximum_size: Option<Size<Pixels>>,
     data: Option<PreviewData>,
     media_asset: Option<SharedString>,
     original_image: Option<std::path::PathBuf>,

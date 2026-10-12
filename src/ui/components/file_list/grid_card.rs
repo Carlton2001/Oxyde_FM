@@ -4,6 +4,7 @@ use crate::ui::app::{ContextMenuContent, ContextMenuInstance, FileDragData, File
 use crate::ui::components::{paths_match, with_grid_sort, oxyde_context_menu_items};
 use crate::ui::components::icons::render_file_icon;
 use crate::ui::components::tooltip::Tooltip;
+use crate::ui::components::tooltip::hover::SharedTooltipExt;
 use crate::ui::i18n::{I18nContext, Message};
 use crate::ui::scale::logical;
 use crate::ui::theme::OxydeTheme;
@@ -97,11 +98,11 @@ pub(super) fn render_grid_card(params: GridCardParams<'_>, cx: &mut App) -> Stat
         })
         .group("file-grid-card")
         .relative().when(!is_selected, |d| d.hover(|d| d.bg(theme.hover)))
-        .when(show_tooltips && file.original_path.is_some(), |d| d.tooltip(Tooltip::for_trash(file.clone(), ext_tt.clone(), show_media_previews)))
-                .when(show_tooltips && network_entry(file), |d| d.tooltip(Tooltip::for_network(file.clone())))
-        .when(show_tooltips && search_results, |d| d.tooltip(Tooltip::for_search_result(file.clone(), ext_tt.clone(), show_media_previews)))
+        .when(show_tooltips && file.original_path.is_some(), |d| d.file_tooltip(h.clone(), pid.clone(), path.clone(), cx, Tooltip::for_trash(file.clone(), ext_tt.clone(), show_media_previews)))
+                .when(show_tooltips && file.original_path.is_none() && network_entry(file), |d| d.file_tooltip(h.clone(), pid.clone(), path.clone(), cx, Tooltip::for_network(file.clone())))
+        .when(show_tooltips && file.original_path.is_none() && !network_entry(file) && search_results, |d| d.file_tooltip(h.clone(), pid.clone(), path.clone(), cx, Tooltip::for_search_result(file.clone(), ext_tt.clone(), show_media_previews)))
                 .when(show_tooltips && file.original_path.is_none() && !search_results && !network_entry(file) && show_media_previews, |d| {
-            d.tooltip(Tooltip::for_file_full(
+            d.file_tooltip(h.clone(), pid.clone(), path.clone(), cx, Tooltip::for_file_full(
                 file_name_tt.clone(),
                 path_tt.clone(),
                 ext_tt.clone(),
@@ -110,7 +111,7 @@ pub(super) fn render_grid_card(params: GridCardParams<'_>, cx: &mut App) -> Stat
             ))
         })
         .when(show_tooltips && file.original_path.is_none() && !search_results && !network_entry(file) && !show_media_previews, |d| {
-            d.tooltip(Tooltip::for_file_no_preview(
+            d.file_tooltip(h.clone(), pid.clone(), path.clone(), cx, Tooltip::for_file_no_preview(
                 file_name_tt,
                 ext_tt,
                 size_tt,

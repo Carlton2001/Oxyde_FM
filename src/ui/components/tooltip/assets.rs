@@ -14,7 +14,7 @@ impl Asset for TooltipPreviewAsset {
     ) -> impl std::future::Future<Output = Self::Output> + Send + 'static {
         let path = source.to_string();
         let task = crate::ui::preview_jobs::load(move || {
-            let result = ::oxyde_lib::platform::platform().pdf_thumbnail(path);
+            let result = super::pdf_cache::load(path);
             result.map_err(|error| {
                 log::warn!("Could not load tooltip media preview: {error}");
                 ImageCacheError::Asset(error.to_string().into())
@@ -24,7 +24,7 @@ impl Asset for TooltipPreviewAsset {
             let image = task
                 .await
                 .map_err(|error| ImageCacheError::Asset(error.into()))?;
-            Ok(Arc::new(RenderImage::new(vec![image::Frame::new(image)])))
+            Ok(image)
         }
     }
 }

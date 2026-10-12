@@ -523,8 +523,11 @@ pub fn render_top_bar(
                             part.to_string()
                         };
 
+                        let segment_bounds = std::rc::Rc::new(std::cell::Cell::new(Bounds::<Pixels>::default()));
                         let seg = div()
                             .id(SharedString::from(format!("breadcrumb-{}-{}", p_id, index)))
+                            .relative()
+                            .child(canvas({ let bounds = segment_bounds.clone(); move |rect, _, _| bounds.set(rect) }, |_, _, _, _| {}).absolute().size_full())
                             .flex_none()
                             .h(rems(1.5))
                             .px(rems(0.375))
@@ -588,10 +591,11 @@ pub fn render_top_bar(
                                 }
                             })
                             .on_mouse_down(MouseButton::Right, {
+                                let bounds = segment_bounds.clone();
                                 let h = handle.clone();
                                 let path = target_path.clone();
                                 let p = pane_id.clone();
-                                move |event, _, cx| {
+                                move |_, _, cx| {
                                     cx.stop_propagation();
                                     let item = crate::ui::components::dropdown::DropdownItem {
                                         label: cx.i18n().text(crate::ui::i18n::Message::CopyPath).to_string(),
@@ -637,7 +641,7 @@ pub fn render_top_bar(
                                     h.update(cx, |this, cx| {
                                         this.context_menus.clear();
                                         this.context_menus.push(crate::ui::app::ContextMenuInstance {
-                                            position: event.position,
+                                            position: point(bounds.get().left(), bounds.get().bottom() + crate::ui::scale::rem_pixels(rems(0.25))),
                                             content: crate::ui::app::ContextMenuContent::Items(items, None),
                                             scroll_handle: UniformListScrollHandle::new(),
                                             width: px(0.0), bottom_padding: 3.0, open_left: false,

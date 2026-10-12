@@ -5,6 +5,7 @@ use gpui::*;
 
 struct GridThumbnailAsset;
 pub(crate) fn invalidate_thumbnail(path: &str, cx: &mut App) {
+    crate::ui::components::tooltip::invalidate_pdf_preview(path);
     cx.remove_asset::<GridThumbnailAsset>(&SharedString::from(path.to_string()));
 }
 

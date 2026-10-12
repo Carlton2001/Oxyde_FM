@@ -145,6 +145,7 @@ impl OxydeApp {
                 label.clone(),
             )
             .selected(is_tab_active)
+            .when(self.context_menus.is_empty(), |tab| tab.tooltip_path(tab_data.path.clone()))
             .position(position)
             .icon(tab_icon.clone())
             .on_click({

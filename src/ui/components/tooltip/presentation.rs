@@ -1,5 +1,6 @@
-use super::preview::fitted_preview_size;
-use super::{DriveTooltip, DuplicateResultTooltip, PreviewData, Tooltip};
+use super::placement::PreviewTooltip;
+use super::position::CursorTooltip;
+use super::{DriveTooltip, DuplicateResultTooltip, Tooltip};
 use crate::ui::format::{format_date, format_size};
 use crate::ui::i18n::{FluentArgs, I18nContext, Message};
 use crate::ui::scale::rem_pixels;
@@ -162,10 +163,10 @@ impl Render for DriveTooltip {
         } else {
             body = body.child(div().text_size(rems(0.6875)).text_color(theme.text_muted).child(self.drive.path.clone()));
         }
-        div().pl(rems(0.5)).pt(rems(0.625)).child(div().bg(theme.surface).text_color(theme.text)
+        CursorTooltip::new(div().bg(theme.surface).text_color(theme.text)
             .font_family("Inter").font_weight(crate::ui::style::DEFAULT_FONT_WEIGHT)
             .border(rems(0.0625)).border_color(theme.border).rounded_md().shadow(crate::ui::style::rem_shadow(true))
-            .px(rems(0.75)).py(rems(0.5)).child(body))
+            .px(rems(0.75)).py(rems(0.5)).child(body).into_any_element())
     }
 }
 
@@ -232,16 +233,8 @@ impl Render for Tooltip {
             let line = window.text_system().shape_line(self.title.clone(), rem_pixels(rems(0.75)), &[TextRun {
                 len: self.title.len(), font: font.clone(), color: theme.accent, background_color: None, underline: None, strikethrough: None,
             }], None);
-            let preview_width = self.preview_view.as_ref().map(|view| view.read(cx).clone())
-                .map(|preview| {
-                    preview.loaded_image(window, cx)
-                        .map(|image| fitted_preview_size(&image, maximum_width - chrome).width)
-                        .unwrap_or_else(|| if matches!(preview.data, Some(PreviewData::Text(_))) { rem_pixels(rems(21.875)).min(maximum_width - chrome) } else { px(0.0) })
-                })
-                .unwrap_or(px(0.0));
-            // Prefer the preview width, then widen only as needed to show the
-            // complete filename on two lines, keeping the extension together.
-            let preferred_width = if preview_width > px(0.0) { preview_width } else { line.width };
+            // Keep filename wrapping and horizontal placement independent of loading.
+            let preferred_width = line.width;
             tooltip_width = (preferred_width.max(rem_pixels(rems(14.0))) + chrome).min(maximum_width);
             let wrap = |width: Pixels| filename_line_ranges(&self.title, (width - chrome).as_f32().max(1.0), |index| line.x_for_index(index).as_f32());
             if wrap(tooltip_width).len() > 2 {
@@ -270,37 +263,46 @@ impl Render for Tooltip {
             tooltip_width = (line.width + chrome + px(1.0)).min(maximum_width);
             location_line_ranges(&self.title, (tooltip_width - chrome - px(1.0)).as_f32().max(1.0), |index| line.x_for_index(index).as_f32())
                 .into_iter().map(|range| self.title[range].to_string().into()).collect()
+        } else if let Some(meta) = &self.meta {
+            // Resolve the width before laying out percentage-width flex rows.
+            // Standalone tooltips must not inherit a host row's line height.
+            let measure = |text: SharedString, font_size: Rems, weight: FontWeight| {
+                let mut font = window.text_style().font();
+                font.family = "Inter".into(); font.weight = weight; font.features = TNUM.clone();
+                window.text_system().shape_line(text.clone(), rem_pixels(font_size), &[TextRun {
+                    len: text.len(), font, color: theme.text, background_color: None, underline: None, strikethrough: None,
+                }], None).width
+            };
+            let title_width = measure(self.title.clone(), rems(0.75), FontWeight::MEDIUM);
+            let meta_width = meta.lines().map(|line| measure(line.to_string().into(), rems(0.6875), crate::ui::style::DEFAULT_FONT_WEIGHT))
+                .fold(px(0.0), |width, line| width.max(line));
+            tooltip_width = (title_width.max(meta_width) + chrome).min(maximum_width);
+            vec![self.title.clone()]
         } else {
             vec![self.title.clone()]
         };
 
         let mut box_div = div()
             .max_w(tooltip_width)
-            .when(self.file_info.is_some() || self.wrap_title, |tooltip| tooltip.w(tooltip_width))
-            .bg(theme.surface)
+            .when(self.file_info.is_some() || self.wrap_title || self.meta.is_some(), |tooltip| tooltip.w(tooltip_width))
             .border(rems(0.0625))
-            .border_color(theme.border)
-            .rounded_md()
-            .shadow(crate::ui::style::rem_shadow(true))
+            .border_color(gpui::transparent_black())
+            .when(self.preview_view.is_none(), |this| this
+                .bg(theme.surface)
+                .border_color(theme.border)
+                .rounded_md()
+                .shadow(crate::ui::style::rem_shadow(true)))
             .font_family("Inter")
             .font_weight(crate::ui::style::DEFAULT_FONT_WEIGHT)
+            .line_height(relative(1.25))
             .py_2()
             .px_3()
             .flex()
             .flex_col()
             .gap(rems(0.25))
-            .when_some(self.preview_view.clone(), |this, view| {
-                this.child(
-                    div()
-                        .mb_2()
-                        .pb_2()
-                        .border_b(rems(0.0625))
-                        .border_color(theme.border)
-                        .child(view),
-                )
-            })
             .child(
                 div()
+                    .flex_none()
                     .w_full()
                     .min_w_0()
                     .text_color(if self.file_info.is_some() {
@@ -325,6 +327,7 @@ impl Render for Tooltip {
             .when_some(self.meta.clone(), |this, meta| {
                 this.child(
                     div()
+                        .flex_none()
                         .max_w(rems(21.875))
                         .text_color(theme.text_muted)
                         .text_size(rems(0.6875))
@@ -385,7 +388,15 @@ impl Render for Tooltip {
         box_div.text_style().font_features = Some(TNUM.clone());
 
         // Décalage pour éviter que le tooltip n'apparaisse exactement sous le pointeur de la souris
-        div().pl(rems(0.5)).pt(rems(0.625)).child(box_div)
+        if let Some(preview) = self.preview_view.clone() {
+            PreviewTooltip::new(box_div.into_any_element(), preview).into_any_element()
+        } else {
+            if let Some(bounds) = self.fixed_bounds.clone() {
+                CursorTooltip::anchored(box_div.into_any_element(), bounds).into_any_element()
+            } else {
+                CursorTooltip::new(box_div.into_any_element()).into_any_element()
+            }
+        }
     }
 }
 

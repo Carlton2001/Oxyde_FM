@@ -72,6 +72,7 @@ pub struct Tab {
     selected: bool,
     position: TabPosition,
     label: SharedString,
+    tooltip_path: Option<SharedString>,
     icon: Option<TabIcon>,
     on_click: Option<Box<dyn Fn(&mut Window, &mut App) + 'static>>,
     on_middle_click: Option<Box<dyn Fn(&mut Window, &mut App) + 'static>>,
@@ -89,6 +90,7 @@ impl Tab {
             selected: false,
             position: TabPosition::First,
             label: label.into(),
+            tooltip_path: None,
             icon: None,
             on_click: None,
             on_middle_click: None,
@@ -102,6 +104,11 @@ impl Tab {
 
     pub fn selected(mut self, selected: bool) -> Self {
         self.selected = selected;
+        self
+    }
+
+    pub fn tooltip_path(mut self, path: impl Into<SharedString>) -> Self {
+        self.tooltip_path = Some(path.into());
         self
     }
 
@@ -169,7 +176,7 @@ impl IntoElement for Tab {
 }
 
 impl RenderOnce for Tab {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let theme = *cx.theme();
         let (text_color, bg_color) = if self.selected {
             (theme.text, theme.tab_active)
@@ -189,6 +196,14 @@ impl RenderOnce for Tab {
             .text_size(rems(0.8125))
             .font_weight(crate::ui::style::DEFAULT_FONT_WEIGHT)
             .group("tab");
+
+        if let Some(path) = self.tooltip_path {
+            let state = window.use_keyed_state(SharedString::from(format!("tab-path-bounds-{:?}", self.id)), cx,
+                |_, _| std::rc::Rc::new(std::cell::Cell::new(Bounds::<Pixels>::default())));
+            let bounds = state.read(cx).clone();
+            container = container.tooltip(crate::ui::components::tooltip::Tooltip::fixed_path(path, bounds.clone()))
+                .child(canvas(move |rect, _, _| bounds.set(rect), |_, _, _, _| {}).absolute().size_full());
+        }
 
         if let Some(on_click) = self.on_click {
             container = container

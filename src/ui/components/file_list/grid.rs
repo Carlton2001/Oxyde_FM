@@ -362,6 +362,8 @@ pub(super) fn render_grid_file_list(
         .flex_col()
         .relative()
         .pb(px(status_bar_height()))
+        .on_scroll_wheel(|_, window, cx| crate::ui::components::tooltip::hover::dismiss(window, cx))
+        .child(crate::ui::components::tooltip::hover::container(handle.clone(), pane_id.clone(), px(0.0), px(status_bar_height()), cx))
         .overflow_hidden()
         .bg(if active {
             theme.active_background

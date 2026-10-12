@@ -127,6 +127,8 @@ pub(super) fn render_details_file_list(
     let folder_subdirectory_flags = view.folder_has_subdirs.clone();
 
     let mut container = div()
+        .on_scroll_wheel(|_, window, cx| crate::ui::components::tooltip::hover::dismiss(window, cx))
+        .child(crate::ui::components::tooltip::hover::container(handle.clone(), pane_id.clone(), px(crate::ui::style::column_header_height()), px(status_bar_height()), cx))
         .flex_1()
         .min_h_0()
         .flex()

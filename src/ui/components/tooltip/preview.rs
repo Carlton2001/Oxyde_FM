@@ -13,6 +13,22 @@ use std::time::Duration;
 const PREVIEW_LOADING_DELAY: Duration = Duration::from_secs(1);
 
 impl PreviewTask {
+    pub(super) fn ready_for_handover(&self, cx: &mut App) -> bool {
+        // Video players share one admission slot: keeping the old player alive
+        // would prevent its replacement from producing a first frame.
+        if self._video_cancellation.is_some() { return true; }
+        // Keep the old, internally consistent bubble until the replacement has
+        // content or a terminal message. The existing loading deadline ensures
+        // that a slow preview does not leave the old filename visible forever.
+        if self.loading_delay_elapsed { return true; }
+        if let Some(source) = &self.media_asset {
+            return cx.fetch_asset::<TooltipPreviewAsset>(source).is_some();
+        }
+        if let Some(source) = &self.original_image {
+            return cx.fetch_asset::<TooltipImageAsset>(source).is_some();
+        }
+        self.data.is_some() || self.message.is_some()
+    }
     pub(super) fn loaded_image(&self, window: &mut Window, cx: &mut App) -> Option<Arc<RenderImage>> {
         if let Some(source) = &self.media_asset {
             return window
@@ -63,6 +79,7 @@ impl PreviewTask {
             let path = std::path::PathBuf::from(path);
             retain_tooltip_asset(TooltipAssetSource::Image(path.clone()), cx);
             return Self {
+                maximum_size: None,
                 data: None,
                 media_asset: None,
                 original_image: Some(path),
@@ -75,6 +92,7 @@ impl PreviewTask {
             let path = SharedString::from(path);
             retain_tooltip_asset(TooltipAssetSource::Pdf(path.clone()), cx);
             return Self {
+                maximum_size: None,
                 data: None,
                 media_asset: Some(path),
                 original_image: None,
@@ -276,6 +294,7 @@ impl PreviewTask {
         .detach();
 
         Self {
+            maximum_size: None,
             data: None,
             media_asset: None,
             original_image: None,
@@ -299,7 +318,13 @@ impl Render for PreviewTask {
         if let Some(image) = self.loaded_image(window, cx) {
             let maximum = rem_pixels(rems(24.875))
                 .min((window.viewport_size().width - rem_pixels(rems(3.625))).max(px(1.0)));
-            let size = fitted_preview_size(&image, maximum);
+            let mut size = fitted_preview_size(&image, maximum);
+            if let Some(limit) = self.maximum_size {
+                let height = (limit.height - rem_pixels(rems(2.0))).max(px(1.0));
+                let scale = (limit.width / size.width).min(height / size.height).min(1.0);
+                size.width *= scale;
+                size.height *= scale;
+            }
             let notice = self.preview_message(window, cx);
             return div()
                 .w_full()
@@ -332,7 +357,7 @@ impl Render for PreviewTask {
                     .into_any_element(),
                 PreviewData::Text(t) => div()
                     .max_w(rems(21.875))
-                    .max_h(rems(12.5))
+                    .max_h(self.maximum_size.map(|limit| limit.height).unwrap_or_else(|| rem_pixels(rems(12.5))).min(rem_pixels(rems(12.5))))
                     .overflow_hidden()
                     .rounded_md()
                     .bg(theme.active_background)
