@@ -4,16 +4,16 @@ multi_agent = true
 [agents]
 enabled = true
 default_subagent_model = "gpt-6.1-sol"
-default_subagent_reasoning_effort = "medium"
+default_subagent_reasoning_effort = "low"
 
-[agents.explorer]
-description = "Analyse le code Rust et les dépendances sans modifier les fichiers."
-config_file = "agents/explorer.toml"
+[agents.security_explorer]
+description = "Analyse les preuves et limites de sécurité sans modifier le code."
+config_file = "agents/security_explorer.toml"
 
-[agents.implementer]
-description = "Effectue les refactorisations Rust en préservant le comportement."
-config_file = "agents/implementer.toml"
+[agents.security_implementer]
+description = "Implémente une correction de sécurité délimitée et ses tests."
+config_file = "agents/security_implementer.toml"
 
-[agents.reviewer]
-description = "Vérifie les changements, les tests et les risques de régression."
-config_file = "agents/reviewer.toml"
+[agents.security_reviewer]
+description = "Vérifie garanties, scénarios adverses et limites du changement."
+config_file = "agents/security_reviewer.toml"
