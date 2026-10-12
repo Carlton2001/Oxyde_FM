@@ -57,3 +57,9 @@ Ces points restent ouverts, mais n'imposent pas automatiquement un développemen
 Exemple de demande de reprise : « Reprends sur master. Lis AGENTS.md et AUDIT_SECURITE_RELIQUAT.md. Traite uniquement R1 ; précise les workers concernés, les critères de fin et les limites conservées avant de coder. Consulte AUDIT_SECURITE.md pour les preuves utiles. »
 
 Ce fichier n'engage aucune implémentation. Création documentaire après la validation visuelle ; tests automatisés non relancés.
+
+## Preuve partielle R1 — groupe 1, 12 octobre 2026
+
+Archive-I/O Windows Decode/Encode : LPAC sans capacité ni repli, job avant reprise, sélection explicite des handles IPC ; course d'héritage corrigée pour les launchers Command Oxyde recensés. Runtime privé RX, provenance/identités retenues et nettoyage ciblé. Refus privés/HKCU/droits dangereux et témoin différentiel AAP démontrés. Validation : 908 tests réussis, aucun échec, 17 ignorés préexistants ; check/build sans avertissement, clippy avec avertissements préexistants. Commits et preuves : [rapport groupe 1](security/AUDIT_GROUPE_1_RESULTATS.md).
+
+**R1 reste ouvert** : autres workers, TCP non exercé, ACL explicitement accordées au sandbox, Shell/tiers hors verrou. Ces limites n'ont pas été acceptées comme clôture par l'utilisateur. Renommage refusé ; substitution d'identité non exercée. R3/R4/R6 restent ouverts. **R9 reste ouvert**, contrat distinct à décider, aucune preuve de fidélité hostile ; **R5 inchangé**, Linux non exécuté. Aucun nouveau chantier autorisé par cet addendum.

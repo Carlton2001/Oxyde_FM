@@ -2447,3 +2447,11 @@ Le worker d'indexation de recherche conserve 512 Mio privés engagés maximum, u
 **Retour utilisateur :** « Tests OK », en réponse à la reprise ciblée de suppression/historique/rafraîchissement et d'affichage de l'avertissement de recherche dans l'infobulle. Les validations précédentes des points 1, 3, 4 et 6 restent acquises. Aucun détail supplémentaire sur les variantes de fenêtre, de langue ou de volume n'est déduit de ce retour. La vérification visuelle de cette passe est terminée.
 
 **Consignation :** mise à jour documentaire uniquement, aucun changement de code ni nouvel essai. La borne automatisée reste celle du lot 67 : 782 tests réussis, aucun échec, 17 tests préexistants ignorés non activés ; check et build sans avertissement. Aucun Computer Use, suivi automatique relancé ni push. Les risques structurels et durcissements non réalisés du bilan restent ouverts.
+
+## Groupe 1 — protections partielles archive-I/O Windows — 12 octobre 2026
+
+Premier lot R1 validé par l'utilisateur, exploration et revue indépendantes. Worker codec headless sous LPAC sans capacités/repli ; job avant reprise, héritage IPC explicite et verrou partagé avec les launchers Command Oxyde recensés. Runtime privé RX avec identités retenues, comparaison de provenance et nettoyage des seuls objets détenus. Tests adverses natifs, publication et rollback conservés. Détails et matrice imposé/observé/refusé/non validé : [rapport groupe 1](security/AUDIT_GROUPE_1_RESULTATS.md).
+
+Validation actuelle sur Windows : check/build sans avertissement du projet, 908 tests réussis, zéro échec, 17 ignorés préexistants ; clippy réussi avec avertissements préexistants ; diff check réussi. L'échec initial de cache plein est évité par un TEMP/TMP privé, sans purge globale.
+
+R1 entier reste ouvert : autres workers, TCP non exercé (initialisation Winsock 10107), ACL explicites au sandbox et Shell/tiers hors verrou. Substitution d'identité non exercée, renommage effectivement refusé ; altération du même objet détectée. R3/R4/R6 restent ouverts. R9 seulement cadré, aucune fidélité hostile prouvée ni limite acceptée. Linux non validé, R5 hors périmètre. Cette preuve s'ajoute à l'historique sans réécrire les conclusions antérieures.
