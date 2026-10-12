@@ -178,13 +178,7 @@ impl OxydeApp {
         dialog.selected = index;
         dialog.percent = percent;
         dialog.value = if percent {
-            let total = dialog.drives[index].total_bytes;
-            if total == 0 {
-                "0".into()
-            } else {
-                ((config.max_size_mb as u128 * 1024 * 1024 * 100 / total as u128) as u64)
-                    .to_string()
-            }
+            capacity_percent(config.max_size_mb, dialog.drives[index].total_bytes).to_string()
         } else {
             config.max_size_mb.to_string()
         };

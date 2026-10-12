@@ -46,6 +46,15 @@ fn capacity_mb(value: &str, percent: bool, total_bytes: u64) -> Option<u64> {
     }
 }
 
+fn capacity_percent(max_size_mb: u64, total_bytes: u64) -> u64 {
+    if total_bytes == 0 {
+        return 0;
+    }
+    let total = total_bytes as u128;
+    let scaled = max_size_mb as u128 * 1024 * 1024 * 100;
+    ((scaled + total / 2) / total) as u64
+}
+
 
 pub(crate) struct PendingDelete {
     pub paths: Vec<String>,
