@@ -49,6 +49,9 @@ pub(crate) fn install_icon(path: &'static str, window: &mut Window) {
             icon,
             raw_window_handle::HasWindowHandle::window_handle(window),
         ) {
+            if let Err(error) = oxyde_lib::platform::platform().install_pointer_capture(handle.as_raw()) {
+                log::warn!("Cannot install tool pointer capture: {error}");
+            }
             oxyde_lib::platform::platform().set_application_icon(handle.as_raw(), &icon);
         }
     });

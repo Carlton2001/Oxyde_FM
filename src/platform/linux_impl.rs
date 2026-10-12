@@ -715,6 +715,15 @@ impl Platform for LinuxPlatform {
             .spawn();
     }
 
+    fn install_pointer_capture(&self, _window: raw_window_handle::RawWindowHandle) -> Result<(), String> {
+        // X11/Wayland already provide a button grab through GPUI.
+        Ok(())
+    }
+
+    fn set_window_owner(&self, _window: raw_window_handle::RawWindowHandle, _owner: raw_window_handle::RawWindowHandle) -> Result<(), String> {
+        Err("Native tool window ownership is unavailable on this platform".into())
+    }
+
     fn set_application_icon(&self, _window: raw_window_handle::RawWindowHandle, _icon_bytes: &[u8]) {
         // TODO
     }

@@ -346,15 +346,7 @@ pub(super) fn render_grid_card(params: GridCardParams<'_>, cx: &mut App) -> Stat
                     let paths = data.paths.clone();
                     let target = target.clone();
                     h.update(cx, |this, cx| {
-                        if this.drag_copy_mode {
-                            this.execute_file_copy(
-                                paths, target, cx,
-                            )
-                        } else {
-                            this.execute_file_move(
-                                paths, target, cx,
-                            )
-                        }
+                        this.execute_file_drop(paths, target, cx);
                     });
                 }
             });

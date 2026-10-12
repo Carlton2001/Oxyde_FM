@@ -33,7 +33,15 @@ impl OxydeApp {
                                         .pane_sizes
                                         .get(&p_id)
                                         .is_none_or(|old| (old.width - size.width).abs() > 1.0);
+                                    let height_changed = this.pane_sizes.get(&p_id)
+                                        .is_some_and(|old| (old.height - size.height).abs() > 1.0);
                                     this.pane_sizes.insert(p_id.clone(), size);
+                                    if height_changed {
+                                        if let Some(pane) = this.state.find_pane_mut(&p_id) {
+                                            pane.active_tab_mut().keep_cursor_visible(size);
+                                        }
+                                        cx.notify();
+                                    }
                                     if width_changed {
                                         if let Some(pane) = this.state.layout.find_pane(&p_id) {
                                             let parts = pane

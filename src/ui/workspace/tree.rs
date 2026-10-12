@@ -5,6 +5,8 @@ impl Default for TabStripState {
     fn default() -> Self {
         Self {
             scroll: ScrollHandle::new(),
+            animation_generation: Default::default(),
+            animation_target: Default::default(),
             overflow: Default::default(),
             active_id: Default::default(),
             active_index: Default::default(),

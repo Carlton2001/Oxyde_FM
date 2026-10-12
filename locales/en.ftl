@@ -597,3 +597,9 @@ shell-delete-unconfirmed = Windows did not confirm deletion of this item. The de
 
 archive-listing-metadata-limit = Cannot display the contents: the file list exceeds { $limit }. This limit applies to names and file information, not decompressed file sizes. You can try extracting with the usual limits.
 archive-listing-worker-failed = Cannot read this archive’s contents: the reading process failed or returned an invalid response. The archive has not been modified. You can retry or try extracting with the usual limits.
+
+toast-transfer-skipped = All items were skipped.
+
+properties-calculating-size = Calculating size…
+drag-new-tab = Create a new tab
+properties-loading = Loading properties…

@@ -1,16 +1,16 @@
-use super::super::{Coller, Copier, Couper, Ouvrir, OxydeApp, Renommer, Supprimer};
-use super::{general, property_presentation, shortcut};
-use crate::ui::components::modal::{action_button, Modal};
+use super::super::{Coller, Copier, Couper, Ouvrir, Renommer, Supprimer};
+use super::{general, property_presentation, shortcut, PropertiesWindow};
+use crate::ui::components::modal::action_button;
 use crate::ui::i18n::{I18nContext, Message};
 use crate::ui::theme::ThemeContext;
 use gpui::prelude::FluentBuilder;
 use gpui::*;
 
 pub(crate) fn render(
-    view: &OxydeApp,
-    handle: Entity<OxydeApp>,
+    view: &PropertiesWindow,
+    handle: Entity<PropertiesWindow>,
     window: &mut Window,
-    cx: &mut Context<OxydeApp>,
+    cx: &mut Context<PropertiesWindow>,
 ) -> impl IntoElement {
     let dialog = view.properties_dialog.as_ref().unwrap();
     let theme = *cx.theme();
@@ -18,11 +18,19 @@ pub(crate) fn render(
     let label_width = general::label_width(presentation.as_ref(), theme, window, cx);
     let mut body = div().flex().flex_col().gap(rems(0.375));
     if let Some(p) = dialog.properties.as_ref().filter(|_| !dialog.shortcut_tab) {
-        body = general::render(body, view, p, presentation.as_ref().unwrap(), label_width, theme, cx);
+        body = general::render(
+            body,
+            view,
+            p,
+            presentation.as_ref().unwrap(),
+            label_width,
+            theme,
+            cx,
+        );
     } else if dialog.shortcut_tab {
         body = shortcut::fields(body, dialog, &handle, theme, cx);
     } else if dialog.error.is_none() {
-        body = body.child(cx.i18n().text(Message::PreviewLoading));
+        body = body.child(cx.i18n().text(Message::PropertiesLoading));
     }
     let has_shortcut = dialog
         .properties
@@ -52,7 +60,6 @@ pub(crate) fn render(
             .child(div().px(rems(1.0)).py(rems(1.25)).child(body));
     }
     let keyboard = handle.clone();
-    let close = handle.clone();
     let cancel = handle.clone();
     let ok = handle.clone();
     let system = handle.clone();
@@ -64,6 +71,11 @@ pub(crate) fn render(
         .on_key_down(move |event, window, cx| {
             keyboard.update(cx, |this, cx| match event.keystroke.key.as_str() {
                 "escape" => {
+                    if !this.context_menus.is_empty() {
+                        this.context_menus.clear();
+                        cx.notify();
+                        return;
+                    }
                     if let Some(dialog) = &mut this.properties_dialog {
                         if dialog.run_menu.take().is_some() {
                             cx.notify();
@@ -156,66 +168,69 @@ pub(crate) fn render(
         .on_action(|_: &Copier, _, cx| cx.stop_propagation())
         .on_action(|_: &Coller, _, cx| cx.stop_propagation())
         .child(
-            Modal::new("file-properties", cx.i18n().text(Message::Properties), body)
-                .when(has_shortcut, |modal| {
-                    modal.body_padding(rems(0.0), rems(0.0))
-                })
-                .width(rems(28.0))
-                .title_icon("icons/settings-2.svg")
-                .header(
+            div()
+                .size_full()
+                .flex()
+                .flex_col()
+                .child(crate::ui::components::tool_window::header(
+                    "icons/settings-2.svg",
+                    cx.i18n().text(Message::Properties),
+                    window.is_maximized(),
+                    false,
+                    cx,
+                    move |window, cx| {
+                        title_close.update(cx, |this, cx| this.close_file_properties(window, cx))
+                    },
+                ))
+                .child(
+                    div()
+                        .id("properties-body")
+                        .flex_1()
+                        .min_h_0()
+                        .overflow_y_scroll()
+                        .when(!has_shortcut, |body| body.px(rems(1.0)).py(rems(1.25)))
+                        .child(body),
+                )
+                .child(
                     div()
                         .flex()
-                        .items_center()
+                        .justify_end()
                         .gap(rems(0.5))
+                        .px(rems(1.0))
+                        .py(rems(0.625))
+                        .border_t(rems(0.0625))
+                        .border_color(theme.border)
                         .child(
-                            svg()
-                                .path("icons/settings-2.svg")
-                                .size(rems(1.0))
-                                .flex_none()
-                                .text_color(theme.text_muted),
-                        )
-                        .child(div().flex_1().child(cx.i18n().text(Message::Properties)))
-                        .child(
-                            div()
-                                .id("properties-close")
-                                .child(svg().path("icons/x.svg").size(rems(1.0)))
+                            action_button("properties-system")
+                                .bg(theme.control_hover)
+                                .child(cx.i18n().text(Message::PropertiesSystem))
                                 .on_mouse_down(MouseButton::Left, move |_, window, cx| {
-                                    cx.stop_propagation();
-                                    title_close.update(cx, |this, cx| {
+                                    system.update(cx, |this, cx| {
+                                        this.system_file_properties(window, cx)
+                                    });
+                                }),
+                        )
+                        .child(
+                            action_button("properties-cancel")
+                                .track_focus(&dialog.focus)
+                                .bg(theme.control_hover)
+                                .child(cx.i18n().text(Message::Cancel))
+                                .on_mouse_down(MouseButton::Left, move |_, window, cx| {
+                                    cancel.update(cx, |this, cx| {
                                         this.close_file_properties(window, cx)
                                     });
                                 }),
+                        )
+                        .child(
+                            action_button("properties-ok")
+                                .track_focus(&dialog.ok_focus)
+                                .bg(theme.accent)
+                                .text_color(theme.text_on_accent)
+                                .child(cx.i18n().text(Message::TrashSettingsOk))
+                                .on_mouse_down(MouseButton::Left, move |_, window, cx| {
+                                    ok.update(cx, |this, cx| this.accept_properties(window, cx));
+                                }),
                         ),
-                )
-                .on_backdrop_dismiss(move |window, cx| {
-                    close.update(cx, |this, cx| this.close_file_properties(window, cx));
-                })
-                .action(
-                    action_button("properties-system")
-                        .bg(theme.control_hover)
-                        .child(cx.i18n().text(Message::PropertiesSystem))
-                        .on_mouse_down(MouseButton::Left, move |_, _, cx| {
-                            system.update(cx, |this, cx| this.system_file_properties(cx));
-                        }),
-                )
-                .action(
-                    action_button("properties-cancel")
-                        .track_focus(&dialog.focus)
-                        .bg(theme.control_hover)
-                        .child(cx.i18n().text(Message::Cancel))
-                        .on_mouse_down(MouseButton::Left, move |_, window, cx| {
-                            cancel.update(cx, |this, cx| this.close_file_properties(window, cx));
-                        }),
-                )
-                .action(
-                    action_button("properties-ok")
-                        .track_focus(&dialog.ok_focus)
-                        .bg(theme.accent)
-                        .text_color(theme.text_on_accent)
-                        .child(cx.i18n().text(Message::TrashSettingsOk))
-                        .on_mouse_down(MouseButton::Left, move |_, window, cx| {
-                            ok.update(cx, |this, cx| this.accept_properties(window, cx));
-                        }),
                 ),
         )
         .when(dialog.saving, |root| {

@@ -55,7 +55,6 @@ pub(super) fn render_grid_file_list(
     let columns = grid.columns;
     let card_width = grid.cell_width - logical(4.0);
     let rows = display_rows(&files, tab.group_by_date, &tab.collapsed_date_groups, columns);
-    let row_count = rows.len();
     let empty_message = if !files.is_empty() {
         None
     } else if !tab.files.is_empty() {
@@ -201,38 +200,25 @@ pub(super) fn render_grid_file_list(
                         .collect::<Vec<_>>()
                 }
             };
-        let list = if tab.group_by_date {
+        let list = {
             let scroll = tab.list_scroll.0.borrow().base_handle.clone();
             let viewport = view.pane_sizes.get(&pane_id).map(|size| size.height).unwrap_or(view.list_height).max(logical(200.0));
             let actual_viewport = scroll.bounds().size.height.as_f32();
-            let max_scroll = (crate::ui::date_groups::content_height(&rows, true) - if actual_viewport > 0.0 { actual_viewport } else { viewport }).max(0.0);
+            let max_scroll = (crate::ui::date_groups::content_height(&rows, true) + crate::ui::style::row_height() - if actual_viewport > 0.0 { actual_viewport } else { viewport }).max(0.0);
             let offset = (-scroll.offset().y.as_f32()).clamp(0.0, max_scroll);
             if scroll.offset().y.as_f32() != -offset {
                 scroll.set_offset(point(px(0.0), px(-offset)));
             }
-            let mut top = 0.0;
-            let mut start = 0;
-            while start < rows.len() && top + crate::ui::date_groups::row_height(&rows[start], true) < offset {
-                top += crate::ui::date_groups::row_height(&rows[start], true);
-                start += 1;
-            }
-            let mut end = start;
-            let mut bottom = top;
-            while end < rows.len() && bottom < offset + viewport + crate::ui::style::grid_card_row_height() {
-                bottom += crate::ui::date_groups::row_height(&rows[end], true);
-                end += 1;
-            }
+            let visible = super::grid_scroll::visible_rows(&rows, tab.group_by_date, offset, if actual_viewport > 0.0 { actual_viewport } else { viewport });
             let scroll_handle = handle.clone();
-            div().id(SharedString::from(format!("file-grid-grouped-{pane_id}")))
+            div().id(SharedString::from(if tab.group_by_date { format!("file-grid-grouped-{pane_id}") } else { format!("file-grid-{pane_id}") }))
                 .h_full().flex().flex_col().overflow_y_scroll().track_scroll(&scroll)
                 .on_scroll_wheel(move |_, _, cx| scroll_handle.update(cx, |_, cx| cx.notify()))
-                .child(div().h(px(top)).flex_none())
-                .children(render_rows(start..end, cx))
-                .child(div().h(px((crate::ui::date_groups::content_height(&rows, true) - bottom).max(0.0))).flex_none())
+                .child(div().h(px(visible.top)).flex_none())
+                .children(render_rows(visible.range, cx))
+                .child(div().h(px((crate::ui::date_groups::content_height(&rows, true) - visible.bottom).max(0.0))).flex_none())
+                .child(div().w_full().flex_none().h(px(crate::ui::style::row_height())))
                 .into_any_element()
-        } else {
-            uniform_list(SharedString::from(format!("file-grid-{pane_id}")), row_count, move |range, _, cx| render_rows(range, cx))
-                .h_full().track_scroll(&tab.list_scroll).into_any_element()
         };
         let viewport_height = tab
             .list_scroll
@@ -243,7 +229,7 @@ pub(super) fn render_grid_file_list(
             .size
             .height
             .as_f32();
-        let content_height = crate::ui::date_groups::content_height(&rows, true);
+        let content_height = crate::ui::date_groups::content_height(&rows, true) + crate::ui::style::row_height();
         let scroll_offset = -tab
             .list_scroll
             .0
@@ -257,7 +243,8 @@ pub(super) fn render_grid_file_list(
             .id(SharedString::from(format!("file-grid-scroll-{pane_id}")))
             .relative()
             .flex_1()
-            .overflow_y_scroll()
+            .min_h_0()
+            .overflow_hidden()
             .px_2()
             .pr(px(crate::ui::components::scrollbar::zed_track_width()))
             .pt_1()
@@ -369,6 +356,7 @@ pub(super) fn render_grid_file_list(
 
     div()
         .flex_1()
+        .min_h_0()
         .min_w_0()
         .flex()
         .flex_col()

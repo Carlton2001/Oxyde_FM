@@ -3,13 +3,37 @@ mod general;
 mod interactions;
 mod loading;
 mod shortcut;
+mod window;
 
-pub(crate) use dialog::render;
+pub(crate) use window::close_properties_windows;
 
 use crate::ui::components::input::TextInput;
 use crate::ui::i18n::Message;
 use gpui::{Bounds, Entity, FocusHandle, Pixels, Point};
 use oxyde_lib::models::{DriveInfo, FileProperties};
+
+pub(crate) struct PropertiesWindow {
+    owner: gpui::WeakEntity<super::OxydeApp>,
+    properties_dialog: Option<PropertiesDialog>,
+    context_menus: Vec<super::ContextMenuInstance>,
+    scrollbar_origins: std::collections::HashMap<String, Point<f32>>,
+    _subscriptions: Vec<gpui::Subscription>,
+    _calculation: Option<gpui::Task<()>>,
+    cancellation: std::sync::Arc<std::sync::atomic::AtomicBool>,
+}
+
+impl Drop for PropertiesWindow {
+    fn drop(&mut self) {
+        self.cancellation.store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+impl crate::ui::components::scrollbar::ScrollbarState for PropertiesWindow {
+    fn scrollbar_origins(&mut self) -> &mut std::collections::HashMap<String, Point<f32>> {
+        &mut self.scrollbar_origins
+    }
+    fn set_grab_offset(&mut self, _: f32) {}
+}
 
 pub(crate) struct PropertiesDialog {
     path: String,

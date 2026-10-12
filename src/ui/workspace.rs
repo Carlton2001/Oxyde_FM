@@ -191,6 +191,8 @@ pub(crate) struct CalendarFilterResult {
 }
 #[derive(Clone)]
 pub struct TabStripState {
+    pub animation_generation: std::rc::Rc<std::cell::Cell<u64>>,
+    pub animation_target: std::rc::Rc<std::cell::Cell<Option<f32>>>,
     pub scroll: ScrollHandle,
     pub overflow: std::rc::Rc<std::cell::Cell<bool>>,
     pub active_id: std::rc::Rc<std::cell::RefCell<String>>,

@@ -1,4 +1,4 @@
-use super::super::OxydeApp;
+use super::PropertiesWindow;
 use super::PropertyPresentation;
 use crate::ui::components::icons::{get_icon_type, render_file_icon};
 use crate::ui::format::{date_format, format_date, format_size};
@@ -12,7 +12,7 @@ pub(super) fn label_width(
     presentation: Option<&PropertyPresentation<'_>>,
     theme: OxydeTheme,
     window: &mut Window,
-    cx: &mut Context<OxydeApp>,
+    cx: &mut Context<PropertiesWindow>,
 ) -> f32 {
     let mut font = window.text_style().font();
     font.family = "Inter".into();
@@ -68,12 +68,12 @@ pub(super) fn divider(theme: OxydeTheme) -> Div {
 
 pub(super) fn render(
     mut body: Div,
-    view: &OxydeApp,
+    view: &PropertiesWindow,
     p: &FileProperties,
     presentation: &PropertyPresentation<'_>,
     label_width: f32,
     theme: OxydeTheme,
-    cx: &mut Context<OxydeApp>,
+    cx: &mut Context<PropertiesWindow>,
 ) -> Div {
     let dialog = view.properties_dialog.as_ref().unwrap();
     let row = |label: SharedString, value: String| {
@@ -93,7 +93,7 @@ pub(super) fn render(
     };
     let icon = get_icon_type(presentation.name, p.is_dir, Some(&p.path), false, false);
     let graphic = if let Some(drive) = &dialog.drive {
-        if cfg!(target_os = "windows") && view.use_system_icons() {
+        if cfg!(target_os = "windows") && view.use_system_icons(cx) {
             render_file_icon(
                 p.path.clone(),
                 icon,
@@ -119,7 +119,7 @@ pub(super) fn render(
             } else {
                 theme.icon_muted
             },
-            cfg!(target_os = "windows") && view.use_system_icons(),
+            cfg!(target_os = "windows") && view.use_system_icons(cx),
             true,
         )
     };
@@ -288,7 +288,7 @@ pub(super) fn render(
             .child(row(
                 cx.i18n().text(Message::ColumnSize),
                 if dialog.calculating {
-                    cx.i18n().text(Message::PreviewLoading).to_string()
+                    cx.i18n().text(Message::PropertiesCalculatingSize).to_string()
                 } else {
                     format_size(p.size, p.is_dir, p.is_calculated, cx.i18n().language())
                 },

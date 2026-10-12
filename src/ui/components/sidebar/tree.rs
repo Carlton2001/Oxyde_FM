@@ -192,7 +192,7 @@ pub(super) fn render_sidebar_tree(
         ScrollbarAxis::Horizontal,
         viewport_w,
         content_w,
-        view.sidebar_scroll_h.offset().x.as_f32(),
+        -view.sidebar_scroll_h.offset().x.as_f32(),
         matches!(view.drag_target, Some(DragTarget::SidebarH { .. })),
         "sidebar-h".to_string(),
         None,

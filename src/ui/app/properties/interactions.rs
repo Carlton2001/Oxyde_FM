@@ -1,6 +1,9 @@
-use super::super::*;
+use super::PropertiesWindow;
+use crate::ui::components::input::TextInput;
+use crate::ui::i18n::Message;
+use gpui::*;
 
-impl OxydeApp {
+impl PropertiesWindow {
     pub(super) fn select_properties_tab(
         &mut self,
         shortcut: bool,
@@ -149,7 +152,9 @@ impl OxydeApp {
                     match result {
                         Ok(()) => {
                             this.close_file_properties(window, cx);
-                            this.refresh_all(cx);
+                            if let Some(owner) = this.owner.upgrade() {
+                                owner.update(cx, |owner, cx| owner.refresh_all(cx));
+                            }
                         }
                         Err(error) => dialog.error = Some(error.to_string()),
                     }
@@ -159,5 +164,4 @@ impl OxydeApp {
         })
         .detach();
     }
-
 }

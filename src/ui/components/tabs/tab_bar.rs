@@ -49,6 +49,8 @@ impl TabBar {
         active_index: usize,
     ) -> Self {
         if *state.active_id.borrow() != active_id || state.active_index.get() != active_index {
+            state.animation_generation.set(state.animation_generation.get().wrapping_add(1));
+            state.animation_target.set(None);
             *state.active_id.borrow_mut() = active_id;
             state.active_index.set(active_index);
             state.scroll.scroll_to_item(active_index);
@@ -78,6 +80,8 @@ impl RenderOnce for TabBar {
         use crate::ui::theme::ThemeContext;
         let theme = cx.theme();
         let overflow = self.scroll_state.overflow.get();
+        let animation = self.scroll_state.clone();
+        let wheel_animation = animation.clone();
         let scroll = self.scroll_state.scroll;
         let wheel_scroll = scroll.clone();
         let measure_scroll = scroll.clone();
@@ -110,6 +114,7 @@ impl RenderOnce for TabBar {
         };
         let scroll_button = |id: &'static str, icon: &'static str, direction: f32| {
             let scroll = scroll.clone();
+            let animation = animation.clone();
             let at_edge = if direction > 0.0 {
                 scroll.offset().x >= rem_pixels(rems(-0.0625))
             } else {
@@ -119,10 +124,7 @@ impl RenderOnce for TabBar {
                 .on_mouse_down(MouseButton::Left, move |_, window, cx| {
                     cx.stop_propagation();
                     let step = (scroll.bounds().size.width * 0.75).max(rem_pixels(rems(5.0)));
-                    let x = (scroll.offset().x + step * direction)
-                        .clamp(-scroll.max_offset().x, px(0.0));
-                    scroll.set_offset(point(x, px(0.0)));
-                    window.refresh();
+                    super::scroll::smooth_scroll(animation.clone(), step * direction, window, cx);
                 })
                 .child(
                     svg()
@@ -179,10 +181,7 @@ impl RenderOnce for TabBar {
                                 };
                                 let max = wheel_scroll.max_offset().x;
                                 if max > px(0.0) && amount != px(0.0) {
-                                    let x = (wheel_scroll.offset().x + amount * 1.5)
-                                        .clamp(-max, px(0.0));
-                                    wheel_scroll.set_offset(point(x, px(0.0)));
-                                    window.refresh();
+                                    super::scroll::smooth_scroll(wheel_animation.clone(), amount * 1.5, window, cx);
                                     cx.stop_propagation();
                                 }
                             })

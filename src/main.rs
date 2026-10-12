@@ -141,6 +141,7 @@ fn main() {
                         trace_shutdown_request("native window close");
                         crate::ui::app::duplicates::close_duplicate_windows(cx);
                         crate::ui::app::advanced_search::close_advanced_search_windows(cx);
+                        crate::ui::app::properties::close_properties_windows(cx);
                         true
                     });
                     let focus_handle = app.read(cx).focus_handle.clone();
@@ -149,6 +150,9 @@ fn main() {
                         match raw_window_handle::HasWindowHandle::window_handle(window) {
                             Ok(handle) => {
                                 let platform = oxyde_lib::platform::platform();
+                                if let Err(error) = platform.install_pointer_capture(handle.as_raw()) {
+                                    log::warn!("Cannot install pointer capture: {error}");
+                                }
                                 if let Err(error) = platform.install_disk_image_autoplay_handler(handle.as_raw()) {
                                     log::warn!("Cannot install disk-image AutoPlay handler: {error}");
                                 }

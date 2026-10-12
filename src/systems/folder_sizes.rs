@@ -6,11 +6,11 @@ use std::sync::{
     Arc,
 };
 use std::time::Duration;
+mod pools;
 
 static SCAN_SLOTS: Lazy<Arc<tokio::sync::Semaphore>> =
     Lazy::new(|| Arc::new(tokio::sync::Semaphore::new(2)));
-static HDD_POOL: Lazy<Result<Arc<rayon::ThreadPool>, String>> = Lazy::new(|| make_pool(2));
-static SSD_POOL: Lazy<Result<Arc<rayon::ThreadPool>, String>> = Lazy::new(|| make_pool(16));
+static SCAN_POOLS: Lazy<Arc<pools::ScanPools>> = Lazy::new(|| Arc::new(pools::ScanPools::new()));
 
 fn make_pool(threads: usize) -> Result<Arc<rayon::ThreadPool>, String> {
     rayon::ThreadPoolBuilder::new()
@@ -89,15 +89,12 @@ pub(crate) async fn calculate(
         if !path.is_dir() {
             return Err(CommandError::PathError("Path is not a directory".into()));
         }
-        let pool = if crate::utils::hardware::is_ssd(&path) {
-            &*SSD_POOL
-        } else {
-            &*HDD_POOL
-        };
-        let pool = pool
-            .as_ref()
-            .map_err(|error| CommandError::SystemError(error.clone()))?
-            .clone();
+        // jwalk's par_bridge retains every worker in its pool until that walk
+        // ends. A second walk on the same pool would wait for the entire first
+        // directory, even though it already holds its own semaphore permit.
+        let lane = SCAN_POOLS.acquire().map_err(CommandError::SystemError)?;
+        let pool = lane.pool(crate::utils::hardware::is_ssd(&path))
+            .map_err(CommandError::SystemError)?;
         scan(&path, cancellation, pool, || {})
     })
     .await

@@ -4,6 +4,21 @@ use crate::ui::scale::{logical, rem_pixels};
 use gpui::prelude::*;
 use gpui::*;
 
+fn actionable_drop_paths(mut paths: Vec<String>, target: &str) -> Vec<String> {
+    use crate::ui::components::sidebar::sidebar_paths_equal;
+    paths.retain(|path| {
+        !sidebar_paths_equal(path, target)
+            && !std::path::Path::new(path).parent().is_some_and(|parent| {
+                sidebar_paths_equal(&parent.to_string_lossy(), target)
+            })
+    });
+    paths
+}
+
+#[cfg(test)]
+#[path = "drag/tests/drop_paths.rs"]
+mod drop_paths_tests;
+
 /// Returns true if `src` and `dst` are on different drives/volumes.
 /// On Windows this compares the root prefix (e.g. "C:" vs "D:").
 pub fn drives_differ(src: &str, dst: &str) -> bool {
@@ -67,6 +82,7 @@ fn drag_op_pill(key_hint: &str, label: &str, active: bool, theme: &OxydeTheme) -
 impl Render for FileDragPreview {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let is_copy = self.app_handle.read(cx).drag_copy_mode;
+        let new_tab = self.app_handle.read(cx).drag_new_tab;
         let theme = *cx.theme();
 
         let (icon_path, name_label) = if self.paths.len() == 1 {
@@ -141,7 +157,8 @@ impl Render for FileDragPreview {
                     div()
                         .flex()
                         .gap(rems(0.25))
-                        .child(drag_op_pill(
+                        .when(new_tab, |row| row.child(drag_op_pill("", cx.i18n().text(Message::DragNewTab).as_ref(), true, &theme)))
+                        .when(!new_tab, |row| row.child(drag_op_pill(
                             "+Ctrl",
                             cx.i18n().text(Message::DragCopy).as_ref(),
                             is_copy,
@@ -152,7 +169,7 @@ impl Render for FileDragPreview {
                             cx.i18n().text(Message::DragMove).as_ref(),
                             !is_copy,
                             &theme,
-                        )),
+                        ))),
                 ),
         )
     }
@@ -161,6 +178,10 @@ impl Render for FileDragPreview {
 impl OxydeApp {
     /// End pointer interactions, including releases missed outside the window.
     pub(crate) fn finish_pointer_drag(&mut self, cx: &mut Context<Self>) {
+        self.set_file_drag_new_tab(false, cx);
+        if let Some(panel) = self.operations_panel_view.clone() {
+            cx.defer(move |cx| panel.update(cx, |panel, cx| panel.finish_drag(cx)));
+        }
         let mut needs_notify = false;
         let workspace_layout_changed = matches!(
             self.drag_target.as_ref(),
@@ -205,6 +226,29 @@ impl OxydeApp {
 }
 
 impl OxydeApp {
+    pub(crate) fn set_file_drag_new_tab(&mut self, value: bool, cx: &mut Context<Self>) {
+        if self.drag_new_tab != value {
+            self.drag_new_tab = value;
+            cx.notify();
+        }
+    }
+
+    pub(crate) fn tab_drop_directories(&self, data: &super::FileDragData) -> Vec<String> {
+        self.state.find_pane(&data.source_pane_id)
+            .map(|pane| pane.active_tab().files.iter()
+                .filter(|file| file.is_dir && data.paths.contains(&file.path))
+                .map(|file| file.path.clone()).collect()).unwrap_or_default()
+    }
+
+    pub(crate) fn execute_file_drop(&mut self, paths: Vec<String>, target: String, cx: &mut Context<Self>) {
+        let paths = actionable_drop_paths(paths, &target);
+        if self.drag_copy_mode {
+            self.execute_file_copy(paths, target, cx);
+        } else {
+            self.execute_file_move(paths, target, cx);
+        }
+    }
+
     pub(super) fn handle_pointer_move(&mut self, e: &MouseMoveEvent, window: &mut Window, cx: &mut Context<Self>) {
         if !e.dragging() {
             self.finish_pointer_drag(cx);

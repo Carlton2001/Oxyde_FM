@@ -264,6 +264,7 @@ fn header_cell(
         .relative()
         .w(px(width))
         .flex_none()
+        .overflow_hidden()
         .px(rems(0.5))
         .h_full()
         .flex()
@@ -271,8 +272,8 @@ fn header_cell(
         .child(
             div()
                 .flex_1()
-                .overflow_hidden()
-                .text_ellipsis()
+                .min_w_0()
+                .truncate()
                 .child(label.to_string()),
         )
         .child(div().ml_1().when(is_filtered, |s| {
@@ -286,6 +287,7 @@ fn header_cell(
         .child(
             div()
                 .w(rems(1.0))
+                .flex_none()
                 .flex()
                 .justify_center()
                 .when(is_active, |s| {

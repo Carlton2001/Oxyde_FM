@@ -256,11 +256,7 @@ pub(super) fn render_details_row(params: DetailsRowParams<'_>, cx: &mut App) -> 
                         let paths = data.paths.clone();
                         let target = target_path.clone();
                         h_drop.update(cx, |this, cx| {
-                            if this.drag_copy_mode {
-                                this.execute_file_copy(paths, target, cx);
-                            } else {
-                                this.execute_file_move(paths, target, cx);
-                            }
+                            this.execute_file_drop(paths, target, cx);
                         });
                     })
             })

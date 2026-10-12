@@ -673,6 +673,19 @@ impl Platform for WindowsPlatform {
         });
     }
 
+    fn install_pointer_capture(&self, window: raw_window_handle::RawWindowHandle) -> Result<(), String> {
+        let raw_window_handle::RawWindowHandle::Win32(handle) = window else { return Ok(()); };
+        super::windows_pointer::install(windows::Win32::Foundation::HWND(handle.hwnd.get() as *mut std::ffi::c_void))
+    }
+
+    fn set_window_owner(&self, window: raw_window_handle::RawWindowHandle, owner: raw_window_handle::RawWindowHandle) -> Result<(), String> {
+        let (raw_window_handle::RawWindowHandle::Win32(window), raw_window_handle::RawWindowHandle::Win32(owner)) = (window, owner) else {
+            return Err("Window ownership requires Win32 handles".into());
+        };
+        use windows::Win32::Foundation::HWND;
+        super::windows_window_owner::set_owner(HWND(window.hwnd.get() as *mut _), HWND(owner.hwnd.get() as *mut _))
+    }
+
     fn set_application_icon(&self, window: raw_window_handle::RawWindowHandle, icon_bytes: &[u8]) {
         use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
         use windows::Win32::UI::WindowsAndMessaging::{

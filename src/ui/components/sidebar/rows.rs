@@ -164,11 +164,7 @@ pub(super) fn render_sidebar_rows(
                         move |data: &FileDragData, _, cx| {
                             let paths = data.paths.clone();
                             h.update(cx, |this, cx| {
-                                if this.drag_copy_mode {
-                                    this.execute_file_copy(paths, tgt.clone(), cx);
-                                } else {
-                                    this.execute_file_move(paths, tgt.clone(), cx);
-                                }
+                                this.execute_file_drop(paths, tgt.clone(), cx);
                             });
                         }
                     })
@@ -304,11 +300,7 @@ pub(super) fn render_sidebar_rows(
                         move |data: &FileDragData, _, cx| {
                             let paths = data.paths.clone();
                             h.update(cx, |this, cx| {
-                                if this.drag_copy_mode {
-                                    this.execute_file_copy(paths, tgt.clone(), cx);
-                                } else {
-                                    this.execute_file_move(paths, tgt.clone(), cx);
-                                }
+                                this.execute_file_drop(paths, tgt.clone(), cx);
                             });
                         }
                     })
@@ -460,11 +452,7 @@ pub(super) fn render_sidebar_rows(
                             if data.paths == vec![self_path.clone()] { return; }
                             let paths = data.paths.clone();
                             h.update(cx, |this, cx| {
-                                if this.drag_copy_mode {
-                                    this.execute_file_copy(paths, tgt.clone(), cx);
-                                } else {
-                                    this.execute_file_move(paths, tgt.clone(), cx);
-                                }
+                                this.execute_file_drop(paths, tgt.clone(), cx);
                             });
                         }
                     })

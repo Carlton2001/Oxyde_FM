@@ -1,4 +1,5 @@
 mod menus;
+mod pinned;
 mod rail;
 mod rows;
 mod toolbar;
@@ -9,6 +10,8 @@ use crate::ui::i18n::{I18n, Message};
 use crate::ui::scale::rem_pixels;
 use crate::ui::workspace::SidebarItem;
 use gpui::*;
+
+pub(crate) use pinned::render_pinned_menu;
 
 pub(crate) fn sidebar_paths_equal(left: &str, right: &str) -> bool {
     #[cfg(target_os = "windows")]

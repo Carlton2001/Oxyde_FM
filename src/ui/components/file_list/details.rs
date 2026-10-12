@@ -35,7 +35,7 @@ pub(super) fn render_details_file_list(
         files.iter().fold(0u64, |total, file| total.saturating_add(file.size))
     } else { 0 };
     let rows = display_rows(&files, active_tab.group_by_date, &active_tab.collapsed_date_groups, 1);
-    let count = rows.len() as f32;
+    let count = (rows.len() + 1) as f32;
     let empty_message = if !files.is_empty() {
         None
     } else if !active_tab.files.is_empty() {
@@ -128,6 +128,7 @@ pub(super) fn render_details_file_list(
 
     let mut container = div()
         .flex_1()
+        .min_h_0()
         .flex()
         .flex_col()
         .bg(if is_active_pane { theme.active_background } else { theme.background })
@@ -142,7 +143,7 @@ pub(super) fn render_details_file_list(
                     move |_, bounds: Bounds<Pixels>, _, cx| {
                         let b = Bounds {
                             origin: Point { x: bounds.origin.x.as_f32(), y: bounds.origin.y.as_f32() },
-                            size: Size { width: bounds.size.width.as_f32(), height: bounds.size.height.as_f32() },
+                            size: Size { width: bounds.size.width.as_f32(), height: (bounds.size.height.as_f32() - status_bar_height() - crate::ui::components::scrollbar::zed_track_width()).max(1.0) },
                         };
                         h.update(cx, |this, _| {
                             this.list_bounds.insert(p_id.clone(), b);
@@ -170,14 +171,15 @@ pub(super) fn render_details_file_list(
                         .absolute()
                         .left(active_tab.list_scroll_h.offset().x + rem_pixels(rems(0.5)))
                         .w(px(total_w))
-                        .h_full()
+                        .top_0()
+                        .bottom(px(status_bar_height() + crate::ui::components::scrollbar::zed_track_width()))
                         .flex()
                         .flex_col()
                         .child(render_headers(view, pane_id.clone(), handle.clone(), name_w, location_w, type_w, size_w, date_w, if trash_panel { logical(active_tab.deleted_col_width) } else { 0.0 }, &theme, cx.i18n()))
                         .child(
                             uniform_list(
                                 SharedString::from(format!("file-list-{}", pane_id)),
-                                rows.len(),
+                                rows.len() + 1,
                                 {
                                     let files = files.clone();
                                     let rows = rows.clone();
@@ -189,6 +191,9 @@ pub(super) fn render_details_file_list(
                                     move |range, _, cx| {
                                         let folder_subdirectory_flags = folder_subdirectory_flags.clone();
                                         range.map(|i| {
+                                            if i == rows.len() {
+                                                return div().w_full().h(px(crate::ui::style::row_height())).into_any_element();
+                                            }
                                             let theme = *OxydeTheme::global(cx);
                                             let index = match &rows[i] {
                                                 DisplayRow::Header(group, count) => return date_group_header(*group, *count, collapsed.contains(group), p_id_for_list.clone(), h_inner.clone(), crate::ui::style::row_height(), cx),
@@ -327,11 +332,7 @@ pub(super) fn render_details_file_list(
                                             .map(|p| p.active_tab().path.clone())
                                             .unwrap_or_default();
                                         if !target.is_empty() {
-                                            if this.drag_copy_mode {
-                                                this.execute_file_copy(paths, target, cx);
-                                            } else {
-                                                this.execute_file_move(paths, target, cx);
-                                            }
+                                            this.execute_file_drop(paths, target, cx);
                                         }
                                     });
                                 }

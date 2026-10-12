@@ -904,3 +904,9 @@ shell-delete-unconfirmed = Windows no confirmó la eliminación de este elemento
 
 archive-listing-metadata-limit = No se puede mostrar el contenido: la lista de archivos supera { $limit }. Este límite se aplica a los nombres y a la información de los archivos, no a su tamaño descomprimido. Puede intentar extraerlos con los límites habituales.
 archive-listing-worker-failed = No se puede leer el contenido de este archivo: el proceso de lectura ha fallado o su respuesta no es válida. El archivo no se ha modificado. Puede volver a intentarlo o extraerlo con los límites habituales.
+
+toast-transfer-skipped = Se omitieron todos los elementos.
+
+properties-calculating-size = Calculando el tamaño…
+drag-new-tab = Crear una nueva pestaña
+properties-loading = Cargando las propiedades…

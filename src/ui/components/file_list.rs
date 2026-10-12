@@ -2,6 +2,7 @@ mod details;
 mod details_row;
 mod filters;
 mod grid;
+mod grid_scroll;
 mod grid_card;
 mod headers;
 mod presentation;

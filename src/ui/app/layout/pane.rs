@@ -31,7 +31,9 @@ impl OxydeApp {
             .child({
                 let content = div()
                     .id(SharedString::from(format!("pane-content-{}", p_id.clone())))
-                    .size_full()
+                    .w_full()
+                    .flex_1()
+                    .min_h_0()
                     .flex()
                     .flex_col()
                     .relative()

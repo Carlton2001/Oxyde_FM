@@ -240,6 +240,17 @@ impl OxydeApp {
                         div()
                             .absolute()
                             .inset_0()
+                            .on_drag_move::<FileDragData>({
+                                let h = h.clone();
+                                let pane_id = p_id.clone();
+                                move |event, _, cx| {
+                                    h.update(cx, |this, cx| {
+                                        if this.state.find_pane(&pane_id).is_some_and(|pane| tab_drop_zone_contains_pointer(event.bounds, pane.tab_strip.scroll.bounds(), event.event.position)) {
+                                            this.set_file_drag_new_tab(false, cx);
+                                        }
+                                    });
+                                }
+                            })
                             .drag_over::<FileDragData>({
                                 let h_over = h.clone();
                                 let tgt = tab_path.clone();
@@ -264,19 +275,7 @@ impl OxydeApp {
                                 move |data: &FileDragData, _, cx| {
                                     let paths = data.paths.clone();
                                     h.update(cx, |this, cx| {
-                                        if this.drag_copy_mode {
-                                            this.execute_file_copy(
-                                                paths,
-                                                target.clone(),
-                                                cx,
-                                            );
-                                        } else {
-                                            this.execute_file_move(
-                                                paths,
-                                                target.clone(),
-                                                cx,
-                                            );
-                                        }
+                                        this.execute_file_drop(paths, target.clone(), cx);
                                     });
                                 }
                             }),
@@ -475,6 +474,17 @@ impl OxydeApp {
             .h(crate::ui::style::TAB_BAR_HEIGHT)
             .w_full()
             .relative()
+            .on_drag_move::<FileDragData>({
+                let h = h.clone();
+                move |event, _, cx| {
+                    if event.bounds.contains(&event.event.position) {
+                        h.update(cx, |this, cx| {
+                            let value = !this.tab_drop_directories(event.drag(cx)).is_empty();
+                            this.set_file_drag_new_tab(value, cx);
+                        });
+                    }
+                }
+            })
             .on_drag_move::<(String, usize)>({
                 let h = h.clone();
                 let p_id_cap = p_id.clone();
@@ -525,6 +535,16 @@ impl OxydeApp {
                         this.reconcile_watchers(cx);
                         this.save_workspace(cx);
                         cx.notify();
+                    });
+                }
+            })
+            .on_drop({
+                let h = h.clone();
+                let pane_id = p_id.clone();
+                move |data: &FileDragData, _, cx| {
+                    let directories = h.read(cx).tab_drop_directories(data);
+                    h.update(cx, |this, cx| {
+                        for path in directories { this.add_tab(&pane_id, path, false, cx); }
                     });
                 }
             })

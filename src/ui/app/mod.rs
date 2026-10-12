@@ -241,8 +241,6 @@ pub struct OxydeApp {
     pub(crate) ejecting_drive: bool,
     pub(crate) mounted_disk_images: Vec<oxyde_lib::platform::MountedDiskImage>,
     pub(super) disk_image_refresh_task: Option<Task<()>>,
-    pub(crate) properties_dialog: Option<properties::PropertiesDialog>,
-    properties_revision: u64,
     pub(crate) shift_delete: bool,
     pub(crate) pending_trash_delete: Option<trash_settings::PendingDelete>,
     pub(crate) trash_settings: Option<trash_settings::TrashSettings>,
@@ -256,6 +254,7 @@ pub struct OxydeApp {
     /// Effective drag operation: true = copy, false = move.
     /// Derived from `drag_modifier_copy` (if Some) or `drag_target_default_copy` otherwise.
     pub drag_copy_mode: bool,
+    pub(crate) drag_new_tab: bool,
     /// Modifier override: Some(true) = Ctrl (always copy), Some(false) = Shift (always move),
     /// None = auto (determined by whether source and target are on different drives).
     pub drag_modifier_copy: Option<bool>,
@@ -271,6 +270,7 @@ pub struct OxydeApp {
     pub(crate) trash_busy: bool,
     pub(crate) clipboard_has_files: bool,
     pub breadcrumb_editing: bool,
+    pub(crate) pinned_rail_open: bool,
     pub breadcrumb_text: String,
     pub breadcrumb_pane_id: Option<String>,
     pub breadcrumb_shake_id: u64,
@@ -415,8 +415,6 @@ impl OxydeApp {
             trash_settings: None,
             pending_trash_delete: None,
             shift_delete: false,
-            properties_dialog: None,
-            properties_revision: 0,
             network_dialog_revision: 0,
             network_force_confirmation: None,
             network_force_focus_pending: false,
@@ -443,6 +441,7 @@ impl OxydeApp {
                 }
             })],
             drag_copy_mode: false,
+            drag_new_tab: false,
             drag_modifier_copy: None,
             drag_target_default_copy: false,
             editing_path: None,
@@ -453,6 +452,7 @@ impl OxydeApp {
             trash_busy: false,
             clipboard_has_files: false,
             breadcrumb_editing: false,
+            pinned_rail_open: false,
             breadcrumb_text: String::new(),
             breadcrumb_pane_id: None,
             breadcrumb_shake_id: 0,

@@ -50,8 +50,7 @@ impl OxydeApp {
                 if matches!(row, DisplayRow::Files(indices) if indices.contains(&index)) {
                     let handle = &tab.list_scroll.0.borrow().base_handle;
                     let offset = handle.offset();
-                    let viewport = self.list_bounds.get(&pane_id).map_or(self.list_height, |bounds| bounds.size.height)
-                        - if grid { 0.0 } else { crate::ui::style::column_header_height() };
+                    let viewport = handle.bounds().size.height.as_f32().max(1.0);
                     let visible_top = -offset.y.as_f32();
                     let target = if top < visible_top { top }
                         else if top + height > visible_top + viewport { (top + height - viewport).max(0.0) }
@@ -108,7 +107,9 @@ impl OxydeApp {
             if new_scroll_y != scroll_y {
                 let visible_list_h = if grid_mode { bounds.size.height.max(1.0) }
                     else { (bounds.size.height - crate::ui::style::column_header_height()).max(1.0) };
-                let content_h = crate::ui::date_groups::content_height(&rows, grid_mode).max(1.0);                let max_scroll = (content_h - visible_list_h).max(0.0);
+                let trailing_height = crate::ui::style::row_height();
+                let content_h = (crate::ui::date_groups::content_height(&rows, grid_mode) + trailing_height).max(1.0);
+                let max_scroll = (content_h - visible_list_h).max(0.0);
 
                 new_scroll_y = new_scroll_y.clamp(-max_scroll, 0.0);
                 if new_scroll_y != scroll_y {

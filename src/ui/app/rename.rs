@@ -485,7 +485,7 @@ impl OxydeApp {
                         tab.collapsed_date_groups.remove(&crate::ui::date_groups::DateGroup::for_timestamp(file.modified, chrono::Local::now().date_naive()));
                         let rows = crate::ui::date_groups::display_rows(tab.filtered_files(), tab.group_by_date, &tab.collapsed_date_groups, columns);
                         if let Some(row) = rows.iter().position(|row| matches!(row, crate::ui::date_groups::DisplayRow::Files(indices) if indices.contains(&index))) {
-                            if grid && tab.group_by_date {
+                            if grid {
                                 let y = crate::ui::date_groups::content_height(&rows[..row], true);
                                 tab.list_scroll.0.borrow().base_handle.set_offset(point(px(0.0), px(-y)));
                             } else {

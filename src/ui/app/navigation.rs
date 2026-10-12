@@ -24,6 +24,9 @@ impl OxydeApp {
         else {
             return;
         };
+        if path == "trash://" {
+            return;
+        }
         let Some(handle) = self.handle.clone() else {
             return;
         };
@@ -214,6 +217,7 @@ impl OxydeApp {
 
     pub(crate) fn toggle_sidebar_panel(&mut self, cx: &mut Context<Self>) {
         self.sidebar_collapsed = !self.sidebar_collapsed;
+        self.pinned_rail_open = false;
         self.context_menus.clear();
         self.save_workspace(cx);
         cx.notify();

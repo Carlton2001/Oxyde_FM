@@ -377,6 +377,13 @@ pub trait Platform: Send + Sync {
     /// Définit l'icône de l'application pour la barre des tâches et la fenêtre.
     fn set_application_icon(&self, window: raw_window_handle::RawWindowHandle, icon_bytes: &[u8]);
 
+    /// Keep button drags active outside the client area. Called on the UI thread.
+    fn install_pointer_capture(&self, window: raw_window_handle::RawWindowHandle) -> Result<(), String>;
+
+    /// Keep a non-modal tool window above its owning application window.
+    /// Call on the UI thread with two application-owned native handles.
+    fn set_window_owner(&self, window: raw_window_handle::RawWindowHandle, owner: raw_window_handle::RawWindowHandle) -> Result<(), String>;
+
     /// Transfers selected file paths through the native file clipboard.
     fn set_clipboard_files(&self, paths: Vec<String>, cut: bool) -> Result<(), String>;
 
@@ -423,6 +430,10 @@ pub mod network;
 mod thumbnails;
 #[cfg(target_os = "windows")]
 mod windows_disk_images;
+#[cfg(target_os = "windows")]
+mod windows_pointer;
+#[cfg(target_os = "windows")]
+mod windows_window_owner;
 #[cfg(target_os = "windows")]
 mod windows_drives;
 #[cfg(target_os = "windows")]

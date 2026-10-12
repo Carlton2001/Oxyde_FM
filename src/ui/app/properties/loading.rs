@@ -1,64 +1,10 @@
-use super::super::*;
-use super::PropertiesDialog;
-
-fn same_root(a: &str, b: &str) -> bool {
-    a.trim_end_matches(['\\', '/'])
-        .eq_ignore_ascii_case(b.trim_end_matches(['\\', '/']))
-}
-
-impl OxydeApp {
-    pub(crate) fn open_file_properties(
-        &mut self,
-        path: String,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        if path == "trash://" {
-            self.open_trash_settings(window, cx);
-            return;
-        }
-        self.context_menus.clear();
-        if path == "__network_vincinity__" {
-            cx.spawn(async move |_, _| {
-                let _ = tokio::task::spawn_blocking(move || {
-                    oxyde_lib::platform::platform().show_properties_dialog(&path)
-                })
-                .await;
-            })
-            .detach();
-            cx.notify();
-            return;
-        }
-        self.properties_revision += 1;
-        let revision = self.properties_revision;
-        let drive = self
-            .state
-            .drives
-            .iter()
-            .find(|drive| same_root(&drive.path, &path))
-            .cloned();
-        let focus = cx.focus_handle();
-        window.focus(&focus, cx);
-        self.properties_dialog = Some(PropertiesDialog {
-            path: path.clone(),
-            revision,
-            properties: None,
-            drive,
-            calculating: false,
-            error: None,
-            focus,
-            ok_focus: cx.focus_handle(),
-            shortcut_tab: false,
-            shortcut_inputs: Vec::new(),
-            run_window: 1,
-            run_menu: None,
-            run_focus: cx.focus_handle(),
-            run_bounds: None,
-            saving: false,
-            validation_error: None,
-        });
-        cx.notify();
-        cx.spawn(async move |this, cx| {
+use super::PropertiesWindow;
+use gpui::*;
+impl PropertiesWindow {
+    pub(super) fn load(&mut self, path: String, cx: &mut Context<Self>) {
+        let revision = 0;
+        let cancellation = self.cancellation.clone();
+        self._calculation = Some(cx.spawn(async move |this, cx| {
             let result = tokio::task::spawn_blocking(move || {
                 oxyde_lib::commands::io::get_file_properties(path)
             })
@@ -92,7 +38,9 @@ impl OxydeApp {
                 .ok()
                 .flatten();
             if let Some(path) = scan {
-                let result = oxyde_lib::commands::io::calculate_folder_size(path).await;
+                let result =
+                    oxyde_lib::commands::io::calculate_folder_size_cancellable(path, cancellation)
+                        .await;
                 let _ = this.update(cx, |this, cx| {
                     let Some(dialog) = this
                         .properties_dialog
@@ -116,8 +64,7 @@ impl OxydeApp {
                     cx.notify();
                 });
             }
-        })
-        .detach();
+        }));
     }
 
     pub(crate) fn close_file_properties(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -129,15 +76,19 @@ impl OxydeApp {
             return;
         }
         self.properties_dialog = None;
-        window.focus(&self.focus_handle, cx);
+        window.remove_window();
         cx.notify();
     }
 
-    pub(super) fn system_file_properties(&mut self, cx: &mut Context<Self>) {
+    pub(super) fn system_file_properties(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(dialog) = &self.properties_dialog else {
             return;
         };
+        if dialog.saving {
+            return;
+        }
         let path = dialog.path.clone();
+        self.close_file_properties(window, cx);
         cx.spawn(async move |_, _| {
             let _ = tokio::task::spawn_blocking(move || {
                 oxyde_lib::platform::platform().show_properties_dialog(&path)

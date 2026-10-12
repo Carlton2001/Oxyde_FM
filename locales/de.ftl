@@ -904,3 +904,9 @@ shell-delete-unconfirmed = Windows hat das Löschen dieses Elements nicht bestä
 
 archive-listing-metadata-limit = Der Inhalt kann nicht angezeigt werden: Die Dateiliste überschreitet { $limit }. Diese Grenze betrifft Namen und Dateiinformationen, nicht die entpackte Dateigröße. Sie können das Entpacken mit den üblichen Grenzen versuchen.
 archive-listing-worker-failed = Der Inhalt dieses Archivs kann nicht gelesen werden: Der Leseprozess ist fehlgeschlagen oder seine Antwort ist ungültig. Das Archiv wurde nicht verändert. Sie können es erneut versuchen oder mit den üblichen Grenzen entpacken.
+
+toast-transfer-skipped = Alle Elemente wurden übersprungen.
+
+properties-calculating-size = Größe wird berechnet…
+drag-new-tab = Neuen Tab erstellen
+properties-loading = Eigenschaften werden geladen…

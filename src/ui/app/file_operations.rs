@@ -2,6 +2,14 @@ use super::{Annuler, OxydeApp, PendingFileOperation, Refaire, ToastKind};
 use crate::ui::i18n::{I18nContext, Message};
 use gpui::*;
 
+fn actionable_transfer_paths(paths: Vec<String>, resolutions: &std::collections::HashMap<String, oxyde_lib::models::ConflictAction>) -> Vec<String> {
+    paths.into_iter().filter(|path| resolutions.get(path) != Some(&oxyde_lib::models::ConflictAction::Skip)).collect()
+}
+
+#[cfg(test)]
+#[path = "file_operations/tests/skip.rs"]
+mod skip_tests;
+
 impl OxydeApp {
     pub fn execute_undo(&mut self, cx: &mut Context<Self>) {
         if self.history_operation_in_progress {
@@ -306,8 +314,14 @@ impl OxydeApp {
             return;
         };
         let resolutions = pending.dialog.completed_resolutions(&pending.conflicts);
+        let paths = actionable_transfer_paths(pending.paths, &resolutions);
+        if paths.is_empty() {
+            self.toast(ToastKind::Info, Message::ToastTransferSkipped, String::new(), 0, cx);
+            cx.notify();
+            return;
+        }
         self.queue_file_operation(
-            pending.paths,
+            paths,
             pending.target_dir,
             pending.is_move,
             Some(resolutions),

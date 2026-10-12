@@ -63,6 +63,12 @@ impl Render for OxydeApp {
                 if peek { cx.stop_propagation(); return; }
                 if event.keystroke.key == "escape" {
                     settings_keyboard.update(cx, |this, cx| {
+                        if this.pinned_rail_open {
+                            this.pinned_rail_open = false;
+                            cx.stop_propagation();
+                            cx.notify();
+                            return;
+                        }
                         if !this.context_menus.is_empty() {
                             this.context_menus.clear();
                             cx.stop_propagation();
@@ -148,25 +154,31 @@ impl Render for OxydeApp {
         root.text_style().font_features = Some(TNUM.clone());
 
         root = root
-            .on_mouse_exit({
+            .on_drag_move::<FileDragData>({
                 let h = handle.clone();
-                move |_, _, cx| {
-                    if let Some(panel) = h.read(cx).operations_panel_view.clone() {
-                        panel.update(cx, |panel, cx| panel.finish_drag(cx));
-                    }
-                    h.update(cx, |this, cx| this.finish_pointer_drag(cx));
-                }
+                move |_, _, cx| h.update(cx, |this, cx| this.set_file_drag_new_tab(false, cx))
             })
-            .on_mouse_move({
+            .child(canvas(|bounds, _, _| bounds, {
                 let h = handle.clone();
-                move |e, window, cx| {
-                    if !e.dragging() {
-                        if let Some(panel) = h.read(cx).operations_panel_view.clone() {
-                            panel.update(cx, |panel, cx| panel.finish_drag(cx));
+                move |_, _, window, _| {
+                    let h = h.clone();
+                    window.on_mouse_event(move |event: &MouseMoveEvent, phase, window, cx| {
+                        if phase == DispatchPhase::Capture {
+                            if !event.dragging() {
+                                if let Some(panel) = h.read(cx).operations_panel_view.clone() {
+                                    panel.update(cx, |panel, cx| panel.finish_drag(cx));
+                                }
+                            }
+                            h.update(cx, |this, cx| {
+                                this.handle_pointer_move(event, window, cx);
+                            });
                         }
-                    }
-                    h.update(cx, |this, cx| this.handle_pointer_move(e, window, cx));
+                    });
                 }
+            }).absolute().size_full())
+            .on_mouse_up_out(MouseButton::Left, {
+                let h = handle.clone();
+                move |_, _, cx| h.update(cx, |this, cx| this.finish_pointer_drag(cx))
             })
             .on_mouse_up(MouseButton::Left, {
                 let h = handle.clone();
@@ -314,12 +326,12 @@ impl Render for OxydeApp {
             }
         }
 
+        if self.sidebar_collapsed && self.pinned_rail_open { root = root.child(crate::ui::components::sidebar::render_pinned_menu(self, handle.clone(), cx)); }
         if self.settings_open {
             use crate::ui::components::settings::render_settings_panel;
             root = root.child(deferred(render_settings_panel(self, handle.clone(), _window, cx)));
         }
 
-        if self.properties_dialog.is_some() { root = root.child(deferred(properties::render(self, handle.clone(), _window, cx))); }
         if self.pending_trash_delete.is_some() { root = root.child(deferred(trash_settings::render_delete_confirmation(self, handle.clone(), _window, cx))); }
         if self.trash_settings.is_some() { root = root.child(deferred(trash_settings::render(self, handle.clone(), cx))); }
         if self.settings_confirmation.is_some() {

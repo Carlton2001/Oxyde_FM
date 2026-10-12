@@ -1,6 +1,7 @@
 use super::{SortColumn, SortDirection, TabLoadStatus, TabState, ViewMode};
 use gpui::{ScrollHandle, UniformListScrollHandle};
 use oxyde_lib::models::FileEntry;
+mod scroll;
 
 #[cfg(test)]
 mod prepared_sort_tests;
@@ -15,7 +16,7 @@ impl TabState {
         let columns = if grid { crate::ui::style::GridGeometry::for_viewport(width, crate::ui::components::scrollbar::zed_track_width()).columns } else { 1 };
         let rows = crate::ui::date_groups::display_rows(self.filtered_files(), self.group_by_date, &self.collapsed_date_groups, columns);
         if let Some(row) = rows.iter().position(|row| matches!(row, crate::ui::date_groups::DisplayRow::Files(indices) if indices.contains(&index))) {
-            if grid && self.group_by_date {
+            if grid {
                 let y = crate::ui::date_groups::content_height(&rows[..row], true);
                 self.list_scroll.0.borrow().base_handle.set_offset(gpui::point(gpui::px(0.0), gpui::px(-y)));
             } else { self.list_scroll.scroll_to_item(row, gpui::ScrollStrategy::Top); }

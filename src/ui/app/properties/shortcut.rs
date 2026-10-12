@@ -1,4 +1,4 @@
-use super::super::OxydeApp;
+use super::PropertiesWindow;
 use super::{general, PropertiesDialog};
 use crate::ui::i18n::{I18nContext, Message};
 use crate::ui::theme::OxydeTheme;
@@ -8,9 +8,9 @@ use gpui::*;
 pub(super) fn fields(
     mut body: Div,
     dialog: &PropertiesDialog,
-    handle: &Entity<OxydeApp>,
+    handle: &Entity<PropertiesWindow>,
     theme: OxydeTheme,
-    cx: &mut Context<OxydeApp>,
+    cx: &mut Context<PropertiesWindow>,
 ) -> Div {
     for (index, message) in [
         Message::ShortcutTarget,
@@ -104,10 +104,10 @@ pub(super) fn fields(
 
 pub(super) fn tabs(
     dialog: &PropertiesDialog,
-    handle: &Entity<OxydeApp>,
+    handle: &Entity<PropertiesWindow>,
     has_shortcut: bool,
     theme: OxydeTheme,
-    cx: &mut Context<OxydeApp>,
+    cx: &mut Context<PropertiesWindow>,
 ) -> Option<Div> {
     let mut property_tabs = None;
     if has_shortcut {
@@ -181,9 +181,9 @@ pub(super) fn tabs(
 pub(super) fn run_menu(
     mut body: Div,
     dialog: &PropertiesDialog,
-    handle: &Entity<OxydeApp>,
+    handle: &Entity<PropertiesWindow>,
     theme: OxydeTheme,
-    cx: &mut Context<OxydeApp>,
+    cx: &mut Context<PropertiesWindow>,
 ) -> Div {
     if let Some(position) = dialog.run_menu {
         let mut menu = div()
@@ -224,9 +224,12 @@ pub(super) fn run_menu(
             anchored()
                 .position(position)
                 .snap_to_window()
-                .child(menu.on_mouse_down_out(move |_, _, cx| {
+                .child(menu.on_mouse_down_out(move |event, _, cx| {
                     close.update(cx, |this, cx| {
                         if let Some(dialog) = &mut this.properties_dialog {
+                            if dialog.run_bounds.is_some_and(|bounds| bounds.contains(&event.position)) {
+                                return;
+                            }
                             dialog.run_menu = None;
                             cx.notify();
                         }

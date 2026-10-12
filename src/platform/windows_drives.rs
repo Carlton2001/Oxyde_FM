@@ -263,12 +263,13 @@ pub fn eject_drive(path: &str) -> Result<(), String> {
                 // Stop at the first physically removable node in the disk's ancestry.
                 let mut node = info.DevInst;
                 loop {
-                    let mut status = CM_DEVNODE_STATUS_FLAGS::default();
-                    let mut problem = CM_PROB::default();
-                    if CM_Get_DevNode_Status(&mut status, &mut problem, node, 0) != CR_SUCCESS {
-                        return Err("Cannot query device status".into());
+                    let mut capabilities = 0u32;
+                    let mut length = std::mem::size_of_val(&capabilities) as u32;
+                    if CM_Get_DevNode_Registry_PropertyW(node, CM_DRP_CAPABILITIES, None,
+                        Some(std::ptr::addr_of_mut!(capabilities).cast()), &mut length, 0) != CR_SUCCESS {
+                        return Err("Cannot query device removal capabilities".into());
                     }
-                    if status.0 & DN_REMOVABLE.0 != 0 {
+                    if capabilities & CM_DEVCAP_REMOVABLE.0 != 0 {
                         break;
                     }
                     let mut parent = 0;
@@ -280,6 +281,7 @@ pub fn eject_drive(path: &str) -> Result<(), String> {
                 let mut veto = PNP_VETO_TYPE::default();
                 let mut name = [0u16; 260];
                 let result = CM_Request_Device_EjectW(node, Some(&mut veto), Some(&mut name), 0);
+                log::debug!("USB ejection: disk {}, node {}, result {}, veto {}", target.DeviceNumber, node, result.0, veto.0);
                 return if result == CR_SUCCESS {
                     Ok(())
                 } else {
