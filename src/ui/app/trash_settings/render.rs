@@ -44,6 +44,11 @@ pub(crate) fn render(
         .inset_0()
         .track_focus(&dialog.focus)
         .on_key_down(move |event, window, cx| {
+            // Character input is dispatched after key handlers by GPUI.
+            // Only consume the modal shortcuts so TextInput can receive typing.
+            if !matches!(event.keystroke.key.as_str(), "escape" | "tab" | "enter" | "space") {
+                return;
+            }
             keyboard.update(cx, |this, cx| match event.keystroke.key.as_str() {
                 "escape" => this.close_trash_settings(window, cx),
                 "tab" => {

@@ -733,6 +733,7 @@ mod recycle_settings {
     use windows::Win32::UI::Shell::{SHChangeNotify, SHCNE_ASSOCCHANGED, SHCNF_FLUSH};
 pub(super) fn read_recycle_bin_config(drive_path: String) -> Result<TrashSystemConfig, CommandError> {
     let wide_drive: Vec<u16> = drive_path
+        .replace('/', "\\")
         .encode_utf16()
         .chain(std::iter::once(0))
         .collect();
@@ -820,7 +821,7 @@ pub(super) fn write_recycle_bin_config(config: TrashSystemConfig) -> Result<(), 
     use windows::Win32::System::Registry::{RegCreateKeyExW, RegCloseKey, REG_OPTION_NON_VOLATILE};
     let fail = |error: windows::core::Error| CommandError::SystemError(error.to_string());
     let capacity = u32::try_from(config.max_size_mb).map_err(|_| CommandError::SystemError("Capacity exceeds Windows limit".into()))?;
-    let drive: Vec<u16> = config.drive_path.encode_utf16().chain(Some(0)).collect();
+    let drive: Vec<u16> = config.drive_path.replace('/', "\\").encode_utf16().chain(Some(0)).collect();
     unsafe {
         let mut volume = [0u16; 50];
         GetVolumeNameForVolumeMountPointW(PCWSTR(drive.as_ptr()), &mut volume).map_err(fail)?;
@@ -844,6 +845,10 @@ pub(super) fn write_recycle_bin_config(config: TrashSystemConfig) -> Result<(), 
     }
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "tests/paths.rs"]
+mod tests;
 
 }
 use recycle_settings::{read_recycle_bin_config, write_recycle_bin_config};
