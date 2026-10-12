@@ -429,7 +429,6 @@ date-this-month = Diesen Monat
 
 settings-group-by-date = Nach Datum gruppieren
 
-settings-group-by-date-description = Dateien im aktiven Tab nach Änderungsdatum gruppieren.
 
 date-group-count = { $count ->
     [one] { $number } Element
@@ -818,7 +817,6 @@ conflict-apply-summary = Anwenden: { $replace_count ->
        *[other] { $skip_number } übersprungen
     }
 
-peek-open = Mit PowerToys Peek öffnen
 peek-failed = Peek konnte nicht geöffnet werden
 properties-general = Allgemein
 properties-shortcut = Verknüpfung

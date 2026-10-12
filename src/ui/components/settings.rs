@@ -121,7 +121,7 @@ pub fn render_settings_panel(
         line.width.as_f32() / crate::ui::scale::rem_pixels(rems(1.0)).as_f32()
     };
     let left_width = [
-        Message::SettingsTheme, Message::SettingsGroupByDate,
+        Message::SettingsTheme,
         Message::SettingsGridThumbnails, Message::SettingsWindowsIcons,
         Message::SettingsCheckboxes, Message::SettingsPathTracking,
         Message::SettingsHidden, Message::SettingsSystem,

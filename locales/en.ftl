@@ -244,7 +244,6 @@ tabs-new-tab = New tab
 
 date-this-month = This month
 settings-group-by-date = Group by date
-settings-group-by-date-description = Group files by modification date in the active tab.
 date-group-count = { $count ->
     [one] { $number } item
    *[other] { $number } items
@@ -511,7 +510,6 @@ conflict-apply-summary = Apply: { $replace_count ->
        *[other] { $skip_number } skipped
     }
 
-peek-open = Open with PowerToys Peek
 peek-failed = Could not open Peek
 properties-general = General
 properties-shortcut = Shortcut

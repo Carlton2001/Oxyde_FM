@@ -429,7 +429,6 @@ date-this-month = Este mes
 
 settings-group-by-date = Agrupar por fecha
 
-settings-group-by-date-description = Agrupar los archivos por fecha de modificación en la pestaña activa.
 
 date-group-count = { $count ->
     [one] { $number } elemento
@@ -818,7 +817,6 @@ conflict-apply-summary = Aplicar: { $replace_count ->
        *[other] { $skip_number } omitidos
     }
 
-peek-open = Abrir con PowerToys Peek
 peek-failed = No se pudo abrir Peek
 properties-general = General
 properties-shortcut = Acceso directo

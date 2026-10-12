@@ -429,7 +429,6 @@ date-this-month = Questo mese
 
 settings-group-by-date = Raggruppa per data
 
-settings-group-by-date-description = Raggruppa i file per data di modifica nella scheda attiva.
 
 date-group-count = { $count ->
     [one] { $number } elemento
@@ -818,7 +817,6 @@ conflict-apply-summary = Applica: { $replace_count ->
        *[other] { $skip_number } ignorati
     }
 
-peek-open = Apri con PowerToys Peek
 peek-failed = Impossibile aprire Peek
 properties-general = Generale
 properties-shortcut = Collegamento

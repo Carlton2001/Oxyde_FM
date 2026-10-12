@@ -18,7 +18,6 @@ const ITALIAN: &str = include_str!("../../locales/it.ftl");
 /// Stable identifiers, independent of the text displayed to users.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Message {
-    PeekOpen,
     PeekFailed,
     PropertiesGeneral,
     PropertiesShortcut,
@@ -473,7 +472,6 @@ pub enum Message {
     SizeHuge,
     DateThisMonth,
     SettingsGroupByDate,
-    SettingsGroupByDateDescription,
     DateGroupCount,
     DateToday,
     DateYesterday,
@@ -694,7 +692,6 @@ impl Message {
             Self::PreviewTimedOut => "preview-timed-out",
             Self::PreviewImageLimit => "preview-image-limit",
             Self::PreviewAnimationStatic => "preview-animation-static",
-            Self::PeekOpen => "peek-open",
             Self::PeekFailed => "peek-failed",
             Self::PropertiesGeneral => "properties-general",
             Self::PropertiesShortcut => "properties-shortcut",
@@ -973,7 +970,6 @@ impl Message {
             Self::SizeHuge => "size-huge",
             Self::DateThisMonth => "date-this-month",
             Self::SettingsGroupByDate => "settings-group-by-date",
-            Self::SettingsGroupByDateDescription => "settings-group-by-date-description",
             Self::DateGroupCount => "date-group-count",
             Self::DateToday => "date-today",
             Self::DateYesterday => "date-yesterday",
@@ -1172,7 +1168,6 @@ mod tests {
         for language in Language::ALL {
             let i18n = I18n::for_language(language);
             let messages = [
-                Message::PeekOpen,
                 Message::PeekFailed,
                 Message::PropertiesGeneral,
                 Message::PropertiesShortcut,
@@ -1626,7 +1621,6 @@ mod tests {
                 Message::SizeHuge,
                 Message::DateThisMonth,
                 Message::SettingsGroupByDate,
-                Message::SettingsGroupByDateDescription,
                 Message::DateGroupCount,
                 Message::DateToday,
                 Message::DateYesterday,

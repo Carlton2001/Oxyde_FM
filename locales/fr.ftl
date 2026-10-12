@@ -250,7 +250,6 @@ tabs-new-tab = Nouvel onglet
 
 date-this-month = Ce mois-ci
 settings-group-by-date = Grouper par date
-settings-group-by-date-description = Regrouper les fichiers par date de modification dans l’onglet actif.
 date-group-count = { $count ->
     [one] { $number } élément
    *[other] { $number } éléments
@@ -517,7 +516,6 @@ conflict-apply-summary = Appliquer: { $replace_count ->
        *[other] { $skip_number } ignorés
     }
 
-peek-open = Ouvrir avec PowerToys Peek
 peek-failed = Impossible d’ouvrir Peek
 properties-general = Général
 properties-shortcut = Raccourci

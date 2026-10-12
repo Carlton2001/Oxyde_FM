@@ -265,7 +265,7 @@ Les cartes de conflit avec une ombre utilisent un fond opaque : la teinte d’ac
 
 ### Peek, raccourcis et accès rapide
 
-Sous Windows, le menu d’un fichier propose Ouvrir avec PowerToys Peek, désactivé si Peek n’est pas installé ou activé. Le raccourci configuré dans PowerToys et Espace lorsque cette option est activée agissent sur un seul fichier sélectionné, uniquement avec le focus de la liste. Les réglages PowerToys sont relus en arrière-plan ; une réponse identique ne provoque pas de notification GPUI. Aucune préférence système n’est modifiée.
+Sous Windows, PowerToys Peek reste accessible au clavier si Peek est installé et activé. Le raccourci configuré dans PowerToys et Espace lorsque cette option est activée agissent sur un seul fichier sélectionné, uniquement avec le focus de la liste. Les réglages PowerToys sont relus en arrière-plan ; une réponse identique ne provoque pas de notification GPUI. Aucune préférence système n’est modifiée.
 
 Les propriétés des fichiers .lnk reprennent les onglets Général / Raccourci de Tauri. Raccourci propose Cible, Arguments, Démarrer dans, Commentaire et Exécuter (normale, agrandie, réduite). Le menu Exécuter flotte sous son champ sans changer la hauteur de la fenêtre. Un second clic sur le champ le ferme sans changer la sélection. Les modifications restent locales jusqu’à OK ; Annuler les abandonne. La sauvegarde travaille en arrière-plan, conserve les autres métadonnées du raccourci et laisse la fenêtre ouverte en cas d’erreur. Les API COM passent par Platform.
 
