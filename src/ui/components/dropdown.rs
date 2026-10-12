@@ -358,7 +358,9 @@ impl<T: crate::ui::components::scrollbar::ScrollbarState + 'static> RenderOnce f
                                     let stay_open = item.stay_open;
                                     let is_dimmed = item.is_dimmed;
                                     let is_destructive =
-                                        matches!(item.icon.as_ref(), Some(IconName::Trash | IconName::TrashPermanent));
+                                        matches!(item.icon.as_ref(), Some(IconName::TrashPermanent))
+                                            || (matches!(item.icon.as_ref(), Some(IconName::Trash))
+                                                && item.label == cx.i18n().text(Message::TrashDeletePermanent).as_ref());
                                     let on_h = on_hover_list.clone();
                                     let arrow_hover = on_hover_list.clone();
                                     let shortcut = if self_is_context_menu { context_shortcut(&item.label, cx.i18n(), window.modifiers().shift) } else { None };
