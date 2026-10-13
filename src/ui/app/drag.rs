@@ -34,6 +34,10 @@ impl FileDragPreview {
         app_handle: Entity<OxydeApp>,
         cx: &mut Context<Self>,
     ) -> Self {
+        app_handle.update(cx, |app, _| {
+            app.file_drag_origin = app.state.find_pane(&app.state.active_pane_id)
+                .map(|pane| (pane.id.clone(), pane.active_tab().id.clone()));
+        });
         let sub = cx.observe(&app_handle, |_, _entity, cx| cx.notify());
         Self {
             paths,
@@ -178,6 +182,7 @@ impl Render for FileDragPreview {
 impl OxydeApp {
     /// End pointer interactions, including releases missed outside the window.
     pub(crate) fn finish_pointer_drag(&mut self, cx: &mut Context<Self>) {
+        self.file_drag_origin = None;
         self.set_file_drag_new_tab(false, cx);
         if let Some(panel) = self.operations_panel_view.clone() {
             cx.defer(move |cx| panel.update(cx, |panel, cx| panel.finish_drag(cx)));
@@ -226,6 +231,25 @@ impl OxydeApp {
 }
 
 impl OxydeApp {
+    pub(crate) fn cancel_file_drag(&mut self, window: &mut Window, cx: &mut Context<Self>) -> bool {
+        if self.file_drag_origin.is_none() || !cx.has_active_drag() {
+            return false;
+        }
+        let origin = self.file_drag_origin.take();
+        cx.stop_active_drag(window);
+        self.finish_pointer_drag(cx);
+        if let Some((pane_id, tab_id)) = origin {
+            let index = self.state.find_pane(&pane_id)
+                .and_then(|pane| pane.tabs.iter().position(|tab| tab.id == tab_id));
+            if let Some(index) = index {
+                self.switch_tab(&pane_id, index, cx);
+                window.focus(&self.focus_handle, cx);
+            }
+        }
+        cx.notify();
+        true
+    }
+
     pub(crate) fn set_file_drag_new_tab(&mut self, value: bool, cx: &mut Context<Self>) {
         if self.drag_new_tab != value {
             self.drag_new_tab = value;
@@ -235,9 +259,10 @@ impl OxydeApp {
 
     pub(crate) fn tab_drop_directories(&self, data: &super::FileDragData) -> Vec<String> {
         self.state.find_pane(&data.source_pane_id)
-            .map(|pane| pane.active_tab().files.iter()
+            .map(|pane| pane.tabs.iter().flat_map(|tab| tab.files.iter())
                 .filter(|file| file.is_dir && data.paths.contains(&file.path))
-                .map(|file| file.path.clone()).collect()).unwrap_or_default()
+                .map(|file| file.path.clone()).collect::<std::collections::BTreeSet<_>>()
+                .into_iter().collect()).unwrap_or_default()
     }
 
     pub(crate) fn execute_file_drop(&mut self, paths: Vec<String>, target: String, cx: &mut Context<Self>) {

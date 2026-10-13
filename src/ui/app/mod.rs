@@ -257,6 +257,7 @@ pub struct OxydeApp {
     /// Derived from `drag_modifier_copy` (if Some) or `drag_target_default_copy` otherwise.
     pub drag_copy_mode: bool,
     pub(crate) drag_new_tab: bool,
+    pub(crate) file_drag_origin: Option<(String, String)>,
     /// Modifier override: Some(true) = Ctrl (always copy), Some(false) = Shift (always move),
     /// None = auto (determined by whether source and target are on different drives).
     pub drag_modifier_copy: Option<bool>,
@@ -446,6 +447,7 @@ impl OxydeApp {
             })],
             drag_copy_mode: false,
             drag_new_tab: false,
+            file_drag_origin: None,
             drag_modifier_copy: None,
             drag_target_default_copy: false,
             editing_path: None,

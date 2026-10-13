@@ -188,6 +188,7 @@ impl RenderOnce for Tab {
             .id(self.id.clone())
             .relative()
             .h(crate::ui::style::TAB_BAR_HEIGHT)
+            .w_full()
             .flex_none()
             .bg(bg_color)
             .flex()
@@ -195,6 +196,7 @@ impl RenderOnce for Tab {
             .text_color(text_color)
             .text_size(rems(0.8125))
             .font_weight(crate::ui::style::DEFAULT_FONT_WEIGHT)
+            .when(!self.selected, |tab| tab.hover(|style| style.bg(theme.hover)))
             .group("tab");
 
         if let Some(path) = self.tooltip_path {
@@ -239,13 +241,10 @@ impl RenderOnce for Tab {
                         .border_color(theme.border)
                 }
             }
-            TabPosition::Last => {
-                if self.selected {
-                    container
-                } else {
-                    container.border_b(rems(0.0625)).border_color(theme.border)
-                }
-            }
+            TabPosition::Last => container
+                .border_r(rems(0.0625))
+                .when(!self.selected, |s| s.border_b(rems(0.0625)))
+                .border_color(theme.border),
             TabPosition::Middle => container
                 .border_r(rems(0.0625))
                 .when(!self.selected, |s| s.border_b(rems(0.0625)))
@@ -255,20 +254,29 @@ impl RenderOnce for Tab {
         container = container.child(
             div()
                 .flex()
+                .w_full()
                 .items_center()
                 .pl_3()
                 .pr(if self.on_close.is_some() {
-                    rem_pixels(rems(0.75))
+                    rem_pixels(rems(0.25))
                 } else {
                     rem_pixels(rems(1.25))
                 })
                 .gap_2()
                 .when_some(self.icon, |s, icon| s.child(icon.render(text_color)))
-                .child(div().text_ellipsis().child(self.label.clone()))
+                .child(div().flex_1().min_w_0().text_ellipsis().child(self.label.clone()))
                 .when_some(self.on_close, |s, on_close| {
                     s.child(
                         div()
-                            .p_0p5()
+                            .id((self.id.clone(), "close"))
+                            .flex_none()
+                            .when(!self.selected, |button| {
+                                button.opacity(0.0).group_hover("tab", |style| style.opacity(1.0))
+                            })
+                            .size(rems(1.5))
+                            .flex()
+                            .items_center()
+                            .justify_center()
                             .rounded_sm()
                             .hover(|st: StyleRefinement| st.bg(theme.tab_close_hover))
                             .on_mouse_down(MouseButton::Left, move |_, _window, cx| {

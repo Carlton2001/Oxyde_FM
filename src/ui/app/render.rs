@@ -161,6 +161,13 @@ impl Render for OxydeApp {
             .child(canvas(|bounds, _, _| bounds, {
                 let h = handle.clone();
                 move |_, _, window, _| {
+                    let cancel_handle = h.clone();
+                    window.on_mouse_event(move |event: &MouseDownEvent, phase, window, cx| {
+                        if phase == DispatchPhase::Capture && event.button == MouseButton::Right
+                            && cancel_handle.update(cx, |this, cx| this.cancel_file_drag(window, cx)) {
+                            cx.stop_propagation();
+                        }
+                    });
                     let h = h.clone();
                     window.on_mouse_event(move |event: &MouseMoveEvent, phase, window, cx| {
                         if phase == DispatchPhase::Capture {

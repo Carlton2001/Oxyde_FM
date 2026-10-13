@@ -235,6 +235,8 @@ impl OxydeApp {
             tab_bar = tab_bar.child(
                 div()
                     .relative()
+                    .flex_basis(rems(12.0))
+                    .flex_shrink(1.0)
                     .child(tab)
                     // File Drop Zone (drop files onto tab to move them to that tab's directory)
                     .child(
@@ -248,6 +250,9 @@ impl OxydeApp {
                                     h.update(cx, |this, cx| {
                                         if this.state.find_pane(&pane_id).is_some_and(|pane| tab_drop_zone_contains_pointer(event.bounds, pane.tab_strip.scroll.bounds(), event.event.position)) {
                                             this.set_file_drag_new_tab(false, cx);
+                                            if this.state.active_pane_id != pane_id || this.state.find_pane(&pane_id).is_some_and(|pane| pane.active_tab_index != t_ix) {
+                                                this.switch_tab(&pane_id, t_ix, cx);
+                                            }
                                         }
                                     });
                                 }
