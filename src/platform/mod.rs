@@ -54,7 +54,7 @@ pub enum SystemExecutable {
 
 /// Opaque identity of an opened file or directory. Keep a handle alive while comparing it
 /// across an operation so a deleted file's identifier cannot be reused.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct FileIdentity {
     volume: u64,
     value: [u8; 16],

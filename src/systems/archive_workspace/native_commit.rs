@@ -259,6 +259,10 @@ pub(super) fn publish_all(
     entries: &mut [Prepared<'_>],
     op: &Arc<Mutex<FileOperation>>,
 ) -> Result<(), String> {
+    let mut identities = std::collections::HashSet::new();
+    if entries.iter().any(|entry| !identities.insert(entry.workspace.original_identity)) {
+        return Err("Aliased archives are not supported in a publication group".into());
+    }
     let mut group = RollbackOnUnwind {
         entries,
         handled: false,

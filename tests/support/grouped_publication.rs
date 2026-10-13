@@ -111,3 +111,24 @@ fn failed_group_rollback_preserves_foreign_replacements_and_reports_original_bac
         assert_eq!(fs::read(&paths[2]).unwrap(), before[2]);
     });
 }
+
+#[test]
+fn two_archive_names_for_the_same_original_object_are_refused_before_publication() {
+    native(|| {
+        let root = tempfile::tempdir().unwrap();
+        let source = root.path().join("source.zip");
+        let target = root.path().join("alias.zip");
+        zip(&source, "first", b"safe", false);
+        fs::hard_link(&source, &target).unwrap();
+        let before = fs::read(&source).unwrap();
+        let selected = source.join("first");
+        let resolutions = std::collections::HashMap::from([(selected.to_string_lossy().into_owned(), oxyde_lib::models::ConflictAction::Replace)]);
+        let result = FileOperationManager::perform_copy(&operation(FileOpType::Move), vec![selected], Some(target.clone()), true, Some(resolutions));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Aliased archives are not supported"));
+        assert_eq!(fs::read(&source).unwrap(), before); assert_eq!(fs::read(&target).unwrap(), before);
+        let first = oxyde_lib::platform::platform().file_identity(&fs::File::open(source).unwrap()).unwrap();
+        let second = oxyde_lib::platform::platform().file_identity(&fs::File::open(target).unwrap()).unwrap();
+        assert_eq!(first, second);
+    });
+}
