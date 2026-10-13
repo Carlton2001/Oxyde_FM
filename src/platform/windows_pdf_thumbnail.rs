@@ -8,7 +8,7 @@ use windows::Graphics::Imaging::{
 use windows::Storage::StorageFile;
 use windows::Storage::Streams::InMemoryRandomAccessStream;
 
-const MAX_SIDE: u32 = 512;
+const MAX_SIDE: u32 = crate::utils::image_preview_decode::POLICY.output_side;
 const MAX_ENCODED_BYTES: u64 = 4 * 1024 * 1024;
 
 // WinRT render options are DIPs, not physical pixels. Round down before native
@@ -170,17 +170,17 @@ mod tests {
     #[test]
     fn pdf_preview_fit_keeps_both_sides_bounded_for_extreme_ratios() {
         for (width, height, expected) in [
-            (72.0, 144.0, (256, 512)),
-            (144.0, 72.0, (512, 256)),
-            (72.0, 720.0, (51, 512)),
-            (720.0, 72.0, (512, 51)),
-            (f32::MIN_POSITIVE, f32::MAX, (1, 512)),
-            (f32::MAX, f32::MIN_POSITIVE, (512, 1)),
-            (f32::from_bits(1), f32::from_bits(1), (512, 512)),
+            (72.0, 144.0, (512, 1024)),
+            (144.0, 72.0, (1024, 512)),
+            (72.0, 720.0, (102, 1024)),
+            (720.0, 72.0, (1024, 102)),
+            (f32::MIN_POSITIVE, f32::MAX, (1, 1024)),
+            (f32::MAX, f32::MIN_POSITIVE, (1024, 1)),
+            (f32::from_bits(1), f32::from_bits(1), (1024, 1024)),
         ] {
             let layout = PixelLayout::fit(width, height).unwrap();
             assert_eq!((layout.width, layout.height), expected);
-            assert!(layout.byte_len <= 1024 * 1024);
+            assert!(layout.byte_len <= 4 * 1024 * 1024);
         }
     }
 
@@ -194,8 +194,8 @@ mod tests {
 
     #[test]
     fn pdf_preview_decoded_layout_checks_both_boundaries_before_allocating() {
-        assert_eq!(PixelLayout::new(512, 512).unwrap().byte_len, 1024 * 1024);
-        for (width, height) in [(0, 1), (1, 0), (513, 1), (1, 513), (u32::MAX, u32::MAX)] {
+        assert_eq!(PixelLayout::new(1024, 1024).unwrap().byte_len, 4 * 1024 * 1024);
+        for (width, height) in [(0, 1), (1, 0), (MAX_SIDE + 1, 1), (1, MAX_SIDE + 1), (u32::MAX, u32::MAX)] {
             assert!(PixelLayout::new(width, height).is_err());
         }
     }
@@ -243,12 +243,12 @@ mod tests {
         std::thread::spawn(|| {
             let directory = tempfile::tempdir().unwrap();
             for (width, height, rotation, expected) in [
-                (72, 144, 0, (256, 512)),
-                (144, 72, 0, (512, 256)),
-                (72, 720, 0, (51, 512)),
-                (720, 72, 0, (512, 51)),
-                (72, 144, 90, (512, 256)),
-                (72, 72, 0, (512, 512)),
+                (72, 144, 0, (512, 1024)),
+                (144, 72, 0, (1024, 512)),
+                (72, 720, 0, (102, 1024)),
+                (720, 72, 0, (1024, 102)),
+                (72, 144, 90, (1024, 512)),
+                (72, 72, 0, (1024, 1024)),
             ] {
                 let path = directory
                     .path()
@@ -264,7 +264,7 @@ mod tests {
                     image.get_pixel(image.width() / 2, image.height() / 2).0,
                     [0, 0, 255, 255]
                 );
-                assert!(image.as_raw().len() <= 1024 * 1024);
+                assert!(image.as_raw().len() <= 4 * 1024 * 1024);
                 // Rendering must release file/page resources before returning.
                 std::fs::remove_file(path).unwrap();
             }

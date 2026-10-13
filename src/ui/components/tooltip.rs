@@ -17,8 +17,9 @@ use crate::ui::i18n::{I18nContext, Message};
 use gpui::*;
 use std::sync::Arc;
 
-pub(crate) fn invalidate_pdf_preview(path: &str) {
+pub(crate) fn invalidate_media_preview(path: &str) {
     pdf_cache::invalidate(path);
+    image_cache::invalidate(std::path::Path::new(path));
 }
 
 /// Un composant de bulle d'aide (Tooltip) dans le style Oxyde.

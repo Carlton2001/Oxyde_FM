@@ -10,6 +10,7 @@ use std::{
 
 const MAX_ENTRIES: usize = 32;
 const MAX_BYTES: usize = 64 * 1024 * 1024;
+static CACHE: OnceLock<Mutex<Cache>> = OnceLock::new();
 
 #[derive(Clone, PartialEq, Eq)]
 struct Signature {
@@ -34,6 +35,7 @@ struct Entry {
     bytes: usize,
 }
 struct Cache {
+    revision: u64,
     entries: VecDeque<Entry>,
     bytes: usize,
     max_entries: usize,
@@ -42,6 +44,7 @@ struct Cache {
 impl Cache {
     fn new(max_entries: usize, max_bytes: usize) -> Self {
         Self {
+            revision: 0,
             entries: VecDeque::new(),
             bytes: 0,
             max_entries,
@@ -52,6 +55,12 @@ impl Cache {
         let entry = self.entries.remove(index).unwrap();
         self.bytes -= entry.bytes;
         entry
+    }
+    fn invalidate(&mut self, path: &Path) {
+        self.revision += 1;
+        if let Some(index) = self.entries.iter().position(|entry| entry.signature.path == path) {
+            self.remove(index);
+        }
     }
     fn get(&mut self, path: &Path, signature: Option<&Signature>) -> Option<PreviewImage> {
         let index = self
@@ -104,6 +113,7 @@ fn cached_load_with_status(
     path: &Path,
     decode: impl FnOnce() -> Result<PreviewImage, PreviewError>,
 ) -> Result<(PreviewImage, bool), PreviewError> {
+    let revision = cache.lock().unwrap().revision;
     let signature = Signature::read(path);
     if let Some(preview) = cache.lock().unwrap().get(path, signature.as_ref()) {
         log::debug!("Tooltip image decoded cache hit: {}", path.display());
@@ -114,18 +124,25 @@ fn cached_load_with_status(
     let preview = decode()?;
     if let Some(signature) = signature {
         if Signature::read(path).as_ref() == Some(&signature) {
-            cache.lock().unwrap().insert(signature, preview.clone());
+            let mut cache = cache.lock().unwrap();
+            if cache.revision == revision { cache.insert(signature, preview.clone()); }
         }
     }
     Ok((preview, false))
 }
 
 pub(super) fn load(path: &Path, renderer: &SvgRenderer) -> Result<(PreviewImage, bool), PreviewError> {
-    static CACHE: OnceLock<Mutex<Cache>> = OnceLock::new();
     let cache = CACHE.get_or_init(|| Mutex::new(Cache::new(MAX_ENTRIES, MAX_BYTES)));
+    let disk_hit = std::cell::Cell::new(false);
     cached_load_with_status(cache, path, || {
-        crate::ui::image_preview::load_path(path, renderer)
-    })
+        let (preview, cached) = crate::ui::preview_disk::load_image(path, renderer)?;
+        disk_hit.set(cached);
+        Ok(preview)
+    }).map(|(preview, cached)| (preview, cached || disk_hit.get()))
+}
+
+pub(super) fn invalidate(path: &Path) {
+    if let Some(cache) = CACHE.get() { cache.lock().unwrap().invalidate(path); }
 }
 
 #[cfg(test)]

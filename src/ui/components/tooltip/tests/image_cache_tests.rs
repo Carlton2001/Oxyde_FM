@@ -3,6 +3,19 @@ use gpui::RenderImage;
 use std::{cell::Cell, sync::Arc};
 
 #[test]
+fn invalidation_during_decode_does_not_retain_late_pixels() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("image.png");
+    std::fs::write(&path, b"source").unwrap();
+    let cache = Mutex::new(Cache::new(32, 1024));
+    cached_load(&cache, &path, || {
+        cache.lock().unwrap().invalidate(&path);
+        Ok(preview(1))
+    }).unwrap();
+    assert!(cache.lock().unwrap().entries.is_empty());
+}
+
+#[test]
 fn handover_cache_status_distinguishes_hits_from_changed_sources() {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("image.png");
