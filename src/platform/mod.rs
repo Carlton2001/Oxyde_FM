@@ -93,6 +93,8 @@ impl ShellDeleteOutcome {
 /// doit passer par ce trait plutôt qu'appeler directement les API OS.
 pub trait Platform: Send + Sync {
     #[doc(hidden)]
+    fn check_broker_pressure(&self) -> std::io::Result<()> { Ok(()) }
+    #[doc(hidden)]
     fn cache_proof_key(&self, _path: &std::path::Path) -> std::io::Result<[u8; 32]> {
         Err(std::io::Error::new(std::io::ErrorKind::Unsupported, "Persistent cache keys unavailable"))
     }

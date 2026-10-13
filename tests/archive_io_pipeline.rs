@@ -20,6 +20,8 @@ mod provenance_mutation;
 mod cache_crash_recovery;
 #[path = "support/grouped_publication.rs"]
 mod grouped_publication;
+#[path = "support/tar_fidelity.rs"]
+mod tar_fidelity;
 #[path = "support/broker_cancellation.rs"]
 mod broker_cancellation;
 

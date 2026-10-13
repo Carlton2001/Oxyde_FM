@@ -11,6 +11,7 @@ impl WindowsPlatform {
 }
 
 impl Platform for WindowsPlatform {
+    fn check_broker_pressure(&self) -> std::io::Result<()> { super::windows_resource_pressure::check() }
     fn cache_proof_key(&self, path: &std::path::Path) -> std::io::Result<[u8; 32]> {
         super::windows_cache_proof::key::load(path)
     }

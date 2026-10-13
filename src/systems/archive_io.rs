@@ -71,7 +71,6 @@ fn ack() -> Frame {
         turbo: false,
     })
 }
-
 pub(crate) fn watch_io(
     op: Option<&Arc<Mutex<FileOperation>>>,
     remaining: std::time::Duration,
@@ -101,6 +100,31 @@ pub(crate) fn decode(
         .unwrap_or_default();
     let _io_cancellation = platform().watch_broker_io(budget.remaining()?, cancel, pause)?;
     let format = format(path)?;
+    let control = controls(op);
+    let checkpoint = || loop {
+        platform().check_broker_pressure()?;
+        let current = control()?;
+        if current.cancelled {
+            return Err(io::Error::new(
+                io::ErrorKind::Interrupted,
+                "Operation cancelled",
+            ));
+        }
+        if !current.paused {
+            return Ok(());
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    };
+    let mut fidelity = if format == Format::Tar {
+        Some(crate::utils::tar_fidelity::Verifier::new(
+            crate::utils::tar_fidelity::scan(&mut source, budget.limits(), selected, true, &|| {
+                budget.checkpoint(&checkpoint)
+            })
+            .map_err(crate::utils::tar_fidelity::source_error)?,
+        ))
+    } else {
+        None
+    };
     let mut limits = limits(budget.limits());
     limits.seconds = budget.remaining()?.as_secs().saturating_add(1);
     let mut state = ExtractionState::new(
@@ -138,7 +162,6 @@ pub(crate) fn decode(
         selected: selected.map(str::to_owned),
         limits,
     };
-    let control = controls(op);
     let started = std::time::Instant::now();
     let result = platform().run_archive_io_worker(operation, &control, &mut |frame| {
         frame.validate()?;
@@ -188,7 +211,16 @@ pub(crate) fn decode(
             _ => {}
         }
         state.accept(&frame)?;
-
+        if let Some(verifier) = &mut fidelity {
+            match &frame.message {
+                Message::Entry { entry } => verifier.entry(entry)?,
+                Message::Begin { id } => verifier.begin(*id)?,
+                Message::Chunk { id, .. } => verifier.chunk(*id, &frame.data)?,
+                Message::End { id } => verifier.end(*id)?,
+                Message::Finished => verifier.finish()?,
+                _ => {}
+            }
+        }
         match &frame.message {
             Message::Entry { entry } => {
                 if let Some(op) = op {

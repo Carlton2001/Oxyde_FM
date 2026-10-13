@@ -29,6 +29,7 @@ struct Source {
     entry: Entry,
     read: u64,
     active: bool,
+    hash: Option<blake3::Hasher>,
 }
 
 pub(super) fn source_failure(error: io::Error) -> io::Error {
@@ -57,6 +58,8 @@ pub(super) fn run(
         (locked.cancel_flag.clone(), locked.pause_flag.clone())
     };
     let _io_cancellation = platform().watch_broker_io(budget.remaining()?, cancel, pause)?;
+    let verify_tar = format(path)? == crate::utils::archive_io_protocol::Format::Tar;
+    let mut expected_records = Vec::new();
     let raw = entries.iter().try_fold(0u64, |total, entry| {
         total.checked_add(entry.source.size()).ok_or_else(invalid)
     })?;
@@ -146,6 +149,7 @@ pub(super) fn run(
                         entry: entry.clone(),
                         read: 0,
                         active: false,
+                        hash: verify_tar.then(blake3::Hasher::new),
                     });
                     return Ok(Frame::new(Message::Entry { entry }));
                 }
@@ -182,6 +186,9 @@ pub(super) fn run(
                     )?;
                     let mut data = vec![0; length as usize];
                     source.file.read_exact(&mut data)?;
+                    if let Some(hash) = &mut source.hash {
+                        hash.update(&data);
+                    }
                     source.read += length as u64;
                     FileOperationManager::archive_progress(op, length as u64);
                     return Ok(Frame::data(Message::Bytes { source: id, offset }, data));
@@ -193,6 +200,24 @@ pub(super) fn run(
                         || source_ref.read != source_ref.entry.size
                     {
                         return Err(invalid());
+                    }
+                    if verify_tar {
+                        let entry = &source_ref.entry;
+                        expected_records.push(crate::utils::tar_fidelity::Record {
+                            name: crate::utils::archive_security::relative_archive_path(
+                                &entry.name,
+                            )?,
+                            directory: entry.directory,
+                            size: entry.size,
+                            mode: entry.mode,
+                            modified: Some(
+                                entry
+                                    .modified
+                                    .filter(|time| time.seconds >= 0)
+                                    .map_or(0, |time| time.seconds),
+                            ),
+                            hash: source_ref.hash.as_ref().map(|hash| hash.finalize()),
+                        });
                     }
                     source.take();
                     next = next.checked_add(1).ok_or_else(invalid)?;
@@ -239,6 +264,17 @@ pub(super) fn run(
     budget.check_time()?;
     if !finished || output.metadata()?.len() > output_limit {
         return Err(invalid());
+    }
+    if verify_tar {
+        let actual = crate::utils::tar_fidelity::scan_canonical(output, budget.limits(), &|| {
+            platform().check_broker_pressure()?;
+            budget.checkpoint(&|| {
+                FileOperationManager::archive_checkpoint(op).map_err(io::Error::other)
+            })
+        })?;
+        if actual != expected_records {
+            return Err(crate::utils::tar_fidelity::failure());
+        }
     }
     Ok(())
 }
