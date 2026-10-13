@@ -1,3 +1,4 @@
+use crate::ui::components::tooltip::NativeTooltipExt;
 use crate::ui::app::OxydeApp;
 use crate::ui::components::tooltip::Tooltip;
 use crate::ui::format::{format_number, format_size};
@@ -230,7 +231,7 @@ pub(super) fn render_operation_card(
                 .gap(rems(0.25))
                 .rounded_sm()
                 .hover(|style| style.bg(theme.menu_hover).text_color(theme.text))
-                .tooltip(Tooltip::text(i18n.text(Message::OpsDismiss)))
+                .native_tooltip(Tooltip::text(i18n.text(Message::OpsDismiss)))
                 .child(
                     svg()
                         .path("icons/x.svg")
@@ -267,7 +268,7 @@ pub(super) fn render_operation_card(
                     .justify_center()
                     .rounded_sm()
                     .hover(|style| style.bg(theme.control_hover))
-                    .tooltip(Tooltip::text(i18n.text(if can_start {
+                    .native_tooltip(Tooltip::text(i18n.text(if can_start {
                         Message::OpsResume
                     } else {
                         Message::OpsPause
@@ -288,7 +289,7 @@ pub(super) fn render_operation_card(
                     .justify_center()
                     .rounded_sm()
                     .hover(|style| style.bg(theme.control_hover))
-                    .tooltip(Tooltip::text(i18n.text(if turbo {
+                    .native_tooltip(Tooltip::text(i18n.text(if turbo {
                         Message::OpsFast
                     } else {
                         Message::OpsNormal
@@ -318,7 +319,7 @@ pub(super) fn render_operation_card(
                     .justify_center()
                     .rounded_sm()
                     .hover(|style| style.bg(theme.control_hover))
-                    .tooltip(Tooltip::text(i18n.text(Message::OpsStop)))
+                    .native_tooltip(Tooltip::text(i18n.text(Message::OpsStop)))
                     .child(
                         svg()
                             .path("icons/x.svg")

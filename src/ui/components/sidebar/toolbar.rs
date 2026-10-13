@@ -1,3 +1,4 @@
+use crate::ui::components::tooltip::NativeTooltipExt;
 use crate::ui::app::OxydeApp;
 use crate::ui::components::tooltip::Tooltip;
 use crate::ui::i18n::{I18nContext, Message};
@@ -28,7 +29,7 @@ pub(super) fn sidebar_button(
             theme.icon_disabled
         })
         .when(enabled, |d| d.hover(move |s| s.bg(theme.hover)))
-        .tooltip(Tooltip::text(label))
+        .native_tooltip(Tooltip::text(label))
         .when(enabled, |d| d.on_mouse_down(MouseButton::Left, action))
         .when_some(icon, |d, path| {
             d.child(svg().path(path).size(rems(1.125)).text_color(if enabled {

@@ -164,6 +164,18 @@ impl Render for PropertiesWindow {
                 continue;
             };
             let close = handle.clone();
+            #[cfg(target_os = "windows")]
+            if crate::ui::components::popup::supported(window, cx) {
+                let scroll = menu.scroll_handle.clone();
+                crate::ui::components::popup::text_menu(
+                    format!("properties-text-menu-{index}"), crate::ui::components::popup::PopupAnchor::point(menu.position, false),
+                    close.clone(), handle.clone(), items.clone(), scroll.clone(), window, cx,
+                    move |view| view.context_menus.get(index).is_some_and(|menu| std::rc::Rc::ptr_eq(&menu.scroll_handle.0, &scroll.0)),
+                    |view, _, cx| { view.context_menus.clear(); cx.notify(); },
+                );
+                continue;
+            }
+                        {
             root = root.child(deferred(
                 anchored().position(menu.position).snap_to_window().child(
                     crate::ui::components::dropdown::GenericDropdown {
@@ -192,6 +204,7 @@ impl Render for PropertiesWindow {
                     },
                 ),
             ));
+            }
         }
         root
     }
@@ -251,6 +264,7 @@ impl PropertiesWindow {
 
         self.context_menus.clear();
         self.context_menus.push(ContextMenuInstance {
+            native_bounds: None,
             position,
             content: ContextMenuContent::Items(items, None),
             scroll_handle: UniformListScrollHandle::new(),

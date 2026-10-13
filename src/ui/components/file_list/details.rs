@@ -1,3 +1,4 @@
+use crate::ui::components::tooltip::NativeTooltipExt;
 use super::details_row::{render_details_row, DetailsRowParams};
 use super::headers::render_headers;
 use super::presentation::{date_group_button, date_group_header, view_mode_button};
@@ -290,6 +291,7 @@ pub(super) fn render_details_file_list(
                                           this.activate_pane(&p_id_cap_cap, cx);
                                           this.context_menus.clear();
                                           this.context_menus.push(ContextMenuInstance {
+            native_bounds: None,
                                               position: pos,
                                               content: ContextMenuContent::Items(with_grid_sort(pane_context_menu_items(cx.i18n(), h.clone(), p_id_cap_cap.clone(), this), this, h.clone(), &p_id_cap_cap, cx.i18n()), None),
                                               scroll_handle: UniformListScrollHandle::new(),
@@ -613,7 +615,7 @@ pub(super) fn render_details_file_list(
                             .text_ellipsis()
                             .overflow_hidden()
                             .text_color(theme.accent)
-                            .tooltip(Tooltip::text(summary.clone()))
+                            .native_tooltip(Tooltip::text(summary.clone()))
                             .child(summary),
                     )
             })

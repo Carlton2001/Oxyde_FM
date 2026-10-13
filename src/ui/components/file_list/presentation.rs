@@ -1,3 +1,4 @@
+use crate::ui::components::tooltip::NativeTooltipExt;
 use crate::ui::app::OxydeApp;
 use crate::ui::components::tooltip::Tooltip;
 use crate::ui::date_groups::DateGroup;
@@ -43,7 +44,7 @@ pub(super) fn date_group_button(pane_id: &str, enabled: bool, handle: Entity<Oxy
         .size(rems(1.5)).flex_none().flex().items_center().justify_center().rounded_md()
         .bg(if enabled { theme.selected } else { theme.header })
         .hover(|style| style.bg(theme.control_hover))
-        .tooltip(Tooltip::text(cx.i18n().text(Message::SettingsGroupByDate)))
+        .native_tooltip(Tooltip::text(cx.i18n().text(Message::SettingsGroupByDate)))
         .on_mouse_down(MouseButton::Left, move |_, _, cx| {
             cx.stop_propagation();
             handle.update(cx, |view, cx| view.toggle_date_grouping(&pane_id, cx));
@@ -211,7 +212,7 @@ pub(super) fn view_mode_button(
             theme.header
         })
         .hover(|d| d.bg(theme.control_hover))
-        .tooltip(Tooltip::text(cx.i18n().text(tooltip)))
+        .native_tooltip(Tooltip::text(cx.i18n().text(tooltip)))
         .on_mouse_down(MouseButton::Left, move |_, _, cx| {
             cx.stop_propagation();
             handle.update(cx, |this, cx| {

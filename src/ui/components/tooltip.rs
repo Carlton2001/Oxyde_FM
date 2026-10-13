@@ -6,6 +6,8 @@ mod placement;
 pub(crate) mod hover;
 mod pdf_cache;
 mod image_cache;
+mod native;
+pub(crate) use native::NativeTooltipExt;
 mod position;
 
 use video::CancelVideoPreview;

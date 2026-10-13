@@ -1,3 +1,4 @@
+use crate::ui::components::tooltip::NativeTooltipExt;
 use crate::ui::app::OxydeApp;
 use crate::ui::components::tooltip::Tooltip;
 use crate::ui::i18n::{I18nContext, Message};
@@ -25,7 +26,7 @@ pub fn render_title_bar(
         div().id(id).w(rems(2.25)).h_full().flex().items_center()
             .justify_center().flex_none()
             .hover(move |s| s.bg(btn_hover_bg))
-            .tooltip(Tooltip::with_shortcut(
+            .native_tooltip(Tooltip::with_shortcut(
                 cx.i18n().text(label),
                 match label { Message::Refresh => Some("F5 / Ctrl+R".into()), Message::NewPanel => Some("Ctrl+N".into()), _ => None },
             ))
@@ -75,6 +76,7 @@ pub fn render_title_bar(
                 view.settings_open = false;
                 view.context_menus.clear();
                 view.context_menus.push(ContextMenuInstance {
+            native_bounds: None,
                     position: point(bounds.right(), bounds.bottom()),
                     content: ContextMenuContent::Items(items, None),
                     scroll_handle: UniformListScrollHandle::new(),
@@ -91,7 +93,7 @@ pub fn render_title_bar(
     let app_button = div()
         .id("oxyde-app-btn")
         .relative()
-        .tooltip(Tooltip::text(cx.i18n().text(Message::SettingsTitle)))
+        .native_tooltip(Tooltip::text(cx.i18n().text(Message::SettingsTitle)))
         .h_full()
         .px_3()
         .flex()

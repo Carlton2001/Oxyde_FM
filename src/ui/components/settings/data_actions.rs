@@ -122,7 +122,7 @@ pub(super) fn data_action_row(
         .child(div().flex_1().flex_shrink_0().whitespace_nowrap().child(label))
         .on_mouse_down(MouseButton::Left, move |_, window, cx| {
             if enabled {
-                handle.update(cx, |view, cx| view.open_settings_confirmation(action, window, cx));
+                crate::ui::components::popup::with_owner(window, cx, |window, cx| handle.update(cx, |view, cx| view.open_settings_confirmation(action, window, cx)));
             }
         })
 }

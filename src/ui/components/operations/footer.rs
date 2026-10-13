@@ -1,3 +1,4 @@
+use crate::ui::components::tooltip::NativeTooltipExt;
 use crate::ui::app::OxydeApp;
 use crate::ui::components::tooltip::Tooltip;
 use crate::ui::i18n::{I18nContext, Message};
@@ -32,7 +33,7 @@ pub fn render_operations_footer(
         .rounded_sm()
         .text_color(theme.text_muted)
         .occlude()
-        .tooltip(Tooltip::text(tooltip))
+        .native_tooltip(Tooltip::text(tooltip))
         .hover(|style| style.bg(theme.control_hover).text_color(theme.text))
         .child({
             let icon = div().size_4().rounded_full().child(svg()

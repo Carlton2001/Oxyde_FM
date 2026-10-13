@@ -26,12 +26,25 @@ pub(crate) enum SettingsPicker {
     Compression,
 }
 
-pub fn render_settings_panel(
+pub fn render_settings_panel(view: &OxydeApp, handle: Entity<OxydeApp>, window: &mut Window, cx: &mut Context<OxydeApp>) -> AnyElement {
+    #[cfg(target_os = "windows")]
+    if crate::ui::components::popup::supported(window, cx) {
+        let bounds = view.settings_button_bounds.unwrap_or(Bounds::new(point(px(0.0), px(0.0)), size(px(0.0), px(44.0))));
+        crate::ui::components::popup::show("settings-panel", crate::ui::components::popup::PopupAnchor::element(bounds), handle.clone(), window, cx,
+            |view| view.settings_open,
+            |view, window, cx| render_settings_surface(view, cx.entity(), window, cx, None),
+            |view, _, cx| { view.settings_open = false; view.settings_about_open = false; view.settings_picker = None; view.settings_submenu_bounds = None; cx.notify(); });
+        return div().into_any_element();
+    }
+    render_settings_surface(view, handle, window, cx, None)
+}
+fn render_settings_surface(
     view: &OxydeApp,
     handle: Entity<OxydeApp>,
     window: &mut Window,
     cx: &mut Context<OxydeApp>,
-) -> impl IntoElement {
+    _only_picker: Option<SettingsPicker>,
+) -> AnyElement {
     let theme = *cx.theme();
     let i18n = cx.i18n();
     let backdrop = handle.clone();
@@ -184,11 +197,11 @@ pub fn render_settings_panel(
             px(0.0),
             px(crate::ui::components::title_bar::titlebar_h()),
         ));
-    let available_height = (window.viewport_size().height - origin.y - margin).max(px(1.0));
+    let available_height = (crate::ui::components::popup::available_size(window, cx).height - origin.y - margin).max(px(1.0));
     let panel = div()
         .id("settings-panel")
         .w(rems(panel_width))
-        .max_w(window.viewport_size().width - margin * 2.0)
+        .max_w(crate::ui::components::popup::available_size(window, cx).width - margin * 2.0)
         .max_h(available_height)
         .overflow_x_scroll()
         .overflow_y_scroll()
@@ -203,7 +216,17 @@ pub fn render_settings_panel(
         .on_any_mouse_down(|_, _, cx| cx.stop_propagation())
         .on_scroll_wheel(|_, _, cx| cx.stop_propagation())
         .child(body);
-    let mut overlay = div()
+    #[cfg(target_os = "windows")]
+    if _only_picker.is_none() && crate::ui::components::popup::is_menu(window, cx) {
+        if let (Some(kind), Some(bounds)) = (view.settings_picker.filter(|kind| *kind != SettingsPicker::About), view.settings_submenu_bounds) {
+            let open_left = false;
+            crate::ui::components::popup::show("settings-picker", crate::ui::components::popup::PopupAnchor::beside(bounds, open_left), handle.clone(), window, cx,
+                move |view| view.settings_open && view.settings_picker == Some(kind),
+                move |view, window, cx| render_settings_surface(view, cx.entity(), window, cx, Some(kind)),
+                |view, _, cx| { view.settings_picker = None; view.settings_submenu_bounds = None; cx.notify(); });
+        }
+        return panel.into_any_element();
+    }    let mut overlay = div()
         .absolute()
         .top_0()
         .bottom_0()
@@ -235,11 +258,11 @@ pub fn render_settings_panel(
             } else {
                 18.0
             }))
-            .min(window.viewport_size().width - margin * 2.0);
+            .min(crate::ui::components::popup::available_size(window, cx).width - margin * 2.0);
         // Let the content determine the height. Anchoring moves the menu upwards
         // when needed; scrolling is only necessary if it exceeds the viewport.
         let submenu_available_height =
-            (window.viewport_size().height - margin * 2.0).max(px(1.0));
+            (crate::ui::components::popup::available_size(window, cx).height - margin * 2.0).max(px(1.0));
         let submenu = div()
             .id("settings-submenu")
             .w(submenu_width)
@@ -257,7 +280,10 @@ pub fn render_settings_panel(
             .on_scroll_wheel(|_, _, cx| cx.stop_propagation())
             .child(section(title, theme))
             .children(choices);
-        let open_left = bounds.right() + submenu_width + margin > window.viewport_size().width
+
+        #[cfg(target_os = "windows")]
+        if _only_picker.is_some() { return submenu.into_any_element(); }
+        let open_left = bounds.right() + submenu_width + margin > crate::ui::components::popup::available_size(window, cx).width
             && bounds.left() - submenu_width >= margin;
         let position = point(
             if open_left {
@@ -279,5 +305,5 @@ pub fn render_settings_panel(
                 .child(submenu),
         );
     }
-    overlay
+    overlay.into_any_element()
 }

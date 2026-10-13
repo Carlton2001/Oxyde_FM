@@ -89,6 +89,7 @@ pub(super) fn show_text_menu(
     };
     view.update(cx, |view, cx| {
         view.context_menus = vec![super::ContextMenuInstance {
+            native_bounds: None,
             position,
             content: super::ContextMenuContent::Items(items, None),
             scroll_handle: UniformListScrollHandle::new(),
@@ -330,7 +331,7 @@ impl Render for DialogWindow {
                     .into_any_element()
             }
         });
-        let mut root = div()
+        let root = div()
             .size_full()
             .relative()
             .bg(cx.theme().active_background)
@@ -338,11 +339,24 @@ impl Render for DialogWindow {
             .font_family("Inter")
             .font_weight(crate::ui::style::DEFAULT_FONT_WEIGHT)
             .child(content);
+                let mut root = root;
         for (index, menu) in self.context_menus.iter().enumerate() {
             let super::ContextMenuContent::Items(items, _) = &menu.content else {
                 continue;
             };
             let handle = cx.entity();
+            #[cfg(target_os = "windows")]
+            if crate::ui::components::popup::supported(window, cx) {
+                let scroll = menu.scroll_handle.clone();
+                crate::ui::components::popup::text_menu(
+                    format!("dialog-text-menu-{index}"), crate::ui::components::popup::PopupAnchor::point(menu.position, false),
+                    handle, owner.clone(), items.clone(), scroll.clone(), window, cx,
+                    move |view| view.context_menus.get(index).is_some_and(|menu| std::rc::Rc::ptr_eq(&menu.scroll_handle.0, &scroll.0)),
+                    |view, _, cx| { view.context_menus.clear(); cx.notify(); },
+                );
+                continue;
+            }
+                        {
             let close = handle.clone();
             let measured = handle.clone();
             let menu_size = size(
@@ -392,6 +406,7 @@ impl Render for DialogWindow {
                     },
                 ),
             ));
+            }
         }
         root.into_any_element()
     }

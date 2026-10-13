@@ -1,3 +1,4 @@
+use crate::ui::components::tooltip::NativeTooltipExt;
 use super::PropertiesWindow;
 use super::PropertyPresentation;
 use crate::ui::components::icons::{get_icon_type, render_file_icon};
@@ -150,7 +151,7 @@ pub(super) fn render(
                     .flex()
                     .items_center()
                     .id("properties-name")
-                    .tooltip(crate::ui::components::tooltip::Tooltip::text(
+                    .native_tooltip(crate::ui::components::tooltip::Tooltip::text(
                         cx.i18n().text(Message::PropertiesCopyNameDoubleClick),
                     ))
                     .on_mouse_down(MouseButton::Left, move |event, _, cx| {

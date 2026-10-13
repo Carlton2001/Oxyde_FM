@@ -257,6 +257,7 @@ impl AdvancedSearchWindow {
 
         self.context_menus.clear();
         self.context_menus.push(ContextMenuInstance {
+            native_bounds: None,
             position,
             content: ContextMenuContent::Items(items, None),
             scroll_handle: UniformListScrollHandle::new(),

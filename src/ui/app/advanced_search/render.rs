@@ -397,6 +397,18 @@ impl Render for AdvancedSearchWindow {
                     continue;
                 };
                 let close = handle.clone();
+                #[cfg(target_os = "windows")]
+                if crate::ui::components::popup::supported(window, cx) {
+                    let scroll = menu.scroll_handle.clone();
+                    crate::ui::components::popup::text_menu(
+                        format!("advanced-text-menu-{index}"), crate::ui::components::popup::PopupAnchor::point(menu.position, false),
+                        close.clone(), handle.clone(), items.clone(), scroll.clone(), window, cx,
+                        move |view| view.context_menus.get(index).is_some_and(|menu| std::rc::Rc::ptr_eq(&menu.scroll_handle.0, &scroll.0)),
+                        |view, _, cx| { view.context_menus.clear(); cx.notify(); },
+                    );
+                    continue;
+                }
+                                {
                 let width = crate::ui::scale::rem_pixels(rems(13.0));
                 let height = crate::ui::scale::rem_pixels(rems(items.len() as f32 * 1.625 + 1.0));
                 let viewport = window.viewport_size();
@@ -432,6 +444,7 @@ impl Render for AdvancedSearchWindow {
                         },
                     ),
                 ));
+                }
             }
         }
         root

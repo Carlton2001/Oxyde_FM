@@ -1,3 +1,4 @@
+use crate::ui::components::tooltip::NativeTooltipExt;
 use super::super::{ContextMenuContent, ContextMenuInstance};
 use super::AdvancedSearchWindow;
 use crate::ui::{
@@ -149,6 +150,7 @@ impl AdvancedSearchWindow {
                             .collect();
                         this.context_menus.clear();
                         this.context_menus.push(ContextMenuInstance {
+            native_bounds: None,
                             position: event.position,
                             content: ContextMenuContent::Items(items, None),
                             scroll_handle: UniformListScrollHandle::new(),
@@ -299,7 +301,7 @@ impl AdvancedSearchWindow {
                             theme.text_muted
                         }),
                 )
-                .tooltip(crate::ui::components::tooltip::Tooltip::text(
+                .native_tooltip(crate::ui::components::tooltip::Tooltip::text(
                     cx.i18n().text(message),
                 ))
                 .on_click(move |_, _, cx| {
@@ -352,7 +354,7 @@ impl AdvancedSearchWindow {
                     }),
             )
             .when(!regex, |e| e.child(cx.i18n().text(message)))
-            .tooltip(crate::ui::components::tooltip::Tooltip::text(
+            .native_tooltip(crate::ui::components::tooltip::Tooltip::text(
                 cx.i18n().text(message),
             ))
             .on_click(move |_, _, cx| {

@@ -1,3 +1,4 @@
+use crate::ui::components::tooltip::NativeTooltipExt;
 use crate::ui::app::OxydeApp;
 use crate::ui::components::tooltip::Tooltip;
 use crate::ui::i18n::{I18nContext, Message};
@@ -184,7 +185,7 @@ pub fn render_operations_panel(
                                     .justify_center()
                                     .rounded_sm()
                                     .hover(|style| style.bg(theme.control_hover))
-                                    .tooltip(Tooltip::text(cx.i18n().text(Message::OpsDismissAll)))
+                                    .native_tooltip(Tooltip::text(cx.i18n().text(Message::OpsDismissAll)))
                                     .child(
                                         svg()
                                             .path("icons/broom.svg")
@@ -208,7 +209,7 @@ pub fn render_operations_panel(
                                 .justify_center()
                                 .rounded_sm()
                                 .hover(|style| style.bg(theme.control_hover))
-                                .tooltip(Tooltip::text(cx.i18n().text(Message::OpsHidePanel)))
+                                .native_tooltip(Tooltip::text(cx.i18n().text(Message::OpsHidePanel)))
                                 .child(
                                     svg()
                                         .path("icons/chevron-down.svg")

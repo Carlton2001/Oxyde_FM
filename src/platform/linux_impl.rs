@@ -735,4 +735,14 @@ impl Platform for LinuxPlatform {
     fn place_hover_window(&self, _window: raw_window_handle::RawWindowHandle, _size: Option<(f32, f32, f32)>, _scale: f32) -> Result<(), String> {
         Err("Native hover windows are unavailable on this platform".into())
     }
+
+    fn set_popup_anchor(&self, _window: raw_window_handle::RawWindowHandle, _bounds: Option<(f32, f32, f32, f32)>, _open_left: bool, beside: bool) -> Result<(), String> {
+        Err("Native popup anchors are unavailable on this platform".into())
+    }
+
+    fn configure_menu_window(&self, _window: raw_window_handle::RawWindowHandle, _owner: raw_window_handle::RawWindowHandle, _coordinate_owner: raw_window_handle::RawWindowHandle) -> Result<(), String> { Err("Native popup menus unavailable".into()) }
+    fn popup_point_to_owner(&self, _window: raw_window_handle::RawWindowHandle, _owner: raw_window_handle::RawWindowHandle, point: (f32, f32)) -> Result<(f32, f32), String> { Ok(point) }
+    fn popup_family_active(&self, _owner: raw_window_handle::RawWindowHandle) -> bool { false }
+    fn request_popup_activation(&self, _window: raw_window_handle::RawWindowHandle) -> Result<(), String> { Err("Native popup activation unavailable".into()) }
+    fn popup_work_area_size(&self, _window: raw_window_handle::RawWindowHandle) -> Result<(f32, f32), String> { Err("Native popup work area unavailable".into()) }
 }

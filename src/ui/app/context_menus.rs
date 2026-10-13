@@ -14,6 +14,7 @@ pub(super) fn context_menu_contains_point(
     position: Point<Pixels>,
     viewport_height: Pixels,
 ) -> bool {
+    if let Some(bounds) = menu.native_bounds { return bounds.contains(&position); }
     let height = context_menu_height(menu, viewport_height);
     let left = if menu.open_left {
         menu.position.x - menu.width
@@ -25,6 +26,7 @@ pub(super) fn context_menu_contains_point(
 }
 
 pub(super) fn context_menu_height(menu: &ContextMenuInstance, viewport_height: Pixels) -> Pixels {
+    if let Some(bounds) = menu.native_bounds { return bounds.size.height; }
     let (item_count, header_height, max_height) = match &menu.content {
         ContextMenuContent::Items(items, header) => (
             items.iter().filter(|item| !matches!(item.icon, Some(crate::ui::components::dropdown::IconName::Separator))).count(),
@@ -90,6 +92,7 @@ impl OxydeApp {
         let request_id = self.next_native_menu_request;
         self.context_menus.truncate(parent_menu_idx + 1);
         self.context_menus.push(ContextMenuInstance {
+            native_bounds: None,
             position,
             content: ContextMenuContent::NativeItems {
                 path: path.clone(),
@@ -316,6 +319,7 @@ impl OxydeApp {
         }
         self.context_menus.clear();
         self.context_menus.push(ContextMenuInstance {
+            native_bounds: None,
             position,
             content: ContextMenuContent::Items(items, None),
             scroll_handle: UniformListScrollHandle::new(),

@@ -12,13 +12,60 @@ use std::{
 struct NativeWindows {
     windows: HashMap<WindowId, (WindowHandle<NativeTooltip>, Task<()>)>,
     pending: HashSet<WindowId>,
+    ordinary: HashMap<WindowId, AnyView>,
     failed: HashSet<WindowId>,
     cleanup: Option<Subscription>,
 }
 impl Global for NativeWindows {}
 
+pub(in crate::ui::components::tooltip) fn is_surface(window: &Window, cx: &App) -> bool {
+    let id = window.window_handle().window_id();
+    cx.try_global::<NativeWindows>().is_some_and(|state| state.windows.values().any(|entry| entry.0.window_id() == id))
+}
+
+fn set_native(view: &AnyView, native: bool, cx: &mut App) {
+    if let Ok(view) = view.clone().downcast::<Tooltip>() {
+        view.update(cx, |tooltip, cx| { tooltip.native_presentation = native; cx.notify(); });
+    }
+}
+
+pub(in crate::ui::components::tooltip) fn proxy(view: AnyView, parent: AnyWindowHandle, cx: &mut App) -> AnyView {
+    let id = parent.window_id();
+    if cx.default_global::<NativeWindows>().failed.contains(&id) { return view; }
+    let lease = view.entity_id();
+    cx.new(|cx| {
+        cx.on_release(move |_, cx| {
+            let state = cx.default_global::<NativeWindows>();
+            if state.ordinary.get(&id).is_some_and(|view| view.entity_id() == lease) {
+                state.ordinary.remove(&id);
+                hide(id, cx);
+            }
+        }).detach();
+        TooltipProxy { view }
+    }).into()
+}
+
+struct TooltipProxy { view: AnyView }
+impl Render for TooltipProxy {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let id = Window::window_handle(window).window_id();
+        if cx.default_global::<NativeWindows>().failed.contains(&id) {
+            return self.view.clone().into_any_element();
+        }
+        let view = self.view.clone();
+        canvas(|_, _, _| (), move |_, _, window, cx| {
+            let id = Window::window_handle(window).window_id();
+            cx.default_global::<NativeWindows>().ordinary.insert(id, view.clone());
+            present(&view, window, cx);
+            window.on_mouse_event(|_: &MouseMoveEvent, phase, window, cx| {
+                if phase == DispatchPhase::Bubble { sync(window, cx); }
+            });
+        }).w(px(1.0)).h(px(1.0)).into_any_element()
+    }
+}
+
 pub(super) struct NativeTooltip {
-    view: Option<Entity<Tooltip>>,
+    view: Option<AnyView>,
     measured: Option<Size<Pixels>>,
     scale: f32,
 }
@@ -34,6 +81,14 @@ fn visible_size(measured: Option<Size<Pixels>>, rem: Pixels) -> Size<Pixels> {
         .unwrap_or_else(|| size(rem * 26.5, rem * 8.0))
 }
 
+pub(super) fn close_for(id: WindowId, cx: &mut App) {
+    let state = cx.default_global::<NativeWindows>();
+    state.pending.remove(&id);
+    state.ordinary.remove(&id);
+    let entry = state.windows.remove(&id);
+    if let Some((handle, task)) = entry { drop(task); let _ = handle.update(cx, |_, window, _| window.remove_window()); }
+}
+
 pub(super) fn close_windows(cx: &mut App) {
     let entries = std::mem::take(&mut cx.default_global::<NativeWindows>().windows);
     for (_, (handle, task)) in entries {
@@ -42,14 +97,12 @@ pub(super) fn close_windows(cx: &mut App) {
     }
 }
 
-fn candidate(view: &AnyView, cx: &App) -> Option<Entity<Tooltip>> {
-    let tooltip = view.clone().downcast::<Tooltip>().ok()?;
-    let preview = tooltip.read(cx).preview_view.as_ref()?.read(cx);
-    (preview.original_image.is_some() || preview.media_asset.is_some()).then_some(tooltip)
-}
-
-fn place(root: &NativeTooltip, window: &Window) {
+fn place(root: &NativeTooltip, window: &Window, cx: &App) {
     if let Ok(raw) = HasWindowHandle::window_handle(window) {
+        let anchor = root.view.as_ref().and_then(|view| view.clone().downcast::<Tooltip>().ok())
+            .and_then(|view| view.read(cx).fixed_bounds.clone());
+        let anchor = anchor.map(|bounds| { let bounds = bounds.get(); (bounds.left().as_f32(), bounds.top().as_f32(), bounds.size.width.as_f32(), bounds.size.height.as_f32()) });
+        let _ = oxyde_lib::platform::platform().set_popup_anchor(raw.as_raw(), anchor, false, false);
         let size = root.view.as_ref().map(|_| {
             let measured = visible_size(root.measured, window.rem_size());
             (
@@ -86,19 +139,17 @@ pub(super) fn sync(parent: &mut Window, cx: &mut App) {
         .map(|session| (session.scope.clone(), session.tooltip.clone()));
     let view =
         session.and_then(|(scope, view)| scope.filter(|scope| scope.valid(parent, cx)).and(view));
-    let view = view.as_ref().and_then(|view| candidate(view, cx));
+    let ordinary = cx.default_global::<NativeWindows>().ordinary.get(&id).cloned();
+    let view = if parent.is_window_active() && parent.is_window_hovered() { ordinary.or(view) } else { None };
     let rem = parent.rem_size();
     let _ = handle.update(cx, |root, window, cx| {
-        if root.view.as_ref().map(Entity::entity_id) != view.as_ref().map(Entity::entity_id) {
+        if root.view.as_ref().map(|view| view.entity_id()) != view.as_ref().map(|view| view.entity_id()) {
             if let Some(old) = root.view.take() {
-                old.update(cx, |tooltip, _| tooltip.native_presentation = false);
+                set_native(&old, false, cx);
             }
             root.view = view;
             if let Some(view) = &root.view {
-                view.update(cx, |tooltip, cx| {
-                    tooltip.native_presentation = true;
-                    cx.notify();
-                });
+                set_native(view, true, cx);
             }
             cx.notify();
             window.refresh();
@@ -107,7 +158,7 @@ pub(super) fn sync(parent: &mut Window, cx: &mut App) {
             window.set_rem_size(rem);
             window.refresh();
         }
-        place(root, window);
+        place(root, window, cx);
     });
 }
 
@@ -147,7 +198,7 @@ pub(super) fn hide(id: WindowId, cx: &mut App) {
     if let Some(handle) = handle {
         let _ = handle.update(cx, |root, window, cx| {
             if let Some(view) = root.view.take() {
-                view.update(cx, |tooltip, _| tooltip.native_presentation = false);
+                set_native(&view, false, cx);
             }
             if let Ok(handle) = window.window_handle() {
                 let _ = oxyde_lib::platform::platform().place_hover_window(
@@ -160,10 +211,8 @@ pub(super) fn hide(id: WindowId, cx: &mut App) {
     }
 }
 
-pub(super) fn present(view: &AnyView, parent: &mut Window, cx: &mut App) -> bool {
-    if candidate(view, cx).is_none() {
-        return false;
-    }
+pub(super) fn present(_view: &AnyView, parent: &mut Window, cx: &mut App) -> bool {
+    
     let id = Window::window_handle(parent).window_id();
     let state = cx.default_global::<NativeWindows>();
     if state.failed.contains(&id) {
@@ -184,6 +233,7 @@ pub(super) fn present(view: &AnyView, parent: &mut Window, cx: &mut App) -> bool
             let entry = cx.default_global::<NativeWindows>().windows.remove(&id);
             cx.default_global::<NativeWindows>().pending.remove(&id);
             cx.default_global::<NativeWindows>().failed.remove(&id);
+            cx.default_global::<NativeWindows>().ordinary.remove(&id);
             if let Some((handle, _)) = entry {
                 let _ = handle.update(cx, |_, window, _| window.remove_window());
             }
@@ -195,10 +245,12 @@ pub(super) fn present(view: &AnyView, parent: &mut Window, cx: &mut App) -> bool
     let rem = parent.rem_size();
     let scale = parent.scale_factor();
     cx.defer(move |cx| {
+        if !cx.default_global::<NativeWindows>().pending.contains(&id) { return; }
         let result = (|| -> Result<WindowHandle<NativeTooltip>, String> {
             parent_handle
                 .update(cx, |_, _, _| ())
                 .map_err(|error| error.to_string())?;
+            let origin = parent_handle.update(cx, |_, parent, _| parent.bounds().origin).map_err(|error| error.to_string())?;
             let owner = owner.ok_or_else(|| "Missing hover owner".to_string())?;
             let handle = cx
                 .open_window(
@@ -212,7 +264,7 @@ pub(super) fn present(view: &AnyView, parent: &mut Window, cx: &mut App) -> bool
                         is_minimizable: false,
                         is_movable: false,
                         window_bounds: Some(WindowBounds::Windowed(Bounds::new(
-                            point(px(0.0), px(0.0)),
+                            origin,
                             size(px(424.0), px(544.0)),
                         ))),
                         ..Default::default()
@@ -257,7 +309,8 @@ pub(super) fn present(view: &AnyView, parent: &mut Window, cx: &mut App) -> bool
                                     .windows
                                     .get(&id)
                                     .and_then(|session| session.scope.clone());
-                                if !scope.is_some_and(|scope| scope.valid(parent, cx)) {
+                                let ordinary = cx.default_global::<NativeWindows>().ordinary.contains_key(&id);
+                                if !parent.is_window_active() || !parent.is_window_hovered() || (!ordinary && !scope.is_some_and(|scope| scope.valid(parent, cx))) {
                                     hide(id, cx);
                                 }
                             })
@@ -362,7 +415,7 @@ impl Element for MeasuredContent {
                 owner.update(cx, |root, _| root.measured = Some(measured));
                 let _ = handle.update(cx, |_, window, cx| {
                     let root = owner.read(cx);
-                    place(root, window);
+                    place(root, window, cx);
                 });
             });
         }

@@ -124,6 +124,11 @@ impl Element for CursorTooltip {
         window: &mut Window,
         cx: &mut App,
     ) {
+        #[cfg(target_os = "windows")]
+        if super::hover::native_window::is_surface(window, cx) {
+            self.content.prepaint_at(point(px(0.0), px(0.0)), window, cx);
+            return;
+        }
         let origin = if let Some(bounds) = &self.fixed_bounds {
             let bounds = bounds.get();
             anchored_origin(
@@ -148,6 +153,8 @@ impl Element for CursorTooltip {
         cx: &mut App,
     ) {
         self.content.paint(window, cx);
+        #[cfg(target_os = "windows")]
+        if super::hover::native_window::is_surface(window, cx) { return; }
         if self.fixed_bounds.is_none() {
             follow_pointer(window);
         }

@@ -241,6 +241,7 @@ impl OxydeApp {
                                                             new_pos.y = parent_visible_y + px(ix_cap as f32 * logical(26.0));
 
                                                             this.context_menus.push(ContextMenuInstance {
+            native_bounds: None,
                                                                 position: new_pos,
                                                                 open_left,
                                                                 hovered_item: None,

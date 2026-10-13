@@ -2,7 +2,7 @@
 mod scope;
 mod handover;
 #[cfg(target_os = "windows")]
-mod native_window;
+pub(super) mod native_window;
 
 pub(crate) fn close_native_windows(cx: &mut App) {
     #[cfg(target_os = "windows")]
@@ -92,6 +92,12 @@ fn initialize(cx: &mut App) {
         });
         cx.default_global::<Sessions>().cleanup = Some(subscription);
     }
+}
+
+pub(crate) fn close_for(window: &mut Window, cx: &mut App) {
+    dismiss(window, cx);
+    #[cfg(target_os = "windows")]
+    native_window::close_for(window.window_handle().window_id(), cx);
 }
 
 pub(crate) fn dismiss(window: &mut Window, cx: &mut App) {
@@ -337,7 +343,7 @@ pub(crate) fn region_container(
             let session = cx.default_global::<Sessions>().windows.get(&id).unwrap();
             if let Some(view) = session.tooltip.clone() {
                 #[cfg(target_os = "windows")]
-                if matches!(scope.region, HoverRegion::Files(_)) && native_window::present(&view, window, cx) {
+                if native_window::present(&view, window, cx) {
                     return;
                 }
                 let tag = scope.tag.clone();

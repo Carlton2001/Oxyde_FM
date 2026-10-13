@@ -6,9 +6,23 @@ use crate::ui::theme::ThemeContext;
 use gpui::prelude::*;
 use gpui::*;
 
-pub(crate) fn render_pinned_menu(
+pub(crate) fn render_pinned_menu(view: &OxydeApp, handle: Entity<OxydeApp>, window: &mut Window, cx: &mut Context<OxydeApp>) -> AnyElement {
+    #[cfg(target_os = "windows")]
+    if crate::ui::components::popup::supported(window, cx) {
+        let origin = view.context_anchor_points.get("sidebar-pinned").copied().unwrap_or_default();
+        let bounds = Bounds::new(origin, size(rem_pixels(rems(2.0)), rem_pixels(rems(2.0))));
+        crate::ui::components::popup::show("pinned-rail", crate::ui::components::popup::PopupAnchor::beside(bounds, false), handle.clone(), window, cx,
+            |view| view.sidebar_collapsed && view.pinned_rail_open,
+            |view, window, cx| render_pinned_contents(view, cx.entity(), window, cx),
+            |view, _, cx| { view.pinned_rail_open = false; cx.notify(); });
+        return div().into_any_element();
+    }
+    render_pinned_contents(view, handle, window, cx)
+}
+fn render_pinned_contents(
     view: &OxydeApp,
     handle: Entity<OxydeApp>,
+    window: &mut Window,
     cx: &mut Context<OxydeApp>,
 ) -> AnyElement {
     let theme = *cx.theme();
@@ -40,10 +54,12 @@ pub(crate) fn render_pinned_menu(
         let open = handle.clone();
         let middle = handle.clone();
         let middle_path = path.clone();
+        let key_open = handle.clone(); let key_path = path.clone();
+        let key_action = std::rc::Rc::new(move |_: &mut Window, cx: &mut App| { key_open.update(cx, |this, cx| { this.pinned_rail_open = false; let pane = this.state.active_pane_id.clone(); this.navigate_to(&pane, key_path.clone(), cx); }); });
         let context = handle.clone();
         let context_path = path.clone();
         menu = menu.child(
-            div()
+            crate::ui::components::popup::keyboard::item(div()
                 .id(("pinned-rail-item", index))
                 .px(rems(0.75))
                 .h(rems(1.625))
@@ -70,8 +86,9 @@ pub(crate) fn render_pinned_menu(
                         this.add_tab(&pane, middle_path.clone(), false, cx);
                     });
                 })
-                .on_mouse_down(MouseButton::Right, move |event, _, cx| {
+                .on_mouse_down(MouseButton::Right, move |event, window, cx| {
                     cx.stop_propagation();
+                    let position = crate::ui::components::popup::owner_point(window, cx, event.position);
                     let items = menus::pinned_context_menu(
                         cx.i18n(),
                         context.clone(),
@@ -81,7 +98,8 @@ pub(crate) fn render_pinned_menu(
                         this.pinned_rail_open = false;
                         this.context_menus.clear();
                         this.context_menus.push(ContextMenuInstance {
-                            position: event.position,
+            native_bounds: None,
+                            position,
                             content: ContextMenuContent::Items(items, None),
                             scroll_handle: UniformListScrollHandle::new(),
                             width: px(0.0),
@@ -92,7 +110,7 @@ pub(crate) fn render_pinned_menu(
                         });
                         cx.notify();
                     });
-                }),
+                }), key_action, None, None),
         );
     }
     menu = menu.on_mouse_down_out(move |event, _, cx| {
@@ -104,6 +122,7 @@ pub(crate) fn render_pinned_menu(
             cx.notify();
         });
     });
+    if crate::ui::components::popup::is_menu(window, cx) { return menu.into_any_element(); }
     deferred(
         anchored()
             .position(point(origin.x + rem_pixels(rems(2.5)), origin.y))
