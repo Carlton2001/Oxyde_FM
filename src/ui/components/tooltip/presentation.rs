@@ -222,12 +222,18 @@ impl Render for DuplicateResultTooltip {
 impl Render for Tooltip {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = *OxydeTheme::global(cx);
-        let maximum_width = if self.native_presentation {
-            rem_pixels(rems(26.5))
-        } else {
-            rem_pixels(rems(26.5)).min((window.viewport_size().width - rem_pixels(rems(2.0))).max(px(1.0)))
-        };
         let chrome = rem_pixels(rems(1.625));
+        let media_width = self.preview_view.clone().and_then(|preview| {
+            preview.update(cx, |preview, cx| {
+                preview.loaded_image(window, cx).map(|image|
+                    preview.preferred_size(&image, rem_pixels(rems(48.375))).width + chrome)
+            })
+        });
+        let maximum_width = if self.native_presentation {
+            media_width.unwrap_or_else(|| rem_pixels(rems(26.5)))
+        } else {
+            media_width.unwrap_or_else(|| rem_pixels(rems(26.5))).min((window.viewport_size().width - rem_pixels(rems(2.0))).max(px(1.0)))
+        };
         let mut tooltip_width = maximum_width;
         let title_lines: Vec<SharedString> = if self.file_info.is_some() {
             let mut font = window.text_style().font();
@@ -237,9 +243,11 @@ impl Render for Tooltip {
             let line = window.text_system().shape_line(self.title.clone(), rem_pixels(rems(0.75)), &[TextRun {
                 len: self.title.len(), font: font.clone(), color: theme.accent, background_color: None, underline: None, strikethrough: None,
             }], None);
-            // Keep filename wrapping and horizontal placement independent of loading.
+            // A ready media preview determines the width; filenames wrap within it.
             let preferred_width = line.width;
-            tooltip_width = (preferred_width.max(rem_pixels(rems(14.0))) + chrome).min(maximum_width);
+            tooltip_width = if media_width.is_some() { maximum_width } else {
+                (preferred_width.max(rem_pixels(rems(14.0))) + chrome).min(maximum_width)
+            };
             let wrap = |width: Pixels| filename_line_ranges(&self.title, (width - chrome).as_f32().max(1.0), |index| line.x_for_index(index).as_f32());
             if wrap(tooltip_width).len() > 2 {
                 if wrap(maximum_width).len() <= 2 {
