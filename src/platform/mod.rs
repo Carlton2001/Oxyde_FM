@@ -423,6 +423,13 @@ pub trait Platform: Send + Sync {
     /// Call on the UI thread with two application-owned native handles.
     fn set_window_owner(&self, window: raw_window_handle::RawWindowHandle, owner: raw_window_handle::RawWindowHandle) -> Result<(), String>;
 
+    /// Configure an application-owned, non-activating, mouse-transparent hover window.
+    fn configure_hover_window(&self, window: raw_window_handle::RawWindowHandle, owner: raw_window_handle::RawWindowHandle) -> Result<(), String>;
+
+    /// Show beside the native pointer, constrained to its monitor, or hide with None.
+    /// Dimensions are logical pixels at the owner's scale factor. UI thread only.
+    fn place_hover_window(&self, window: raw_window_handle::RawWindowHandle, size: Option<(f32, f32)>, scale: f32) -> Result<(), String>;
+
     /// Transfers selected file paths through the native file clipboard.
     fn set_clipboard_files(&self, paths: Vec<String>, cut: bool) -> Result<(), String>;
 
@@ -473,6 +480,9 @@ mod windows_disk_images;
 mod windows_pointer;
 #[cfg(target_os = "windows")]
 mod windows_window_owner;
+
+#[cfg(target_os = "windows")]
+mod windows_hover_window;
 #[cfg(target_os = "windows")]
 mod windows_drives;
 #[cfg(target_os = "windows")]

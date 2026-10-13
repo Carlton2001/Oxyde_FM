@@ -20,6 +20,7 @@ pub(crate) fn invalidate_pdf_preview(path: &str) {
 
 /// Un composant de bulle d'aide (Tooltip) dans le style Oxyde.
 pub struct Tooltip {
+    native_presentation: bool,
     title: SharedString,
     wrap_title: bool,
     meta: Option<SharedString>,
@@ -50,7 +51,7 @@ impl Tooltip {
     }
     pub(crate) fn fixed_path(title: SharedString, bounds: std::rc::Rc<std::cell::Cell<Bounds<Pixels>>>) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
         move |_, cx| cx.new(|_| Self {
-            title: title.clone(), wrap_title: true, meta: None, shortcut: None,
+            native_presentation: false, title: title.clone(), wrap_title: true, meta: None, shortcut: None,
             file_info: None, preview_view: None, fixed_bounds: Some(bounds.clone()),
         }).into()
     }
@@ -70,7 +71,7 @@ impl Tooltip {
                     tooltip.shortcut = Some(if app.shift_delete { "Shift+Del" } else { "Del" }.into());
                     cx.notify();
                 }).detach();
-                Self { title, wrap_title: false, meta: None, shortcut: Some(if window.modifiers().shift { "Shift+Del" } else { "Del" }.into()), file_info: None, fixed_bounds: None, preview_view: None }
+                Self { native_presentation: false, title, wrap_title: false, meta: None, shortcut: Some(if window.modifiers().shift { "Shift+Del" } else { "Del" }.into()), file_info: None, fixed_bounds: None, preview_view: None }
             }).into()
         }
     }
@@ -89,7 +90,7 @@ impl Tooltip {
     }
     pub fn for_network(file: oxyde_lib::models::FileEntry) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
         move |_, cx| cx.new(|_| Self {
-            title: file.name.clone().into(), wrap_title: false, meta: None, shortcut: None,
+            native_presentation: false, title: file.name.clone().into(), wrap_title: false, meta: None, shortcut: None,
             file_info: Some(FileInfo { location: None, network: Some(file.clone()), ext: "Réseau".into(), size: (0, false, false), date: 0 }),
             fixed_bounds: None, preview_view: None,
         }).into()
@@ -102,7 +103,7 @@ impl Tooltip {
         let title = title.into();
         move |_, cx| {
             cx.new(|_| Self {
-                title: title.clone(), wrap_title: false, meta: None, shortcut: shortcut.clone(),
+                native_presentation: false, title: title.clone(), wrap_title: false, meta: None, shortcut: shortcut.clone(),
                 file_info: None, fixed_bounds: None, preview_view: None,
             }).into()
         }
@@ -127,7 +128,7 @@ impl Tooltip {
     ) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
         move |_, cx| {
             cx.new(|_| Self {
-                title: title.clone(),
+                native_presentation: false, title: title.clone(),
                 wrap_title,
                 meta: None,
                 shortcut: None,
@@ -147,7 +148,7 @@ impl Tooltip {
         let meta = meta.into();
         move |_, cx| {
             cx.new(|_| Self {
-                title: title.clone(),
+                native_presentation: false, title: title.clone(),
                 wrap_title: false,
                 meta: Some(meta.clone()),
                 shortcut: None,
@@ -167,7 +168,7 @@ impl Tooltip {
     ) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
         move |_, cx| {
             cx.new(|_| Self {
-                title: SharedString::from(name.clone()),
+                native_presentation: false, title: SharedString::from(name.clone()),
                 wrap_title: false,
                 meta: None,
                 shortcut: None,
@@ -251,7 +252,7 @@ impl Tooltip {
             }
 
             Self {
-                title: SharedString::from(name),
+                native_presentation: false, title: SharedString::from(name),
                 wrap_title: false,
                 meta: None,
                 shortcut: None,

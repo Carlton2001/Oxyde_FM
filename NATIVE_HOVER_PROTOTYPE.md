@@ -1,0 +1,41 @@
+# Prototype des aperçus en fenêtre native
+
+Branche : `codex/native-hover-preview`.
+
+Sous Windows, les infobulles de fichiers avec aperçu image ou PDF utilisent une
+fenêtre GPUI native réutilisée par fenêtre principale. Cela concerne les listes
+de fichiers utilisant la session de survol partagée, en modes Détails et Grille.
+Les préférences d'aperçu et le délai de survol existants restent applicables.
+Les autres infobulles, les vidéos et les aperçus texte conservent leur rendu actuel.
+Sous Linux, le rendu actuel reste utilisé.
+
+La fenêtre native ne prend pas le focus, laisse passer la souris, n'apparaît pas
+dans la barre des tâches et appartient à sa fenêtre Oxyde. Son placement suit le
+pointeur et les limites de la zone de travail du moniteur, même en dehors des
+bords de la fenêtre principale. Elle est masquée quand la session devient
+invalide et supprimée à la fermeture de la fenêtre principale.
+
+Le chargement et l'isolation des décodeurs existants sont conservés. Un contrôle
+sur le thread UI toutes les 50 ms assure le suivi et la disparition même sans
+nouveau rendu de la fenêtre principale. Les placements inchangés n'émettent pas
+de nouveaux événements de redimensionnement natifs.
+
+## Essai manuel
+
+Lancer `cargo run --offline`, avec les aperçus activés dans les préférences.
+
+1. Survoler une image puis un PDF dans les modes Détails et Grille.
+2. Essayer près de chacun des bords d'une fenêtre Oxyde non maximisée : la bulle
+   peut dépasser Oxyde, mais doit rester dans la zone de travail de l'écran.
+3. Passer rapidement entre les fichiers, défiler, changer de dossier et cliquer.
+   Vérifier la disparition et l'absence de nom ou d'aperçu obsolète.
+4. Vérifier que la souris peut sélectionner un fichier sous la bulle et que les
+   raccourcis clavier restent dirigés vers la fenêtre principale.
+5. Faire Alt+Tab, minimiser Oxyde, ouvrir une fenêtre secondaire et fermer Oxyde.
+   Vérifier qu'aucune bulle ne reste visible et qu'aucun processus ne persiste.
+6. Tester le zoom de l'interface et, si disponible, deux écrans avec des échelles
+   différentes. Vérifier la taille, le placement et la lisibilité.
+
+Ce prototype modifie le placement : la bulle complète passe à gauche ou au-dessus
+du pointeur quand l'espace manque. Le rendu natif n'a pas encore de coins de
+fenêtre arrondis ni d'ombre extérieure comme l'overlay actuel.

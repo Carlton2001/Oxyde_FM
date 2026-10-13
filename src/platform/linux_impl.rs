@@ -727,4 +727,12 @@ impl Platform for LinuxPlatform {
     fn set_application_icon(&self, _window: raw_window_handle::RawWindowHandle, _icon_bytes: &[u8]) {
         // TODO
     }
+
+    fn configure_hover_window(&self, _window: raw_window_handle::RawWindowHandle, _owner: raw_window_handle::RawWindowHandle) -> Result<(), String> {
+        Err("Native hover windows are unavailable on this platform".into())
+    }
+
+    fn place_hover_window(&self, _window: raw_window_handle::RawWindowHandle, _size: Option<(f32, f32)>, _scale: f32) -> Result<(), String> {
+        Err("Native hover windows are unavailable on this platform".into())
+    }
 }

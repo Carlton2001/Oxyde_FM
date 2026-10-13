@@ -698,6 +698,15 @@ impl Platform for WindowsPlatform {
         super::windows_window_owner::set_owner(HWND(window.hwnd.get() as *mut _), HWND(owner.hwnd.get() as *mut _))
     }
 
+    fn configure_hover_window(&self, window: raw_window_handle::RawWindowHandle, owner: raw_window_handle::RawWindowHandle) -> Result<(), String> {
+        self.set_window_owner(window, owner)?;
+        super::windows_hover_window::configure(window)
+    }
+
+    fn place_hover_window(&self, window: raw_window_handle::RawWindowHandle, size: Option<(f32, f32)>, scale: f32) -> Result<(), String> {
+        super::windows_hover_window::place(window, size, scale)
+    }
+
     fn set_application_icon(&self, window: raw_window_handle::RawWindowHandle, icon_bytes: &[u8]) {
         use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
         use windows::Win32::UI::WindowsAndMessaging::{

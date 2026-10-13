@@ -1,6 +1,8 @@
 //! A window-local tooltip session shared inside each hover region.
 mod scope;
 mod handover;
+#[cfg(target_os = "windows")]
+mod native_window;
 use crate::ui::app::OxydeApp;
 use gpui::*;
 pub(crate) use scope::HoverRegion;
@@ -87,6 +89,8 @@ fn initialize(cx: &mut App) {
 
 pub(crate) fn dismiss(window: &mut Window, cx: &mut App) {
     let id = window.window_handle().window_id();
+    #[cfg(target_os = "windows")]
+    native_window::hide(id, cx);
     if let Some(session) = cx.default_global::<Sessions>().windows.get_mut(&id) {
         session.clear();
     }
@@ -321,6 +325,10 @@ pub(crate) fn region_container(
             }
             let session = cx.default_global::<Sessions>().windows.get(&id).unwrap();
             if let Some(view) = session.tooltip.clone() {
+                #[cfg(target_os = "windows")]
+                if matches!(scope.region, HoverRegion::Files(_)) && native_window::present(&view, window, cx) {
+                    return;
+                }
                 let tag = scope.tag.clone();
                 window.set_tooltip(AnyTooltip {
                     view,

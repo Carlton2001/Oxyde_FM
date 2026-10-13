@@ -222,7 +222,11 @@ impl Render for DuplicateResultTooltip {
 impl Render for Tooltip {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = *OxydeTheme::global(cx);
-        let maximum_width = rem_pixels(rems(26.5)).min((window.viewport_size().width - rem_pixels(rems(2.0))).max(px(1.0)));
+        let maximum_width = if self.native_presentation {
+            rem_pixels(rems(26.5))
+        } else {
+            rem_pixels(rems(26.5)).min((window.viewport_size().width - rem_pixels(rems(2.0))).max(px(1.0)))
+        };
         let chrome = rem_pixels(rems(1.625));
         let mut tooltip_width = maximum_width;
         let title_lines: Vec<SharedString> = if self.file_info.is_some() {
@@ -386,6 +390,18 @@ impl Render for Tooltip {
             });
 
         box_div.text_style().font_features = Some(TNUM.clone());
+
+        if self.native_presentation {
+            if let Some(preview) = self.preview_view.clone() {
+                let limit = size(rem_pixels(rems(25.0)), rem_pixels(rems(24.0)));
+                preview.update(cx, |preview, _| preview.maximum_size = Some(limit));
+                return div().w(tooltip_width).flex().flex_col()
+                    .bg(theme.surface).border(rems(0.0625)).border_color(theme.border)
+                    .font_family("Inter").font_weight(crate::ui::style::DEFAULT_FONT_WEIGHT)
+                    .child(div().px_3().pt_2().max_h(limit.height).overflow_hidden().child(preview))
+                    .child(box_div).into_any_element();
+            }
+        }
 
         // Décalage pour éviter que le tooltip n'apparaisse exactement sous le pointeur de la souris
         if let Some(preview) = self.preview_view.clone() {
