@@ -6,6 +6,8 @@ Oxyde est un explorateur de fichiers natif écrit en Rust, avec GPUI pour l'inte
 
 ## Documentation à consulter
 
+- **[POPUP_WINDOWS_AUDIT.md](POPUP_WINDOWS_AUDIT.md)** décrit la migration des infobulles et menus vers les fenêtres Windows et ses limites de validation. Consulter également la section « Fenêtres transitoires » de `UI_ARCHITECTURE.md` avant de modifier ces surfaces.
+
 - **[SHUTDOWN_DIAGNOSTICS.md](SHUTDOWN_DIAGNOSTICS.md)** conserve le diagnostic et la résolution du blocage de fermeture après les aperçus PDF sous Windows (`SHUTDOWN-PDF-INTEL-2026-10-04`). Le consulter si ce problème revient ou avant de modifier la sortie finale du processus.
 - **[UI_ARCHITECTURE.md](UI_ARCHITECTURE.md)** définit les règles actuelles pour les thèmes, l'internationalisation, les composants partagés, les préférences et la validation de l'interface. Le consulter avant de modifier l'UI.
 - `src/ui/app/` contient l'état et l'assemblage des vues ; `src/ui/components/` les composants d'interface ; `src/ui/elements/` les éléments réutilisables de bas niveau.

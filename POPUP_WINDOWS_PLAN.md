@@ -39,6 +39,8 @@ Aucun changement de curseur n'est ajouté.
   actions système, sous-menus, filtres avec en-têtes et filtre nominal éditable.
 - Menus ancrés : fil d'Ariane, rail des favoris, paramètres et sous-menus,
   listes de formulaires réseau et choix des propriétés de raccourci.
+- Suggestions de chemins : menu cliquable ancré au champ, sans prendre son
+  focus ni interrompre la saisie ; conserver sa navigation clavier existante.
 - Menus secondaires : recherche avancée, propriétés, conflits et corbeille,
   y compris les menus contextuels des champs texte.
 
@@ -53,6 +55,11 @@ Aucun changement de curseur n'est ajouté.
    affectés et mettre à jour `UI_ARCHITECTURE.md` et les consignes applicables.
 
 ## Autovalidation et audit
+
+Les étapes de développement sont réalisées. L’audit, les corrections, les
+résultats des tests et les limites de validation sont conservés dans
+[POPUP_WINDOWS_AUDIT.md](POPUP_WINDOWS_AUDIT.md). Les essais visuels et la
+compilation Linux complète restent distincts des validations Windows obtenues.
 
 La couverture est contrôlée par recherche des anciens points d'entrée de rendu,
 pas seulement par compilation. Les tests doivent découvrir un nombre non nul
