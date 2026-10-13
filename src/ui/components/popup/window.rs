@@ -624,8 +624,10 @@ impl Render for MenuWindow {
                                 super::keyboard::pointer(window, cx);
                                 let mut event = event.clone();
                                 event.position = super::owner_point(window, cx, event.position);
-                                let _ = parent.update(cx, |_, window, cx| {
-                                    window.dispatch_event(PlatformInput::MouseMove(event), cx)
+                                let _ = parent.update(cx, |view, window, cx| {
+                                    if let Ok(view) = view.downcast::<crate::ui::app::OxydeApp>() {
+                                        view.update(cx, |view, cx| view.move_popup_scroll(&event, window, cx));
+                                    }
                                 });
                                 cx.propagate();
                             }
@@ -634,8 +636,10 @@ impl Render for MenuWindow {
                             if phase == DispatchPhase::Capture {
                                 let mut event = event.clone();
                                 event.position = super::owner_point(window, cx, event.position);
-                                let _ = parent.update(cx, |_, window, cx| {
-                                    window.dispatch_event(PlatformInput::MouseUp(event), cx)
+                                let _ = parent.update(cx, |view, _, cx| {
+                                    if let Ok(view) = view.downcast::<crate::ui::app::OxydeApp>() {
+                                        view.update(cx, |view, cx| view.release_popup_scroll(&event, cx));
+                                    }
                                 });
                                 cx.propagate();
                             }

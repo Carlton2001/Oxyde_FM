@@ -59,3 +59,7 @@ L’ouverture réelle des menus a révélé un plantage dans `Window::draw` : l�
 Les infobulles simples et fixes perdaient également l’origine de prépaint donnée par leur cadre natif : `CursorTooltip` remettait le contenu à `(0, 0)` et décalait ainsi le cadre visible de la marge d’ombre. Il conserve maintenant l’origine de ses bounds ; le placement intégré et les aperçus gardent leurs chemins existants.
 
 `cargo check --offline` est sans avertissement ; les cinq tests de `tooltip::position` passent. Ils vérifient la géométrie historique conservée ; le rendu natif corrigé et l’ouverture des menus demandent encore confirmation dans une session graphique réelle. L’exécutable est reconstruit après correction.
+
+### Isolation des événements de pointeur
+
+L’essai utilisateur suivant a confirmé l’amélioration des positions et révélé que les éléments sous les menus réagissaient à la souris. La retransmission synthétique des mouvements et relâchements à `Window::dispatch_event` relançait le hit testing de la fenêtre source. Elle est supprimée : les menus appellent directement les gestionnaires de défilement, limités aux glissements `ContextMenuV` et `BreadcrumbV`. Les événements locaux du menu continuent à circuler ; les gestionnaires locaux des lettres réseau sont conservés. Un test de non-régression vérifie que ces gestionnaires excluent les glissements de la liste de fichiers et de la sidebar. La vérification visuelle reste à confirmer dans Oxyde.

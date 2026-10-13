@@ -3,6 +3,8 @@ use crate::ui::i18n::{FluentArgs, I18nContext, Message};
 use crate::ui::scale::{logical, rem_pixels};
 use gpui::prelude::*;
 use gpui::*;
+#[cfg(target_os = "windows")]
+mod popup;
 
 fn actionable_drop_paths(mut paths: Vec<String>, target: &str) -> Vec<String> {
     use crate::ui::components::sidebar::sidebar_paths_equal;
