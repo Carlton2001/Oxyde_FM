@@ -176,11 +176,11 @@ impl OxydeApp {
                     );
                     let closing = close.clone();
                     window.on_window_should_close(cx, move |window, cx| {
-                        crate::ui::components::tool_window::close_transients(window, cx);
                         let Some(main) = closing.upgrade() else {
+                            crate::ui::components::tool_window::close_transients(window, cx);
                             return true;
                         };
-                        main.update(cx, |app, cx| {
+                        let allowed = main.update(cx, |app, cx| {
                             match kind {
                                 DialogKind::Trash => {
                                     if app.trash_settings.as_ref().map(|d| d.request_id())
@@ -197,7 +197,11 @@ impl OxydeApp {
                                 DialogKind::Conflict => app.cancel_pending_file_operation(cx),
                             }
                             true
-                        })
+                        });
+                        if allowed {
+                            crate::ui::components::tool_window::close_transients(window, cx);
+                        }
+                        allowed
                     });
                     cx.new(|cx| {
                         let Some(main) = owner.upgrade() else {
