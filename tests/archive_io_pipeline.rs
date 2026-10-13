@@ -16,6 +16,8 @@ mod iso;
 mod seven_crc;
 #[path = "support/provenance_mutation.rs"]
 mod provenance_mutation;
+#[path = "support/grouped_publication.rs"]
+mod grouped_publication;
 #[path = "support/broker_cancellation.rs"]
 mod broker_cancellation;
 
@@ -639,7 +641,7 @@ fn a_completed_update_reports_a_retained_backup_instead_of_silent_success() {
 }
 
 #[test]
-fn interrupted_transfer_reports_the_already_published_destination() {
+fn interrupted_preparation_leaves_every_original_archive_unchanged() {
     use oxyde_lib::utils::archive_mutation_test::{with_hook_for_tests, Stage};
     native(|| {
         let temp = tempfile::tempdir().unwrap();
@@ -653,6 +655,7 @@ fn interrupted_transfer_reports_the_already_published_destination() {
         )
         .unwrap();
         let before = fs::read(&source).unwrap();
+        let target_before = fs::read(&target).unwrap();
         let op = operation(FileOpType::Move);
         let cancel = op.lock().unwrap().cancel_flag.clone();
         let result = with_hook_for_tests(
@@ -678,17 +681,11 @@ fn interrupted_transfer_reports_the_already_published_destination() {
                 )
             },
         );
-        let report =
-            oxyde_lib::models::error::ArchiveRecoveryFailure::from_message(&result.unwrap_err())
-                .unwrap();
-        assert!(!report.completed);
-        assert!(report
-            .locations
-            .iter()
-            .any(|path| Path::new(path) == fs::canonicalize(&target).unwrap()));
+        let error = result.unwrap_err();
+        assert!(error.contains("Operation cancelled"));
+        assert!(oxyde_lib::models::error::ArchiveRecoveryFailure::from_message(&error).is_none());
         assert_eq!(fs::read(source).unwrap(), before);
-        let mut result = zip::ZipArchive::new(fs::File::open(target).unwrap()).unwrap();
-        assert_eq!(result.by_name("chosen").unwrap().size(), 4);
+        assert_eq!(fs::read(target).unwrap(), target_before);
     });
 }
 

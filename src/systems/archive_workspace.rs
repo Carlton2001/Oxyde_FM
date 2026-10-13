@@ -17,6 +17,18 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock, Mutex, MutexGuard, Weak};
 
 type MutationMutex = Arc<Mutex<()>>;
+pub(crate) fn commit_group(workspaces: &ArchiveWorkspaces, archives: &[PathBuf], op: &Arc<Mutex<FileOperation>>, retained: &HashMap<PathBuf, std::fs::File>) -> Result<(), String> {
+    #[cfg(all(target_os = "windows", not(test)))]
+    {
+        let mut prepared = archives.iter().map(|archive| workspaces.0[archive].prepare_native(op, retained)).collect::<Result<Vec<_>, _>>()?;
+        native_commit::publish_all(&mut prepared, op)
+    }
+    #[cfg(any(not(target_os = "windows"), test))]
+    {
+        for archive in archives { workspaces.0[archive].commit_with_retained(op, retained)?; }
+        Ok(())
+    }
+}
 #[cfg(any(not(target_os = "windows"), test))]
 type WorkspaceDirectory = tempfile::TempDir;
 #[cfg(all(target_os = "windows", not(test)))]

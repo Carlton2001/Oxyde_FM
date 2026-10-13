@@ -147,14 +147,13 @@ impl FileOperationManager {
         }
         let retained_outputs = deferred_moves.as_ref().map(|moves| moves.lock().unwrap().retained_outputs())
             .transpose().map_err(|error| error.to_string())?.unwrap_or_default();
-        // Publish destination first: a failed source rewrite leaves a recoverable copy.
-        if let Some(archive) = &target_archive {
-            workspaces.0[archive].commit_with_retained(op, &retained_outputs)?;
-            changed.remove(archive);
-        }
-        for archive in changed {
-            workspaces.0[&archive].commit_with_retained(op, &retained_outputs)?;
-        }
+        // Prepare every replacement before any original is moved. Stable order
+        // keeps the destination first, with rollback across the complete group.
+        if let Some(archive) = &target_archive { changed.remove(archive); }
+        let mut remaining: Vec<_> = changed.into_iter().collect();
+        remaining.sort();
+        let ordered: Vec<_> = target_archive.iter().cloned().chain(remaining).collect();
+        crate::systems::archive_workspace::commit_group(&workspaces, &ordered, op, &retained_outputs)?;
         drop(retained_outputs);
         if is_move {
             // Sources have remained held since copy, including during reconstruction.
