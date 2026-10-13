@@ -39,7 +39,14 @@ impl Policy {
         max_bytes: 1024 * 1024 * 1024,
         max_entries: 512,
         // Bound the selected file plus provenance and its fingerprint record.
-        max_entry_bytes: 256 * 1024 * 1024 + MAX_OWNER_BYTES + 4 * 1024 * 1024 + 64 * 1024,
+        max_entry_bytes: 256 * 1024 * 1024
+            + MAX_OWNER_BYTES
+            + 64 * 1024
+            + if cfg!(all(target_os = "windows", not(test))) {
+                4 * 1024 * 1024
+            } else {
+                0
+            },
         retention: Duration::from_secs(7 * 24 * 60 * 60),
         launch_grace: Duration::from_secs(60),
     };
@@ -333,7 +340,11 @@ impl Session {
         let mut pending = 0usize;
         for item in fs::read_dir(&self.root)? {
             let item = item?;
-            if item.file_name() == ".cache-lock" || item.file_name() == ".cache-proof-key" || excluded == Some(item.path().as_path()) {
+            if item.file_name() == ".cache-lock"
+                || (cfg!(all(target_os = "windows", not(test)))
+                    && item.file_name() == ".cache-proof-key")
+                || excluded == Some(item.path().as_path())
+            {
                 continue;
             }
             visited += 1;

@@ -42,7 +42,12 @@ pub(in crate::systems::archive_open_cache) fn evict(
     pressure: bool,
     remaining: &mut usize,
 ) -> io::Result<bool> {
-    let key = platform().cache_proof_key(&path.parent().ok_or_else(|| io::Error::other("Missing cache proof parent"))?.join(".cache-proof-key"))?;
+    let key = platform().cache_proof_key(
+        &path
+            .parent()
+            .ok_or_else(|| io::Error::other("Missing cache proof parent"))?
+            .join(".cache-proof-key"),
+    )?;
     let root = platform().open_cache_cleanup(path, true)?;
     let bound_root = platform().retained_file_path(&root, path)?;
     let marker_path = path.join(OWNER);

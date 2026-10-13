@@ -83,7 +83,13 @@ impl Journal {
         owner: &mut super::super::archive_owned_tree::OwnedTree,
         created: u64,
     ) -> io::Result<Arc<Mutex<Self>>> {
-        let key = platform().cache_proof_key(&owner.path().parent().ok_or_else(|| io::Error::other("Missing cache proof parent"))?.join(".cache-proof-key"))?;
+        let key = platform().cache_proof_key(
+            &owner
+                .path()
+                .parent()
+                .ok_or_else(|| io::Error::other("Missing cache proof parent"))?
+                .join(".cache-proof-key"),
+        )?;
         let first = owner.create_file(&owner.path().join(SLOTS[0]))?;
         let second = owner.create_file(&owner.path().join(SLOTS[1]))?;
         let mut records = Vec::new();

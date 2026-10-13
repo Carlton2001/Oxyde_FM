@@ -22,9 +22,13 @@ pub(super) fn transform(bytes: &[u8], key: &[u8; 32], protect: bool) -> io::Resu
         result.extend_from_slice(&encrypted);
         Ok(result)
     } else {
-        if bytes.len() < 40 || bytes.len() > MAX_BYTES || &bytes[..8] != MAGIC { return Err(io::Error::other("Invalid cache proof envelope")); }
+        if bytes.len() < 40 || bytes.len() > MAX_BYTES || &bytes[..8] != MAGIC {
+            return Err(io::Error::other("Invalid cache proof envelope"));
+        }
         let expected = blake3::Hash::from_bytes(bytes[8..40].try_into().unwrap());
-        if blake3::keyed_hash(key, &bytes[40..]) != expected { return Err(io::Error::other("Cache proof authentication failed")); }
+        if blake3::keyed_hash(key, &bytes[40..]) != expected {
+            return Err(io::Error::other("Cache proof authentication failed"));
+        }
         dpapi(&bytes[40..], false)
     }
 }

@@ -32,6 +32,12 @@ fn native<T>(run: impl FnOnce() -> T) -> T {
 fn operation(kind: FileOpType) -> Arc<Mutex<FileOperation>> {
     Arc::new(Mutex::new(FileOperation::new(kind, vec![], None, None)))
 }
+fn assert_no_cache_entries(base: &Path) {
+    let mut names: Vec<_> = fs::read_dir(base.join("oxyde-archive-open/v2")).unwrap()
+        .map(|item| item.unwrap().file_name().to_string_lossy().into_owned()).collect();
+    names.sort();
+    assert_eq!(names, [".cache-lock", ".cache-proof-key"]);
+}
 fn zip(path: &Path, name: &str, bytes: &[u8], unsafe_tail: bool) {
     let mut zip = zip::ZipWriter::new(fs::File::create(path).unwrap());
     zip.start_file(name, zip::write::SimpleFileOptions::default())
@@ -768,12 +774,7 @@ fn selected_failure_keeps_cache_and_export_clean_and_refuses_missing_or_director
                 )
                 .is_err());
                 assert_eq!(fs::read_dir(&export).unwrap().count(), 0);
-                assert_eq!(
-                    fs::read_dir(base.join("oxyde-archive-open/v1"))
-                        .unwrap()
-                        .count(),
-                    1
-                ); // only the cache lease
+                assert_no_cache_entries(&base);
             }
             assert!(!temp.path().join("outside").exists());
         });
@@ -801,12 +802,7 @@ fn selected_seven_wrapper_verifies_unselected_block_crc_tail_before_publication(
                     assert!(cached.is_err());
                     assert!(exported.is_err());
                     assert_eq!(fs::read_dir(&folder).unwrap().count(), 0);
-                    assert_eq!(
-                        fs::read_dir(base.join("oxyde-archive-open/v1"))
-                            .unwrap()
-                            .count(),
-                        1
-                    );
+                    assert_no_cache_entries(&base);
                 } else {
                     assert_eq!(fs::read(cached.unwrap()).unwrap(), b"safe");
                     assert_eq!(fs::read(exported.unwrap()).unwrap(), b"safe");
