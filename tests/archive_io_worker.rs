@@ -1,6 +1,8 @@
 #![cfg(target_os = "windows")]
+mod platform { pub use oxyde_lib::platform::platform; }
 mod utils {
     pub use oxyde_lib::utils::{archive_io_protocol, archive_listing_protocol, preview_protocol};
+    pub use oxyde_lib::utils::image_preview_decode;
 }
 mod models {
     pub use oxyde_lib::models::error;
@@ -8,6 +10,7 @@ mod models {
 }
 mod commands {
     pub use oxyde_lib::commands::archive_io_worker;
+    pub use oxyde_lib::commands::archive_handle_worker;
 }
 #[path = "support/iso.rs"]
 mod iso;
@@ -23,6 +26,12 @@ mod windows_preview_worker;
 #[allow(dead_code)]
 #[path = "../src/platform/windows_process_launch.rs"]
 mod windows_process_launch;
+#[allow(dead_code)]
+#[path = "../src/platform/windows_worker_budget.rs"]
+mod windows_worker_budget;
+#[allow(dead_code)]
+#[path = "../src/platform/windows_resource_pressure.rs"]
+mod windows_resource_pressure;
 use windows_process_launch::native_probe;
 #[allow(dead_code)]
 #[path = "../src/platform/windows_worker_sandbox.rs"]
@@ -397,7 +406,7 @@ fn listing_search_and_preview_advance_while_archive_io_is_confirmed_paused() {
     let run = || {
         waiting.recv_timeout(Duration::from_secs(12)).unwrap();
         assert_eq!(effects.load(Ordering::Relaxed), 0);
-        let executable = Path::new(env!("CARGO_BIN_EXE_oxyde"));
+        let executable = Path::new(env!("CARGO_BIN_EXE_oxyde-archive-list-worker"));
         assert_eq!(
             windows_archive_worker::run_in(executable, &archive, "", Duration::from_secs(15))
                 .unwrap()
@@ -416,7 +425,7 @@ fn listing_search_and_preview_advance_while_archive_io_is_confirmed_paused() {
             1
         );
         let reply =
-            windows_preview_worker::run_in(executable, "image", &image, Duration::from_secs(15))
+            windows_preview_worker::run_image_in(Path::new(env!("CARGO_BIN_EXE_oxyde-image-worker")), &image, Duration::from_secs(15))
                 .unwrap();
         let utils::preview_protocol::Reply::Images { frames, limited } =
             utils::preview_protocol::decode(&reply).unwrap()
@@ -475,9 +484,10 @@ fn deadline_and_cancellation_remain_live_when_child_does_not_read_its_input() {
             length: utils::archive_io_protocol::MAX_BLOCK as u32,
         }));
         let started = Instant::now();
+        let ready_at = std::cell::Cell::new(None::<Instant>);
         let controls = || {
             Ok(Control {
-                cancelled: cancel && started.elapsed() >= Duration::from_millis(250),
+                cancelled: cancel && ready_at.get().is_some_and(|time| time.elapsed() >= Duration::from_millis(250)),
                 ..Control::default()
             })
         };
@@ -489,6 +499,7 @@ fn deadline_and_cancellation_remain_live_when_child_does_not_read_its_input() {
             &mut |frame| match frame.message {
                 Message::Source { id: 0 } => {
                     ready = true;
+                    ready_at.set(Some(Instant::now()));
                     noop(frame)
                 }
                 Message::Read {

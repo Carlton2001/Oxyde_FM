@@ -75,6 +75,7 @@ fn decode(
     })
     .map_err(convert_error)?;
     let image = Arc::new(RenderImage::new(decoded.frames));
+    crate::ui::preview_budget::admit(&image).map_err(PreviewError::Memory)?;
     Ok(PreviewImage {
         image,
         notice: decoded.limited.then_some(Message::PreviewAnimationStatic),
@@ -99,6 +100,7 @@ pub(crate) fn load_path(path: &Path, renderer: &SvgRenderer) -> Result<PreviewIm
         match reply {
             oxyde_lib::utils::preview_protocol::Reply::Images { frames, limited } => {
                 let image = Arc::new(RenderImage::new(frames));
+                crate::ui::preview_budget::admit(&image).map_err(PreviewError::Memory)?;
                 Ok(PreviewImage {
                     image,
                     notice: limited.then_some(Message::PreviewAnimationStatic),

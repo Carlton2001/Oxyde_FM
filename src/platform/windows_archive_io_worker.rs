@@ -32,6 +32,7 @@ fn check(controls: &dyn Fn() -> io::Result<Control>) -> io::Result<Control> {
     if control.cancelled {
         Err(cancelled())
     } else {
+        super::windows_resource_pressure::check()?;
         Ok(control)
     }
 }

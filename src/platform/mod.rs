@@ -69,6 +69,12 @@ pub struct ShellDeleteOutcome {
     /// Confirmed descendants, including separately recycled payloads.
     pub effects: Vec<crate::models::transaction::HistoryDeletedItem>,
 }
+/// Keeps the selected archive and its ancestors retained for a parser session.
+#[doc(hidden)]
+pub struct RetainedArchiveSource {
+    pub file: std::fs::File,
+    _parents: crate::systems::path_parents::HeldParents,
+}
 
 impl ShellDeleteOutcome {
     pub fn from_result(result: Result<(), String>) -> Self {
@@ -80,6 +86,12 @@ impl ShellDeleteOutcome {
 /// Toute fonctionnalité native (lecteurs, ouverture, raccourcis, etc.)
 /// doit passer par ce trait plutôt qu'appeler directement les API OS.
 pub trait Platform: Send + Sync {
+    #[doc(hidden)]
+    fn retain_archive_source(&self, path: &std::path::Path) -> std::io::Result<RetainedArchiveSource> {
+        let parents = crate::systems::path_parents::HeldParents::new(path)?;
+        let file = self.open_archive_source(&parents.resolved_path(path)?, false)?;
+        Ok(RetainedArchiveSource { file, _parents: parents })
+    }
     fn run_archive_io_worker(&self, operation: crate::utils::archive_io_protocol::Operation,
         controls: &dyn Fn() -> std::io::Result<crate::utils::archive_io_protocol::Control>,
         handler: &mut dyn FnMut(crate::utils::archive_io_protocol::Frame) -> std::io::Result<crate::utils::archive_io_protocol::Frame>) -> std::io::Result<std::time::Duration>;
@@ -546,5 +558,9 @@ mod windows_archive_io_worker;
 mod windows_worker_sandbox;
 #[cfg(target_os = "windows")]
 mod windows_process_launch;
+#[cfg(target_os = "windows")]
+mod windows_worker_budget;
+#[cfg(target_os = "windows")]
+mod windows_resource_pressure;
 #[cfg(target_os = "windows")]
 mod windows_icon_pixels;

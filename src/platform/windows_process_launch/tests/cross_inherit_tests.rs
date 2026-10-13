@@ -50,6 +50,32 @@ impl Drop for FixtureChild {
 
 #[test]
 fn concurrent_spawn_waits_until_inheritable_pipes_close_and_cannot_keep_them_alive() {
+    // Junction and executable fixtures elsewhere in the suite launch outside
+    // Oxyde's lock. Isolate this exact test so those unrelated children cannot
+    // retain its deliberately inheritable reader. Keep every identity/lifetime
+    // assertion below and the concurrent launcher under test unchanged.
+    const INNER: &str = "OXYDE_CROSS_INHERIT_TEST_INNER";
+    if std::env::var_os(INNER).is_none() {
+        let module = module_path!().split_once("::").unwrap().1;
+        let name = format!("{module}::concurrent_spawn_waits_until_inheritable_pipes_close_and_cannot_keep_them_alive");
+        let mut command = Command::new(std::env::current_exe().unwrap());
+        command
+            .args(["--exact", &name, "--nocapture"])
+            .env(INNER, "1")
+            .creation_flags(0x08000000);
+        let output = super::output(command).unwrap();
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(
+            stdout.contains("running 1 test"),
+            "isolated inheritance test was not discovered: {stdout}"
+        );
+        assert!(
+            output.status.success(),
+            "isolated inheritance test failed: {stdout}\n{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        return;
+    }
     // Compile before opening the inheritance interval: this test's compiler is
     // deliberately outside the process-launch mechanism under test.
     let mut command = native_probe::command("hold-no-gate");

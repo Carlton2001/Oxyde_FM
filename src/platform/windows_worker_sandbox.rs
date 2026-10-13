@@ -1,4 +1,4 @@
-//! Archive-I/O only: zero-capability LPAC, explicit inherited pipes and a job
+//! Codec workers: zero-capability LPAC, explicit inherited handles and a job
 //! attached while the initial thread is suspended. No permissive fallback.
 use std::ffi::OsStr;
 use std::fs::{File, OpenOptions};
@@ -96,6 +96,13 @@ impl Runtime {
         checkpoint()?;
         let mut parents = retain_parents(source)?;
         let mut source_file = retain(source, false)?;
+        const MAX_RUNTIME_BYTES: u64 = 128 * 1024 * 1024;
+        if source_file.metadata()?.len() > MAX_RUNTIME_BYTES {
+            return Err(io::Error::new(
+                io::ErrorKind::FileTooLarge,
+                "Worker runtime exceeds its limit",
+            ));
+        }
         let temporary = std::env::temp_dir();
         parents.extend(retain_parents(&temporary)?);
         let temp_handle = OpenOptions::new()
@@ -171,11 +178,19 @@ impl Runtime {
             .ok_or_else(|| io::Error::other("Missing staged binary"))?;
         use std::io::{Read, Seek, SeekFrom};
         let mut copy_bytes = [0; 64 * 1024];
+        let mut copied = 0u64;
         loop {
             checkpoint()?;
             let count = source_file.read(&mut copy_bytes)?;
             if count == 0 {
                 break;
+            }
+            copied += count as u64;
+            if copied > MAX_RUNTIME_BYTES {
+                return Err(io::Error::new(
+                    io::ErrorKind::FileTooLarge,
+                    "Worker runtime exceeds its limit",
+                ));
             }
             target_file.write_all(&copy_bytes[..count])?;
         }
@@ -429,7 +444,10 @@ impl AsRawHandle for Process {
 impl Process {
     pub(super) fn try_wait(&mut self) -> io::Result<Option<ExitStatus>> {
         match unsafe { WaitForSingleObject(HANDLE(self.as_raw_handle()), 0) } {
-            WAIT_TIMEOUT => Ok(None),
+            WAIT_TIMEOUT => {
+                super::windows_resource_pressure::check_worker(HANDLE(self.as_raw_handle()))?;
+                Ok(None)
+            }
             WAIT_OBJECT_0 => {
                 let mut code = 0;
                 unsafe { GetExitCodeProcess(HANDLE(self.as_raw_handle()), &mut code) }
@@ -445,11 +463,14 @@ pub(super) struct Worker {
     pub(super) _job: OwnedHandle,
     runtime: Option<Runtime>,
     profile: Option<Profile>,
+    budget: Option<super::windows_worker_budget::Permit>,
 }
 enum LaunchKind {
     Lpac,
     #[cfg(test)]
     AppContainerControl,
+    #[cfg(test)]
+    LpacCapabilityProbe(&'static [&'static str]),
 }
 impl Worker {
     #[cfg(test)]
@@ -461,7 +482,15 @@ impl Worker {
         memory: usize,
         checkpoint: &dyn Fn() -> io::Result<()>,
     ) -> io::Result<(Self, File, File)> {
-        Self::start_duplex_with_kind(command, memory, checkpoint, LaunchKind::Lpac)
+        Self::start_duplex_with_kind(command, memory, checkpoint, LaunchKind::Lpac, None)
+    }
+    pub(super) fn start_duplex_source(
+        command: Command,
+        memory: usize,
+        checkpoint: &dyn Fn() -> io::Result<()>,
+        source: &File,
+    ) -> io::Result<(Self, File, File)> {
+        Self::start_duplex_with_kind(command, memory, checkpoint, LaunchKind::Lpac, Some(source))
     }
     #[cfg(test)]
     fn start_duplex_for_test(
@@ -478,6 +507,7 @@ impl Worker {
             } else {
                 LaunchKind::AppContainerControl
             },
+            None,
         )
     }
     fn start_duplex_with_kind(
@@ -485,8 +515,10 @@ impl Worker {
         memory: usize,
         checkpoint: &dyn Fn() -> io::Result<()>,
         kind: LaunchKind,
+        source: Option<&File>,
     ) -> io::Result<(Self, File, File)> {
         checkpoint()?;
+        let budget = super::windows_worker_budget::acquire(memory, checkpoint)?;
         let profile = Profile::create()?;
         let runtime = Runtime::create(Path::new(command.get_program()), profile.sid, checkpoint)?;
         checkpoint()?;
@@ -496,21 +528,55 @@ impl Worker {
         // stderr is a distinct pipe whose parent reader is immediately closed.
         let (stderr_read, stderr_write) = pipe()?;
         drop(stderr_read);
+        #[cfg(test)]
+        let capability_probe = if let LaunchKind::LpacCapabilityProbe(names) = &kind {
+            Some(capability_probe::Capabilities::new(names)?)
+        } else {
+            None
+        };
         let caps = SECURITY_CAPABILITIES {
             AppContainerSid: profile.sid,
             ..Default::default()
+        };
+        #[cfg(test)]
+        let caps = {
+            let mut caps = caps;
+            if let Some(probe) = &capability_probe {
+                probe.apply(&mut caps);
+            }
+            caps
         };
         let policy = match kind {
             LaunchKind::Lpac => 1u32,
             #[cfg(test)]
             LaunchKind::AppContainerControl => 0u32,
+            #[cfg(test)]
+            LaunchKind::LpacCapabilityProbe(_) => 1u32,
         };
         let executable = runtime.root.join("worker.exe");
+        // Source is already opened read-only and retained by the parent. This
+        // explicit extra handle grants no pathname access or writable object.
+        let source = source
+            .map(|file| {
+                unsafe { std::os::windows::io::BorrowedHandle::borrow_raw(file.as_raw_handle()) }
+                    .try_clone_to_owned()
+            })
+            .transpose()?;
         let app = wide(&executable);
         let mut line = quote(executable.as_os_str());
         for argument in command.get_args() {
             line.push(32);
             line.extend(quote(argument));
+        }
+        if let Some(source) = &source {
+            line.extend(
+                wide(format!(
+                    " --source-handle {}",
+                    source.as_raw_handle() as usize
+                ))
+                .into_iter()
+                .take_while(|unit| *unit != 0),
+            );
         }
         line.push(0);
         let cwd = wide(&runtime.root);
@@ -543,11 +609,11 @@ impl Worker {
         ));
         // No callbacks or environment discovery while handles are inheritable.
         checkpoint()?;
-        let inherited = super::windows_process_launch::InheritedHandles::new([
-            child_read,
-            child_write,
-            stderr_write,
-        ])?;
+        let mut child_handles = vec![child_read, child_write, stderr_write];
+        if let Some(source) = source {
+            child_handles.push(source);
+        }
+        let inherited = super::windows_process_launch::InheritedHandles::new(child_handles)?;
         let handles = inherited.raw();
         let mut attributes = Attributes::new()?;
         attributes.set(
@@ -595,7 +661,9 @@ impl Worker {
             _job: job,
             runtime: Some(runtime),
             profile: Some(profile),
+            budget: Some(budget),
         };
+        super::windows_worker_budget::attach(HANDLE(worker.child.as_raw_handle()))?;
         unsafe {
             AssignProcessToJobObject(
                 HANDLE(worker._job.as_raw_handle()),
@@ -626,12 +694,19 @@ impl Drop for Worker {
         let handle = HANDLE(self.child.as_raw_handle());
         let _ = unsafe { TerminateProcess(handle, 1) };
         if unsafe { WaitForSingleObject(handle, 1000) } != WAIT_OBJECT_0 {
-            if let Some(runtime) = self.runtime.take() {
+            let runtime = self.runtime.take();
+            if let Some(runtime) = &runtime {
                 log::warn!(
                     "Archive sandbox termination delayed: PID {}, retaining private runtime at {}",
                     unsafe { GetProcessId(handle) },
                     runtime.root.display()
                 );
+            }
+            if let Some(budget) = self.budget.take() {
+                super::windows_worker_budget::retain_until_exit(handle, budget, move || {
+                    drop(runtime)
+                });
+            } else {
                 std::mem::forget(runtime);
             }
         } else if let Some(runtime) = self.runtime.take() {
@@ -669,6 +744,9 @@ fn quote(argument: &OsStr) -> Vec<u16> {
     result
 }
 
+#[cfg(test)]
+#[path = "windows_worker_sandbox/tests/capability_probe.rs"]
+mod capability_probe;
 #[cfg(test)]
 #[path = "windows_worker_sandbox/tests/security_tests.rs"]
 mod security_tests;

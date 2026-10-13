@@ -1,10 +1,13 @@
 #![cfg(target_os = "windows")]
+mod commands { pub use oxyde_lib::commands::archive_handle_worker; }
+mod platform { pub use oxyde_lib::platform::platform; }
 mod models {
     pub use oxyde_lib::models::error;
     pub use oxyde_lib::models::*;
 }
 mod utils {
     pub use oxyde_lib::utils::{archive_listing_protocol, preview_protocol};
+    pub use oxyde_lib::utils::image_preview_decode;
 }
 #[allow(dead_code)]
 #[path = "../src/platform/windows_archive_worker.rs"]
@@ -15,6 +18,15 @@ mod windows_preview_worker;
 #[allow(dead_code)]
 #[path = "../src/platform/windows_process_launch.rs"]
 mod windows_process_launch;
+#[allow(dead_code)]
+#[path = "../src/platform/windows_worker_budget.rs"]
+mod windows_worker_budget;
+#[allow(dead_code)]
+#[path = "../src/platform/windows_resource_pressure.rs"]
+mod windows_resource_pressure;
+#[allow(dead_code)]
+#[path = "../src/platform/windows_worker_sandbox.rs"]
+mod windows_worker_sandbox;
 use models::error::{ArchiveLimitFailure, ArchiveLimitKind, ArchiveListingFailure};
 use std::io::Write;
 use std::path::Path;
@@ -22,7 +34,7 @@ use std::time::{Duration, Instant};
 
 fn listing(path: &Path, internal: &str) -> Result<Vec<models::FileEntry>, models::CommandError> {
     windows_archive_worker::run_in(
-        Path::new(env!("CARGO_BIN_EXE_oxyde")),
+        Path::new(env!("CARGO_BIN_EXE_oxyde-archive-list-worker")),
         path,
         internal,
         Duration::from_secs(120),
@@ -30,7 +42,7 @@ fn listing(path: &Path, internal: &str) -> Result<Vec<models::FileEntry>, models
 }
 fn index(path: &Path) -> Result<Vec<models::FileEntry>, models::CommandError> {
     windows_archive_worker::index_in(
-        Path::new(env!("CARGO_BIN_EXE_oxyde")),
+        Path::new(env!("CARGO_BIN_EXE_oxyde-archive-list-worker")),
         path,
         Duration::from_secs(120),
         &|| Ok(()),

@@ -17,14 +17,14 @@ fn lock() -> io::Result<MutexGuard<'static, ()>> {
 /// Field order closes every inheritable handle BEFORE releasing the lock,
 /// including creation failures and unwinding. Parent endpoints never inherit.
 pub(super) struct InheritedHandles {
-    handles: [OwnedHandle; 3],
+    handles: Vec<OwnedHandle>,
     _guard: MutexGuard<'static, ()>,
 }
 
 impl InheritedHandles {
-    pub(super) fn new(handles: [OwnedHandle; 3]) -> io::Result<Self> {
+    pub(super) fn new(handles: impl Into<Vec<OwnedHandle>>) -> io::Result<Self> {
         let inherited = Self {
-            handles,
+            handles: handles.into(),
             _guard: lock()?,
         };
         for handle in inherited.raw() {
@@ -34,10 +34,11 @@ impl InheritedHandles {
         Ok(inherited)
     }
 
-    pub(super) fn raw(&self) -> [HANDLE; 3] {
+    pub(super) fn raw(&self) -> Vec<HANDLE> {
         self.handles
-            .each_ref()
+            .iter()
             .map(|handle| HANDLE(handle.as_raw_handle()))
+            .collect()
     }
 }
 

@@ -45,17 +45,25 @@ fn native(error: windows::core::Error) -> io::Error {
 pub(super) struct Worker {
     pub(super) child: Child,
     pub(super) _job: OwnedHandle,
+    budget: Option<super::windows_worker_budget::Permit>,
 }
 impl Worker {
-    fn start(command: Command, memory_bytes: usize) -> io::Result<(Self, std::fs::File)> {
-        let (worker, output, input) = Self::start_duplex(command, memory_bytes)?;
+    fn start(
+        command: Command,
+        memory_bytes: usize,
+        checkpoint: &dyn Fn() -> io::Result<()>,
+    ) -> io::Result<(Self, std::fs::File)> {
+        let (worker, output, input) =
+            Self::start_duplex_checked(command, memory_bytes, checkpoint)?;
         drop(input);
         Ok((worker, output))
     }
-    pub(super) fn start_duplex(
+    fn start_duplex_checked(
         mut command: Command,
         memory_bytes: usize,
+        checkpoint: &dyn Fn() -> io::Result<()>,
     ) -> io::Result<(Self, std::fs::File, std::process::ChildStdin)> {
+        let budget = super::windows_worker_budget::acquire(memory_bytes, checkpoint)?;
         let job = job(memory_bytes)?;
         // Suggest enough capacity for one bounded video packet to reduce small
         // transfers through the polled pipe. Windows may choose another size.
@@ -70,7 +78,12 @@ impl Worker {
             .stderr(Stdio::null())
             .creation_flags(0x08000000);
         let child = super::windows_process_launch::spawn(command)?;
-        let mut worker = Self { child, _job: job };
+        let mut worker = Self {
+            child,
+            _job: job,
+            budget: Some(budget),
+        };
+        super::windows_worker_budget::attach(HANDLE(worker.child.as_raw_handle()))?;
         unsafe {
             AssignProcessToJobObject(
                 HANDLE(worker._job.as_raw_handle()),
@@ -99,6 +112,15 @@ impl Drop for Worker {
             let _ = self.child.wait();
         } else {
             log::warn!("Preview worker termination has not completed; closing its resource job");
+            // Do not admit replacement work while an unconfirmed process still
+            // owns its envelope. The native aggregate job remains a second bound.
+            if let Some(budget) = self.budget.take() {
+                super::windows_worker_budget::retain_until_exit(
+                    HANDLE(self.child.as_raw_handle()),
+                    budget,
+                    || {},
+                );
+            }
         }
     }
 }
@@ -131,7 +153,68 @@ pub(super) fn run(mode: &str, path: &Path) -> io::Result<Vec<u8>> {
     let _slot = SLOT
         .lock()
         .map_err(|_| io::Error::other("Preview worker admission failed"))?;
-    run_in(&std::env::current_exe()?, mode, path, DEADLINE)
+    if mode == "image" {
+        run_image_in(
+            &std::env::current_exe()?.with_file_name("oxyde-image-worker.exe"),
+            path,
+            DEADLINE,
+        )
+    } else if mode == "office-text" {
+        run_office_text_in(
+            &std::env::current_exe()?.with_file_name("oxyde-image-worker.exe"),
+            path,
+            DEADLINE,
+        )
+    } else {
+        run_in(&std::env::current_exe()?, mode, path, DEADLINE)
+    }
+}
+
+pub(super) fn run_image_in(
+    executable: &Path,
+    path: &Path,
+    deadline: Duration,
+) -> io::Result<Vec<u8>> {
+    let source = crate::platform::platform().retain_archive_source(path)?;
+    if source.file.metadata()?.len()
+        > crate::utils::image_preview_decode::POLICY.encoded_bytes as u64
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::FileTooLarge,
+            "Image source exceeds its limit",
+        ));
+    }
+    let mut command = Command::new(executable);
+    command.arg("--oxyde-image-handle-worker-v1");
+    supervise_source(
+        command,
+        &source.file,
+        deadline,
+        MEMORY_BYTES,
+        crate::utils::preview_protocol::MAX_REPLY,
+        &|| Ok(()),
+    )
+}
+pub(super) fn run_office_text_in(
+    executable: &Path,
+    path: &Path,
+    deadline: Duration,
+) -> io::Result<Vec<u8>> {
+    let source = crate::platform::platform().retain_archive_source(path)?;
+    let mut command = Command::new(executable);
+    command.arg("--oxyde-office-text-handle-worker-v1").arg(
+        path.extension()
+            .and_then(|value| value.to_str())
+            .unwrap_or(""),
+    );
+    supervise_source(
+        command,
+        &source.file,
+        deadline,
+        MEMORY_BYTES,
+        crate::utils::preview_protocol::MAX_REPLY,
+        &|| Ok(()),
+    )
 }
 
 pub(super) fn run_in(
@@ -184,12 +267,91 @@ pub(super) fn supervise_checked(
 ) -> io::Result<Vec<u8>> {
     checkpoint()?;
     let started = Instant::now();
-    let (mut worker, mut output) = Worker::start(command, memory_bytes)?;
+    let checked = || {
+        checkpoint()?;
+        if started.elapsed() >= deadline {
+            Err(io::Error::new(
+                io::ErrorKind::TimedOut,
+                timeout_detail.to_owned(),
+            ))
+        } else {
+            Ok(())
+        }
+    };
+    let (mut worker, output) = Worker::start(command, memory_bytes, &checked)?;
+    collect_reply(
+        output,
+        started,
+        deadline,
+        max_reply,
+        timeout_detail,
+        checkpoint,
+        &mut || {
+            super::windows_resource_pressure::check_worker(HANDLE(worker.child.as_raw_handle()))?;
+            worker.child.try_wait()
+        },
+    )
+}
+
+pub(super) fn supervise_source(
+    command: Command,
+    source: &std::fs::File,
+    deadline: Duration,
+    memory_bytes: usize,
+    max_reply: usize,
+    checkpoint: &dyn Fn() -> io::Result<()>,
+) -> io::Result<Vec<u8>> {
+    let started = Instant::now();
+    let timeout_detail = if command
+        .get_args()
+        .next()
+        .is_some_and(|flag| flag == "--oxyde-archive-handle-worker-v1")
+    {
+        "Archive metadata worker timed out"
+    } else {
+        "PreviewWorkerTimeout: Preview exceeded its deadline"
+    };
+    let checked = || {
+        checkpoint()?;
+        if started.elapsed() >= deadline {
+            Err(io::Error::new(io::ErrorKind::TimedOut, timeout_detail))
+        } else {
+            Ok(())
+        }
+    };
+    let (mut worker, output, input) = super::windows_worker_sandbox::Worker::start_duplex_source(
+        command,
+        memory_bytes,
+        &checked,
+        source,
+    )?;
+    drop(input);
+    collect_reply(
+        output,
+        started,
+        deadline,
+        max_reply,
+        timeout_detail,
+        checkpoint,
+        &mut || worker.child.try_wait(),
+    )
+}
+
+pub(super) fn collect_reply(
+    mut output: std::fs::File,
+    started: Instant,
+    deadline: Duration,
+    max_reply: usize,
+    timeout_detail: &str,
+    checkpoint: &dyn Fn() -> io::Result<()>,
+    wait: &mut dyn FnMut() -> io::Result<Option<std::process::ExitStatus>>,
+) -> io::Result<Vec<u8>> {
     let mut bytes = Vec::new();
     let mut chunk = [0; 64 * 1024];
     let mut exited = None;
     loop {
         checkpoint()?;
+        super::windows_resource_pressure::check()?;
         if started.elapsed() >= deadline {
             return Err(io::Error::new(
                 io::ErrorKind::TimedOut,
@@ -244,7 +406,7 @@ pub(super) fn supervise_checked(
         } else {
             std::thread::sleep(Duration::from_millis(5));
         }
-        exited = worker.child.try_wait()?;
+        exited = wait()?;
     }
 }
 
@@ -298,7 +460,20 @@ pub(super) fn supervise_stream(
         return Ok(());
     }
     let mut progress = Instant::now();
-    let (mut worker, mut output) = Worker::start(command, VIDEO_MEMORY_BYTES)?;
+    let started = Worker::start(command, VIDEO_MEMORY_BYTES, &|| {
+        if cancelled() {
+            Err(io::Error::new(
+                io::ErrorKind::Interrupted,
+                "Operation cancelled",
+            ))
+        } else {
+            Ok(())
+        }
+    });
+    let (mut worker, mut output) = match started {
+        Err(error) if error.kind() == io::ErrorKind::Interrupted && cancelled() => return Ok(()),
+        result => result?,
+    };
     let mut pending = Vec::new();
     let mut chunk = [0; 64 * 1024];
     let mut exited = None;
@@ -307,6 +482,7 @@ pub(super) fn supervise_stream(
         if cancelled() {
             return Ok(());
         }
+        super::windows_resource_pressure::check()?;
         if progress.elapsed() >= deadline {
             return Err(io::Error::new(
                 io::ErrorKind::TimedOut,
@@ -397,6 +573,7 @@ pub(super) fn supervise_stream(
         } else {
             std::thread::sleep(Duration::from_millis(5));
         }
+        super::windows_resource_pressure::check_worker(HANDLE(worker.child.as_raw_handle()))?;
         exited = worker.child.try_wait()?;
     }
 }

@@ -127,6 +127,10 @@ impl PreviewTask {
                                 Box::new(move |rgba, pts| {
                                     let frame =
                                         Arc::new(RenderImage::new(vec![image::Frame::new(rgba)]));
+                                    if let Err(error) = crate::ui::preview_budget::admit(&frame) {
+                                        log::warn!("Could not admit video preview pixels: {error}");
+                                        return false;
+                                    }
                                     send_video_frame(&tx, (frame, pts), &send_cancellation)
                                 }),
                                 Box::new(move || {
@@ -236,7 +240,15 @@ impl PreviewTask {
                         if let Some(rgba) = rgba_img {
                             // Backend now consistently returns BGRA for all types
                             let frame = image::Frame::new(rgba);
-                            Some(PreviewData::Image(Arc::new(RenderImage::new(vec![frame]))))
+                            let image = Arc::new(RenderImage::new(vec![frame]));
+                            match crate::ui::preview_budget::admit(&image) {
+                                Ok(()) => Some(PreviewData::Image(image)),
+                                Err(error) => {
+                                    log::warn!("Could not admit tooltip pixels: {error}");
+                                    failure_message = Some(crate::ui::i18n::Message::PreviewUnavailable);
+                                    None
+                                }
+                            }
                         } else if preview_type == PreviewType::Office {
                             // Fallback to text for Office if no image
                             let path_for_text = path.clone();

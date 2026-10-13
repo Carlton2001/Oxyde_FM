@@ -8,6 +8,78 @@ use windows::core::PCWSTR;
 use windows::Win32::Foundation::{SetHandleInformation, HANDLE, HANDLE_FLAG_INHERIT};
 use windows::Win32::System::Registry::*;
 
+#[test]
+fn inherited_selected_source_is_readable_but_not_writable_and_grants_no_path_access() {
+    let fixture = tempfile::tempdir().unwrap();
+    let path = fixture.path().join("selected");
+    std::fs::write(&path, b"selected witness").unwrap();
+    let source = File::open(&path).unwrap();
+    let mut command = native_probe::command("source-handle");
+    command.arg(&path);
+    let bytes = super::super::windows_preview_worker::supervise_source(command, &source,
+        Duration::from_secs(15), 512 * 1024 * 1024, 32 * 1024, &|| Ok(())).unwrap();
+    let report = String::from_utf8(bytes).unwrap();
+    assert!(report.contains("selected_read=true"), "{report}");
+    assert!(report.contains("selected_write=false"), "{report}");
+    assert!(report.contains("private_path_read=false"), "{report}");
+    assert_eq!(std::fs::read(path).unwrap(), b"selected witness");
+}
+
+#[test]
+fn native_service_bootstrap_records_lpac_and_unsandboxed_control_results() {
+    let command = native_probe::command("native-services");
+    let control = super::super::windows_preview_worker::supervise(command, Duration::from_secs(15)).unwrap();
+    println!("Native services control: {}", String::from_utf8_lossy(&control));
+    let fixture = tempfile::tempfile().unwrap();
+    let bytes = super::super::windows_preview_worker::supervise_source(native_probe::command("native-services"),
+        &fixture, Duration::from_secs(15), 512 * 1024 * 1024, 32 * 1024, &|| Ok(())).unwrap();
+    let report = String::from_utf8(bytes).unwrap();
+    println!("Native services LPAC: {report}");
+    assert!(!report.is_empty());
+}
+
+#[test]
+fn com_and_registry_capability_probe_measures_private_access_and_tcp_with_positive_controls() {
+    let directory = tempfile::tempdir().unwrap();
+    for name in ["source.bin", "destination.bin", "aap.bin", "aar.bin"] {
+        std::fs::write(directory.path().join(name), b"private witness").unwrap();
+    }
+    let registry = RegistryFixture::new();
+    let ipv4 = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let ipv6 = std::net::TcpListener::bind("[::1]:0").unwrap();
+    let make = || fixtures_command(directory.path(), &registry, 0, &ipv4, &ipv6, directory.path());
+    let mut control_command = make();
+    control_command.stdin(Stdio::piped()).stdout(Stdio::piped());
+    let mut control = super::super::windows_process_launch::spawn(control_command).unwrap();
+    control.stdin.take().unwrap().write_all(&[0xA7]).unwrap();
+    let control = control.wait_with_output().unwrap();
+    assert!(control.status.success());
+    let control = String::from_utf8(control.stdout).unwrap();
+    for name in ["read", "write", "create", "registry", "parent", "ipv4", "ipv6"] {
+        assert!(report(&control, name), "positive witness {name} missing: {control}");
+    }
+    std::fs::remove_file(directory.path().join("foreign-create.bin")).unwrap();
+    let started = Instant::now();
+    let (mut worker, output, input) = Worker::start_duplex_with_kind(make(), 512 * 1024 * 1024,
+        &|| Ok(()), LaunchKind::LpacCapabilityProbe(&["lpacCom", "registryRead"]), None).unwrap();
+    drop(input);
+    let bytes = super::super::windows_preview_worker::collect_reply(output, started,
+        Duration::from_secs(15), 32 * 1024, "Private capability probe timed out",
+        &|| Ok(()), &mut || worker.child.try_wait()).unwrap();
+    let text = String::from_utf8(bytes).unwrap();
+    println!("COM/registry capability private-access report: {text}");
+    assert!(report(&text, "appcontainer"));
+    for name in ["read", "write", "create", "parent", "runtime_write", "runtime_dac", "runtime_owner", "runtime_create", "cwd_create"] {
+        assert!(!report(&text, name), "unexpected private access {name}: {text}");
+    }
+    // registryRead may include inherited Windows registry permissions. Report
+    // what the fixture actually permits rather than assuming private HKCU denial.
+    println!("Private HKCU readable with registryRead: {}", report(&text, "registry"));
+    if report(&text, "network_initialized") {
+        assert!(!report(&text, "ipv4") && !report(&text, "ipv6"), "controlled TCP connection permitted: {text}");
+    }
+}
+
 struct RegistryFixture {
     path: Vec<u16>,
     key: HKEY,
@@ -157,11 +229,9 @@ fn zero_capability_lpac_denies_private_resources_and_preserves_ipc() {
 
     // Identical native operations outside the sandbox are witnesses that the
     // private fixtures, registry and both live endpoints are accessible.
-    let mut baseline = make_command()
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .spawn()
-        .unwrap();
+    let mut baseline_command = make_command();
+    baseline_command.stdin(Stdio::piped()).stdout(Stdio::piped());
+    let mut baseline = super::super::windows_process_launch::spawn(baseline_command).unwrap();
     baseline.stdin.take().unwrap().write_all(&[0xA7]).unwrap();
     let baseline = baseline.wait_with_output().unwrap();
     assert!(baseline.status.success());

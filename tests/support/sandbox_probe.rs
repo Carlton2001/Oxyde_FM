@@ -8,6 +8,9 @@ extern "system" {
     fn GetCurrentProcess() -> Handle;
     fn OpenProcess(access: u32, inherit: i32, pid: u32) -> Handle;
     fn CloseHandle(handle: Handle) -> i32;
+    fn LoadLibraryW(path: *const u16) -> Handle;
+    fn GetProcAddress(module: Handle, name: *const u8) -> *mut std::ffi::c_void;
+    fn CreateEventW(attributes: *const std::ffi::c_void, manual: i32, initial: i32, name: *const u16) -> Handle;
 }
 #[link(name = "advapi32")]
 extern "system" {
@@ -92,6 +95,50 @@ fn main() {
         std::thread::sleep(Duration::from_millis(100));
     }
     match args[1].as_str() {
+        "success" => { std::io::stdout().write_all(&[1]).unwrap(); }
+        "source-handle" => {
+            use std::os::windows::io::FromRawHandle;
+            let handle = args.windows(2).find(|pair| pair[0] == "--source-handle").unwrap()[1]
+                .parse::<usize>().unwrap();
+            let mut file = unsafe { std::fs::File::from_raw_handle(handle as Handle) };
+            let mut bytes = Vec::new();
+            file.read_to_end(&mut bytes).unwrap();
+            flag("selected_read", bytes == b"selected witness");
+            flag("selected_write", file.write_all(b"hostile").is_ok());
+            flag("private_path_read", std::fs::read(&args[2]).is_ok());
+        }
+        "native-services" => unsafe {
+            unsafe fn procedure(module: &str, name: &[u8]) -> *mut std::ffi::c_void {
+                let path: Vec<_> = module.encode_utf16().chain([0]).collect();
+                let library = LoadLibraryW(path.as_ptr());
+                if library.is_null() { return std::ptr::null_mut(); }
+                GetProcAddress(library, name.as_ptr())
+            }
+            let co = procedure("ole32.dll", b"CoInitializeEx\0");
+            if !co.is_null() {
+                let call: unsafe extern "system" fn(Handle, u32) -> i32 = std::mem::transmute(co);
+                println!("com_initialize={:08X}", call(std::ptr::null_mut(), 0) as u32);
+            } else { println!("com_load_error={}", std::io::Error::last_os_error()); }
+            let mf = procedure("mfplat.dll", b"MFStartup\0");
+            if !mf.is_null() {
+                let call: unsafe extern "system" fn(u32, u32) -> i32 = std::mem::transmute(mf);
+                println!("media_initialize={:08X}", call(0x20070, 0) as u32);
+            } else { println!("media_load_error={}", std::io::Error::last_os_error()); }
+            let create = procedure("combase.dll", b"WindowsCreateString\0");
+            let activate = procedure("combase.dll", b"RoGetActivationFactory\0");
+            if !create.is_null() && !activate.is_null() {
+                let create: unsafe extern "system" fn(*const u16, u32, *mut Handle) -> i32 = std::mem::transmute(create);
+                let activate: unsafe extern "system" fn(Handle, *const u32, *mut Handle) -> i32 = std::mem::transmute(activate);
+                let unknown: [u32; 4] = [0, 0, 0x000000C0, 0x46000000];
+                for class in ["Windows.Data.Pdf.PdfDocument", "Windows.Storage.StorageFile"] {
+                    let units: Vec<_> = class.encode_utf16().collect();
+                    let mut name = std::ptr::null_mut();
+                    assert!(create(units.as_ptr(), units.len() as u32, &mut name) >= 0);
+                    let mut factory = std::ptr::null_mut();
+                    println!("{class}={:08X}", activate(name, unknown.as_ptr(), &mut factory) as u32);
+                }
+            } else { println!("winrt_load_error={}", std::io::Error::last_os_error()); }
+        },
         "sleep" => std::thread::sleep(Duration::from_secs(10)),
         "crash" => std::process::exit(9),
         "malformed" => {
@@ -104,6 +151,28 @@ fn main() {
             }
             std::hint::black_box(&bytes);
             std::thread::sleep(Duration::from_secs(10));
+        }
+        "memory-bytes" => {
+            let count: usize = args[2].parse().unwrap();
+            let mut bytes = Vec::new();
+            let permitted = bytes.try_reserve_exact(count).is_ok();
+            if permitted { bytes.resize(count, 0u8); }
+            flag("allocation", permitted);
+            std::io::stdout().flush().unwrap();
+            std::io::stdin().read_exact(&mut gate).unwrap();
+            std::hint::black_box(&bytes);
+        }
+        "handles" => {
+            let mut handles = Vec::new();
+            for _ in 0..5000 {
+                let handle = unsafe { CreateEventW(std::ptr::null(), 0, 0, std::ptr::null()) };
+                assert!(!handle.is_null());
+                handles.push(handle);
+            }
+            flag("handles_ready", true);
+            std::io::stdout().flush().unwrap();
+            std::thread::sleep(Duration::from_secs(10));
+            for handle in handles { unsafe { CloseHandle(handle); } }
         }
         "frames" => {
             let bytes: Vec<u8> = args[2]

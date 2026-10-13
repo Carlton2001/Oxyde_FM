@@ -121,6 +121,7 @@ pub(super) fn load(path: String) -> Result<Arc<RenderImage>, String> {
         .map_err(|error| error.to_string())?;
     let bytes = pixels.as_raw().len();
     let image = Arc::new(RenderImage::new(vec![image::Frame::new(pixels)]));
+    crate::ui::preview_budget::admit(&image)?;
     // A changed source must not publish old pixels under its new metadata.
     if let Some(key) = signature {
         if Signature::read(&path).as_ref() == Some(&key) {

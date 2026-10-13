@@ -1,5 +1,6 @@
 #![cfg(target_os = "windows")]
 mod utils {
+    pub use oxyde_lib::utils::image_preview_decode;
     pub use oxyde_lib::utils::preview_protocol;
 }
 #[allow(dead_code)]
@@ -8,9 +9,84 @@ mod transport;
 #[allow(dead_code)]
 #[path = "../src/platform/windows_process_launch.rs"]
 mod windows_process_launch;
+#[allow(dead_code)]
+#[path = "../src/platform/windows_resource_pressure.rs"]
+mod windows_resource_pressure;
+#[allow(dead_code)]
+#[path = "../src/platform/windows_worker_budget.rs"]
+mod windows_worker_budget;
+use transport as windows_preview_worker;
+mod platform {
+    pub use oxyde_lib::platform::platform;
+}
+#[allow(dead_code)]
+#[path = "../src/platform/windows_worker_sandbox.rs"]
+mod windows_worker_sandbox;
 use oxyde_lib::utils::preview_protocol::{self, Reply};
 use std::path::Path;
 use std::time::{Duration, Instant};
+
+#[test]
+fn minimal_image_worker_renders_png_and_svg_under_zero_capability_lpac() {
+    let mut png = std::io::Cursor::new(Vec::new());
+    image::RgbaImage::from_pixel(2, 1, image::Rgba([10, 20, 30, 255]))
+        .write_to(&mut png, image::ImageFormat::Png)
+        .unwrap();
+    let directory = tempfile::tempdir().unwrap();
+    for (name, data) in [("sample.png", png.into_inner()), ("sample.svg", b"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"2\" height=\"1\"><rect width=\"2\" height=\"1\" fill=\"red\"/></svg>".to_vec()),
+        ("text.svg", b"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"100\" height=\"24\"><text x=\"0\" y=\"18\" font-family=\"Segoe UI\" font-size=\"16\">Oxyde</text></svg>".to_vec())] {
+        let source = directory.path().join(name);
+        std::fs::write(&source, data).unwrap();
+        let held = platform::platform().retain_archive_source(&source).unwrap();
+        let mut command = std::process::Command::new(env!("CARGO_BIN_EXE_oxyde-image-worker"));
+        command.arg(oxyde_lib::commands::image_handle_worker::FLAG);
+        let bytes = transport::supervise_source(command, &held.file, Duration::from_secs(15),
+            512 * 1024 * 1024, preview_protocol::MAX_REPLY, &|| Ok(())).unwrap();
+        let Reply::Images { frames, .. } = preview_protocol::decode(&bytes).unwrap() else { panic!("LPAC image unavailable") };
+        let Reply::Images { frames: reference, .. } = worker("image", &source) else { panic!("Image control unavailable") };
+        assert_eq!(frames[0].buffer(), reference[0].buffer(), "{name}");
+        if name == "text.svg" { assert!(frames[0].buffer().pixels().any(|pixel| pixel.0[3] != 0), "SVG text disappeared under LPAC"); }
+    }
+}
+
+#[test]
+fn isolated_office_text_uses_only_selected_handle_and_rejects_missing_worker_without_fallback() {
+    use std::io::Write;
+    let directory = tempfile::tempdir().unwrap();
+    let source = directory.path().join("école.docx");
+    let mut zip = zip::ZipWriter::new(std::fs::File::create(&source).unwrap());
+    zip.start_file(
+        "word/document.xml",
+        zip::write::SimpleFileOptions::default(),
+    )
+    .unwrap();
+    zip.write_all(b"<w:p><w:t>selected text</w:t></w:p>")
+        .unwrap();
+    zip.finish().unwrap();
+    let before = std::fs::read(&source).unwrap();
+    let bytes = transport::run_office_text_in(
+        Path::new(env!("CARGO_BIN_EXE_oxyde-image-worker")),
+        &source,
+        Duration::from_secs(15),
+    )
+    .unwrap();
+    assert!(
+        matches!(preview_protocol::decode(&bytes).unwrap(), Reply::Text(text) if text == "selected text")
+    );
+    assert_eq!(std::fs::read(&source).unwrap(), before);
+    assert!(transport::run_office_text_in(
+        &directory.path().join("missing-worker.exe"),
+        &source,
+        Duration::from_secs(15)
+    )
+    .is_err());
+    assert!(transport::run_image_in(
+        &directory.path().join("missing-worker.exe"),
+        &source,
+        Duration::from_secs(15)
+    )
+    .is_err());
+}
 
 fn worker(mode: &str, source: &Path) -> Reply {
     let bytes = transport::run_in(

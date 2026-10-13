@@ -17,7 +17,7 @@ fn failed() -> CommandError {
 
 pub(super) fn run(path: &Path, internal: &str) -> Result<Vec<FileEntry>, CommandError> {
     let _slot = SLOT.lock().map_err(|_| failed())?;
-    let executable = std::env::current_exe().map_err(|_| failed())?;
+    let executable = executable()?;
     run_in(&executable, path, internal, DEADLINE)
 }
 pub(super) fn run_in(
@@ -28,11 +28,15 @@ pub(super) fn run_in(
 ) -> Result<Vec<FileEntry>, CommandError> {
     let mut command = Command::new(executable);
     command
-        .arg("--oxyde-archive-list-worker-v1")
+        .arg(crate::commands::archive_handle_worker::FLAG)
+        .arg("directory")
         .arg(path)
         .arg(internal);
-    supervise(command, path, internal, deadline)
+    let bytes = confined(command, path, deadline, &|| Ok(()))?;
+    archive_listing_protocol::decode(&bytes, path, internal)
 }
+#[cfg(test)]
+#[allow(dead_code)]
 pub(super) fn supervise(
     command: Command,
     path: &Path,
@@ -82,7 +86,7 @@ pub(super) fn index(
     checkpoint: &dyn Fn() -> std::io::Result<()>,
 ) -> Result<Vec<FileEntry>, CommandError> {
     let _slot = search_admission(checkpoint)?;
-    let executable = std::env::current_exe().map_err(|_| failed())?;
+    let executable = executable()?;
     index_in(&executable, path, DEADLINE, checkpoint)
 }
 pub(super) fn index_in(
@@ -92,9 +96,55 @@ pub(super) fn index_in(
     checkpoint: &dyn Fn() -> std::io::Result<()>,
 ) -> Result<Vec<FileEntry>, CommandError> {
     let mut command = Command::new(executable);
-    command.arg("--oxyde-archive-index-worker-v1").arg(path);
-    supervise_index(command, path, deadline, checkpoint)
+    command
+        .arg(crate::commands::archive_handle_worker::FLAG)
+        .arg("index")
+        .arg(path)
+        .arg("");
+    let bytes = confined(command, path, deadline, checkpoint)?;
+    archive_listing_protocol::decode_index(&bytes, path, checkpoint)
 }
+fn executable() -> Result<std::path::PathBuf, CommandError> {
+    Ok(std::env::current_exe()
+        .map_err(|_| failed())?
+        .with_file_name("oxyde-archive-list-worker.exe"))
+}
+fn confined(
+    command: Command,
+    path: &Path,
+    deadline: Duration,
+    checkpoint: &dyn Fn() -> std::io::Result<()>,
+) -> Result<Vec<u8>, CommandError> {
+    checkpoint()?;
+    let source = crate::platform::platform().retain_archive_source(path)?;
+    super::windows_preview_worker::supervise_source(
+        command,
+        &source.file,
+        deadline,
+        MEMORY_BYTES,
+        archive_listing_protocol::MAX_REPLY,
+        checkpoint,
+    )
+    .map_err(|error| {
+        log::warn!("Confined archive metadata worker failed: {error}");
+        match error.kind() {
+            std::io::ErrorKind::Interrupted => CommandError::IoError(error.to_string()),
+            std::io::ErrorKind::TimedOut => CommandError::ArchiveError(
+                ArchiveLimitFailure {
+                    kind: ArchiveLimitKind::Seconds,
+                    limit: deadline.as_secs(),
+                }
+                .to_string(),
+            ),
+            std::io::ErrorKind::FileTooLarge => {
+                CommandError::ArchiveError(ArchiveListingFailure::MetadataLimit.to_string())
+            }
+            _ => failed(),
+        }
+    })
+}
+#[cfg(test)]
+#[allow(dead_code)]
 pub(super) fn supervise_index(
     command: Command,
     path: &Path,
