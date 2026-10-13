@@ -3,7 +3,13 @@
 use super::{scope::Scope, Sessions};
 use crate::ui::components::tooltip::Tooltip;
 use gpui::{AnyView, App, Window};
-use std::time::Duration;
+use std::time::{Duration, Instant};
+
+const CHANGE_DELAY: Duration = Duration::from_millis(150);
+
+fn can_publish(elapsed: Duration, preview_ready: bool) -> bool {
+    elapsed >= CHANGE_DELAY && preview_ready
+}
 
 fn ready(view: &AnyView, cx: &mut App) -> bool {
     match view.clone().downcast::<Tooltip>() {
@@ -21,14 +27,10 @@ pub(super) fn replace(
     cx: &mut App,
 ) {
     let id = window.window_handle().window_id();
-    #[cfg(target_os = "windows")]
-    let immediate = super::native_window::immediate_handover(&view, window, cx);
-    #[cfg(not(target_os = "windows"))]
-    let immediate = false;
-    if immediate || ready(&view, cx) {
-        super::publish_tooltip(view, window, cx);
-        return;
-    }
+    // Start loading now, including cache lookup, while keeping the old bubble
+    // intact. Even a cached preview waits for a stable hover before replacement.
+    let _ = ready(&view, cx);
+    let started = Instant::now();
     // The pending view belongs to the cancellable task, not to the painted
     // tooltip. Leaving or entering a different item releases it immediately.
     let task = window.spawn(cx, async move |cx| loop {
@@ -52,7 +54,7 @@ pub(super) fn replace(
                     super::clear(window, cx);
                     return true;
                 }
-                if !ready(&view, cx) {
+                if !can_publish(started.elapsed(), ready(&view, cx)) {
                     return false;
                 }
                 super::publish_tooltip(view.clone(), window, cx);
@@ -69,3 +71,7 @@ pub(super) fn replace(
         .unwrap()
         .task = Some(task);
 }
+
+#[cfg(test)]
+#[path = "../tests/handover_tests.rs"]
+mod tests;

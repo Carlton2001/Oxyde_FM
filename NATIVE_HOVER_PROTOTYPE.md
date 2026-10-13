@@ -22,8 +22,11 @@ suit directement les événements de souris, sans minuterie de suivi. Les
 placements inchangés ne font rien ; les déplacements seuls ne redimensionnent
 pas la fenêtre.
 
-Lors du passage à un autre fichier image ou PDF, le nom et les métadonnées
-changent immédiatement ; l'aperçu se complète pendant son chargement en arrière-plan.
+Lors du passage à un autre fichier, la bulle précédente reste complète pendant
+au moins 150 ms et jusqu'à ce que le nouvel aperçu soit prêt (ou atteigne le
+délai de chargement existant). Le chargement démarre dès le nouveau survol.
+Le nom, les métadonnées et l'aperçu sont remplacés ensemble. Un changement de
+cible, un départ ou une navigation annule la transition en attente.
 La taille native est ajustée dès que le rendu mesure le nouveau contenu.
 L'écart de 24 pixels logiques par axe est mesuré jusqu'au cadre visible : la
 marge transparente de l'ombre n'ajoute plus de distance au pointeur. Près d'un

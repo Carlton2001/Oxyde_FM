@@ -48,14 +48,6 @@ fn candidate(view: &AnyView, cx: &App) -> Option<Entity<Tooltip>> {
     (preview.original_image.is_some() || preview.media_asset.is_some()).then_some(tooltip)
 }
 
-pub(super) fn immediate_handover(view: &AnyView, window: &Window, cx: &mut App) -> bool {
-    candidate(view, cx).is_some()
-        && !cx
-            .default_global::<NativeWindows>()
-            .failed
-            .contains(&window.window_handle().window_id())
-}
-
 fn place(root: &NativeTooltip, window: &Window) {
     if let Ok(raw) = HasWindowHandle::window_handle(window) {
         let size = root.view.as_ref().map(|_| {
