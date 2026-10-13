@@ -552,16 +552,16 @@ fn crash_malformed_output_and_memory_failure_do_not_report_success() {
         ("malformed", 1024 * 1024 * 1024),
         ("memory", 64 * 1024 * 1024),
     ] {
-        let mut ready = false;
-        let started = Instant::now();
+        let mut ready = None;
+        let command = adverse_probe(mode);
         assert!(windows_archive_io_worker::supervise(
-            adverse_probe(mode),
+            command,
             [7; 16],
             encode_operation(Format::Zip, Quality::Fast),
             &|| Ok(Control::default()),
             &mut |frame| {
                 assert_eq!(frame.message, Message::Source { id: 0 });
-                ready = true;
+                ready = Some(Instant::now());
                 noop(frame)
             },
             Duration::from_secs(3),
@@ -569,10 +569,10 @@ fn crash_malformed_output_and_memory_failure_do_not_report_success() {
         )
         .is_err());
         assert!(
-            ready,
+            ready.is_some(),
             "native adverse child never reported readiness: {mode}"
         );
-        assert!(started.elapsed() < Duration::from_secs(5));
+        assert!(ready.unwrap().elapsed() < Duration::from_secs(5));
     }
 }
 
