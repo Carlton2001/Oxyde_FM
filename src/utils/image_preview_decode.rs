@@ -119,7 +119,7 @@ fn classify_decode(error: image::ImageError) -> PreviewError {
 fn fitted_bgra(image: DynamicImage, policy: Policy) -> RgbaImage {
     let image = if image.width() > policy.output_side || image.height() > policy.output_side {
         let filter = if policy.output_side <= 128 { image::imageops::FilterType::Triangle }
-            else { image::imageops::FilterType::Lanczos3 };
+            else { image::imageops::FilterType::Gaussian };
         image.resize(policy.output_side, policy.output_side, filter)
     } else {
         image

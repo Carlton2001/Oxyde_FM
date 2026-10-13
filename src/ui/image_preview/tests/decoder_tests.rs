@@ -22,7 +22,7 @@ fn grid_decode_reduces_directly_to_128_pixels_with_triangle() {
 }
 
 #[test]
-fn tooltip_reduction_uses_lanczos_without_jpeg_roundtrip() {
+fn tooltip_reduction_uses_gaussian_without_jpeg_roundtrip() {
     let mut source = RgbaImage::new(257, 193);
     for (x, y, pixel) in source.enumerate_pixels_mut() {
         *pixel = Rgba([x as u8, y as u8, (x ^ y) as u8, 128]);
@@ -30,7 +30,7 @@ fn tooltip_reduction_uses_lanczos_without_jpeg_roundtrip() {
     let mut data = Cursor::new(Vec::new());
     DynamicImage::ImageRgba8(source.clone()).write_to(&mut data, ImageFormat::Png).unwrap();
     let decoded = decode(data.get_ref(), &renderer(), Policy { output_side: 192, ..POLICY }).unwrap();
-    let mut expected = DynamicImage::ImageRgba8(source).resize(192, 192, image::imageops::FilterType::Lanczos3).to_rgba8();
+    let mut expected = DynamicImage::ImageRgba8(source).resize(192, 192, image::imageops::FilterType::Gaussian).to_rgba8();
     for pixel in expected.pixels_mut() { pixel.0.swap(0, 2); }
     assert_eq!(bytes(&decoded, 0), expected.as_raw().as_slice());
 }
