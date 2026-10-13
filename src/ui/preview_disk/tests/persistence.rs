@@ -23,7 +23,7 @@ fn independent_readers_reuse_png_preserving_alpha_and_bgra() {
     let cached = reopened.read().unwrap();
     assert_eq!(cached.bgra, pixels(false).bgra);
     assert!(!cached.animated);
-    let png = image::open(&key.file).unwrap().to_rgba8();
+    let png = image::open(key.png_file()).unwrap().to_rgba8();
     assert_eq!(png.get_pixel(0, 0).0, [200, 20, 10, 77]);
 }
 
@@ -81,12 +81,12 @@ fn image_and_pdf_renditions_do_not_alias_and_names_use_existing_quota() {
     let pdf = Key::in_root(&source, "pdf", key.file.parent().unwrap()).unwrap();
     assert_ne!(key.file, pdf.file);
     let name = key.file.file_name().unwrap().to_str().unwrap();
-    assert_eq!(name.len(), 64 + "_large.png".len());
+    assert_eq!(name.len(), 64 + ".jpg".len());
     assert!(name[..64].bytes().all(|byte| byte.is_ascii_hexdigit()));
 }
 
 #[test]
-fn grid_and_tooltip_requests_share_a_generation_lock() {
+fn matching_renditions_share_a_generation_lock() {
     let (_root, source, key) = fixture();
     let other = Key::in_root(&source, "image", key.file.parent().unwrap()).unwrap();
     let first = generation_lock(Some(&key)).unwrap();
@@ -96,4 +96,49 @@ fn grid_and_tooltip_requests_share_a_generation_lock() {
     assert!(second.try_lock().is_err());
     drop(guard);
     assert!(second.try_lock().is_ok());
+}
+
+#[test]
+fn grid_rendition_is_small_jpeg_and_distinct_from_tooltip() {
+    let (_root, source, large) = fixture();
+    let grid = Key::in_root(&source, "grid-image", large.file.parent().unwrap()).unwrap();
+    assert_ne!(grid.file, large.file);
+    assert_eq!(grid.side, 128);
+    assert_eq!(large.side, 768);
+    let mut state = 42u32;
+    let bgra = RgbaImage::from_fn(1024, 576, |_, _| {
+        state = state.wrapping_mul(1664525).wrapping_add(1013904223);
+        image::Rgba([state as u8, (state >> 8) as u8, (state >> 16) as u8, 255])
+    });
+    grid.write(&Pixels { bgra, animated: false, limited: false });
+    let bytes = std::fs::read(&grid.file).unwrap();
+    assert_eq!(&bytes[..2], &[0xff, 0xd8]);
+    assert!(bytes.len() < 8 * 1024, "{} bytes", bytes.len());
+    assert!(!large.file.exists());
+    let cached = grid.read().unwrap();
+    assert_eq!(cached.bgra.dimensions(), (128, 72));
+    let guard = generation_lock(Some(&grid)).unwrap();
+    assert!(!Arc::ptr_eq(&guard, &generation_lock(Some(&large)).unwrap()));
+}
+
+#[test]
+fn large_opaque_preview_uses_bounded_jpeg() {
+    let (_root, _, key) = fixture();
+    key.write(&Pixels { bgra: RgbaImage::from_pixel(1024, 576, image::Rgba([30, 100, 200, 255])), animated: false, limited: false });
+    assert!(std::fs::metadata(&key.file).unwrap().len() < 16 * 1024);
+    assert_eq!(key.read().unwrap().bgra.dimensions(), (768, 432));
+}
+
+#[test]
+fn transparent_thumbnail_over_byte_budget_is_not_persisted() {
+    let (_root, source, large) = fixture();
+    let grid = Key::in_root(&source, "grid-image", large.file.parent().unwrap()).unwrap();
+    let mut state = 42u32;
+    let bgra = RgbaImage::from_fn(128, 128, |_, _| {
+        state = state.wrapping_mul(1664525).wrapping_add(1013904223);
+        image::Rgba(state.to_le_bytes())
+    });
+    grid.write(&Pixels { bgra, animated: false, limited: false });
+    assert!(!grid.file.exists());
+    assert!(!grid.png_file().exists());
 }

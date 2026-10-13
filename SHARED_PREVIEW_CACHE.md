@@ -1,27 +1,19 @@
-# Cache disque partagé des aperçus — 14 octobre 2026
+# Compact preview cache - 14 October 2026
 
-Les infobulles et la grille partagent un PNG de 1 024 px maximum pour les images et la première page des PDF. Le premier consommateur génère et enregistre ; les suivants peuvent lire sans redécoder le fichier source ni refaire le rendu PDF, y compris après redémarrage d’Oxyde. Un verrou de génération commun évite deux rendus simultanés de la même entrée. Les petits fichiers image ne sont pas agrandis.
+Grid thumbnails and tooltip previews now use separate disk renditions. Browsing a grid persists only a 128 px rendition, matching the former Tauri thumbnail size. A tooltip persists its own rendition, up to 768 px, only when requested. An existing large rendition can seed a small thumbnail; a small thumbnail never seeds a tooltip.
 
-Le PNG conserve l’alpha et les couleurs. La conversion RGBA/BGRA respecte GPUI ; les flags de première frame/animation sont conservés dans un trailer après le PNG. Les visionneuses PNG ordinaires peuvent ouvrir l’image. La grille utilise un bitmap mémoire de 256 px ; les aperçus gardent le rendu commun de 1 024 px. Les infobulles animées gardent leur animation et le cache mémoire existant ; leur première frame disque sert à la grille.
+Opaque images and PDF renders use JPEG quality 75. Transparent images use PNG to preserve alpha. Both retain proportions; small tooltip sources are not enlarged. Resizing uses Triangle. Image decoding and native PDF rendering retain their existing isolated worker limits (1024 px intermediate); grid generation never persists this intermediate. Animations keep their original tooltip playback; only a first frame is persisted.
 
-## Stockage et invalidation
+## Storage
 
-- Répertoire existant : `dirs::cache_dir()/oxyde/thumbnails` (`%LOCALAPPDATA%/oxyde/thumbnails` sous Windows).
-- Clé BLAKE3 versionnée : chemin absolu, type image/PDF, taille, date de modification et taille de rendu.
-- Lecture et écriture via `Platform`, publication atomique, temporaire nettoyé par l’implémentation native.
-- Quota Windows partagé avec les miniatures : 256 Mio, 4 096 entrées, maximum 4 Mio par entrée. Une image dépassant le budget reste utilisable en mémoire.
-- Encodage et décodage bornés ; cache illisible, corrompu ou périmé ignoré. Les changements pendant le chargement empêchent sa réutilisation/publication sous une ancienne signature.
-- La commande Effacer le cache inclut ces fichiers, car ils sont dans le répertoire déjà nettoyé. L’invalidation des miniatures retire maintenant aussi les pixels d’images du LRU mémoire, avec une révision contre les insertions tardives.
-- Les anciennes miniatures JPEG restent distinctes et ne sont pas agrandies pour fabriquer les nouveaux aperçus.
-
-Le cache ne remplace ni l’isolation des décodeurs de sources, ni leurs budgets. Une écriture impossible est une optimisation manquée, pas une erreur d’affichage. Les hits disque ont le même comportement de transition que les hits mémoire : pas d’attente artificielle de 150 ms après résolution.
+- Existing `dirs::cache_dir()/oxyde/thumbnails` directory.
+- Versioned BLAKE3 keys include absolute path, media type, rendition size, source length and modification time.
+- Grid entries: maximum 24 KiB; tooltip entries: maximum 160 KiB. Oversized encoded results are displayed but not persisted.
+- JPEG files use `<hash>.jpg`; transparent PNG files use `<hash>_large.png`. A ten-byte trailer preserves animation flags. Standard image readers still read the images.
+- Native atomic publication and Windows cache quota remain in place (256 MiB, 4096 entries).
+- Corrupt or stale entries are misses. Per-rendition locks prevent duplicate generation. Failure to write does not prevent display.
+- Old version PNGs are ignored and deliberately left for the user's Clear cache action. No migration or automatic cleanup is performed.
 
 ## Validation
 
-Les tests de persistance utilisent exclusivement des fixtures temporaires : réouverture indépendante, PNG lisible et couleurs/alpha, flags animés, signature changée, données invalides/trop grandes, échec d’écriture et verrou partagé. Les tests Windows PDF vérifient le rendu natif à 1 024 px, les ratios extrêmes, les limites de buffers et la libération du document. Le test d’invalidation mémoire vérifie qu’une génération antérieure ne se réinsère pas après invalidation.
-
-Vérifications réalisées : `cargo check --offline` sans avertissement ; `cargo test --offline --bin oxyde ui:: -- --test-threads=1` avec 219 tests réussis et un ignoré ; `cargo test --offline --lib windows_pdf_thumbnail -- --test-threads=1` avec six tests réussis ; exécutable reconstruit et diff vérifié.
-
-La validation visuelle dans une session Oxyde et la compilation Linux complète restent à réaliser. Le quota décrit est celui de l’implémentation Windows existante. La première visite entraîne une génération et une écriture PNG ; le gain concerne surtout la réutilisation et les redémarrages. Le cache disque n’archive pas toutes les frames des animations.
-
-Pour essayer : survoler une image et un PDF, activer les miniatures de grille et retrouver leurs rendus ; redémarrer Oxyde puis recommencer. Modifier un fichier doit produire un nouveau rendu. Effacer le cache doit supprimer les fichiers partagés ; les aperçus actifs peuvent être régénérés ensuite. Les logs debug signalent les hits disque.
+Temporary-fixture tests cover alpha/channel preservation, independent reads, animation flags, invalidation, corruption, write failure, separate rendition keys and locks, 128 px JPEG dimensions and encoded size, and 768 px JPEG output. Visual quality and the total size of the user's actual folder still require an application trial; synthetic size checks do not predict every photograph's compressed size.
