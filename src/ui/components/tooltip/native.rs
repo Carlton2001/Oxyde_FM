@@ -11,7 +11,9 @@ pub(crate) trait NativeTooltipExt: StatefulInteractiveElement + Sized {
             })
         }
         #[cfg(not(target_os = "windows"))]
-        { self.tooltip(builder) }
+        {
+            self.tooltip(builder)
+        }
     }
 }
 impl<T: StatefulInteractiveElement> NativeTooltipExt for T {}

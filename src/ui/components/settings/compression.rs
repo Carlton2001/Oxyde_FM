@@ -52,8 +52,10 @@ pub(super) fn compression_table(view: &OxydeApp, handle: Entity<OxydeApp>, cx: &
         for quality in ["fast", "normal", "best"] {
             let handle = handle.clone();
             let active = selected == quality;
+            let key_handle = handle.clone();
+            let key_action = std::rc::Rc::new(move |_: &mut Window, cx: &mut App| { key_handle.update(cx, |view, cx| view.set_compression_quality(format, quality, cx)); });
             row = row.child(
-                div()
+                crate::ui::components::popup::keyboard::item(div()
                     .id(format!("compression-{format}-{quality}"))
                     .flex_1()
                     .min_w_0()
@@ -77,7 +79,7 @@ pub(super) fn compression_table(view: &OxydeApp, handle: Entity<OxydeApp>, cx: &
                         handle.update(cx, |view, cx| {
                             view.set_compression_quality(format, quality, cx)
                         });
-                    }),
+                    }), key_action, None, None),
             );
         }
         rows.push(row.into_any_element());

@@ -15,7 +15,8 @@ pub fn stepper(
     let on_step = Rc::new(on_step);
     let button = |increase: bool, enabled: bool| {
         let on_step = on_step.clone();
-        div()
+        let key_step = on_step.clone();
+        let row = div()
             .id(SharedString::from(format!(
                 "{id}-{}",
                 if increase { "increase" } else { "decrease" }
@@ -37,7 +38,8 @@ pub fn stepper(
                 if enabled {
                     on_step(increase, window, cx);
                 }
-            })
+            });
+        if enabled { crate::ui::components::popup::keyboard::item(row, Rc::new(move |window, cx| key_step(increase, window, cx)), None, None).into_any_element() } else { row.into_any_element() }
     };
     div()
         .flex_none()

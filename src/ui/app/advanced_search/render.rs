@@ -139,7 +139,7 @@ impl AdvancedSearchWindow {
                 window.is_maximized(),
                 false,
                 cx,
-                |window, _| window.remove_window(),
+                |window, cx| { crate::ui::components::tool_window::close_transients(window, cx); window.remove_window() },
             ))
             .child(tabs)
             .child(

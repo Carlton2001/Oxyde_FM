@@ -76,7 +76,7 @@ impl PropertiesWindow {
             return;
         }
         self.properties_dialog = None;
-        window.remove_window();
+        { crate::ui::components::tool_window::close_transients(window, cx); window.remove_window() };
         cx.notify();
     }
 

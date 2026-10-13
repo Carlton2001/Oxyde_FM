@@ -55,6 +55,10 @@ impl OxydeApp {
             return root;
         }
         {
+        if self.context_menus.iter().any(|menu| menu.native_bounds.is_some()) {
+            let source = handle.clone();
+            cx.defer(move |cx| source.update(cx, |view, cx| { for menu in &mut view.context_menus { menu.native_bounds = None; } cx.notify(); }));
+        }
         let mut root = root;
         let win_h = _win_h;
         // CONTEXT MENU OVERLAY

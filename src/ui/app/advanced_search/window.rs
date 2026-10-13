@@ -10,7 +10,7 @@ use oxyde_lib::commands::search::AdvancedSearchOptions;
 pub(crate) fn close_advanced_search_windows(cx: &mut App) {
     for handle in cx.windows() {
         if let Some(handle) = handle.downcast::<AdvancedSearchWindow>() {
-            let _ = handle.update(cx, |_, window, _| window.remove_window());
+            let _ = handle.update(cx, |_, window, cx| { crate::ui::components::tool_window::close_transients(window, cx); window.remove_window() });
         }
     }
 }
@@ -184,11 +184,12 @@ impl AdvancedSearchWindow {
             help_metrics: (0.0, 0.0),
             help_drag: None,
         });
+        window.on_window_should_close(cx, |window, cx| { crate::ui::components::tool_window::close_transients(window, cx); true });
         crate::ui::components::tool_window::install_icon("icons/search.svg", window);
         let mut subscriptions = Vec::new();
         if let Some(main) = owner.upgrade() {
             subscriptions.push(
-                cx.observe_release_in(&main, window, |_, _, window, _| window.remove_window()),
+                cx.observe_release_in(&main, window, |_, _, window, cx| { crate::ui::components::tool_window::close_transients(window, cx); window.remove_window() }),
             );
         }
         Self {
@@ -280,7 +281,7 @@ impl AdvancedSearchWindow {
         {
             // Escape dismisses the date picker before closing the tool window.
         } else {
-            window.remove_window();
+            { crate::ui::components::tool_window::close_transients(window, cx); window.remove_window() };
         }
         cx.notify();
     }

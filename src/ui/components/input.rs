@@ -1,3 +1,4 @@
+mod completion_menu;
 use crate::ui::scale::rem_pixels;
 use crate::ui::theme::ThemeContext;
 use gpui::prelude::*;
@@ -55,6 +56,8 @@ pub struct TextInput {
     completion_task: Option<Task<()>>,
     completion_epoch: u64,
     completion_bounds: Option<Bounds<Pixels>>,
+    completion_anchor: Option<Bounds<Pixels>>,
+    completion_scroll: ScrollHandle,
 }
 
 fn masked_display_index(content: &str, byte: usize) -> usize {
@@ -200,6 +203,8 @@ impl TextInput {
             completion_task: None,
             completion_epoch: 0,
             completion_bounds: None,
+            completion_anchor: None,
+            completion_scroll: ScrollHandle::new(),
             path_submit: false,
             password: false,
             focus_handle,
@@ -394,7 +399,8 @@ impl TextInput {
     ) {
         cx.stop_propagation();
         let input = cx.entity();
-        (self.on_context_menu)(input, self.has_selection(), event.position, window, cx);
+        let position = crate::ui::components::popup::owner_point(window, cx, event.position);
+        crate::ui::components::popup::with_owner(window, cx, |window, cx| (self.on_context_menu)(input, self.has_selection(), position, window, cx));
     }
 
     pub fn has_selection(&self) -> bool {
@@ -579,12 +585,14 @@ impl TextInput {
     fn completion_up(&mut self, _: &CompletionUp, _: &mut Window, cx: &mut Context<Self>) {
         if self.completions.is_empty() { cx.propagate(); return; }
         self.completion_index = (self.completion_index + self.completions.len() - 1) % self.completions.len();
+        self.completion_scroll.scroll_to_item(self.completion_index);
         cx.notify();
     }
 
     fn completion_down(&mut self, _: &CompletionDown, _: &mut Window, cx: &mut Context<Self>) {
         if self.completions.is_empty() { cx.propagate(); return; }
         self.completion_index = (self.completion_index + 1) % self.completions.len();
+        self.completion_scroll.scroll_to_item(self.completion_index);
         cx.notify();
     }
 
@@ -769,6 +777,7 @@ impl Render for TextInput {
         let focus_handle = self.focus_handle.clone();
         let is_focused = focus_handle.is_focused(window);
         let theme = *cx.theme();
+        if !is_focused || self.completions.is_empty() { self.completion_anchor = None; }
 
         div()
             .relative()
@@ -822,61 +831,10 @@ impl Render for TextInput {
             .when(self.path_submit, |s| s.pr(rems(0.0625)))
             .w_full()
             .when(is_focused && !self.completions.is_empty(), |input| {
-                let rows = self
-                    .completions
-                    .iter()
-                    .enumerate()
-                    .map(|(index, path)| {
-                        let path = path.clone();
-                        let selected = index == self.completion_index;
-                        div()
-                            .id(("path-completion", index))
-                            .px_3()
-                            .h(rems(1.75))
-                            .flex()
-                            .items_center()
-                            .text_size(rems(0.8125))
-                            .text_color(theme.text)
-                            .when(selected, |row| row.bg(theme.selected))
-                            .hover(|style| style.bg(theme.control_hover))
-                            .child(div().min_w_0().truncate().child(path.clone()))
-                            .on_mouse_down(
-                                MouseButton::Left,
-                                cx.listener(move |this, _, window, cx| {
-                                    cx.stop_propagation();
-                                    this.accept_completion(path.clone(), window, cx);
-                                }),
-                            )
-                    })
-                    .collect::<Vec<_>>();
-                let measure = cx.entity();
-                input.child(deferred(
-                    div()
-                        .absolute()
-                        .top(relative(1.0))
-                        .left_0()
-                        .w_full()
-                        .bg(theme.menu_surface)
-                        .border(rems(0.0625))
-                        .border_color(theme.menu_border)
-                        .rounded_sm()
-                        .shadow(crate::ui::style::rem_shadow(false))
-                        .occlude()
-                        .on_any_mouse_down(|_, _, cx| cx.stop_propagation())
-                        .child(
-                            canvas(
-                                |bounds, _, _| bounds,
-                                move |_, bounds, _, cx| {
-                                    measure.update(cx, |input, _| {
-                                        input.completion_bounds = Some(bounds)
-                                    });
-                                },
-                            )
-                            .absolute()
-                            .size_full(),
-                        )
-                        .children(rows),
-                ))
+                #[cfg(target_os = "windows")]
+                if crate::ui::components::popup::supported(window, cx) { return input.child(completion_menu::surface(cx.entity())); }
+                let menu = completion_menu::render(self, window, cx);
+                input.child(deferred(div().absolute().top(relative(1.0)).left_0().w_full().child(menu)))
             })
             .child(
                 div()

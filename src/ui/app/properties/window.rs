@@ -10,7 +10,7 @@ use gpui::*;
 pub(crate) fn close_properties_windows(cx: &mut App) {
     for window in cx.windows() {
         if let Some(window) = window.downcast::<PropertiesWindow>() {
-            let _ = window.update(cx, |_, window, _| window.remove_window());
+            let _ = window.update(cx, |_, window, cx| { crate::ui::components::tool_window::close_transients(window, cx); window.remove_window() });
         }
     }
 }
@@ -68,6 +68,7 @@ impl OxydeApp {
                     ..Default::default()
                 },
                 move |window, cx| {
+                    window.on_window_should_close(cx, |window, cx| { crate::ui::components::tool_window::close_transients(window, cx); true });
                     if let (Some(owner), Ok(handle)) = (
                         native_owner, raw_window_handle::HasWindowHandle::window_handle(window),
                     ) {
@@ -87,7 +88,7 @@ impl OxydeApp {
                             subscriptions.push(cx.observe_release_in(
                                 &main,
                                 window,
-                                |_, _, window, _| window.remove_window(),
+                                |_, _, window, cx| { crate::ui::components::tool_window::close_transients(window, cx); window.remove_window() },
                             ));
                         }
                         let mut view = PropertiesWindow {

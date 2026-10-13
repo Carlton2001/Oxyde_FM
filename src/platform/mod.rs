@@ -435,7 +435,7 @@ pub trait Platform: Send + Sync {
     /// Set a fixed owner-client anchor (x, y, width, height), or follow the cursor.
     fn set_popup_anchor(&self, window: raw_window_handle::RawWindowHandle, bounds: Option<(f32, f32, f32, f32)>, open_left: bool, beside: bool) -> Result<(), String>;
 
-    fn configure_menu_window(&self, window: raw_window_handle::RawWindowHandle, owner: raw_window_handle::RawWindowHandle, coordinate_owner: raw_window_handle::RawWindowHandle) -> Result<(), String>;
+    fn configure_menu_window(&self, window: raw_window_handle::RawWindowHandle, owner: raw_window_handle::RawWindowHandle, coordinate_owner: raw_window_handle::RawWindowHandle, activate: bool) -> Result<(), String>;
     fn popup_point_to_owner(&self, window: raw_window_handle::RawWindowHandle, owner: raw_window_handle::RawWindowHandle, point: (f32, f32)) -> Result<(f32, f32), String>;
     fn popup_family_active(&self, owner: raw_window_handle::RawWindowHandle) -> bool;
     fn request_popup_activation(&self, window: raw_window_handle::RawWindowHandle) -> Result<(), String>;

@@ -381,6 +381,7 @@ impl<T: crate::ui::components::scrollbar::ScrollbarState + 'static> RenderOnce f
                                     let key_hover = on_hover_list.clone();
                                     let key_bounds = row_bounds.clone();
                                     let submenu: Option<crate::ui::components::popup::keyboard::Action> = if item.has_submenu { key_hover.map(|hover| Rc::new(move |window: &mut Window, cx: &mut App| { let position = key_bounds.get().map(|bounds| bounds.origin).unwrap_or_default(); hover(original_ix, crate::ui::components::popup::owner_point(window, cx, position), cx); }) as crate::ui::components::popup::keyboard::Action) } else { None };
+                                    let key_action = if item.has_submenu && !split_copy { submenu.clone().unwrap_or(key_action) } else { key_action };
                                     let row = div()
                                         // Keep action hover state stable across menu renders.
                                         .id(("dropdown-item", ix))

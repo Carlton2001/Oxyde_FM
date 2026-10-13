@@ -59,7 +59,7 @@ pub(super) struct DialogWindow {
 pub(crate) fn close_dialog_windows(cx: &mut App) {
     for handle in cx.windows() {
         if let Some(handle) = handle.downcast::<DialogWindow>() {
-            let _ = handle.update(cx, |_, window, _| window.remove_window());
+            let _ = handle.update(cx, |_, window, cx| { crate::ui::components::tool_window::close_transients(window, cx); window.remove_window() });
         }
     }
 }
@@ -175,7 +175,8 @@ impl OxydeApp {
                         window,
                     );
                     let closing = close.clone();
-                    window.on_window_should_close(cx, move |_, cx| {
+                    window.on_window_should_close(cx, move |window, cx| {
+                        crate::ui::components::tool_window::close_transients(window, cx);
                         let Some(main) = closing.upgrade() else {
                             return true;
                         };
@@ -203,8 +204,8 @@ impl OxydeApp {
                             unreachable!()
                         };
                         let observed = cx.observe(&main, |_, _, cx| cx.notify());
-                        let released = cx.observe_release_in(&main, window, |_, _, window, _| {
-                            window.remove_window()
+                        let released = cx.observe_release_in(&main, window, |_, _, window, cx| {
+                            { crate::ui::components::tool_window::close_transients(window, cx); window.remove_window() }
                         });
                         let cleanup = owner.clone();
                         cx.on_release(move |_, cx| {
@@ -262,11 +263,11 @@ impl OxydeApp {
 impl Render for DialogWindow {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let Some(owner) = self.owner.upgrade() else {
-            window.remove_window();
+            { crate::ui::components::tool_window::close_transients(window, cx); window.remove_window() };
             return div().into_any_element();
         };
         if !self.kind.active(owner.read(cx)) {
-            window.remove_window();
+            { crate::ui::components::tool_window::close_transients(window, cx); window.remove_window() };
             return div().into_any_element();
         }
         if matches!(self.kind, DialogKind::Trash)
@@ -277,7 +278,7 @@ impl Render for DialogWindow {
                 .map(|d| d.request_id())
                 != self.trash_request
         {
-            window.remove_window();
+            { crate::ui::components::tool_window::close_transients(window, cx); window.remove_window() };
             return div().into_any_element();
         }
         let advanced = matches!(self.kind, DialogKind::Conflict)

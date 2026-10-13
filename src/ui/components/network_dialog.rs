@@ -3,9 +3,6 @@ use crate::ui::app::{
     network::{drive_letter_used, network_drive},
     OxydeApp,
 };
-use crate::ui::components::scrollbar::{
-    render_scrollbar_with_pointer, ScrollbarAxis, ZED_TRACK_WIDTH,
-};
 use crate::ui::components::{
     input::TextInput,
     modal::{action_button, form_row, Modal},

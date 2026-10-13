@@ -711,9 +711,10 @@ impl Platform for WindowsPlatform {
         super::windows_hover_window::set_anchor(window, bounds, open_left, beside)
     }
 
-    fn configure_menu_window(&self, window: raw_window_handle::RawWindowHandle, owner: raw_window_handle::RawWindowHandle, coordinate_owner: raw_window_handle::RawWindowHandle) -> Result<(), String> {
+    fn configure_menu_window(&self, window: raw_window_handle::RawWindowHandle, owner: raw_window_handle::RawWindowHandle, coordinate_owner: raw_window_handle::RawWindowHandle, activate: bool) -> Result<(), String> {
         self.set_window_owner(window, owner)?;
-        super::windows_hover_window::configure_menu(window, owner, coordinate_owner)
+        super::windows_hover_window::configure_menu(window, owner, coordinate_owner, activate)?;
+        self.install_pointer_capture(window)
     }
     fn popup_point_to_owner(&self, window: raw_window_handle::RawWindowHandle, owner: raw_window_handle::RawWindowHandle, point: (f32, f32)) -> Result<(f32, f32), String> {
         super::windows_hover_window::point_to_owner(window, owner, point)
