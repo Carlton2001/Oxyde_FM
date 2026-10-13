@@ -72,6 +72,19 @@ fn ack() -> Frame {
     })
 }
 
+pub(crate) fn watch_io(
+    op: Option<&Arc<Mutex<FileOperation>>>,
+    remaining: std::time::Duration,
+) -> io::Result<crate::platform::IoCancellationGuard> {
+    let (cancel, pause) = op
+        .map(|op| {
+            let locked = op.lock().unwrap();
+            (locked.cancel_flag.clone(), locked.pause_flag.clone())
+        })
+        .unwrap_or_default();
+    platform().watch_broker_io(remaining, cancel, pause)
+}
+
 pub(crate) fn decode(
     path: &Path,
     mut source: File,

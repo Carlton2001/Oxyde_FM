@@ -92,6 +92,12 @@ type CacheDirectory = super::archive_owned_tree::OwnedTree;
 
 impl CacheEntry {
     pub fn new() -> io::Result<Self> {
+        #[cfg(all(target_os = "windows", not(test)))]
+        let _io_cancellation = platform().watch_broker_io(
+            Duration::from_secs(15),
+            Default::default(),
+            Default::default(),
+        )?;
         let base = TEST_BASE
             .with(|value| value.borrow().clone())
             .unwrap_or_else(std::env::temp_dir);
@@ -201,6 +207,12 @@ impl CacheEntry {
     }
 
     pub fn finish(mut self, path: PathBuf) -> io::Result<PathBuf> {
+        #[cfg(all(target_os = "windows", not(test)))]
+        let _io_cancellation = platform().watch_broker_io(
+            Duration::from_secs(15),
+            Default::default(),
+            Default::default(),
+        )?;
         if !path.starts_with(&self.payload) || !path.is_file() {
             return Err(io::Error::other("Invalid cached archive file"));
         }

@@ -35,6 +35,9 @@ impl ArchiveWorkspace {
         op: &Arc<Mutex<FileOperation>>,
         retained: &HashMap<PathBuf, File>,
     ) -> Result<Prepared<'_>, String> {
+        let _io_cancellation =
+            crate::systems::archive_io::watch_io(Some(op), ArchiveLimits::WORKSPACE.max_duration)
+                .map_err(|error| error.to_string())?;
         if !writable(&self.archive) {
             return Err("This archive format is read-only".into());
         }
@@ -260,7 +263,10 @@ pub(super) fn publish_all(
     op: &Arc<Mutex<FileOperation>>,
 ) -> Result<(), String> {
     let mut identities = std::collections::HashSet::new();
-    if entries.iter().any(|entry| !identities.insert(entry.workspace.original_identity)) {
+    if entries
+        .iter()
+        .any(|entry| !identities.insert(entry.workspace.original_identity))
+    {
         return Err("Aliased archives are not supported in a publication group".into());
     }
     let mut group = RollbackOnUnwind {

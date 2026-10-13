@@ -146,6 +146,8 @@ impl ArchiveWorkspace {
         Self::open_controlled(archive, checkpoint, limits, None)
     }
     fn open_controlled(archive: PathBuf, checkpoint: &dyn Fn() -> std::io::Result<()>, limits: ArchiveLimits, op: Option<&Arc<Mutex<FileOperation>>>) -> Result<Self, String> {
+        #[cfg(all(target_os = "windows", not(test)))]
+        let _io_cancellation = super::archive_io::watch_io(op, limits.max_duration).map_err(|error| error.to_string())?;
         #[cfg(any(not(target_os = "windows"), test))]
         let directory = tempfile::tempdir().map_err(|e| e.to_string())?;
         #[cfg(all(target_os = "windows", not(test)))]

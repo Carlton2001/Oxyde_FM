@@ -1,11 +1,12 @@
-//! Cooperative native interruption of synchronous archive broker calls.
-//! Never kill a parent thread or release its object guards while I/O is pending.
+//! Cooperative native interruption, scoped to the thread that owns broker I/O.
+//! Nested scopes share one monitor and keep independent deadlines/cancel flags.
 use std::{
+    cell::RefCell,
     io,
     os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle},
     sync::{
         atomic::{AtomicBool, AtomicUsize, Ordering},
-        Arc,
+        Arc, Mutex, Weak,
     },
     time::{Duration, Instant},
 };
@@ -16,33 +17,57 @@ use windows::Win32::{
         IO::CancelSynchronousIo,
     },
 };
-
 const MAX_MONITORS: usize = 8;
 static ACTIVE: AtomicUsize = AtomicUsize::new(0);
+thread_local! { static CURRENT: RefCell<Weak<Monitor>> = const { RefCell::new(Weak::new()) }; }
 struct Reservation;
 impl Drop for Reservation {
     fn drop(&mut self) {
         ACTIVE.fetch_sub(1, Ordering::AcqRel);
     }
 }
+struct Spec {
+    id: usize,
+    limit: Duration,
+    elapsed: Duration,
+    previous: Instant,
+    cancel: Arc<AtomicBool>,
+    pause: Arc<AtomicBool>,
+}
+struct State {
+    done: AtomicBool,
+    scopes: Mutex<Vec<Spec>>,
+    next: AtomicUsize,
+}
 struct Monitor {
-    done: Arc<AtomicBool>,
+    state: Arc<State>,
     thread: Option<std::thread::JoinHandle<()>>,
 }
 impl Drop for Monitor {
     fn drop(&mut self) {
-        self.done.store(true, Ordering::Release);
-        // Join before the caller can reuse its thread for unrelated I/O.
+        self.state.done.store(true, Ordering::Release);
         if let Some(thread) = self.thread.take() {
             let _ = thread.join();
         }
     }
 }
-pub(super) fn watch(
-    remaining: Duration,
-    cancel: Arc<AtomicBool>,
-    pause: Arc<AtomicBool>,
-) -> io::Result<super::IoCancellationGuard> {
+struct Scope {
+    monitor: Arc<Monitor>,
+    id: usize,
+}
+impl Drop for Scope {
+    fn drop(&mut self) {
+        // Removal also waits for any cancellation request from this scope, so
+        // it cannot interrupt the next read in a still-live outer scope.
+        self.monitor
+            .state
+            .scopes
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .retain(|spec| spec.id != self.id);
+    }
+}
+fn create(remaining: Duration, cancel: &AtomicBool) -> io::Result<Arc<Monitor>> {
     let admission = Instant::now();
     while ACTIVE
         .fetch_update(Ordering::AcqRel, Ordering::Acquire, |active| {
@@ -79,36 +104,89 @@ pub(super) fn watch(
     }
     .map_err(|error| io::Error::other(error.to_string()))?;
     let target = unsafe { OwnedHandle::from_raw_handle(handle.0) };
-    let done = Arc::new(AtomicBool::new(false));
-    let stopped = done.clone();
+    let state = Arc::new(State {
+        done: AtomicBool::new(false),
+        scopes: Mutex::new(Vec::new()),
+        next: AtomicUsize::new(0),
+    });
+    let monitored = state.clone();
     let thread = std::thread::Builder::new()
         .name("oxyde-broker-cancel".into())
         .spawn(move || {
             let _reservation = reservation;
-            let mut previous = Instant::now();
-            let mut elapsed = Duration::ZERO;
-            while !stopped.load(Ordering::Acquire) {
+            while !monitored.done.load(Ordering::Acquire) {
                 let now = Instant::now();
-                if !pause.load(Ordering::Acquire) {
-                    elapsed = elapsed.saturating_add(now.duration_since(previous));
+                let mut scopes = monitored
+                    .scopes
+                    .lock()
+                    .unwrap_or_else(|error| error.into_inner());
+                let mut stop = false;
+                for spec in &mut *scopes {
+                    if !spec.pause.load(Ordering::Acquire) {
+                        spec.elapsed = spec
+                            .elapsed
+                            .saturating_add(now.duration_since(spec.previous));
+                    }
+                    spec.previous = now;
+                    stop |= spec.cancel.load(Ordering::Acquire) || spec.elapsed >= spec.limit;
                 }
-                previous = now;
-                if cancel.load(Ordering::Acquire) || elapsed >= remaining {
-                    // Reissue to cover a cancellation arriving between two native
-                    // calls. The monitor belongs to this broker scope only.
+                if stop {
+                    // Order requests with scope removal. Drivers can still refuse
+                    // cancellation; guards remain alive until native I/O returns.
                     let _ = unsafe { CancelSynchronousIo(HANDLE(target.as_raw_handle())) };
                 }
+                drop(scopes);
                 std::thread::sleep(Duration::from_millis(10));
             }
         })?;
+    Ok(Arc::new(Monitor {
+        state,
+        thread: Some(thread),
+    }))
+}
+pub(super) fn watch(
+    remaining: Duration,
+    cancel: Arc<AtomicBool>,
+    pause: Arc<AtomicBool>,
+) -> io::Result<super::IoCancellationGuard> {
+    let monitor = match CURRENT.with(|current| current.borrow().upgrade()) {
+        Some(monitor) => monitor,
+        None => {
+            let monitor = create(remaining, &cancel)?;
+            CURRENT.with(|current| *current.borrow_mut() = Arc::downgrade(&monitor));
+            monitor
+        }
+    };
+    let id = monitor
+        .state
+        .next
+        .fetch_update(Ordering::AcqRel, Ordering::Acquire, |id| id.checked_add(1))
+        .map_err(|_| io::Error::other("Broker cancellation scope IDs exhausted"))?;
+    {
+        let mut scopes = monitor
+            .state
+            .scopes
+            .lock()
+            .map_err(|_| io::Error::other("Broker cancellation monitor poisoned"))?;
+        if scopes.len() >= 16 {
+            return Err(io::Error::new(
+                io::ErrorKind::WouldBlock,
+                "Broker cancellation nesting exceeded",
+            ));
+        }
+        scopes.push(Spec {
+            id,
+            limit: remaining,
+            elapsed: Duration::ZERO,
+            previous: Instant::now(),
+            cancel,
+            pause,
+        });
+    }
     Ok(super::IoCancellationGuard {
-        _state: Box::new(Monitor {
-            done,
-            thread: Some(thread),
-        }),
+        _state: Box::new(Scope { monitor, id }),
     })
 }
-
 #[cfg(test)]
 #[path = "windows_broker_cancellation/tests/native_io.rs"]
 mod tests;

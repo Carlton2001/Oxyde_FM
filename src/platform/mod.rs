@@ -64,7 +64,7 @@ pub struct FileIdentity {
 /// Keeps a platform cancellation monitor alive only for its owning I/O scope.
 #[doc(hidden)]
 pub struct IoCancellationGuard {
-    _state: Box<dyn std::any::Any + Send>,
+    _state: Box<dyn std::any::Any>,
 }
 
 /// The item receipt is independent of a later failure of the native operation.
@@ -110,6 +110,7 @@ pub trait Platform: Send + Sync {
     }
     #[doc(hidden)]
     fn retain_archive_source(&self, path: &std::path::Path) -> std::io::Result<RetainedArchiveSource> {
+        let _cancellation = self.watch_broker_io(std::time::Duration::from_secs(15), Default::default(), Default::default())?;
         let parents = crate::systems::path_parents::HeldParents::new(path)?;
         let file = self.open_archive_source(&parents.resolved_path(path)?, false)?;
         Ok(RetainedArchiveSource { file, _parents: parents })
