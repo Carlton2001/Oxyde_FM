@@ -11,6 +11,9 @@ impl WindowsPlatform {
 }
 
 impl Platform for WindowsPlatform {
+    fn watch_broker_io(&self, remaining: std::time::Duration, cancel: std::sync::Arc<std::sync::atomic::AtomicBool>, pause: std::sync::Arc<std::sync::atomic::AtomicBool>) -> std::io::Result<super::IoCancellationGuard> {
+        super::windows_broker_cancellation::watch(remaining, cancel, pause)
+    }
     fn run_archive_io_worker(&self, operation: crate::utils::archive_io_protocol::Operation,
         controls: &dyn Fn() -> std::io::Result<crate::utils::archive_io_protocol::Control>,
         handler: &mut dyn FnMut(crate::utils::archive_io_protocol::Frame) -> std::io::Result<crate::utils::archive_io_protocol::Frame>) -> std::io::Result<std::time::Duration> {

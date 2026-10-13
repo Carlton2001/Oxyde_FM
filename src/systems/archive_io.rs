@@ -80,6 +80,13 @@ pub(crate) fn decode(
     budget: &ArchiveBudget,
     op: Option<&Arc<Mutex<FileOperation>>>,
 ) -> io::Result<()> {
+    let (cancel, pause) = op
+        .map(|op| {
+            let locked = op.lock().unwrap();
+            (locked.cancel_flag.clone(), locked.pause_flag.clone())
+        })
+        .unwrap_or_default();
+    let _io_cancellation = platform().watch_broker_io(budget.remaining()?, cancel, pause)?;
     let format = format(path)?;
     let mut limits = limits(budget.limits());
     limits.seconds = budget.remaining()?.as_secs().saturating_add(1);
@@ -138,6 +145,11 @@ pub(crate) fn decode(
                     return Err(invalid());
                 }
                 source.seek(SeekFrom::Start(offset))?;
+                crate::utils::archive_mutation_test::checkpoint(
+                    crate::utils::archive_mutation_test::Stage::BrokerBeforeSourceRead,
+                    path,
+                    target.path(),
+                )?;
                 let mut data = vec![0; length as usize];
                 source.read_exact(&mut data)?;
                 return Ok(Frame::data(Message::Bytes { source: id, offset }, data));

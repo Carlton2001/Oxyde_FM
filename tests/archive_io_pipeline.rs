@@ -16,6 +16,8 @@ mod iso;
 mod seven_crc;
 #[path = "support/provenance_mutation.rs"]
 mod provenance_mutation;
+#[path = "support/broker_cancellation.rs"]
+mod broker_cancellation;
 
 fn native<T>(run: impl FnOnce() -> T) -> T {
     with_worker_executable_for_tests(

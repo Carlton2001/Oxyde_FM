@@ -7,6 +7,7 @@ pub enum Stage {
     AfterBackup,
     BeforeRollback,
     BeforeBackupRemoval,
+    BrokerBeforeSourceRead,
 }
 type Hook = Box<dyn FnMut(Stage, &Path, &Path) -> io::Result<()>>;
 thread_local! { static HOOK: RefCell<Option<Hook>> = const { RefCell::new(None) }; }

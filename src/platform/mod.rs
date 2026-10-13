@@ -61,6 +61,12 @@ pub struct FileIdentity {
     kind: u8,
 }
 
+/// Keeps a platform cancellation monitor alive only for its owning I/O scope.
+#[doc(hidden)]
+pub struct IoCancellationGuard {
+    _state: Box<dyn std::any::Any + Send>,
+}
+
 /// The item receipt is independent of a later failure of the native operation.
 #[derive(Debug)]
 pub struct ShellDeleteOutcome {
@@ -86,6 +92,14 @@ impl ShellDeleteOutcome {
 /// Toute fonctionnalité native (lecteurs, ouverture, raccourcis, etc.)
 /// doit passer par ce trait plutôt qu'appeler directement les API OS.
 pub trait Platform: Send + Sync {
+    /// Attempt to interrupt synchronous broker I/O on cancellation/deadline.
+    /// Drivers may refuse cancellation; this is not an unconditional deadline.
+    #[doc(hidden)]
+    fn watch_broker_io(&self, _remaining: std::time::Duration,
+        _cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
+        _pause: std::sync::Arc<std::sync::atomic::AtomicBool>) -> std::io::Result<IoCancellationGuard> {
+        Ok(IoCancellationGuard { _state: Box::new(()) })
+    }
     #[doc(hidden)]
     fn retain_archive_source(&self, path: &std::path::Path) -> std::io::Result<RetainedArchiveSource> {
         let parents = crate::systems::path_parents::HeldParents::new(path)?;
@@ -484,6 +498,8 @@ mod windows_copy_staging;
 pub(crate) mod windows_reparse_tests;
 #[cfg(target_os = "windows")]
 mod windows_archive_source;
+#[cfg(target_os = "windows")]
+mod windows_broker_cancellation;
 #[cfg(target_os = "windows")]
 mod windows_file_copy;
 #[cfg(target_os = "windows")]

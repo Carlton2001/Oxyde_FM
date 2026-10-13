@@ -52,6 +52,11 @@ pub(super) fn run(
     budget: &ArchiveBudget,
     op: &Arc<Mutex<FileOperation>>,
 ) -> io::Result<()> {
+    let (cancel, pause) = {
+        let locked = op.lock().unwrap();
+        (locked.cancel_flag.clone(), locked.pause_flag.clone())
+    };
+    let _io_cancellation = platform().watch_broker_io(budget.remaining()?, cancel, pause)?;
     let raw = entries.iter().try_fold(0u64, |total, entry| {
         total.checked_add(entry.source.size()).ok_or_else(invalid)
     })?;
@@ -170,6 +175,11 @@ pub(super) fn run(
                         return Err(invalid());
                     }
                     source.file.seek(SeekFrom::Start(offset))?;
+                    crate::utils::archive_mutation_test::checkpoint(
+                        crate::utils::archive_mutation_test::Stage::BrokerBeforeSourceRead,
+                        source._parents.resolved_directory(),
+                        path,
+                    )?;
                     let mut data = vec![0; length as usize];
                     source.file.read_exact(&mut data)?;
                     source.read += length as u64;
