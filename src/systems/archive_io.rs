@@ -175,6 +175,7 @@ pub(crate) fn decode(
             _ => {}
         }
         state.accept(&frame)?;
+
         match &frame.message {
             Message::Entry { entry } => {
                 if let Some(op) = op {
@@ -200,11 +201,13 @@ pub(crate) fn decode(
                     output = Some(target.create_file(&path)?);
                 }
             }
-            Message::Chunk { .. } => {
-                output
-                    .as_mut()
-                    .ok_or_else(invalid)?
-                    .write_all(&frame.data)?;
+            Message::Chunk { id, .. } => {
+                let entry = state.entry(*id)?;
+                let path = target.path().join(relative_archive_path(&entry.name)?);
+                let file = output.as_mut().ok_or_else(invalid)?;
+                target.before_cache_write(&path, file, &frame.data)?;
+                file.write_all(&frame.data)?;
+                target.cache_write_observed(&path)?;
                 if let Some(op) = op {
                     FileOperationManager::archive_progress(op, frame.data.len() as u64);
                 }
@@ -235,6 +238,10 @@ pub(crate) fn decode(
                             data,
                         )?;
                     }
+                    target.complete_cache_write(
+                        &target.path().join(relative_archive_path(&entry.name)?),
+                        &file,
+                    )?;
                 }
                 if let Some(op) = op {
                     op.lock().unwrap().processed_files += 1;

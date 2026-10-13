@@ -7,6 +7,7 @@ pub enum Stage {
     AfterBackup,
     BeforeRollback,
     BeforeBackupRemoval,
+    CacheWritten,
     BrokerBeforeSourceRead,
 }
 type Hook = Box<dyn FnMut(Stage, &Path, &Path) -> io::Result<()>>;

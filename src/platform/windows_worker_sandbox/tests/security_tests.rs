@@ -347,7 +347,7 @@ fn zero_capability_lpac_denies_private_resources_and_preserves_ipc() {
     assert!(!directory.path().join("foreign-create.bin").exists());
 }
 
-fn set_fixture_acl(path: &std::path::Path, package_entries: &str) {
+pub(super) fn set_fixture_acl(path: &std::path::Path, package_entries: &str) {
     let sddl = wide(format!(
         "D:P(A;OICI;FA;;;{})(A;OICI;FA;;;SY){package_entries}",
         parent_user_sid().unwrap()

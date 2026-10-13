@@ -6,6 +6,7 @@ use std::{
     fs::File,
     io,
     path::{Path, PathBuf},
+    sync::{Arc, Mutex},
 };
 
 struct Owned {
@@ -24,6 +25,7 @@ pub(crate) struct OwnedTree {
     name_bytes: usize,
     cleanup: bool,
     remove_root: bool,
+    recovery: Option<Arc<Mutex<super::archive_open_cache::recovery::Journal>>>,
 }
 
 impl std::fmt::Debug for OwnedTree {
@@ -74,6 +76,7 @@ impl OwnedTree {
             name_bytes: 0,
             cleanup: true,
             remove_root,
+            recovery: None,
         })
     }
     pub fn created(path: &Path, file: &File) -> io::Result<Self> {
@@ -157,6 +160,12 @@ impl OwnedTree {
         self.name_bytes = self.name_bytes.saturating_add(path.as_os_str().len());
         self.check_journal_path(path)?;
         self.check_journal_budget()?;
+        if let Some(journal) = &self.recovery {
+            journal
+                .lock()
+                .map_err(|_| io::Error::other("Cache proof poisoned"))?
+                .created(path, &self.directories[path].tracking, true)?;
+        }
         Ok(())
     }
     pub fn ensure_directory(&mut self, path: &Path) -> io::Result<()> {
@@ -224,7 +233,14 @@ impl OwnedTree {
             .saturating_sub(old.map_or(0, |entry| entry.path.as_os_str().len()))
             .saturating_add(path.as_os_str().len());
         self.check_journal_path(&path)?;
-        self.check_journal_budget()
+        self.check_journal_budget()?;
+        if let Some(journal) = &self.recovery {
+            journal
+                .lock()
+                .map_err(|_| io::Error::other("Cache proof poisoned"))?
+                .created(&path, file, false)?;
+        }
+        Ok(())
     }
     pub fn adopt_created_directory(&mut self, path: &Path, file: &File) -> io::Result<()> {
         let path = self.resolved(path)?;
@@ -291,6 +307,59 @@ impl OwnedTree {
             .chain(self.directories.values())
             .map(|entry| (entry.path.clone(), entry.identity))
             .collect()
+    }
+    pub(super) fn recovery_root(&self) -> &File {
+        &self.root.tracking
+    }
+    pub(super) fn recovery_records(&self) -> impl Iterator<Item = (&Path, &File, bool)> {
+        self.directories
+            .values()
+            .map(|entry| (entry.path.as_path(), &entry.tracking, true))
+            .chain(
+                self.files
+                    .values()
+                    .map(|entry| (entry.path.as_path(), &entry.tracking, false)),
+            )
+    }
+    pub(super) fn attach_recovery(
+        &mut self,
+        journal: Arc<Mutex<super::archive_open_cache::recovery::Journal>>,
+    ) {
+        self.recovery = Some(journal);
+    }
+    pub(super) fn before_cache_write(
+        &self,
+        path: &Path,
+        file: &File,
+        data: &[u8],
+    ) -> io::Result<()> {
+        if let Some(journal) = &self.recovery {
+            journal
+                .lock()
+                .map_err(|_| io::Error::other("Cache proof poisoned"))?
+                .before_write(path, file, data)?;
+        }
+        Ok(())
+    }
+    pub(super) fn complete_cache_write(&self, path: &Path, file: &File) -> io::Result<()> {
+        if let Some(journal) = &self.recovery {
+            journal
+                .lock()
+                .map_err(|_| io::Error::other("Cache proof poisoned"))?
+                .complete(path, file)?;
+        }
+        Ok(())
+    }
+    #[cfg(not(test))]
+    pub(super) fn cache_write_observed(&self, path: &Path) -> io::Result<()> {
+        if self.recovery.is_some() {
+            crate::utils::archive_mutation_test::checkpoint(
+                crate::utils::archive_mutation_test::Stage::CacheWritten,
+                path,
+                self.path(),
+            )?;
+        }
+        Ok(())
     }
     pub fn verify_owned(&self, path: &Path, file: &File) -> io::Result<()> {
         let expected = if path == self.path() {

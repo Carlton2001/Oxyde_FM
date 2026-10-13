@@ -350,7 +350,7 @@ fn retain(path: &Path, directory: bool) -> io::Result<File> {
     Ok(file)
 }
 
-fn parent_user_sid() -> io::Result<String> {
+pub(super) fn parent_user_sid() -> io::Result<String> {
     let mut token = HANDLE::default();
     unsafe { OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token) }.map_err(native)?;
     let token = owned(token);
@@ -750,6 +750,9 @@ mod capability_probe;
 #[cfg(test)]
 #[path = "windows_worker_sandbox/tests/security_tests.rs"]
 mod security_tests;
+#[cfg(test)]
+#[path = "windows_worker_sandbox/tests/cache_proof_tests.rs"]
+mod cache_proof_tests;
 
 #[cfg(test)]
 thread_local! {

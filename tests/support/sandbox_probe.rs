@@ -8,6 +8,7 @@ extern "system" {
     fn GetCurrentProcess() -> Handle;
     fn OpenProcess(access: u32, inherit: i32, pid: u32) -> Handle;
     fn CloseHandle(handle: Handle) -> i32;
+    fn LocalFree(memory: Handle) -> Handle;
     fn LoadLibraryW(path: *const u16) -> Handle;
     fn GetProcAddress(module: Handle, name: *const u8) -> *mut std::ffi::c_void;
     fn CreateEventW(attributes: *const std::ffi::c_void, manual: i32, initial: i32, name: *const u16) -> Handle;
@@ -95,6 +96,23 @@ fn main() {
         std::thread::sleep(Duration::from_millis(100));
     }
     match args[1].as_str() {
+        "dpapi" => unsafe {
+            #[repr(C)] struct Blob { size: u32, data: *mut u8 }
+            type Protect = unsafe extern "system" fn(*const Blob, *const u16, *const Blob, Handle, Handle, u32, *mut Blob) -> i32;
+            let name: Vec<_> = "crypt32.dll".encode_utf16().chain([0]).collect();
+            let library = LoadLibraryW(name.as_ptr());
+            assert!(!library.is_null());
+            let function = GetProcAddress(library, b"CryptProtectData\0".as_ptr());
+            assert!(!function.is_null());
+            let protect: Protect = std::mem::transmute(function);
+            let input = Blob { size: 6, data: b"forged".as_ptr().cast_mut() };
+            let mut output = Blob { size: 0, data: std::ptr::null_mut() };
+            let result = protect(&input, std::ptr::null(), std::ptr::null(), std::ptr::null_mut(), std::ptr::null_mut(), 1, &mut output);
+            let error = std::io::Error::last_os_error().raw_os_error().unwrap_or(-1);
+            flag("dpapi_protect", result != 0);
+            if result == 0 { println!("dpapi_error={error}"); }
+            if !output.data.is_null() { LocalFree(output.data.cast()); }
+        },
         "success" => { std::io::stdout().write_all(&[1]).unwrap(); }
         "source-handle" => {
             use std::os::windows::io::FromRawHandle;

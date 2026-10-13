@@ -54,7 +54,7 @@ pub enum SystemExecutable {
 
 /// Opaque identity of an opened file or directory. Keep a handle alive while comparing it
 /// across an operation so a deleted file's identifier cannot be reused.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct FileIdentity {
     volume: u64,
     value: [u8; 16],
@@ -92,6 +92,14 @@ impl ShellDeleteOutcome {
 /// Toute fonctionnalité native (lecteurs, ouverture, raccourcis, etc.)
 /// doit passer par ce trait plutôt qu'appeler directement les API OS.
 pub trait Platform: Send + Sync {
+    #[doc(hidden)]
+    fn cache_proof_key(&self, _path: &std::path::Path) -> std::io::Result<[u8; 32]> {
+        Err(std::io::Error::new(std::io::ErrorKind::Unsupported, "Persistent cache keys unavailable"))
+    }
+    #[doc(hidden)]
+    fn seal_cache_proof(&self, _bytes: &[u8], _key: &[u8; 32], _protect: bool) -> std::io::Result<Vec<u8>> {
+        Err(std::io::Error::new(std::io::ErrorKind::Unsupported, "Persistent cache proofs unavailable"))
+    }
     /// Attempt to interrupt synchronous broker I/O on cancellation/deadline.
     /// Drivers may refuse cancellation; this is not an unconditional deadline.
     #[doc(hidden)]
@@ -472,6 +480,8 @@ mod windows_executables;
 mod windows_archive_security;
 #[cfg(target_os = "windows")]
 mod windows_cache;
+#[cfg(target_os = "windows")]
+mod windows_cache_proof;
 #[cfg(target_os = "windows")]
 mod windows_no_reparse;
 #[cfg(target_os = "windows")]

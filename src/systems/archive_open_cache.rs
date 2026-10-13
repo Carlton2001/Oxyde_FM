@@ -11,6 +11,8 @@ const OWNER: &str = ".owner.json";
 const MAX_SCAN_NODES: usize = 65_536;
 const MAX_SCAN_DEPTH: usize = 80;
 const MAX_PENDING_ENTRIES: usize = 4;
+#[cfg(target_os = "windows")]
+pub(crate) mod recovery;
 
 thread_local! { static TEST_BASE: std::cell::RefCell<Option<PathBuf>> = const { std::cell::RefCell::new(None) }; }
 pub(crate) fn with_test_base<T>(base: &Path, run: impl FnOnce() -> T) -> T {
@@ -37,7 +39,7 @@ impl Policy {
         max_bytes: 1024 * 1024 * 1024,
         max_entries: 512,
         // Bound the selected file plus provenance and its fingerprint record.
-        max_entry_bytes: 256 * 1024 * 1024 + MAX_OWNER_BYTES + 64 * 1024,
+        max_entry_bytes: 256 * 1024 * 1024 + MAX_OWNER_BYTES + 4 * 1024 * 1024 + 64 * 1024,
         retention: Duration::from_secs(7 * 24 * 60 * 60),
         launch_grace: Duration::from_secs(60),
     };
@@ -72,6 +74,8 @@ pub(crate) struct CacheEntry {
     // and inter-process lease until the temporary directory is gone.
     _guard: ExtractionRoot,
     marker: File,
+    #[cfg(all(target_os = "windows", not(test)))]
+    recovery: std::sync::Arc<std::sync::Mutex<recovery::Journal>>,
     #[cfg(all(target_os = "windows", not(test)))]
     payload_owner: Option<super::archive_owned_tree::OwnedTree>,
     directory: Option<CacheDirectory>,
@@ -122,7 +126,12 @@ impl CacheEntry {
 
     fn prepare(base: &Path, policy: Policy, now: u64) -> io::Result<Self> {
         let base_guard = ExtractionRoot::new(base)?;
-        let destination = base_guard.destination("oxyde-archive-open/v1", true)?;
+        let cache_root = if cfg!(all(target_os = "windows", not(test))) {
+            "oxyde-archive-open/v2"
+        } else {
+            "oxyde-archive-open/v1"
+        };
+        let destination = base_guard.destination(cache_root, true)?;
         let guard = ExtractionRoot::new(&destination.path)?;
         let root = destination.path.clone();
         let lock = platform()
@@ -157,7 +166,7 @@ impl CacheEntry {
             &mut marker,
             &Owner {
                 version: if cfg!(all(target_os = "windows", not(test))) {
-                    3
+                    4
                 } else {
                     2
                 },
@@ -167,9 +176,13 @@ impl CacheEntry {
         )?;
         marker.flush()?;
         marker.sync_all()?;
+        #[cfg(all(target_os = "windows", not(test)))]
+        let recovery = recovery::Journal::new(&mut directory, now)?;
         let mut entry = Self {
             _guard: entry_guard,
             marker,
+            #[cfg(all(target_os = "windows", not(test)))]
+            recovery,
             #[cfg(all(target_os = "windows", not(test)))]
             payload_owner: None,
             directory: Some(directory),
@@ -217,7 +230,7 @@ impl CacheEntry {
             &mut self.marker,
             &Owner {
                 version: if cfg!(all(target_os = "windows", not(test))) {
-                    3
+                    4
                 } else {
                     2
                 },
@@ -237,6 +250,11 @@ impl CacheEntry {
             Some(directory),
         )?;
         #[cfg(all(target_os = "windows", not(test)))]
+        self.recovery
+            .lock()
+            .map_err(|_| io::Error::other("Cache proof poisoned"))?
+            .finish()?;
+        #[cfg(all(target_os = "windows", not(test)))]
         if let Some(owner) = &mut self.payload_owner {
             owner.keep();
         }
@@ -251,6 +269,10 @@ impl CacheEntry {
     ) -> io::Result<PathBuf> {
         self.payload_owner = Some(owner);
         self.finish(path)
+    }
+    #[cfg(all(target_os = "windows", not(test)))]
+    pub fn attach_recovery(&self, owner: &mut super::archive_owned_tree::OwnedTree) {
+        owner.attach_recovery(self.recovery.clone());
     }
 }
 
@@ -299,7 +321,7 @@ impl Session {
         let mut pending = 0usize;
         for item in fs::read_dir(&self.root)? {
             let item = item?;
-            if item.file_name() == ".cache-lock" || excluded == Some(item.path().as_path()) {
+            if item.file_name() == ".cache-lock" || item.file_name() == ".cache-proof-key" || excluded == Some(item.path().as_path()) {
                 continue;
             }
             visited += 1;
@@ -330,7 +352,7 @@ impl Session {
             let owner = read_owner(&path).ok();
             if owner
                 .as_ref()
-                .is_some_and(|owner| matches!(owner.version, 2 | 3) && owner.original.is_none())
+                .is_some_and(|owner| matches!(owner.version, 2 | 3 | 4) && owner.original.is_none())
             {
                 // A live preparation keeps its marker and directory open.
                 // Traversing it would race decoder writes and TempDir cleanup.
@@ -405,79 +427,86 @@ impl Session {
         if !path.is_absolute() || path.parent() != Some(self.root.as_path()) {
             return Err(io::Error::other("Cache cleanup path escaped its root"));
         }
-        let root_handle = platform().open_cache_cleanup(path, true)?;
-        let marker_path = path.join(OWNER);
-        let mut marker = platform().open_cache_cleanup(&marker_path, false)?;
-        let mut bytes = Vec::new();
-        (&mut marker)
-            .take(MAX_OWNER_BYTES + 1)
-            .read_to_end(&mut bytes)?;
-        if bytes.len() as u64 > MAX_OWNER_BYTES {
-            return Err(io::Error::other("Cache owner record is too large"));
-        }
-        let owner: Owner = serde_json::from_slice(&bytes)?;
-        // A crash before completion supplies no persistent ownership proof.
-        if owner.version == 3 && owner.original.is_none() {
-            return Ok(false);
-        }
-        let abandoned = owner.version == 2 && owner.original.is_none();
-        let required_age = if pressure || abandoned {
-            policy.launch_grace
-        } else {
-            policy.retention
-        };
-        if !matches!(owner.version, 1 | 2 | 3)
-            || now.saturating_sub(owner.created) < required_age.as_secs()
-            || (pressure && owner.version == 1 && owner.original.is_none())
+        #[cfg(all(target_os = "windows", not(test)))]
         {
-            return Ok(false);
+            return recovery::evict(path, policy, now, pressure, remaining);
         }
-        let mut nodes = Vec::new();
-        collect_cleanup(path, &marker_path, &mut nodes, remaining, 0)?;
-        if let Some(original) = owner.original {
-            let expected = crate::utils::archive_security::relative_archive_path(
-                &original.path.to_string_lossy(),
-            )?;
-            if expected != original.path || !expected.starts_with("data") {
+        #[cfg(any(not(target_os = "windows"), test))]
+        {
+            let root_handle = platform().open_cache_cleanup(path, true)?;
+            let marker_path = path.join(OWNER);
+            let mut marker = platform().open_cache_cleanup(&marker_path, false)?;
+            let mut bytes = Vec::new();
+            (&mut marker)
+                .take(MAX_OWNER_BYTES + 1)
+                .read_to_end(&mut bytes)?;
+            if bytes.len() as u64 > MAX_OWNER_BYTES {
+                return Err(io::Error::other("Cache owner record is too large"));
+            }
+            let owner: Owner = serde_json::from_slice(&bytes)?;
+            // A crash before completion supplies no persistent ownership proof.
+            if owner.version == 3 && owner.original.is_none() {
                 return Ok(false);
             }
-            let mut files = nodes.iter_mut().filter(|node| !node.directory);
-            let Some(node) = files.next() else {
-                return Ok(false);
+            let abandoned = owner.version == 2 && owner.original.is_none();
+            let required_age = if pressure || abandoned {
+                policy.launch_grace
+            } else {
+                policy.retention
             };
-            let metadata = node.file.metadata()?;
-            if node.path != path.join(expected)
-                || files.next().is_some()
-                || metadata.len() != original.size
-                || metadata.modified().ok() != original.modified
-                || hash_file(&mut node.file, original.size)? != original.hash
+            if !matches!(owner.version, 1 | 2 | 3)
+                || now.saturating_sub(owner.created) < required_age.as_secs()
+                || (pressure && owner.version == 1 && owner.original.is_none())
             {
                 return Ok(false);
             }
-        } else if !abandoned {
-            // Version-one entries have no content baseline: only expire after
-            // the old retention window, with recent modifications protected.
-            for node in &nodes {
-                if !node.directory
-                    && now.saturating_sub(seconds(node.file.metadata()?.modified()?)?)
-                        < policy.retention.as_secs()
+            let mut nodes = Vec::new();
+            collect_cleanup(path, &marker_path, &mut nodes, remaining, 0)?;
+            if let Some(original) = owner.original {
+                let expected = crate::utils::archive_security::relative_archive_path(
+                    &original.path.to_string_lossy(),
+                )?;
+                if expected != original.path || !expected.starts_with("data") {
+                    return Ok(false);
+                }
+                let mut files = nodes.iter_mut().filter(|node| !node.directory);
+                let Some(node) = files.next() else {
+                    return Ok(false);
+                };
+                let metadata = node.file.metadata()?;
+                if node.path != path.join(expected)
+                    || files.next().is_some()
+                    || metadata.len() != original.size
+                    || metadata.modified().ok() != original.modified
+                    || hash_file(&mut node.file, original.size)? != original.hash
                 {
                     return Ok(false);
                 }
+            } else if !abandoned {
+                // Version-one entries have no content baseline: only expire after
+                // the old retention window, with recent modifications protected.
+                for node in &nodes {
+                    if !node.directory
+                        && now.saturating_sub(seconds(node.file.metadata()?.modified()?)?)
+                            < policy.retention.as_secs()
+                    {
+                        return Ok(false);
+                    }
+                }
             }
+            // All data handles were obtained exclusively before any deletion.
+            // Existing readers prevent the whole eviction, including readers that
+            // allow FILE_SHARE_DELETE. Directories are deleted by held identity.
+            for node in nodes {
+                platform().remove_open_file(&node.file, &node.path)?;
+                drop(node.file);
+            }
+            platform().remove_open_file(&marker, &marker_path)?;
+            drop(marker);
+            platform().remove_open_file(&root_handle, path)?;
+            drop(root_handle);
+            Ok(true)
         }
-        // All data handles were obtained exclusively before any deletion.
-        // Existing readers prevent the whole eviction, including readers that
-        // allow FILE_SHARE_DELETE. Directories are deleted by held identity.
-        for node in nodes {
-            platform().remove_open_file(&node.file, &node.path)?;
-            drop(node.file);
-        }
-        platform().remove_open_file(&marker, &marker_path)?;
-        drop(marker);
-        platform().remove_open_file(&root_handle, path)?;
-        drop(root_handle);
-        Ok(true)
     }
 }
 

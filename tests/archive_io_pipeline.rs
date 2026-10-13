@@ -16,6 +16,8 @@ mod iso;
 mod seven_crc;
 #[path = "support/provenance_mutation.rs"]
 mod provenance_mutation;
+#[path = "support/cache_crash_recovery.rs"]
+mod cache_crash_recovery;
 #[path = "support/grouped_publication.rs"]
 mod grouped_publication;
 #[path = "support/broker_cancellation.rs"]

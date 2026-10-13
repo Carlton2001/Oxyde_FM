@@ -11,6 +11,12 @@ impl WindowsPlatform {
 }
 
 impl Platform for WindowsPlatform {
+    fn cache_proof_key(&self, path: &std::path::Path) -> std::io::Result<[u8; 32]> {
+        super::windows_cache_proof::key::load(path)
+    }
+    fn seal_cache_proof(&self, bytes: &[u8], key: &[u8; 32], protect: bool) -> std::io::Result<Vec<u8>> {
+        super::windows_cache_proof::transform(bytes, key, protect)
+    }
     fn watch_broker_io(&self, remaining: std::time::Duration, cancel: std::sync::Arc<std::sync::atomic::AtomicBool>, pause: std::sync::Arc<std::sync::atomic::AtomicBool>) -> std::io::Result<super::IoCancellationGuard> {
         super::windows_broker_cancellation::watch(remaining, cancel, pause)
     }

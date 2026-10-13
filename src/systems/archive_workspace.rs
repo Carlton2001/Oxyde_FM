@@ -466,6 +466,7 @@ fn external_file_inner(path: &Path) -> Result<PathBuf, crate::models::CommandErr
     #[cfg(all(target_os = "windows", not(test)))]
     let result = {
         let mut owner = super::archive_owned_tree::OwnedTree::new(cache.payload(), false)?;
+        cache.attach_recovery(&mut owner);
         let destination = prepare_selection_owned(archive, &internal, &mut owner, ArchiveLimits::OPEN_FILE).map_err(crate::models::CommandError::ArchiveError)?;
         cache.finish_owned(destination, owner)
     };
