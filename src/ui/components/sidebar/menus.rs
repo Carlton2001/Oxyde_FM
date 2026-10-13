@@ -183,7 +183,7 @@ fn drive_context_menu_raw(i18n: &I18n, h: Entity<OxydeApp>, path: String, is_usb
         let path = path.clone();
         items.push(DropdownItem {
             label: i18n.text(Message::EjectDrive).to_string(),
-            icon: None,
+            icon: Some(IconName::Unplug),
             badge: None,
             stay_open: false,
             has_submenu: false,

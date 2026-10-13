@@ -258,7 +258,7 @@ fn oxyde_context_menu_items_raw(
                     });
                 },
             )
-            .icon(IconName::ExternalLink),
+            .icon(if mounted { IconName::Eject } else { IconName::Disc }),
         );
     }
     if is_dir {
@@ -569,7 +569,7 @@ fn pane_context_menu_items_raw(
         },
         crate::ui::components::dropdown::DropdownItem {
             label: i18n.text(Message::SelectAll).to_string(),
-            icon: Some(IconName::Square),
+            icon: Some(IconName::SquareDashedMousePointer),
             badge: None,
             stay_open: false,
             has_submenu: false,

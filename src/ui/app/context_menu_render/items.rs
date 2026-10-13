@@ -58,6 +58,7 @@ impl OxydeApp {
                     pid_cap
                 )))
                 .label(cx.i18n().text(label))
+                .icon(if should_clear { "icons/square-minus.svg" } else { "icons/square-check-big.svg" })
                 .label_size(13.0)
                 .on_click(move |_, cx| {
                     let pid_inner = pid_cap.clone();
@@ -129,6 +130,7 @@ impl OxydeApp {
                     pid_cap
                 )))
                 .label(cx.i18n().text(label))
+                .icon(if should_clear { "icons/square-minus.svg" } else { "icons/square-check-big.svg" })
                 .label_size(13.0)
                 .on_click(move |_, cx| {
                     let pid_inner = pid_cap.clone();
@@ -181,6 +183,7 @@ impl OxydeApp {
                     pid_cap
                 )))
                 .label(cx.i18n().text(label))
+                .icon(if should_clear { "icons/square-minus.svg" } else { "icons/square-check-big.svg" })
                 .label_size(13.0)
                 .on_click(move |_, cx| {
                     let pid_inner = pid_cap.clone();

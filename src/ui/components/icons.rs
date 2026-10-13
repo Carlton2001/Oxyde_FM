@@ -14,6 +14,7 @@ pub fn drive_icon_path(drive: &oxyde_lib::models::DriveInfo) -> &'static str {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IconType {
     Folder,
+    FolderOpen,
     File,
     FileText,
     FileImage,
@@ -45,6 +46,7 @@ impl IconType {
     pub fn path(&self) -> &'static str {
         match self {
             Self::Folder => "icons/folder.svg",
+            Self::FolderOpen => "icons/folder-open.svg",
             Self::File => "icons/file.svg",
             Self::FileText => "icons/file-text.svg",
             Self::FileImage => "icons/file-image.svg",

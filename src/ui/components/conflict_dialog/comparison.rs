@@ -1,7 +1,7 @@
 use super::controls::{automatic_badge, button, choose};
 use super::rules::{ancestors, decision, parent};
 use crate::ui::app::{OxydeApp, PendingFileOperation};
-use crate::ui::components::icons::{get_icon_type, render_file_icon};
+use crate::ui::components::icons::{entry_icon, render_file_icon};
 use crate::ui::format::{date_format, format_date, format_number, format_size};
 use crate::ui::i18n::{FluentArgs, I18nContext, Message};
 use crate::ui::theme::ThemeContext;
@@ -16,32 +16,23 @@ pub(super) fn conflict_icon(
     large: bool,
     cx: &App,
 ) -> AnyElement {
-    let icon = get_icon_type(&entry.name, entry.is_dir, Some(&entry.path), false, false);
-    if !system && icon == crate::ui::components::icons::IconType::FileVideo {
-        svg()
-            .path("icons/conflict-file-video.svg")
-            .size(size)
-            .flex_none()
-            .text_color(cx.theme().icon_video)
-            .into_any_element()
-    } else {
-        div()
-            .size(size)
-            .flex_none()
-            .child(render_file_icon(
-                entry.path.clone(),
-                icon,
-                size,
-                if entry.is_dir {
-                    cx.theme().accent
-                } else {
-                    cx.theme().icon_muted
-                },
-                system,
-                large,
-            ))
-            .into_any_element()
-    }
+    let icon = entry_icon(entry);
+    div()
+        .size(size)
+        .flex_none()
+        .child(render_file_icon(
+            entry.path.clone(),
+            icon,
+            size,
+            if entry.is_dir {
+                cx.theme().accent
+            } else {
+                cx.theme().icon_muted
+            },
+            system,
+            large,
+        ))
+        .into_any_element()
 }
 fn metadata(label: SharedString, value: String, highlight: bool, cx: &App) -> impl IntoElement {
     div()

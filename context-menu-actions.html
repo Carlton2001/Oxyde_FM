@@ -1,0 +1,1444 @@
+<!doctype html><html lang="fr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Oxyde — actions des menus contextuels</title>
+<style>body{font:15px system-ui,sans-serif;color:#242734;background:#f5f6f9;margin:0;padding:32px}main{max-width:1400px;margin:auto}h1{font-size:26px}p{line-height:1.6;max-width:1050px;color:#535968}input{box-sizing:border-box;width:100%;padding:12px;border:1px solid #ccd1dc;border-radius:8px;font:inherit;margin:12px 0 20px}table{border-collapse:collapse;width:100%;background:white}th,td{padding:12px 16px;text-align:left;border-bottom:1px solid #e2e5ed}thead th{background:#252c40;color:white;position:sticky;top:0}.section th{background:#e9edf5;font-size:14px}.icon{display:inline-flex;vertical-align:middle;margin-right:10px}.icon svg{width:24px;height:24px}code{font:12px ui-monospace,monospace;overflow-wrap:anywhere}small{display:block;font-size:11px;color:#757d8e;margin-top:5px}.muted{color:#8a92a1}td:first-child{width:90px}td:nth-child(3){width:34%}[hidden]{display:none}@media print{body{padding:0;background:white}input{display:none}thead th{position:static}tr{break-inside:avoid}}</style>
+<main><h1>Actions des menus contextuels dʼOxyde</h1><p>126 entrées • Libellés français du dépôt • 13 octobre 2026. Le module indiqué est celui qui définit lʼaction et son icône. Les SVG sont intégrés au fichier, sans dépendance externe.</p>
+<p>Les actions conditionnelles et les sous-menus sont inclus. Les séparateurs et les messages de chargement ne sont pas des actions. Pour le tri, la coche apparaît seulement sur le choix actif ; les filtres alternent entre carré et coche. Les noms de dossiers, extensions et actions Windows dépendent des fichiers et du système : les familles dynamiques sont indiquées explicitement. Pour les sous-dossiers du fil Ariane, folder-open.svg est utilise en mode SVG ; en mode icones systeme Windows, aucun SVG ne sert (folder.svg est le repli). Les menus Outils et filtres sont également inclus car ils utilisent le même rendu de menu. Les filtres Nom et Emplacement dʼorigine sont des champs de saisie, pas des listes dʼactions.</p>
+<input id="search" type="search" placeholder="Filtrer par libellé, module ou SVG…" aria-label="Filtrer le tableau"><table><thead><tr><th>SVG</th><th>Libellé</th><th>Module rust</th><th>Nom du fichier SVG</th></tr></thead><tbody><tr class='section'><th colspan='4'>Fichiers et dossiers</th></tr><tr class='action'><td><span class='icon' title='external-link.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M15 3h6v6" />
+  <path d="M10 14 21 3" />
+  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+</svg>
+</span></td><td>Ouvrir l’emplacement du fichier</td><td><code>ui::components</code><small>src/ui/components/mod.rs</small></td><td><code>external-link.svg</code></td></tr><tr class='action'><td><span class='icon' title='external-link.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M15 3h6v6" />
+  <path d="M10 14 21 3" />
+  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+</svg>
+</span></td><td>Ouvrir</td><td><code>ui::components</code><small>src/ui/components/mod.rs</small></td><td><code>external-link.svg</code></td></tr><tr class='action'><td><span class='icon' title='external-link.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M15 3h6v6" />
+  <path d="M10 14 21 3" />
+  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+</svg>
+</span></td><td>Ouvrir dans un nouvel onglet</td><td><code>ui::components</code><small>src/ui/components/mod.rs</small></td><td><code>external-link.svg</code></td></tr><tr class='action'><td><span class='icon' title='disc.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <circle cx="12" cy="12" r="10" />
+  <circle cx="12" cy="12" r="2" />
+</svg>
+</span></td><td>Monter</td><td><code>ui::components</code><small>src/ui/components/mod.rs</small></td><td><code>disc.svg</code></td></tr><tr class='action'><td><span class='icon' title='eject.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M4 13a1 1 0 0 1-.72-1.695l7.257-7.668a2 2 0 0 1 2.926 0l7.256 7.668A1 1 0 0 1 20 13z" />
+  <rect x="3" y="17" width="18" height="4" rx="1" />
+</svg>
+</span></td><td>D&#233;monter</td><td><code>ui::components</code><small>src/ui/components/mod.rs</small></td><td><code>eject.svg</code></td></tr><tr class='action'><td><span class='icon' title='pin.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <g transform="rotate(45 12 12)">
+    <path d="M12 17v5" />
+    <path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z" />
+  </g>
+</svg></span></td><td>&#201;pingler &#224; l’acc&#232;s rapide</td><td><code>ui::components</code><small>src/ui/components/mod.rs</small></td><td><code>pin.svg</code></td></tr><tr class='action'><td><span class='icon' title='pin-off.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="black"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <g transform="rotate(45 12 12)">
+    <path d="M12 17v5" />
+    <path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z" />
+  </g>
+  <line x1="-0.6" y1="12" x2="24.6" y2="12" transform="rotate(45 12 12)" stroke-width="1.5" />
+</svg>
+</span></td><td>D&#233;s&#233;pingler de l’acc&#232;s rapide</td><td><code>ui::components</code><small>src/ui/components/mod.rs</small></td><td><code>pin-off.svg</code></td></tr><tr class='action'><td><span class='icon' title='scissors.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <circle cx="6" cy="6" r="3" />
+  <path d="M8.12 8.12 12 12" />
+  <path d="M20 4 8.12 15.88" />
+  <circle cx="6" cy="18" r="3" />
+  <path d="M14.8 14.8 20 20" />
+</svg>
+</span></td><td>Couper</td><td><code>ui::components</code><small>src/ui/components/mod.rs</small></td><td><code>scissors.svg</code></td></tr><tr class='action'><td><span class='icon' title='copy.svg'><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-copy"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+</span></td><td>Copier</td><td><code>ui::components</code><small>src/ui/components/mod.rs</small></td><td><code>copy.svg</code></td></tr><tr class='action'><td><span class='icon' title='copy.svg'><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-copy"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+</span></td><td>Copier le nom</td><td><code>ui::components</code><small>src/ui/components/mod.rs</small></td><td><code>copy.svg</code></td></tr><tr class='action'><td><span class='icon' title='copy.svg'><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-copy"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+</span></td><td>Copier le chemin</td><td><code>ui::components</code><small>src/ui/components/mod.rs</small></td><td><code>copy.svg</code></td></tr><tr class='action'><td><span class='icon' title='clipboard-paste.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M11 14h10" />
+  <path d="M16 4h2a2 2 0 0 1 2 2v1.344" />
+  <path d="m17 18 4-4-4-4" />
+  <path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 1.793-1.113" />
+  <rect x="8" y="2" width="8" height="4" rx="1" />
+</svg>
+</span></td><td>Coller</td><td><code>ui::components</code><small>src/ui/components/mod.rs</small></td><td><code>clipboard-paste.svg</code></td></tr><tr class='action'><td><span class='icon' title='archive.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <rect width="20" height="5" x="2" y="3" rx="1" />
+  <path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" />
+  <path d="M10 12h4" />
+</svg>
+</span></td><td>Compresser</td><td><code>ui::components</code><small>src/ui/components/mod.rs</small></td><td><code>archive.svg</code></td></tr><tr class='action'><td><span class='icon' title='archive.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <rect width="20" height="5" x="2" y="3" rx="1" />
+  <path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" />
+  <path d="M10 12h4" />
+</svg>
+</span></td><td>Archive .zip</td><td><code>ui::components</code><small>src/ui/components/mod.rs</small></td><td><code>archive.svg</code></td></tr><tr class='action'><td><span class='icon' title='archive.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <rect width="20" height="5" x="2" y="3" rx="1" />
+  <path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" />
+  <path d="M10 12h4" />
+</svg>
+</span></td><td>Archive .7z</td><td><code>ui::components</code><small>src/ui/components/mod.rs</small></td><td><code>archive.svg</code></td></tr><tr class='action'><td><span class='icon' title='archive.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <rect width="20" height="5" x="2" y="3" rx="1" />
+  <path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" />
+  <path d="M10 12h4" />
+</svg>
+</span></td><td>Archive .tar</td><td><code>ui::components</code><small>src/ui/components/mod.rs</small></td><td><code>archive.svg</code></td></tr><tr class='action'><td><span class='icon' title='archive.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <rect width="20" height="5" x="2" y="3" rx="1" />
+  <path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" />
+  <path d="M10 12h4" />
+</svg>
+</span></td><td>Archive .zst</td><td><code>ui::components</code><small>src/ui/components/mod.rs</small></td><td><code>archive.svg</code></td></tr><tr class='action'><td><span class='icon' title='archive-restore.svg'><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-archive-restore"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h2"/><path d="M20 8v11a2 2 0 0 1-2 2h-2"/><path d="m9 15 3-3 3 3"/><path d="M12 12v9"/></svg>
+</span></td><td>Extraire l’archive</td><td><code>ui::components</code><small>src/ui/components/mod.rs</small></td><td><code>archive-restore.svg</code></td></tr><tr class='action'><td><span class='icon' title='pencil.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z" />
+  <path d="m15 5 4 4" />
+</svg>
+</span></td><td>Renommer</td><td><code>ui::components</code><small>src/ui/components/mod.rs</small></td><td><code>pencil.svg</code></td></tr><tr class='action'><td><span class='icon' title='trash.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M10 11v6" />
+  <path d="M14 11v6" />
+  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+  <path d="M3 6h18" />
+  <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+</svg>
+</span></td><td>Supprimer</td><td><code>ui::components</code><small>src/ui/components/mod.rs</small></td><td><code>trash.svg</code></td></tr><tr class='action'><td><span class='icon' title='trash-2.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M3 6h18" />
+  <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+  <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+  <line x1="10" x2="10" y1="11" y2="17" />
+  <line x1="14" x2="14" y1="11" y2="17" />
+</svg>
+</span></td><td>Supprimer d&#233;finitivement</td><td><code>ui::components</code><small>src/ui/components/mod.rs</small></td><td><code>trash-2.svg</code></td></tr><tr class='action'><td><span class='icon' title='settings.svg'><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-settings"><path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"/><circle cx="12" cy="12" r="3"/></svg>
+</span></td><td>Propri&#233;t&#233;s</td><td><code>ui::components</code><small>src/ui/components/mod.rs</small></td><td><code>settings.svg</code></td></tr><tr class='action'><td><span class='icon' title='ellipsis.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <circle cx="12" cy="12" r="1" />
+  <circle cx="19" cy="12" r="1" />
+  <circle cx="5" cy="12" r="1" />
+</svg>
+</span></td><td>Plus d’options</td><td><code>ui::components</code><small>src/ui/components/mod.rs</small></td><td><code>ellipsis.svg</code></td></tr><tr class='section'><th colspan='4'>Fond du panneau de fichiers</th></tr><tr class='action'><td><span class='icon' title='folder-plus.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M12 10v6" />
+  <path d="M9 13h6" />
+  <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />
+</svg>
+</span></td><td>Nouveau dossier</td><td><code>ui::components</code><small>src/ui/components/mod.rs</small></td><td><code>folder-plus.svg</code></td></tr><tr class='action'><td><span class='icon' title='square-dashed-mouse-pointer.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M12.034 12.681a.498.498 0 0 1 .647-.647l9 3.5a.5.5 0 0 1-.033.943l-3.444 1.068a1 1 0 0 0-.66.66l-1.067 3.443a.5.5 0 0 1-.943.033z" />
+  <path d="M5 3a2 2 0 0 0-2 2" />
+  <path d="M19 3a2 2 0 0 1 2 2" />
+  <path d="M5 21a2 2 0 0 1-2-2" />
+  <path d="M9 3h1" />
+  <path d="M9 21h2" />
+  <path d="M14 3h1" />
+  <path d="M3 9v1" />
+  <path d="M21 9v2" />
+  <path d="M3 14v1" />
+</svg>
+</span></td><td>Tout s&#233;lectionner</td><td><code>ui::components</code><small>src/ui/components/mod.rs</small></td><td><code>square-dashed-mouse-pointer.svg</code></td></tr><tr class='action'><td><span class='icon' title='clipboard-paste.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M11 14h10" />
+  <path d="M16 4h2a2 2 0 0 1 2 2v1.344" />
+  <path d="m17 18 4-4-4-4" />
+  <path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 1.793-1.113" />
+  <rect x="8" y="2" width="8" height="4" rx="1" />
+</svg>
+</span></td><td>Coller</td><td><code>ui::components</code><small>src/ui/components/mod.rs</small></td><td><code>clipboard-paste.svg</code></td></tr><tr class='action'><td><span class='icon' title='settings.svg'><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-settings"><path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"/><circle cx="12" cy="12" r="3"/></svg>
+</span></td><td>Propri&#233;t&#233;s</td><td><code>ui::components</code><small>src/ui/components/mod.rs</small></td><td><code>settings.svg</code></td></tr><tr class='action'><td><span class='icon' title='ellipsis.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <circle cx="12" cy="12" r="1" />
+  <circle cx="19" cy="12" r="1" />
+  <circle cx="5" cy="12" r="1" />
+</svg>
+</span></td><td>Plus d’options</td><td><code>ui::components</code><small>src/ui/components/mod.rs</small></td><td><code>ellipsis.svg</code></td></tr><tr class='section'><th colspan='4'>Onglets</th></tr><tr class='action'><td><span class='icon' title='copy-plus.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <line x1="15" x2="15" y1="12" y2="18" />
+  <line x1="12" x2="18" y1="15" y2="15" />
+  <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
+  <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
+</svg>
+</span></td><td>Dupliquer l’onglet</td><td><code>ui::components</code><small>src/ui/components/mod.rs</small></td><td><code>copy-plus.svg</code></td></tr><tr class='action'><td><span class='icon' title='copy-x.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M4 16a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2" />
+  <rect x="8" y="8" width="14" height="14" rx="2" />
+  <path d="m12.5 12.5 5 5" />
+  <path d="m12.5 17.5 5-5" />
+</svg>
+</span></td><td>Fermer les autres onglets</td><td><code>ui::components</code><small>src/ui/components/mod.rs</small></td><td><code>copy-x.svg</code></td></tr><tr class='action'><td><span class='icon' title='circle-x.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <circle cx="12" cy="12" r="10" />
+  <path d="m15 9-6 6" />
+  <path d="m9 9 6 6" />
+</svg>
+</span></td><td>Fermer l’onglet</td><td><code>ui::components</code><small>src/ui/components/mod.rs</small></td><td><code>circle-x.svg</code></td></tr><tr class='section'><th colspan='4'>Corbeille</th></tr><tr class='action'><td><span class='icon' title='scissors.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <circle cx="6" cy="6" r="3" />
+  <path d="M8.12 8.12 12 12" />
+  <path d="M20 4 8.12 15.88" />
+  <circle cx="6" cy="18" r="3" />
+  <path d="M14.8 14.8 20 20" />
+</svg>
+</span></td><td>Couper</td><td><code>ui::components</code><small>src/ui/components/mod.rs</small></td><td><code>scissors.svg</code></td></tr><tr class='action'><td><span class='icon' title='rotate-ccw.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+  <path d="M3 3v5h5" />
+</svg>
+</span></td><td>Restaurer</td><td><code>ui::components</code><small>src/ui/components/mod.rs</small></td><td><code>rotate-ccw.svg</code></td></tr><tr class='action'><td><span class='icon' title='rotate-ccw.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+  <path d="M3 3v5h5" />
+</svg>
+</span></td><td>Tout restaurer</td><td><code>ui::components</code><small>src/ui/components/mod.rs</small></td><td><code>rotate-ccw.svg</code></td></tr><tr class='action'><td><span class='icon' title='trash-2.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M3 6h18" />
+  <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+  <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+  <line x1="10" x2="10" y1="11" y2="17" />
+  <line x1="14" x2="14" y1="11" y2="17" />
+</svg>
+</span></td><td>Supprimer d&#233;finitivement</td><td><code>ui::components</code><small>src/ui/components/mod.rs</small></td><td><code>trash-2.svg</code></td></tr><tr class='action'><td><span class='icon' title='trash-2.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M3 6h18" />
+  <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+  <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+  <line x1="10" x2="10" y1="11" y2="17" />
+  <line x1="14" x2="14" y1="11" y2="17" />
+</svg>
+</span></td><td>Vider la Corbeille</td><td><code>ui::components</code><small>src/ui/components/mod.rs</small></td><td><code>trash-2.svg</code></td></tr><tr class='action'><td><span class='icon' title='settings.svg'><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-settings"><path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"/><circle cx="12" cy="12" r="3"/></svg>
+</span></td><td>Propri&#233;t&#233;s</td><td><code>ui::components</code><small>src/ui/components/mod.rs</small></td><td><code>settings.svg</code></td></tr><tr class='section'><th colspan='4'>Sous-menu Trier par (grille)</th></tr><tr class='action'><td><span class='icon' title='list-ordered.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M11 5h10" />
+  <path d="M11 12h10" />
+  <path d="M11 19h10" />
+  <path d="M4 4h1v5" />
+  <path d="M4 9h2" />
+  <path d="M6.5 20H3.4c0-1 2.6-1.925 2.6-3.5a1.5 1.5 0 0 0-2.6-1.02" />
+</svg>
+</span></td><td>Trier par</td><td><code>ui::components</code><small>src/ui/components/mod.rs</small></td><td><code>list-ordered.svg</code></td></tr><tr class='action'><td><span class='icon' title='check.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M20 6 9 17l-5-5" />
+</svg>
+</span></td><td>Nom</td><td><code>ui::components</code><small>src/ui/components/mod.rs</small></td><td><code>check.svg</code></td></tr><tr class='action'><td><span class='icon' title='check.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M20 6 9 17l-5-5" />
+</svg>
+</span></td><td>Extension</td><td><code>ui::components</code><small>src/ui/components/mod.rs</small></td><td><code>check.svg</code></td></tr><tr class='action'><td><span class='icon' title='check.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M20 6 9 17l-5-5" />
+</svg>
+</span></td><td>Taille</td><td><code>ui::components</code><small>src/ui/components/mod.rs</small></td><td><code>check.svg</code></td></tr><tr class='action'><td><span class='icon' title='check.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M20 6 9 17l-5-5" />
+</svg>
+</span></td><td>Modifi&#233; le</td><td><code>ui::components</code><small>src/ui/components/mod.rs</small></td><td><code>check.svg</code></td></tr><tr class='action'><td><span class='icon' title='check.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M20 6 9 17l-5-5" />
+</svg>
+</span></td><td>Emplacement d’origine</td><td><code>ui::components</code><small>src/ui/components/mod.rs</small></td><td><code>check.svg</code></td></tr><tr class='action'><td><span class='icon' title='check.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M20 6 9 17l-5-5" />
+</svg>
+</span></td><td>Date de suppression</td><td><code>ui::components</code><small>src/ui/components/mod.rs</small></td><td><code>check.svg</code></td></tr><tr class='action'><td><span class='icon' title='check.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M20 6 9 17l-5-5" />
+</svg>
+</span></td><td>Croissant</td><td><code>ui::components</code><small>src/ui/components/mod.rs</small></td><td><code>check.svg</code></td></tr><tr class='action'><td><span class='icon' title='check.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M20 6 9 17l-5-5" />
+</svg>
+</span></td><td>D&#233;croissant</td><td><code>ui::components</code><small>src/ui/components/mod.rs</small></td><td><code>check.svg</code></td></tr><tr class='section'><th colspan='4'>Arbre — acc&#232;s rapides</th></tr><tr class='action'><td><span class='icon' title='external-link.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M15 3h6v6" />
+  <path d="M10 14 21 3" />
+  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+</svg>
+</span></td><td>Ouvrir</td><td><code>ui::components::sidebar::menus</code><small>src/ui/components/sidebar/menus.rs</small></td><td><code>external-link.svg</code></td></tr><tr class='action'><td><span class='icon' title='external-link.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M15 3h6v6" />
+  <path d="M10 14 21 3" />
+  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+</svg>
+</span></td><td>Ouvrir dans un nouvel onglet</td><td><code>ui::components::sidebar::menus</code><small>src/ui/components/sidebar/menus.rs</small></td><td><code>external-link.svg</code></td></tr><tr class='action'><td><span class='icon' title='pin-off.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="black"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <g transform="rotate(45 12 12)">
+    <path d="M12 17v5" />
+    <path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z" />
+  </g>
+  <line x1="-0.6" y1="12" x2="24.6" y2="12" transform="rotate(45 12 12)" stroke-width="1.5" />
+</svg>
+</span></td><td>D&#233;s&#233;pingler de l’acc&#232;s rapide</td><td><code>ui::components::sidebar::menus</code><small>src/ui/components/sidebar/menus.rs</small></td><td><code>pin-off.svg</code></td></tr><tr class='action'><td><span class='icon' title='settings.svg'><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-settings"><path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"/><circle cx="12" cy="12" r="3"/></svg>
+</span></td><td>Propri&#233;t&#233;s</td><td><code>ui::components::sidebar::menus</code><small>src/ui/components/sidebar/menus.rs</small></td><td><code>settings.svg</code></td></tr><tr class='section'><th colspan='4'>Arbre — emplacements</th></tr><tr class='action'><td><span class='icon' title='external-link.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M15 3h6v6" />
+  <path d="M10 14 21 3" />
+  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+</svg>
+</span></td><td>Ouvrir</td><td><code>ui::components::sidebar::menus</code><small>src/ui/components/sidebar/menus.rs</small></td><td><code>external-link.svg</code></td></tr><tr class='action'><td><span class='icon' title='settings.svg'><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-settings"><path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"/><circle cx="12" cy="12" r="3"/></svg>
+</span></td><td>Propri&#233;t&#233;s</td><td><code>ui::components::sidebar::menus</code><small>src/ui/components/sidebar/menus.rs</small></td><td><code>settings.svg</code></td></tr><tr class='section'><th colspan='4'>Arbre — lecteurs</th></tr><tr class='action'><td><span class='icon' title='external-link.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M15 3h6v6" />
+  <path d="M10 14 21 3" />
+  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+</svg>
+</span></td><td>Ouvrir</td><td><code>ui::components::sidebar::menus</code><small>src/ui/components/sidebar/menus.rs</small></td><td><code>external-link.svg</code></td></tr><tr class='action'><td><span class='icon' title='external-link.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M15 3h6v6" />
+  <path d="M10 14 21 3" />
+  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+</svg>
+</span></td><td>Ouvrir dans un nouvel onglet</td><td><code>ui::components::sidebar::menus</code><small>src/ui/components/sidebar/menus.rs</small></td><td><code>external-link.svg</code></td></tr><tr class='action'><td><span class='icon' title='unplug.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="m19 5 3-3" />
+  <path d="m2 22 3-3" />
+  <path d="M6.3 20.3a2.4 2.4 0 0 0 3.4 0L12 18l-6-6-2.3 2.3a2.4 2.4 0 0 0 0 3.4Z" />
+  <path d="M7.5 13.5 10 11" />
+  <path d="M10.5 16.5 13 14" />
+  <path d="m12 6 6 6 2.3-2.3a2.4 2.4 0 0 0 0-3.4l-2.6-2.6a2.4 2.4 0 0 0-3.4 0Z" />
+</svg>
+</span></td><td>&#201;jecter</td><td><code>ui::components::sidebar::menus</code><small>src/ui/components/sidebar/menus.rs</small></td><td><code>unplug.svg</code></td></tr><tr class='action'><td><span class='icon' title='chevron-down.svg'><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6" /></svg>
+</span></td><td>D&#233;velopper tout</td><td><code>ui::components::sidebar::menus</code><small>src/ui/components/sidebar/menus.rs</small></td><td><code>chevron-down.svg</code></td></tr><tr class='action'><td><span class='icon' title='chevron-up.svg'><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"/></svg>
+</span></td><td>R&#233;duire tout</td><td><code>ui::components::sidebar::menus</code><small>src/ui/components/sidebar/menus.rs</small></td><td><code>chevron-up.svg</code></td></tr><tr class='action'><td><span class='icon' title='settings.svg'><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-settings"><path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"/><circle cx="12" cy="12" r="3"/></svg>
+</span></td><td>Propri&#233;t&#233;s</td><td><code>ui::components::sidebar::menus</code><small>src/ui/components/sidebar/menus.rs</small></td><td><code>settings.svg</code></td></tr><tr class='action'><td><span class='icon' title='ellipsis.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <circle cx="12" cy="12" r="1" />
+  <circle cx="19" cy="12" r="1" />
+  <circle cx="5" cy="12" r="1" />
+</svg>
+</span></td><td>Plus d’options</td><td><code>ui::components::sidebar::menus</code><small>src/ui/components/sidebar/menus.rs</small></td><td><code>ellipsis.svg</code></td></tr><tr class='section'><th colspan='4'>Arbre — dossiers</th></tr><tr class='action'><td><span class='icon' title='external-link.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M15 3h6v6" />
+  <path d="M10 14 21 3" />
+  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+</svg>
+</span></td><td>Ouvrir</td><td><code>ui::components::sidebar::menus</code><small>src/ui/components/sidebar/menus.rs</small></td><td><code>external-link.svg</code></td></tr><tr class='action'><td><span class='icon' title='external-link.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M15 3h6v6" />
+  <path d="M10 14 21 3" />
+  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+</svg>
+</span></td><td>Ouvrir dans un nouvel onglet</td><td><code>ui::components::sidebar::menus</code><small>src/ui/components/sidebar/menus.rs</small></td><td><code>external-link.svg</code></td></tr><tr class='action'><td><span class='icon' title='chevron-down.svg'><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6" /></svg>
+</span></td><td>D&#233;velopper tout</td><td><code>ui::components::sidebar::menus</code><small>src/ui/components/sidebar/menus.rs</small></td><td><code>chevron-down.svg</code></td></tr><tr class='action'><td><span class='icon' title='chevron-up.svg'><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"/></svg>
+</span></td><td>R&#233;duire tout</td><td><code>ui::components::sidebar::menus</code><small>src/ui/components/sidebar/menus.rs</small></td><td><code>chevron-up.svg</code></td></tr><tr class='action'><td><span class='icon' title='pin.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <g transform="rotate(45 12 12)">
+    <path d="M12 17v5" />
+    <path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z" />
+  </g>
+</svg></span></td><td>&#201;pingler &#224; l’acc&#232;s rapide</td><td><code>ui::components::sidebar::menus</code><small>src/ui/components/sidebar/menus.rs</small></td><td><code>pin.svg</code></td></tr><tr class='action'><td><span class='icon' title='settings.svg'><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-settings"><path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"/><circle cx="12" cy="12" r="3"/></svg>
+</span></td><td>Propri&#233;t&#233;s</td><td><code>ui::components::sidebar::menus</code><small>src/ui/components/sidebar/menus.rs</small></td><td><code>settings.svg</code></td></tr><tr class='action'><td><span class='icon' title='ellipsis.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <circle cx="12" cy="12" r="1" />
+  <circle cx="19" cy="12" r="1" />
+  <circle cx="5" cy="12" r="1" />
+</svg>
+</span></td><td>Plus d’options</td><td><code>ui::components::sidebar::menus</code><small>src/ui/components/sidebar/menus.rs</small></td><td><code>ellipsis.svg</code></td></tr><tr class='section'><th colspan='4'>R&#233;seau (actions partag&#233;es)</th></tr><tr class='action'><td><span class='icon' title='server.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <rect width="20" height="8" x="2" y="2" rx="2" ry="2" />
+  <rect width="20" height="8" x="2" y="14" rx="2" ry="2" />
+  <line x1="6" x2="6.01" y1="6" y2="6" />
+  <line x1="6" x2="6.01" y1="18" y2="18" />
+</svg>
+</span></td><td>Connecter un lecteur r&#233;seau</td><td><code>ui::components::network</code><small>src/ui/components/network.rs</small></td><td><code>server.svg</code></td></tr><tr class='action'><td><span class='icon' title='server-off.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M7 2h13a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-5" />
+  <path d="M10 10 2.5 2.5C2 2 2 2.5 2 5v3a2 2 0 0 0 2 2h6z" />
+  <path d="M22 17v-1a2 2 0 0 0-2-2h-1" />
+  <path d="M4 14a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h16.5l1-.5.5.5-8-8H4z" />
+  <path d="M6 18h.01" />
+  <path d="m2 2 20 20" />
+</svg>
+</span></td><td>D&#233;connecter un lecteur r&#233;seau</td><td><code>ui::components::network</code><small>src/ui/components/network.rs</small></td><td><code>server-off.svg</code></td></tr><tr class='action'><td><span class='icon' title='server-off.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M7 2h13a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-5" />
+  <path d="M10 10 2.5 2.5C2 2 2 2.5 2 5v3a2 2 0 0 0 2 2h6z" />
+  <path d="M22 17v-1a2 2 0 0 0-2-2h-1" />
+  <path d="M4 14a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h16.5l1-.5.5.5-8-8H4z" />
+  <path d="M6 18h.01" />
+  <path d="m2 2 20 20" />
+</svg>
+</span></td><td>D&#233;connecter le lecteur r&#233;seau</td><td><code>ui::components::network</code><small>src/ui/components/network.rs</small></td><td><code>server-off.svg</code></td></tr><tr class='section'><th colspan='4'>Fil dʼAriane</th></tr><tr class='action'><td><span class='icon' title='copy.svg'><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-copy"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+</span></td><td>Copier le chemin</td><td><code>ui::components::top_bar</code><small>src/ui/components/top_bar.rs</small></td><td><code>copy.svg</code></td></tr><tr class='action'><td><span class='icon' title='external-link.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M15 3h6v6" />
+  <path d="M10 14 21 3" />
+  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+</svg>
+</span></td><td>Ouvrir dans un nouvel onglet</td><td><code>ui::components::top_bar</code><small>src/ui/components/top_bar.rs</small></td><td><code>external-link.svg</code></td></tr><tr class='action'><td><span class='icon' title='folder-open.svg'><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-folder-open"><path d="m6 14 1.45-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.55 6a2 2 0 0 1-1.94 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H20a2 2 0 0 1 2 2"/></svg>
+</span><span class='icon' title='folder.svg'><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" /></svg>
+</span></td><td>Sous-dossiers du segment (noms dynamiques)</td><td><code>ui::components::top_bar</code><small>src/ui/components/top_bar.rs</small></td><td><code>folder-open.svg</code> / <code>folder.svg</code></td></tr><tr class='section'><th colspan='4'>Champs de texte</th></tr><tr class='action'><td><span class='icon' title='scissors.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <circle cx="6" cy="6" r="3" />
+  <path d="M8.12 8.12 12 12" />
+  <path d="M20 4 8.12 15.88" />
+  <circle cx="6" cy="18" r="3" />
+  <path d="M14.8 14.8 20 20" />
+</svg>
+</span></td><td>Couper</td><td><code>ui::app::context_menus</code><small>src/ui/app/context_menus.rs</small></td><td><code>scissors.svg</code></td></tr><tr class='action'><td><span class='icon' title='copy.svg'><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-copy"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+</span></td><td>Copier</td><td><code>ui::app::context_menus</code><small>src/ui/app/context_menus.rs</small></td><td><code>copy.svg</code></td></tr><tr class='action'><td><span class='icon' title='clipboard-paste.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M11 14h10" />
+  <path d="M16 4h2a2 2 0 0 1 2 2v1.344" />
+  <path d="m17 18 4-4-4-4" />
+  <path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 1.793-1.113" />
+  <rect x="8" y="2" width="8" height="4" rx="1" />
+</svg>
+</span></td><td>Coller</td><td><code>ui::app::context_menus</code><small>src/ui/app/context_menus.rs</small></td><td><code>clipboard-paste.svg</code></td></tr><tr class='action'><td><span class='icon' title='square-dashed-mouse-pointer.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M12.034 12.681a.498.498 0 0 1 .647-.647l9 3.5a.5.5 0 0 1-.033.943l-3.444 1.068a1 1 0 0 0-.66.66l-1.067 3.443a.5.5 0 0 1-.943.033z" />
+  <path d="M5 3a2 2 0 0 0-2 2" />
+  <path d="M19 3a2 2 0 0 1 2 2" />
+  <path d="M5 21a2 2 0 0 1-2-2" />
+  <path d="M9 3h1" />
+  <path d="M9 21h2" />
+  <path d="M14 3h1" />
+  <path d="M3 9v1" />
+  <path d="M21 9v2" />
+  <path d="M3 14v1" />
+</svg>
+</span></td><td>Tout s&#233;lectionner</td><td><code>ui::app::context_menus</code><small>src/ui/app/context_menus.rs</small></td><td><code>square-dashed-mouse-pointer.svg</code></td></tr><tr class='action'><td><span class='icon' title='scissors.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <circle cx="6" cy="6" r="3" />
+  <path d="M8.12 8.12 12 12" />
+  <path d="M20 4 8.12 15.88" />
+  <circle cx="6" cy="18" r="3" />
+  <path d="M14.8 14.8 20 20" />
+</svg>
+</span></td><td>Couper</td><td><code>ui::app::advanced_search::window</code><small>src/ui/app/advanced_search/window.rs</small></td><td><code>scissors.svg</code></td></tr><tr class='action'><td><span class='icon' title='copy.svg'><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-copy"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+</span></td><td>Copier</td><td><code>ui::app::advanced_search::window</code><small>src/ui/app/advanced_search/window.rs</small></td><td><code>copy.svg</code></td></tr><tr class='action'><td><span class='icon' title='clipboard-paste.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M11 14h10" />
+  <path d="M16 4h2a2 2 0 0 1 2 2v1.344" />
+  <path d="m17 18 4-4-4-4" />
+  <path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 1.793-1.113" />
+  <rect x="8" y="2" width="8" height="4" rx="1" />
+</svg>
+</span></td><td>Coller</td><td><code>ui::app::advanced_search::window</code><small>src/ui/app/advanced_search/window.rs</small></td><td><code>clipboard-paste.svg</code></td></tr><tr class='action'><td><span class='icon' title='square-dashed-mouse-pointer.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M12.034 12.681a.498.498 0 0 1 .647-.647l9 3.5a.5.5 0 0 1-.033.943l-3.444 1.068a1 1 0 0 0-.66.66l-1.067 3.443a.5.5 0 0 1-.943.033z" />
+  <path d="M5 3a2 2 0 0 0-2 2" />
+  <path d="M19 3a2 2 0 0 1 2 2" />
+  <path d="M5 21a2 2 0 0 1-2-2" />
+  <path d="M9 3h1" />
+  <path d="M9 21h2" />
+  <path d="M14 3h1" />
+  <path d="M3 9v1" />
+  <path d="M21 9v2" />
+  <path d="M3 14v1" />
+</svg>
+</span></td><td>Tout s&#233;lectionner</td><td><code>ui::app::advanced_search::window</code><small>src/ui/app/advanced_search/window.rs</small></td><td><code>square-dashed-mouse-pointer.svg</code></td></tr><tr class='action'><td><span class='icon' title='scissors.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <circle cx="6" cy="6" r="3" />
+  <path d="M8.12 8.12 12 12" />
+  <path d="M20 4 8.12 15.88" />
+  <circle cx="6" cy="18" r="3" />
+  <path d="M14.8 14.8 20 20" />
+</svg>
+</span></td><td>Couper</td><td><code>ui::app::properties::window</code><small>src/ui/app/properties/window.rs</small></td><td><code>scissors.svg</code></td></tr><tr class='action'><td><span class='icon' title='copy.svg'><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-copy"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+</span></td><td>Copier</td><td><code>ui::app::properties::window</code><small>src/ui/app/properties/window.rs</small></td><td><code>copy.svg</code></td></tr><tr class='action'><td><span class='icon' title='clipboard-paste.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M11 14h10" />
+  <path d="M16 4h2a2 2 0 0 1 2 2v1.344" />
+  <path d="m17 18 4-4-4-4" />
+  <path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 1.793-1.113" />
+  <rect x="8" y="2" width="8" height="4" rx="1" />
+</svg>
+</span></td><td>Coller</td><td><code>ui::app::properties::window</code><small>src/ui/app/properties/window.rs</small></td><td><code>clipboard-paste.svg</code></td></tr><tr class='action'><td><span class='icon' title='square-dashed-mouse-pointer.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M12.034 12.681a.498.498 0 0 1 .647-.647l9 3.5a.5.5 0 0 1-.033.943l-3.444 1.068a1 1 0 0 0-.66.66l-1.067 3.443a.5.5 0 0 1-.943.033z" />
+  <path d="M5 3a2 2 0 0 0-2 2" />
+  <path d="M19 3a2 2 0 0 1 2 2" />
+  <path d="M5 21a2 2 0 0 1-2-2" />
+  <path d="M9 3h1" />
+  <path d="M9 21h2" />
+  <path d="M14 3h1" />
+  <path d="M3 9v1" />
+  <path d="M21 9v2" />
+  <path d="M3 14v1" />
+</svg>
+</span></td><td>Tout s&#233;lectionner</td><td><code>ui::app::properties::window</code><small>src/ui/app/properties/window.rs</small></td><td><code>square-dashed-mouse-pointer.svg</code></td></tr><tr class='section'><th colspan='4'>Menu Outils</th></tr><tr class='action'><td><span class='icon' title='chart-bar.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M3 3v16a2 2 0 0 0 2 2h16" />
+  <path d="M7 16h8" />
+  <path d="M7 11h12" />
+  <path d="M7 6h3" />
+</svg>
+</span></td><td>Calculer les tailles</td><td><code>ui::components::title_bar</code><small>src/ui/components/title_bar.rs</small></td><td><code>chart-bar.svg</code></td></tr><tr class='action'><td><span class='icon' title='search.svg'><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-search"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></svg>
+</span></td><td>Recherche avanc&#233;e</td><td><code>ui::components::title_bar</code><small>src/ui/components/title_bar.rs</small></td><td><code>search.svg</code></td></tr><tr class='action'><td><span class='icon' title='copy.svg'><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-copy"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+</span></td><td>Rechercher les doublons</td><td><code>ui::components::title_bar</code><small>src/ui/components/title_bar.rs</small></td><td><code>copy.svg</code></td></tr><tr class='section'><th colspan='4'>Filtres de colonnes — Type</th></tr><tr class='action'><td><span class='icon' title='square.svg'><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" /></svg>
+</span><span class='icon' title='check.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M20 6 9 17l-5-5" />
+</svg>
+</span></td><td>Dossier</td><td><code>ui::components::file_list::filters</code><small>src/ui/components/file_list/filters.rs</small></td><td><code>square.svg</code> / <code>check.svg</code></td></tr><tr class='action'><td><span class='icon' title='square.svg'><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" /></svg>
+</span><span class='icon' title='check.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M20 6 9 17l-5-5" />
+</svg>
+</span></td><td>Fichier</td><td><code>ui::components::file_list::filters</code><small>src/ui/components/file_list/filters.rs</small></td><td><code>square.svg</code> / <code>check.svg</code></td></tr><tr class='action'><td><span class='icon' title='square.svg'><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" /></svg>
+</span><span class='icon' title='check.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M20 6 9 17l-5-5" />
+</svg>
+</span></td><td>Lien symbolique</td><td><code>ui::components::file_list::filters</code><small>src/ui/components/file_list/filters.rs</small></td><td><code>square.svg</code> / <code>check.svg</code></td></tr><tr class='action'><td><span class='icon' title='square.svg'><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" /></svg>
+</span><span class='icon' title='check.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M20 6 9 17l-5-5" />
+</svg>
+</span></td><td>Jonction</td><td><code>ui::components::file_list::filters</code><small>src/ui/components/file_list/filters.rs</small></td><td><code>square.svg</code> / <code>check.svg</code></td></tr><tr class='action'><td><span class='icon' title='square.svg'><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" /></svg>
+</span><span class='icon' title='check.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M20 6 9 17l-5-5" />
+</svg>
+</span></td><td>Types/extensions pr&#233;sents (valeurs dynamiques)</td><td><code>ui::components::file_list::filters</code><small>src/ui/components/file_list/filters.rs</small></td><td><code>square.svg</code> / <code>check.svg</code></td></tr><tr class='section'><th colspan='4'>Filtres de colonnes — Taille</th></tr><tr class='action'><td><span class='icon' title='square.svg'><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" /></svg>
+</span><span class='icon' title='check.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M20 6 9 17l-5-5" />
+</svg>
+</span></td><td>Minuscule (&lt; 10 Ko)</td><td><code>ui::components::file_list::filters</code><small>src/ui/components/file_list/filters.rs</small></td><td><code>square.svg</code> / <code>check.svg</code></td></tr><tr class='action'><td><span class='icon' title='square.svg'><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" /></svg>
+</span><span class='icon' title='check.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M20 6 9 17l-5-5" />
+</svg>
+</span></td><td>Petit (10 Ko - 1 Mo)</td><td><code>ui::components::file_list::filters</code><small>src/ui/components/file_list/filters.rs</small></td><td><code>square.svg</code> / <code>check.svg</code></td></tr><tr class='action'><td><span class='icon' title='square.svg'><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" /></svg>
+</span><span class='icon' title='check.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M20 6 9 17l-5-5" />
+</svg>
+</span></td><td>Moyen (1 Mo - 100 Mo)</td><td><code>ui::components::file_list::filters</code><small>src/ui/components/file_list/filters.rs</small></td><td><code>square.svg</code> / <code>check.svg</code></td></tr><tr class='action'><td><span class='icon' title='square.svg'><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" /></svg>
+</span><span class='icon' title='check.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M20 6 9 17l-5-5" />
+</svg>
+</span></td><td>Grand (100 Mo - 1 Go)</td><td><code>ui::components::file_list::filters</code><small>src/ui/components/file_list/filters.rs</small></td><td><code>square.svg</code> / <code>check.svg</code></td></tr><tr class='action'><td><span class='icon' title='square.svg'><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" /></svg>
+</span><span class='icon' title='check.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M20 6 9 17l-5-5" />
+</svg>
+</span></td><td>Tr&#232;s grand (&gt; 1 Go)</td><td><code>ui::components::file_list::filters</code><small>src/ui/components/file_list/filters.rs</small></td><td><code>square.svg</code> / <code>check.svg</code></td></tr><tr class='section'><th colspan='4'>Filtres de colonnes — Date</th></tr><tr class='action'><td><span class='icon' title='square.svg'><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" /></svg>
+</span><span class='icon' title='check.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M20 6 9 17l-5-5" />
+</svg>
+</span></td><td>Aujourd’hui</td><td><code>ui::components::file_list::filters</code><small>src/ui/components/file_list/filters.rs</small></td><td><code>square.svg</code> / <code>check.svg</code></td></tr><tr class='action'><td><span class='icon' title='square.svg'><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" /></svg>
+</span><span class='icon' title='check.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M20 6 9 17l-5-5" />
+</svg>
+</span></td><td>Hier</td><td><code>ui::components::file_list::filters</code><small>src/ui/components/file_list/filters.rs</small></td><td><code>square.svg</code> / <code>check.svg</code></td></tr><tr class='action'><td><span class='icon' title='square.svg'><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" /></svg>
+</span><span class='icon' title='check.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M20 6 9 17l-5-5" />
+</svg>
+</span></td><td>Cette semaine</td><td><code>ui::components::file_list::filters</code><small>src/ui/components/file_list/filters.rs</small></td><td><code>square.svg</code> / <code>check.svg</code></td></tr><tr class='action'><td><span class='icon' title='square.svg'><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" /></svg>
+</span><span class='icon' title='check.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M20 6 9 17l-5-5" />
+</svg>
+</span></td><td>La semaine derni&#232;re</td><td><code>ui::components::file_list::filters</code><small>src/ui/components/file_list/filters.rs</small></td><td><code>square.svg</code> / <code>check.svg</code></td></tr><tr class='action'><td><span class='icon' title='square.svg'><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" /></svg>
+</span><span class='icon' title='check.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M20 6 9 17l-5-5" />
+</svg>
+</span></td><td>Ce mois-ci</td><td><code>ui::components::file_list::filters</code><small>src/ui/components/file_list/filters.rs</small></td><td><code>square.svg</code> / <code>check.svg</code></td></tr><tr class='action'><td><span class='icon' title='square.svg'><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" /></svg>
+</span><span class='icon' title='check.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M20 6 9 17l-5-5" />
+</svg>
+</span></td><td>Plus ancien</td><td><code>ui::components::file_list::filters</code><small>src/ui/components/file_list/filters.rs</small></td><td><code>square.svg</code> / <code>check.svg</code></td></tr><tr class='section'><th colspan='4'>En-tetes des filtres Type, Taille et Date</th></tr><tr class='action'><td><span class='icon' title='square-check-big.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M21 10.656V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h12.344" />
+  <path d="m9 11 3 3L22 4" />
+</svg>
+</span></td><td>Tout cocher</td><td><code>ui::app::context_menu_render::items</code><small>src/ui/app/context_menu_render/items.rs</small></td><td><code>square-check-big.svg</code></td></tr><tr class='action'><td><span class='icon' title='square-minus.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <rect width="18" height="18" x="3" y="3" rx="2" />
+  <path d="M8 12h8" />
+</svg>
+</span></td><td>Tout d&#233;cocher</td><td><code>ui::app::context_menu_render::items</code><small>src/ui/app/context_menu_render/items.rs</small></td><td><code>square-minus.svg</code></td></tr><tr class='section'><th colspan='4'>Sous-menu natif Windows — correspondances reconnues</th></tr><tr class='action'><td><span class='icon' title='shield.svg'><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-shield"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></svg>
+</span></td><td>Ex&#233;cuter en tant quʼadministrateur</td><td><code>ui::components::dropdown</code><small>src/ui/components/dropdown.rs</small></td><td><code>shield.svg</code></td></tr><tr class='action'><td><span class='icon' title='external-link.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M15 3h6v6" />
+  <path d="M10 14 21 3" />
+  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+</svg>
+</span></td><td>Ouvrir</td><td><code>ui::components::dropdown</code><small>src/ui/components/dropdown.rs</small></td><td><code>external-link.svg</code></td></tr><tr class='action'><td><span class='icon' title='printer.svg'><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-printer"><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 9V3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v6"/><rect x="6" y="14" width="12" height="8" rx="1"/></svg>
+</span></td><td>Imprimer</td><td><code>ui::components::dropdown</code><small>src/ui/components/dropdown.rs</small></td><td><code>printer.svg</code></td></tr><tr class='action'><td><span class='icon' title='settings.svg'><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-settings"><path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"/><circle cx="12" cy="12" r="3"/></svg>
+</span></td><td>Propri&#233;t&#233;s</td><td><code>ui::components::dropdown</code><small>src/ui/components/dropdown.rs</small></td><td><code>settings.svg</code></td></tr><tr class='action'><td><span class='icon' title='play.svg'><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-play"><path d="M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z"/></svg>
+</span></td><td>Lecture</td><td><code>ui::components::dropdown</code><small>src/ui/components/dropdown.rs</small></td><td><code>play.svg</code></td></tr><tr class='action'><td><span class='icon' title='pencil.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z" />
+  <path d="m15 5 4 4" />
+</svg>
+</span></td><td>Modifier</td><td><code>ui::components::dropdown</code><small>src/ui/components/dropdown.rs</small></td><td><code>pencil.svg</code></td></tr><tr class='action'><td><span class='icon' title='search.svg'><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-search"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></svg>
+</span></td><td>Rechercher</td><td><code>ui::components::dropdown</code><small>src/ui/components/dropdown.rs</small></td><td><code>search.svg</code></td></tr><tr class='action'><td><span class='icon' title='code.svg'><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-code"><path d="m16 18 6-6-6-6"/><path d="m8 6-6 6 6 6"/></svg>
+</span></td><td>Visual Studio Code / Code</td><td><code>ui::components::dropdown</code><small>src/ui/components/dropdown.rs</small></td><td><code>code.svg</code></td></tr><tr class='action'><td><span class='icon' title='terminal.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M12 19h8" />
+  <path d="m4 17 6-6-6-6" />
+</svg>
+</span></td><td>Terminal / PowerShell / CMD</td><td><code>ui::components::dropdown</code><small>src/ui/components/dropdown.rs</small></td><td><code>terminal.svg</code></td></tr><tr class='action'><td><span class='icon' title='git-branch.svg'><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-git-branch"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>
+</span></td><td>Git / GitHub / TortoiseGit</td><td><code>ui::components::dropdown</code><small>src/ui/components/dropdown.rs</small></td><td><code>git-branch.svg</code></td></tr><tr class='action'><td><span class='icon' title='share-2.svg'><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-share-2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" x2="15.42" y1="13.51" y2="17.49"/><line x1="15.41" x2="8.59" y1="6.51" y2="10.49"/></svg>
+</span></td><td>Partager</td><td><code>ui::components::dropdown</code><small>src/ui/components/dropdown.rs</small></td><td><code>share-2.svg</code></td></tr><tr class='action'><td><span class='icon' title='shield-check.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" />
+  <path d="m9 12 2 2 4-4" />
+</svg>
+</span></td><td>Analyser avec un antivirus</td><td><code>ui::components::dropdown</code><small>src/ui/components/dropdown.rs</small></td><td><code>shield-check.svg</code></td></tr><tr class='action'><td><span class='icon' title='cast.svg'><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-cast"><path d="M2 8V6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-6"/><path d="M2 12a9 9 0 0 1 8 8"/><path d="M2 16a5 5 0 0 1 4 4"/><line x1="2" x2="2.01" y1="20" y2="20"/></svg>
+</span></td><td>Diffuser</td><td><code>ui::components::dropdown</code><small>src/ui/components/dropdown.rs</small></td><td><code>cast.svg</code></td></tr><tr class='action'><td><span class='icon' title='pin.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <g transform="rotate(45 12 12)">
+    <path d="M12 17v5" />
+    <path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z" />
+  </g>
+</svg></span></td><td>&#201;pingler</td><td><code>ui::components::dropdown</code><small>src/ui/components/dropdown.rs</small></td><td><code>pin.svg</code></td></tr><tr class='action'><td><span class='icon' title='hard-drive.svg'><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 16h.01" /><path d="M2.212 11.577a2 2 0 0 0-.212.896V18a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-5.527a2 2 0 0 0-.212-.896L18.55 5.11A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" /><path d="M21.946 12.013H2.054" /><path d="M6 16h.01" /></svg>
+</span></td><td>Formater</td><td><code>ui::components::dropdown</code><small>src/ui/components/dropdown.rs</small></td><td><code>hard-drive.svg</code></td></tr><tr class='action'><td><span class='icon' title='archive-restore.svg'><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-archive-restore"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h2"/><path d="M20 8v11a2 2 0 0 1-2 2h-2"/><path d="m9 15 3-3 3 3"/><path d="M12 12v9"/></svg>
+</span></td><td>Extraire</td><td><code>ui::components::dropdown</code><small>src/ui/components/dropdown.rs</small></td><td><code>archive-restore.svg</code></td></tr><tr class='action'><td><span class='icon' title='archive.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <rect width="20" height="5" x="2" y="3" rx="1" />
+  <path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" />
+  <path d="M10 12h4" />
+</svg>
+</span></td><td>Compresser</td><td><code>ui::components::dropdown</code><small>src/ui/components/dropdown.rs</small></td><td><code>archive.svg</code></td></tr><tr class='action'><td><span class='icon' title='refresh-cw.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+  <path d="M21 3v5h-5" />
+  <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+  <path d="M8 16H3v5" />
+</svg>
+</span></td><td>Synchroniser</td><td><code>ui::components::dropdown</code><small>src/ui/components/dropdown.rs</small></td><td><code>refresh-cw.svg</code></td></tr><tr class='action'><td><span class='icon' title='brush-cleaning.svg'><svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="m16 22-1-4" />
+  <path d="M19 14a1 1 0 0 0 1-1v-1a2 2 0 0 0-2-2h-3a1 1 0 0 1-1-1V4a2 2 0 0 0-4 0v5a1 1 0 0 1-1 1H6a2 2 0 0 0-2 2v1a1 1 0 0 0 1 1" />
+  <path d="M19 14H5l-1.973 6.767A1 1 0 0 0 4 22h16a1 1 0 0 0 .973-1.233z" />
+  <path d="m8 22 1-4" />
+</svg>
+</span></td><td>Lib&#233;rer de lʼespace</td><td><code>ui::components::dropdown</code><small>src/ui/components/dropdown.rs</small></td><td><code>brush-cleaning.svg</code></td></tr><tr class='action'><td><span class='icon' title='circle-check.svg'><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-circle-check"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+</span></td><td>Toujours conserver sur cet appareil</td><td><code>ui::components::dropdown</code><small>src/ui/components/dropdown.rs</small></td><td><code>circle-check.svg</code></td></tr><tr class='action'><td><span class="muted">—</span></td><td>Autres actions et sous-menus du syst&#232;me (dynamiques)</td><td><code>ui::components::dropdown</code><small>src/ui/components/dropdown.rs</small></td><td>Aucun SVG</td></tr></tbody></table></main>
+<script>document.querySelector('#search').addEventListener('input',e=>{const q=e.target.value.toLocaleLowerCase('fr');document.querySelectorAll('tr.action').forEach(r=>r.hidden=!r.textContent.toLocaleLowerCase('fr').includes(q));document.querySelectorAll('tr.section').forEach(s=>{let n=s.nextElementSibling,visible=false;while(n&&!n.classList.contains('section')){visible ||= !n.hidden;n=n.nextElementSibling}s.hidden=!visible})});</script></html>
+
+

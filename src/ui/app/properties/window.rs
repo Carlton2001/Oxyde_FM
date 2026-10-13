@@ -243,8 +243,10 @@ impl PropertiesWindow {
                     });
                 });
             item.icon = match command {
+                0 => Some(IconName::Scissors),
                 1 => Some(IconName::Copy),
-                3 => Some(IconName::ALargeSmall),
+                2 => Some(IconName::ClipboardPaste),
+                3 => Some(IconName::SquareDashedMousePointer),
                 _ => None,
             };
             item.is_dimmed = is_dimmed;

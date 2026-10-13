@@ -7,6 +7,9 @@ use oxyde_lib::models::FileEntry;
 mod tests;
 #[cfg(test)]
 mod calendar_refresh_tests;
+#[cfg(test)]
+#[path = "filters/tests/metadata_indicators.rs"]
+mod metadata_indicator_tests;
 
 impl SizeCategory {
     pub fn message(&self) -> Message {
@@ -120,6 +123,23 @@ impl CalendarFilterRequest {
 }
 
 impl TabState {
+    /// Match the header indicators: selecting every present value does not filter.
+    pub(crate) fn metadata_filter_flags(&self) -> (bool, bool, bool) {
+        let type_filtered = !self.filter_types.is_empty() && self.files.iter().any(|file| {
+            !self.filter_types.contains(&crate::ui::components::file_list::file_type_label(file))
+        });
+        let categories = [SizeCategory::Minuscule, SizeCategory::Petit, SizeCategory::Moyen,
+            SizeCategory::Grand, SizeCategory::Huge];
+        let size_filtered = !self.filter_sizes.is_empty() && self.files.iter().any(|file| {
+            categories.iter().find(|category| category.matches(file.size))
+                .is_some_and(|category| !self.filter_sizes.contains(category))
+        });
+        let date_filtered = !self.filter_dates.is_empty() &&
+            crate::ui::date_groups::counts_by_date(&self.files, chrono::Local::now().date_naive())
+                .keys().any(|group| !self.filter_dates.contains(group));
+        (type_filtered, size_filtered, date_filtered)
+    }
+
     pub fn update_cache(&mut self) {
         self.update_cache_on(chrono::Local::now().date_naive());
     }

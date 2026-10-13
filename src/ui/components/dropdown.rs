@@ -25,7 +25,10 @@ pub enum IconName {
     ChartBar,
     Separator,
     ListOrdered,
-    ALargeSmall,
+    SquareDashedMousePointer,
+    Disc,
+    Eject,
+    Unplug,
     Check,
     Square,
     FolderOpen,
@@ -48,7 +51,7 @@ pub enum IconName {
     PinOff,
     ArchiveRestore,
     Refresh,
-    CloudOff,
+    BrushCleaning,
     CheckCircle,
     Pencil,
     ExternalLink,
@@ -120,7 +123,7 @@ pub fn native_menu_icon(verb: Option<&str>, label: &str) -> Option<IconName> {
     } else if has(&["synchroniser", "sync"]) {
         Some(IconName::Refresh)
     } else if has(&["libérer de l'espace", "free up space"]) {
-        Some(IconName::CloudOff)
+        Some(IconName::BrushCleaning)
     } else if has(&["toujours conserver", "always keep"]) {
         Some(IconName::CheckCircle)
     } else {
@@ -410,9 +413,12 @@ impl<T: crate::ui::components::scrollbar::ScrollbarState + 'static> RenderOnce f
                                                         d.child(
                                                             svg()
                                                                 .path(match icon {
-                                                                    IconName::ALargeSmall => {
-                                                                        "icons/a-large-small.svg"
+                                                                    IconName::SquareDashedMousePointer => {
+                                                                        "icons/square-dashed-mouse-pointer.svg"
                                                                     }
+                                                                    IconName::Disc => "icons/disc.svg",
+                                                                    IconName::Eject => "icons/eject.svg",
+                                                                    IconName::Unplug => "icons/unplug.svg",
                                                                     IconName::Check => {
                                                                         "icons/check.svg"
                                                                     }
@@ -474,8 +480,8 @@ impl<T: crate::ui::components::scrollbar::ScrollbarState + 'static> RenderOnce f
                                                                     IconName::Refresh => {
                                                                         "icons/refresh-cw.svg"
                                                                     }
-                                                                    IconName::CloudOff => {
-                                                                        "icons/cloud-off.svg"
+                                                                    IconName::BrushCleaning => {
+                                                                        "icons/brush-cleaning.svg"
                                                                     }
                                                                     IconName::CheckCircle => {
                                                                         "icons/circle-check.svg"

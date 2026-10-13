@@ -7,6 +7,7 @@ pub struct Button {
     id: ElementId,
     label: Option<SharedString>,
     label_size: Option<f32>,
+    icon: Option<&'static str>,
     on_click: Option<Box<dyn Fn(&mut Window, &mut App) + 'static>>,
 }
 
@@ -16,6 +17,7 @@ impl Button {
             id: id.into(),
             label: None,
             label_size: None,
+            icon: None,
             on_click: None,
         }
     }
@@ -27,6 +29,11 @@ impl Button {
 
     pub fn label_size(mut self, size: f32) -> Self {
         self.label_size = Some(size);
+        self
+    }
+
+    pub fn icon(mut self, path: &'static str) -> Self {
+        self.icon = Some(path);
         self
     }
 
@@ -58,6 +65,9 @@ impl RenderOnce for Button {
                 container
                     .on_mouse_down(MouseButton::Left, move |_, window, cx| on_click(window, cx))
             })
+            .children(self.icon.map(|path| {
+                svg().path(path).size(rems(0.875)).flex_none().text_color(theme.text)
+            }))
             .children(self.label.map(|label| {
                 div()
                     .ml_2()

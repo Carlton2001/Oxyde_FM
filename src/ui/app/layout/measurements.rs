@@ -24,7 +24,8 @@ impl OxydeApp {
         };
         self.state.layout.visit_panes_mut(&mut |pane| {
             let tab = pane.active_tab_mut();
-            let key = (reference, language, date_format, !tab.filter_types.is_empty(), !tab.filter_dates.is_empty(), !tab.filter_sizes.is_empty());
+            let (type_filtered, size_filtered, date_filtered) = tab.metadata_filter_flags();
+            let key = (reference, language, date_format, type_filtered, date_filtered, size_filtered);
             if tab.column_measurement_key == Some(key) { return; }
             let type_width = tab.column_type_labels.iter().map(|label| {
                 let message = match label.as_str() {

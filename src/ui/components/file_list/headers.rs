@@ -1,4 +1,3 @@
-use super::presentation::file_type_label;
 use crate::ui::app::OxydeApp;
 use crate::ui::i18n::Message;
 use crate::ui::scale::rem_pixels;
@@ -35,45 +34,7 @@ pub(super) fn render_headers(
     // Check filters
     let name_filtered = !tab.filter_name.is_empty();
 
-    let type_filtered = if tab.filter_types.is_empty() {
-        false
-    } else {
-        let mut all_types = std::collections::HashSet::new();
-        for f in &tab.files {
-            all_types.insert(file_type_label(f));
-        }
-        !all_types.iter().all(|t| tab.filter_types.contains(t))
-    };
-
-    let size_filtered = if tab.filter_sizes.is_empty() {
-        false
-    } else {
-        use crate::ui::workspace::SizeCategory;
-        let categories = [
-            SizeCategory::Minuscule,
-            SizeCategory::Petit,
-            SizeCategory::Moyen,
-            SizeCategory::Grand,
-            SizeCategory::Huge,
-        ];
-        let mut present = std::collections::HashSet::new();
-        for f in &tab.files {
-            for cat in &categories {
-                if cat.matches(f.size) {
-                    present.insert(*cat);
-                    break;
-                }
-            }
-        }
-        !present.iter().all(|c| tab.filter_sizes.contains(c))
-    };
-
-    let date_filtered = if tab.filter_dates.is_empty() {
-        false
-    } else {
-        let counts = crate::ui::date_groups::counts_by_date(&tab.files, chrono::Local::now().date_naive());
-        !counts.keys().all(|group| tab.filter_dates.contains(group))
-    };
+    let (type_filtered, size_filtered, date_filtered) = tab.metadata_filter_flags();
 
     div()
         .flex()

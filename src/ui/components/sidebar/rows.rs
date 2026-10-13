@@ -255,7 +255,6 @@ pub(super) fn render_sidebar_rows(
                             .w_4().h_4().mr_1()
                             .flex().items_center().justify_center().flex_shrink_0()
                             .when(has_subs, |d| d
-                            .hover(|s| s.bg(theme.hover).rounded_md())
                             .on_mouse_down(MouseButton::Left, {
                                 let h = h.clone(); let p = path.clone();
                                 move |_, _, cx| {
@@ -385,7 +384,6 @@ pub(super) fn render_sidebar_rows(
                             .w_4().h_4().mr_1()
                             .flex().items_center().justify_center().flex_shrink_0()
                             .when(has_subs, |d| d
-                                .hover(|s| s.bg(theme.hover).rounded_md())
                                 .on_mouse_down(MouseButton::Left, {
                                     let h = h.clone(); let p = path.clone();
                                     move |_, _, cx| {
@@ -407,7 +405,11 @@ pub(super) fn render_sidebar_rows(
                     .child(
                         div().w_4().h_4().mr_2().flex().items_center().justify_center().flex_shrink_0()
                             .child(crate::ui::components::icons::render_file_icon(
-                                path.clone(), crate::ui::components::icons::IconType::Folder,
+                                path.clone(), if is_exp && !use_system_icons {
+                                    crate::ui::components::icons::IconType::FolderOpen
+                                } else {
+                                    crate::ui::components::icons::IconType::Folder
+                                },
                                 rems(1.0), theme.accent, use_system_icons, false,
                             ))
                     )
