@@ -313,8 +313,10 @@ impl FileOperationManager {
                 selected[index]
                     .recycle(&mut |deleted| {
                         let mut locked = op.lock().unwrap();
+                        if deleted.path == source.to_string_lossy() {
+                            locked.processed_files += 1;
+                        }
                         locked.deleted_items.push(deleted);
-                        locked.processed_files += 1;
                     })
                     .map_err(|error| error.to_string())?;
             }

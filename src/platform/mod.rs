@@ -66,11 +66,13 @@ pub struct FileIdentity {
 pub struct ShellDeleteOutcome {
     pub completed: bool,
     pub error: Option<String>,
+    /// Confirmed descendants, including separately recycled payloads.
+    pub effects: Vec<crate::models::transaction::HistoryDeletedItem>,
 }
 
 impl ShellDeleteOutcome {
     pub fn from_result(result: Result<(), String>) -> Self {
-        Self { completed: result.is_ok(), error: result.err() }
+        Self { completed: result.is_ok(), error: result.err(), effects: Vec::new() }
     }
 }
 

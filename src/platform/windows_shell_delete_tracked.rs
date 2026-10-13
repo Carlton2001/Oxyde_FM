@@ -11,6 +11,8 @@ use windows::Win32::Foundation::{E_ABORT, S_OK};
 use windows::Win32::System::Com::{CoCreateInstance, CLSCTX_INPROC_SERVER};
 use windows::Win32::System::Ole::{OleInitialize, OleUninitialize};
 use windows::Win32::UI::Shell::*;
+#[path = "windows_shell_delete_tracked/effects.rs"]
+mod effects;
 
 struct Apartment;
 impl Apartment {
@@ -21,6 +23,10 @@ impl Apartment {
         Ok(Self)
     }
 }
+
+#[cfg(test)]
+#[path = "windows_shell_delete_tracked/tests/partial_effects.rs"]
+mod partial_effect_tests;
 impl Drop for Apartment {
     fn drop(&mut self) {
         unsafe {
@@ -34,6 +40,8 @@ struct Receipt {
     preflight: bool,
     completed: bool,
     error: Option<String>,
+    effects: effects::Effects,
+    payload: Option<PathBuf>,
 }
 impl Receipt {
     fn fail(&mut self, error: String) {
@@ -67,6 +75,7 @@ impl Receipt {
         ShellDeleteOutcome {
             completed: self.completed,
             error: self.error.take(),
+            effects: self.effects.take(self.completed, self.payload.as_deref()),
         }
     }
 }
@@ -100,7 +109,7 @@ struct DeleteSink {
     receipt: Arc<Mutex<Receipt>>,
 }
 impl DeleteSink_Impl {
-    fn root_item(&self, item: Ref<IShellItem>) -> windows::core::Result<bool> {
+    fn root_item(&self, item: &Ref<IShellItem>) -> windows::core::Result<bool> {
         let item = item.ok()?;
         Ok(unsafe { item.Compare(&self.root, SICHINT_CANONICAL.0 as u32)? } == 0)
     }
@@ -128,7 +137,7 @@ impl IFileOperationProgressSink_Impl for DeleteSink_Impl {
     }
     fn PreDeleteItem(&self, _: u32, item: Ref<IShellItem>) -> windows::core::Result<()> {
         if self
-            .root_item(item)
+            .root_item(&item)
             .map_err(|e| self.record_failure(e.to_string()))?
         {
             check_source(&self.path, self.proof).map_err(|e| self.record_failure(e))?;
@@ -136,6 +145,14 @@ impl IFileOperationProgressSink_Impl for DeleteSink_Impl {
                 .lock()
                 .unwrap_or_else(|p| p.into_inner())
                 .preflight = true;
+        } else {
+            let result = self
+                .receipt
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .effects
+                .pre(&self.path, item);
+            result.map_err(|e| self.record_failure(e))?;
         }
         Ok(())
     }
@@ -144,16 +161,32 @@ impl IFileOperationProgressSink_Impl for DeleteSink_Impl {
         _: u32,
         item: Ref<IShellItem>,
         result: HRESULT,
-        _: Ref<IShellItem>,
+        payload: Ref<IShellItem>,
     ) -> windows::core::Result<()> {
         if self
-            .root_item(item)
+            .root_item(&item)
             .map_err(|e| self.record_failure(e.to_string()))?
         {
+            // Preserve the native completion before querying optional metadata.
             self.receipt
                 .lock()
                 .unwrap_or_else(|p| p.into_inner())
                 .post(result);
+            let destination = if payload.ok().is_ok() {
+                Some(effects::path(payload).map_err(|e| self.record_failure(e))?)
+            } else {
+                None
+            };
+            let mut receipt = self.receipt.lock().unwrap_or_else(|p| p.into_inner());
+            receipt.payload = destination;
+        } else {
+            let recorded = self
+                .receipt
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .effects
+                .post(item, result, payload);
+            recorded.map_err(|e| self.record_failure(e))?;
         }
         Ok(())
     }
@@ -253,6 +286,7 @@ fn delete(path: &Path, recycle: bool, proof: Option<HistoryFileIdentity>) -> She
             return ShellDeleteOutcome {
                 completed: false,
                 error: Some(error),
+                effects: Vec::new(),
             }
         }
     };
@@ -271,10 +305,14 @@ fn delete(path: &Path, recycle: bool, proof: Option<HistoryFileIdentity>) -> She
                 receipt: receipt.clone(),
             }
             .into();
-            operation.DeleteItem(&root, &sink)?;
+            // Observe the whole operation, including child deletions. Do not
+            // also register the item sink: that duplicates root notifications.
+            let cookie = operation.Advise(&sink)?;
+            operation.DeleteItem(&root, None)?;
             // Completion receipts remain available even when PerformOperations fails.
             let performed = operation.PerformOperations();
             let aborted = operation.GetAnyOperationsAborted();
+            let _ = operation.Unadvise(cookie);
             performed?;
             Ok(aborted?.as_bool())
         }
@@ -301,10 +339,12 @@ pub(super) fn run(
         Ok(thread) => thread.join().unwrap_or_else(|_| ShellDeleteOutcome {
             completed: false,
             error: Some("Windows deletion worker failed".into()),
+            effects: Vec::new(),
         }),
         Err(error) => ShellDeleteOutcome {
             completed: false,
             error: Some(error.to_string()),
+            effects: Vec::new(),
         },
     }
 }
@@ -323,7 +363,10 @@ mod tests {
     #[test]
     fn completed_root_survives_later_error_and_abort_but_skips_never_become_success() {
         for status in [S_OK, COPYENGINE_S_DONT_PROCESS_CHILDREN] {
-            let mut receipt = Receipt { preflight: true, ..Default::default() };
+            let mut receipt = Receipt {
+                preflight: true,
+                ..Default::default()
+            };
             receipt.post(status);
             let outcome = receipt.outcome(Ok(()), false);
             assert!(outcome.completed);
@@ -368,7 +411,11 @@ mod tests {
             let _apartment = Apartment::new().unwrap();
             for directory in [false, true] {
                 let temp = tempfile::tempdir().unwrap();
-                let path = temp.path().join(if directory { "Dossier école" } else { "Annuler école.txt" });
+                let path = temp.path().join(if directory {
+                    "Dossier école"
+                } else {
+                    "Annuler école.txt"
+                });
                 if directory {
                     fs::create_dir(&path).unwrap();
                     fs::write(path.join("contenu.txt"), b"witness").unwrap();
@@ -377,7 +424,12 @@ mod tests {
                 }
                 let proof = {
                     let parents = HeldParents::new(&path).unwrap();
-                    let file = super::super::platform().track_source_item(parents.directory(), &parents.resolved_path(&path).unwrap()).unwrap();
+                    let file = super::super::platform()
+                        .track_source_item(
+                            parents.directory(),
+                            &parents.resolved_path(&path).unwrap(),
+                        )
+                        .unwrap();
                     HistoryFileIdentity::from_file(&file).unwrap()
                 };
                 let root = item(&path);
@@ -391,26 +443,38 @@ mod tests {
                 let unrelated = item(&child_or_sibling);
                 let receipt = Arc::new(Mutex::new(Receipt::default()));
                 let sink: IFileOperationProgressSink = DeleteSink {
-                    root: root.clone(), path: path.clone(), proof: Some(proof), receipt: receipt.clone(),
-                }.into();
+                    root: root.clone(),
+                    path: path.clone(),
+                    proof: Some(proof),
+                    receipt: receipt.clone(),
+                }
+                .into();
                 unsafe {
                     sink.PreDeleteItem(0, &unrelated).unwrap();
-                    sink.PostDeleteItem(0, &unrelated, COPYENGINE_S_DONT_PROCESS_CHILDREN, None).unwrap();
+                    sink.PostDeleteItem(0, &unrelated, COPYENGINE_S_DONT_PROCESS_CHILDREN, None)
+                        .unwrap();
                     assert!(!receipt.lock().unwrap().completed);
                     sink.PreDeleteItem(0, &root).unwrap();
                     // Only a private rename: this test never touches the Recycle Bin.
                     fs::rename(&path, temp.path().join("saved")).unwrap();
-                    sink.PostDeleteItem(0, &root, COPYENGINE_S_DONT_PROCESS_CHILDREN, None).unwrap();
+                    sink.PostDeleteItem(0, &root, COPYENGINE_S_DONT_PROCESS_CHILDREN, None)
+                        .unwrap();
                     sink.FinishOperations(S_OK).unwrap();
                 }
                 let outcome = receipt.lock().unwrap().outcome(Ok(()), false);
                 assert!(outcome.completed);
                 assert!(outcome.error.is_none());
                 let saved = temp.path().join("saved");
-                let content = if directory { saved.join("contenu.txt") } else { saved };
+                let content = if directory {
+                    saved.join("contenu.txt")
+                } else {
+                    saved
+                };
                 assert_eq!(fs::read(content).unwrap(), b"witness");
             }
-        }).join().unwrap();
+        })
+        .join()
+        .unwrap();
     }
 
     #[test]

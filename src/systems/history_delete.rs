@@ -22,6 +22,9 @@ struct SelectedSource {
     _parents: HeldParents,
     file: File,
 }
+#[cfg(test)]
+#[path = "history_delete/tests/partial_effects.rs"]
+mod partial_effect_tests;
 impl SelectedSource {
     fn new(path: &Path) -> Result<Self, CommandError> {
         let parents = HeldParents::new(path)?;
@@ -150,10 +153,14 @@ impl PreparedDelete {
         let _source = &self.source;
         let outcome = delete(&self.path, self.identity);
         if outcome.completed {
-            completed(HistoryDeletedItem::new(
+            let entry = HistoryDeletedItem::new(
                 self.path.to_string_lossy().into_owned(),
                 self.identity,
-            ));
+            );
+            entry.remember_partial(outcome.effects);
+            completed(entry);
+        } else {
+            for effect in outcome.effects { completed(effect); }
         }
         if let Some(error) = outcome.error {
             return Err(dispatch_failure(&self.path, outcome.completed, error));
@@ -232,13 +239,21 @@ pub(crate) fn undo(details: &TransactionDetails) -> Result<(), CommandError> {
     let items = platform()
         .list_trash_items()
         .map_err(CommandError::TrashError)?;
-    let items = items
+    let items: Vec<_> = items
         .iter()
         .map(crate::commands::ops::item_with_correct_restore_name)
         .collect();
-    platform()
-        .restore_trash_history(items, entries)
-        .map_err(CommandError::TrashError)
+    restore_entries(entries, &mut |journal| platform().restore_trash_history(items.clone(), journal))
+}
+fn restore_entries(entries: &[HistoryDeletedItem], restore: &mut dyn FnMut(&[HistoryDeletedItem]) -> Result<(), String>) -> Result<(), CommandError> {
+    let mut pending = entries.to_vec();
+    while !pending.is_empty() {
+        // Each layer retains the existing batch preflight. Separately recycled
+        // descendants need the successful parent restore before their paths exist.
+        restore(&pending).map_err(CommandError::TrashError)?;
+        pending = pending.iter().flat_map(HistoryDeletedItem::partial).collect();
+    }
+    Ok(())
 }
 pub(crate) fn redo(details: &TransactionDetails) -> Result<(), CommandError> {
     redo_reporting(entries(details)?, &mut |path, proof| {
@@ -270,7 +285,9 @@ fn redo_reporting(
     for (entry, source) in selected {
         // The path-based Shell call has a residual race after this check.
         let current = SelectedSource::expected(entry)?;
+        entry.discard_restored_partial();
         let outcome = delete(Path::new(&entry.path), entry.identity);
+        entry.remember_partial(outcome.effects);
         // Preserve the native item receipt even if the operation later failed.
         if outcome.completed {
             entry.set_restored(false);
@@ -552,6 +569,7 @@ mod tests {
                 crate::platform::ShellDeleteOutcome {
                     completed: true,
                     error: Some("late injected failure".into()),
+                    effects: Vec::new(),
                 }
             },
             &mut |item| journal.push(item),
@@ -585,6 +603,7 @@ mod tests {
             crate::platform::ShellDeleteOutcome {
                 completed: true,
                 error: Some("late injected failure".into()),
+                effects: Vec::new(),
             }
         });
         assert!(result.is_err());
@@ -612,7 +631,8 @@ mod tests {
             .recycle_reporting(
                 &mut |_, _| crate::platform::ShellDeleteOutcome {
                     completed: false,
-                    error: None
+                    error: None,
+                    effects: Vec::new(),
                 },
                 &mut |_| completed = true
             )
@@ -622,7 +642,8 @@ mod tests {
         assert!(
             redo_reporting(&entries, &mut |_, _| crate::platform::ShellDeleteOutcome {
                 completed: false,
-                error: None
+                error: None,
+                effects: Vec::new(),
             })
             .is_err()
         );

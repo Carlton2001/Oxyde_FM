@@ -128,6 +128,8 @@ pub struct HistoryDeletedItem {
     pub(crate) identity: Option<HistoryFileIdentity>,
     #[cfg(target_os = "windows")]
     restored: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    #[cfg(target_os = "windows")]
+    partial: std::sync::Arc<std::sync::Mutex<Vec<HistoryDeletedItem>>>,
 }
 #[cfg(target_os = "windows")]
 impl HistoryDeletedItem {
@@ -136,6 +138,7 @@ impl HistoryDeletedItem {
             path,
             identity,
             restored: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            partial: Default::default(),
         }
     }
     pub(crate) fn is_restored(&self) -> bool {
@@ -144,5 +147,14 @@ impl HistoryDeletedItem {
     pub(crate) fn set_restored(&self, value: bool) {
         self.restored
             .store(value, std::sync::atomic::Ordering::Release);
+    }
+    pub(crate) fn remember_partial(&self, effects: Vec<Self>) {
+        self.partial.lock().unwrap_or_else(|p| p.into_inner()).extend(effects);
+    }
+    pub(crate) fn partial(&self) -> Vec<Self> {
+        self.partial.lock().unwrap_or_else(|p| p.into_inner()).clone()
+    }
+    pub(crate) fn discard_restored_partial(&self) {
+        self.partial.lock().unwrap_or_else(|p| p.into_inner()).retain(|entry| !entry.is_restored());
     }
 }
