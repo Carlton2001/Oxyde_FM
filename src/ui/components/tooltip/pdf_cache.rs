@@ -113,9 +113,11 @@ pub(super) fn load(path: String) -> Result<Arc<RenderImage>, String> {
     let signature = Signature::read(&path);
     if let Some(key) = &signature {
         if let Some(image) = cache.lock().unwrap().get(key) {
+            log::debug!("Tooltip PDF decoded cache hit: {path}");
             return Ok(image);
         }
     }
+    log::debug!("Tooltip PDF decoded cache miss: {path}");
     let pixels = ::oxyde_lib::platform::platform()
         .pdf_thumbnail(path.clone())
         .map_err(|error| error.to_string())?;

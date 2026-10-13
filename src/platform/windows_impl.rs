@@ -703,7 +703,7 @@ impl Platform for WindowsPlatform {
         super::windows_hover_window::configure(window)
     }
 
-    fn place_hover_window(&self, window: raw_window_handle::RawWindowHandle, size: Option<(f32, f32)>, scale: f32) -> Result<(), String> {
+    fn place_hover_window(&self, window: raw_window_handle::RawWindowHandle, size: Option<(f32, f32, f32)>, scale: f32) -> Result<(), String> {
         super::windows_hover_window::place(window, size, scale)
     }
 

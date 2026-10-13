@@ -17,7 +17,7 @@ const INITIALIZE_WINDOW: u32 = APPLY_PLACEMENT + 1;
 
 #[derive(Clone, Copy)]
 struct Placement {
-    size: Option<(f32, f32)>,
+    size: Option<(f32, f32, f32)>,
     scale: f32,
 }
 
@@ -114,15 +114,17 @@ pub(super) fn configure(handle: RawWindowHandle) -> Result<(), String> {
 
 pub(super) fn place(
     handle: RawWindowHandle,
-    size: Option<(f32, f32)>,
+    size: Option<(f32, f32, f32)>,
     scale: f32,
 ) -> Result<(), String> {
     let window = hwnd(handle)?;
-    if let Some((width, height)) = size {
+    if let Some((width, height, inset)) = size {
         if !scale.is_finite()
             || scale <= 0.0
             || !width.is_finite()
             || !height.is_finite()
+            || !inset.is_finite()
+            || inset < 0.0
             || width <= 0.0
             || height <= 0.0
         {
@@ -147,9 +149,19 @@ pub(super) fn place(
     Ok(())
 }
 
-fn place_now(window: HWND, size: Option<(f32, f32)>, scale: f32) -> Result<(), String> {
+fn axis_origin(cursor: i32, extent: i32, minimum: i32, maximum: i32, gap: i32, inset: i32) -> i32 {
+    let forward = cursor + gap - inset;
+    let origin = if forward + extent <= maximum {
+        forward
+    } else {
+        cursor - gap - extent + inset
+    };
+    origin.clamp(minimum, maximum - extent)
+}
+
+fn place_now(window: HWND, size: Option<(f32, f32, f32)>, scale: f32) -> Result<(), String> {
     unsafe {
-        let Some((width, height)) = size else {
+        let Some((width, height, inset)) = size else {
             if IsWindowVisible(window).as_bool() {
                 let _ = ShowWindow(window, SW_HIDE);
             }
@@ -159,6 +171,8 @@ fn place_now(window: HWND, size: Option<(f32, f32)>, scale: f32) -> Result<(), S
             || scale <= 0.0
             || !width.is_finite()
             || !height.is_finite()
+            || !inset.is_finite()
+            || inset < 0.0
             || width <= 0.0
             || height <= 0.0
         {
@@ -178,18 +192,9 @@ fn place_now(window: HWND, size: Option<(f32, f32)>, scale: f32) -> Result<(), S
         let width = ((width * scale).ceil() as i32).clamp(1, (work.right - work.left).max(1));
         let height = ((height * scale).ceil() as i32).clamp(1, (work.bottom - work.top).max(1));
         let gap = (24.0 * scale).round() as i32;
-        let x = if cursor.x + gap + width <= work.right {
-            cursor.x + gap
-        } else {
-            cursor.x - gap - width
-        };
-        let y = if cursor.y + gap + height <= work.bottom {
-            cursor.y + gap
-        } else {
-            cursor.y - gap - height
-        };
-        let x = x.clamp(work.left, work.right - width);
-        let y = y.clamp(work.top, work.bottom - height);
+        let inset = (inset * scale).round() as i32;
+        let x = axis_origin(cursor.x, width, work.left, work.right, gap, inset);
+        let y = axis_origin(cursor.y, height, work.top, work.bottom, gap, inset);
         // The lifecycle watcher also runs while the pointer is stationary.
         // Do not generate redundant native resize/paint events on each tick.
         let mut current = windows::Win32::Foundation::RECT::default();

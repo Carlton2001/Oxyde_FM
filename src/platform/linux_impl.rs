@@ -732,7 +732,7 @@ impl Platform for LinuxPlatform {
         Err("Native hover windows are unavailable on this platform".into())
     }
 
-    fn place_hover_window(&self, _window: raw_window_handle::RawWindowHandle, _size: Option<(f32, f32)>, _scale: f32) -> Result<(), String> {
+    fn place_hover_window(&self, _window: raw_window_handle::RawWindowHandle, _size: Option<(f32, f32, f32)>, _scale: f32) -> Result<(), String> {
         Err("Native hover windows are unavailable on this platform".into())
     }
 }

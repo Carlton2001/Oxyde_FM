@@ -427,8 +427,10 @@ pub trait Platform: Send + Sync {
     fn configure_hover_window(&self, window: raw_window_handle::RawWindowHandle, owner: raw_window_handle::RawWindowHandle) -> Result<(), String>;
 
     /// Show beside the native pointer, constrained to its monitor, or hide with None.
-    /// Dimensions are logical pixels at the owner's scale factor. UI thread only.
-    fn place_hover_window(&self, window: raw_window_handle::RawWindowHandle, size: Option<(f32, f32)>, scale: f32) -> Result<(), String>;
+    /// Tuple is (outer width, outer height, transparent inset), in logical pixels.
+    /// The cursor offset applies to the visible frame, excluding that inset.
+    /// UI thread only.
+    fn place_hover_window(&self, window: raw_window_handle::RawWindowHandle, size: Option<(f32, f32, f32)>, scale: f32) -> Result<(), String>;
 
     /// Transfers selected file paths through the native file clipboard.
     fn set_clipboard_files(&self, paths: Vec<String>, cut: bool) -> Result<(), String>;

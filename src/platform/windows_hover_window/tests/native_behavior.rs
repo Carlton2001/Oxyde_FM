@@ -75,7 +75,7 @@ fn hover_is_passive_owned_mouse_transparent_and_not_globally_topmost() {
             MA_NOACTIVATE as isize
         );
         let foreground = GetForegroundWindow();
-        place(hover.raw(), Some((120.0, 80.0)), 1.0).unwrap();
+        place(hover.raw(), Some((120.0, 80.0, 0.0)), 1.0).unwrap();
         apply_pending(hover.0);
         assert!(IsWindowVisible(hover.0).as_bool());
         assert_eq!(GetForegroundWindow(), foreground);
@@ -99,13 +99,13 @@ fn hover_is_passive_owned_mouse_transparent_and_not_globally_topmost() {
 fn placements_are_deferred_coalesced_and_cancelled_by_hide() {
     let hover = TestWindow::new();
     configure(hover.raw()).unwrap();
-    place(hover.raw(), Some((120.0, 80.0)), 1.0).unwrap();
-    place(hover.raw(), Some((180.0, 100.0)), 1.0).unwrap();
+    place(hover.raw(), Some((120.0, 80.0, 0.0)), 1.0).unwrap();
+    place(hover.raw(), Some((180.0, 100.0, 0.0)), 1.0).unwrap();
     assert!(!unsafe { IsWindowVisible(hover.0) }.as_bool());
     PENDING.with(|pending| {
         assert_eq!(
             pending.borrow().get(&(hover.0 .0 as isize)).unwrap().size,
-            Some((180.0, 100.0))
+            Some((180.0, 100.0, 0.0))
         )
     });
     apply_pending(hover.0);
@@ -115,9 +115,27 @@ fn placements_are_deferred_coalesced_and_cancelled_by_hide() {
         (bounds.right - bounds.left, bounds.bottom - bounds.top),
         (180, 100)
     );
-    place(hover.raw(), Some((200.0, 120.0)), 1.0).unwrap();
+    place(hover.raw(), Some((200.0, 120.0, 0.0)), 1.0).unwrap();
     place(hover.raw(), None, 1.0).unwrap();
     apply_pending(hover.0);
     assert!(!unsafe { IsWindowVisible(hover.0) }.as_bool());
     PENDING.with(|pending| assert!(!pending.borrow().contains_key(&(hover.0 .0 as isize))));
+}
+
+#[test]
+fn visible_frame_stays_24_pixels_from_cursor_excluding_shadow_margin() {
+    for scale in [1, 2] {
+        let cursor = 500 * scale;
+        let extent = 300 * scale;
+        let inset = 32 * scale;
+        let gap = 24 * scale;
+        let origin = axis_origin(cursor, extent, 0, 2000 * scale, gap, inset);
+        assert_eq!(origin + inset - cursor, gap);
+        let cursor = 1900 * scale;
+        let origin = axis_origin(cursor, extent, 0, 2000 * scale, gap, inset);
+        assert_eq!(cursor - (origin + extent - inset), gap);
+    }
+    let origin = axis_origin(-1000, 300, -1920, 0, 24, 32);
+    assert_eq!(origin + 32 - (-1000), 24);
+    assert_eq!(axis_origin(0, 300, 0, 800, 24, 32), 0);
 }

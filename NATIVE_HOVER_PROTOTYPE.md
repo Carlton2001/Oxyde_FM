@@ -25,6 +25,17 @@ pas la fenêtre.
 Lors du passage à un autre fichier image ou PDF, le nom et les métadonnées
 changent immédiatement ; l'aperçu se complète pendant son chargement en arrière-plan.
 La taille native est ajustée dès que le rendu mesure le nouveau contenu.
+L'écart de 24 pixels logiques par axe est mesuré jusqu'au cadre visible : la
+marge transparente de l'ombre n'ajoute plus de distance au pointeur. Près d'un
+bord d'écran, la bulle se retourne ou est limitée à la zone de travail.
+
+Les images décodées disposent, comme les PDF, d'un cache RAM de 32 entrées et
+64 Mio maximum. Tous les pixels des animations comptent dans ce plafond. Les
+retours sur un fichier inchangé réutilisent le même `RenderImage` ; un contrôle
+de taille/date de modification sur le worker invalide les fichiers modifiés.
+Les erreurs et les résultats de fichiers modifiés pendant le décodage ne sont
+pas conservés. Le cache GPUI des tâches est toujours libéré au dernier survol ;
+le cache de pixels indépendant évite de relancer les décodeurs aux retours.
 Les demandes de placement sont regroupées puis appliquées dans la boucle de
 messages Windows, pour éviter les rappels de déplacement/redimensionnement
 pendant une mise à jour de vue GPUI. Une demande de masquage remplace les

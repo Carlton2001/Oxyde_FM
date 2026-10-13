@@ -5,6 +5,7 @@ mod video;
 mod placement;
 pub(crate) mod hover;
 mod pdf_cache;
+mod image_cache;
 mod position;
 
 use video::CancelVideoPreview;

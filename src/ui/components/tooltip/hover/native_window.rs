@@ -60,7 +60,11 @@ fn place(root: &NativeTooltip, window: &Window) {
     if let Ok(raw) = HasWindowHandle::window_handle(window) {
         let size = root.view.as_ref().map(|_| {
             let measured = visible_size(root.measured, window.rem_size());
-            (measured.width.as_f32(), measured.height.as_f32())
+            (
+                measured.width.as_f32(),
+                measured.height.as_f32(),
+                (window.rem_size() * 2.0).as_f32(),
+            )
         });
         if let Err(error) = oxyde_lib::platform::platform().place_hover_window(
             raw.as_raw(),
