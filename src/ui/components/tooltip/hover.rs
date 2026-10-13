@@ -3,6 +3,13 @@ mod scope;
 mod handover;
 #[cfg(target_os = "windows")]
 mod native_window;
+
+pub(crate) fn close_native_windows(cx: &mut App) {
+    #[cfg(target_os = "windows")]
+    native_window::close_windows(cx);
+    #[cfg(not(target_os = "windows"))]
+    let _ = cx;
+}
 use crate::ui::app::OxydeApp;
 use gpui::*;
 pub(crate) use scope::HoverRegion;

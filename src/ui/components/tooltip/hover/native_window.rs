@@ -19,8 +19,27 @@ impl Global for NativeWindows {}
 
 pub(super) struct NativeTooltip {
     view: Option<Entity<Tooltip>>,
-    measured: Size<Pixels>,
+    measured: Option<Size<Pixels>>,
     scale: f32,
+}
+
+fn visible_size(measured: Option<Size<Pixels>>, rem: Pixels) -> Size<Pixels> {
+    measured
+        .filter(|size| {
+            size.width.as_f32().is_finite()
+                && size.height.as_f32().is_finite()
+                && size.width > px(0.0)
+                && size.height > px(0.0)
+        })
+        .unwrap_or_else(|| size(rem * 26.5, rem * 8.0))
+}
+
+pub(super) fn close_windows(cx: &mut App) {
+    let entries = std::mem::take(&mut cx.default_global::<NativeWindows>().windows);
+    for (_, (handle, task)) in entries {
+        drop(task);
+        let _ = handle.update(cx, |_, window, _| window.remove_window());
+    }
 }
 
 fn candidate(view: &AnyView, cx: &App) -> Option<Entity<Tooltip>> {
@@ -104,7 +123,7 @@ pub(super) fn present(view: &AnyView, parent: &mut Window, cx: &mut App) -> bool
                         window.set_rem_size(rem);
                         cx.new(|_| NativeTooltip {
                             view: None,
-                            measured: size(px(1.0), px(1.0)),
+                            measured: None,
                             scale,
                         })
                     },
@@ -154,6 +173,7 @@ pub(super) fn present(view: &AnyView, parent: &mut Window, cx: &mut App) -> bool
                                                     tooltip.native_presentation = true
                                                 });
                                             }
+                                            cx.notify();
                                             window.refresh();
                                         }
                                         if window.rem_size() != rem {
@@ -163,10 +183,8 @@ pub(super) fn present(view: &AnyView, parent: &mut Window, cx: &mut App) -> bool
                                         root.scale = window.scale_factor();
                                         if let Ok(raw) = HasWindowHandle::window_handle(window) {
                                             let size = root.view.as_ref().map(|_| {
-                                                (
-                                                    root.measured.width.as_f32(),
-                                                    root.measured.height.as_f32(),
-                                                )
+                                                let measured = visible_size(root.measured, rem);
+                                                (measured.width.as_f32(), measured.height.as_f32())
                                             });
                                             if let Err(error) = oxyde_lib::platform::platform()
                                                 .place_hover_window(raw.as_raw(), size, root.scale)
@@ -257,10 +275,13 @@ impl Element for MeasuredContent {
     ) {
         self.content
             .prepaint_at(point(px(0.0), px(0.0)), window, cx);
-        if self.owner.read(cx).measured != *measured {
+        if measured.width > px(0.0)
+            && measured.height > px(0.0)
+            && self.owner.read(cx).measured != Some(*measured)
+        {
             let owner = self.owner.clone();
             let measured = *measured;
-            cx.defer(move |cx| owner.update(cx, |root, _| root.measured = measured));
+            cx.defer(move |cx| owner.update(cx, |root, _| root.measured = Some(measured)));
         }
     }
     fn paint(
@@ -276,3 +297,7 @@ impl Element for MeasuredContent {
         self.content.paint(window, cx);
     }
 }
+
+#[cfg(test)]
+#[path = "../tests/native_dimensions.rs"]
+mod tests;
