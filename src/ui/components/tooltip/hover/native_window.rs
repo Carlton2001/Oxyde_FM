@@ -211,6 +211,7 @@ pub(super) fn present(view: &AnyView, parent: &mut Window, cx: &mut App) -> bool
                         titlebar: None,
                         focus: false,
                         show: false,
+                        window_background: WindowBackgroundAppearance::Transparent,
                         is_resizable: false,
                         is_minimizable: false,
                         is_movable: false,
@@ -286,7 +287,7 @@ pub(super) fn present(view: &AnyView, parent: &mut Window, cx: &mut App) -> bool
 }
 
 impl Render for NativeTooltip {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let content = match &self.view {
             Some(view) => view.clone().into_any_element(),
             None => div().into_any_element(),
@@ -294,6 +295,13 @@ impl Render for NativeTooltip {
         MeasuredContent {
             content,
             owner: cx.entity(),
+            // Reserve transparent space for the same soft shadow as internal
+            // tooltips. The native DWM decoration remains disabled.
+            inset: if self.view.is_some() {
+                window.rem_size() * 2.0
+            } else {
+                px(0.0)
+            },
         }
     }
 }
@@ -301,6 +309,7 @@ impl Render for NativeTooltip {
 struct MeasuredContent {
     content: AnyElement,
     owner: Entity<NativeTooltip>,
+    inset: Pixels,
 }
 impl IntoElement for MeasuredContent {
     type Element = Self;
@@ -324,9 +333,13 @@ impl Element for MeasuredContent {
         window: &mut Window,
         cx: &mut App,
     ) -> (LayoutId, Size<Pixels>) {
-        let measured = self
+        let content_size = self
             .content
             .layout_as_root(AvailableSpace::min_size(), window, cx);
+        let measured = size(
+            content_size.width + self.inset * 2.0,
+            content_size.height + self.inset * 2.0,
+        );
         let mut style = Style::default();
         style.size = size(measured.width.into(), measured.height.into());
         (window.request_layout(style, [], cx), measured)
@@ -341,7 +354,7 @@ impl Element for MeasuredContent {
         cx: &mut App,
     ) {
         self.content
-            .prepaint_at(point(px(0.0), px(0.0)), window, cx);
+            .prepaint_at(point(self.inset, self.inset), window, cx);
         if measured.width > px(0.0)
             && measured.height > px(0.0)
             && self.owner.read(cx).measured != Some(*measured)

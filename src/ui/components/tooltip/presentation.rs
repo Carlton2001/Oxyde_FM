@@ -393,10 +393,11 @@ impl Render for Tooltip {
 
         if self.native_presentation {
             if let Some(preview) = self.preview_view.clone() {
-                let limit = size(rem_pixels(rems(25.0)), rem_pixels(rems(24.0)));
+                let limit = size((tooltip_width - chrome).max(px(1.0)), rem_pixels(rems(24.0)));
                 preview.update(cx, |preview, _| preview.maximum_size = Some(limit));
                 return div().w(tooltip_width).flex().flex_col()
                     .bg(theme.surface).border(rems(0.0625)).border_color(theme.border)
+                    .rounded_md().shadow(tooltip_shadow())
                     .font_family("Inter").font_weight(crate::ui::style::DEFAULT_FONT_WEIGHT)
                     .child(div().px_3().pt_2().max_h(limit.height).overflow_hidden().child(preview))
                     .child(box_div).into_any_element();

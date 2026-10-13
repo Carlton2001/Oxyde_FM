@@ -30,8 +30,11 @@ messages Windows, pour éviter les rappels de déplacement/redimensionnement
 pendant une mise à jour de vue GPUI. Une demande de masquage remplace les
 placements en attente. Les ombres dessinées par les infobulles GPUI ont une
 opacité réduite de moitié.
-Pour privilégier un rendu léger, la décoration non cliente DWM est désactivée
-sur la fenêtre d'aperçu native, sans ajouter une ombre personnalisée.
+La décoration non cliente DWM reste désactivée sur la fenêtre d'aperçu native.
+Une seule ombre GPUI légère est conservée, identique à celle des infobulles
+intérieures, avec leurs coins arrondis et leur bordure sémantique. La fenêtre
+transparente réserve une marge autour du contenu pour afficher ce halo sans le
+couper ni dessiner un rectangle opaque dans les coins.
 
 ## Essai manuel
 
@@ -50,5 +53,5 @@ Lancer `cargo run --offline`, avec les aperçus activés dans les préférences.
    différentes. Vérifier la taille, le placement et la lisibilité.
 
 Ce prototype modifie le placement : la bulle complète passe à gauche ou au-dessus
-du pointeur quand l'espace manque. Le rendu natif n'a pas encore de coins de
-fenêtre arrondis ni d'ombre extérieure comme l'overlay actuel.
+du pointeur quand l'espace manque. La marge transparente du halo participe au
+calcul de placement pour rester dans la zone de travail de l'écran.
