@@ -51,3 +51,11 @@ La compilation Linux a été tentée avec `cargo check --offline --target x86_64
 L’environnement ne permet pas de piloter visuellement l’application native. Les tests Win32 ne remplacent pas une session Oxyde réelle. Restent à essayer : transfert rapide entre menus et sous-menus, filtres éditables et presse-papiers, scrollbar hors surface, ouverture des propriétés/confirmations depuis un menu, Alt+Tab, fermeture avec aperçus actifs, écrans multiples à DPI différents, zoom 12–24 et thèmes clairs/sombres. L’injection d’un échec de création GPUI n’a pas été exécutée ; son repli a été audité dans le code.
 
 Aucun autre défaut certain n’a été identifié après les corrections et contrôles ci-dessus. Cette conclusion couvre le code et les tests exécutés, pas les essais visuels manquants.
+
+## Correction après essai utilisateur — 13 octobre 2026
+
+L’ouverture réelle des menus a révélé un plantage dans `Window::draw` : l’initialisation des modificateurs appelait `dispatch_event` dans le constructeur d’`open_window`, alors que `Window::root` était encore absent. L’événement est maintenant envoyé après installation de la racine via `AnyWindowHandle::update`, sans emprunt typé de la racine pendant le dessin. Les tests Win32 de la couche plateforme ne pouvaient pas découvrir ce défaut du cycle de vie GPUI.
+
+Les infobulles simples et fixes perdaient également l’origine de prépaint donnée par leur cadre natif : `CursorTooltip` remettait le contenu à `(0, 0)` et décalait ainsi le cadre visible de la marge d’ombre. Il conserve maintenant l’origine de ses bounds ; le placement intégré et les aperçus gardent leurs chemins existants.
+
+`cargo check --offline` est sans avertissement ; les cinq tests de `tooltip::position` passent. Ils vérifient la géométrie historique conservée ; le rendu natif corrigé et l’ouverture des menus demandent encore confirmation dans une session graphique réelle. L’exécutable est reconstruit après correction.

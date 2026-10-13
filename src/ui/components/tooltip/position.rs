@@ -119,14 +119,16 @@ impl Element for CursorTooltip {
         &mut self,
         _: Option<&GlobalElementId>,
         _: Option<&InspectorElementId>,
-        _: Bounds<Pixels>,
+        _bounds: Bounds<Pixels>,
         size: &mut Size<Pixels>,
         window: &mut Window,
         cx: &mut App,
     ) {
         #[cfg(target_os = "windows")]
         if super::hover::native_window::is_surface(window, cx) {
-            self.content.prepaint_at(point(px(0.0), px(0.0)), window, cx);
+            // The native frame already positions this element inside its
+            // shadow inset. Preserve that origin for simple and fixed tips.
+            self.content.prepaint_at(_bounds.origin, window, cx);
             return;
         }
         let origin = if let Some(bounds) = &self.fixed_bounds {

@@ -403,13 +403,6 @@ fn show_inner<T: 'static>(
             },
             move |window, cx| {
                 window.set_rem_size(root_spec.rem);
-                window.dispatch_event(
-                    PlatformInput::ModifiersChanged(ModifiersChangedEvent {
-                        modifiers: root_spec.modifiers,
-                        ..Default::default()
-                    }),
-                    cx,
-                );
                 cx.default_global::<Surfaces>().logical_owners.insert(
                     Window::window_handle(window).window_id(),
                     root_spec.restore_parent,
@@ -501,6 +494,17 @@ fn show_inner<T: 'static>(
                     .owners
                     .insert(handle.window_id(), (spec.parent, spec.raw_owner));
                 cx.default_global::<Surfaces>().windows.insert(key, handle);
+                let _ = AnyWindowHandle::from(handle).update(cx, |_, window, cx| {
+                    // Input dispatch may draw the window. Its root is installed
+                    // only after open_window's constructor has returned.
+                    window.dispatch_event(
+                        PlatformInput::ModifiersChanged(ModifiersChangedEvent {
+                            modifiers: spec.modifiers,
+                            ..Default::default()
+                        }),
+                        cx,
+                    );
+                });
                 let _ = handle.update(cx, |root, window, cx| {
                     if root.spec.activate {
                         window.focus(&root.focus, cx);
