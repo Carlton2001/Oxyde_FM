@@ -2,6 +2,9 @@
 use raw_window_handle::RawWindowHandle;
 use std::{cell::RefCell, collections::HashMap};
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, POINT, WPARAM};
+use windows::Win32::Graphics::Dwm::{
+    DwmSetWindowAttribute, DWMNCRP_DISABLED, DWMWA_NCRENDERING_POLICY,
+};
 use windows::Win32::Graphics::Gdi::{
     GetMonitorInfoW, MonitorFromPoint, MONITORINFO, MONITOR_DEFAULTTONEAREST,
 };
@@ -41,6 +44,19 @@ unsafe extern "system" fn subclass(
 ) -> LRESULT {
     match message {
         INITIALIZE_WINDOW => {
+            // Keep the prototype's native surface plain: no system halo and
+            // no additional custom shadow pass around moving previews.
+            let policy = DWMNCRP_DISABLED;
+            if let Err(error) = unsafe {
+                DwmSetWindowAttribute(
+                    window,
+                    DWMWA_NCRENDERING_POLICY,
+                    std::ptr::from_ref(&policy).cast(),
+                    std::mem::size_of_val(&policy) as u32,
+                )
+            } {
+                log::warn!("Cannot disable native hover decoration: {error}");
+            }
             // Ownership supplies stacking without being globally topmost.
             // Run outside the GPUI App borrow, just like movement and resize.
             if let Err(error) = unsafe {

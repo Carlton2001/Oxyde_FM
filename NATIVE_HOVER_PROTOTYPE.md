@@ -30,6 +30,8 @@ messages Windows, pour éviter les rappels de déplacement/redimensionnement
 pendant une mise à jour de vue GPUI. Une demande de masquage remplace les
 placements en attente. Les ombres dessinées par les infobulles GPUI ont une
 opacité réduite de moitié.
+Pour privilégier un rendu léger, la décoration non cliente DWM est désactivée
+sur la fenêtre d'aperçu native, sans ajouter une ombre personnalisée.
 
 ## Essai manuel
 
