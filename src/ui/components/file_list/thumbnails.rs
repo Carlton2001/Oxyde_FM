@@ -5,7 +5,7 @@ use gpui::*;
 
 struct GridThumbnailAsset;
 pub(crate) fn invalidate_thumbnail(path: &str, cx: &mut App) {
-    crate::ui::components::tooltip::invalidate_pdf_preview(path);
+    crate::ui::components::tooltip::invalidate_media_preview(path);
     cx.remove_asset::<GridThumbnailAsset>(&SharedString::from(path.to_string()));
 }
 
@@ -15,20 +15,17 @@ impl Asset for GridThumbnailAsset {
 
     fn load(
         source: Self::Source,
-        _cx: &mut App,
+        cx: &mut App,
     ) -> impl std::future::Future<Output = Self::Output> + Send + 'static {
+        let renderer = cx.svg_renderer();
         let task = crate::ui::preview_jobs::load(move || {
-            oxyde_lib::platform::platform()
-                .thumbnail(source.to_string())
-                .map_err(|error| ImageCacheError::Asset(error.to_string().into()))
+            crate::ui::preview_disk::load_grid(&source, &renderer).map_err(|error| ImageCacheError::Asset(error.into()))
         });
         async move {
-            let rgba = task
+            let image = task
                 .await
                 .map_err(|error| ImageCacheError::Asset(error.into()))?;
-            Ok(std::sync::Arc::new(RenderImage::new(vec![
-                image::Frame::new(rgba),
-            ])))
+            Ok(image)
         }
     }
 }

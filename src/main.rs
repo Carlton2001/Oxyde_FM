@@ -139,6 +139,9 @@ fn main() {
                     app.update(cx, |this, cx| this.observe_main_window(window, cx));
                     window.on_window_should_close(cx, |_, cx| {
                         trace_shutdown_request("native window close");
+                        crate::ui::components::tooltip::hover::close_native_windows(cx);
+                        #[cfg(target_os = "windows")]
+                        crate::ui::components::popup::close_all(cx);
                         crate::ui::app::duplicates::close_duplicate_windows(cx);
                         crate::ui::app::advanced_search::close_advanced_search_windows(cx);
                         crate::ui::app::properties::close_properties_windows(cx);

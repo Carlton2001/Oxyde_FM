@@ -423,6 +423,24 @@ pub trait Platform: Send + Sync {
     /// Call on the UI thread with two application-owned native handles.
     fn set_window_owner(&self, window: raw_window_handle::RawWindowHandle, owner: raw_window_handle::RawWindowHandle) -> Result<(), String>;
 
+    /// Configure an application-owned, non-activating, mouse-transparent hover window.
+    fn configure_hover_window(&self, window: raw_window_handle::RawWindowHandle, owner: raw_window_handle::RawWindowHandle) -> Result<(), String>;
+
+    /// Show beside the native pointer, constrained to its monitor, or hide with None.
+    /// Tuple is (outer width, outer height, transparent inset), in logical pixels.
+    /// The cursor offset applies to the visible frame, excluding that inset.
+    /// UI thread only.
+    fn place_hover_window(&self, window: raw_window_handle::RawWindowHandle, size: Option<(f32, f32, f32)>, scale: f32) -> Result<(), String>;
+
+    /// Set a fixed owner-client anchor (x, y, width, height), or follow the cursor.
+    fn set_popup_anchor(&self, window: raw_window_handle::RawWindowHandle, bounds: Option<(f32, f32, f32, f32)>, open_left: bool, beside: bool) -> Result<(), String>;
+
+    fn configure_menu_window(&self, window: raw_window_handle::RawWindowHandle, owner: raw_window_handle::RawWindowHandle, coordinate_owner: raw_window_handle::RawWindowHandle, activate: bool) -> Result<(), String>;
+    fn popup_point_to_owner(&self, window: raw_window_handle::RawWindowHandle, owner: raw_window_handle::RawWindowHandle, point: (f32, f32)) -> Result<(f32, f32), String>;
+    fn popup_family_active(&self, owner: raw_window_handle::RawWindowHandle) -> bool;
+    fn request_popup_activation(&self, window: raw_window_handle::RawWindowHandle) -> Result<(), String>;
+    fn popup_work_area_size(&self, window: raw_window_handle::RawWindowHandle) -> Result<(f32, f32), String>;
+
     /// Transfers selected file paths through the native file clipboard.
     fn set_clipboard_files(&self, paths: Vec<String>, cut: bool) -> Result<(), String>;
 
@@ -473,6 +491,9 @@ mod windows_disk_images;
 mod windows_pointer;
 #[cfg(target_os = "windows")]
 mod windows_window_owner;
+
+#[cfg(target_os = "windows")]
+mod windows_hover_window;
 #[cfg(target_os = "windows")]
 mod windows_drives;
 #[cfg(target_os = "windows")]

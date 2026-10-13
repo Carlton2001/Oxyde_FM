@@ -4,6 +4,7 @@ use crate::ui::i18n::{I18nContext, Message};
 use crate::ui::theme::OxydeTheme;
 use gpui::prelude::FluentBuilder;
 use gpui::*;
+use crate::ui::theme::ThemeContext;
 
 pub(super) fn fields(
     mut body: Div,
@@ -183,42 +184,19 @@ pub(super) fn run_menu(
     dialog: &PropertiesDialog,
     handle: &Entity<PropertiesWindow>,
     theme: OxydeTheme,
+    window: &mut Window,
     cx: &mut Context<PropertiesWindow>,
 ) -> Div {
-    if let Some(position) = dialog.run_menu {
-        let mut menu = div()
-            .occlude()
-            .on_any_mouse_down(|_, _, cx| cx.stop_propagation())
-            .on_mouse_up(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-            .on_mouse_move(|_, _, cx| cx.stop_propagation())
-            .on_scroll_wheel(|_, _, cx| cx.stop_propagation())
-            .w(rems(17.0))
-            .py(rems(0.25))
-            .bg(theme.menu_surface)
-            .border(rems(0.0625))
-            .border_color(theme.menu_border)
-            .shadow(crate::ui::style::rem_shadow(false));
-        for mode in [1, 3, 7] {
-            let choice = handle.clone();
-            menu = menu.child(
-                div()
-                    .id(("shortcut-run-mode", mode as usize))
-                    .px(rems(0.75))
-                    .py(rems(0.5))
-                    .hover(|row| row.bg(theme.menu_hover))
-                    .child(cx.i18n().text(run_window_message(mode)))
-                    .on_click(move |_, _, cx| {
-                        cx.stop_propagation();
-                        choice.update(cx, |this, cx| {
-                            if let Some(dialog) = &mut this.properties_dialog {
-                                dialog.run_window = mode;
-                                dialog.run_menu = None;
-                                cx.notify();
-                            }
-                        })
-                    }),
-            );
-        }
+    #[cfg(target_os = "windows")]
+    if let Some(position) = dialog.run_menu.filter(|_| crate::ui::components::popup::supported(window, cx)) {
+        let bounds = dialog.run_bounds.unwrap_or(Bounds::new(position, size(px(0.0), px(0.0))));
+        crate::ui::components::popup::show("shortcut-run", crate::ui::components::popup::PopupAnchor::element(bounds), handle.clone(), window, cx,
+            |view| view.properties_dialog.as_ref().is_some_and(|dialog| dialog.run_menu.is_some() && dialog.shortcut_tab),
+            |_, _, cx| run_choices(&cx.entity(), *cx.theme(), cx).into_any_element(),
+            |view, _, cx| { if let Some(dialog) = &mut view.properties_dialog { dialog.run_menu = None; cx.notify(); } });
+        return body;
+    }    if let Some(position) = dialog.run_menu {
+        let menu = run_choices(handle, theme, cx);
         let close = handle.clone();
         body = body.child(deferred(
             anchored()
@@ -238,6 +216,45 @@ pub(super) fn run_menu(
         ));
     }
     body
+}
+
+fn run_choices(handle: &Entity<PropertiesWindow>, theme: OxydeTheme, cx: &mut Context<PropertiesWindow>) -> Div {
+        let mut menu = div()
+            .occlude()
+            .on_any_mouse_down(|_, _, cx| cx.stop_propagation())
+            .on_mouse_up(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+            .on_mouse_move(|_, _, cx| cx.stop_propagation())
+            .on_scroll_wheel(|_, _, cx| cx.stop_propagation())
+            .w(rems(17.0))
+            .py(rems(0.25))
+            .bg(theme.menu_surface)
+            .border(rems(0.0625))
+            .border_color(theme.menu_border)
+            .shadow(crate::ui::style::rem_shadow(false));
+        for mode in [1, 3, 7] {
+            let choice = handle.clone();
+            let key_choice = handle.clone();
+            let key_action = std::rc::Rc::new(move |_: &mut Window, cx: &mut App| { key_choice.update(cx, |this, cx| { if let Some(dialog) = &mut this.properties_dialog { dialog.run_window = mode; dialog.run_menu = None; cx.notify(); } }); });
+            menu = menu.child(
+                crate::ui::components::popup::keyboard::item(div()
+                    .id(("shortcut-run-mode", mode as usize))
+                    .px(rems(0.75))
+                    .py(rems(0.5))
+                    .hover(|row| row.bg(theme.menu_hover))
+                    .child(cx.i18n().text(run_window_message(mode)))
+                    .on_click(move |_, _, cx| {
+                        cx.stop_propagation();
+                        choice.update(cx, |this, cx| {
+                            if let Some(dialog) = &mut this.properties_dialog {
+                                dialog.run_window = mode;
+                                dialog.run_menu = None;
+                                cx.notify();
+                            }
+                        })
+                    }), key_action, None, None),
+            );
+        }
+        menu
 }
 
 fn run_window_message(mode: i32) -> Message {

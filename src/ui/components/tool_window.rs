@@ -154,3 +154,9 @@ pub(crate) fn action_button(
         .focus_visible(move |s| s.border(rems(0.0625)).border_color(theme.accent))
         .child(label)
 }
+
+/// Retire owned surfaces before their native owner is destroyed.
+pub(crate) fn close_transients(window: &mut Window, cx: &mut App) {
+    crate::ui::components::popup::close_for(window, cx);
+    crate::ui::components::tooltip::hover::close_for(window, cx);
+}

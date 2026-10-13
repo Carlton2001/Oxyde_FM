@@ -333,7 +333,7 @@ impl Render for OxydeApp {
             }
         }
 
-        if self.sidebar_collapsed && self.pinned_rail_open { root = root.child(crate::ui::components::sidebar::render_pinned_menu(self, handle.clone(), cx)); }
+        if self.sidebar_collapsed && self.pinned_rail_open { root = root.child(crate::ui::components::sidebar::render_pinned_menu(self, handle.clone(), _window, cx)); }
         if self.settings_open {
             use crate::ui::components::settings::render_settings_panel;
             root = root.child(deferred(render_settings_panel(self, handle.clone(), _window, cx)));

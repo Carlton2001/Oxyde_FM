@@ -115,6 +115,7 @@ pub(super) fn render_sidebar_rows(
                                 this.sidebar_selected_path = Some(p.clone());
                                 this.context_menus.clear();
                                 this.context_menus.push(ContextMenuInstance {
+            native_bounds: None,
                                     position: pos,
                                     content: ContextMenuContent::Items(items, None),
                                     scroll_handle: UniformListScrollHandle::new(),
@@ -236,6 +237,7 @@ pub(super) fn render_sidebar_rows(
                                 this.sidebar_selected_path = Some(p.clone());
                                 this.context_menus.clear();
                                 this.context_menus.push(ContextMenuInstance {
+            native_bounds: None,
                                     position: pos,
                                     content: ContextMenuContent::Items(items, None),
                                     scroll_handle: UniformListScrollHandle::new(),
@@ -365,6 +367,7 @@ pub(super) fn render_sidebar_rows(
                                 this.sidebar_selected_path = Some(p.clone());
                                 this.context_menus.clear();
                                 this.context_menus.push(ContextMenuInstance {
+            native_bounds: None,
                                     position: pos,
                                     content: ContextMenuContent::Items(items, None),
                                     scroll_handle: UniformListScrollHandle::new(),

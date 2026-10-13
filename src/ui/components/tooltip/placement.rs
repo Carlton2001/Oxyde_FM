@@ -118,7 +118,7 @@ impl Element for PreviewTooltip {
             .border(rems(0.0625))
             .border_color(theme.border)
             .rounded_md()
-            .shadow(crate::ui::style::rem_shadow(true))
+            .shadow(super::presentation::tooltip_shadow())
             .into_any_element();
         frame.layout_as_root(AvailableSpace::min_size(), window, cx);
         let frame_origin = preview_frame_origin(origin, extra);

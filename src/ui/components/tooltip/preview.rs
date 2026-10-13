@@ -13,6 +13,21 @@ use std::time::Duration;
 const PREVIEW_LOADING_DELAY: Duration = Duration::from_secs(1);
 
 impl PreviewTask {
+    pub(super) fn preferred_size(&self, image: &RenderImage, maximum_width: Pixels) -> Size<Pixels> {
+        let height = rem_pixels(if self.media_asset.is_some() { rems(18.75) } else { rems(12.5) });
+        let natural = image.size(0);
+        fit_media_size(natural.width.0 as f32, natural.height.0 as f32, maximum_width, height)
+    }
+    pub(super) fn cached_for_handover(&self, cx: &mut App) -> bool {
+        if let Some(source) = &self.media_asset {
+            return cx.fetch_asset::<TooltipPreviewAsset>(source).is_some_and(|result| matches!(result, Ok((_, true))));
+        }
+        if let Some(source) = &self.original_image {
+            return cx.fetch_asset::<TooltipImageAsset>(source).is_some_and(|result| matches!(result, Ok((_, true))));
+        }
+        false
+    }
+
     pub(super) fn ready_for_handover(&self, cx: &mut App) -> bool {
         // Video players share one admission slot: keeping the old player alive
         // would prevent its replacement from producing a first frame.
@@ -33,13 +48,13 @@ impl PreviewTask {
         if let Some(source) = &self.media_asset {
             return window
                 .use_asset::<TooltipPreviewAsset>(source, cx)
-                .and_then(Result::ok);
+                .and_then(Result::ok).map(|(image, _)| image);
         }
         if let Some(source) = &self.original_image {
             return window
                 .use_asset::<TooltipImageAsset>(source, cx)
                 .and_then(Result::ok)
-                .map(|preview| preview.image);
+                .map(|(preview, _)| preview.image);
         }
         match &self.data {
             Some(PreviewData::Image(image)) => Some(image.clone()),
@@ -50,7 +65,7 @@ impl PreviewTask {
         if let Some(source) = &self.original_image {
             return window.use_asset::<TooltipImageAsset>(source, cx).and_then(
                 |result| match result {
-                    Ok(preview) => preview.notice,
+                    Ok((preview, _)) => preview.notice,
                     Err(error) => Some(error.message()),
                 },
             );
@@ -317,20 +332,24 @@ impl PreviewTask {
     }
 }
 
-pub(super) fn fitted_preview_size(image: &RenderImage, maximum_width: Pixels) -> Size<Pixels> {
-    let natural = image.size(0);
-    let ratio = natural.width.0 as f32 / (natural.height.0 as f32).max(1.0);
-    let width = maximum_width.min(rem_pixels(rems(23.75)) * ratio);
-    size(width, width / ratio.max(0.001))
+fn fit_media_size(width: f32, height: f32, maximum_width: Pixels, maximum_height: Pixels) -> Size<Pixels> {
+    let scale = (maximum_width.as_f32() / width.max(1.0))
+        .min(maximum_height.as_f32() / height.max(1.0)).min(1.0);
+    size(px(width * scale), px(height * scale))
 }
+
+#[cfg(test)]
+#[path = "tests/media_size.rs"]
+mod media_size_tests;
 
 impl Render for PreviewTask {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = *OxydeTheme::global(cx);
         if let Some(image) = self.loaded_image(window, cx) {
-            let maximum = rem_pixels(rems(24.875))
-                .min((window.viewport_size().width - rem_pixels(rems(3.625))).max(px(1.0)));
-            let mut size = fitted_preview_size(&image, maximum);
+            let maximum = self.maximum_size.map(|limit| limit.width).unwrap_or_else(||
+                rem_pixels(rems(48.375))
+                    .min((window.viewport_size().width - rem_pixels(rems(3.625))).max(px(1.0))));
+            let mut size = self.preferred_size(&image, maximum);
             if let Some(limit) = self.maximum_size {
                 let height = (limit.height - rem_pixels(rems(2.0))).max(px(1.0));
                 let scale = (limit.width / size.width).min(height / size.height).min(1.0);

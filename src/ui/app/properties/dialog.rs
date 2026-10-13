@@ -44,7 +44,7 @@ pub(crate) fn render(
     if let Some(error) = dialog.validation_error {
         body = body.child(div().text_color(theme.error).child(cx.i18n().text(error)));
     }
-    body = shortcut::run_menu(body, dialog, &handle, theme, cx);
+    body = shortcut::run_menu(body, dialog, &handle, theme, window, cx);
     body = body.when_some(dialog.error.as_ref(), |body, error| {
         body.child(
             div()

@@ -3,6 +3,7 @@
 pub mod app;
 pub mod assets;
 pub(crate) mod preview_jobs;
+pub(crate) mod preview_disk;
 pub(crate) mod preview_budget;
 pub(crate) mod image_preview;
 #[cfg(target_os = "windows")]

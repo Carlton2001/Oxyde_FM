@@ -18,6 +18,10 @@ impl OxydeApp {
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) -> GenericDropdown {
+        if crate::ui::components::popup::is_menu(_window, cx) {
+            let focus = input.read(cx).focus_handle.clone();
+            if !focus.is_focused(_window) { _window.focus(&focus, cx); }
+        }
         let input_width = (input.read(cx).placeholder_width(_window).as_f32() + logical(32.0)).max(logical(200.0));
         GenericDropdown {
         id: ("context-menu", m_idx).into(),

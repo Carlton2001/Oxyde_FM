@@ -1,3 +1,4 @@
+use crate::ui::components::tooltip::NativeTooltipExt;
 use crate::ui::scale::rem_pixels;
 use crate::ui::theme::ThemeContext;
 use gpui::prelude::*;
@@ -203,7 +204,7 @@ impl RenderOnce for Tab {
             let state = window.use_keyed_state(SharedString::from(format!("tab-path-bounds-{:?}", self.id)), cx,
                 |_, _| std::rc::Rc::new(std::cell::Cell::new(Bounds::<Pixels>::default())));
             let bounds = state.read(cx).clone();
-            container = container.tooltip(crate::ui::components::tooltip::Tooltip::fixed_path(path, bounds.clone()))
+            container = container.native_tooltip(crate::ui::components::tooltip::Tooltip::fixed_path(path, bounds.clone()))
                 .child(canvas(move |rect, _, _| bounds.set(rect), |_, _, _, _| {}).absolute().size_full());
         }
 

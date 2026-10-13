@@ -698,6 +698,37 @@ impl Platform for WindowsPlatform {
         super::windows_window_owner::set_owner(HWND(window.hwnd.get() as *mut _), HWND(owner.hwnd.get() as *mut _))
     }
 
+    fn configure_hover_window(&self, window: raw_window_handle::RawWindowHandle, owner: raw_window_handle::RawWindowHandle) -> Result<(), String> {
+        self.set_window_owner(window, owner)?;
+        super::windows_hover_window::configure(window)
+    }
+
+    fn place_hover_window(&self, window: raw_window_handle::RawWindowHandle, size: Option<(f32, f32, f32)>, scale: f32) -> Result<(), String> {
+        super::windows_hover_window::place(window, size, scale)
+    }
+
+    fn set_popup_anchor(&self, window: raw_window_handle::RawWindowHandle, bounds: Option<(f32, f32, f32, f32)>, open_left: bool, beside: bool) -> Result<(), String> {
+        super::windows_hover_window::set_anchor(window, bounds, open_left, beside)
+    }
+
+    fn configure_menu_window(&self, window: raw_window_handle::RawWindowHandle, owner: raw_window_handle::RawWindowHandle, coordinate_owner: raw_window_handle::RawWindowHandle, activate: bool) -> Result<(), String> {
+        self.set_window_owner(window, owner)?;
+        super::windows_hover_window::configure_menu(window, owner, coordinate_owner, activate)?;
+        self.install_pointer_capture(window)
+    }
+    fn popup_point_to_owner(&self, window: raw_window_handle::RawWindowHandle, owner: raw_window_handle::RawWindowHandle, point: (f32, f32)) -> Result<(f32, f32), String> {
+        super::windows_hover_window::point_to_owner(window, owner, point)
+    }
+    fn popup_family_active(&self, owner: raw_window_handle::RawWindowHandle) -> bool {
+        super::windows_hover_window::family_active(owner)
+    }
+    fn request_popup_activation(&self, window: raw_window_handle::RawWindowHandle) -> Result<(), String> {
+        super::windows_hover_window::request_activation(window)
+    }
+    fn popup_work_area_size(&self, window: raw_window_handle::RawWindowHandle) -> Result<(f32, f32), String> {
+        super::windows_hover_window::work_area_size(window)
+    }
+
     fn set_application_icon(&self, window: raw_window_handle::RawWindowHandle, icon_bytes: &[u8]) {
         use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
         use windows::Win32::UI::WindowsAndMessaging::{

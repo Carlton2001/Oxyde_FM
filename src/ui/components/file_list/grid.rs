@@ -1,3 +1,4 @@
+use crate::ui::components::tooltip::NativeTooltipExt;
 use super::grid_card::{render_grid_card, GridCardParams};
 use super::presentation::{date_group_button, date_group_header, view_mode_button};
 use super::status_bar_height;
@@ -100,6 +101,7 @@ pub(super) fn render_grid_file_list(
                         );
                         this.context_menus.clear();
                         this.context_menus.push(ContextMenuInstance {
+            native_bounds: None,
                             position: event.position,
                             content: ContextMenuContent::Items(items, None),
                             scroll_handle: UniformListScrollHandle::new(),
@@ -335,6 +337,7 @@ pub(super) fn render_grid_file_list(
                         this.activate_pane(&pid, cx);
                         this.context_menus.clear();
                         this.context_menus.push(ContextMenuInstance {
+            native_bounds: None,
                             position,
                             content: ContextMenuContent::Items(
                                 with_grid_sort(pane_context_menu_items(cx.i18n(), h.clone(), pid.clone(), this), this, h.clone(), &pid, cx.i18n()),
@@ -460,7 +463,7 @@ pub(super) fn render_grid_file_list(
                             .text_ellipsis()
                             .overflow_hidden()
                             .text_color(theme.accent)
-                            .tooltip(Tooltip::text(summary.clone()))
+                            .native_tooltip(Tooltip::text(summary.clone()))
                             .child(summary),
                     )
                 })

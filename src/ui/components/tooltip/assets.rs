@@ -6,7 +6,7 @@ pub(super) struct TooltipPreviewAsset;
 
 impl Asset for TooltipPreviewAsset {
     type Source = SharedString;
-    type Output = Result<Arc<RenderImage>, ImageCacheError>;
+    type Output = Result<(Arc<RenderImage>, bool), ImageCacheError>;
 
     fn load(
         source: Self::Source,
@@ -34,7 +34,7 @@ pub(super) struct TooltipImageAsset;
 impl Asset for TooltipImageAsset {
     type Source = std::path::PathBuf;
     type Output =
-        Result<crate::ui::image_preview::PreviewImage, crate::ui::image_preview::PreviewError>;
+        Result<(crate::ui::image_preview::PreviewImage, bool), crate::ui::image_preview::PreviewError>;
 
     fn load(
         source: Self::Source,
@@ -43,7 +43,7 @@ impl Asset for TooltipImageAsset {
         let renderer = cx.svg_renderer();
         // Preserve the typed decoder error across the job runner's worker errors.
         let task = crate::ui::preview_jobs::load(move || {
-            Ok::<_, String>(crate::ui::image_preview::load_path(&source, &renderer))
+            Ok::<_, String>(super::image_cache::load(&source, &renderer))
         });
         async move {
             let result = task

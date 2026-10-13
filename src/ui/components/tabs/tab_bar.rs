@@ -1,3 +1,4 @@
+use crate::ui::components::tooltip::NativeTooltipExt;
 use crate::ui::scale::rem_pixels;
 use crate::ui::style::h_flex;
 use crate::ui::components::tooltip::Tooltip;
@@ -100,7 +101,7 @@ impl RenderOnce for TabBar {
             .border_b(rems(0.0625))
             .border_color(theme.border)
             .hover(|s| s.bg(theme.hover))
-            .tooltip(Tooltip::text(cx.i18n().text(Message::NewTab)))
+            .native_tooltip(Tooltip::text(cx.i18n().text(Message::NewTab)))
             .on_mouse_down(MouseButton::Left, move |_, window, cx| {
                 on_new_tab(window, cx);
             })

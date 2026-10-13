@@ -1,3 +1,4 @@
+use crate::ui::components::tooltip::NativeTooltipExt;
 use super::DuplicateWindow;
 use crate::ui::i18n::{I18nContext, Message};
 use crate::ui::theme::OxydeTheme;
@@ -121,7 +122,7 @@ impl DuplicateWindow {
                         .truncate()
                         .text_size(rems(0.75))
                         .text_color(theme.text_muted)
-                        .tooltip(crate::ui::components::tooltip::Tooltip::text(path.clone()))
+                        .native_tooltip(crate::ui::components::tooltip::Tooltip::text(path.clone()))
                         .child(path.clone()),
                 );
             }

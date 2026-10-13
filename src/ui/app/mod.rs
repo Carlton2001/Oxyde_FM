@@ -150,6 +150,7 @@ pub enum ContextMenuContent {
 
 #[derive(Clone)]
 pub struct ContextMenuInstance {
+    pub(crate) native_bounds: Option<Bounds<Pixels>>,
     pub position: Point<Pixels>,
     pub content: ContextMenuContent,
     pub scroll_handle: UniformListScrollHandle,

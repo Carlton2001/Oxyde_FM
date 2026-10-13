@@ -1,3 +1,4 @@
+use crate::ui::components::tooltip::NativeTooltipExt;
 use super::OxydeApp;
 use crate::ui::components::input::TextInput;
 use crate::ui::i18n::{FluentArgs, I18nContext, Message};
@@ -382,7 +383,7 @@ impl OxydeApp {
                     .justify_center()
                     .rounded_sm()
                     .hover(move |style| style.bg(theme.control_hover))
-                    .tooltip(crate::ui::components::tooltip::Tooltip::with_shortcut(
+                    .native_tooltip(crate::ui::components::tooltip::Tooltip::with_shortcut(
                         format!("{} — {}", cx.i18n().text(Message::QuickSearch), cx.i18n().text(Message::QuickSearchCurrentFolder)),
                         Some("Ctrl+F".into()),
                     ))
@@ -490,7 +491,7 @@ impl OxydeApp {
                     .min_w_0()
                     .truncate()
                     .text_color(theme.accent)
-                    .tooltip(crate::ui::components::tooltip::Tooltip::text(
+                    .native_tooltip(crate::ui::components::tooltip::Tooltip::text(
                         search.root.clone(),
                     ))
                     .child(format!("'{}'", search.query)),
@@ -503,7 +504,7 @@ impl OxydeApp {
                         .min_w_0()
                         .truncate()
                         .text_color(theme.warning_text)
-                        .tooltip(crate::ui::components::tooltip::Tooltip::wrapped_text(
+                        .native_tooltip(crate::ui::components::tooltip::Tooltip::wrapped_text(
                             search.archive_warnings.detail(&cx.i18n()),
                         ))
                         .child(search.archive_warnings.label(&cx.i18n())),
@@ -516,7 +517,7 @@ impl OxydeApp {
                         .text_color(theme.text_muted)
                         .when(search.running, |status| {
                             status
-                                .tooltip(crate::ui::components::tooltip::Tooltip::text(
+                                .native_tooltip(crate::ui::components::tooltip::Tooltip::text(
                                     cx.i18n().text(Message::QuickSearchStop).to_string(),
                                 ))
                                 .on_click(move |_, _, cx| {

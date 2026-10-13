@@ -1,3 +1,4 @@
+use crate::ui::components::tooltip::NativeTooltipExt;
 use super::presentation::{file_type_display, file_type_label, network_category, network_entry, selection_checkbox, size_histogram, size_loading};
 use crate::ui::app::{ContextMenuContent, ContextMenuInstance, FileDragData, FileDragPreview, OxydeApp};
 use crate::ui::components::{paths_match, with_grid_sort, oxyde_context_menu_items};
@@ -192,6 +193,7 @@ pub(super) fn render_details_row(params: DetailsRowParams<'_>, cx: &mut App) -> 
                           }
                           this.context_menus.clear();
                           this.context_menus.push(ContextMenuInstance {
+            native_bounds: None,
                               position: pos,
                               content: ContextMenuContent::Items(with_grid_sort(oxyde_context_menu_items(cx.i18n(), h_inner_inner.clone(), is_dir, is_pinned, p_for_right_cap.clone(), this), this, h_inner_inner.clone(), &p_id_cap_cap, cx.i18n()), None),
                               scroll_handle: UniformListScrollHandle::new(),
@@ -305,7 +307,7 @@ pub(super) fn render_details_row(params: DetailsRowParams<'_>, cx: &mut App) -> 
                                         .items_center()
                                         .when_some(rename_error, |field, error| {
                                             field
-                                                .tooltip(Tooltip::text(error))
+                                                .native_tooltip(Tooltip::text(error))
                                                 .border(rems(0.0625))
                                                 .border_color(theme.error)
                                                 .rounded_sm()

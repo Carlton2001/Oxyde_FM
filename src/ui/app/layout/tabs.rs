@@ -180,6 +180,7 @@ impl OxydeApp {
                             .unwrap_or(pos);
                         this.context_menus.clear();
                         this.context_menus.push(ContextMenuInstance {
+            native_bounds: None,
                             position,
                             content: ContextMenuContent::Items(
                                 crate::ui::components::tab_context_menu_items(

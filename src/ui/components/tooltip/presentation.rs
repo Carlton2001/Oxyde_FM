@@ -165,7 +165,7 @@ impl Render for DriveTooltip {
         }
         CursorTooltip::new(div().bg(theme.surface).text_color(theme.text)
             .font_family("Inter").font_weight(crate::ui::style::DEFAULT_FONT_WEIGHT)
-            .border(rems(0.0625)).border_color(theme.border).rounded_md().shadow(crate::ui::style::rem_shadow(true))
+            .border(rems(0.0625)).border_color(theme.border).rounded_md().shadow(tooltip_shadow())
             .px(rems(0.75)).py(rems(0.5)).child(body).into_any_element())
     }
 }
@@ -206,7 +206,7 @@ impl Render for DuplicateResultTooltip {
         let location = cx.i18n().text_with_args(Message::TooltipLocation, &args);
         div().w(width).max_w(width).px(rems(0.75)).py(rems(0.5))
             .bg(theme.surface).border(rems(0.0625)).border_color(theme.border).rounded(rems(0.375))
-            .shadow(crate::ui::style::rem_shadow(true)).font_family("Inter")
+            .shadow(tooltip_shadow()).font_family("Inter")
             .font_weight(crate::ui::style::DEFAULT_FONT_WEIGHT).line_height(relative(1.25))
             .flex().flex_col().gap(rems(0.5))
             .child(div().text_size(rems(0.75)).font_weight(FontWeight::MEDIUM).text_color(theme.text)
@@ -222,8 +222,18 @@ impl Render for DuplicateResultTooltip {
 impl Render for Tooltip {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = *OxydeTheme::global(cx);
-        let maximum_width = rem_pixels(rems(26.5)).min((window.viewport_size().width - rem_pixels(rems(2.0))).max(px(1.0)));
         let chrome = rem_pixels(rems(1.625));
+        let media_width = self.preview_view.clone().and_then(|preview| {
+            preview.update(cx, |preview, cx| {
+                preview.loaded_image(window, cx).map(|image|
+                    preview.preferred_size(&image, rem_pixels(rems(48.375))).width + chrome)
+            })
+        });
+        let maximum_width = if self.native_presentation {
+            media_width.unwrap_or_else(|| rem_pixels(rems(26.5)))
+        } else {
+            media_width.unwrap_or_else(|| rem_pixels(rems(26.5))).min((window.viewport_size().width - rem_pixels(rems(2.0))).max(px(1.0)))
+        };
         let mut tooltip_width = maximum_width;
         let title_lines: Vec<SharedString> = if self.file_info.is_some() {
             let mut font = window.text_style().font();
@@ -233,9 +243,11 @@ impl Render for Tooltip {
             let line = window.text_system().shape_line(self.title.clone(), rem_pixels(rems(0.75)), &[TextRun {
                 len: self.title.len(), font: font.clone(), color: theme.accent, background_color: None, underline: None, strikethrough: None,
             }], None);
-            // Keep filename wrapping and horizontal placement independent of loading.
+            // A ready media preview determines the width; filenames wrap within it.
             let preferred_width = line.width;
-            tooltip_width = (preferred_width.max(rem_pixels(rems(14.0))) + chrome).min(maximum_width);
+            tooltip_width = if media_width.is_some() { maximum_width } else {
+                (preferred_width.max(rem_pixels(rems(14.0))) + chrome).min(maximum_width)
+            };
             let wrap = |width: Pixels| filename_line_ranges(&self.title, (width - chrome).as_f32().max(1.0), |index| line.x_for_index(index).as_f32());
             if wrap(tooltip_width).len() > 2 {
                 if wrap(maximum_width).len() <= 2 {
@@ -291,7 +303,7 @@ impl Render for Tooltip {
                 .bg(theme.surface)
                 .border_color(theme.border)
                 .rounded_md()
-                .shadow(crate::ui::style::rem_shadow(true)))
+                .shadow(tooltip_shadow()))
             .font_family("Inter")
             .font_weight(crate::ui::style::DEFAULT_FONT_WEIGHT)
             .line_height(relative(1.25))
@@ -387,6 +399,19 @@ impl Render for Tooltip {
 
         box_div.text_style().font_features = Some(TNUM.clone());
 
+        if self.native_presentation {
+            if let Some(preview) = self.preview_view.clone() {
+                let limit = size((tooltip_width - chrome).max(px(1.0)), rem_pixels(rems(24.0)));
+                preview.update(cx, |preview, _| preview.maximum_size = Some(limit));
+                return div().w(tooltip_width).flex().flex_col()
+                    .bg(theme.surface).border(rems(0.0625)).border_color(theme.border)
+                    .rounded_md().shadow(tooltip_shadow())
+                    .font_family("Inter").font_weight(crate::ui::style::DEFAULT_FONT_WEIGHT)
+                    .child(div().px_3().pt_2().max_h(limit.height).overflow_hidden().child(preview))
+                    .child(box_div).into_any_element();
+            }
+        }
+
         // Décalage pour éviter que le tooltip n'apparaisse exactement sous le pointeur de la souris
         if let Some(preview) = self.preview_view.clone() {
             PreviewTooltip::new(box_div.into_any_element(), preview).into_any_element()
@@ -407,4 +432,13 @@ fn network_tooltip_lines(file: &oxyde_lib::models::FileEntry, i18n: &crate::ui::
         .into_iter().filter(|(_, value)| !value.is_empty()).map(|(message, value)| {
             let mut args = FluentArgs::new(); args.set("value", value); i18n.text_with_args(message, &args)
         }).collect()
+}
+
+// Keep tooltip shadows softer without changing shadows on menus or dialogs.
+pub(super) fn tooltip_shadow() -> Vec<BoxShadow> {
+    let mut shadows = crate::ui::style::rem_shadow(true);
+    for shadow in &mut shadows {
+        shadow.color = shadow.color.opacity(0.5);
+    }
+    shadows
 }

@@ -45,22 +45,25 @@ fn about_link(
     id: &'static str, label: SharedString, icon_path: &'static str,
     url: &'static str, handle: Entity<OxydeApp>, theme: OxydeTheme,
 ) -> impl IntoElement {
-    div().id(id).flex().items_center().gap(rems(0.5))
+    let action = std::rc::Rc::new(move |_: &mut Window, cx: &mut App| { handle.update(cx, |this, cx| this.open_external_item(url.into(), cx)); });
+    let pointer = action.clone();
+    let row = div().id(id).flex().items_center().gap(rems(0.5))
         .px(rems(0.75)).py(rems(0.5)).rounded_md()
         .bg(theme.control_hover).hover(|s| s.bg(theme.menu_hover))
         .child(icon(icon_path, theme))
         .child(div().flex_1().flex_shrink_0().whitespace_nowrap().child(label))
         .child(icon("icons/external-link.svg", theme))
-        .on_mouse_down(MouseButton::Left, move |_, _, cx| {
-            handle.update(cx, |this, cx| this.open_external_item(url.into(), cx));
-        })
+        .on_mouse_down(MouseButton::Left, move |_, window, cx| pointer(window, cx));
+    crate::ui::components::popup::keyboard::item(row, action, None, None)
 }
 
 fn about_tool(
     id: &'static str, name: &'static str, logo: &'static str, url: &'static str,
     color_logo: bool, handle: Entity<OxydeApp>, theme: OxydeTheme,
 ) -> impl IntoElement {
-    div().id(id).flex().items_center().justify_center().gap(rems(0.75))
+    let action = std::rc::Rc::new(move |_: &mut Window, cx: &mut App| { handle.update(cx, |this, cx| this.open_external_item(url.into(), cx)); });
+    let pointer = action.clone();
+    let row = div().id(id).flex().items_center().justify_center().gap(rems(0.75))
         .py(rems(0.625)).px(rems(0.75)).rounded_md()
         .border(rems(0.0625)).border_color(theme.border)
         .hover(|s| s.bg(theme.menu_hover))
@@ -70,7 +73,6 @@ fn about_tool(
             svg().path(logo).size(rems(1.75)).text_color(theme.text).into_any_element()
         })
         .child(div().text_size(rems(1.125)).child(name))
-        .on_mouse_down(MouseButton::Left, move |_, _, cx| {
-            handle.update(cx, |this, cx| this.open_external_item(url.into(), cx));
-        })
+        .on_mouse_down(MouseButton::Left, move |_, window, cx| pointer(window, cx));
+    crate::ui::components::popup::keyboard::item(row, action, None, None)
 }

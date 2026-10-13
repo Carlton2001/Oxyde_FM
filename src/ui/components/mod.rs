@@ -14,6 +14,7 @@ pub mod sidebar;
 pub mod tabs;
 pub mod title_bar;
 pub mod tooltip;
+pub(crate) mod popup;
 pub(crate) mod tool_window;
 pub mod top_bar;
 
@@ -114,6 +115,7 @@ pub fn with_grid_sort(
                 use crate::ui::app::{ContextMenuContent, ContextMenuInstance};
                 this.context_menus.truncate(1);
                 this.context_menus.push(ContextMenuInstance {
+            native_bounds: None,
                     position,
                     content: ContextMenuContent::Items(choices.clone(), None),
                     scroll_handle: UniformListScrollHandle::new(),
@@ -349,6 +351,7 @@ fn oxyde_context_menu_items_raw(
                     }).collect();
                     this.context_menus.truncate(1);
                     this.context_menus.push(ContextMenuInstance {
+            native_bounds: None,
                         position, content: ContextMenuContent::Items(choices, None),
                         scroll_handle: UniformListScrollHandle::new(), width: px(0.0),
                         bottom_padding: 0.0, open_left, hovered_item: None, native_request_id: None,
@@ -411,6 +414,7 @@ fn oxyde_context_menu_items_raw(
                 use crate::ui::app::{ContextMenuContent, ContextMenuInstance};
                 this.context_menus.truncate(1);
                 this.context_menus.push(ContextMenuInstance {
+            native_bounds: None,
                     position,
                     content: ContextMenuContent::Items(choices.clone(), None),
                     scroll_handle: UniformListScrollHandle::new(),

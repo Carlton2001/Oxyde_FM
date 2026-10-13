@@ -43,6 +43,7 @@ impl OxydeApp {
 
             self.context_menus.clear();
             self.context_menus.push(ContextMenuInstance {
+            native_bounds: None,
                 position: pos,
                 content: ContextMenuContent::Items(
                     items,
@@ -82,6 +83,7 @@ impl OxydeApp {
 
             self.context_menus.clear();
             self.context_menus.push(ContextMenuInstance {
+            native_bounds: None,
                 position: pos,
                 content: ContextMenuContent::Items(
                     items,
@@ -140,6 +142,7 @@ impl OxydeApp {
 
             self.context_menus.clear();
             self.context_menus.push(ContextMenuInstance {
+            native_bounds: None,
                 position: pos,
                 content: ContextMenuContent::Items(
                     items,
@@ -293,6 +296,7 @@ impl OxydeApp {
 
         self.context_menus.clear();
         self.context_menus.push(ContextMenuInstance {
+            native_bounds: None,
             position: pos,
             content: ContextMenuContent::NameFilter {
                 input: input.clone(),
@@ -306,7 +310,9 @@ impl OxydeApp {
         });
         cx.notify();
 
+        #[cfg(not(target_os = "windows"))]
         let focus_handle = input.read(cx).focus_handle.clone();
+        #[cfg(not(target_os = "windows"))]
         cx.on_next_frame(window, move |_, window, cx| {
             window.focus(&focus_handle, cx);
         });
@@ -379,6 +385,7 @@ impl OxydeApp {
 
         self.context_menus.clear();
         self.context_menus.push(ContextMenuInstance {
+            native_bounds: None,
             position: pos,
             content: ContextMenuContent::NameFilter {
                 input: input.clone(),
@@ -392,7 +399,9 @@ impl OxydeApp {
         });
         cx.notify();
 
+        #[cfg(not(target_os = "windows"))]
         let focus_handle = input.read(cx).focus_handle.clone();
+        #[cfg(not(target_os = "windows"))]
         cx.on_next_frame(window, move |_, window, cx| {
             window.focus(&focus_handle, cx);
         });

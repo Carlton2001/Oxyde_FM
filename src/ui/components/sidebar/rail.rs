@@ -168,6 +168,7 @@ pub(super) fn render_sidebar_rail(
                     this.pinned_rail_open = false;
                     this.context_menus.clear();
                     this.context_menus.push(ContextMenuInstance {
+            native_bounds: None,
                         position: event.position,
                         content: ContextMenuContent::Items(items, None),
                         scroll_handle: UniformListScrollHandle::new(),

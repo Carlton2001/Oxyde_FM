@@ -10,7 +10,7 @@ use gpui::*;
 pub(crate) fn close_properties_windows(cx: &mut App) {
     for window in cx.windows() {
         if let Some(window) = window.downcast::<PropertiesWindow>() {
-            let _ = window.update(cx, |_, window, _| window.remove_window());
+            let _ = window.update(cx, |_, window, cx| { crate::ui::components::tool_window::close_transients(window, cx); window.remove_window() });
         }
     }
 }
@@ -68,6 +68,7 @@ impl OxydeApp {
                     ..Default::default()
                 },
                 move |window, cx| {
+                    window.on_window_should_close(cx, |window, cx| { crate::ui::components::tool_window::close_transients(window, cx); true });
                     if let (Some(owner), Ok(handle)) = (
                         native_owner, raw_window_handle::HasWindowHandle::window_handle(window),
                     ) {
@@ -87,7 +88,7 @@ impl OxydeApp {
                             subscriptions.push(cx.observe_release_in(
                                 &main,
                                 window,
-                                |_, _, window, _| window.remove_window(),
+                                |_, _, window, cx| { crate::ui::components::tool_window::close_transients(window, cx); window.remove_window() },
                             ));
                         }
                         let mut view = PropertiesWindow {
@@ -164,6 +165,18 @@ impl Render for PropertiesWindow {
                 continue;
             };
             let close = handle.clone();
+            #[cfg(target_os = "windows")]
+            if crate::ui::components::popup::supported(window, cx) {
+                let scroll = menu.scroll_handle.clone();
+                crate::ui::components::popup::text_menu(
+                    format!("properties-text-menu-{index}"), crate::ui::components::popup::PopupAnchor::point(menu.position, false),
+                    close.clone(), handle.clone(), items.clone(), scroll.clone(), window, cx,
+                    move |view| view.context_menus.get(index).is_some_and(|menu| std::rc::Rc::ptr_eq(&menu.scroll_handle.0, &scroll.0)),
+                    |view, _, cx| { view.context_menus.clear(); cx.notify(); },
+                );
+                continue;
+            }
+                        {
             root = root.child(deferred(
                 anchored().position(menu.position).snap_to_window().child(
                     crate::ui::components::dropdown::GenericDropdown {
@@ -192,6 +205,7 @@ impl Render for PropertiesWindow {
                     },
                 ),
             ));
+            }
         }
         root
     }
@@ -251,6 +265,7 @@ impl PropertiesWindow {
 
         self.context_menus.clear();
         self.context_menus.push(ContextMenuInstance {
+            native_bounds: None,
             position,
             content: ContextMenuContent::Items(items, None),
             scroll_handle: UniformListScrollHandle::new(),

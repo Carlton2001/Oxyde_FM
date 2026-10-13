@@ -107,18 +107,23 @@ pub(super) fn invalidate(path: &str) {
     }
 }
 
-pub(super) fn load(path: String) -> Result<Arc<RenderImage>, String> {
+pub(super) fn cached(path: &str) -> Option<Arc<RenderImage>> {
+    let signature = Signature::read(path)?;
+    CACHE.get()?.lock().unwrap().get(&signature)
+}
+
+pub(super) fn load(path: String) -> Result<(Arc<RenderImage>, bool), String> {
     let cache = CACHE.get_or_init(|| Mutex::new(Cache::default()));
     let revision = cache.lock().unwrap().revision;
     let signature = Signature::read(&path);
     if let Some(key) = &signature {
         if let Some(image) = cache.lock().unwrap().get(key) {
-            return Ok(image);
+            log::debug!("Tooltip PDF decoded cache hit: {path}");
+            return Ok((image, true));
         }
     }
-    let pixels = ::oxyde_lib::platform::platform()
-        .pdf_thumbnail(path.clone())
-        .map_err(|error| error.to_string())?;
+    log::debug!("Tooltip PDF decoded cache miss: {path}");
+    let pixels = oxyde_lib::platform::platform().pdf_thumbnail(path.clone()).map_err(|error| error.to_string())?;
     let bytes = pixels.as_raw().len();
     let image = Arc::new(RenderImage::new(vec![image::Frame::new(pixels)]));
     crate::ui::preview_budget::admit(&image)?;
@@ -129,7 +134,7 @@ pub(super) fn load(path: String) -> Result<Arc<RenderImage>, String> {
             cache.insert_if_current(revision, key, image.clone(), bytes);
         }
     }
-    Ok(image)
+    Ok((image, false))
 }
 
 #[cfg(test)]

@@ -5,6 +5,35 @@ use std::io::Write;
 fn renderer() -> SvgRenderer {
     SvgRenderer::new(Arc::new(()))
 }
+
+#[test]
+fn grid_decode_reduces_directly_to_128_pixels_with_triangle() {
+    let policy = Policy { output_side: 128, frame_count: 1, ..POLICY };
+    let mut source = RgbaImage::new(257, 193);
+    for (x, y, pixel) in source.enumerate_pixels_mut() {
+        *pixel = Rgba([x as u8, y as u8, (x ^ y) as u8, 255]);
+    }
+    let mut data = Cursor::new(Vec::new());
+    DynamicImage::ImageRgba8(source.clone()).write_to(&mut data, ImageFormat::Png).unwrap();
+    let decoded = decode(data.get_ref(), &renderer(), policy).unwrap();
+    let mut expected = DynamicImage::ImageRgba8(source).resize(128, 128, image::imageops::FilterType::Triangle).to_rgba8();
+    for pixel in expected.pixels_mut() { pixel.0.swap(0, 2); }
+    assert_eq!(bytes(&decoded, 0), expected.as_raw().as_slice());
+}
+
+#[test]
+fn tooltip_reduction_uses_gaussian_without_jpeg_roundtrip() {
+    let mut source = RgbaImage::new(257, 193);
+    for (x, y, pixel) in source.enumerate_pixels_mut() {
+        *pixel = Rgba([x as u8, y as u8, (x ^ y) as u8, 128]);
+    }
+    let mut data = Cursor::new(Vec::new());
+    DynamicImage::ImageRgba8(source.clone()).write_to(&mut data, ImageFormat::Png).unwrap();
+    let decoded = decode(data.get_ref(), &renderer(), Policy { output_side: 192, ..POLICY }).unwrap();
+    let mut expected = DynamicImage::ImageRgba8(source).resize(192, 192, image::imageops::FilterType::Gaussian).to_rgba8();
+    for pixel in expected.pixels_mut() { pixel.0.swap(0, 2); }
+    assert_eq!(bytes(&decoded, 0), expected.as_raw().as_slice());
+}
 fn png(width: u32, height: u32) -> Vec<u8> {
     let mut data = Cursor::new(Vec::new());
     DynamicImage::ImageRgba8(RgbaImage::from_pixel(

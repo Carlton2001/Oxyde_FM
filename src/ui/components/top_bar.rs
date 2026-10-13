@@ -1,3 +1,6 @@
+#[cfg(target_os = "windows")]
+mod breadcrumb_menu;
+use crate::ui::components::tooltip::NativeTooltipExt;
 use crate::ui::scale::{logical};
 use crate::ui::app::{FileDragData, OxydeApp};
 use crate::ui::components::dropdown::IconName;
@@ -192,7 +195,7 @@ pub fn render_top_bar(
                         let p_id = pane_id.clone();
                         btn = btn
                             .hover(move |s| s.bg(hover_bg))
-                            .when(show_tooltips, |d| d.tooltip(Tooltip::with_meta(_cx.i18n().text(Message::Back), _cx.i18n().text(Message::ShortcutBack))))
+                            .when(show_tooltips, |d| d.native_tooltip(Tooltip::with_meta(_cx.i18n().text(Message::Back), _cx.i18n().text(Message::ShortcutBack))))
                             .on_mouse_down(MouseButton::Left, {
                                 let h = handle.clone();
                                 move |_, _, cx| { h.update(cx, |v: &mut OxydeApp, cx| v.go_back(&p_id, cx)); }
@@ -220,7 +223,7 @@ pub fn render_top_bar(
                         let p_id = pane_id.clone();
                         btn = btn
                             .hover(move |s| s.bg(hover_bg))
-                            .when(show_tooltips, |d| d.tooltip(Tooltip::with_meta(_cx.i18n().text(Message::Forward), _cx.i18n().text(Message::ShortcutForward))))
+                            .when(show_tooltips, |d| d.native_tooltip(Tooltip::with_meta(_cx.i18n().text(Message::Forward), _cx.i18n().text(Message::ShortcutForward))))
                             .on_mouse_down(MouseButton::Left, {
                                 let h = handle.clone();
                                 move |_, _, cx| { h.update(cx, |v: &mut OxydeApp, cx| v.go_forward(&p_id, cx)); }
@@ -260,9 +263,9 @@ pub fn render_top_bar(
                     && (!matches!(action, 1 | 2) || !view.history_operation_in_progress)
                     && (action < 7 || (!view.trash_busy && if action < 9 { selected } else { !active_tab.files.is_empty() }));
                 let mut button = div().id(id).min_w(rems(1.5)).h_6().px(rems(0.125)).flex().items_center().justify_center().rounded_md()
-                    .when(show_tooltips && (action == 1 || action == 2), |d| d.tooltip(Tooltip::with_meta(_cx.i18n().text(label), tip.clone())))
-                    .when(show_tooltips && action == 6, |d| d.tooltip(Tooltip::for_delete(handle.clone(), pane_id.clone())))
-                    .when(show_tooltips && action != 1 && action != 2 && action != 6, |d| d.tooltip(Tooltip::with_shortcut(_cx.i18n().text(label),
+                    .when(show_tooltips && (action == 1 || action == 2), |d| d.native_tooltip(Tooltip::with_meta(_cx.i18n().text(label), tip.clone())))
+                    .when(show_tooltips && action == 6, |d| d.native_tooltip(Tooltip::for_delete(handle.clone(), pane_id.clone())))
+                    .when(show_tooltips && action != 1 && action != 2 && action != 6, |d| d.native_tooltip(Tooltip::with_shortcut(_cx.i18n().text(label),
                         (!tip.is_empty()).then(|| SharedString::from(tip)))));
                 if enabled {
                     let h = handle.clone();
@@ -386,7 +389,19 @@ pub fn render_top_bar(
                                div()
                                    .relative()
                                    .flex_none()
-                                   .child(
+                                   .child({
+                                       #[cfg(target_os = "windows")]
+                                       {
+                                           let pane = p_id.clone(); let path = parent_path_cap.clone();
+                                           let test_pane = pane.clone(); let test_path = path.clone();
+                                           crate::ui::components::popup::anchored_surface(format!("breadcrumb-menu-{}-{index}", p_id), handle.clone(),
+                                               move |view| view.breadcrumb_menu.as_ref().is_some_and(|(pane, path, current, _)| *pane == test_pane && *path == test_path && *current == index),
+                                               move |view, window, cx| breadcrumb_menu::render(view, cx.entity(), &pane, &path, index, window, cx),
+                                               |view, _, cx| { view.breadcrumb_menu = None; cx.notify(); }).into_any_element()
+                                       }
+                                       #[cfg(not(target_os = "windows"))]
+                                       div().into_any_element()
+                                   })                                   .child(
                                        div()
                                            .id(SharedString::from(format!("chevron-btn-{}-{}", p_id, index)))
                                            .h(rems(1.5))
@@ -433,6 +448,9 @@ pub fn render_top_bar(
                                        let breadcrumb_menu = view.breadcrumb_menu.clone();
                                        div()
                                             .when_some(breadcrumb_menu, |this: Div, (m_pane_id, menu_path, _, dirs): (String, String, usize, Vec<FileEntry>)| {
+                                                #[cfg(target_os = "windows")]
+                                                if crate::ui::components::popup::supported_source(&handle, _cx) { return this; }
+                                                {
                                                 if m_pane_id == p_id && menu_path == parent_path_cap {
                                                     let items = dirs.into_iter()
                                                         .map(|entry| {
@@ -453,7 +471,7 @@ pub fn render_top_bar(
                                                                 h.update(app, |this, cx| {
                                                                     this.navigate_to(&p_id, entry_path.clone(), cx);
                                                                     this.breadcrumb_menu = None;
-                                                                });
+                                            });
                                                             }),
                                                             on_hover: None,
                                                         }
@@ -502,6 +520,7 @@ pub fn render_top_bar(
                                                     )
                                                 } else {
                                                     this
+                                                }
                                                 }
                                             })
                                    })
@@ -643,6 +662,7 @@ pub fn render_top_bar(
                                     h.update(cx, |this, cx| {
                                         this.context_menus.clear();
                                         this.context_menus.push(crate::ui::app::ContextMenuInstance {
+            native_bounds: None,
                                             position: point(bounds.get().left(), bounds.get().bottom() + crate::ui::scale::rem_pixels(rems(0.25))),
                                             content: crate::ui::app::ContextMenuContent::Items(items, None),
                                             scroll_handle: UniformListScrollHandle::new(),

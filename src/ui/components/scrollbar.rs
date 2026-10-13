@@ -155,11 +155,12 @@ pub fn render_scrollbar_with_pointer<T: ScrollbarState + 'static>(
         .child(
             canvas(
                 |bounds, _, _| bounds,
-                move |bounds, _, _, cx| {
+                move |bounds, _, window, cx| {
+                    let origin = crate::ui::components::popup::owner_point(window, cx, bounds.origin);
                     handle_cap.update(cx, |this, _| {
                         this.scrollbar_origins().insert(
                             track_id_cap.clone(),
-                            bounds.origin.map(|p| p.to_f64() as f32),
+                            origin.map(|p| p.to_f64() as f32),
                         );
                     });
                 },
@@ -171,12 +172,13 @@ pub fn render_scrollbar_with_pointer<T: ScrollbarState + 'static>(
         .on_mouse_down(MouseButton::Left, {
             let h = handle.clone();
             let track_id_for_drag = track_id.clone();
-            move |e, _, cx| {
+            move |e, window, cx| {
                 cx.stop_propagation();
+                let position = crate::ui::components::popup::owner_point(window, cx, e.position);
                 let mouse_pos = if is_v {
-                    e.position.y.to_f64() as f32
+                    position.y.to_f64() as f32
                 } else {
-                    e.position.x.to_f64() as f32
+                    position.x.to_f64() as f32
                 };
 
                 h.update(cx, |this, app| {
@@ -204,7 +206,7 @@ pub fn render_scrollbar_with_pointer<T: ScrollbarState + 'static>(
                             track_id_for_drag.clone(),
                             viewport_size,
                             content_size,
-                            e.position,
+                            position,
                             app,
                         );
                     }

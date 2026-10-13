@@ -315,19 +315,19 @@ impl OxydeApp {
                                     let parent_left = this
                                         .context_menus
                                         .get(m_idx)
-                                        .map(|m| m.position.x)
+                                        .map(|m| m.native_bounds.map(|bounds| bounds.left()).unwrap_or(m.position.x))
                                         .unwrap_or_default();
                                     let parent_right = parent_left
                                         + this
                                             .context_menus
                                             .get(m_idx)
-                                            .map(|m| m.width)
+                                            .map(|m| m.native_bounds.map(|bounds| bounds.size.width).unwrap_or(m.width))
                                             .unwrap_or_default();
                                     // Compute Y from parent menu position + item index (reliable, no canvas-bounds dependency)
                                     let parent_pos_y = this
                                         .context_menus
                                         .get(m_idx)
-                                        .map(|m| m.position.y)
+                                        .map(|m| m.native_bounds.map(|bounds| bounds.top()).unwrap_or(m.position.y))
                                         .unwrap_or_default();
                                     let parent_menu_height = this
                                         .context_menus

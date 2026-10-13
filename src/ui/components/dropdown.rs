@@ -278,12 +278,14 @@ impl<T: crate::ui::components::scrollbar::ScrollbarState + 'static> RenderOnce f
         let requested_width = self.width.unwrap_or(calculated_width);
         let right_padding = if self.is_context_menu { logical(5.0) } else { logical(4.0) };
         let outer_width = (requested_width + logical(4.0) + right_padding)
-            .min((window.viewport_size().width.as_f32() - logical(16.0)).max(1.0));
+            .min((crate::ui::components::popup::available_size(window, cx).width.as_f32() - logical(16.0)).max(1.0));
         let width = (outer_width - logical(4.0) - right_padding).max(1.0);
 
         // Report computed width including the menu's horizontal padding.
         if let Some(on_width) = self.on_width_calculated.take() {
-            (on_width)(px(outer_width), cx);
+            let origin = crate::ui::components::popup::owner_point(window, cx, point(px(0.0), px(0.0)));
+            let end = crate::ui::components::popup::owner_point(window, cx, point(px(outer_width), px(0.0)));
+            (on_width)(end.x - origin.x, cx);
         }
 
         let h_app_copy = self.h_app.clone();
@@ -310,7 +312,7 @@ impl<T: crate::ui::components::scrollbar::ScrollbarState + 'static> RenderOnce f
         }
         self.items = visible_items;
         let item_count = self.items.len();
-        let maximum = crate::ui::style::menu_list_max_height(window.viewport_size().height.as_f32(), self.header.is_some(), self.bottom_padding, self.max_height);
+        let maximum = crate::ui::style::menu_list_max_height(crate::ui::components::popup::available_size(window, cx).height.as_f32(), self.header.is_some(), self.bottom_padding, self.max_height);
         let separator_height = logical(9.0);
         let separator_count = separator_before.iter().filter(|value| **value).count();
         let viewport_h = (item_count as f32 * item_h + separator_count as f32 * separator_height).min(maximum);
@@ -366,10 +368,20 @@ impl<T: crate::ui::components::scrollbar::ScrollbarState + 'static> RenderOnce f
                                                 && item.label == cx.i18n().text(Message::TrashDeletePermanent).as_ref());
                                     let on_h = on_hover_list.clone();
                                     let arrow_hover = on_hover_list.clone();
+                                    let row_bounds = Rc::new(std::cell::Cell::new(None::<Bounds<Pixels>>));
+                                    let measured_row = row_bounds.clone();
+                                    let hovered_row = row_bounds.clone();
                                     let shortcut = if self_is_context_menu { context_shortcut(&item.label, cx.i18n(), window.modifiers().shift) } else { None };
                                     let split_copy = self_is_context_menu && item.has_submenu
                                         && item.label == cx.i18n().text(Message::Copy).as_ref();
 
+                                    let key_click = item.on_click.clone();
+                                    let key_close = on_close.clone();
+                                    let key_action = Rc::new(move |window: &mut Window, cx: &mut App| crate::ui::components::popup::with_owner(window, cx, |window, cx| { key_click(window, cx); if !stay_open { key_close(window, cx); } }));
+                                    let key_hover = on_hover_list.clone();
+                                    let key_bounds = row_bounds.clone();
+                                    let submenu: Option<crate::ui::components::popup::keyboard::Action> = if item.has_submenu { key_hover.map(|hover| Rc::new(move |window: &mut Window, cx: &mut App| { let position = key_bounds.get().map(|bounds| bounds.origin).unwrap_or_default(); hover(original_ix, crate::ui::components::popup::owner_point(window, cx, position), cx); }) as crate::ui::components::popup::keyboard::Action) } else { None };
+                                    let key_action = if item.has_submenu && !split_copy { submenu.clone().unwrap_or(key_action) } else { key_action };
                                     let row = div()
                                         // Keep action hover state stable across menu renders.
                                         .id(("dropdown-item", ix))
@@ -382,17 +394,21 @@ impl<T: crate::ui::components::scrollbar::ScrollbarState + 'static> RenderOnce f
                                         .rounded(rems(0.3125))
                                         .when(item.is_dimmed, |d| d.opacity(0.42))
                                         .when(!item.is_dimmed, |d| d.hover(|s| s.bg(item_hover)))
-                                        .on_mouse_move(move |event, _window, cx| {
+                                        .child(canvas(|bounds, _, _| bounds, move |bounds, _, window, cx| { measured_row.set(Some(bounds)); crate::ui::components::popup::record_row(window, cx, original_ix, bounds); }).absolute().size_full())
+                                        .on_mouse_move(move |event, window, cx| {
                                             if let Some(on_h) = &on_h {
-                                                (on_h)(original_ix, event.position, cx);
+                                                let position = if crate::ui::components::popup::is_menu(window, cx) { hovered_row.get().map(|bounds| bounds.origin).unwrap_or(event.position) } else { event.position };
+                                                (on_h)(original_ix, crate::ui::components::popup::owner_point(window, cx, position), cx);
                                             }
                                         })
                                         .on_mouse_down(MouseButton::Left, move |_, window, cx| {
                                             if !is_dimmed {
+                                                crate::ui::components::popup::with_owner(window, cx, |window, cx| {
                                                 (on_click)(window, cx);
                                                 if !stay_open {
                                                     (on_close_inner)(window, cx);
                                                 }
+                                                });
                                             }
                                         })
                                         // Nested Shell menus omit the empty icon column.
@@ -587,10 +603,10 @@ impl<T: crate::ui::components::scrollbar::ScrollbarState + 'static> RenderOnce f
                                             s.child(
                                                 div().id(("submenu-arrow", ix)).flex_none().h_full()
                                                     .flex().items_center()
-                                                    .when(split_copy, |arrow| arrow.on_mouse_down(MouseButton::Left, move |event, _, cx| {
+                                                    .when(split_copy, |arrow| arrow.on_mouse_down(MouseButton::Left, move |event, window, cx| {
                                                         cx.stop_propagation();
                                                         if let Some(on_hover) = &arrow_hover {
-                                                            on_hover(original_ix, event.position, cx);
+                                                            on_hover(original_ix, crate::ui::components::popup::owner_point(window, cx, event.position), cx);
                                                         }
                                                     }))
                                                     .child(svg().path("icons/chevron-right.svg")
@@ -602,7 +618,7 @@ impl<T: crate::ui::components::scrollbar::ScrollbarState + 'static> RenderOnce f
                                             div().h(px(separator_height)).px(rems(0.5)).flex().items_center()
                                                 .child(div().w_full().h(rems(0.0625)).bg(menu_border)),
                                         ))
-                                        .child(row)
+                                        .child(if is_dimmed { row.into_any_element() } else { crate::ui::components::popup::keyboard::item(row, key_action, submenu, Some((base_scroll_handle.clone(), ix))).into_any_element() })
                                 })
                                 .collect::<Vec<_>>()
                     })
@@ -628,7 +644,7 @@ impl<T: crate::ui::components::scrollbar::ScrollbarState + 'static> RenderOnce f
                         content_h,
                         current_scroll,
                         is_dragging,
-                        "context-menu-scrollbar".to_string(),
+                        format!("context-menu-scrollbar-{:?}", window.window_handle().window_id()),
                         None,
                         move |this, tid, vh, ch, _, cx| {
                             (on_drag)(this, tid, vh, ch, cx);
@@ -641,9 +657,10 @@ impl<T: crate::ui::components::scrollbar::ScrollbarState + 'static> RenderOnce f
                 let on_outside = self.on_outside.clone();
                 move |event, window, cx| {
                     if let Some(on_outside) = &on_outside {
-                        (on_outside)(event.position, window, cx);
+                        let point = crate::ui::components::popup::owner_point(window, cx, event.position);
+                        crate::ui::components::popup::with_owner(window, cx, |window, cx| (on_outside)(point, window, cx));
                     } else {
-                        (on_close)(window, cx);
+                        crate::ui::components::popup::with_owner(window, cx, |window, cx| (on_close)(window, cx));
                     }
                 }
             })
