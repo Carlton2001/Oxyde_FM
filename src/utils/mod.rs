@@ -141,3 +141,5 @@ mod tests {
         assert!(!system);
     }
 }
+pub mod image_preview_decode;
+pub mod office_preview;

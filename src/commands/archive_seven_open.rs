@@ -92,9 +92,17 @@ fn indexed_with_limits(
 ) -> Result<Vec<FileEntry>, CommandError> {
     let parents = HeldParents::new(archive_path)?;
     let resolved = parents.resolved_path(archive_path)?;
+    indexed_file(archive_path, platform().open_archive_source(&resolved, false)?, limits, checkpoint)
+}
+pub(super) fn indexed_file(
+    archive_path: &Path,
+    file: File,
+    limits: ArchiveLimits,
+    checkpoint: &dyn Fn() -> io::Result<()>,
+) -> Result<Vec<FileEntry>, CommandError> {
     let budget = ArchiveBudget::new(limits);
     let mut source = CheckedSource {
-        file: platform().open_archive_source(&resolved, false)?,
+        file,
         budget: &budget,
         checkpoint,
     };

@@ -100,6 +100,20 @@ fn indexed_with_limits(
     limits: ArchiveLimits,
     checkpoint: &dyn Fn() -> io::Result<()>,
 ) -> Result<Vec<FileEntry>, CommandError> {
+    let parents = HeldParents::new(path)?;
+    let resolved = parents.resolved_path(path)?;
+    let file = platform().open_archive_source(&resolved, false)?;
+    indexed_file(path, file, limits, checkpoint)
+}
+
+/// The isolated worker receives the selected read-only object, never opens a
+/// document pathname, and shares the same parser and limits with local callers.
+pub(super) fn indexed_file(
+    path: &Path,
+    file: File,
+    limits: ArchiveLimits,
+    checkpoint: &dyn Fn() -> io::Result<()>,
+) -> Result<Vec<FileEntry>, CommandError> {
     let budget = ArchiveBudget::new(limits);
     budget.checkpoint(checkpoint)?;
     let format = ArchiveFormat::from_path(path)
@@ -115,9 +129,6 @@ fn indexed_with_limits(
             )
         })
         .ok_or_else(|| invalid("Unsupported metadata format"))?;
-    let parents = HeldParents::new(path)?;
-    let resolved = parents.resolved_path(path)?;
-    let file = platform().open_archive_source(&resolved, false)?;
     let source = Source {
         length: file.metadata()?.len(),
         file,

@@ -293,9 +293,16 @@ pub(super) fn indexed_files(
 ) -> Result<Vec<FileEntry>, CommandError> {
     let parents = HeldParents::new(archive)?;
     let source = parents.resolved_path(archive)?;
+    indexed_file(archive, platform().open_archive_source(&source, false)?, checkpoint)
+}
+pub(super) fn indexed_file(
+    archive: &Path,
+    file: File,
+    checkpoint: &dyn Fn() -> io::Result<()>,
+) -> Result<Vec<FileEntry>, CommandError> {
     let budget = ArchiveBudget::new(ArchiveLimits::LISTING);
     let mut image = image(
-        platform().open_archive_source(&source, false)?,
+        file,
         &budget,
         checkpoint,
     )?;

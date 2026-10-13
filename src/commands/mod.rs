@@ -5,6 +5,15 @@ pub mod archive_io_codec;
 pub mod archive_io_worker;
 #[doc(hidden)]
 pub mod archive_worker;
+#[doc(hidden)]
+#[cfg(target_os = "windows")]
+pub mod archive_handle_worker;
+#[doc(hidden)]
+#[cfg(target_os = "windows")]
+pub mod image_handle_worker;
+#[doc(hidden)]
+#[cfg(target_os = "windows")]
+pub mod office_handle_worker;
 mod archive_iso_open;
 mod archive_metadata;
 mod archive_seven_open;
