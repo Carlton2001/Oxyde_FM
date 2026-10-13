@@ -55,11 +55,11 @@ pub(super) fn identity(file: &File) -> io::Result<FileIdentity> {
         )
     };
     match result.map_err(io_error) {
-        Ok(()) => Ok(FileIdentity {
-            volume: extended.VolumeSerialNumber,
-            value: extended.FileId.Identifier,
-            kind: 1,
-        }),
+        Ok(()) if extended.FileId.Identifier == [0; 16] => Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "Filesystem did not provide a stable file identity",
+        )),
+        Ok(()) => Ok(FileIdentity { volume: extended.VolumeSerialNumber, value: extended.FileId.Identifier, kind: 1 }),
         // Older filesystem drivers may provide only the legacy 64-bit identity.
         Err(error) if matches!(error.raw_os_error(), Some(1 | 50 | 87)) => {
             let mut basic = BY_HANDLE_FILE_INFORMATION::default();
@@ -82,3 +82,7 @@ pub(super) fn identity(file: &File) -> io::Result<FileIdentity> {
         Err(error) => Err(error),
     }
 }
+
+#[cfg(test)]
+#[path = "windows_archive_source/tests/retention.rs"]
+mod tests;

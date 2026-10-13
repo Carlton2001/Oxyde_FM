@@ -100,6 +100,7 @@ pub(crate) struct ArchiveWorkspace {
     modified: Option<std::time::SystemTime>,
     original_identity: crate::platform::FileIdentity,
     original_hash: blake3::Hash,
+    original_provenance: Option<Vec<u8>>,
     // Keep the original object's identity alive without blocking later edits.
     _original_file: std::fs::File,
     _parents: super::path_parents::HeldParents,
@@ -157,6 +158,7 @@ impl ArchiveWorkspace {
         let metadata = source.metadata().map_err(|e| e.to_string())?;
         let original_identity = crate::platform::platform().file_identity(&source).map_err(|e| e.to_string())?;
         let original_hash = fingerprint(&mut source, checkpoint, &budget).map_err(|e| e.to_string())?;
+        let original_provenance = crate::platform::platform().read_archive_output_provenance(parents.directory(), &source, &archive).map_err(|e| e.to_string())?;
         use std::io::{Seek, SeekFrom};
         source.seek(SeekFrom::Start(0)).map_err(|e| e.to_string())?;
         #[cfg(any(not(target_os = "windows"), test))]
@@ -183,7 +185,8 @@ impl ArchiveWorkspace {
         }
         // Windows protects source data for the initial read. On other systems
         // validate it again before accepting the temporary view.
-        if fingerprint(&mut source, checkpoint, &budget).map_err(|e| e.to_string())? != original_hash {
+        if fingerprint(&mut source, checkpoint, &budget).map_err(|e| e.to_string())? != original_hash
+            || crate::platform::platform().read_archive_output_provenance(parents.directory(), &source, &archive).map_err(|e| e.to_string())? != original_provenance {
             return Err(crate::models::error::ArchiveSourceConflict.to_string());
         }
         #[cfg(all(target_os = "windows", not(test)))]
@@ -195,6 +198,7 @@ impl ArchiveWorkspace {
             modified: metadata.modified().ok(),
             original_identity,
             original_hash,
+            original_provenance,
             _original_file: original_file,
             _parents: parents,
             #[cfg(all(target_os = "windows", not(test)))]
@@ -290,7 +294,8 @@ impl ArchiveWorkspace {
         if !metadata.is_file() || crate::platform::platform().file_attributes(&metadata, "").2
             || metadata.len() != self.length || metadata.modified().ok() != self.modified
             || crate::platform::platform().file_identity(&original).map_err(|e| e.to_string())? != self.original_identity
-            || fingerprint(&mut original, &|| FileOperationManager::archive_checkpoint(op).map_err(std::io::Error::other), &ArchiveBudget::new(ArchiveLimits::WORKSPACE)).map_err(|e| e.to_string())? != self.original_hash {
+            || fingerprint(&mut original, &|| FileOperationManager::archive_checkpoint(op).map_err(std::io::Error::other), &ArchiveBudget::new(ArchiveLimits::WORKSPACE)).map_err(|e| e.to_string())? != self.original_hash
+            || crate::platform::platform().read_file_provenance(&self.archive).map_err(|e| e.to_string())? != self.original_provenance {
             return Err(crate::models::error::ArchiveSourceConflict.to_string());
         }
         if let Some(data) = crate::platform::platform()
@@ -376,7 +381,8 @@ impl ArchiveWorkspace {
         let metadata = original.metadata().map_err(|e| e.to_string())?;
         if !metadata.is_file() || platform().file_attributes(&metadata, "").2 || metadata.len() != self.length || metadata.modified().ok() != self.modified
             || platform().file_identity(&original).map_err(|e| e.to_string())? != self.original_identity
-            || fingerprint(&mut original, &|| FileOperationManager::archive_checkpoint(op).map_err(std::io::Error::other), &ArchiveBudget::new(ArchiveLimits::WORKSPACE)).map_err(|e| e.to_string())? != self.original_hash {
+            || fingerprint(&mut original, &|| FileOperationManager::archive_checkpoint(op).map_err(std::io::Error::other), &ArchiveBudget::new(ArchiveLimits::WORKSPACE)).map_err(|e| e.to_string())? != self.original_hash
+            || platform().read_archive_output_provenance(self._parents.directory(), &original, &archive).map_err(|e| e.to_string())? != self.original_provenance {
             return Err(crate::models::error::ArchiveSourceConflict.to_string());
         }
         if let Some(data) = platform().read_archive_output_provenance(self._parents.directory(), &original, &archive).map_err(|e| e.to_string())? { output.mark(&destination, &rebuilt, &data).map_err(|e| e.to_string())?; }

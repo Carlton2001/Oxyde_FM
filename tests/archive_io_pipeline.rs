@@ -14,6 +14,8 @@ use std::{
 mod iso;
 #[path = "support/seven_crc.rs"]
 mod seven_crc;
+#[path = "support/provenance_mutation.rs"]
+mod provenance_mutation;
 
 fn native<T>(run: impl FnOnce() -> T) -> T {
     with_worker_executable_for_tests(
