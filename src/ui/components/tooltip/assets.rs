@@ -6,7 +6,7 @@ pub(super) struct TooltipPreviewAsset;
 
 impl Asset for TooltipPreviewAsset {
     type Source = SharedString;
-    type Output = Result<Arc<RenderImage>, ImageCacheError>;
+    type Output = Result<(Arc<RenderImage>, bool), ImageCacheError>;
 
     fn load(
         source: Self::Source,
@@ -34,7 +34,7 @@ pub(super) struct TooltipImageAsset;
 impl Asset for TooltipImageAsset {
     type Source = std::path::PathBuf;
     type Output =
-        Result<crate::ui::image_preview::PreviewImage, crate::ui::image_preview::PreviewError>;
+        Result<(crate::ui::image_preview::PreviewImage, bool), crate::ui::image_preview::PreviewError>;
 
     fn load(
         source: Self::Source,

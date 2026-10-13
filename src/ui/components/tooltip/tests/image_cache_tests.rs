@@ -2,6 +2,21 @@ use super::*;
 use gpui::RenderImage;
 use std::{cell::Cell, sync::Arc};
 
+#[test]
+fn handover_cache_status_distinguishes_hits_from_changed_sources() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("image.png");
+    std::fs::write(&path, b"first").unwrap();
+    let cache = Mutex::new(Cache::new(32, 1024));
+    let (_, cached) = cached_load_with_status(&cache, &path, || Ok(preview(1))).unwrap();
+    assert!(!cached);
+    let (_, cached) = cached_load_with_status(&cache, &path, || panic!("cache hit must not decode")).unwrap();
+    assert!(cached);
+    std::fs::write(&path, b"modified source").unwrap();
+    let (_, cached) = cached_load_with_status(&cache, &path, || Ok(preview(1))).unwrap();
+    assert!(!cached, "stale cache entries must not bypass the fresh-preview delay");
+}
+
 fn preview(frames: usize) -> PreviewImage {
     PreviewImage {
         image: Arc::new(RenderImage::new(

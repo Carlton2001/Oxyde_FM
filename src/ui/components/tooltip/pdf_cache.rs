@@ -107,14 +107,14 @@ pub(super) fn invalidate(path: &str) {
     }
 }
 
-pub(super) fn load(path: String) -> Result<Arc<RenderImage>, String> {
+pub(super) fn load(path: String) -> Result<(Arc<RenderImage>, bool), String> {
     let cache = CACHE.get_or_init(|| Mutex::new(Cache::default()));
     let revision = cache.lock().unwrap().revision;
     let signature = Signature::read(&path);
     if let Some(key) = &signature {
         if let Some(image) = cache.lock().unwrap().get(key) {
             log::debug!("Tooltip PDF decoded cache hit: {path}");
-            return Ok(image);
+            return Ok((image, true));
         }
     }
     log::debug!("Tooltip PDF decoded cache miss: {path}");
@@ -131,7 +131,7 @@ pub(super) fn load(path: String) -> Result<Arc<RenderImage>, String> {
             cache.insert_if_current(revision, key, image.clone(), bytes);
         }
     }
-    Ok(image)
+    Ok((image, false))
 }
 
 #[cfg(test)]

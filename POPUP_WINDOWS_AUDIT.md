@@ -63,3 +63,9 @@ Les infobulles simples et fixes perdaient également l’origine de prépaint do
 ### Isolation des événements de pointeur
 
 L’essai utilisateur suivant a confirmé l’amélioration des positions et révélé que les éléments sous les menus réagissaient à la souris. La retransmission synthétique des mouvements et relâchements à `Window::dispatch_event` relançait le hit testing de la fenêtre source. Elle est supprimée : les menus appellent directement les gestionnaires de défilement, limités aux glissements `ContextMenuV` et `BreadcrumbV`. Les événements locaux du menu continuent à circuler ; les gestionnaires locaux des lettres réseau sont conservés. Un test de non-régression vérifie que ces gestionnaires excluent les glissements de la liste de fichiers et de la sidebar. La vérification visuelle reste à confirmer dans Oxyde.
+
+### Cache et délai de transition — 14 octobre 2026
+
+Le délai de 150 ms était imposé à tous les remplacements et redémarrait à chaque item, même avec un cache hit. Cela conservait inutilement la bulle précédente lors d’un parcours rapide. Un asset GPUI déjà résolu est maintenant publié immédiatement ; les workers de cache images/PDF transmettent leur statut de réutilisation après validation du fichier. Un cache hit prêt contourne les 150 ms, tandis qu’une nouvelle génération conserve la grâce. Aucun résultat incomplet ou issu d’un survol obsolète n’est publié. La vérification asynchrone et le prochain contrôle de publication peuvent encore prendre quelques millisecondes ; aucune lecture de fichier n’est ajoutée au thread UI.
+
+Les 36 tests d’infobulles passent, dont les nouveaux scénarios cache immédiat, résultat pas encore prêt, génération avec grâce et source modifiée invalidant le cache. `cargo check --offline` reste sans avertissement. Le délai initial et la tolérance entre éléments ne sont pas modifiés.

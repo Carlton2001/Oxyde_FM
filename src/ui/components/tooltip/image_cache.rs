@@ -99,15 +99,15 @@ impl Cache {
     }
 }
 
-fn cached_load(
+fn cached_load_with_status(
     cache: &Mutex<Cache>,
     path: &Path,
     decode: impl FnOnce() -> Result<PreviewImage, PreviewError>,
-) -> Result<PreviewImage, PreviewError> {
+) -> Result<(PreviewImage, bool), PreviewError> {
     let signature = Signature::read(path);
     if let Some(preview) = cache.lock().unwrap().get(path, signature.as_ref()) {
         log::debug!("Tooltip image decoded cache hit: {}", path.display());
-        return Ok(preview);
+        return Ok((preview, true));
     }
     log::debug!("Tooltip image decoded cache miss: {}", path.display());
     // Do not hold the cache lock during decoding, and never retain failures.
@@ -117,15 +117,20 @@ fn cached_load(
             cache.lock().unwrap().insert(signature, preview.clone());
         }
     }
-    Ok(preview)
+    Ok((preview, false))
 }
 
-pub(super) fn load(path: &Path, renderer: &SvgRenderer) -> Result<PreviewImage, PreviewError> {
+pub(super) fn load(path: &Path, renderer: &SvgRenderer) -> Result<(PreviewImage, bool), PreviewError> {
     static CACHE: OnceLock<Mutex<Cache>> = OnceLock::new();
     let cache = CACHE.get_or_init(|| Mutex::new(Cache::new(MAX_ENTRIES, MAX_BYTES)));
-    cached_load(cache, path, || {
+    cached_load_with_status(cache, path, || {
         crate::ui::image_preview::load_path(path, renderer)
     })
+}
+
+#[cfg(test)]
+fn cached_load(cache: &Mutex<Cache>, path: &Path, decode: impl FnOnce() -> Result<PreviewImage, PreviewError>) -> Result<PreviewImage, PreviewError> {
+    cached_load_with_status(cache, path, decode).map(|(preview, _)| preview)
 }
 
 #[cfg(test)]

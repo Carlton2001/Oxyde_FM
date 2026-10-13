@@ -48,6 +48,10 @@ enum PreviewData {
 }
 
 impl Tooltip {
+    pub(super) fn cached_for_handover(&self, cx: &mut App) -> bool {
+        self.preview_view.as_ref().map(|preview| preview.read(cx).clone()).is_some_and(|preview| preview.cached_for_handover(cx))
+    }
+
     pub(super) fn ready_for_handover(&self, cx: &mut App) -> bool {
         self.preview_view.as_ref().map(|preview| preview.read(cx).clone())
             .is_none_or(|preview| preview.ready_for_handover(cx))

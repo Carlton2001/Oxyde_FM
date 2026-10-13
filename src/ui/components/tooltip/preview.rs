@@ -13,6 +13,16 @@ use std::time::Duration;
 const PREVIEW_LOADING_DELAY: Duration = Duration::from_secs(1);
 
 impl PreviewTask {
+    pub(super) fn cached_for_handover(&self, cx: &mut App) -> bool {
+        if let Some(source) = &self.media_asset {
+            return cx.fetch_asset::<TooltipPreviewAsset>(source).is_some_and(|result| matches!(result, Ok((_, true))));
+        }
+        if let Some(source) = &self.original_image {
+            return cx.fetch_asset::<TooltipImageAsset>(source).is_some_and(|result| matches!(result, Ok((_, true))));
+        }
+        false
+    }
+
     pub(super) fn ready_for_handover(&self, cx: &mut App) -> bool {
         // Video players share one admission slot: keeping the old player alive
         // would prevent its replacement from producing a first frame.
@@ -33,13 +43,13 @@ impl PreviewTask {
         if let Some(source) = &self.media_asset {
             return window
                 .use_asset::<TooltipPreviewAsset>(source, cx)
-                .and_then(Result::ok);
+                .and_then(Result::ok).map(|(image, _)| image);
         }
         if let Some(source) = &self.original_image {
             return window
                 .use_asset::<TooltipImageAsset>(source, cx)
                 .and_then(Result::ok)
-                .map(|preview| preview.image);
+                .map(|(preview, _)| preview.image);
         }
         match &self.data {
             Some(PreviewData::Image(image)) => Some(image.clone()),
@@ -50,7 +60,7 @@ impl PreviewTask {
         if let Some(source) = &self.original_image {
             return window.use_asset::<TooltipImageAsset>(source, cx).and_then(
                 |result| match result {
-                    Ok(preview) => preview.notice,
+                    Ok((preview, _)) => preview.notice,
                     Err(error) => Some(error.message()),
                 },
             );

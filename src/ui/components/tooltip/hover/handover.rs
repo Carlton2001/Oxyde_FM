@@ -7,8 +7,8 @@ use std::time::{Duration, Instant};
 
 const CHANGE_DELAY: Duration = Duration::from_millis(150);
 
-fn can_publish(elapsed: Duration, preview_ready: bool) -> bool {
-    elapsed >= CHANGE_DELAY && preview_ready
+fn can_publish(elapsed: Duration, preview_ready: bool, cached: bool) -> bool {
+    preview_ready && (cached || elapsed >= CHANGE_DELAY)
 }
 
 fn ready(view: &AnyView, cx: &mut App) -> bool {
@@ -27,9 +27,11 @@ pub(super) fn replace(
     cx: &mut App,
 ) {
     let id = window.window_handle().window_id();
-    // Start loading now, including cache lookup, while keeping the old bubble
-    // intact. Even a cached preview waits for a stable hover before replacement.
-    let _ = ready(&view, cx);
+    // An already resolved GPUI asset can be displayed without another frame.
+    if ready(&view, cx) {
+        super::publish_tooltip(view, window, cx);
+        return;
+    }
     let started = Instant::now();
     // The pending view belongs to the cancellable task, not to the painted
     // tooltip. Leaving or entering a different item releases it immediately.
@@ -54,7 +56,9 @@ pub(super) fn replace(
                     super::clear(window, cx);
                     return true;
                 }
-                if !can_publish(started.elapsed(), ready(&view, cx)) {
+                let preview_ready = ready(&view, cx);
+                let cached = view.clone().downcast::<Tooltip>().ok().is_some_and(|tooltip| tooltip.update(cx, |tooltip, cx| tooltip.cached_for_handover(cx)));
+                if !can_publish(started.elapsed(), preview_ready, cached) {
                     return false;
                 }
                 super::publish_tooltip(view.clone(), window, cx);
