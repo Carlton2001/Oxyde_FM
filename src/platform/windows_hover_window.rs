@@ -1,5 +1,6 @@
 //! Native behavior for the experimental GPUI image/PDF hover surface.
 use raw_window_handle::RawWindowHandle;
+use std::{cell::RefCell, collections::HashMap};
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, POINT, WPARAM};
 use windows::Win32::Graphics::Gdi::{
     GetMonitorInfoW, MonitorFromPoint, MONITORINFO, MONITOR_DEFAULTTONEAREST,
@@ -8,6 +9,20 @@ use windows::Win32::UI::Shell::{DefSubclassProc, RemoveWindowSubclass, SetWindow
 use windows::Win32::UI::WindowsAndMessaging::*;
 
 const SUBCLASS: usize = 0x4f585948;
+const APPLY_PLACEMENT: u32 = WM_APP + 0x348;
+const INITIALIZE_WINDOW: u32 = APPLY_PLACEMENT + 1;
+
+#[derive(Clone, Copy)]
+struct Placement {
+    size: Option<(f32, f32)>,
+    scale: f32,
+}
+
+thread_local! {
+    // Coalesce pointer requests without entering GPUI through synchronous
+    // WM_MOVE/WM_SIZE callbacks while its App/Window is already borrowed.
+    static PENDING: RefCell<HashMap<isize, Placement>> = RefCell::new(HashMap::new());
+}
 
 fn hwnd(handle: RawWindowHandle) -> Result<HWND, String> {
     match handle {
@@ -25,9 +40,37 @@ unsafe extern "system" fn subclass(
     _: usize,
 ) -> LRESULT {
     match message {
+        INITIALIZE_WINDOW => {
+            // Ownership supplies stacking without being globally topmost.
+            // Run outside the GPUI App borrow, just like movement and resize.
+            if let Err(error) = unsafe {
+                SetWindowPos(
+                    window,
+                    Some(HWND_NOTOPMOST),
+                    0,
+                    0,
+                    0,
+                    0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED,
+                )
+            } {
+                log::warn!("Cannot initialize hover window: {error}");
+            }
+            return LRESULT(0);
+        }
+        APPLY_PLACEMENT => {
+            let pending = PENDING.with(|pending| pending.borrow_mut().remove(&(window.0 as isize)));
+            if let Some(pending) = pending {
+                if let Err(error) = place_now(window, pending.size, pending.scale) {
+                    log::warn!("Cannot apply hover placement: {error}");
+                }
+            }
+            return LRESULT(0);
+        }
         WM_NCHITTEST => return LRESULT(HTTRANSPARENT as isize),
         WM_MOUSEACTIVATE => return LRESULT(MA_NOACTIVATE as isize),
         WM_NCDESTROY => unsafe {
+            PENDING.with(|pending| pending.borrow_mut().remove(&(window.0 as isize)));
             let _ = RemoveWindowSubclass(window, Some(subclass), SUBCLASS);
         },
         _ => {}
@@ -47,18 +90,8 @@ pub(super) fn configure(handle: RawWindowHandle) -> Result<(), String> {
         if !SetWindowSubclass(window, Some(subclass), SUBCLASS, 0).as_bool() {
             return Err("Cannot install hover window hit testing".into());
         }
-        // GPUI PopUp starts globally topmost. Ownership supplies the required
-        // stacking without leaving the preview above another application.
-        SetWindowPos(
-            window,
-            Some(HWND_NOTOPMOST),
-            0,
-            0,
-            0,
-            0,
-            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED,
-        )
-        .map_err(|error| error.to_string())?;
+        PostMessageW(Some(window), INITIALIZE_WINDOW, WPARAM(0), LPARAM(0))
+            .map_err(|error| error.to_string())?;
     }
     Ok(())
 }
@@ -69,6 +102,36 @@ pub(super) fn place(
     scale: f32,
 ) -> Result<(), String> {
     let window = hwnd(handle)?;
+    if let Some((width, height)) = size {
+        if !scale.is_finite()
+            || scale <= 0.0
+            || !width.is_finite()
+            || !height.is_finite()
+            || width <= 0.0
+            || height <= 0.0
+        {
+            return Err("Invalid hover window dimensions".into());
+        }
+    }
+    let key = window.0 as isize;
+    let queued = PENDING.with(|pending| {
+        pending
+            .borrow_mut()
+            .insert(key, Placement { size, scale })
+            .is_some()
+    });
+    if !queued {
+        if let Err(error) =
+            unsafe { PostMessageW(Some(window), APPLY_PLACEMENT, WPARAM(0), LPARAM(0)) }
+        {
+            PENDING.with(|pending| pending.borrow_mut().remove(&key));
+            return Err(error.to_string());
+        }
+    }
+    Ok(())
+}
+
+fn place_now(window: HWND, size: Option<(f32, f32)>, scale: f32) -> Result<(), String> {
     unsafe {
         let Some((width, height)) = size else {
             if IsWindowVisible(window).as_bool() {

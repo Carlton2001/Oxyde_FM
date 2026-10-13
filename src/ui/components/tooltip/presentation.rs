@@ -165,7 +165,7 @@ impl Render for DriveTooltip {
         }
         CursorTooltip::new(div().bg(theme.surface).text_color(theme.text)
             .font_family("Inter").font_weight(crate::ui::style::DEFAULT_FONT_WEIGHT)
-            .border(rems(0.0625)).border_color(theme.border).rounded_md().shadow(crate::ui::style::rem_shadow(true))
+            .border(rems(0.0625)).border_color(theme.border).rounded_md().shadow(tooltip_shadow())
             .px(rems(0.75)).py(rems(0.5)).child(body).into_any_element())
     }
 }
@@ -206,7 +206,7 @@ impl Render for DuplicateResultTooltip {
         let location = cx.i18n().text_with_args(Message::TooltipLocation, &args);
         div().w(width).max_w(width).px(rems(0.75)).py(rems(0.5))
             .bg(theme.surface).border(rems(0.0625)).border_color(theme.border).rounded(rems(0.375))
-            .shadow(crate::ui::style::rem_shadow(true)).font_family("Inter")
+            .shadow(tooltip_shadow()).font_family("Inter")
             .font_weight(crate::ui::style::DEFAULT_FONT_WEIGHT).line_height(relative(1.25))
             .flex().flex_col().gap(rems(0.5))
             .child(div().text_size(rems(0.75)).font_weight(FontWeight::MEDIUM).text_color(theme.text)
@@ -295,7 +295,7 @@ impl Render for Tooltip {
                 .bg(theme.surface)
                 .border_color(theme.border)
                 .rounded_md()
-                .shadow(crate::ui::style::rem_shadow(true)))
+                .shadow(tooltip_shadow()))
             .font_family("Inter")
             .font_weight(crate::ui::style::DEFAULT_FONT_WEIGHT)
             .line_height(relative(1.25))
@@ -423,4 +423,13 @@ fn network_tooltip_lines(file: &oxyde_lib::models::FileEntry, i18n: &crate::ui::
         .into_iter().filter(|(_, value)| !value.is_empty()).map(|(message, value)| {
             let mut args = FluentArgs::new(); args.set("value", value); i18n.text_with_args(message, &args)
         }).collect()
+}
+
+// Keep tooltip shadows softer without changing shadows on menus or dialogs.
+pub(super) fn tooltip_shadow() -> Vec<BoxShadow> {
+    let mut shadows = crate::ui::style::rem_shadow(true);
+    for shadow in &mut shadows {
+        shadow.color = shadow.color.opacity(0.5);
+    }
+    shadows
 }

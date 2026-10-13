@@ -25,6 +25,11 @@ pas la fenêtre.
 Lors du passage à un autre fichier image ou PDF, le nom et les métadonnées
 changent immédiatement ; l'aperçu se complète pendant son chargement en arrière-plan.
 La taille native est ajustée dès que le rendu mesure le nouveau contenu.
+Les demandes de placement sont regroupées puis appliquées dans la boucle de
+messages Windows, pour éviter les rappels de déplacement/redimensionnement
+pendant une mise à jour de vue GPUI. Une demande de masquage remplace les
+placements en attente. Les ombres dessinées par les infobulles GPUI ont une
+opacité réduite de moitié.
 
 ## Essai manuel
 

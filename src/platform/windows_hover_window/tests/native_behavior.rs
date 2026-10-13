@@ -36,12 +36,30 @@ impl Drop for TestWindow {
     }
 }
 
+fn apply_pending(window: HWND) {
+    unsafe {
+        let mut message = MSG::default();
+        while PeekMessageW(
+            &mut message,
+            Some(window),
+            APPLY_PLACEMENT,
+            INITIALIZE_WINDOW,
+            PM_REMOVE,
+        )
+        .as_bool()
+        {
+            DispatchMessageW(&message);
+        }
+    }
+}
+
 #[test]
 fn hover_is_passive_owned_mouse_transparent_and_not_globally_topmost() {
     let owner = TestWindow::new();
     let hover = TestWindow::new();
     super::super::windows_window_owner::set_owner(hover.0, owner.0).unwrap();
     configure(hover.raw()).unwrap();
+    apply_pending(hover.0);
     unsafe {
         let style = GetWindowLongPtrW(hover.0, GWL_EXSTYLE) as u32;
         assert_ne!(style & WS_EX_TOOLWINDOW.0, 0);
@@ -58,6 +76,7 @@ fn hover_is_passive_owned_mouse_transparent_and_not_globally_topmost() {
         );
         let foreground = GetForegroundWindow();
         place(hover.raw(), Some((120.0, 80.0)), 1.0).unwrap();
+        apply_pending(hover.0);
         assert!(IsWindowVisible(hover.0).as_bool());
         assert_eq!(GetForegroundWindow(), foreground);
         let mut bounds = windows::Win32::Foundation::RECT::default();
@@ -71,6 +90,34 @@ fn hover_is_passive_owned_mouse_transparent_and_not_globally_topmost() {
                 && cursor.y < bounds.bottom)
         );
         place(hover.raw(), None, 1.0).unwrap();
+        apply_pending(hover.0);
         assert!(!IsWindowVisible(hover.0).as_bool());
     }
+}
+
+#[test]
+fn placements_are_deferred_coalesced_and_cancelled_by_hide() {
+    let hover = TestWindow::new();
+    configure(hover.raw()).unwrap();
+    place(hover.raw(), Some((120.0, 80.0)), 1.0).unwrap();
+    place(hover.raw(), Some((180.0, 100.0)), 1.0).unwrap();
+    assert!(!unsafe { IsWindowVisible(hover.0) }.as_bool());
+    PENDING.with(|pending| {
+        assert_eq!(
+            pending.borrow().get(&(hover.0 .0 as isize)).unwrap().size,
+            Some((180.0, 100.0))
+        )
+    });
+    apply_pending(hover.0);
+    let mut bounds = windows::Win32::Foundation::RECT::default();
+    unsafe { GetWindowRect(hover.0, &mut bounds) }.unwrap();
+    assert_eq!(
+        (bounds.right - bounds.left, bounds.bottom - bounds.top),
+        (180, 100)
+    );
+    place(hover.raw(), Some((200.0, 120.0)), 1.0).unwrap();
+    place(hover.raw(), None, 1.0).unwrap();
+    apply_pending(hover.0);
+    assert!(!unsafe { IsWindowVisible(hover.0) }.as_bool());
+    PENDING.with(|pending| assert!(!pending.borrow().contains_key(&(hover.0 .0 as isize))));
 }
