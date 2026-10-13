@@ -130,7 +130,15 @@ pub(super) fn place(
             y,
             width,
             height,
-            SWP_NOACTIVATE | SWP_NOZORDER | SWP_SHOWWINDOW,
+            SWP_NOACTIVATE
+                | SWP_NOZORDER
+                | SWP_SHOWWINDOW
+                | if current.right - current.left == width && current.bottom - current.top == height
+                {
+                    SWP_NOSIZE
+                } else {
+                    SET_WINDOW_POS_FLAGS(0)
+                },
         )
         .map_err(|error| error.to_string())
     }

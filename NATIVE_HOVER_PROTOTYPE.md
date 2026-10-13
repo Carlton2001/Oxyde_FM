@@ -16,9 +16,15 @@ bords de la fenêtre principale. Elle est masquée quand la session devient
 invalide et supprimée à la fermeture de la fenêtre principale.
 
 Le chargement et l'isolation des décodeurs existants sont conservés. Un contrôle
-sur le thread UI toutes les 50 ms assure le suivi et la disparition même sans
-nouveau rendu de la fenêtre principale. Les placements inchangés n'émettent pas
-de nouveaux événements de redimensionnement natifs.
+sur le thread UI toutes les 100 ms assure uniquement la disparition lors d'une
+désactivation, même sans nouveau rendu de la fenêtre principale. Le déplacement
+suit directement les événements de souris, sans minuterie de suivi. Les
+placements inchangés ne font rien ; les déplacements seuls ne redimensionnent
+pas la fenêtre.
+
+Lors du passage à un autre fichier image ou PDF, le nom et les métadonnées
+changent immédiatement ; l'aperçu se complète pendant son chargement en arrière-plan.
+La taille native est ajustée dès que le rendu mesure le nouveau contenu.
 
 ## Essai manuel
 

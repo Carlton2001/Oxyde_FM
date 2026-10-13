@@ -108,6 +108,14 @@ fn clear(window: &mut Window, cx: &mut App) {
     dismiss(window, cx);
 }
 
+fn publish_tooltip(view: AnyView, window: &mut Window, cx: &mut App) {
+    let id = window.window_handle().window_id();
+    cx.default_global::<Sessions>().windows.get_mut(&id).unwrap().tooltip = Some(view);
+    #[cfg(target_os = "windows")]
+    native_window::sync(window, cx);
+    window.refresh();
+}
+
 fn hover(
     scope: Scope,
     key: String,
@@ -165,13 +173,7 @@ fn hover(
                         return;
                     }
                     let tooltip = builder(window, cx);
-                    let session = cx
-                        .default_global::<Sessions>()
-                        .windows
-                        .get_mut(&id)
-                        .unwrap();
-                    session.tooltip = Some(tooltip);
-                    window.refresh();
+                    publish_tooltip(tooltip, window, cx);
                 });
             });
             cx.default_global::<Sessions>()
@@ -299,6 +301,8 @@ pub(crate) fn region_container(
 ) -> impl IntoElement {
     initialize(cx);
     let owner = owner.downgrade();
+    #[cfg(target_os = "windows")]
+    let follow_region = region.clone();
     canvas(
         move |bounds, window, cx| {
             let Some(owner) = owner.upgrade() else {
@@ -366,7 +370,19 @@ pub(crate) fn region_container(
                 });
             }
         },
-        |_, _, _, _| {},
+        move |bounds, _, window, _| {
+            #[cfg(target_os = "windows")]
+            {
+                let region = follow_region.clone();
+                window.on_mouse_event(move |_: &MouseMoveEvent, phase, window, cx| {
+                    if phase == DispatchPhase::Bubble {
+                        native_window::follow_pointer(&region, bounds, window, cx);
+                    }
+                });
+            }
+            #[cfg(not(target_os = "windows"))]
+            let _ = (bounds, window);
+        },
     )
     .absolute()
     .left_0()

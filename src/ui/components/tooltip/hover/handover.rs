@@ -21,13 +21,12 @@ pub(super) fn replace(
     cx: &mut App,
 ) {
     let id = window.window_handle().window_id();
-    if ready(&view, cx) {
-        cx.default_global::<Sessions>()
-            .windows
-            .get_mut(&id)
-            .unwrap()
-            .tooltip = Some(view);
-        window.refresh();
+    #[cfg(target_os = "windows")]
+    let immediate = super::native_window::immediate_handover(&view, window, cx);
+    #[cfg(not(target_os = "windows"))]
+    let immediate = false;
+    if immediate || ready(&view, cx) {
+        super::publish_tooltip(view, window, cx);
         return;
     }
     // The pending view belongs to the cancellable task, not to the painted
@@ -56,12 +55,7 @@ pub(super) fn replace(
                 if !ready(&view, cx) {
                     return false;
                 }
-                cx.default_global::<Sessions>()
-                    .windows
-                    .get_mut(&id)
-                    .unwrap()
-                    .tooltip = Some(view.clone());
-                window.refresh();
+                super::publish_tooltip(view.clone(), window, cx);
                 true
             })
             .unwrap_or(true);

@@ -48,6 +48,100 @@ fn candidate(view: &AnyView, cx: &App) -> Option<Entity<Tooltip>> {
     (preview.original_image.is_some() || preview.media_asset.is_some()).then_some(tooltip)
 }
 
+pub(super) fn immediate_handover(view: &AnyView, window: &Window, cx: &mut App) -> bool {
+    candidate(view, cx).is_some()
+        && !cx
+            .default_global::<NativeWindows>()
+            .failed
+            .contains(&window.window_handle().window_id())
+}
+
+fn place(root: &NativeTooltip, window: &Window) {
+    if let Ok(raw) = HasWindowHandle::window_handle(window) {
+        let size = root.view.as_ref().map(|_| {
+            let measured = visible_size(root.measured, window.rem_size());
+            (measured.width.as_f32(), measured.height.as_f32())
+        });
+        if let Err(error) = oxyde_lib::platform::platform().place_hover_window(
+            raw.as_raw(),
+            size,
+            window.scale_factor(),
+        ) {
+            log::warn!("Cannot place hover window: {error}");
+        }
+    }
+}
+
+/// Called by pointer events and content publication, never by a movement timer.
+pub(super) fn sync(parent: &mut Window, cx: &mut App) {
+    let id = Window::window_handle(parent).window_id();
+    let handle = cx
+        .default_global::<NativeWindows>()
+        .windows
+        .get(&id)
+        .map(|entry| entry.0);
+    let Some(handle) = handle else {
+        return;
+    };
+    let session = cx
+        .default_global::<Sessions>()
+        .windows
+        .get(&id)
+        .map(|session| (session.scope.clone(), session.tooltip.clone()));
+    let view =
+        session.and_then(|(scope, view)| scope.filter(|scope| scope.valid(parent, cx)).and(view));
+    let view = view.as_ref().and_then(|view| candidate(view, cx));
+    let rem = parent.rem_size();
+    let _ = handle.update(cx, |root, window, cx| {
+        if root.view.as_ref().map(Entity::entity_id) != view.as_ref().map(Entity::entity_id) {
+            if let Some(old) = root.view.take() {
+                old.update(cx, |tooltip, _| tooltip.native_presentation = false);
+            }
+            root.view = view;
+            if let Some(view) = &root.view {
+                view.update(cx, |tooltip, cx| {
+                    tooltip.native_presentation = true;
+                    cx.notify();
+                });
+            }
+            cx.notify();
+            window.refresh();
+        }
+        if window.rem_size() != rem {
+            window.set_rem_size(rem);
+            window.refresh();
+        }
+        place(root, window);
+    });
+}
+
+pub(super) fn follow_pointer(
+    region: &super::HoverRegion,
+    bounds: Bounds<Pixels>,
+    parent: &mut Window,
+    cx: &mut App,
+) {
+    let id = Window::window_handle(parent).window_id();
+    let owns_session = cx
+        .default_global::<Sessions>()
+        .windows
+        .get(&id)
+        .is_some_and(|session| {
+            session
+                .scope
+                .as_ref()
+                .is_some_and(|scope| &scope.region == region)
+        });
+    if !owns_session {
+        return;
+    }
+    if bounds.contains(&parent.mouse_position()) {
+        sync(parent, cx);
+    } else {
+        super::clear(parent, cx);
+    }
+}
+
 pub(super) fn hide(id: WindowId, cx: &mut App) {
     let handle = cx
         .default_global::<NativeWindows>()
@@ -79,7 +173,14 @@ pub(super) fn present(view: &AnyView, parent: &mut Window, cx: &mut App) -> bool
     if state.failed.contains(&id) {
         return false;
     }
-    if state.windows.contains_key(&id) || !state.pending.insert(id) {
+    if state.windows.contains_key(&id) {
+        let parent = Window::window_handle(parent);
+        cx.defer(move |cx| {
+            let _ = parent.update(cx, |_, window, cx| sync(window, cx));
+        });
+        return true;
+    }
+    if !state.pending.insert(id) {
         return true;
     }
     if state.cleanup.is_none() {
@@ -145,68 +246,34 @@ pub(super) fn present(view: &AnyView, parent: &mut Window, cx: &mut App) -> bool
         cx.default_global::<NativeWindows>().pending.remove(&id);
         match result {
             Ok(handle) => {
+                // Only invalidate a hidden/left/deactivated session here. Movement,
+                // content and measured-size changes are event-driven.
                 let task = cx.spawn(async move |cx| loop {
+                    cx.background_executor()
+                        .timer(Duration::from_millis(100))
+                        .await;
                     let alive = cx.update(|cx| {
                         parent_handle
                             .update(cx, |_, parent, cx| {
-                                let session = cx.default_global::<Sessions>().windows.get(&id).map(
-                                    |session| (session.scope.clone(), session.tooltip.clone()),
-                                );
-                                let view = session.and_then(|(scope, view)| {
-                                    scope.filter(|scope| scope.valid(parent, cx)).and(view)
-                                });
-                                let view = view.as_ref().and_then(|view| candidate(view, cx));
-                                let rem = parent.rem_size();
-                                handle
-                                    .update(cx, |root, window, cx| {
-                                        let changed = root.view.as_ref().map(Entity::entity_id)
-                                            != view.as_ref().map(Entity::entity_id);
-                                        if changed {
-                                            if let Some(old) = root.view.take() {
-                                                old.update(cx, |tooltip, _| {
-                                                    tooltip.native_presentation = false
-                                                });
-                                            }
-                                            root.view = view;
-                                            if let Some(view) = &root.view {
-                                                view.update(cx, |tooltip, _| {
-                                                    tooltip.native_presentation = true
-                                                });
-                                            }
-                                            cx.notify();
-                                            window.refresh();
-                                        }
-                                        if window.rem_size() != rem {
-                                            window.set_rem_size(rem);
-                                            window.refresh();
-                                        }
-                                        root.scale = window.scale_factor();
-                                        if let Ok(raw) = HasWindowHandle::window_handle(window) {
-                                            let size = root.view.as_ref().map(|_| {
-                                                let measured = visible_size(root.measured, rem);
-                                                (measured.width.as_f32(), measured.height.as_f32())
-                                            });
-                                            if let Err(error) = oxyde_lib::platform::platform()
-                                                .place_hover_window(raw.as_raw(), size, root.scale)
-                                            {
-                                                log::warn!("Cannot place hover window: {error}");
-                                            }
-                                        }
-                                    })
-                                    .is_ok()
+                                let scope = cx
+                                    .default_global::<Sessions>()
+                                    .windows
+                                    .get(&id)
+                                    .and_then(|session| session.scope.clone());
+                                if !scope.is_some_and(|scope| scope.valid(parent, cx)) {
+                                    hide(id, cx);
+                                }
                             })
-                            .unwrap_or(false)
+                            .is_ok()
                     });
                     if !alive {
                         break;
                     }
-                    cx.background_executor()
-                        .timer(Duration::from_millis(50))
-                        .await;
                 });
                 cx.default_global::<NativeWindows>()
                     .windows
                     .insert(id, (handle, task));
+                let _ = parent_handle.update(cx, |_, parent, cx| sync(parent, cx));
             }
             Err(error) => {
                 log::warn!("Native hover preview unavailable: {error}");
@@ -281,7 +348,14 @@ impl Element for MeasuredContent {
         {
             let owner = self.owner.clone();
             let measured = *measured;
-            cx.defer(move |cx| owner.update(cx, |root, _| root.measured = Some(measured)));
+            let handle = Window::window_handle(window);
+            cx.defer(move |cx| {
+                owner.update(cx, |root, _| root.measured = Some(measured));
+                let _ = handle.update(cx, |_, window, cx| {
+                    let root = owner.read(cx);
+                    place(root, window);
+                });
+            });
         }
     }
     fn paint(
