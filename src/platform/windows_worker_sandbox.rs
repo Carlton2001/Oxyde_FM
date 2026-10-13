@@ -199,9 +199,7 @@ impl Runtime {
         // An image cannot be loaded while a writable file object is retained.
         let transition = OpenOptions::new().read(true).share_mode(7).open(&target)?;
         let created_id = file_id(target_file)?;
-        if file_id(&transition)? != created_id {
-            return Err(io::Error::other("Archive runtime identity changed"));
-        }
+        require_identity(&transition, created_id)?;
         drop(runtime.binary.take());
         #[cfg(test)]
         HANDLE_TRANSITION_HOOK.with(|hook| {
@@ -216,10 +214,8 @@ impl Runtime {
             }
         });
         let binary = retain_for_delete(&target, false)?;
-        if file_id(&binary)? != created_id {
-            // The reopened file is foreign: never enroll it in owned cleanup.
-            return Err(io::Error::other("Archive runtime identity changed"));
-        }
+        // The reopened file is foreign if this fails: never enroll it in cleanup.
+        require_identity(&binary, created_id)?;
         drop(transition);
         runtime.binary = Some(binary);
         let binary = runtime
@@ -294,6 +290,10 @@ fn file_id(file: &File) -> io::Result<(u64, [u8; 16])> {
     }
     .map_err(native)?;
     Ok((info.VolumeSerialNumber, info.FileId.Identifier))
+}
+fn require_identity(file: &File, expected: (u64, [u8; 16])) -> io::Result<()> {
+    if file_id(file)? != expected { return Err(io::Error::other("Archive runtime identity changed")); }
+    Ok(())
 }
 fn retain_for_delete(path: &Path, directory: bool) -> io::Result<File> {
     let file = OpenOptions::new()
@@ -762,3 +762,6 @@ type HandleTransitionHook = Box<dyn FnOnce(&Path, &File)>;
 #[cfg(test)]
 #[path = "windows_worker_sandbox/tests/identity_tests.rs"]
 mod identity_tests;
+#[cfg(test)]
+#[path = "windows_worker_sandbox/tests/object_identity_tests.rs"]
+mod object_identity_tests;
