@@ -13,8 +13,7 @@ pub(super) fn visible(p: &PendingFileOperation) -> Vec<usize> {
 }
 pub(super) fn restore_focus(handle: &Entity<OxydeApp>, window: &mut Window, cx: &mut App) {
     if handle.read(cx).pending_file_operations.is_empty() {
-        let focus = handle.read(cx).focus_handle.clone();
-        window.focus(&focus, cx);
+        window.remove_window();
     }
 }
 pub(super) fn edit(

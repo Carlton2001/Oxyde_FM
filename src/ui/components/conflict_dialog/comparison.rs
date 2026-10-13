@@ -116,9 +116,9 @@ fn card(
         .p(rems(1.0))
         .rounded(rems(0.75))
         .bg(if newer {
-            t.background.blend(t.accent.opacity(0.04))
+            t.active_background.blend(t.accent.opacity(0.04))
         } else {
-            t.background.blend(t.header.opacity(0.8))
+            t.active_background.blend(t.header.opacity(0.8))
         })
         .border(rems(0.0625))
         .border_color(if newer { t.accent } else { t.border })

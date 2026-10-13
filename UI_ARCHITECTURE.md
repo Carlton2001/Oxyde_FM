@@ -55,6 +55,7 @@ Après une extraction, vérifier la compilation et les parcours réellement touc
 Le thème actif est accessible avec `cx.theme()`. Les 13 thèmes de `ThemeId::ALL`, définis dans `src/models/preferences.rs`, reprennent Oxyde, Ayu, GitHub, One, Solarized et Windows en variantes claires et sombres, ainsi que Monokai sombre. Les identifiants historiques `dark` et `light` restent ceux des thèmes Oxyde. Les libellés Fluent paramétrés traduisent Clair/Sombre (Light/Dark), avec une icône Lucide Sun/Moon à gauche de chaque choix.
 
 - Utiliser les jetons de `OxydeTheme` pour les surfaces, textes, bordures, actions, sélection, survol, erreurs, menus, onglets, icônes et barres de défilement.
+- `background` distingue les panneaux de fichiers inactifs ; les fenêtres secondaires autonomes utilisent `active_background` pour leur fond et `surface` pour leur barre de titre. Les champs de saisie non compacts utilisent `surface`, avec une bordure accentuée au focus ; les champs compacts gardent un fond transparent fourni par leur conteneur.
 - Les filtres Type, Taille et Date du mode Détails affichent une pastille à droite de chaque option, avec le nombre d'éléments correspondants parmi les fichiers de l'onglet avant filtrage. Les nombres suivent la langue active ; `DropdownItem::badge` utilise les couleurs sémantiques et entre dans le calcul de largeur du menu.
 - Si un rôle visuel partagé manque, ajouter un jeton sémantique et lui donner une valeur dans chaque palette. Ne pas introduire une couleur littérale dans une vue pour contourner le thème.
 - Garder une valeur locale uniquement si elle exprime un effet propre au composant, comme un fond entièrement transparent. Le rôle doit rester évident dans le code.
@@ -190,6 +191,10 @@ Les appels passent par `Platform::map_network_drive` et `Platform::disconnect_ne
 - Une compilation réussie ne valide pas à elle seule le contraste, la disposition ou le comportement visuel.
 
 ## Références
+
+Les propriétés de corbeille et les conflits utilisent des fenêtres natives indépendantes via `app/dialog_windows.rs`. Leurs opérations et validations restent dans `OxydeApp` ; chaque fenêtre observe cet état, possède ses menus de texte et se ferme à la disparition du dialogue ou à la fermeture de l’application. La corbeille conserve le refus de fermeture pendant une écriture ; rouvrir ses propriétés réactive la fenêtre existante. Ces dialogues ne bloquent plus les raccourcis de navigation de la fenêtre principale.
+
+Les propriétés de fichier/dossier, la corbeille et les conflits simples adaptent leur hauteur au contenu après le layout, dans la zone visible de l’écran. Les conflits avancés occupent la fenêtre, avec contrôles natifs minimiser/agrandir/restaurer et redimensionnement système. La poignée de redimensionnement du popup a disparu ; le séparateur de la liste des conflits reste ajustable avec un curseur horizontal. `Modal::standalone` construit directement un cadre de fenêtre avec la barre de titre commune, sans enveloppe de popup, interception globale de souris ni ombre GPUI. Les fenêtres de propriétés de fichiers/dossiers et de corbeille ont Oxyde comme propriétaire natif Windows pour rester au-dessus de sa fenêtre principale. Les conflits simples et avancés ont également Oxyde comme propriétaire natif et restent au-dessus de sa fenêtre principale. Le retour au mode simple restaure les dimensions précédentes, puis adapte la hauteur au contenu. Leur fermeture reste liée à celle de l’application par le cycle de vie GPUI et le hook existant de fermeture.
 
 - [GPUI](https://gpui.rs/)
 - [API Rust Fluent](https://docs.rs/fluent-bundle/0.16.0/fluent_bundle/)

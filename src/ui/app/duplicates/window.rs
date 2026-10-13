@@ -84,7 +84,7 @@ impl Render for DuplicateWindow {
             .size_full()
             .flex()
             .flex_col()
-            .bg(theme.background)
+            .bg(theme.active_background)
             .text_color(theme.text)
             .font_family("Inter")
             .font_weight(crate::ui::style::DEFAULT_FONT_WEIGHT)

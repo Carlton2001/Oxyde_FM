@@ -139,7 +139,7 @@ impl DuplicateWindow {
                     .bg(if selected {
                         theme.selected
                     } else {
-                        theme.background
+                        theme.active_background
                     })
                     .border_b(if index + 1 < self.locations.len() {
                         rems(0.0625)
@@ -227,7 +227,7 @@ impl DuplicateWindow {
                             .bg(if checked {
                                 theme.accent
                             } else {
-                                theme.background
+                                theme.active_background
                             })
                             .when(checked, |s| {
                                 s.child(

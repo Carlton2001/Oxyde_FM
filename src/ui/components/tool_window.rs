@@ -2,6 +2,27 @@ use crate::ui::theme::ThemeContext;
 use gpui::prelude::*;
 use gpui::*;
 
+/// Resize content-sized tool windows after layout, avoiding layout re-entry.
+pub(crate) fn content_height_limit(window: &Window, cx: &App) -> Pixels {
+    window.display(cx).map(|display| (display.visible_bounds().size.height
+        - rems(5.0).to_pixels(window.rem_size())).max(px(100.0)))
+        .unwrap_or(px(900.0))
+}
+
+pub(crate) fn fit_content_height(height: Pixels, window: &mut Window, cx: &App) {
+    fit_content_height_at_width(height, window.viewport_size().width, window, cx);
+}
+
+pub(crate) fn fit_content_height_at_width(height: Pixels, width: Pixels, window: &mut Window, cx: &App) {
+    let target = height.ceil().min(content_height_limit(window, cx));
+    if ((window.viewport_size().height - target).abs() > px(1.0)
+        || (window.viewport_size().width - width).abs() > px(1.0)) && target > px(0.0) {
+        window.on_next_frame(move |window, _| {
+            window.resize(size(width, target));
+        });
+    }
+}
+
 /// Rasterize the official SVG without changing its geometry, for WM_SETICON.
 fn native_tool_icon(path: &str, cx: &App) -> Option<Vec<u8>> {
     let bytes = cx.asset_source().load(path).ok()??;
@@ -68,10 +89,11 @@ pub(crate) fn header(
     let theme = *cx.theme();
     div()
         .h(rems(2.25))
+        .w_full()
         .flex_none()
         .flex()
         .items_center()
-        .bg(theme.header)
+        .bg(theme.surface)
         .border_b(rems(0.0625))
         .border_color(theme.border)
         .child(

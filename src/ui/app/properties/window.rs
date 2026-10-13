@@ -47,8 +47,7 @@ impl OxydeApp {
         let title = cx.i18n().text(Message::Properties);
         let origin = window.bounds().origin + point(px(48.0), px(48.0));
         let native_owner = raw_window_handle::HasWindowHandle::window_handle(window)
-            .ok()
-            .map(|handle| handle.as_raw());
+            .ok().map(|handle| handle.as_raw());
         cx.defer(move |cx| {
             if owner.upgrade().is_none() {
                 return;
@@ -70,12 +69,9 @@ impl OxydeApp {
                 },
                 move |window, cx| {
                     if let (Some(owner), Ok(handle)) = (
-                        native_owner,
-                        raw_window_handle::HasWindowHandle::window_handle(window),
+                        native_owner, raw_window_handle::HasWindowHandle::window_handle(window),
                     ) {
-                        if let Err(error) =
-                            oxyde_lib::platform::platform().set_window_owner(handle.as_raw(), owner)
-                        {
+                        if let Err(error) = oxyde_lib::platform::platform().set_window_owner(handle.as_raw(), owner) {
                             log::warn!("Cannot attach properties window to Oxyde: {error}");
                         }
                     }
@@ -154,7 +150,7 @@ impl Render for PropertiesWindow {
         let mut root = div()
             .size_full()
             .relative()
-            .bg(theme.background)
+            .bg(theme.active_background)
             .text_color(theme.text)
             .font_family("Inter")
             .font_weight(crate::ui::style::DEFAULT_FONT_WEIGHT)

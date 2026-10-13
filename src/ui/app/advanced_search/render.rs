@@ -381,7 +381,7 @@ impl Render for AdvancedSearchWindow {
         let mut root = div()
             .size_full()
             .relative()
-            .bg(theme.background)
+            .bg(theme.active_background)
             .text_color(theme.text)
             .font_family("Inter")
             .font_weight(crate::ui::style::DEFAULT_FONT_WEIGHT)

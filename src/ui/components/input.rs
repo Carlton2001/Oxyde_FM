@@ -802,10 +802,8 @@ impl Render for TextInput {
             .on_mouse_move(cx.listener(Self::on_mouse_move))
             .bg(if self.compact {
                 hsla(0.0, 0.0, 0.0, 0.0)
-            } else if is_focused {
-                theme.active_background
             } else {
-                theme.background
+                theme.surface
             })
             .border(rems(0.0625))
             .border_color(if self.compact {

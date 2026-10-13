@@ -5,9 +5,9 @@ impl OxydeApp {
         self.focus_handle.is_focused(window)
             && !self.settings_open
             && self.network_dialog.is_none()
-            && self.trash_settings.is_none() && self.editing_path.is_none()
+            && self.editing_path.is_none()
             && self.settings_confirmation.is_none() && self.network_force_confirmation.is_none()
-            && self.pending_trash_delete.is_none() && self.pending_file_operations.is_empty()
+            && self.pending_trash_delete.is_none()
             && self.file_operation_notice.is_none()
     }
 

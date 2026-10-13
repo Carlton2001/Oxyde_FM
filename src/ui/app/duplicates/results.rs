@@ -143,7 +143,7 @@ impl DuplicateWindow {
                                 .rounded(rems(0.375))
                                 .border(rems(0.0625))
                                 .border_color(theme.border)
-                                .bg(theme.background)
+                                .bg(theme.active_background)
                                 .text_size(rems(0.75))
                                 .child(crate::ui::format::format_size(
                                     group.size,

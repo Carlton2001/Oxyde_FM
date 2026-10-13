@@ -24,10 +24,14 @@ pub(crate) struct TrashSettings {
     confirm: bool,
     usage: (u64, u64),
     loading: bool,
-    busy: bool,
+    pub(super) busy: bool,
     error: Option<String>,
-    focus: FocusHandle,
+    pub(super) focus: FocusHandle,
     save_focus: FocusHandle,
+}
+
+impl TrashSettings {
+    pub(super) fn request_id(&self) -> EntityId { self.input.entity_id() }
 }
 
 fn capacity_mb(value: &str, percent: bool, total_bytes: u64) -> Option<u64> {

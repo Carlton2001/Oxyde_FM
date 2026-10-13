@@ -76,10 +76,22 @@ pub struct Modal {
     body_padding: (Rems, Rems),
     header_background: Option<Hsla>,
     body_background: Option<Hsla>,
-    overlay: Option<AnyElement>,
+    standalone: bool,
+    fill_window: bool,
+    content_width: Option<Pixels>,
 }
 
 impl Modal {
+    pub(crate) fn content_width(mut self, width: Option<Pixels>) -> Self {
+        self.content_width = width;
+        self
+    }
+    pub(crate) fn standalone(mut self, fill_window: bool) -> Self {
+        self.standalone = true;
+        self.fill_window = fill_window;
+        self
+    }
+
     pub fn new(
         id: impl Into<ElementId>,
         title: impl Into<SharedString>,
@@ -99,15 +111,12 @@ impl Modal {
             body_padding: (rems(1.0), rems(1.25)),
             header_background: None,
             body_background: None,
-            overlay: None,
+            standalone: false,
+            fill_window: false,
+            content_width: None,
         }
     }
 
-    /// Optional presentation anchored to the entire panel, above its body and footer.
-    pub fn overlay(mut self, element: impl IntoElement) -> Self {
-        self.overlay = Some(element.into_any_element());
-        self
-    }
     pub fn body_padding(mut self, horizontal: Rems, vertical: Rems) -> Self {
         self.body_padding = (horizontal, vertical);
         self
@@ -160,6 +169,33 @@ impl Modal {
 impl RenderOnce for Modal {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let theme = *cx.theme();
+        if self.standalone {
+            let height_limit = if self.fill_window { window.viewport_size().height } else {
+                crate::ui::components::tool_window::content_height_limit(window, cx)
+            };
+            let fill_window = self.fill_window;
+            let content_width = self.content_width;
+            let header = self.header.unwrap_or_else(|| div().child(self.title).into_any_element());
+            return div().id(self.id).relative().w_full().max_h(height_limit)
+                .when(fill_window, |frame| frame.h_full())
+                .flex().flex_col().bg(self.body_background.unwrap_or(theme.active_background))
+                .text_color(theme.text).text_size(rems(0.8125)).line_height(relative(1.25))
+                .child(header)
+                .child(div().id("modal-body").min_h_0().overflow_y_scroll().px(self.body_padding.0).py(self.body_padding.1)
+                    .flex().flex_col().gap(self.body_gap)
+                    .when(fill_window, |body| body.flex_1()).child(self.body))
+                .when(!self.actions.is_empty(), |frame| frame.child(
+                    div().flex_none().px(rems(1.0)).py(rems(0.625))
+                        .border_t(rems(0.0625)).border_color(theme.border).flex().justify_end()
+                        .when(self.wrap_actions, |actions| actions.flex_wrap())
+                        .gap(rems(0.5)).children(self.actions)))
+                .child(canvas(|bounds, _, _| bounds, move |_, bounds, window, cx| {
+                    if !fill_window {
+                        crate::ui::components::tool_window::fit_content_height_at_width(
+                            bounds.size.height, content_width.unwrap_or(bounds.size.width), window, cx);
+                    }
+                }).absolute().size_full()).into_any_element();
+        }
         let placement =
             window.use_keyed_state(self.id.clone(), cx, |_, _| ModalPlacement::default());
         let viewport = window.viewport_size();
@@ -323,11 +359,8 @@ impl RenderOnce for Modal {
                                 .gap(rems(0.5))
                                 .children(self.actions),
                         )
-                    })
-                    .when_some(self.overlay, |panel, overlay| {
-                        panel.child(deferred(overlay))
                     }),
-            )
+            ).into_any_element()
     }
 }
 

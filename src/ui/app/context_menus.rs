@@ -262,7 +262,7 @@ impl OxydeApp {
         input: Entity<TextInput>,
         has_selection: bool,
         position: Point<Pixels>,
-        _window: &mut Window,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         use crate::ui::components::dropdown::{DropdownItem, IconName};
@@ -310,6 +310,10 @@ impl OxydeApp {
             items.push(item);
         }
 
+        if window.root::<super::dialog_windows::DialogWindow>().flatten().is_some() {
+            super::dialog_windows::show_text_menu(items, position, window, cx);
+            return;
+        }
         self.context_menus.clear();
         self.context_menus.push(ContextMenuInstance {
             position,

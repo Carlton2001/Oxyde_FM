@@ -50,7 +50,7 @@ impl AdvancedSearchWindow {
                 .overflow_hidden()
                 .border(rems(0.0625))
                 .border_color(theme.border)
-                .bg(theme.background);
+                .bg(theme.surface);
             if index != 1 {
                 field = field.child(self.advanced_toggle(
                     if index == 0 { 0 } else { 1 },
@@ -121,7 +121,7 @@ impl AdvancedSearchWindow {
                 .gap(rems(0.5))
                 .border(rems(0.0625))
                 .border_color(theme.border)
-                .bg(theme.background)
+                .bg(theme.surface)
                 .track_focus(&d.controls[8])
                 .child(units[d.unit])
                 .child(
@@ -192,7 +192,7 @@ impl AdvancedSearchWindow {
                     .rounded_md()
                     .border(rems(0.0625))
                     .border_color(theme.border)
-                    .bg(theme.background)
+                    .bg(theme.surface)
                     .child(
                         div()
                             .flex_1()

@@ -24,6 +24,8 @@ mod archives;
 mod rename;
 mod context_menus;
 mod drag;
+mod dialog_windows;
+pub(crate) use dialog_windows::close_dialog_windows;
 mod render;
 mod context_menu_render;
 pub use drag::drives_differ;
@@ -246,6 +248,7 @@ pub struct OxydeApp {
     pub(super) trash_delete_check_pending: bool,
     pub(crate) pending_trash_delete: Option<trash_settings::PendingDelete>,
     pub(crate) trash_settings: Option<trash_settings::TrashSettings>,
+    dialog_windows_open: [bool; 2],
     pub(crate) network_dialog: Option<network::NetworkDialog>,
     pub(crate) network_dialog_revision: u64,
     pub(crate) network_force_confirmation: Option<network::NetworkForceConfirmation>,
@@ -416,6 +419,7 @@ impl OxydeApp {
             disk_image_refresh_task: None,
             network_dialog: None,
             trash_settings: None,
+            dialog_windows_open: [false; 2],
             pending_trash_delete: None,
             shift_delete: false,
             trash_delete_policy: Default::default(),

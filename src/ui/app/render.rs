@@ -340,7 +340,7 @@ impl Render for OxydeApp {
         }
 
         if self.pending_trash_delete.is_some() { root = root.child(deferred(trash_settings::render_delete_confirmation(self, handle.clone(), _window, cx))); }
-        if self.trash_settings.is_some() { root = root.child(deferred(trash_settings::render(self, handle.clone(), cx))); }
+        self.ensure_dialog_window(dialog_windows::DialogKind::Trash, _window, cx);
         if self.settings_confirmation.is_some() {
             root = root.child(deferred(
                 crate::ui::components::settings::render_settings_confirmation(
@@ -349,18 +349,7 @@ impl Render for OxydeApp {
             ));
         }
 
-        let conflict_system_icons = self.use_system_icons();
-        if let Some(pending) = self.pending_file_operations.front_mut() {
-            root = root.child(deferred(
-                crate::ui::components::conflict_dialog::render_conflict_dialog(
-                    pending,
-                    conflict_system_icons,
-                    _window,
-                    handle.clone(),
-                    cx,
-                ),
-            ));
-        }
+        self.ensure_dialog_window(dialog_windows::DialogKind::Conflict, _window, cx);
 
         if let Some((key, detail)) = self.file_operation_notice.clone() {
             let mut args = FluentArgs::new();

@@ -4,7 +4,7 @@ pub use oxyde_lib::models::preferences::ThemeId;
 
 #[derive(Debug, Clone, Copy)]
 pub struct OxydeTheme {
-    pub background: Hsla,        // Fond principal (FileList)
+    pub background: Hsla,        // Fond des panneaux de fichiers inactifs
     pub active_background: Hsla, // Fond du panneau actif
     pub sidebar: Hsla,           // Sidebar et panneaux latéraux
     pub header: Hsla,            // TopBar / TabBar

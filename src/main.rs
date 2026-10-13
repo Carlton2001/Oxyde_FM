@@ -142,6 +142,7 @@ fn main() {
                         crate::ui::app::duplicates::close_duplicate_windows(cx);
                         crate::ui::app::advanced_search::close_advanced_search_windows(cx);
                         crate::ui::app::properties::close_properties_windows(cx);
+                        crate::ui::app::close_dialog_windows(cx);
                         true
                     });
                     let focus_handle = app.read(cx).focus_handle.clone();

@@ -38,7 +38,7 @@ pub(super) fn render_advanced_body(
 ) -> Div {
     let t = *cx.theme();
     let sidebar_drag = handle.clone();
-    let mut body = div().flex().flex_col().gap(rems(0.0));
+    let mut body = div().flex().flex_col().flex_1().min_h_0().gap(rems(0.0));
     let mut tabs = div()
         .flex()
         .flex_none()
@@ -302,7 +302,7 @@ pub(super) fn render_advanced_body(
         div()
             .relative()
             .flex()
-            .h(rems(pending.dialog.height))
+            .flex_1()
             .min_h_0()
             .child(
                 div()
@@ -319,6 +319,7 @@ pub(super) fn render_advanced_body(
             .child(
                 div()
                     .id("conflict-sidebar-resize")
+                    .cursor(CursorStyle::ResizeLeftRight)
                     .w(rems(0.1875))
                     .h_full()
                     .flex_none()
@@ -327,8 +328,8 @@ pub(super) fn render_advanced_body(
                     .on_mouse_down(MouseButton::Left, move |event, _, cx| {
                         cx.stop_propagation();
                         edit(&sidebar_drag, cx, |p| {
-                            p.dialog.resize =
-                                Some((event.position, p.dialog.sidebar_width, 0.0, true))
+                            p.dialog.sidebar_resize =
+                                Some((event.position, p.dialog.sidebar_width))
                         });
                     }),
             )

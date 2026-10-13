@@ -14,6 +14,7 @@ pub(crate) fn render(
 ) -> impl IntoElement {
     let dialog = view.properties_dialog.as_ref().unwrap();
     let theme = *cx.theme();
+    let height_limit = crate::ui::components::tool_window::content_height_limit(window, cx);
     let presentation = dialog.properties.as_ref().map(property_presentation);
     let label_width = general::label_width(presentation.as_ref(), theme, window, cx);
     let mut body = div().flex().flex_col().gap(rems(0.375));
@@ -169,7 +170,9 @@ pub(crate) fn render(
         .on_action(|_: &Coller, _, cx| cx.stop_propagation())
         .child(
             div()
-                .size_full()
+                .relative()
+                .w_full()
+                .max_h(height_limit)
                 .flex()
                 .flex_col()
                 .child(crate::ui::components::tool_window::header(
@@ -185,7 +188,7 @@ pub(crate) fn render(
                 .child(
                     div()
                         .id("properties-body")
-                        .flex_1()
+                        .flex_shrink(1.0)
                         .min_h_0()
                         .overflow_y_scroll()
                         .when(!has_shortcut, |body| body.px(rems(1.0)).py(rems(1.25)))
@@ -231,7 +234,10 @@ pub(crate) fn render(
                                     ok.update(cx, |this, cx| this.accept_properties(window, cx));
                                 }),
                         ),
-                ),
+                )
+                .child(canvas(|bounds, _, _| bounds, |_, bounds, window, cx| {
+                    crate::ui::components::tool_window::fit_content_height(bounds.size.height, window, cx);
+                }).absolute().size_full()),
         )
         .when(dialog.saving, |root| {
             root.child(

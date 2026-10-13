@@ -2,6 +2,10 @@ use super::*;
 
 impl OxydeApp {
     pub(crate) fn open_trash_settings(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.trash_settings.is_some() {
+            cx.defer(super::super::dialog_windows::activate_trash_window);
+            return;
+        }
         self.context_menus.clear();
         let h = self.handle.as_ref().unwrap().clone();
         let change = h.clone();
@@ -43,7 +47,6 @@ impl OxydeApp {
             )
         });
         let focus = cx.focus_handle();
-        window.focus(&focus, cx);
         self.trash_settings = Some(TrashSettings {
             drives: vec![],
             configs: vec![],
@@ -120,7 +123,7 @@ impl OxydeApp {
             return;
         }
         self.trash_settings = None;
-        window.focus(&self.focus_handle, cx);
+        window.remove_window();
         cx.notify();
     }
 

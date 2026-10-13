@@ -21,9 +21,8 @@ use std::collections::{HashMap, HashSet};
 pub(crate) struct ConflictDialogState {
     advanced: bool,
     width: f32,
-    height: f32,
     sidebar_width: f32,
-    resize: Option<(Point<Pixels>, f32, f32, bool)>,
+    sidebar_resize: Option<(Point<Pixels>, f32)>,
     focus: Option<FocusHandle>,
     selected: usize,
     filter: usize,
@@ -40,9 +39,8 @@ impl Default for ConflictDialogState {
         Self {
             advanced: false,
             width: 52.0,
-            height: 27.25,
             sidebar_width: 25.0,
-            resize: None,
+            sidebar_resize: None,
             focus: None,
             selected: 0,
             filter: 0,
@@ -55,9 +53,14 @@ impl Default for ConflictDialogState {
         }
     }
 }
+impl ConflictDialogState {
+    pub(crate) fn is_advanced(&self) -> bool { self.advanced }
+    pub(crate) fn reset_focus(&mut self) { self.focus = None; }
+}
 pub(crate) fn render_conflict_dialog(
     pending_state: &mut PendingFileOperation,
     system: bool,
+    simple_width: Option<Pixels>,
     window: &mut Window,
     handle: Entity<OxydeApp>,
     cx: &mut Context<OxydeApp>,
@@ -103,7 +106,8 @@ pub(crate) fn render_conflict_dialog(
         pending.dialog.input = Some(input.clone());
     }
     let advanced = pending.dialog.advanced;
-    let max_width = (window.viewport_size().width / window.rem_size()).max(2.0) - 2.0;
+    let max_width = (window.viewport_size().width / window.rem_size()).max(2.0);
+    pending.dialog.width = max_width;
     let width = pending.dialog.width.min(max_width);
     let sidebar_width = pending.dialog.sidebar_width.min((width - 20.0).max(10.0));
     let rows = visible(pending);
@@ -132,5 +136,5 @@ pub(crate) fn render_conflict_dialog(
             .child(comparison);
         body
     };
-    render_frame(pending, body, width, handle, cx)
+    render_frame(pending, body, width, simple_width, handle, window, cx)
 }

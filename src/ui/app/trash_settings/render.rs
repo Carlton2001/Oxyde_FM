@@ -26,6 +26,7 @@ fn toggle(value: bool, theme: crate::ui::theme::OxydeTheme) -> impl IntoElement 
 pub(crate) fn render(
     view: &OxydeApp,
     handle: Entity<OxydeApp>,
+    window: &mut Window,
     cx: &mut Context<OxydeApp>,
 ) -> impl IntoElement {
     let dialog = view.trash_settings.as_ref().unwrap();
@@ -95,33 +96,16 @@ pub(crate) fn render(
                 body,
             )
             .title_icon("icons/trash-2.svg")
-            .header(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap(rems(0.5))
-                    .child(
-                        svg()
-                            .path("icons/trash-2.svg")
-                            .size(rems(1.0))
-                            .text_color(theme.text_muted),
-                    )
-                    .child(
-                        div()
-                            .flex_1()
-                            .child(cx.i18n().text(Message::TrashProperties)),
-                    )
-                    .child(
-                        div()
-                            .id("trash-settings-close")
-                            .child(svg().path("icons/x.svg").size(rems(1.0)))
-                            .on_mouse_down(MouseButton::Left, move |_, window, cx| {
-                                cx.stop_propagation();
-                                title_close
-                                    .update(cx, |this, cx| this.close_trash_settings(window, cx));
-                            }),
-                    ),
-            )
+            .standalone(false)
+            .header_background(theme.surface)
+            .body_background(theme.active_background)
+            .header(crate::ui::components::tool_window::header(
+                "icons/trash-2.svg", cx.i18n().text(Message::TrashProperties),
+                window.is_maximized(), false, cx,
+                move |window, cx| {
+                    title_close.update(cx, |app, cx| app.close_trash_settings(window, cx));
+                },
+            ))
             .width(rems(28.0))
             .on_backdrop_dismiss(move |window, cx| {
                 close.update(cx, |this, cx| this.close_trash_settings(window, cx));
