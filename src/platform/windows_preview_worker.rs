@@ -154,10 +154,13 @@ pub(super) fn run(mode: &str, path: &Path) -> io::Result<Vec<u8>> {
         .lock()
         .map_err(|_| io::Error::other("Preview worker admission failed"))?;
     if mode == "image" {
-        run_image_in(
+        run_image_in(&std::env::current_exe()?.with_file_name("oxyde-image-worker.exe"), path, DEADLINE)
+    } else if mode == "image-thumbnail" {
+        run_image_mode_in(
             &std::env::current_exe()?.with_file_name("oxyde-image-worker.exe"),
             path,
             DEADLINE,
+            mode == "image-thumbnail",
         )
     } else if mode == "office-text" {
         run_office_text_in(
@@ -175,6 +178,9 @@ pub(super) fn run_image_in(
     path: &Path,
     deadline: Duration,
 ) -> io::Result<Vec<u8>> {
+    run_image_mode_in(executable, path, deadline, false)
+}
+fn run_image_mode_in(executable: &Path, path: &Path, deadline: Duration, thumbnail: bool) -> io::Result<Vec<u8>> {
     let source = crate::platform::platform().retain_archive_source(path)?;
     if source.file.metadata()?.len()
         > crate::utils::image_preview_decode::POLICY.encoded_bytes as u64
@@ -185,7 +191,7 @@ pub(super) fn run_image_in(
         ));
     }
     let mut command = Command::new(executable);
-    command.arg("--oxyde-image-handle-worker-v1");
+    command.arg(if thumbnail { crate::commands::image_handle_worker::THUMBNAIL_FLAG } else { crate::commands::image_handle_worker::FLAG });
     supervise_source(
         command,
         &source.file,
@@ -195,6 +201,10 @@ pub(super) fn run_image_in(
         &|| Ok(()),
     )
 }
+
+#[cfg(test)]
+#[path = "windows_preview_worker/tests/thumbnail.rs"]
+mod thumbnail_tests;
 pub(super) fn run_office_text_in(
     executable: &Path,
     path: &Path,

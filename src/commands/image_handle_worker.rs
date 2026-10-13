@@ -10,6 +10,7 @@ use std::{
 };
 
 pub const FLAG: &str = "--oxyde-image-handle-worker-v1";
+pub const THUMBNAIL_FLAG: &str = "--oxyde-thumbnail-handle-worker-v1";
 pub fn run_if_requested(
     svg: &dyn Fn(
         &[u8],
@@ -17,9 +18,10 @@ pub fn run_if_requested(
     ) -> Result<Vec<image::Frame>, image_preview_decode::PreviewError>,
 ) -> bool {
     let mut arguments = std::env::args_os().skip(1);
-    if arguments.next().as_deref() != Some(std::ffi::OsStr::new(FLAG)) {
-        return false;
-    }
+    let flag = arguments.next();
+    let thumbnail = flag.as_deref() == Some(std::ffi::OsStr::new(THUMBNAIL_FLAG));
+    if !thumbnail && flag.as_deref() != Some(std::ffi::OsStr::new(FLAG)) { return false; }
+    let policy = if thumbnail { image_preview_decode::Policy { output_side: 128, frame_count: 1, ..POLICY } } else { POLICY };
     let result = (|| -> io::Result<()> {
         let mut gate = [0];
         io::stdin().read_exact(&mut gate)?;
@@ -39,8 +41,8 @@ pub fn run_if_requested(
             return Err(io::Error::other("Unexpected image argument"));
         }
         let file = unsafe { File::from_raw_handle(handle as *mut std::ffi::c_void) };
-        let decoded = image_preview_decode::read_bounded(file, POLICY.encoded_bytes)
-            .and_then(|data| image_preview_decode::decode(&data, POLICY, svg));
+        let decoded = image_preview_decode::read_bounded(file, policy.encoded_bytes)
+            .and_then(|data| image_preview_decode::decode(&data, policy, svg));
         let reply = match decoded {
             Ok(decoded) => Reply::Images {
                 frames: decoded.frames,

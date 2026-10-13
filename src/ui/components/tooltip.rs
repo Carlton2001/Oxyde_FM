@@ -22,6 +22,13 @@ pub(crate) fn invalidate_media_preview(path: &str) {
     image_cache::invalidate(std::path::Path::new(path));
 }
 
+// Worker-only lookup: signature checks must stay outside UI rendering.
+pub(crate) fn cached_media_pixels(path: &str, pdf: bool) -> Option<Arc<RenderImage>> {
+    if pdf { pdf_cache::cached(path) } else {
+        image_cache::cached(std::path::Path::new(path)).map(|preview| preview.image)
+    }
+}
+
 /// Un composant de bulle d'aide (Tooltip) dans le style Oxyde.
 pub struct Tooltip {
     native_presentation: bool,

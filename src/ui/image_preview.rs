@@ -83,6 +83,14 @@ fn decode(
 }
 
 pub(crate) fn load_path(path: &Path, renderer: &SvgRenderer) -> Result<PreviewImage, PreviewError> {
+    load_path_mode(path, renderer, false)
+}
+
+pub(crate) fn load_thumbnail(path: &Path, renderer: &SvgRenderer) -> Result<PreviewImage, PreviewError> {
+    load_path_mode(path, renderer, true)
+}
+
+fn load_path_mode(path: &Path, renderer: &SvgRenderer, thumbnail: bool) -> Result<PreviewImage, PreviewError> {
     #[cfg(target_os = "windows")]
     {
         // Retain the cheap admission and missing-file classification in the parent.
@@ -94,7 +102,7 @@ pub(crate) fn load_path(path: &Path, renderer: &SvgRenderer) -> Result<PreviewIm
         }
         let _ = renderer;
         let reply = oxyde_lib::platform::platform()
-            .run_preview_worker("image", path)
+            .run_preview_worker(if thumbnail { "image-thumbnail" } else { "image" }, path)
             .and_then(|bytes| oxyde_lib::utils::preview_protocol::decode(&bytes))
             .map_err(|error| PreviewError::Worker(error.to_string()))?;
         match reply {
@@ -116,13 +124,20 @@ pub(crate) fn load_path(path: &Path, renderer: &SvgRenderer) -> Result<PreviewIm
         }
     }
     #[cfg(not(target_os = "windows"))]
-    load_path_local(path, renderer)
+    {
+        let policy = if thumbnail { Policy { output_side: 128, frame_count: 1, ..POLICY } } else { POLICY };
+        load_path_local_with_policy(path, renderer, policy)
+    }
 }
 
 pub(crate) fn load_path_local(
     path: &Path,
     renderer: &SvgRenderer,
 ) -> Result<PreviewImage, PreviewError> {
+    load_path_local_with_policy(path, renderer, POLICY)
+}
+
+fn load_path_local_with_policy(path: &Path, renderer: &SvgRenderer, policy: Policy) -> Result<PreviewImage, PreviewError> {
     let file = std::fs::File::open(path).map_err(|error| PreviewError::Read(error.to_string()))?;
     if file
         .metadata()
@@ -133,7 +148,7 @@ pub(crate) fn load_path_local(
         return Err(PreviewError::Limit("encoded byte limit (64 MiB)"));
     }
     let data = read_bounded(file, POLICY.encoded_bytes)?;
-    decode(&data, renderer, POLICY)
+    decode(&data, renderer, policy)
 }
 
 #[cfg(test)]

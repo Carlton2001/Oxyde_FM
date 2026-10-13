@@ -133,12 +133,12 @@ fn cached_load_with_status(
 
 pub(super) fn load(path: &Path, renderer: &SvgRenderer) -> Result<(PreviewImage, bool), PreviewError> {
     let cache = CACHE.get_or_init(|| Mutex::new(Cache::new(MAX_ENTRIES, MAX_BYTES)));
-    let disk_hit = std::cell::Cell::new(false);
-    cached_load_with_status(cache, path, || {
-        let (preview, cached) = crate::ui::preview_disk::load_image(path, renderer)?;
-        disk_hit.set(cached);
-        Ok(preview)
-    }).map(|(preview, cached)| (preview, cached || disk_hit.get()))
+    cached_load_with_status(cache, path, || crate::ui::image_preview::load_path(path, renderer))
+}
+
+pub(super) fn cached(path: &Path) -> Option<PreviewImage> {
+    let signature = Signature::read(path)?;
+    CACHE.get()?.lock().unwrap().get(path, Some(&signature))
 }
 
 pub(super) fn invalidate(path: &Path) {

@@ -1,5 +1,4 @@
-//! Compact disk renditions: small grid thumbnails and on-demand tooltip previews.
-use crate::ui::image_preview::{PreviewError, PreviewImage};
+//! Compact disk thumbnails for the grid; tooltip previews remain RAM-only.
 use gpui::{RenderImage, SvgRenderer};
 use image::{Frame, RgbaImage};
 use std::{
@@ -13,9 +12,8 @@ use std::{
 };
 
 const SIDE: u32 = oxyde_lib::utils::image_preview_decode::POLICY.output_side;
-const MAX_BYTES: usize = 160 * 1024;
+const MAX_BYTES: usize = 24 * 1024;
 const GRID_SIDE: u32 = 128;
-const GRID_BYTES: usize = 24 * 1024;
 const MARKER: &[u8; 8] = b"OXYDEpv2";
 static TEMP_ID: AtomicU64 = AtomicU64::new(0);
 
@@ -62,9 +60,8 @@ impl Key {
     fn in_root(source: &Path, kind: &str, root: &Path) -> Option<Self> {
         let stamp = Stamp::read(source)?;
         let source = std::path::absolute(source).ok()?;
-        let grid = kind.starts_with("grid-");
-        let side = if grid { GRID_SIDE } else { 768 };
-        let max_bytes = if grid { GRID_BYTES } else { MAX_BYTES };
+        let side = GRID_SIDE;
+        let max_bytes = MAX_BYTES;
         let key = blake3::hash(
             format!(
                 "compact-preview-v2|{side}|{kind}|{source:?}|{}|{:?}",
@@ -183,11 +180,6 @@ impl Key {
     }
 }
 
-fn render(pixels: RgbaImage) -> Result<Arc<RenderImage>, String> {
-    let image = Arc::new(RenderImage::new(vec![Frame::new(pixels)]));
-    crate::ui::preview_budget::admit(&image)?;
-    Ok(image)
-}
 fn first_frame(image: &RenderImage) -> Option<RgbaImage> {
     let size = image.size(0);
     RgbaImage::from_raw(
@@ -195,61 +187,6 @@ fn first_frame(image: &RenderImage) -> Option<RgbaImage> {
         size.height.0 as u32,
         image.as_bytes(0)?.to_vec(),
     )
-}
-
-pub(crate) fn load_image(
-    path: &Path,
-    renderer: &SvgRenderer,
-) -> Result<(PreviewImage, bool), PreviewError> {
-    let key = Key::new(path, "image");
-    let lease = generation_lock(key.as_ref());
-    let _guard = lease.as_ref().map(|lock| lock.lock().unwrap_or_else(std::sync::PoisonError::into_inner));
-    if let Some(pixels) = key
-        .as_ref()
-        .and_then(Key::read)
-        .filter(|pixels| !pixels.animated || pixels.limited)
-    {
-        log::debug!("Shared image preview disk cache hit: {}", path.display());
-        return Ok((
-            PreviewImage {
-                image: render(pixels.bgra).map_err(PreviewError::Memory)?,
-                notice: pixels
-                    .limited
-                    .then_some(crate::ui::i18n::Message::PreviewAnimationStatic),
-            },
-            true,
-        ));
-    }
-    let preview = crate::ui::image_preview::load_path(path, renderer)?;
-    if let (Some(key), Some(bgra)) = (key, first_frame(&preview.image)) {
-        key.write(&Pixels {
-            bgra,
-            animated: preview.image.frame_count() > 1 || preview.notice.is_some(),
-            limited: preview.notice.is_some(),
-        });
-    }
-    Ok((preview, false))
-}
-
-pub(crate) fn load_pdf(path: &str) -> Result<(RgbaImage, bool), String> {
-    let key = Key::new(Path::new(path), "pdf");
-    let lease = generation_lock(key.as_ref());
-    let _guard = lease.as_ref().map(|lock| lock.lock().unwrap_or_else(std::sync::PoisonError::into_inner));
-    if let Some(pixels) = key.as_ref().and_then(Key::read) {
-        log::debug!("Shared PDF preview disk cache hit: {path}");
-        return Ok((pixels.bgra, true));
-    }
-    let bgra = oxyde_lib::platform::platform()
-        .pdf_thumbnail(path.into())
-        .map_err(|error| error.to_string())?;
-    if let Some(key) = key {
-        key.write(&Pixels {
-            bgra: bgra.clone(),
-            animated: false,
-            limited: false,
-        });
-    }
-    Ok((bgra, false))
 }
 
 pub(crate) fn load_grid(path: &str, renderer: &SvgRenderer) -> Result<Arc<RenderImage>, String> {
@@ -262,13 +199,13 @@ pub(crate) fn load_grid(path: &str, renderer: &SvgRenderer) -> Result<Arc<Render
     let pixels = if let Some(cached) = key.as_ref().and_then(Key::read) {
         cached.bgra
     } else {
-        // Reuse a large cache if present, but never generate/persist it for the grid.
-        let source = if let Some(cached) = Key::new(Path::new(path), if pdf { "pdf" } else { "image" }).and_then(|key| key.read()) {
-            cached.bgra
+        // Reuse only a valid RAM preview; browsing never creates a disk preview.
+        let source = if let Some(image) = crate::ui::components::tooltip::cached_media_pixels(path, pdf) {
+            first_frame(&image).ok_or("Missing cached preview frame")?
         } else if pdf {
             oxyde_lib::platform::platform().pdf_thumbnail(path.into()).map_err(|error| error.to_string())?
         } else {
-            first_frame(&crate::ui::image_preview::load_path(Path::new(path), renderer).map_err(|error| error.to_string())?.image)
+            first_frame(&crate::ui::image_preview::load_thumbnail(Path::new(path), renderer).map_err(|error| error.to_string())?.image)
                 .ok_or("Missing grid preview frame")?
         };
         let pixels = if source.width() > GRID_SIDE || source.height() > GRID_SIDE {
