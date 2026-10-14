@@ -911,3 +911,7 @@ drag-new-tab = Crear una nueva pestaña
 properties-loading = Cargando las propiedades…
 
 storage-unavailable = No se pudo acceder a los datos de Oxyde. En modo portátil, la carpeta data debe permitir la escritura.
+
+properties-selection-items = { $number } elementos
+properties-total-size = Tamaño total
+properties-multiple-locations = Varias ubicaciones

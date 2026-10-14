@@ -911,3 +911,7 @@ drag-new-tab = Neuen Tab erstellen
 properties-loading = Eigenschaften werden geladen…
 
 storage-unavailable = Auf die Oxyde-Daten konnte nicht zugegriffen werden. Im portablen Modus muss der Ordner data beschreibbar sein.
+
+properties-selection-items = { $number } Elemente
+properties-total-size = Gesamtgröße
+properties-multiple-locations = Mehrere Speicherorte

@@ -64,7 +64,7 @@ impl OxydeApp {
             ("f2", false, false, false) => self.execute_renommer(window, cx),
             ("enter", false, true, false) => {
                 if let Some(path) = pane.active_tab().selected_paths.iter().next().cloned() {
-                    for path in self.context_action_paths(&path) { self.open_file_properties(path, window, cx); }
+                    self.open_properties_for_paths(self.context_action_paths(&path), window, cx);
                 }
             }
             ("backspace", false, false, false) => {

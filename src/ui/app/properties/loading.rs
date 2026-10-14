@@ -84,17 +84,32 @@ impl PropertiesWindow {
         let Some(dialog) = &self.properties_dialog else {
             return;
         };
-        if dialog.saving {
+        if dialog.saving || dialog.system_properties_pending {
             return;
         }
-        let path = dialog.path.clone();
-        self.close_file_properties(window, cx);
-        cx.spawn(async move |_, _| {
-            let _ = tokio::task::spawn_blocking(move || {
-                oxyde_lib::platform::platform().show_properties_dialog(&path)
-            })
-            .await;
-        })
-        .detach();
+        let paths = dialog.paths.clone();
+        if paths.len() == 1 {
+            self.close_file_properties(window, cx);
+        } else if let Some(dialog) = &mut self.properties_dialog {
+            dialog.system_properties_pending = true;
+            dialog.system_properties_error = None;
+            cx.notify();
+        }
+        cx.spawn(async move |this, cx| {
+            let result = tokio::task::spawn_blocking(move || {
+                oxyde_lib::platform::platform().show_selection_properties(&paths)
+            }).await;
+            let _ = this.update(cx, |this, cx| {
+                if let Some(dialog) = &mut this.properties_dialog {
+                    dialog.system_properties_pending = false;
+                    dialog.system_properties_error = match result {
+                        Ok(Ok(())) => None,
+                        Ok(Err(error)) => Some(error),
+                        Err(error) => Some(error.to_string()),
+                    };
+                    cx.notify();
+                }
+            });
+        }).detach();
     }
 }

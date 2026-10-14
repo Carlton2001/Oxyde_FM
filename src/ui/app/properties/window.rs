@@ -22,12 +22,24 @@ impl OxydeApp {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        self.open_properties_for_paths(vec![path], window, cx);
+    }
+
+    pub(crate) fn open_properties_for_paths(
+        &mut self,
+        mut paths: Vec<String>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        paths.sort();
+        paths.dedup();
+        let Some(path) = paths.first().cloned() else { return; };
         self.context_menus.clear();
-        if path == "trash://" {
+        if paths.len() == 1 && path == "trash://" {
             self.open_trash_settings(window, cx);
             return;
         }
-        if path == "__network_vincinity__" {
+        if paths.len() == 1 && path == "__network_vincinity__" {
             cx.spawn(async move |_, _| {
                 let _ = tokio::task::spawn_blocking(move || {
                     oxyde_lib::platform::platform().show_properties_dialog(&path)
@@ -95,6 +107,10 @@ impl OxydeApp {
                             owner,
                             properties_dialog: Some(PropertiesDialog {
                                 path: path.clone(),
+                                paths: paths.clone(),
+                                selection: None,
+                                system_properties_pending: false,
+                                system_properties_error: None,
                                 revision: 0,
                                 properties: None,
                                 drive,
@@ -119,7 +135,11 @@ impl OxydeApp {
                                 false,
                             )),
                         };
-                        view.load(path, cx);
+                        if paths.len() > 1 {
+                            view.load_selection(paths, cx);
+                        } else {
+                            view.load(path, cx);
+                        }
                         view
                     })
                 },

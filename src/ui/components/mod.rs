@@ -536,7 +536,7 @@ fn oxyde_context_menu_items_raw(
             let p = path.clone();
             move |window, app| {
                 h.update(app, |this, cx| {
-                    for path in this.context_action_paths(&p) { this.open_file_properties(path, window, cx); }
+                    this.open_properties_for_paths(this.context_action_paths(&p), window, cx);
                 });
             }
         }),
@@ -852,7 +852,7 @@ fn trash_context_menu_items(i18n: &I18n, handle: Entity<crate::ui::app::OxydeApp
         handle.update(cx, |this, cx| {
             this.context_menus.clear();
             if path == "trash://" { this.open_trash_settings(window, cx); return; }
-            for path in this.context_action_paths(&path) { this.open_file_properties(path, window, cx); }
+            this.open_properties_for_paths(this.context_action_paths(&path), window, cx);
             cx.notify();
         });
     }).icon(IconName::Settings));

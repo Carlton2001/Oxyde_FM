@@ -649,6 +649,17 @@ impl Platform for WindowsPlatform {
         super::windows_shell_properties::friendly_name(path)
     }
 
+    fn show_selection_properties(&self, paths: &[String]) -> Result<(), String> {
+        if let [path] = paths {
+            self.show_properties_dialog(path);
+            return Ok(());
+        }
+        let paths = paths.to_vec();
+        std::thread::spawn(move || super::windows_shell_selection::show_properties(&paths))
+            .join().map_err(|_| "Shell properties thread failed".to_string())?
+            .map_err(|error| error.to_string())
+    }
+
     fn show_properties_dialog(&self, path: &str) {
         use windows::core::{HSTRING, PCWSTR};
         use windows::Win32::UI::Shell::{

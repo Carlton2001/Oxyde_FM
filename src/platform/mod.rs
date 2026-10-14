@@ -416,6 +416,14 @@ pub trait Platform: Send + Sync {
     /// Affiche la boîte de dialogue propriétés native pour un fichier/dossier.
     fn show_properties_dialog(&self, path: &str);
 
+    /// Opens native properties for a complete selection when supported by the OS.
+    fn show_selection_properties(&self, paths: &[String]) -> Result<(), String> {
+        match paths {
+            [path] => { self.show_properties_dialog(path); Ok(()) }
+            _ => Err("Selection properties are unavailable on this platform".into()),
+        }
+    }
+
     /// Définit l'icône de l'application pour la barre des tâches et la fenêtre.
     fn set_application_icon(&self, window: raw_window_handle::RawWindowHandle, icon_bytes: &[u8]);
 

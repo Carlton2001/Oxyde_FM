@@ -610,3 +610,7 @@ drag-new-tab = Créer un nouvel onglet
 properties-loading = Chargement des propriétés…
 
 storage-unavailable = Impossible d’accéder aux données d’Oxyde. En mode portable, le dossier data doit être accessible en écriture.
+
+properties-selection-items = { $number } éléments
+properties-total-size = Taille totale
+properties-multiple-locations = Plusieurs emplacements

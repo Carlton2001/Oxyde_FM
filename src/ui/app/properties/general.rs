@@ -22,6 +22,7 @@ pub(super) fn label_width(
         Message::ColumnType,
         Message::ColumnLocation,
         Message::ColumnSize,
+        Message::PropertiesTotalSize,
         Message::PropertiesUsed,
         Message::TrashAvailableSpace,
         Message::PropertiesCapacity,

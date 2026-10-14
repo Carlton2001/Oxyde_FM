@@ -4,6 +4,7 @@ mod interactions;
 mod loading;
 mod shortcut;
 mod window;
+mod selection;
 
 pub(crate) use window::close_properties_windows;
 
@@ -37,6 +38,10 @@ impl crate::ui::components::scrollbar::ScrollbarState for PropertiesWindow {
 
 pub(crate) struct PropertiesDialog {
     path: String,
+    paths: Vec<String>,
+    selection: Option<selection::SelectionProperties>,
+    system_properties_pending: bool,
+    system_properties_error: Option<String>,
     revision: u64,
     properties: Option<FileProperties>,
     drive: Option<DriveInfo>,

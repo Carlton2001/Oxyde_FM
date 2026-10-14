@@ -18,7 +18,9 @@ pub(crate) fn render(
     let presentation = dialog.properties.as_ref().map(property_presentation);
     let label_width = general::label_width(presentation.as_ref(), theme, window, cx);
     let mut body = div().flex().flex_col().gap(rems(0.375));
-    if let Some(p) = dialog.properties.as_ref().filter(|_| !dialog.shortcut_tab) {
+    if dialog.paths.len() > 1 {
+        body = super::selection::render(dialog, label_width, theme, cx);
+    } else if let Some(p) = dialog.properties.as_ref().filter(|_| !dialog.shortcut_tab) {
         body = general::render(
             body,
             view,
@@ -45,14 +47,14 @@ pub(crate) fn render(
         body = body.child(div().text_color(theme.error).child(cx.i18n().text(error)));
     }
     body = shortcut::run_menu(body, dialog, &handle, theme, window, cx);
-    body = body.when_some(dialog.error.as_ref(), |body, error| {
-        body.child(
+    for error in dialog.error.iter().chain(dialog.system_properties_error.iter()) {
+        body = body.child(
             div()
                 .text_color(theme.error)
                 .child(cx.i18n().text(Message::OperationFailed))
                 .child(error.clone()),
-        )
-    });
+        );
+    }
     if let Some(tabs) = property_tabs {
         body = div()
             .flex()
@@ -205,6 +207,7 @@ pub(crate) fn render(
                         .border_color(theme.border)
                         .child(
                             action_button("properties-system")
+                                .when(dialog.system_properties_pending, |button| button.opacity(0.5))
                                 .bg(theme.control_hover)
                                 .child(cx.i18n().text(Message::PropertiesSystem))
                                 .on_mouse_down(MouseButton::Left, move |_, window, cx| {

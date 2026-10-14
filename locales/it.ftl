@@ -911,3 +911,7 @@ drag-new-tab = Crea una nuova scheda
 properties-loading = Caricamento delle proprietà…
 
 storage-unavailable = Impossibile accedere ai dati di Oxyde. In modalità portatile, la cartella data deve essere scrivibile.
+
+properties-selection-items = { $number } elementi
+properties-total-size = Dimensione totale
+properties-multiple-locations = Più posizioni

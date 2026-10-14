@@ -604,3 +604,7 @@ drag-new-tab = Create a new tab
 properties-loading = Loading properties…
 
 storage-unavailable = Could not access Oxyde data. In portable mode, the data folder must be writable.
+
+properties-selection-items = { $number } items
+properties-total-size = Total size
+properties-multiple-locations = Multiple locations
