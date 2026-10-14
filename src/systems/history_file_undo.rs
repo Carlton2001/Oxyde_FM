@@ -215,7 +215,13 @@ impl Plan {
                 Err(error) if error.kind() == ErrorKind::NotFound => {}
                 Err(error) => return Err(error),
             }
-            let hash = verified_file(&destination, hashes.get(&destination).copied())?;
+            // A native rename records identity, but no copied-content hash.
+            // Moving that same object back must not scan its contents.
+            let hash = if let Some(expected) = hashes.get(&destination) {
+                verified_file(&destination, Some(expected))?
+            } else {
+                String::new()
+            };
             // Recovery sidecars obey the same proof as user files.
             let identity = move_identities
                 .get(&destination)
@@ -623,7 +629,15 @@ pub(crate) fn undo_copy(details: &TransactionDetails) -> Result<(), CommandError
     apply_plan(&NativeIo, Plan::copy(details)?).map_err(CommandError::from)
 }
 fn undo_with(ops: &impl UndoIo, details: &TransactionDetails) -> io::Result<()> {
-    apply_plan(ops, Plan::new(details)?)
+    let started = std::time::Instant::now();
+    log::info!("Move undo journal: moved={:?}; created={:?}; source_dirs={:?}",
+        details.moved_files, details.created_files, details.moved_dirs);
+    let result = Plan::new(details).and_then(|plan| apply_plan(ops, plan));
+    match &result {
+        Ok(()) => log::info!("Move undo completed in {:?}", started.elapsed()),
+        Err(error) => log::warn!("Move undo failed in {:?}: {error}", started.elapsed()),
+    }
+    result
 }
 fn apply_plan(ops: &impl UndoIo, plan: Plan) -> io::Result<()> {
     let mut paths = plan.source_dirs.clone();

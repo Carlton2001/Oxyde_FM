@@ -1,6 +1,69 @@
 use super::*;
 
 #[test]
+fn native_batch_move_undo_and_redo_do_not_read_file_contents() {
+    let root = tempfile::tempdir().unwrap();
+    let source = root.path().join("source");
+    let target = root.path().join("target");
+    std::fs::create_dir(&source).unwrap();
+    std::fs::create_dir(&target).unwrap();
+    let paths: Vec<_> = (0..17).map(|index| source.join(format!("file-{index}.bin"))).collect();
+    for path in &paths { std::fs::write(path, vec![0x5a; 2 * 1024 * 1024]).unwrap(); }
+    let history = Arc::new(HistoryManager::new());
+    let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+    runtime.block_on(async {
+        let op = Arc::new(Mutex::new(FileOperation::new(FileOpType::Move, paths.clone(), Some(target.clone()), None)));
+        FileOperationManager::execute_operation(history.clone(), op.clone()).await;
+        assert_eq!(op.lock().unwrap().status, OpStatus::Completed);
+        for _ in 0..2 {
+            crate::systems::history_move::HASH_BYTES.with(|bytes| bytes.set(0));
+            let started = std::time::Instant::now();
+            crate::commands::ops::undo_last_action(&history).await.unwrap();
+            eprintln!("17-file native undo: {:?}", started.elapsed());
+            crate::systems::history_move::HASH_BYTES.with(|bytes| assert_eq!(bytes.get(), 0, "Undo must not hash native moved files"));
+            for path in &paths { assert!(path.exists()); assert!(!target.join(path.file_name().unwrap()).exists()); }
+            crate::commands::ops::redo_last_action(&history).await.unwrap();
+            crate::systems::history_move::HASH_BYTES.with(|bytes| assert_eq!(bytes.get(), 0, "Redo must not hash native moved files"));
+            for path in &paths { assert!(!path.exists()); assert!(target.join(path.file_name().unwrap()).exists()); }
+        }
+    });
+}
+
+#[test]
+fn successive_archive_file_moves_roundtrip_history() {
+    let root = tempfile::tempdir().unwrap();
+    let folders: Vec<_> = ["Tests", "1", "2"].into_iter().map(|name| root.path().join(name)).collect();
+    for folder in &folders { std::fs::create_dir(folder).unwrap(); }
+    let name = "3JH40xKM35P_B2-29272-0030.7z";
+    std::fs::write(folders[0].join(name), b"ordinary archive file fixture").unwrap();
+    let history = Arc::new(HistoryManager::new());
+    let runtime = tokio::runtime::Builder::new_multi_thread().enable_all().build().unwrap();
+    runtime.block_on(async {
+        for step in 0..2 {
+            let op = Arc::new(Mutex::new(FileOperation::new(FileOpType::Move,
+                vec![folders[step].join(name)], Some(folders[step + 1].clone()), None)));
+            FileOperationManager::execute_operation(history.clone(), op.clone()).await;
+            assert_eq!(op.lock().unwrap().status, OpStatus::Completed);
+            assert!(!folders[step].join(name).exists());
+            assert!(folders[step + 1].join(name).exists());
+        }
+        for _ in 0..2 {
+            for step in (0..2).rev() {
+                crate::commands::ops::undo_last_action(&history).await.unwrap();
+                assert!(folders[step].join(name).exists());
+                assert!(!folders[step + 1].join(name).exists());
+                assert_eq!(history.get_state().undo_stack.len(), step);
+            }
+            for step in 0..2 {
+                crate::commands::ops::redo_last_action(&history).await.unwrap();
+                assert!(!folders[step].join(name).exists());
+                assert!(folders[step + 1].join(name).exists());
+            }
+        }
+    });
+}
+
+#[test]
 #[cfg(target_os = "windows")]
 fn directory_move_cleans_initial_directories_and_journals_empty_descendants() {
     let root = tempfile::tempdir().unwrap();

@@ -4,6 +4,11 @@ use std::fs::File;
 use std::io::{self, Read, Seek, SeekFrom};
 use std::path::Path;
 
+#[cfg(test)]
+thread_local! {
+    pub(crate) static HASH_BYTES: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
 trait MoveIo {
     fn rename(
         &self,
@@ -73,6 +78,8 @@ pub(super) fn hash_with(
             break;
         }
         hasher.update(&buffer[..size]);
+        #[cfg(test)]
+        HASH_BYTES.with(|bytes| bytes.set(bytes.get() + size as u64));
     }
     Ok(hasher.finalize().to_hex().to_string())
 }
@@ -208,6 +215,20 @@ fn move_bound_controlled(
             "History moves require an ordinary file, not a reparse point",
         ));
     }
+    // Empty means the initial operation was a native move, without copied
+    // content to verify. Identity was checked on the opened object above.
+    let expected = expected.filter(|hash| !hash.is_empty());
+    let native_attempted = journal_identity.is_some() && expected.is_none();
+    if native_attempted {
+        match ops.rename(&original, &source, &destination, destination_parents) {
+            Ok(()) => {
+                refresh_move_identity(journal_identity, &original, &destination);
+                return Ok(String::new());
+            }
+            Err(error) if error.kind() == io::ErrorKind::CrossesDevices => {}
+            Err(error) => return Err(error),
+        }
+    }
     let original_hash = hash(&mut original)?;
     if expected.is_some_and(|expected| expected != original_hash) {
         return Err(io::Error::other(format!(
@@ -215,15 +236,17 @@ fn move_bound_controlled(
             source.display()
         )));
     }
-    match ops.rename(&original, &source, &destination, destination_parents) {
-        Ok(()) => {
-            refresh_move_identity(journal_identity, &original, &destination);
-            return Ok(original_hash);
+    if !native_attempted {
+        match ops.rename(&original, &source, &destination, destination_parents) {
+            Ok(()) => {
+                refresh_move_identity(journal_identity, &original, &destination);
+                return Ok(original_hash);
+            }
+            Err(error)
+                if error.kind() == io::ErrorKind::CrossesDevices
+                    && (identity.is_none() || journal_identity.is_some()) => {}
+            Err(error) => return Err(error),
         }
-        Err(error)
-            if error.kind() == io::ErrorKind::CrossesDevices
-                && (identity.is_none() || journal_identity.is_some()) => {}
-        Err(error) => return Err(error),
     }
 
     let staging = super::file_copy::Staging::with_prefix(destination_parents, ".oxyde-history-")?;
