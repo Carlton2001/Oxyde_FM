@@ -98,8 +98,7 @@ pub(super) fn render(
             render_file_icon(
                 p.path.clone(),
                 icon,
-                rems(3.0),
-                theme.icon_muted,
+                rems(3.0), &theme,
                 true,
                 true,
             )
@@ -114,12 +113,7 @@ pub(super) fn render(
         render_file_icon(
             p.path.clone(),
             icon,
-            rems(3.0),
-            if p.is_dir {
-                theme.accent
-            } else {
-                theme.icon_muted
-            },
+            rems(3.0), &theme,
             cfg!(target_os = "windows") && view.use_system_icons(cx),
             true,
         )

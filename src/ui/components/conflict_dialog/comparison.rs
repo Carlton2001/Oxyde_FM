@@ -23,12 +23,7 @@ pub(super) fn conflict_icon(
         .child(render_file_icon(
             entry.path.clone(),
             icon,
-            size,
-            if entry.is_dir {
-                cx.theme().accent
-            } else {
-                cx.theme().icon_muted
-            },
+            size, cx.theme(),
             system,
             large,
         ))

@@ -423,7 +423,7 @@ impl<T: crate::ui::components::scrollbar::ScrollbarState + 'static> RenderOnce f
                                                         if let IconName::NativeFolder(path) = icon {
                                                             return d.child(crate::ui::components::icons::render_file_icon(
                                                                 path.clone(), crate::ui::components::icons::IconType::Folder,
-                                                                rems(1.0), icon_color, true, false,
+                                                                rems(1.0), &theme, true, false,
                                                             )).when(item.is_dimmed, |d| d.opacity(0.5));
                                                         }
                                                         d.child(

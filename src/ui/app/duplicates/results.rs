@@ -238,8 +238,7 @@ impl DuplicateWindow {
                             .child(crate::ui::components::icons::render_file_icon(
                                 file.path.clone(),
                                 crate::ui::components::icons::entry_icon(file),
-                                rems(1.75),
-                                theme.text_muted,
+                                rems(1.75), &theme,
                                 system_icons,
                                 true,
                             ))

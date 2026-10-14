@@ -413,7 +413,7 @@ pub(super) fn render_sidebar_rows(
                                 } else {
                                     crate::ui::components::icons::IconType::Folder
                                 },
-                                rems(1.0), theme.accent, use_system_icons, false,
+                                rems(1.0), &theme, use_system_icons, false,
                             ))
                     )
                     // Name

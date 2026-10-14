@@ -15,7 +15,7 @@ pub enum TabIcon {
 }
 
 impl TabIcon {
-    fn render(&self, color: Hsla) -> AnyElement {
+    fn render(&self, color: Hsla, theme: &crate::ui::theme::OxydeTheme) -> AnyElement {
         match self {
             Self::Svg(path) => svg()
                 .path(*path)
@@ -25,8 +25,7 @@ impl TabIcon {
             Self::Item { path, icon, system } => crate::ui::components::icons::render_file_icon(
                 path.clone(),
                 *icon,
-                rems(0.875),
-                color,
+                rems(0.875), theme,
                 *system,
                 false,
             ),
@@ -63,7 +62,7 @@ impl Render for TabDragPreview {
             .flex()
             .items_center()
             .gap_2()
-            .child(self.icon.render(theme.accent))
+            .child(self.icon.render(theme.accent, &theme))
             .child(self.label.clone())
     }
 }
@@ -264,7 +263,7 @@ impl RenderOnce for Tab {
                     rem_pixels(rems(1.25))
                 })
                 .gap_2()
-                .when_some(self.icon, |s, icon| s.child(icon.render(text_color)))
+                .when_some(self.icon, |s, icon| s.child(icon.render(text_color, &theme)))
                 .child(div().flex_1().min_w_0().text_ellipsis().child(self.label.clone()))
                 .when_some(self.on_close, |s, on_close| {
                     s.child(

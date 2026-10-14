@@ -1,3 +1,6 @@
+mod colors;
+pub use colors::FileIconPalette;
+
 use once_cell::sync::Lazy;
 use std::collections::HashSet;
 
@@ -455,11 +458,25 @@ pub(crate) fn render_file_icon(
     path: String,
     icon: IconType,
     size: Rems,
-    color: Hsla,
+    theme: &crate::ui::theme::OxydeTheme,
     system: bool,
     large: bool,
 ) -> AnyElement {
+    let color = colors::file_icon_color(&path, icon, theme);
     let fallback = move || {
+        if matches!(icon, IconType::Folder | IconType::FolderOpen) {
+            let fill_path = if icon == IconType::Folder {
+                "icons/folder-fill.svg"
+            } else {
+                "icons/folder-open-fill.svg"
+            };
+            return div()
+                .relative()
+                .size(size)
+                .child(svg().path(fill_path).size(size).text_color(color).absolute())
+                .child(svg().path(icon.path()).size(size).text_color(color).absolute())
+                .into_any_element();
+        }
         svg()
             .path(icon.path())
             .size(size)

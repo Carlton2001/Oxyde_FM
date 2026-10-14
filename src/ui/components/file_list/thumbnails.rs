@@ -45,6 +45,6 @@ pub(super) fn render_grid_thumbnail(
     .size(rems(5.0))
     .object_fit(ObjectFit::Contain)
     .with_fallback(move || {
-        render_file_icon(fallback_path.clone(), fallback_icon, rems(4.0), theme.text_muted, system, true)
+        render_file_icon(fallback_path.clone(), fallback_icon, rems(4.0), &theme, system, true)
     })
 }

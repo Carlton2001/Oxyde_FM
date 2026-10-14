@@ -34,7 +34,7 @@ pub struct OxydeTheme {
     pub menu_surface: Hsla,
     pub menu_border: Hsla,
     pub menu_hover: Hsla,
-    pub icon_video: Hsla,       // Icônes vidéo, palette Tauri
+    pub file_icons: crate::ui::components::icons::FileIconPalette,
     pub icon_muted: Hsla,
     pub icon_disabled: Hsla,
     pub dialog_tabs: Hsla,       // Fond légèrement teinté des onglets de formulaire
@@ -421,15 +421,7 @@ impl OxydeTheme {
                 ..Self::dark()
             },
         };
-        theme.icon_video = match id {
-            ThemeId::Light => rgb(0xf43f5e), ThemeId::Dark => rgb(0xfb7185),
-            ThemeId::AyuLight | ThemeId::AyuDark => rgb(0xf07178),
-            ThemeId::GithubLight => rgb(0xcf222e), ThemeId::GithubDark => rgb(0xff7b72),
-            ThemeId::OneLight => rgb(0xe45649), ThemeId::OneDark => rgb(0xe06c75),
-            ThemeId::SolarizedLight => rgb(0xdc322f), ThemeId::SolarizedDark => rgb(0xd33682),
-            ThemeId::WindowsLight => rgb(0xc62828), ThemeId::WindowsDark => rgb(0xef9a9a),
-            ThemeId::Monokai => rgb(0xf92672),
-        }.into();
+        theme.file_icons = crate::ui::components::icons::FileIconPalette::for_theme(id);
         theme
     }
 
@@ -468,7 +460,7 @@ impl OxydeTheme {
             menu_surface: rgb(0xfafafa).into(),
             menu_border: rgb(0xe6e1d6).into(),
             menu_hover: rgb(0xe6e2d9).into(),
-            icon_video: rgb(0xf43f5e).into(),
+            file_icons: crate::ui::components::icons::FileIconPalette::for_theme(ThemeId::Light),
             icon_muted: rgb(0x7c7994).into(),
             icon_disabled: rgba(0x7c7994a6).into(),
             dialog_tabs: rgb(0xf8f6f2).into(),
@@ -517,7 +509,7 @@ impl OxydeTheme {
             menu_surface: rgb(0x151320).into(),
             menu_border: rgb(0x2d2a3c).into(),
             menu_hover: rgb(0x1c1a2b).into(),
-            icon_video: rgb(0xfb7185).into(),
+            file_icons: crate::ui::components::icons::FileIconPalette::for_theme(ThemeId::Dark),
             icon_muted: rgb(0xa5a2b8).into(),
             icon_disabled: rgba(0xa5a2b8a6).into(),
             dialog_tabs: rgb(0x12101a).into(),

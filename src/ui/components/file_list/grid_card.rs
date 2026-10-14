@@ -260,7 +260,7 @@ pub(super) fn render_grid_card(params: GridCardParams<'_>, cx: &mut App) -> Stat
                         {
                             render_grid_thumbnail(path.clone(), icon, theme, use_system_icons).into_any_element()
                         } else {
-                            render_file_icon(path.clone(), icon, rems(4.0), if is_dir { theme.accent } else { theme.text_muted }, use_system_icons, true)
+                            render_file_icon(path.clone(), icon, rems(4.0), &theme, use_system_icons, true)
                         }),
                 )
                 .when(has_subdirectories, |row| {

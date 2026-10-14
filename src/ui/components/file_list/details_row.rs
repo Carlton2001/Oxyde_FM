@@ -290,7 +290,7 @@ pub(super) fn render_details_row(params: DetailsRowParams<'_>, cx: &mut App) -> 
                             .items_center()
                             .child({
                                 let icon_type = crate::ui::components::icons::entry_icon(file);
-                                div().flex_none().mr_2().child(render_file_icon(path_str.clone(), icon_type, rems(1.0), if is_dir { theme.accent } else { theme.text_muted }, use_system_icons, false))
+                                div().flex_none().mr_2().child(render_file_icon(path_str.clone(), icon_type, rems(1.0), &theme, use_system_icons, false))
                             })
                             .child(match editing_view {
                                 Some(editing_view) => {
