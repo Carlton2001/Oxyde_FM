@@ -2,7 +2,7 @@ name: Windows dependency security
 
 on:
   push:
-    branches: [master]
+    branches: [main]
     paths: [Cargo.toml, Cargo.lock, scripts/audit-security.ps1, .github/workflows/security.yml]
   pull_request:
     paths: [Cargo.toml, Cargo.lock, scripts/audit-security.ps1, .github/workflows/security.yml]
