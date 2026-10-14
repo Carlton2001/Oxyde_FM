@@ -153,14 +153,7 @@ impl AdvancedSearchWindow {
                     .child(body),
             )
             .child(
-                div()
-                    .flex_none()
-                    .flex()
-                    .items_center()
-                    .gap(rems(0.625))
-                    .border_t(rems(0.0625))
-                    .border_color(theme.border)
-                    .p(rems(0.625))
+                crate::ui::components::tool_window::footer(cx)
                     .child(
                         div().flex_1().flex().child(
                             crate::ui::components::tool_window::action_button(

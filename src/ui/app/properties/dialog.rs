@@ -197,16 +197,17 @@ pub(crate) fn render(
                         .child(body),
                 )
                 .child(
-                    div()
-                        .flex()
-                        .justify_end()
-                        .gap(rems(0.5))
-                        .px(rems(1.0))
-                        .py(rems(0.625))
-                        .border_t(rems(0.0625))
-                        .border_color(theme.border)
+                    crate::ui::components::tool_window::footer(cx)
                         .child(
-                            action_button("properties-system", cx.i18n().text(Message::PropertiesSystem), false, cx)
+                            action_button("properties-system", "".into(), false, cx)
+                                .child(
+                                    svg()
+                                        .path("icons/wrench.svg")
+                                        .size(rems(0.875))
+                                        .flex_none()
+                                        .text_color(theme.text),
+                                )
+                                .child(cx.i18n().text(Message::PropertiesSystem))
                                 .when(dialog.system_properties_pending, |button| button.opacity(0.5))
                                 .on_mouse_down(MouseButton::Left, move |_, window, cx| {
                                     system.update(cx, |this, cx| {

@@ -354,14 +354,7 @@ impl RenderOnce for Modal {
                     )
                     .when(!self.actions.is_empty(), |panel| {
                         panel.child(
-                            div()
-                                .flex_none()
-                                .px(rems(1.0))
-                                .py(rems(0.625))
-                                .border_t(rems(0.0625))
-                                .border_color(theme.border)
-                                .flex()
-                                .justify_end()
+                            super::tool_window::footer(cx)
                                 .when(self.wrap_actions, |d| d.flex_wrap())
                                 .gap(rems(0.5))
                                 .children(self.actions),

@@ -122,6 +122,20 @@ pub(crate) fn header(
         ))
 }
 
+/// Shared secondary-window footer, matching the recycle-bin properties modal.
+pub(crate) fn footer(cx: &App) -> Div {
+    div()
+        .flex_none()
+        .px(rems(1.0))
+        .py(rems(0.625))
+        .border_t(rems(0.0625))
+        .border_color(cx.theme().border)
+        .flex()
+        .items_center()
+        .justify_end()
+        .gap(rems(0.5))
+}
+
 pub(crate) fn action_button(
     id: impl Into<ElementId>,
     label: SharedString,
@@ -132,8 +146,12 @@ pub(crate) fn action_button(
     button_style(div().id(id), *cx.theme(),
         if primary { ButtonVariant::Primary } else { ButtonVariant::Secondary }, true)
         .tab_index(0).flex().items_center().justify_center()
-        .gap(rems(0.5)).px(rems(0.75)).py(rems(0.5))
-        .rounded(rems(0.375)).child(label)
+        .gap(rems(0.5)).px(rems(0.75)).py(rems(0.375))
+        .text_size(rems(0.8125))
+        .rounded(rems(0.375))
+        // Callers may supply icon/text children instead of the built-in label.
+        // An empty text child still introduces an extra flex gap before them.
+        .when(!label.is_empty(), |button| button.child(label))
 }
 
 /// Retire owned surfaces before their native owner is destroyed.

@@ -84,15 +84,7 @@ pub(super) fn render_operations_panel(
                 ),
         )
         .child(
-            div()
-                .flex_none()
-                .border_t(rems(0.0625))
-                .border_color(theme.border)
-                .p(rems(0.625))
-                .flex()
-                .items_center()
-                .justify_end()
-                .gap(rems(0.625))
+            super::super::tool_window::footer(cx)
                 .when(finished, |footer| {
                     footer.child(
                         super::super::tool_window::action_button(

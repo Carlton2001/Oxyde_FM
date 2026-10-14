@@ -163,13 +163,7 @@ impl Render for DuplicateWindow {
                 ),
             )
             .child(
-                div()
-                    .border_t(rems(0.0625))
-                    .border_color(theme.border)
-                    .p(rems(0.625))
-                    .flex()
-                    .justify_end()
-                    .gap(rems(0.625))
+                crate::ui::components::tool_window::footer(cx)
                     .child(
                         Self::button("duplicate-cancel", cx.i18n().text(Message::Cancel), cx)
                             .on_click(cx.listener(|this, _, w, cx| {

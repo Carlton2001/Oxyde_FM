@@ -149,6 +149,10 @@ Appliquer le même principe aux futurs composants partagés : API de présentati
 
 Les listes déroulantes des formulaires s’ouvrent en menus flottants ancrés au champ, au-dessus du contenu et hors du découpage de la modale, sans changer sa hauteur. Sous Windows, elles restent dans la zone de travail de l’écran ; le repli intégré reste dans la fenêtre. L’expansion dans le flux du contenu est réservée aux sections repliables avec chevron.
 
+### Pieds de page des fenêtres secondaires
+
+`components::tool_window::footer` partage le pied de page des modales et fenêtres secondaires : marges horizontales de 1 rem, verticales de 0,625 rem, séparation de 1 pixel logique et espacement des actions de 0,5 rem. La référence est la fenêtre des propriétés de la corbeille. Les boutons d'action des fenêtres d'outils reprennent ses dimensions compactes (texte de 0,8125 rem, marges de 0,75 rem × 0,375 rem). Les vues conservent les actions et leurs focus ; le pied ne se comprime pas lorsque le corps défile.
+
 ### Boutons partagés
 
 `ui/elements/button/style.rs` centralise les états visuels avec `button_style` et `ButtonVariant` : Ghost (action discrète), Secondary, Primary et Danger. Le rôle est indépendant du contenu : icône seule, texte seul ou les deux. Les couleurs viennent du thème ; survol, appui et focus visible sont partagés, sans changement de curseur.
