@@ -39,6 +39,8 @@ fn render_pinned_contents(
         .max_h(rems(30.0))
         .overflow_y_scroll()
         .py(rems(0.25))
+        .text_size(rems(0.8125))
+        .text_color(theme.text)
         .bg(theme.menu_surface)
         .border(rems(0.0625))
         .border_color(theme.menu_border)

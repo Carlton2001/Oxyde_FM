@@ -128,31 +128,12 @@ pub(crate) fn action_button(
     primary: bool,
     cx: &App,
 ) -> Stateful<Div> {
-    let theme = *cx.theme();
-    div()
-        .id(id)
-        .tab_index(0)
-        .flex()
-        .items_center()
-        .gap(rems(0.5))
-        .px(rems(0.75))
-        .py(rems(0.5))
-        .rounded(rems(0.375))
-        .bg(if primary { theme.accent } else { theme.header })
-        .text_color(if primary {
-            theme.text_on_accent
-        } else {
-            theme.text
-        })
-        .hover(move |s| {
-            s.bg(if primary {
-                theme.accent
-            } else {
-                theme.control_hover
-            })
-        })
-        .focus_visible(move |s| s.border(rems(0.0625)).border_color(theme.accent))
-        .child(label)
+    use crate::ui::elements::button::{button_style, ButtonVariant};
+    button_style(div().id(id), *cx.theme(),
+        if primary { ButtonVariant::Primary } else { ButtonVariant::Secondary }, true)
+        .tab_index(0).flex().items_center().justify_center()
+        .gap(rems(0.5)).px(rems(0.75)).py(rems(0.5))
+        .rounded(rems(0.375)).child(label)
 }
 
 /// Retire owned surfaces before their native owner is destroyed.

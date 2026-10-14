@@ -1,6 +1,7 @@
 use super::rules::{decision, filtered_indices};
 use crate::ui::app::{OxydeApp, PendingFileOperation};
 use crate::ui::components::modal::action_button;
+use crate::ui::elements::button::{button_style, ButtonVariant};
 use crate::ui::i18n::{I18nContext, Message};
 use crate::ui::theme::ThemeContext;
 use gpui::prelude::*;
@@ -92,41 +93,47 @@ pub(super) fn button_with_label(
     let callback = std::rc::Rc::new(callback);
     let click_callback = callback.clone();
     let keyboard_handle = handle.clone();
-    action_button(id)
-        .tab_index(0)
-        .flex_none()
-        .whitespace_nowrap()
-        .rounded_sm()
-        .border(rems(0.0625))
-        .border_color(gpui::transparent_black())
-        .focus(|d| d.border_color(t.accent))
-        .flex()
-        .items_center()
-        .gap(rems(0.375))
-        .bg(if primary { t.accent } else { t.stepper_surface })
-        .text_color(if primary { t.text_on_accent } else { t.text })
-        .hover(|d| d.opacity(0.85))
-        .when_some(icon, |d, path| {
-            d.child(
-                svg()
-                    .path(path)
-                    .size(rems(0.875))
-                    .flex_none()
-                    .text_color(if primary { t.text_on_accent } else { t.text }),
-            )
-        })
-        .child(label.unwrap_or_else(|| cx.i18n().text(message)))
-        .on_mouse_down(MouseButton::Left, move |_, window, cx| {
-            click_callback(&handle, cx);
-            restore_focus(&handle, window, cx);
-        })
-        .on_key_down(move |event, window, cx| {
-            if event.keystroke.key == "enter" || event.keystroke.key == "space" {
-                cx.stop_propagation();
-                callback(&keyboard_handle, cx);
-                restore_focus(&keyboard_handle, window, cx);
-            }
-        })
+    button_style(
+        action_button(id),
+        t,
+        if primary {
+            ButtonVariant::Primary
+        } else {
+            ButtonVariant::Secondary
+        },
+        true,
+    )
+    .tab_index(0)
+    .flex_none()
+    .whitespace_nowrap()
+    .rounded_sm()
+    .border(rems(0.0625))
+    .border_color(gpui::transparent_black())
+    .focus(|d| d.border_color(t.accent))
+    .flex()
+    .items_center()
+    .gap(rems(0.375))
+    .when_some(icon, |d, path| {
+        d.child(
+            svg()
+                .path(path)
+                .size(rems(0.875))
+                .flex_none()
+                .text_color(if primary { t.text_on_accent } else { t.text }),
+        )
+    })
+    .child(label.unwrap_or_else(|| cx.i18n().text(message)))
+    .on_mouse_down(MouseButton::Left, move |_, window, cx| {
+        click_callback(&handle, cx);
+        restore_focus(&handle, window, cx);
+    })
+    .on_key_down(move |event, window, cx| {
+        if event.keystroke.key == "enter" || event.keystroke.key == "space" {
+            cx.stop_propagation();
+            callback(&keyboard_handle, cx);
+            restore_focus(&keyboard_handle, window, cx);
+        }
+    })
 }
 pub(super) fn automatic_badge(cx: &App) -> impl IntoElement {
     div()

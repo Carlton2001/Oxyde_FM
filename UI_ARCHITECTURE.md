@@ -149,6 +149,14 @@ Appliquer le même principe aux futurs composants partagés : API de présentati
 
 Les listes déroulantes des formulaires s’ouvrent en menus flottants ancrés au champ, au-dessus du contenu et hors du découpage de la modale, sans changer sa hauteur. Sous Windows, elles restent dans la zone de travail de l’écran ; le repli intégré reste dans la fenêtre. L’expansion dans le flux du contenu est réservée aux sections repliables avec chevron.
 
+### Boutons partagés
+
+`ui/elements/button/style.rs` centralise les états visuels avec `button_style` et `ButtonVariant` : Ghost (action discrète), Secondary, Primary et Danger. Le rôle est indépendant du contenu : icône seule, texte seul ou les deux. Les couleurs viennent du thème ; survol, appui et focus visible sont partagés, sans changement de curseur.
+
+Les vues gardent dimensions, identifiants, infobulles, callbacks et routage clavier/focus. Pour un bouton désactivé, elles doivent aussi retirer ou protéger les callbacks : la base visuelle désactive seulement les effets de survol/appui. Un fond de sélection peut être ajouté après la base commune. Éviter de redéfinir hover/active pour les boutons ordinaires. Onglets, contrôles de fenêtre, lignes de menu et sélecteurs peuvent conserver leurs comportements spécialisés.
+
+La base est utilisée par `Button`, les actions de `tool_window`, les dialogues de conflits, renommage et réseau, la toolbar de sidebar, les commandes de défilement des onglets, Retour/Suivant et les modes d'affichage/regroupement des listes. `modal::action_button` reste un helper de dimensions, aussi utilisé par des onglets spécialisés.
+
 ## Préférences et persistance
 
 Les préférences UI sont stockées dans `AppConfig` et lues au démarrage. Elles incluent le thème, la langue, les options d'affichage des fichiers cachés et système et les aperçus médias.

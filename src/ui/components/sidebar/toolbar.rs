@@ -1,6 +1,7 @@
-use crate::ui::components::tooltip::NativeTooltipExt;
 use crate::ui::app::OxydeApp;
+use crate::ui::components::tooltip::NativeTooltipExt;
 use crate::ui::components::tooltip::Tooltip;
+use crate::ui::elements::button::{button_style, ButtonVariant};
 use crate::ui::i18n::{I18nContext, Message};
 use crate::ui::theme::{OxydeTheme, ThemeContext};
 use gpui::prelude::*;
@@ -15,20 +16,13 @@ pub(super) fn sidebar_button(
     enabled: bool,
     action: impl Fn(&MouseDownEvent, &mut Window, &mut App) + 'static,
 ) -> Stateful<Div> {
-    div()
-        .id(id)
+    button_style(div().id(id), theme, ButtonVariant::Ghost, enabled)
         .size(rems(2.0))
         .flex_none()
         .flex()
         .items_center()
         .justify_center()
         .rounded_md()
-        .text_color(if enabled {
-            theme.text_muted
-        } else {
-            theme.icon_disabled
-        })
-        .when(enabled, |d| d.hover(move |s| s.bg(theme.hover)))
         .native_tooltip(Tooltip::text(label))
         .when(enabled, |d| d.on_mouse_down(MouseButton::Left, action))
         .when_some(icon, |d, path| {
@@ -41,7 +35,11 @@ pub(super) fn sidebar_button(
         .when_some(text, |d, text| d.child(text))
 }
 
-pub(super) fn sidebar_toolbar(view: &OxydeApp, handle: Entity<OxydeApp>, cx: &mut Context<OxydeApp>) -> Div {
+pub(super) fn sidebar_toolbar(
+    view: &OxydeApp,
+    handle: Entity<OxydeApp>,
+    cx: &mut Context<OxydeApp>,
+) -> Div {
     let theme = *cx.theme();
     let mut toolbar = div()
         .h(rems(2.5))
@@ -114,4 +112,3 @@ pub(super) fn sidebar_toolbar(view: &OxydeApp, handle: Entity<OxydeApp>, cx: &mu
         },
     ))
 }
-

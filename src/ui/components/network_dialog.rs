@@ -12,6 +12,7 @@ use crate::ui::scale::rem_pixels;
 use crate::ui::theme::ThemeContext;
 use gpui::prelude::*;
 use gpui::*;
+use crate::ui::elements::button::{button_style, ButtonVariant};
 
 pub(crate) fn render_force_confirmation(
     view: &OxydeApp,
@@ -111,8 +112,7 @@ pub(crate) fn render_force_confirmation(
                     ),
             )
             .action(
-                action_button("network-force-cancel")
-                    .bg(theme.control_hover)
+                button_style(action_button("network-force-cancel"), theme, ButtonVariant::Secondary, true)
                     .border(rems(0.0625))
                     .border_color(if confirmation.focus.is_focused(window) {
                         theme.accent
@@ -125,10 +125,8 @@ pub(crate) fn render_force_confirmation(
                     }),
             )
             .action(
-                action_button("network-force-accept")
+                button_style(action_button("network-force-accept"), theme, ButtonVariant::Danger, true)
                     .track_focus(&confirmation.confirm_focus)
-                    .bg(theme.error)
-                    .text_color(theme.text_on_accent)
                     .border(rems(0.0625))
                     .border_color(if confirmation.confirm_focus.is_focused(window) {
                         theme.text
@@ -595,18 +593,15 @@ pub(crate) fn render_network_dialog(
         .width(rems(30.0))
         .header(header)
         .action(
-            action_button("network-cancel")
+            button_style(action_button("network-cancel"), theme, ButtonVariant::Secondary, !busy)
                 .track_focus(&dialog.controls[2])
-                .bg(theme.control_hover)
                 .rounded_md()
-                .text_color(theme.text_muted)
                 .border(rems(0.0625))
                 .border_color(if dialog.controls[2].is_focused(window) {
                     theme.accent
                 } else {
                     theme.border
                 })
-                .when(!busy, |d| d.hover(|s| s.bg(theme.control_hover)))
                 .when(busy, |d| d.opacity(0.5))
                 .child(cx.i18n().text(Message::Cancel))
                 .on_click(move |_, window, cx| {
@@ -614,19 +609,15 @@ pub(crate) fn render_network_dialog(
                 }),
         )
         .action(
-            action_button("network-submit")
+            button_style(action_button("network-submit"), theme, ButtonVariant::Primary, !disabled)
                 .track_focus(&dialog.controls[3])
                 .rounded_md()
-                .bg(theme.accent)
-                .text_color(theme.text_on_accent)
                 .border(rems(0.0625))
                 .border_color(if dialog.controls[3].is_focused(window) {
                     theme.text_on_accent
                 } else {
                     theme.accent
                 })
-                .when(disabled, |d| d.opacity(0.5))
-                .when(!disabled, |d| d.hover(|s| s.opacity(0.85)))
                 .child(cx.i18n().text(if disconnect {
                     Message::NetworkDisconnect
                 } else {

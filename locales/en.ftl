@@ -147,7 +147,7 @@ shortcut-back = Alt+Left
 shortcut-forward = Alt+Right
 
 ## Sidebar, filters and navigation errors
-sidebar-quick-access = QUICK ACCESS
+sidebar-quick-access = Quick access
 sidebar-drives = DRIVES
 sidebar-locations = LOCATIONS
 sidebar-network = Network

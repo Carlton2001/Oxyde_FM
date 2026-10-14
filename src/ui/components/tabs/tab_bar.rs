@@ -1,3 +1,4 @@
+use crate::ui::elements::button::{button_style, ButtonVariant};
 use crate::ui::components::tooltip::NativeTooltipExt;
 use crate::ui::scale::rem_pixels;
 use crate::ui::style::h_flex;
@@ -7,9 +8,7 @@ use gpui::prelude::*;
 use gpui::*;
 
 fn tab_bar_button(id: impl Into<ElementId>, theme: &crate::ui::theme::OxydeTheme) -> Stateful<Div> {
-    let hover = theme.hover;
-    div()
-        .id(id)
+    button_style(div().id(id), *theme, ButtonVariant::Ghost, true)
         .flex_none()
         .size(rems(1.5))
         .mx(rems(0.25))
@@ -18,7 +17,6 @@ fn tab_bar_button(id: impl Into<ElementId>, theme: &crate::ui::theme::OxydeTheme
         .items_center()
         .justify_center()
         .rounded_md()
-        .hover(move |s| s.bg(hover))
 }
 
 pub struct TabBar {

@@ -1,3 +1,4 @@
+use crate::ui::elements::button::{button_style, ButtonVariant};
 #[cfg(target_os = "windows")]
 mod breadcrumb_menu;
 use crate::ui::components::tooltip::NativeTooltipExt;
@@ -166,10 +167,11 @@ pub fn render_top_bar(
                         .justify_center()
                         .rounded_md();
 
+                    btn = button_style(btn, theme, ButtonVariant::Ghost, can_go_back);
+
                     if can_go_back {
                         let p_id = pane_id.clone();
                         btn = btn
-                            .hover(move |s| s.bg(hover_bg))
                             .when(show_tooltips, |d| d.native_tooltip(Tooltip::with_meta(_cx.i18n().text(Message::Back), _cx.i18n().text(Message::ShortcutBack))))
                             .on_mouse_down(MouseButton::Left, {
                                 let h = handle.clone();
@@ -194,10 +196,11 @@ pub fn render_top_bar(
                         .justify_center()
                         .rounded_md();
 
+                    btn = button_style(btn, theme, ButtonVariant::Ghost, can_go_forward);
+
                     if can_go_forward {
                         let p_id = pane_id.clone();
                         btn = btn
-                            .hover(move |s| s.bg(hover_bg))
                             .when(show_tooltips, |d| d.native_tooltip(Tooltip::with_meta(_cx.i18n().text(Message::Forward), _cx.i18n().text(Message::ShortcutForward))))
                             .on_mouse_down(MouseButton::Left, {
                                 let h = handle.clone();

@@ -123,7 +123,10 @@ pub(super) fn render_sidebar_rail(
                 label.into(),
                 icon,
                 text,
-                theme,
+                crate::ui::theme::OxydeTheme {
+                    control_hover: if selected { theme.selection_hover } else { theme.control_hover },
+                    ..theme
+                },
                 true,
                 move |_, _, cx| {
                     h.update(cx, |this, cx| {
@@ -185,7 +188,8 @@ pub(super) fn render_sidebar_rail(
                 d.font_weight(FontWeight::BOLD).text_size(rems(0.75))
             })
             .when(selected, |d| {
-                d.bg(theme.accent.opacity(0.1)).text_color(theme.text)
+                d.bg(theme.selected)
+                    .text_color(theme.text)
             }),
         );
     }

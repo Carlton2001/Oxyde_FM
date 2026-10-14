@@ -153,7 +153,7 @@ shortcut-back = Alt+Gauche
 shortcut-forward = Alt+Droite
 
 ## Sidebar, filters and navigation errors
-sidebar-quick-access = ACCÈS RAPIDE
+sidebar-quick-access = Accès rapide
 sidebar-drives = LECTEURS
 sidebar-locations = EMPLACEMENTS
 sidebar-network = Réseau

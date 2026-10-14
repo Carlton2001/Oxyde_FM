@@ -1,5 +1,6 @@
 use crate::ui::app::OxydeApp;
 use crate::ui::components::modal::{action_button, Modal};
+use crate::ui::elements::button::{button_style, ButtonVariant};
 use crate::ui::i18n::{I18nContext, Message};
 use crate::ui::theme::ThemeContext;
 use gpui::prelude::*;
@@ -52,22 +53,27 @@ pub fn render_rename_dialog(
             backdrop_handle.update(cx, |this, cx| this.cancel_rename(cx));
         })
         .action(
-            action_button("rename-cancel")
-                .hover(|d| d.bg(theme.control_hover))
-                .text_color(theme.text_muted)
-                .child(cx.i18n().text(Message::Cancel))
-                .on_mouse_down(MouseButton::Left, move |_, _, cx| {
-                    cancel_handle.update(cx, |this, cx| this.cancel_rename(cx));
-                }),
+            button_style(
+                action_button("rename-cancel"),
+                theme,
+                ButtonVariant::Ghost,
+                true,
+            )
+            .child(cx.i18n().text(Message::Cancel))
+            .on_mouse_down(MouseButton::Left, move |_, _, cx| {
+                cancel_handle.update(cx, |this, cx| this.cancel_rename(cx));
+            }),
         )
         .action(
-            action_button("rename-submit")
-                .bg(theme.accent)
-                .text_color(theme.text_on_accent)
-                .hover(|d| d.opacity(0.85))
-                .child(cx.i18n().text(title))
-                .on_mouse_down(MouseButton::Left, move |_, _, cx| {
-                    submit_handle.update(cx, |this, cx| this.submit_rename(cx));
-                }),
+            button_style(
+                action_button("rename-submit"),
+                theme,
+                ButtonVariant::Primary,
+                true,
+            )
+            .child(cx.i18n().text(title))
+            .on_mouse_down(MouseButton::Left, move |_, _, cx| {
+                submit_handle.update(cx, |this, cx| this.submit_rename(cx));
+            }),
         )
 }

@@ -1,6 +1,6 @@
 use super::super::{Coller, Copier, Couper, Ouvrir, Renommer, Supprimer};
 use super::{general, property_presentation, shortcut, PropertiesWindow};
-use crate::ui::components::modal::action_button;
+use crate::ui::components::tool_window::action_button;
 use crate::ui::i18n::{I18nContext, Message};
 use crate::ui::theme::ThemeContext;
 use gpui::prelude::FluentBuilder;
@@ -206,10 +206,8 @@ pub(crate) fn render(
                         .border_t(rems(0.0625))
                         .border_color(theme.border)
                         .child(
-                            action_button("properties-system")
+                            action_button("properties-system", cx.i18n().text(Message::PropertiesSystem), false, cx)
                                 .when(dialog.system_properties_pending, |button| button.opacity(0.5))
-                                .bg(theme.control_hover)
-                                .child(cx.i18n().text(Message::PropertiesSystem))
                                 .on_mouse_down(MouseButton::Left, move |_, window, cx| {
                                     system.update(cx, |this, cx| {
                                         this.system_file_properties(window, cx)
@@ -217,10 +215,8 @@ pub(crate) fn render(
                                 }),
                         )
                         .child(
-                            action_button("properties-cancel")
+                            action_button("properties-cancel", cx.i18n().text(Message::Cancel), false, cx)
                                 .track_focus(&dialog.focus)
-                                .bg(theme.control_hover)
-                                .child(cx.i18n().text(Message::Cancel))
                                 .on_mouse_down(MouseButton::Left, move |_, window, cx| {
                                     cancel.update(cx, |this, cx| {
                                         this.close_file_properties(window, cx)
@@ -228,11 +224,8 @@ pub(crate) fn render(
                                 }),
                         )
                         .child(
-                            action_button("properties-ok")
+                            action_button("properties-ok", cx.i18n().text(Message::TrashSettingsOk), true, cx)
                                 .track_focus(&dialog.ok_focus)
-                                .bg(theme.accent)
-                                .text_color(theme.text_on_accent)
-                                .child(cx.i18n().text(Message::TrashSettingsOk))
                                 .on_mouse_down(MouseButton::Left, move |_, window, cx| {
                                     ok.update(cx, |this, cx| this.accept_properties(window, cx));
                                 }),

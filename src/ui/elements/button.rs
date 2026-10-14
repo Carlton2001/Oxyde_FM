@@ -1,3 +1,6 @@
+mod style;
+pub use style::{button_style, ButtonVariant};
+
 use crate::ui::theme::ThemeContext;
 use gpui::prelude::*;
 use gpui::*;
@@ -47,31 +50,33 @@ impl RenderOnce for Button {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let theme = cx.theme();
 
-        div()
-            .id(self.id)
+        button_style(div().id(self.id), *theme, ButtonVariant::Secondary, true)
             .flex()
             .items_center()
             .justify_center()
+            .gap(rems(0.5))
             .px_3()
             .py_1()
             .h(rems(1.5))
             .rounded_md()
-            .bg(theme.surface)
             .border(rems(0.0625))
             .border_color(theme.border)
-            .hover(|style| style.bg(theme.hover).border_color(theme.accent.opacity(0.5)))
-            .active(|style| style.bg(theme.selected).border_color(theme.accent))
             .when_some(self.on_click, |container, on_click| {
                 container
                     .on_mouse_down(MouseButton::Left, move |_, window, cx| on_click(window, cx))
             })
             .children(self.icon.map(|path| {
-                svg().path(path).size(rems(0.875)).flex_none().text_color(theme.text)
+                svg()
+                    .path(path)
+                    .size(rems(0.875))
+                    .flex_none()
+                    .text_color(theme.text)
             }))
             .children(self.label.map(|label| {
                 div()
-                    .ml_2()
-                    .when_some(self.label_size, |label, size| label.text_size(rems(size / 16.0)))
+                    .when_some(self.label_size, |label, size| {
+                        label.text_size(rems(size / 16.0))
+                    })
                     .when(self.label_size.is_none(), |label| label.text_sm())
                     .font_weight(FontWeight::MEDIUM)
                     .text_color(theme.text)

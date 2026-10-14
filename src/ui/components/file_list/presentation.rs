@@ -1,3 +1,4 @@
+use crate::ui::elements::button::{button_style, ButtonVariant};
 use crate::ui::components::tooltip::NativeTooltipExt;
 use crate::ui::app::OxydeApp;
 use crate::ui::components::tooltip::Tooltip;
@@ -40,10 +41,12 @@ pub(super) fn date_group_header(group: DateGroup, count: usize, collapsed: bool,
 
 pub(super) fn date_group_button(pane_id: &str, enabled: bool, handle: Entity<OxydeApp>, theme: OxydeTheme, cx: &mut Context<OxydeApp>) -> impl IntoElement {
     let pane_id = pane_id.to_string();
-    div().id(SharedString::from(format!("group-by-date-{pane_id}")))
+    button_style(
+        div().id(SharedString::from(format!("group-by-date-{pane_id}"))),
+        theme, ButtonVariant::Ghost, true,
+    )
         .size(rems(1.5)).flex_none().flex().items_center().justify_center().rounded_md()
         .bg(if enabled { theme.selected } else { theme.header })
-        .hover(|style| style.bg(theme.control_hover))
         .native_tooltip(Tooltip::text(cx.i18n().text(Message::SettingsGroupByDate)))
         .on_mouse_down(MouseButton::Left, move |_, _, cx| {
             cx.stop_propagation();
@@ -189,7 +192,7 @@ pub(super) fn view_mode_button(
 ) -> impl IntoElement {
     let selected = mode == active_mode;
     let pane_id = pane_id.to_string();
-    div()
+    button_style(div()
         .id(SharedString::from(format!(
             "view-mode-{}-{}",
             pane_id,
@@ -198,7 +201,7 @@ pub(super) fn view_mode_button(
             } else {
                 "details"
             }
-        )))
+        ))), theme, ButtonVariant::Ghost, true)
         .w(rems(1.5))
         .h(rems(1.5))
         .flex_none()
@@ -211,7 +214,6 @@ pub(super) fn view_mode_button(
         } else {
             theme.header
         })
-        .hover(|d| d.bg(theme.control_hover))
         .native_tooltip(Tooltip::text(cx.i18n().text(tooltip)))
         .on_mouse_down(MouseButton::Left, move |_, _, cx| {
             cx.stop_propagation();
