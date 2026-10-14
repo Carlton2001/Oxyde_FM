@@ -225,8 +225,12 @@ impl Render for Tooltip {
         let chrome = rem_pixels(rems(1.625));
         let media_width = self.preview_view.clone().and_then(|preview| {
             preview.update(cx, |preview, cx| {
-                preview.loaded_image(window, cx).map(|image|
-                    preview.preferred_size(&image, rem_pixels(rems(48.375))).width + chrome)
+                if matches!(preview.data, Some(super::PreviewData::Text(_))) {
+                    Some(rem_pixels(rems(21.875)) + chrome)
+                } else {
+                    preview.loaded_image(window, cx).map(|image|
+                        preview.preferred_size(&image, rem_pixels(rems(48.375))).width + chrome)
+                }
             })
         });
         let maximum_width = if self.native_presentation {

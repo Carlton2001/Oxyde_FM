@@ -50,3 +50,13 @@ Le mode interne `--oxyde-preview-worker-v1` produit un seul aperçu dans un proc
 ## Géométrie persistante — 10 octobre 2026
 
 Le hook GPUI de la fenêtre principale force maintenant la sauvegarde de la dernière géométrie lorsqu’un debounce de déplacement/redimensionnement est en attente, avant de prendre et attendre la queue des préférences. Le snapshot en mémoire est déjà à jour ; la minimisation est ignorée. Aucune écriture bloquante sur le thread UI et aucun changement du contournement final TerminateProcess. Le retour utilisateur du 10 octobre 2026 (« tout fonctionne ») confirme globalement le lot 58, dont la persistance de géométrie après fermeture/réouverture. Ce retour ne constitue pas une nouvelle reproduction dédiée du blocage PDF/Intel.
+
+## Session image réutilisable — 14 octobre 2026
+
+Avant le `TerminateProcess` final existant, `finish_process_shutdown` demande
+l’arrêt du superviseur de session image s’il a été démarré. Le signal est contrôlé
+dans les lectures et checkpoints de lancement ; le nettoyage attend au maximum
+deux secondes. Les arrêts des workers conservent leur Job Object et leur attente
+bornée. Les étapes GPUI/Tokio, les sauvegardes et le contournement PDF/Intel restent
+inchangés. Voir [IMAGE_PREVIEW_SESSIONS.md](IMAGE_PREVIEW_SESSIONS.md) pour les limites
+de cycle de vie, de protocole et de sécurité.

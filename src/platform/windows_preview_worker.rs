@@ -19,6 +19,8 @@ const MEMORY_BYTES: usize = 512 * 1024 * 1024;
 // a separate 1GiB video envelope restores decoding without removing the bound.
 const VIDEO_MEMORY_BYTES: usize = 1024 * 1024 * 1024;
 const DEADLINE: Duration = Duration::from_secs(15);
+mod image_session;
+pub(super) fn shutdown_image_session() { image_session::shutdown(); }
 pub(super) fn initialize() -> io::Result<()> {
     use windows::Win32::UI::HiDpi::*;
     // The headless executable has not created any UI/DPI-dependent resource.
@@ -154,14 +156,9 @@ pub(super) fn run(mode: &str, path: &Path) -> io::Result<Vec<u8>> {
         .lock()
         .map_err(|_| io::Error::other("Preview worker admission failed"))?;
     if mode == "image" {
-        run_image_in(&std::env::current_exe()?.with_file_name("oxyde-image-worker.exe"), path, DEADLINE)
+        image_session::run(path, false)
     } else if mode == "image-thumbnail" {
-        run_image_mode_in(
-            &std::env::current_exe()?.with_file_name("oxyde-image-worker.exe"),
-            path,
-            DEADLINE,
-            mode == "image-thumbnail",
-        )
+        image_session::run(path, true)
     } else if mode == "office-text" {
         run_office_text_in(
             &std::env::current_exe()?.with_file_name("oxyde-image-worker.exe"),
@@ -173,13 +170,7 @@ pub(super) fn run(mode: &str, path: &Path) -> io::Result<Vec<u8>> {
     }
 }
 
-pub(super) fn run_image_in(
-    executable: &Path,
-    path: &Path,
-    deadline: Duration,
-) -> io::Result<Vec<u8>> {
-    run_image_mode_in(executable, path, deadline, false)
-}
+#[cfg(test)]
 fn run_image_mode_in(executable: &Path, path: &Path, deadline: Duration, thumbnail: bool) -> io::Result<Vec<u8>> {
     let source = crate::platform::platform().retain_archive_source(path)?;
     if source.file.metadata()?.len()

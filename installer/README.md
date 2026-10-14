@@ -1,5 +1,21 @@
 # Distribution Windows Oxyde GPUI
 
+## Développement
+
+Avant `cargo run`, construire aussi les exécutables auxiliaires (images/SVG et archives) :
+
+```powershell
+cargo build --offline --bins
+cargo run --offline
+```
+
+Fermer Oxyde avant de reconstruire son exécutable. `cargo run` seul ne construit
+que le binaire principal ; les workers doivent rester à côté de celui-ci dans
+`target/debug`. Sans dossier `data` à cet endroit, les données restent dans le
+profil utilisateur, comme pour une installation classique.
+
+## Construction de la distribution
+
 Construire avec Rust MSVC x64 et les Build Tools Visual C++ :
 
 ```powershell

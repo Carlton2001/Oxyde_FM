@@ -384,7 +384,6 @@ pub enum PreviewType {
     Pdf,
     Office,
     Text,
-    Html,
 }
 
 pub fn get_preview_type(name: &str) -> PreviewType {
@@ -408,7 +407,7 @@ pub fn get_preview_type(name: &str) -> PreviewType {
         return PreviewType::Office;
     }
     if ext == "html" || ext == "htm" {
-        return PreviewType::Html;
+        return PreviewType::Text;
     }
     if TEXT_BASE_EXTENSIONS.contains(ext) || CODE_EXTENSIONS.contains(ext) {
         return PreviewType::Text;

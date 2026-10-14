@@ -5,9 +5,12 @@ mod svg;
 fn main() {
     #[cfg(target_os = "windows")]
     {
-        let renderer = gpui::SvgRenderer::new(std::sync::Arc::new(()));
+        let renderer = std::sync::OnceLock::new();
         if !oxyde_lib::commands::image_handle_worker::run_if_requested(&|data, policy| {
-            svg::svg(data, &renderer, policy)
+            // Loading system fonts is expensive and only SVG decoding needs it.
+            // Raster images and Office text must not pay this cost per worker.
+            let renderer = renderer.get_or_init(|| gpui::SvgRenderer::new(std::sync::Arc::new(())));
+            svg::svg(data, renderer, policy)
         }) {
             oxyde_lib::commands::office_handle_worker::run_if_requested();
         }

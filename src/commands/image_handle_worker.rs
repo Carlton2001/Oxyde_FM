@@ -11,6 +11,9 @@ use std::{
 
 pub const FLAG: &str = "--oxyde-image-handle-worker-v1";
 pub const THUMBNAIL_FLAG: &str = "--oxyde-thumbnail-handle-worker-v1";
+pub const SESSION_FLAG: &str = "--oxyde-image-session-worker-v1";
+pub const SESSION_REQUESTS: u64 = 32;
+mod session;
 pub fn run_if_requested(
     svg: &dyn Fn(
         &[u8],
@@ -19,6 +22,14 @@ pub fn run_if_requested(
 ) -> bool {
     let mut arguments = std::env::args_os().skip(1);
     let flag = arguments.next();
+    if flag.as_deref() == Some(std::ffi::OsStr::new(SESSION_FLAG)) {
+        let result = if arguments.next().is_none() { session::run(svg) } else {
+            Err(io::Error::other("Unexpected image session argument"))
+        };
+        if let Err(error) = result { let _ = writeln!(io::stderr(), "Image session failed: {error}"); }
+        let _ = crate::platform::finish_archive_worker_shutdown();
+        return true;
+    }
     let thumbnail = flag.as_deref() == Some(std::ffi::OsStr::new(THUMBNAIL_FLAG));
     if !thumbnail && flag.as_deref() != Some(std::ffi::OsStr::new(FLAG)) { return false; }
     let policy = if thumbnail { image_preview_decode::Policy { output_side: 128, frame_count: 1, ..POLICY } } else { POLICY };
