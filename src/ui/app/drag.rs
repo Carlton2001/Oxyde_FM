@@ -184,6 +184,8 @@ impl Render for FileDragPreview {
 impl OxydeApp {
     /// End pointer interactions, including releases missed outside the window.
     pub(crate) fn finish_pointer_drag(&mut self, cx: &mut Context<Self>) {
+        self.item_press = None;
+        self.item_selection_drag = false;
         self.file_drag_origin = None;
         self.set_file_drag_new_tab(false, cx);
         if let Some(panel) = self.operations_panel_view.clone() {
@@ -281,6 +283,7 @@ impl OxydeApp {
             self.finish_pointer_drag(cx);
             return;
         }
+        self.move_item_press(e, cx);
         if let Some(target) = self.drag_target.clone() {
             let pos = e.position;
             match target {

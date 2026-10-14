@@ -128,6 +128,7 @@ pub(super) fn render_grid_card(params: GridCardParams<'_>, cx: &mut App) -> Stat
                 let is_dir = is_dir;
                 h.update(cx, |this, cx| {
                     this.activate_pane(&pid, cx);
+                    this.begin_item_press(&pid, &path, e);
                     let preserve_multi_selection = !e.modifiers.control
                         && !e.modifiers.shift
                         && this.state.find_pane(&pid).is_some_and(|pane| {

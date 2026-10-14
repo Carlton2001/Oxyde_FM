@@ -109,6 +109,7 @@ pub(super) fn render_details_row(params: DetailsRowParams<'_>, cx: &mut App) -> 
                     let shift = e.modifiers.shift;
                     h_inner_inner.update(cx, |this, cx| {
                         this.activate_pane(&p_id_cap, cx);
+                        this.begin_item_press(&p_id_cap, &p, e);
                         // If file is already part of a multi-selection and no modifier
                         // is held, preserve the selection so dragging all files works.
                         // on_click will narrow the selection if no drag happens.
@@ -139,6 +140,9 @@ pub(super) fn render_details_row(params: DetailsRowParams<'_>, cx: &mut App) -> 
                         return;
                     }
                     h.update(cx, |this, cx| {
+                        if this.suppress_item_selection_click {
+                            return;
+                        }
                         let is_multi = this.state.find_pane(&p_id_cap)
                             .map(|pane| pane.active_tab().selected_paths.len() > 1)
                             .unwrap_or(false);

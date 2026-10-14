@@ -163,9 +163,32 @@ impl Render for OxydeApp {
                 move |_, _, window, _| {
                     let cancel_handle = h.clone();
                     window.on_mouse_event(move |event: &MouseDownEvent, phase, window, cx| {
+                        if phase == DispatchPhase::Capture {
+                            cancel_handle.update(cx, |this, _| {
+                                this.suppress_item_selection_click = false;
+                            });
+                        }
                         if phase == DispatchPhase::Capture && event.button == MouseButton::Right
                             && cancel_handle.update(cx, |this, cx| this.cancel_file_drag(window, cx)) {
                             cx.stop_propagation();
+                        }
+                    });
+                    let release_handle = h.clone();
+                    window.on_mouse_event(move |event: &MouseUpEvent, phase, _, cx| {
+                        if phase == DispatchPhase::Capture && event.button == MouseButton::Left {
+                            release_handle.update(cx, |this, cx| {
+                                if this.item_selection_drag {
+                                    // Let GPUI observe the release and clear its pending press.
+                                    // Suppress only the resulting item click, not event propagation.
+                                    if let Some(DragTarget::SelectionRectangle { pane_id, .. }) = &this.drag_target {
+                                        this.handle_selection_drag(pane_id.clone(), event.position, cx);
+                                    }
+                                    this.finish_pointer_drag(cx);
+                                    this.suppress_item_selection_click = true;
+                                } else {
+                                    this.item_press = None;
+                                }
+                            });
                         }
                     });
                     let h = h.clone();

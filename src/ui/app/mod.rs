@@ -32,6 +32,7 @@ pub use drag::drives_differ;
 use toasts::{Toast, ToastKind};
 pub(crate) mod network;
 pub mod selection;
+mod item_pointer;
 pub(crate) mod search;
 pub(crate) mod advanced_search;
 pub(crate) mod duplicates;
@@ -201,6 +202,9 @@ pub struct OxydeApp {
     pub(crate) sidebar_scroll_h: ScrollHandle,
     pub(crate) breadcrumb_scroll: UniformListScrollHandle,
     pub drag_target: Option<DragTarget>,
+    item_press: Option<item_pointer::ItemPress>,
+    item_selection_drag: bool,
+    pub(crate) suppress_item_selection_click: bool,
     pub drop_target_idx: Option<usize>,
     pub drop_target_pane: Option<String>,
     pub highlight_right_zone: bool,
@@ -368,6 +372,9 @@ impl OxydeApp {
             sidebar_scroll_h: ScrollHandle::new(),
             breadcrumb_scroll: UniformListScrollHandle::new(),
             drag_target: None,
+            item_press: None,
+            item_selection_drag: false,
+            suppress_item_selection_click: false,
             drop_target_idx: None,
             drop_target_pane: None,
             highlight_right_zone: false,
