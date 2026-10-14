@@ -64,6 +64,8 @@ fn initialize_logging() {
 
 fn main() {
     #[cfg(target_os = "windows")]
+    if oxyde_lib::commands::icon_session_worker::run_if_requested() { return; }
+    #[cfg(target_os = "windows")]
     if oxyde_lib::commands::archive_io_worker::run_if_requested() { return; }
     #[cfg(target_os = "windows")]
     if oxyde_lib::commands::archive_worker::run_if_requested() { return; }
@@ -100,10 +102,14 @@ fn main() {
         .unwrap_or_else(|| oxyde_lib::models::preferences::DateFormat::for_locale(
             &oxyde_lib::platform::platform().regional_locale().unwrap_or_default()));
     config.date_format = date_format.as_str().into();
+    // The shared native folder icons are ready before any file list is painted.
+    // No file operation blocks navigation: the first window does not exist yet.
+    let folder_icons = crate::ui::components::icons::prepare_system_folder_icons(config.use_system_icons);
     let asset_source = crate::ui::assets::EmbeddedAssetSource::new();
     gpui_platform::application()
         .with_assets(asset_source)
         .run(move |cx| {
+            cx.set_global(folder_icons);
             let assets = crate::ui::assets::EmbeddedAssetSource::new();
             assets.load_fonts(cx).expect("fonts could not be loaded");
             cx.set_global(crate::ui::theme::OxydeTheme::for_id(

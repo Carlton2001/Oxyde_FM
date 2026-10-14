@@ -25,3 +25,6 @@ pub mod ops;
 pub mod search;
 pub mod sidebar;
 pub mod system;
+#[doc(hidden)]
+#[cfg(target_os = "windows")]
+pub mod icon_session_worker;

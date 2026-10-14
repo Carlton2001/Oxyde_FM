@@ -20,7 +20,10 @@ const MEMORY_BYTES: usize = 512 * 1024 * 1024;
 const VIDEO_MEMORY_BYTES: usize = 1024 * 1024 * 1024;
 const DEADLINE: Duration = Duration::from_secs(15);
 mod image_session;
+mod icon_session;
 pub(super) fn shutdown_image_session() { image_session::shutdown(); }
+pub(super) fn shutdown_icon_session() { icon_session::shutdown(); }
+pub(super) fn reset_icon_session() { icon_session::reset(); }
 pub(super) fn initialize() -> io::Result<()> {
     use windows::Win32::UI::HiDpi::*;
     // The headless executable has not created any UI/DPI-dependent resource.
@@ -60,7 +63,7 @@ impl Worker {
         drop(input);
         Ok((worker, output))
     }
-    fn start_duplex_checked(
+    pub(super) fn start_duplex_checked(
         mut command: Command,
         memory_bytes: usize,
         checkpoint: &dyn Fn() -> io::Result<()>,
@@ -152,6 +155,9 @@ pub(super) fn job(memory_bytes: usize) -> io::Result<OwnedHandle> {
 }
 
 pub(super) fn run(mode: &str, path: &Path) -> io::Result<Vec<u8>> {
+    if (mode == "icon-small" || mode == "icon-large") && path.to_str().is_some_and(|path| path.len() + 5 <= crate::commands::icon_session_worker::MAX_INPUT) {
+        return icon_session::run(path, mode == "icon-large");
+    }
     let _slot = SLOT
         .lock()
         .map_err(|_| io::Error::other("Preview worker admission failed"))?;

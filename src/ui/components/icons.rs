@@ -423,9 +423,33 @@ use gpui::prelude::*;
 use gpui::*;
 
 struct SystemIconAsset;
+#[derive(Default)]
+pub(crate) struct SystemFolderImages(Option<[std::sync::Arc<RenderImage>; 2]>);
+impl Global for SystemFolderImages {}
+
+/// Before opening the first window, prepare the two shared folder sizes.
+pub(crate) fn prepare_system_folder_icons(enabled: bool) -> SystemFolderImages {
+    if !enabled || !cfg!(target_os = "windows") { return SystemFolderImages::default(); }
+    let load = |large| {
+        oxyde_lib::platform::platform().file_icon("oxyde_dir_generic".into(), large).map(|mut image| {
+            rgba_to_bgra(&mut image);
+            std::sync::Arc::new(RenderImage::new(vec![image::Frame::new(image)]))
+        })
+    };
+    match (load(false), load(true)) {
+        (Ok(small), Ok(large)) => SystemFolderImages(Some([small, large])),
+        _ => SystemFolderImages::default(),
+    }
+}
+
 pub(crate) fn invalidate_file_icon(path: &str, cx: &mut App) {
+    cx.set_global(SystemFolderImages::default());
     for large in [false, true] {
         cx.remove_asset::<SystemIconAsset>(&(SharedString::from(path.to_string()), large));
+        for (is_dir, preserve_path) in [(false, false), (true, false), (false, true)] {
+            let source = oxyde_lib::platform::platform().file_icon_source(path, is_dir, preserve_path);
+            cx.remove_asset::<SystemIconAsset>(&(SharedString::from(source), large));
+        }
     }
 }
 impl Asset for SystemIconAsset {
@@ -486,8 +510,25 @@ pub(crate) fn render_file_icon(
     if !system || path.starts_with("trash:") || path == "__network_vincinity__" {
         return fallback();
     }
-    let source = (SharedString::from(path), large);
-    img(move |window: &mut Window, cx: &mut App| window.use_asset::<SystemIconAsset>(&source, cx))
+    // Special locations and directories retain their own Shell icons. Ordinary
+    // files share the same GPUI asset, including its pending load and GPU image.
+    let preserve_path = matches!(icon,
+        IconType::Link2 |
+        IconType::HardDrive | IconType::Network | IconType::Globe |
+        IconType::Trash | IconType::Monitor | IconType::Smartphone | IconType::Printer | IconType::Box
+    );
+    let source = (
+        SharedString::from(oxyde_lib::platform::platform().file_icon_source(&path, matches!(icon, IconType::Folder | IconType::FolderOpen), preserve_path)),
+        large,
+    );
+    img(move |window: &mut Window, cx: &mut App| {
+        if source.0.as_ref() == "oxyde_dir_generic" {
+            if let Some(images) = cx.try_global::<SystemFolderImages>().and_then(|images| images.0.as_ref()) {
+                return Some(Ok(images[usize::from(large)].clone()));
+            }
+        }
+        window.use_asset::<SystemIconAsset>(&source, cx)
+    })
         .size(size)
         .object_fit(ObjectFit::Contain)
         .with_fallback(fallback)

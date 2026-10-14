@@ -29,6 +29,11 @@ fn shell_icon_path(path: &str) -> String {
     path.replace('/', "\\")
 }
 
+pub(super) fn cache_key(path: &str, size: &str) -> String {
+    let path = shell_icon_path(path);
+    format!("{}_{}", blake3::hash(path.as_bytes()).to_hex(), size)
+}
+
 pub fn get_file_icon(path: String, size: String) -> Result<Vec<u8>, CommandError> {
     // Breadcrumbs use forward slashes; Shell APIs require Windows separators.
     let path = shell_icon_path(&path);
@@ -37,6 +42,8 @@ pub fn get_file_icon(path: String, size: String) -> Result<Vec<u8>, CommandError
     // Virtual path logic (copying the folder "C:\Windows" spirit)
     let (real_path, use_attributes) = if let Some(ext) = path.strip_prefix("oxyde_ext_") {
         (format!("C:\\template.{}", ext), true)
+    } else if path == "oxyde_file_generic" {
+        ("C:\\template".to_string(), true)
     } else if path == "oxyde_dir_generic" {
         ("C:\\Windows".to_string(), false)
     } else {
@@ -45,8 +52,7 @@ pub fn get_file_icon(path: String, size: String) -> Result<Vec<u8>, CommandError
 
     // Cache key is based on the input path to be 100% stable
     // Hash the exact path to avoid collisions and overly long cache filenames.
-    let safe_id = blake3::hash(path.as_bytes()).to_hex().to_string();
-    let cache_key = format!("{}_{}", safe_id, size);
+    let cache_key = cache_key(&path, &size);
 
     extract_icon_png(&real_path, &size, use_attributes, cache_dir, cache_key)
         .map_err(|e| CommandError::SystemError(format!("Failed to extract icon: {}", e)))

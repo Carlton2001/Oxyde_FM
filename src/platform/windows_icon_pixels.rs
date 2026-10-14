@@ -47,6 +47,7 @@ fn cache() -> &'static Mutex<PixelCache> {
     CACHE.get_or_init(|| Mutex::new(PixelCache::new(32 * 1024 * 1024, 1000)))
 }
 pub(super) fn clear() {
+    super::windows_preview_worker::reset_icon_session();
     *cache().lock().unwrap_or_else(|error| error.into_inner()) =
         PixelCache::new(32 * 1024 * 1024, 1000);
 }
@@ -62,6 +63,18 @@ pub(super) fn get(path: String, large: bool) -> Result<RgbaImage, String> {
         .cloned()
     {
         return Ok(image);
+    }
+    // Consult the persisted PNG before starting a Shell process. Decoding remains
+    // bounded by the icon policy and happens on the caller's background thread.
+    if let Some(directory) = crate::app_paths::cache_dir().map(|path| path.join("icons")) {
+        let size = if large { "large" } else { "small" };
+        let filename = super::icons::cache_key(&path, size);
+        if let Ok(bytes) = super::windows_icon_cache::read_cached_png(&directory.join(format!("{filename}.png"))) {
+            if let Ok(image) = super::windows_icon_cache::decode_icon_png(&bytes) {
+                cache().lock().map_err(|error| error.to_string())?.insert(key, image.clone());
+                return Ok(image);
+            }
+        }
     }
     // No cache lock across file I/O, IPC or Shell handlers.
     let bytes = super::platform()

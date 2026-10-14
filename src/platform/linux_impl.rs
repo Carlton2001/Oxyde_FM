@@ -467,6 +467,10 @@ impl Platform for LinuxPlatform {
         }
     }
 
+    fn file_icon_source(&self, path: &str, _is_dir: bool, _preserve_path: bool) -> String {
+        path.to_string()
+    }
+
     fn file_icon(&self, _path: String, _large: bool) -> Result<image::RgbaImage, String> {
         Err("Native icons unavailable".into())
     }

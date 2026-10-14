@@ -298,6 +298,8 @@ pub trait Platform: Send + Sync {
     /// Windows bypasses DLL detach callbacks that can hang in native graphics drivers.
     fn finish_process_shutdown(&self) -> Result<(), String>;
 
+    /// Resolve a cache source without I/O; identify directories and preserve special entries.
+    fn file_icon_source(&self, path: &str, is_dir: bool, preserve_path: bool) -> String;
     /// Load native icons on a background worker.
     fn file_icon(&self, path: String, large: bool) -> Result<image::RgbaImage, String>;
 
@@ -615,3 +617,5 @@ mod windows_worker_budget;
 mod windows_resource_pressure;
 #[cfg(target_os = "windows")]
 mod windows_icon_pixels;
+#[cfg(target_os = "windows")]
+mod windows_icon_source;

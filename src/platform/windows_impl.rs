@@ -308,6 +308,7 @@ impl Platform for WindowsPlatform {
 
     fn finish_process_shutdown(&self) -> Result<(), String> {
         super::windows_preview_worker::shutdown_image_session();
+        super::windows_preview_worker::shutdown_icon_session();
         // A captured shutdown dump showed the final thread spinning in Intel's
         // igd10um64xe through d3d11 / Windows.Data.Pdf during process detach,
         // after main, GPUI and Tokio had finished. ExitProcess (including
@@ -353,6 +354,10 @@ impl Platform for WindowsPlatform {
 
     fn eject_drive(&self, path: &str) -> Result<(), String> {
         super::windows_drives::eject_drive(path)
+    }
+
+    fn file_icon_source(&self, path: &str, is_dir: bool, preserve_path: bool) -> String {
+        super::windows_icon_source::source(path, is_dir, preserve_path)
     }
 
     fn file_icon(&self, path: String, large: bool) -> Result<image::RgbaImage, String> {

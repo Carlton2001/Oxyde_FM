@@ -60,3 +60,7 @@ deux secondes. Les arrêts des workers conservent leur Job Object et leur attent
 bornée. Les étapes GPUI/Tokio, les sauvegardes et le contournement PDF/Intel restent
 inchangés. Voir [IMAGE_PREVIEW_SESSIONS.md](IMAGE_PREVIEW_SESSIONS.md) pour les limites
 de cycle de vie, de protocole et de sécurité.
+
+## Session des icônes Windows — 14 octobre 2026
+
+`finish_process_shutdown` arrête aussi le superviseur de session Shell des icônes, après la session image et avant le TerminateProcess final. Le signal est contrôlé dans les checkpoints et lectures de la session ; le nettoyage attend au maximum deux secondes. Le processus reste attaché au Job Object existant, avec destruction et attente bornée. La session ne traite ni les PDF ni les aperçus documentaires.
