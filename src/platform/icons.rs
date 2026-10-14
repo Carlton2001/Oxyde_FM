@@ -32,7 +32,7 @@ fn shell_icon_path(path: &str) -> String {
 pub fn get_file_icon(path: String, size: String) -> Result<Vec<u8>, CommandError> {
     // Breadcrumbs use forward slashes; Shell APIs require Windows separators.
     let path = shell_icon_path(&path);
-    let cache_dir = dirs::cache_dir().map(|p| p.join("oxyde").join("icons"));
+    let cache_dir = crate::app_paths::cache_dir().map(|p| p.join("icons"));
 
     // Virtual path logic (copying the folder "C:\Windows" spirit)
     let (real_path, use_attributes) = if let Some(ext) = path.strip_prefix("oxyde_ext_") {

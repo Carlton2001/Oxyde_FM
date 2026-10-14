@@ -69,6 +69,13 @@ fn main() {
     if oxyde_lib::commands::archive_worker::run_if_requested() { return; }
     #[cfg(target_os = "windows")]
     if crate::ui::preview_worker::run_if_requested() { return; }
+    if let Err(error) = oxyde_lib::app_paths::initialize() {
+        let platform = oxyde_lib::platform::platform();
+        let locale = platform.regional_locale().unwrap_or_default();
+        let i18n = crate::ui::i18n::I18n::for_language(crate::ui::i18n::Language::from_id(&locale));
+        platform.show_startup_error("Oxyde GPUI", &format!("{}\n\n{error}", i18n.text(crate::ui::i18n::Message::StorageUnavailable)));
+        return;
+    }
     initialize_logging();
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()

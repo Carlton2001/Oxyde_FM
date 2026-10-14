@@ -117,11 +117,11 @@ fn cached_thumbnail(
         .ok()
         .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
         .map_or(0, |duration| duration.as_nanos());
-    let Some(cache_root) = dirs::cache_dir() else {
+    let Some(cache_root) = crate::app_paths::cache_dir() else {
         log::warn!("Cannot resolve the user cache directory; thumbnail will not be cached");
         return generate(path);
     };
-    let cache_dir = cache_root.join("oxyde").join("thumbnails");
+    let cache_dir = cache_root.join("thumbnails");
     let key =
         blake3::hash(format!("v1|{kind}|{}|{}|{modified_ns}", path, metadata.len()).as_bytes())
             .to_hex();

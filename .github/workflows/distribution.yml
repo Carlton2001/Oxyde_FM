@@ -1,0 +1,34 @@
+name: Windows portable distribution
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  portable:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Install Rust stable
+        run: rustup update stable --no-self-update
+      - name: Check application
+        run: cargo check --locked
+      - name: Test portable storage
+        run: cargo test --locked --lib app_paths::tests -- --test-threads=1
+      - name: Build portable ZIP
+        shell: pwsh
+        run: ./scripts/build-distribution.ps1 -PortableOnly
+      - name: Upload portable distribution
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: Oxyde_GPUI-portable-x64
+          path: |
+            target/distribution/output/*-portable.zip
+            target/distribution/output/*-portable.zip.sha256
+          if-no-files-found: error
+          compression-level: 0

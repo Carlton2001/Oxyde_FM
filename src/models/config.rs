@@ -177,8 +177,8 @@ pub struct ConfigManager;
 
 impl ConfigManager {
     pub fn config_path() -> Result<std::path::PathBuf, CommandError> {
-        dirs::config_dir()
-            .map(|dir| dir.join("oxyde").join("config.json"))
+        crate::app_paths::config_dir()
+            .map(|dir| dir.join("config.json"))
             .ok_or_else(|| CommandError::SystemError("Failed to get config directory".into()))
     }
 

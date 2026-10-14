@@ -55,7 +55,7 @@ struct Pixels {
 }
 impl Key {
     fn new(source: &Path, kind: &str) -> Option<Self> {
-        Self::in_root(source, kind, &dirs::cache_dir()?.join("oxyde/thumbnails"))
+        Self::in_root(source, kind, &oxyde_lib::app_paths::cache_dir()?.join("thumbnails"))
     }
     fn in_root(source: &Path, kind: &str, root: &Path) -> Option<Self> {
         let stamp = Stamp::read(source)?;

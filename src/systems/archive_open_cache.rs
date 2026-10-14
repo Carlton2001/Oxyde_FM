@@ -105,9 +105,10 @@ impl CacheEntry {
             Default::default(),
             Default::default(),
         )?;
-        let base = TEST_BASE
-            .with(|value| value.borrow().clone())
-            .unwrap_or_else(std::env::temp_dir);
+        let base = match TEST_BASE.with(|value| value.borrow().clone()) {
+            Some(base) => base,
+            None => crate::app_paths::temporary_dir()?,
+        };
         let started = Instant::now();
         loop {
             match Self::prepare(&base, Policy::DEFAULT, seconds(SystemTime::now())?) {

@@ -149,9 +149,9 @@ impl ArchiveWorkspace {
         #[cfg(all(target_os = "windows", not(test)))]
         let _io_cancellation = super::archive_io::watch_io(op, limits.max_duration).map_err(|error| error.to_string())?;
         #[cfg(any(not(target_os = "windows"), test))]
-        let directory = tempfile::tempdir().map_err(|e| e.to_string())?;
+        let directory = tempfile::tempdir_in(crate::app_paths::temporary_dir().map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
         #[cfg(all(target_os = "windows", not(test)))]
-        let directory = WorkspaceDirectory::new(super::archive_owned_tree::OwnedTree::temporary(&std::env::temp_dir()).map_err(|e| e.to_string())?);
+        let directory = WorkspaceDirectory::new(super::archive_owned_tree::OwnedTree::temporary(&crate::app_paths::temporary_dir().map_err(|e| e.to_string())?).map_err(|e| e.to_string())?);
         Self::open_in_directory_controlled(archive, checkpoint, limits, directory, op)
     }
 

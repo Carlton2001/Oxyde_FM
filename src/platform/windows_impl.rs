@@ -11,6 +11,13 @@ impl WindowsPlatform {
 }
 
 impl Platform for WindowsPlatform {
+    fn show_startup_error(&self, title: &str, message: &str) {
+        use windows::core::{HSTRING, PCWSTR};
+        use windows::Win32::UI::WindowsAndMessaging::{MessageBoxW, MB_ICONERROR, MB_OK};
+        let title = HSTRING::from(title);
+        let message = HSTRING::from(message);
+        unsafe { MessageBoxW(None, PCWSTR(message.as_ptr()), PCWSTR(title.as_ptr()), MB_OK | MB_ICONERROR); }
+    }
     fn check_broker_pressure(&self) -> std::io::Result<()> { super::windows_resource_pressure::check() }
     fn cache_proof_key(&self, path: &std::path::Path) -> std::io::Result<[u8; 32]> {
         super::windows_cache_proof::key::load(path)

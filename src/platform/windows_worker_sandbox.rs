@@ -103,7 +103,7 @@ impl Runtime {
                 "Worker runtime exceeds its limit",
             ));
         }
-        let temporary = std::env::temp_dir();
+        let temporary = crate::app_paths::temporary_dir()?;
         parents.extend(retain_parents(&temporary)?);
         let temp_handle = OpenOptions::new()
             .read(true)
