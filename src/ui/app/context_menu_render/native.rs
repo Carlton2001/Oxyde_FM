@@ -9,7 +9,7 @@ impl OxydeApp {
     #[allow(clippy::ptr_arg)]
     pub(super) fn render_native_menu(
         &self,
-        path: &String,
+        path: &Vec<String>,
         is_background: &bool,
         items: &Vec<oxyde_lib::models::WinMenuItem>,
         instance: &ContextMenuInstance,

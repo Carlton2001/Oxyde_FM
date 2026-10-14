@@ -140,7 +140,7 @@ pub enum ContextMenuContent {
         Option<ContextMenuHeader>,
     ),
     NativeItems {
-        path: String,
+        path: Vec<String>,
         is_background: bool,
         items: Vec<oxyde_lib::models::WinMenuItem>,
     },

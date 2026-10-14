@@ -393,20 +393,20 @@ impl Platform for WindowsPlatform {
 
     fn native_context_menu_items(
         &self,
-        path: &str,
+        path: &[String],
         is_background: bool,
     ) -> Result<Vec<crate::models::WinMenuItem>, String> {
-        super::windows_shell::get_native_context_menu_items(path.to_string(), is_background)
+        super::windows_shell::get_native_context_menu_items(path.to_vec(), is_background)
             .map_err(|error| error.to_string())
     }
 
     fn execute_native_context_menu_item(
         &self,
-        path: &str,
+        path: &[String],
         id: i32,
         is_background: bool,
     ) -> Result<(), String> {
-        super::windows_shell::execute_native_menu_item(path.to_string(), id, is_background)
+        super::windows_shell::execute_native_menu_item(path.to_vec(), id, is_background)
             .map_err(|error| error.to_string())
     }
 

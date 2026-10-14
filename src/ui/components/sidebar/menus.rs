@@ -329,7 +329,7 @@ fn sidebar_tree_actions(
         on_click: std::rc::Rc::new(|_, _| {}),
         on_hover: Some(std::rc::Rc::new(move |pos, left, app| {
             h.update(app, |this, cx| {
-                this.request_native_context_menu(0, p.clone(), false, pos, left, cx);
+                this.request_native_context_menu(0, vec![p.clone()], false, pos, left, cx);
             })
         })),
     });

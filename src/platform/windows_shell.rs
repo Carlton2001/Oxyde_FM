@@ -171,7 +171,7 @@ try {{
 }
 
 pub(super) fn get_native_context_menu_items(
-    path: String,
+    paths: Vec<String>,
     is_background: bool,
 ) -> Result<Vec<WinMenuItem>, CommandError> {
     use windows::core::{Interface, PCWSTR};
@@ -185,7 +185,9 @@ pub(super) fn get_native_context_menu_items(
         WM_INITMENUPOPUP,
     };
 
-    let pb = validate_path(&path)?;
+    let path = paths.first().ok_or_else(|| CommandError::SystemError("Empty Shell selection".into()))?;
+    if is_background && paths.len() != 1 { return Err(CommandError::SystemError("Background menu requires one folder".into())); }
+    let pb = validate_path(path)?;
     let path_norm = pb.to_string_lossy().replace("/", "\\");
     let path_u16: Vec<u16> = path_norm.encode_utf16().chain(std::iter::once(0)).collect();
 
@@ -202,7 +204,9 @@ pub(super) fn get_native_context_menu_items(
         let parent_folder: IShellFolder = SHBindToParent(pidl_full, Some(&mut pidl_relative))
             .map_err(|e| CommandError::SystemError(format!("SHBindToParent failed: {:?}", e)))?;
 
-        let context_menu: IContextMenu = if is_background {
+        let context_menu: IContextMenu = if !is_background && paths.len() > 1 {
+            super::windows_shell_selection::selection_context_menu(&paths)?
+        } else if is_background {
             // For background menu, we need the IShellFolder of the target itself
             let target_folder: IShellFolder = parent_folder
                 .BindToObject(pidl_relative, None)
@@ -325,7 +329,7 @@ pub(super) fn get_native_context_menu_items(
 }
 
 pub(super) fn execute_native_menu_item(
-    path: String,
+    paths: Vec<String>,
     id: i32,
     is_background: bool,
 ) -> Result<(), CommandError> {
@@ -340,7 +344,9 @@ pub(super) fn execute_native_menu_item(
         return Err(CommandError::SystemError("Invalid Shell command ID".into()));
     }
 
-    let pb = validate_path(&path)?;
+    let path = paths.first().ok_or_else(|| CommandError::SystemError("Empty Shell selection".into()))?;
+    if is_background && paths.len() != 1 { return Err(CommandError::SystemError("Background menu requires one folder".into())); }
+    let pb = validate_path(path)?;
     let path_norm = pb.to_string_lossy().replace("/", "\\");
     let path_u16: Vec<u16> = path_norm.encode_utf16().chain(std::iter::once(0)).collect();
 
@@ -359,7 +365,9 @@ pub(super) fn execute_native_menu_item(
         let parent_folder: IShellFolder = SHBindToParent(pidl_full, Some(&mut pidl_relative))
             .map_err(|e| CommandError::SystemError(format!("SHBindToParent failed: {:?}", e)))?;
 
-        let context_menu: IContextMenu = if is_background {
+        let context_menu: IContextMenu = if !is_background && paths.len() > 1 {
+            super::windows_shell_selection::selection_context_menu(&paths)?
+        } else if is_background {
             let target_folder: IShellFolder = parent_folder
                 .BindToObject(pidl_relative, None)
                 .map_err(|e| CommandError::SystemError(format!("BindToObject failed: {:?}", e)))?;

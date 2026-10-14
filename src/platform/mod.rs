@@ -457,7 +457,7 @@ pub trait Platform: Send + Sync {
     /// Builds a plain-data snapshot of an OS context menu for a file or folder.
     fn native_context_menu_items(
         &self,
-        path: &str,
+        path: &[String],
         is_background: bool,
     ) -> Result<Vec<crate::models::WinMenuItem>, String> {
         let _ = (path, is_background);
@@ -467,7 +467,7 @@ pub trait Platform: Send + Sync {
     /// Executes a command ID from a previously built native context-menu snapshot.
     fn execute_native_context_menu_item(
         &self,
-        path: &str,
+        path: &[String],
         id: i32,
         is_background: bool,
     ) -> Result<(), String> {
@@ -541,6 +541,8 @@ mod windows_broker_cancellation;
 mod windows_file_copy;
 #[cfg(target_os = "windows")]
 mod windows_shell;
+#[cfg(target_os = "windows")]
+mod windows_shell_selection;
 #[cfg(target_os = "windows")]
 mod windows_shell_properties;
 #[cfg(target_os = "windows")]

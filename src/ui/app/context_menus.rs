@@ -57,11 +57,33 @@ pub(super) fn context_menu_visible_top(
         .max(px(0.0))
 }
 
+fn action_paths(
+    clicked_path: &str,
+    selection: Option<&std::collections::HashSet<String>>,
+) -> Vec<String> {
+    if let Some(selection) = selection.filter(|paths| paths.contains(clicked_path)) {
+        let mut paths: Vec<_> = selection.iter().cloned().collect();
+        paths.sort();
+        paths
+    } else {
+        vec![clicked_path.to_owned()]
+    }
+}
+
+#[cfg(test)]
+#[path = "context_menus/tests/selection.rs"]
+mod selection_tests;
+
 impl OxydeApp {
+    pub(crate) fn context_action_paths(&self, clicked_path: &str) -> Vec<String> {
+        action_paths(clicked_path, self.state.find_pane(&self.state.active_pane_id)
+            .map(|pane| &pane.active_tab().selected_paths))
+    }
+
     pub(crate) fn request_native_context_menu(
         &mut self,
         parent_menu_idx: usize,
-        path: String,
+        path: Vec<String>,
         is_background: bool,
         position: Point<Pixels>,
         open_left: bool,
@@ -183,7 +205,7 @@ impl OxydeApp {
 
     pub(crate) fn execute_native_context_menu_item(
         &mut self,
-        path: String,
+        path: Vec<String>,
         id: i32,
         is_background: bool,
         creates_item: bool,
@@ -202,7 +224,7 @@ impl OxydeApp {
             async move {
                 let result = tokio::task::spawn_blocking(move || {
                     let before = if creates_item {
-                        std::fs::read_dir(&path).ok().map(|entries| {
+                        std::fs::read_dir(&path[0]).ok().map(|entries| {
                             entries
                                 .filter_map(Result::ok)
                                 .map(|entry| entry.path())
@@ -218,7 +240,7 @@ impl OxydeApp {
                     )?;
                     if let Some(before) = before {
                         for _ in 0..20 {
-                            let added: Vec<_> = std::fs::read_dir(&path)
+                            let added: Vec<_> = std::fs::read_dir(&path[0])
                                 .map_err(|error| error.to_string())?
                                 .filter_map(Result::ok)
                                 .filter(|entry| !before.contains(&entry.path()))

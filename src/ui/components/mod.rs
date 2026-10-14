@@ -202,10 +202,19 @@ fn oxyde_context_menu_items_raw(
         is_dimmed: false,
         on_click: std::rc::Rc::new({
             let h = h_app.clone();
+            let p = path.clone();
             move |_, app| {
                 h.update(app, |this, cx| {
                     this.context_menus.clear();
-                    this.execute_ouvrir(cx);
+                    if is_dir
+                        || oxyde_lib::utils::archive::is_navigable_archive(std::path::Path::new(&p))
+                        || oxyde_lib::utils::disk_image::needs_mount_for_browsing(std::path::Path::new(&p))
+                    {
+                        let pane_id = this.state.active_pane_id.clone();
+                        this.open_file_item(&pane_id, p.clone(), is_dir, cx);
+                    } else {
+                        this.execute_ouvrir(cx);
+                    }
                 });
             }
         }),
@@ -230,7 +239,17 @@ fn oxyde_context_menu_items_raw(
                     h.update(app, |this, cx| {
                         this.context_menus.clear();
                         let p_id = this.state.active_pane_id.clone();
-                        this.open_directory_item(&p_id, p.clone(), true, cx);
+                        let paths = this.context_action_paths(&p);
+                        let directories: Vec<_> = this.state.find_pane(&p_id)
+                            .into_iter().flat_map(|pane| pane.active_tab().files.iter())
+                            .filter(|file| paths.contains(&file.path)
+                                && (file.is_dir
+                                    || oxyde_lib::utils::archive::is_navigable_archive(std::path::Path::new(&file.path))
+                                    || oxyde_lib::utils::disk_image::needs_mount_for_browsing(std::path::Path::new(&file.path))))
+                            .map(|file| file.path.clone()).collect();
+                        for path in directories {
+                            this.open_directory_item(&p_id, path, true, cx);
+                        }
                     });
                 }
             }),
@@ -288,7 +307,14 @@ fn oxyde_context_menu_items_raw(
                 move |_, app| {
                     h.update(app, |this, cx| {
                         this.context_menus.clear();
-                        this.change_favorite(p.clone(), is_pinned, cx);
+                        let paths = this.context_action_paths(&p);
+                        let directories: Vec<_> = this.state.find_pane(&this.state.active_pane_id)
+                            .into_iter().flat_map(|pane| pane.active_tab().files.iter())
+                            .filter(|file| file.is_dir && paths.contains(&file.path))
+                            .map(|file| file.path.clone()).collect();
+                        for path in directories {
+                            this.change_favorite(path, is_pinned, cx);
+                        }
                         cx.notify();
                     });
                 }
@@ -466,10 +492,11 @@ fn oxyde_context_menu_items_raw(
         is_dimmed: false,
         on_click: std::rc::Rc::new({
             let h = h_app.clone();
+            let p = path.clone();
             move |window, app| {
                 h.update(app, |this, cx| {
                     this.context_menus.clear();
-                    this.execute_renommer(window, cx);
+                    this.rename_context_item(p.clone(), is_dir, window, cx);
                 });
             }
         }),
@@ -509,7 +536,7 @@ fn oxyde_context_menu_items_raw(
             let p = path.clone();
             move |window, app| {
                 h.update(app, |this, cx| {
-                    this.open_file_properties(p.clone(), window, cx);
+                    for path in this.context_action_paths(&p) { this.open_file_properties(path, window, cx); }
                 });
             }
         }),
@@ -531,7 +558,7 @@ fn oxyde_context_menu_items_raw(
                 h.update(app, |this, cx| {
                     this.request_native_context_menu(
                         0,
-                        selected_path.clone(),
+                        this.context_action_paths(&selected_path),
                         false,
                         sub_pos,
                         open_left,
@@ -642,7 +669,7 @@ fn pane_context_menu_items_raw(
                     h.update(app, |this, cx| {
                         if let Some(pane) = this.state.layout.find_pane(&p_id) {
                             let path = pane.active_tab().path.clone();
-                            this.request_native_context_menu(0, path, true, sub_pos, open_left, cx);
+                            this.request_native_context_menu(0, vec![path], true, sub_pos, open_left, cx);
                         }
                     });
                 }
@@ -825,7 +852,7 @@ fn trash_context_menu_items(i18n: &I18n, handle: Entity<crate::ui::app::OxydeApp
         handle.update(cx, |this, cx| {
             this.context_menus.clear();
             if path == "trash://" { this.open_trash_settings(window, cx); return; }
-            this.open_file_properties(path, window, cx);
+            for path in this.context_action_paths(&path) { this.open_file_properties(path, window, cx); }
             cx.notify();
         });
     }).icon(IconName::Settings));

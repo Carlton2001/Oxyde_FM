@@ -4,6 +4,16 @@ use crate::ui::i18n::{FluentArgs, I18n, I18nContext, Message};
 use gpui::*;
 
 impl OxydeApp {
+    pub(crate) fn rename_context_item(
+        &mut self,
+        path: String,
+        is_dir: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.begin_rename(path, is_dir, false, window, cx);
+    }
+
     pub fn on_action_renommer(
         &mut self,
         _: &Renommer,

@@ -35,15 +35,7 @@ impl OxydeApp {
         let Some(pane) = self.state.layout.find_pane(&self.state.active_pane_id) else {
             return;
         };
-        let paths: Vec<std::path::PathBuf> = pane
-            .active_tab()
-            .selected_paths
-            .iter()
-            .map(std::path::PathBuf::from)
-            .filter(|path| {
-                oxyde_lib::utils::archive::split_virtual_path(&path.to_string_lossy()).is_none()
-            })
-            .collect();
+        let paths = compression_sources(pane.active_tab().selected_paths.iter().cloned());
         let Some(first) = paths.first() else {
             return;
         };
@@ -60,23 +52,14 @@ impl OxydeApp {
     }
 
     pub fn execute_extract_archive(&mut self, path: String, cx: &mut Context<Self>) {
-        let source = std::path::PathBuf::from(path);
-        let Some(parent) = source.parent() else {
-            return;
-        };
-        let name = source.file_name().unwrap_or_default().to_string_lossy();
-        let stem = [".tar.gz", ".tar.xz", ".tar.zst", ".tar.bz2"]
-            .iter()
-            .find_map(|suffix| name.strip_suffix(suffix))
-            .or_else(|| source.file_stem().and_then(|stem| stem.to_str()))
-            .unwrap_or("archive");
-        let destination = parent.join(stem);
-        self.queue_archive_operation(
-            oxyde_lib::systems::file_ops::FileOpType::Extract,
-            vec![source],
-            destination,
-            cx,
-        );
+        for (source, destination) in extraction_jobs(self.context_action_paths(&path)) {
+            self.queue_archive_operation(
+                oxyde_lib::systems::file_ops::FileOpType::Extract,
+                vec![source],
+                destination,
+                cx,
+            );
+        }
     }
 
     pub(super) fn queue_archive_operation(
@@ -113,3 +96,38 @@ impl OxydeApp {
         .detach();
     }
 }
+
+fn compression_sources(paths: impl IntoIterator<Item = String>) -> Vec<std::path::PathBuf> {
+    let mut sources: Vec<_> = paths.into_iter()
+        .filter(|path| !oxyde_lib::utils::archive::split_virtual_path(path)
+            .is_some_and(|(_, internal)| !internal.is_empty()))
+        .map(std::path::PathBuf::from).collect();
+    sources.sort();
+    sources
+}
+
+fn extraction_jobs(paths: Vec<String>) -> Vec<(std::path::PathBuf, std::path::PathBuf)> {
+    use oxyde_lib::utils::archive::{split_virtual_path, ArchiveFormat};
+    paths.into_iter().filter_map(|path| {
+        if split_virtual_path(&path).is_some_and(|(_, internal)| !internal.is_empty()) {
+            return None;
+        }
+        let source = std::path::PathBuf::from(path);
+        if !matches!(ArchiveFormat::from_path(&source), Some(format) if format != ArchiveFormat::Rar) {
+            return None;
+        }
+        let parent = source.parent()?;
+        let name = source.file_name().unwrap_or_default().to_string_lossy();
+        let stem = [".tar.gz", ".tar.xz", ".tar.zst", ".tar.bz2"]
+            .iter()
+            .find_map(|suffix| name.strip_suffix(suffix))
+            .or_else(|| source.file_stem().and_then(|stem| stem.to_str()))
+            .unwrap_or("archive");
+        let destination = parent.join(stem);
+        Some((source, destination))
+    }).collect()
+}
+
+#[cfg(test)]
+#[path = "archives/tests/extraction.rs"]
+mod extraction_tests;

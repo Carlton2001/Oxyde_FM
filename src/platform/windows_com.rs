@@ -233,7 +233,7 @@ mod tests {
             assert!(super::super::windows_shell_properties::friendly_name(&missing).is_err());
             assert!(super::super::thumbnails::get_pdf_thumbnail_raw(missing.clone()).is_err());
             assert!(
-                super::super::windows_shell::get_native_context_menu_items(missing, false).is_err()
+                super::super::windows_shell::get_native_context_menu_items(vec![missing], false).is_err()
             );
             assert_eq!(
                 unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) },
