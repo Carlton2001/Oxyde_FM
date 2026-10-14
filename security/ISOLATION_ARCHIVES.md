@@ -27,7 +27,7 @@ RAR reste refusé sans appel à un outil externe. Aucun nouveau format, chiffrem
 
 L’isolation native de cette passe concerne Windows. Le contrat IPC et les adaptateurs de codecs seront portables ; les appels système passeront exclusivement par `Platform`, avec implémentation Windows et comportement Linux explicite derrière les conditions de compilation. Linux conserve son exécution locale actuelle, sans prétention d’isolation nouvelle. Un échec du lancement Windows ne doit jamais déclencher de repli local.
 
-La navigation et l’indexation de recherche utilisent déjà des workers distincts : leurs budgets et admissions restent indépendants. La fermeture principale conserve l’ordre et le contournement documentés dans [SHUTDOWN_DIAGNOSTICS.md](../SHUTDOWN_DIAGNOSTICS.md).
+La navigation et l’indexation de recherche utilisent déjà des workers distincts : leurs budgets et admissions restent indépendants. La fermeture principale conserve l’ordre et le contournement documentés dans [SHUTDOWN_DIAGNOSTICS.md](../docs/SHUTDOWN_DIAGNOSTICS.md).
 
 ## Hors périmètre et limites qui resteront ouvertes
 
@@ -145,7 +145,7 @@ Le code est terminé seulement lorsque **tous** les points suivants sont établi
 3. Les bornes mémoire, IPC, contenu, taille de sortie et temps actif sont effectives et chiffrées ; crash/timeout/cancel/protocole invalide ne publient pas un résultat incomplet. Admission, pause, reprise, turbo et progression respectent le contrat.
 4. La matrice automatisée passe sur les workers réels et les fautes injectées ; le compte final est consigné, avec au moins la suite précédente sans régression ni nouveaux tests ignorés pour masquer un échec.
 5. `cargo check --all-targets --locked --offline`, `cargo test --all-targets --locked --offline` et `cargo build --bin oxyde --locked --offline` passent sans avertissement du projet. Une vérification Linux pertinente est consignée si la cible/environnement est disponible ; sinon la limite de validation Linux est annoncée explicitement.
-6. Aucun remplacement des trois dépendances, aucune modification de curseur. Si de nouveaux messages sont nécessaires, les cinq catalogues et les conventions de [UI_ARCHITECTURE.md](../UI_ARCHITECTURE.md) sont respectés.
+6. Aucun remplacement des trois dépendances, aucune modification de curseur. Si de nouveaux messages sont nécessaires, les cinq catalogues et les conventions de [UI_ARCHITECTURE.md](../docs/UI_ARCHITECTURE.md) sont respectés.
 7. L’audit distingue les garanties obtenues des limites encore ouvertes. Les commits locaux couvrent chaque lot, aucune modification du chantier ne reste non commitée ; les fichiers utilisateur indépendants sont préservés. Aucun push.
 8. Le binaire final et un jeu neuf de petites fixtures sont prêts. Le protocole visuel ciblé couvre extraction/ouverture/export, modification et transfert d’archives, pause/reprise/annulation/progression, erreurs traduites et fermeture avec une opération en cours. Aucune nouvelle validation visuelle n’est déduite de celle de `c0f9c58`.
 

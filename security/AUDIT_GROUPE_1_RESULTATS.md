@@ -43,7 +43,7 @@ L'encodeur doit consommer les sources, mais ses blocs de sortie bornés restent 
 
 ## Implémentation et preuves finales — 12 octobre 2026
 
-Le worker archive-I/O Windows utilise désormais un exécutable minimal séparé, `oxyde-archive-io-worker.exe`, lancé dans un LPAC sans capacité. Le lancement ne dispose d'aucun repli : un runtime absent ou une préparation refusée échoue avant le protocole. Le binaire GPUI complet échouait à l'initialisation des DLL sous LPAC ; l'extraction minimale permet aux codecs de fonctionner sans élargir les permissions. `SHUTDOWN_DIAGNOSTICS.md` a été consulté ; la sortie finale conserve le contrat Windows existant.
+Le worker archive-I/O Windows utilise désormais un exécutable minimal séparé, `oxyde-archive-io-worker.exe`, lancé dans un LPAC sans capacité. Le lancement ne dispose d'aucun repli : un runtime absent ou une préparation refusée échoue avant le protocole. Le binaire GPUI complet échouait à l'initialisation des DLL sous LPAC ; l'extraction minimale permet aux codecs de fonctionner sans élargir les permissions. `docs/SHUTDOWN_DIAGNOSTICS.md` a été consulté ; la sortie finale conserve le contrat Windows existant.
 
 Le lanceur natif maintient les buffers d'attributs jusqu'à leur destruction, crée l'enfant suspendu, attache son job avant reprise et limite les handles hérités aux trois handles IPC. Un verrou partagé couvre les launchers `Command` Oxyde recensés ; les handles temporaires sont fermés avant de libérer ce verrou, y compris sur erreur. Les waits restent hors du verrou. Le profil bootstrap est supprimé avant reprise : aucun nettoyage de profil n'agit après l'exécution hostile.
 

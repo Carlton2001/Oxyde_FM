@@ -6,10 +6,10 @@ Oxyde est un explorateur de fichiers natif écrit en Rust, avec GPUI pour l'inte
 
 ## Documentation à consulter
 
-- **[POPUP_WINDOWS_AUDIT.md](POPUP_WINDOWS_AUDIT.md)** décrit la migration des infobulles et menus vers les fenêtres Windows et ses limites de validation. Consulter également la section « Fenêtres transitoires » de `UI_ARCHITECTURE.md` avant de modifier ces surfaces.
+- **[POPUP_WINDOWS_AUDIT.md](docs/POPUP_WINDOWS_AUDIT.md)** décrit la migration des infobulles et menus vers les fenêtres Windows et ses limites de validation. Consulter également la section « Fenêtres transitoires » de `docs/UI_ARCHITECTURE.md` avant de modifier ces surfaces.
 
-- **[SHUTDOWN_DIAGNOSTICS.md](SHUTDOWN_DIAGNOSTICS.md)** conserve le diagnostic et la résolution du blocage de fermeture après les aperçus PDF sous Windows (`SHUTDOWN-PDF-INTEL-2026-10-04`). Le consulter si ce problème revient ou avant de modifier la sortie finale du processus.
-- **[UI_ARCHITECTURE.md](UI_ARCHITECTURE.md)** définit les règles actuelles pour les thèmes, l'internationalisation, les composants partagés, les préférences et la validation de l'interface. Le consulter avant de modifier l'UI.
+- **[SHUTDOWN_DIAGNOSTICS.md](docs/SHUTDOWN_DIAGNOSTICS.md)** conserve le diagnostic et la résolution du blocage de fermeture après les aperçus PDF sous Windows (`SHUTDOWN-PDF-INTEL-2026-10-04`). Le consulter si ce problème revient ou avant de modifier la sortie finale du processus.
+- **[UI_ARCHITECTURE.md](docs/UI_ARCHITECTURE.md)** définit les règles actuelles pour les thèmes, l'internationalisation, les composants partagés, les préférences et la validation de l'interface. Le consulter avant de modifier l'UI.
 - `src/ui/app/` contient l'état et l'assemblage des vues ; `src/ui/components/` les composants d'interface ; `src/ui/elements/` les éléments réutilisables de bas niveau.
 - `src/platform/` est la couche d'abstraction des API système.
 
@@ -32,7 +32,7 @@ La factorisation fait partie du développement courant : avant d'ajouter du code
 - Viser généralement **200 à 600 lignes de production par fichier** lorsqu'une responsabilité le permet. Au-delà de **800 lignes**, examiner le découpage avant une extension significative et justifier le maintien d'un fichier plus grand. Ces nombres sont des repères, pas des limites rigides ; distinguer les tests du code de production et ne pas découper artificiellement un ensemble cohérent.
 - Donner à chaque module une responsabilité identifiable. Les fichiers racines et `mod.rs` servent principalement de façade, de déclaration des modules et d'assemblage ; éviter d'y accumuler les parcours fonctionnels et les grands blocs de rendu.
 - Découper les grandes fonctions de rendu par sections ou interactions cohérentes, même si elles n'ont qu'un usage. Créer un composant partagé seulement lorsque plusieurs usages partagent réellement présentation ou comportement.
-- Organiser les composants complexes en sous-modules privés nommés selon leurs responsabilités. Suivre les règles détaillées de [UI_ARCHITECTURE.md](UI_ARCHITECTURE.md) pour les façades, l'état, les callbacks et les dépendances.
+- Organiser les composants complexes en sous-modules privés nommés selon leurs responsabilités. Suivre les règles détaillées de [UI_ARCHITECTURE.md](docs/UI_ARCHITECTURE.md) pour les façades, l'état, les callbacks et les dépendances.
 - Préserver les imports utilisés ailleurs par des réexportations ciblées et garder la visibilité minimale. Ne pas élargir les accès ni déplacer l'état métier uniquement pour faciliter le découpage.
 - Limiter une extraction au périmètre du changement, procéder par étapes vérifiables et préserver comportement, rendu, identifiants GPUI et cycles de vie. Un changement local ne justifie pas une refactorisation générale de modules voisins.
 
@@ -62,4 +62,4 @@ mod content_tests;
 
 ## Thèmes, langues et composants
 
-Suivre les conventions et les exemples de [UI_ARCHITECTURE.md](UI_ARCHITECTURE.md) pour tout changement d'interface. En résumé : utiliser les couleurs sémantiques du thème, placer les textes traduisibles dans les catalogues, et factoriser un composant lorsque ses usages partagent réellement présentation ou comportement. Garder l'état métier et les actions dans la vue appelante.
+Suivre les conventions et les exemples de [UI_ARCHITECTURE.md](docs/UI_ARCHITECTURE.md) pour tout changement d'interface. En résumé : utiliser les couleurs sémantiques du thème, placer les textes traduisibles dans les catalogues, et factoriser un composant lorsque ses usages partagent réellement présentation ou comportement. Garder l'état métier et les actions dans la vue appelante.

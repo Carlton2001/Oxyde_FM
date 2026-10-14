@@ -1,5 +1,9 @@
 # Rust/Cargo
-/target
+/target/
+# Keep Cargo.lock tracked for reproducible application builds.
+**/*.rs.bk
+*.profraw
+*.profdata
 
 # Oxyde-GPUI Specific Filters
 .perso/
@@ -8,13 +12,41 @@ reference_zed/
 # IDE/Editors
 .vscode/
 .idea/
+.codex/
 *.swp
 *.swo
 *~
+*.tmp
+*.temp
+*.bak
+*.orig
+*.rej
+
+# Local environment settings (keep distributable examples)
+.env
+.env.*
+!.env.example
+!.env.sample
+!.env.template
+
+# Python helper scripts
+__pycache__/
+*.py[cod]
+.venv/
+venv/
 
 # Windows
 Thumbs.db
 desktop.ini
+$RECYCLE.BIN/
+
+# macOS
+.DS_Store
+._*
 
 # Logs
 *.log
+
+# Local crash dumps
+*.dmp
+*.stackdump

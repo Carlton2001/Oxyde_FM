@@ -1,6 +1,6 @@
 # Architecture et conventions de l'interface
 
-Ce document décrit les conventions à suivre pour faire évoluer l'interface GPUI d'Oxyde. Les consignes générales des agents sont dans [AGENTS.md](AGENTS.md).
+Ce document décrit les conventions à suivre pour faire évoluer l'interface GPUI d'Oxyde. Les consignes générales des agents sont dans [AGENTS.md](../AGENTS.md).
 
 ## Fenêtres transitoires : infobulles et menus
 

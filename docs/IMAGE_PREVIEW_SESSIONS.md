@@ -49,7 +49,7 @@ La fermeture finale demande l’arrêt du superviseur et interrompt ses lectures
 surveillées. Elle attend au maximum deux secondes avant le contournement natif
 existant de sortie du processus. Le Job Object ferme le worker si le parent
 disparaît ; un arrêt brutal peut laisser des fichiers de runtime temporaires,
-comme les autres workers. Voir `SHUTDOWN_DIAGNOSTICS.md`.
+comme les autres workers. Voir `docs/SHUTDOWN_DIAGNOSTICS.md`.
 
 ## Vérification et reconstruction
 

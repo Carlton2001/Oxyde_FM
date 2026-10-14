@@ -52,7 +52,7 @@ Aucun changement de curseur n'est ajouté.
 4. Migrer les familles de menus principales puis les menus ancrés et secondaires.
 5. Exécuter les tests ciblés, `cargo check` sans avertissement et la compilation.
 6. Auditer le diff complet, corriger les problèmes, réexécuter les contrôles
-   affectés et mettre à jour `UI_ARCHITECTURE.md` et les consignes applicables.
+   affectés et mettre à jour `docs/UI_ARCHITECTURE.md` et les consignes applicables.
 
 ## Autovalidation et audit
 
