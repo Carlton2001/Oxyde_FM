@@ -35,6 +35,8 @@ pub enum IconName {
     NativeFolder(String),
     HardDrive,
     Copy,
+    Undo,
+    Redo,
     Shield,
     Printer,
     Settings,
@@ -449,6 +451,8 @@ impl<T: crate::ui::components::scrollbar::ScrollbarState + 'static> RenderOnce f
                                                                         "icons/hard-drive.svg"
                                                                     }
                                                                     IconName::ChartBar => "icons/chart-bar.svg",
+                                                                    IconName::Undo => "icons/undo-2.svg",
+                                                                    IconName::Redo => "icons/redo-2.svg",
                                                                     IconName::Copy => {
                                                                         "icons/copy.svg"
                                                                     }

@@ -17,6 +17,7 @@ pub mod tooltip;
 pub(crate) mod popup;
 pub(crate) mod tool_window;
 pub mod top_bar;
+mod history_actions;
 
 use crate::ui::i18n::{I18n, Message};
 use gpui::*;
@@ -732,8 +733,11 @@ pub fn oxyde_context_menu_items(
 ) -> Vec<dropdown::DropdownItem> {
     let mut items = network::network_actions(i18n, h.clone(), &path, false);
     items.extend(oxyde_context_menu_items_raw(
-        i18n, h, is_dir, is_pinned, path, view,
+        i18n, h.clone(), is_dir, is_pinned, path.clone(), view,
     ));
+    if !path.starts_with("trash:") {
+        history_actions::insert_menu_items(&mut items, i18n, h, view);
+    }
     context_menu_sections(items, i18n)
 }
 
@@ -757,7 +761,8 @@ pub fn pane_context_menu_items(i18n: &I18n, h: Entity<crate::ui::app::OxydeApp>,
             sidebar::sidebar_paths_equal(&ancestor.to_string_lossy(), &drive.path))) {
         items.extend(network::network_actions(i18n, h.clone(), &drive.path, true));
     }
-    items.extend(pane_context_menu_items_raw(i18n, h, pane_id));
+    items.extend(pane_context_menu_items_raw(i18n, h.clone(), pane_id));
+    history_actions::insert_menu_items(&mut items, i18n, h, view);
     if path.starts_with("search://") {
         items.retain(|item| ![Message::NewFolder, Message::Paste, Message::Properties, Message::MoreOptions]
             .iter().any(|message| item.label == i18n.text(*message).as_ref()));

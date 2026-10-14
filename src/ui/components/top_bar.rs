@@ -5,22 +5,12 @@ use crate::ui::scale::{logical};
 use crate::ui::app::{FileDragData, OxydeApp};
 use crate::ui::components::dropdown::IconName;
 use crate::ui::components::tooltip::Tooltip;
-use crate::ui::i18n::{FluentArgs, I18nContext, Message};
+use crate::ui::i18n::{I18nContext, Message};
 
 use crate::ui::theme::ThemeContext;
 use gpui::prelude::*;
 use gpui::*;
-use oxyde_lib::models::TransactionType;
 
-fn op_label(op: &TransactionType) -> Message {
-    match op {
-        TransactionType::Copy => Message::OpCopy,
-        TransactionType::Move => Message::OpMove,
-        TransactionType::Rename => Message::OpRename,
-        TransactionType::Delete => Message::OpDelete,
-        TransactionType::NewFolder => Message::OpNewFolder,
-    }
-}
 
 use oxyde_lib::models::FileEntry;
 
@@ -134,26 +124,11 @@ pub fn render_top_bar(
         && oxyde_lib::utils::archive::split_virtual_path(&current_path).is_none();
 
     let undo_tooltip = history_state.undo.map(|operation| {
-        let mut args = FluentArgs::new();
-        args.set(
-            "operation",
-            _cx.i18n().text(op_label(&operation)).to_string(),
-        );
-        _cx.i18n()
-            .text_with_args(Message::UndoOperation, &args)
-            .to_string()
+        super::history_actions::operation_label(_cx.i18n(), Message::UndoOperation, operation)
     });
     let redo_tooltip = history_state.redo.map(|operation| {
-        let mut args = FluentArgs::new();
-        args.set(
-            "operation",
-            _cx.i18n().text(op_label(&operation)).to_string(),
-        );
-        _cx.i18n()
-            .text_with_args(Message::RedoOperation, &args)
-            .to_string()
+        super::history_actions::operation_label(_cx.i18n(), Message::RedoOperation, operation)
     });
-
     // Shared constants for consistent look
     let icon_active = theme.text_muted;
     let icon_disabled = theme.icon_disabled;
