@@ -1,60 +1,31 @@
+use super::OperationsPanelView;
 use crate::ui::app::OxydeApp;
-use crate::ui::scale::logical;
-use gpui::prelude::*;
+use crate::ui::i18n::{FluentArgs, I18nContext, Message};
+use crate::ui::theme::ThemeContext;
 use gpui::*;
-use super::{panel_width, panel_max_height, render_operations_panel, OperationsPanelView};
 
 impl OperationsPanelView {
     pub fn new(app: Entity<OxydeApp>, cx: &mut Context<Self>) -> Self {
-        let position = app.read(cx).operations_panel_position;
         let subscription = cx.observe(&app, |_, _, cx| cx.notify());
         Self {
             app: app.downgrade(),
             _app_subscription: subscription,
-            position,
-            bounds: None,
-            drag_offset: None,
-            last_drag_update: None,
+            focus: cx.focus_handle(),
         }
     }
 
-    pub(crate) fn update_drag(
-        &mut self,
-        pointer: Point<Pixels>,
-        viewport: Size<Pixels>,
-        cx: &mut Context<Self>,
-    ) {
-        let Some(grab_offset) = self.drag_offset else {
-            return;
-        };
-        let now = std::time::Instant::now();
-        if self
-            .last_drag_update
-            .is_some_and(|last| now.duration_since(last) < std::time::Duration::from_millis(16))
-        {
-            return;
-        }
-        let panel_size = self
-            .bounds
-            .map(|bounds| bounds.size)
-            .unwrap_or(size(px(panel_width()), px(panel_max_height())));
-        let margin = logical(12.0);
-        let max_left = (viewport.width.as_f32() - panel_size.width.as_f32() - margin).max(margin);
-        let max_top = (viewport.height.as_f32() - panel_size.height.as_f32() - logical(36.0)).max(margin);
-        self.position = Some(point(
-            px((pointer.x.as_f32() - grab_offset.x.as_f32()).clamp(margin, max_left)),
-            px((pointer.y.as_f32() - grab_offset.y.as_f32()).clamp(margin, max_top)),
-        ));
-        self.last_drag_update = Some(now);
-        cx.notify();
-    }
-
-    pub(super) fn update_scrollbar_drag(&self, pointer: Point<Pixels>, cx: &mut Context<Self>) {
-        let Some(app) = self.app.upgrade() else {
-            return;
-        };
-        let (viewport_h, content_h, grab_offset, origin, scroll_handle) = {
-            let app = app.read(cx);
+    fn move_scrollbar(&self, event: &MouseMoveEvent, cx: &mut Context<Self>) {
+        let _ = self.app.update(cx, |app, cx| {
+            if !matches!(
+                app.drag_target,
+                Some(crate::ui::app::DragTarget::OperationsPanelV { .. })
+            ) {
+                return;
+            }
+            if !event.dragging() {
+                app.finish_pointer_drag(cx);
+                return;
+            }
             let Some(crate::ui::app::DragTarget::OperationsPanelV {
                 viewport_h,
                 content_h,
@@ -66,63 +37,70 @@ impl OperationsPanelView {
             let Some(origin) = app.scrollbar_origins.get(track_id) else {
                 return;
             };
-            (
-                *viewport_h,
-                *content_h,
-                app.grab_offset,
-                *origin,
-                app.operations_panel_scroll.clone(),
-            )
-        };
-        let mouse_pos_in_track = pointer.y.as_f32() - origin.y;
-        let thumb_size = (viewport_h * (viewport_h / content_h.max(1.0)).min(1.0))
-            .max(logical(40.0))
-            .min(viewport_h);
-        let travel_distance = (viewport_h - thumb_size).max(1.0);
-        let content_range = (content_h - viewport_h).max(0.0);
-        let target_thumb_pos = (mouse_pos_in_track - grab_offset).clamp(0.0, travel_distance);
-        let target_offset = (target_thumb_pos / travel_distance) * content_range;
-        scroll_handle.set_offset(point(px(0.0), px(-target_offset)));
-        cx.notify();
-    }
-
-    pub(crate) fn finish_drag(&mut self, cx: &mut Context<Self>) {
-        if self.drag_offset.take().is_none() {
-            return;
-        }
-        self.last_drag_update = None;
-        if let (Some(app), Some(position)) = (self.app.upgrade(), self.position) {
-            app.update(cx, |this, cx| {
-                this.persist_operations_panel_position(position, cx);
-                cx.notify();
-            });
-        }
-        cx.notify();
+            let thumb = (viewport_h * (viewport_h / content_h.max(1.0)).min(1.0))
+                .max(crate::ui::scale::logical(40.0));
+            let travel = (viewport_h - thumb).max(1.0);
+            let position =
+                (event.position.y.as_f32() - origin.y - app.grab_offset).clamp(0.0, travel);
+            app.operations_panel_scroll.set_offset(point(
+                px(0.0),
+                px(-position / travel * (content_h - viewport_h).max(0.0)),
+            ));
+            cx.notify();
+        });
     }
 }
 
 impl Render for OperationsPanelView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let Some(app_handle) = self.app.upgrade() else {
+        let Some(app) = self.app.upgrade() else {
             return div().into_any_element();
         };
-        let panel_handle = cx.entity();
-        let position = self.position;
-        let bounds = self.bounds;
-        let is_dragging = self.drag_offset.is_some();
-        let viewport = window.viewport_size();
-        app_handle.update(cx, |app, cx| {
-            render_operations_panel(
-                app,
-                app_handle.clone(),
-                panel_handle,
-                position,
-                bounds,
-                is_dragging,
-                viewport,
+        let theme = *cx.theme();
+        window.set_rem_size(px(app.read(cx).ui_rem_size() as f32));
+        let mut args = FluentArgs::new();
+        args.set(
+            "count",
+            app.read(cx).file_ops.list_operations().len() as i64,
+        );
+        let title = cx.i18n().text_with_args(Message::OpsTitle, &args);
+        window.set_window_title(title.as_ref());
+        let body = app.update(cx, |owner, cx| {
+            super::panel::render_operations_panel(owner, app.clone(), cx)
+        });
+        div()
+            .track_focus(&self.focus)
+            .size_full()
+            .flex()
+            .flex_col()
+            .bg(theme.active_background)
+            .text_color(theme.text)
+            .on_mouse_move(cx.listener(|this, event, _, cx| this.move_scrollbar(event, cx)))
+            .capture_any_mouse_up(cx.listener(|this, _, _, cx| {
+                let _ = this.app.update(cx, |app, cx| app.finish_pointer_drag(cx));
+            }))
+            .font_family("Inter")
+            .font_weight(crate::ui::style::DEFAULT_FONT_WEIGHT)
+            .text_size(rems(0.8125))
+            .line_height(relative(1.25))
+            .on_key_down(|event: &KeyDownEvent, window, cx| {
+                if event.keystroke.key == "escape" {
+                    super::super::tool_window::close_transients(window, cx);
+                    window.remove_window();
+                }
+            })
+            .child(super::super::tool_window::header(
+                "icons/download.svg",
+                title,
+                window.is_maximized(),
+                true,
                 cx,
-            )
+                |window, cx| {
+                    super::super::tool_window::close_transients(window, cx);
+                    window.remove_window();
+                },
+            ))
+            .child(body)
             .into_any_element()
-        })
     }
 }

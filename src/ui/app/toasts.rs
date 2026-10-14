@@ -214,13 +214,14 @@ impl OxydeApp {
         let handle = cx.entity();
         div()
             .absolute()
-            .bottom(rems(1.0))
+            .bottom(crate::ui::style::STATUS_BAR_HEIGHT + rems(1.0))
             .right(rems(1.0))
             .flex()
             .flex_col()
             .items_end()
             .gap(rems(0.5))
             .max_w(window.viewport_size().width - rem_pixels(rems(2.0)))
+            .children(crate::ui::components::operations::render_operation_progress(self, cx))
             .children(self.toasts.iter().map(|toast| {
                 let id = toast.id;
                 let close = handle.clone();

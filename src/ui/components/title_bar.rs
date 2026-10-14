@@ -162,6 +162,7 @@ pub fn render_title_bar(
         .child(render_window_controls(is_maximized, cx, |window, cx| {
             crate::trace_shutdown_request("title bar close button");
             crate::ui::app::duplicates::close_duplicate_windows(cx);
+            crate::ui::components::operations::close_operations_windows(cx);
             crate::ui::app::advanced_search::close_advanced_search_windows(cx);
             window.remove_window();
         }))

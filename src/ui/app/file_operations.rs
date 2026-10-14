@@ -220,9 +220,6 @@ impl OxydeApp {
         cx.spawn(move |_, cx: &mut AsyncApp| {
             let mut cx = cx.clone();
             async move {
-                let opened_at = std::time::Instant::now();
-                let mut automatic_open_checked = false;
-                let mut panel_was_visible = handle.update(&mut cx, |this, _| this.operations_panel_open);
                 loop {
                     cx.background_executor()
                         .timer(std::time::Duration::from_millis(200))
@@ -230,22 +227,6 @@ impl OxydeApp {
                     let Some(operation) = operations.get_operation(&op_id) else {
                         break;
                     };
-                    panel_was_visible |= handle.update(&mut cx, |this, _| this.operations_panel_open);
-                    if !automatic_open_checked
-                        && opened_at.elapsed() >= std::time::Duration::from_millis(700)
-                    {
-                        automatic_open_checked = true;
-                        if !matches!(
-                            operation.status,
-                            OpStatus::Completed | OpStatus::Cancelled | OpStatus::Error(_)
-                        ) {
-                            handle.update(&mut cx, |this, cx| {
-                                this.operations_panel_open = true;
-                                panel_was_visible = true;
-                                cx.notify();
-                            });
-                        }
-                    }
                     match operation.status {
                         OpStatus::Queued
                         | OpStatus::Calculating
@@ -256,7 +237,6 @@ impl OxydeApp {
                         OpStatus::Error(error) => {
                             handle.update(&mut cx, |this, cx| {
                                 log::warn!("File operation failed: {error}");
-                                this.operations_panel_open = true;
                                 let recovery = this.archive_recovery_notice(&error, cx);
                                 this.file_operation_notice = Some((if recovery { Message::ArchiveRecoveryNotice } else { Message::TransferFailed }, error));
                                 cx.notify();
@@ -268,27 +248,15 @@ impl OxydeApp {
                                 this.refresh_all_tabs(cx);
                                 this.state.refresh_sidebar();
                                 this.reconcile_watchers(cx);
-                                let operations = this.file_ops.list_operations();
-                                let close_automatically = !this.operations_panel_opened_manually
-                                    && !operations.is_empty()
-                                    && operations.iter().all(|operation| {
-                                        matches!(operation.status, OpStatus::Completed)
-                                    });
-                                let panel_closed_automatically = close_automatically && this.operations_panel_open;
-                                if close_automatically {
-                                    this.operations_panel_open = false;
-                                }
-                                if !panel_was_visible || panel_closed_automatically {
-                                    let message = match operation.op_type {
-                                        FileOpType::Copy => Message::ToastCopyCompleted,
-                                        FileOpType::Move => Message::ToastMoveCompleted,
-                                        FileOpType::Trash => Message::ToastTrashCompleted,
-                                        FileOpType::Delete => Message::ToastDeleteCompleted,
-                                        FileOpType::Compress => Message::ToastCompressCompleted,
-                                        FileOpType::Extract => Message::ToastExtractCompleted,
-                                    };
-                                    this.toast(ToastKind::Success, message, String::new(), 0, cx);
-                                }
+                                let message = match operation.op_type {
+                                    FileOpType::Copy => Message::ToastCopyCompleted,
+                                    FileOpType::Move => Message::ToastMoveCompleted,
+                                    FileOpType::Trash => Message::ToastTrashCompleted,
+                                    FileOpType::Delete => Message::ToastDeleteCompleted,
+                                    FileOpType::Compress => Message::ToastCompressCompleted,
+                                    FileOpType::Extract => Message::ToastExtractCompleted,
+                                };
+                                this.toast(ToastKind::Success, message, String::new(), 0, cx);
                                 cx.notify();
                             });
                             break;

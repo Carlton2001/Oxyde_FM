@@ -55,6 +55,11 @@ fn constrain_offset(
     let y = ((viewport.height - modal.height) / 2.0).max(px(0.0));
     point(offset.x.clamp(-x, x), offset.y.clamp(-y, y))
 }
+/// Embedded dialogs leave the pane status bar and a shadow margin unobstructed.
+fn modal_viewport(viewport: Size<Pixels>, bottom_inset: Pixels) -> Size<Pixels> {
+    size(viewport.width, (viewport.height - bottom_inset).max(px(0.0)))
+}
+
 /// Shared presentation for centered dialogs. The caller owns business state,
 /// action callbacks, initial focus, keyboard bindings and placement in the
 /// render tree (including `deferred` and ordering relative to context menus).
@@ -198,13 +203,15 @@ impl RenderOnce for Modal {
         }
         let placement =
             window.use_keyed_state(self.id.clone(), cx, |_, _| ModalPlacement::default());
-        let viewport = window.viewport_size();
+        let bottom_inset = rem_pixels(crate::ui::style::STATUS_BAR_HEIGHT + rems(1.0));
+        let viewport = modal_viewport(window.viewport_size(), bottom_inset);
         let offset = constrain_offset(placement.read(cx).offset, placement.read(cx).size, viewport);
         let title_drag = placement.clone();
         let measure = placement.clone();
         div()
             .absolute()
             .inset_0()
+            .pb(bottom_inset)
             .flex()
             .items_center()
             .justify_center()
@@ -248,7 +255,7 @@ impl RenderOnce for Modal {
                                     let offset = constrain_offset(
                                         state.offset,
                                         state.size,
-                                        window.viewport_size(),
+                                        modal_viewport(window.viewport_size(), bottom_inset),
                                     );
                                     if offset != state.offset {
                                         state.offset = offset;
@@ -265,7 +272,7 @@ impl RenderOnce for Modal {
                                                         state.offset = constrain_offset(
                                                             origin + event.position - start,
                                                             state.size,
-                                                            window.viewport_size(),
+                                                            modal_viewport(window.viewport_size(), bottom_inset),
                                                         );
                                                     } else {
                                                         state.drag = None;
@@ -365,45 +372,5 @@ impl RenderOnce for Modal {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::constrain_offset;
-    use gpui::{point, px, size};
-
-    #[test]
-    fn dragging_keeps_every_edge_inside_the_viewport() {
-        let modal = size(px(480.0), px(360.0));
-        let viewport = size(px(1000.0), px(800.0));
-        assert_eq!(
-            constrain_offset(point(px(900.0), px(-900.0)), modal, viewport),
-            point(px(260.0), px(-220.0))
-        );
-        assert_eq!(
-            constrain_offset(point(px(-900.0), px(900.0)), modal, viewport),
-            point(px(-260.0), px(220.0))
-        );
-        assert_eq!(
-            constrain_offset(point(px(50.0), px(60.0)), modal, viewport),
-            point(px(50.0), px(60.0))
-        );
-    }
-
-    #[test]
-    fn resizing_or_growing_a_modal_reclamps_its_position() {
-        assert_eq!(
-            constrain_offset(
-                point(px(200.0), px(200.0)),
-                size(px(480.0), px(500.0)),
-                size(px(600.0), px(600.0))
-            ),
-            point(px(60.0), px(50.0))
-        );
-        assert_eq!(
-            constrain_offset(
-                point(px(200.0), px(-200.0)),
-                size(px(700.0), px(700.0)),
-                size(px(600.0), px(600.0))
-            ),
-            point(px(0.0), px(0.0))
-        );
-    }
-}
+#[path = "modal/tests/placement.rs"]
+mod tests;

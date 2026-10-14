@@ -294,9 +294,6 @@ pub struct OxydeApp {
     file_operation_notice: Option<(Message, String)>,
     toasts: Vec<Toast>,
     next_toast_id: u64,
-    pub(crate) operations_panel_open: bool,
-    pub(crate) operations_panel_opened_manually: bool,
-    pub(crate) operations_panel_position: Option<Point<Pixels>>,
     pub(crate) operations_panel_view:
         Option<Entity<crate::ui::components::operations::OperationsPanelView>>,
     pub(crate) operations_panel_scroll: ScrollHandle,
@@ -352,11 +349,6 @@ impl OxydeApp {
             });
         let (state, sidebar_width) =
             restored_workspace.unwrap_or_else(|| (WorkspaceState::new(), 260.0));
-        let operations_panel_position = config
-            .operations_panel_position
-            .filter(|position| position[0].is_finite() && position[1].is_finite())
-            .map(|position| point(px(position[0]), px(position[1])));
-
         Self {
             state,
             handle: None,
@@ -483,9 +475,6 @@ impl OxydeApp {
             file_operation_notice: None,
             toasts: Vec::new(),
             next_toast_id: 0,
-            operations_panel_open: false,
-            operations_panel_opened_manually: false,
-            operations_panel_position,
             operations_panel_view: None,
             operations_panel_scroll: ScrollHandle::new(),
             archive_creation: None,

@@ -14,12 +14,9 @@ pub fn render_operations_footer(
 ) -> impl IntoElement {
     let theme = *cx.theme();
     let operations = app.file_ops.list_operations();
+    let enabled = !operations.is_empty();
     let active = operations.iter().filter(|op| !is_final(&op.status)).count();
-    let tooltip = cx.i18n().text(if app.operations_panel_open {
-        Message::OpsHidePanel
-    } else {
-        Message::OpsShowPanel
-    });
+    let tooltip = cx.i18n().text(Message::OpsShowPanel);
     div()
         .id("title-operations")
         .w(rems(2.25))
@@ -34,7 +31,10 @@ pub fn render_operations_footer(
         .text_color(theme.text_muted)
         .occlude()
         .native_tooltip(Tooltip::text(tooltip))
-        .hover(|style| style.bg(theme.control_hover).text_color(theme.text))
+        .when(!enabled, |button| button.opacity(0.4))
+        .when(enabled, |button| {
+            button.hover(|style| style.bg(theme.control_hover).text_color(theme.text))
+        })
         .child({
             let icon = div().size_4().rounded_full().child(svg()
                 .path("icons/download.svg")
@@ -59,11 +59,9 @@ pub fn render_operations_footer(
                 icon.into_any_element()
             }
         })
-        .on_mouse_down(MouseButton::Left, move |_, _, cx| {
-            handle.update(cx, |this, cx| {
-                this.operations_panel_open = !this.operations_panel_open;
-                this.operations_panel_opened_manually = this.operations_panel_open;
-                cx.notify();
-            });
+        .when(enabled, |button| {
+            button.on_mouse_down(MouseButton::Left, move |_, _, cx| {
+                super::open_operations_window(handle.clone(), cx);
+            })
         })
 }

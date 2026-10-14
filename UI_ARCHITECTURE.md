@@ -38,6 +38,8 @@ Linux conserve le rendu intégré. Sous Windows, un échec de création/configur
 
 ## Organisation
 
+Le suivi des opérations utilise deux surfaces : chaque opération active apparaît sur une ligne dans la pile des notifications (icône, libellé traduit, progression et pourcentage), avec les marges et la hauteur d'une notification simple. Sa fin retire cette ligne et affiche la notification de résultat habituelle. Le gestionnaire complet ne s'ouvre jamais automatiquement : le bouton de la barre de titre ouvre ou réactive une fenêtre unique, redimensionnable, assemblée avec `components::tool_window` comme la recherche de doublons. Le pied de page permet de masquer la fenêtre et d'effacer les opérations terminées ; fermer cette fenêtre conserve les opérations et leur historique. La fermeture principale retire aussi cette fenêtre. Le modèle reste dans `OxydeApp` ; `components/operations/` sépare notifications compactes, cycle de vie, cadre de fenêtre, liste et cartes. L'ancien placement du panneau flottant n'est plus appliqué.
+
 - `src/ui/app/` porte l'état de l'application et les parcours fonctionnels.
 - `src/ui/components/` regroupe les composants d'interface composés et les vues réutilisables.
 - `src/ui/elements/` regroupe les éléments simples de bas niveau, tels que les boutons.
@@ -139,7 +141,7 @@ Les nouvelles fenêtres popup internes adoptent la présentation compacte de Tau
 - le clic extérieur ne ferme la modale que si l'appelant configure `on_backdrop_dismiss` ;
 - la gestion du clavier, du focus initial et de l'ordre de rendu reste explicite dans l'appelant ;
 - chaque barre de titre comporte une icône Lucide officielle de 1 rem, avec la couleur sémantique du texte secondaire et un intervalle de 0,5 rem avant le titre ; utiliser `Modal::title_icon` ou conserver cette présentation dans un titre personnalisé ;
-- toutes les modales sont déplaçables au clic gauche par leur barre de titre ; le composant partagé garde leur cadre entier dans les limites de la fenêtre, en fonction de leur taille réelle, et recalcule les limites lors d'un redimensionnement ou d'un changement de contenu ;
+- toutes les modales sont déplaçables au clic gauche par leur barre de titre ; le composant partagé garde leur cadre entier dans les limites de la fenêtre, en fonction de leur taille réelle, et recalcule les limites lors d'un redimensionnement ou d'un changement de contenu ; les modales intégrées et les notifications réservent la hauteur de la barre de statut (`style::STATUS_BAR_HEIGHT`) et une marge de 1 rem pour ne pas la recouvrir, y compris après déplacement ou changement d'échelle ;
 - toutes les popups internes utilisent un ombrage sous leur cadre ; `Modal` applique l'ombre partagée `rem_shadow(true)`, dont les dimensions suivent l'échelle de l'interface ;
 - aucun fond assombri n'est affiché derrière les modales ; la couche transparente bloque toujours les interactions et le défilement sur le contenu recouvert.
 

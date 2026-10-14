@@ -156,6 +156,7 @@ fn main() {
                         #[cfg(target_os = "windows")]
                         crate::ui::components::popup::close_all(cx);
                         crate::ui::app::duplicates::close_duplicate_windows(cx);
+                        crate::ui::components::operations::close_operations_windows(cx);
                         crate::ui::app::advanced_search::close_advanced_search_windows(cx);
                         crate::ui::app::properties::close_properties_windows(cx);
                         crate::ui::app::close_dialog_windows(cx);

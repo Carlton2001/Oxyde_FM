@@ -20,7 +20,7 @@ use crate::ui::workspace::ViewMode;
 use gpui::prelude::*;
 use gpui::*;
 
-const STATUS_BAR_HEIGHT: Rems = rems(2.0);
+use crate::ui::style::STATUS_BAR_HEIGHT;
 fn status_bar_height() -> f32 { rem_pixels(STATUS_BAR_HEIGHT).as_f32() }
 
 pub fn render_file_list(

@@ -188,9 +188,6 @@ impl OxydeApp {
         self.item_selection_drag = false;
         self.file_drag_origin = None;
         self.set_file_drag_new_tab(false, cx);
-        if let Some(panel) = self.operations_panel_view.clone() {
-            cx.defer(move |cx| panel.update(cx, |panel, cx| panel.finish_drag(cx)));
-        }
         let mut needs_notify = false;
         let workspace_layout_changed = matches!(
             self.drag_target.as_ref(),
@@ -278,7 +275,7 @@ impl OxydeApp {
         }
     }
 
-    pub(super) fn handle_pointer_move(&mut self, e: &MouseMoveEvent, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn handle_pointer_move(&mut self, e: &MouseMoveEvent, _window: &mut Window, cx: &mut Context<Self>) {
         if !e.dragging() {
             self.finish_pointer_drag(cx);
             return;
@@ -536,13 +533,6 @@ impl OxydeApp {
                     cx.notify();
                 }
             }
-        }
-        if let Some(panel) = self.operations_panel_view.clone() {
-            let pointer = e.position;
-            let viewport = window.viewport_size();
-            panel.update(cx, |panel, cx| {
-                panel.update_drag(pointer, viewport, cx);
-            });
         }
     }
 }

@@ -194,11 +194,6 @@ impl Render for OxydeApp {
                     let h = h.clone();
                     window.on_mouse_event(move |event: &MouseMoveEvent, phase, window, cx| {
                         if phase == DispatchPhase::Capture {
-                            if !event.dragging() {
-                                if let Some(panel) = h.read(cx).operations_panel_view.clone() {
-                                    panel.update(cx, |panel, cx| panel.finish_drag(cx));
-                                }
-                            }
                             h.update(cx, |this, cx| {
                                 this.handle_pointer_move(event, window, cx);
                             });
@@ -350,11 +345,6 @@ impl Render for OxydeApp {
         root = self.render_context_menus(root, handle.clone(), window_handle, win_h, _window, cx);
 
         // SETTINGS OVERLAY
-        if self.operations_panel_open {
-            if let Some(panel) = self.operations_panel_view.clone() {
-                root = root.child(deferred(panel));
-            }
-        }
 
         if self.sidebar_collapsed && self.pinned_rail_open { root = root.child(crate::ui::components::sidebar::render_pinned_menu(self, handle.clone(), _window, cx)); }
         if self.settings_open {

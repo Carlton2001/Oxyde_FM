@@ -1,28 +1,21 @@
 mod card;
+mod compact;
 mod footer;
+mod lifecycle;
 mod panel;
 mod view;
 
+pub(crate) use compact::render_operation_progress;
 pub use footer::render_operations_footer;
-pub use panel::render_operations_panel;
+pub(crate) use lifecycle::{close_operations_windows, open_operations_window};
 
 use crate::ui::app::OxydeApp;
-use crate::ui::scale::rem_pixels;
 use gpui::*;
 use oxyde_lib::systems::file_ops::OpStatus;
-
-pub(crate) const PANEL_WIDTH: Rems = rems(22.5);
-pub(crate) fn panel_width() -> f32 { rem_pixels(PANEL_WIDTH).as_f32() }
-const PANEL_MAX_HEIGHT: Rems = rems(26.25);
-fn panel_max_height() -> f32 { rem_pixels(PANEL_MAX_HEIGHT).as_f32() }
-
 pub struct OperationsPanelView {
     app: WeakEntity<OxydeApp>,
     _app_subscription: Subscription,
-    position: Option<Point<Pixels>>,
-    bounds: Option<Bounds<Pixels>>,
-    drag_offset: Option<Point<Pixels>>,
-    last_drag_update: Option<std::time::Instant>,
+    focus: FocusHandle,
 }
 
 fn is_final(status: &OpStatus) -> bool {
