@@ -1,7 +1,6 @@
 use super::{menus, pinned_display_name};
 use crate::ui::app::{ContextMenuContent, ContextMenuInstance, OxydeApp};
 use crate::ui::i18n::I18nContext;
-use crate::ui::scale::rem_pixels;
 use crate::ui::theme::ThemeContext;
 use gpui::prelude::*;
 use gpui::*;
@@ -10,8 +9,7 @@ pub(crate) fn render_pinned_menu(view: &OxydeApp, handle: Entity<OxydeApp>, wind
     #[cfg(target_os = "windows")]
     if crate::ui::components::popup::supported(window, cx) {
         let origin = view.context_anchor_points.get("sidebar-pinned").copied().unwrap_or_default();
-        let bounds = Bounds::new(origin, size(rem_pixels(rems(2.0)), rem_pixels(rems(2.0))));
-        crate::ui::components::popup::show("pinned-rail", crate::ui::components::popup::PopupAnchor::beside(bounds, false), handle.clone(), window, cx,
+        crate::ui::components::popup::show("pinned-rail", crate::ui::components::popup::PopupAnchor::point(menu_position(origin, window.rem_size()), false), handle.clone(), window, cx,
             |view| view.sidebar_collapsed && view.pinned_rail_open,
             |view, window, cx| render_pinned_contents(view, cx.entity(), window, cx),
             |view, _, cx| { view.pinned_rail_open = false; cx.notify(); });
@@ -19,6 +17,13 @@ pub(crate) fn render_pinned_menu(view: &OxydeApp, handle: Entity<OxydeApp>, wind
     }
     render_pinned_contents(view, handle, window, cx)
 }
+
+// The reference is the measured pin button origin, with the historical rail gap.
+// Both transports use this fixed point in the source window's coordinates.
+fn menu_position(origin: Point<Pixels>, rem: Pixels) -> Point<Pixels> {
+    point(origin.x + rem * 2.5, origin.y)
+}
+
 fn render_pinned_contents(
     view: &OxydeApp,
     handle: Entity<OxydeApp>,
@@ -31,20 +36,21 @@ fn render_pinned_contents(
         .get("sidebar-pinned")
         .copied()
         .unwrap_or_default();
-    let button_bounds = Bounds::new(origin, size(rem_pixels(rems(2.0)), rem_pixels(rems(2.0))));
+    let button_bounds = Bounds::new(origin, size(window.rem_size() * 2.0, window.rem_size() * 2.0));
     let mut menu = div()
         .id("pinned-rail-menu")
         .occlude()
         .w(rems(17.0))
         .max_h(rems(30.0))
         .overflow_y_scroll()
-        .py(rems(0.25))
+        .p(rems(0.25))
         .text_size(rems(0.8125))
         .text_color(theme.text)
         .bg(theme.menu_surface)
         .border(rems(0.0625))
         .border_color(theme.menu_border)
-        .shadow(crate::ui::style::rem_shadow(false));
+        .rounded(rems(0.5))
+        .shadow(crate::ui::style::rem_shadow(true));
     for (index, item) in view
         .state
         .pinned_items
@@ -63,14 +69,15 @@ fn render_pinned_contents(
         menu = menu.child(
             crate::ui::components::popup::keyboard::item(div()
                 .id(("pinned-rail-item", index))
-                .px(rems(0.75))
+                .px(rems(0.5))
                 .h(rems(1.625))
                 .flex()
                 .items_center()
                 .gap(rems(0.5))
                 .min_w_0()
+                .rounded(rems(0.3125))
                 .hover(|row| row.bg(theme.menu_hover))
-                .child(svg().path("icons/pin.svg").size(rems(0.875)).flex_none().text_color(theme.text_muted))
+                .child(svg().path("icons/pin.svg").size(rems(1.0)).flex_none().text_color(theme.icon_muted))
                 .child(div().flex_1().min_w_0().truncate().child(pinned_display_name(item, cx.i18n())))
                 .on_mouse_down(MouseButton::Left, move |_, _, cx| {
                     cx.stop_propagation();
@@ -97,7 +104,6 @@ fn render_pinned_contents(
                         context_path.clone(),
                     );
                     context.update(cx, |this, cx| {
-                        this.pinned_rail_open = false;
                         this.context_menus.clear();
                         this.context_menus.push(ContextMenuInstance {
             native_bounds: None,
@@ -115,8 +121,9 @@ fn render_pinned_contents(
                 }), key_action, None, None),
         );
     }
-    menu = menu.on_mouse_down_out(move |event, _, cx| {
-        if button_bounds.contains(&event.position) {
+    menu = menu.on_mouse_down_out(move |event, window, cx| {
+        let position = crate::ui::components::popup::owner_point(window, cx, event.position);
+        if button_bounds.contains(&position) {
             return;
         }
         handle.update(cx, |this, cx| {
@@ -127,9 +134,13 @@ fn render_pinned_contents(
     if crate::ui::components::popup::is_menu(window, cx) { return menu.into_any_element(); }
     deferred(
         anchored()
-            .position(point(origin.x + rem_pixels(rems(2.5)), origin.y))
+            .position(menu_position(origin, window.rem_size()))
             .snap_to_window()
             .child(menu),
     )
     .into_any_element()
 }
+
+#[cfg(test)]
+#[path = "tests/pinned_tests.rs"]
+mod tests;

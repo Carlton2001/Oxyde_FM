@@ -28,7 +28,13 @@ impl OxydeApp {
                     let bounds = parent.native_bounds.unwrap_or(row);
                     Some(crate::ui::components::popup::PopupAnchor::beside(Bounds::new(point(bounds.left(), row.top()), size(bounds.size.width, row.size.height)), false))
                 }).unwrap_or_else(|| crate::ui::components::popup::PopupAnchor::point(instance.position, instance.open_left))
-                    .parent(index.checked_sub(1).and_then(|parent_index| crate::ui::components::popup::surface(window_handle, format!("context-menu-{parent_index}"), cx)));
+                    .parent(if let Some(parent_index) = index.checked_sub(1) {
+                        crate::ui::components::popup::surface(window_handle, format!("context-menu-{parent_index}"), cx)
+                    } else if self.sidebar_collapsed && self.pinned_rail_open {
+                        crate::ui::components::popup::surface(window_handle, "pinned-rail", cx)
+                    } else {
+                        None
+                    });
                 crate::ui::components::popup::show(
                     format!("context-menu-{index}"),
                     anchor,
