@@ -293,12 +293,25 @@ pub(super) fn render_grid_card(params: GridCardParams<'_>, cx: &mut App) -> Stat
                         editing_view.into_any_element()
                     }
                     None => {
+                        let h_click = h.clone();
+                        let click_path = path.clone();
                         div()
                             .font_weight(FontWeight::MEDIUM)
                             .child(if file.is_dir {
                                 name.clone()
                             } else {
                                 grid_display_name(&name)
+                            })
+                            .on_mouse_down(MouseButton::Left, move |event, window, cx| {
+                                h_click.update(cx, |this, cx| {
+                                    this.handle_slow_rename_click(
+                                        click_path.clone(),
+                                        is_dir,
+                                        event.click_count,
+                                        window,
+                                        cx,
+                                    );
+                                });
                             })
                             .into_any_element()
                     }
