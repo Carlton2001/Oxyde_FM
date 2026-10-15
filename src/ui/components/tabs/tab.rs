@@ -204,7 +204,7 @@ impl RenderOnce for Tab {
                 |_, _| std::rc::Rc::new(std::cell::Cell::new(Bounds::<Pixels>::default())));
             let bounds = state.read(cx).clone();
             container = container.native_tooltip(crate::ui::components::tooltip::Tooltip::fixed_path(path, bounds.clone()))
-                .child(canvas(move |rect, _, _| bounds.set(rect), |_, _, _, _| {}).absolute().size_full());
+                .child(canvas(move |rect, _, _| bounds.set(rect), |_, _, _, _| {}).absolute().left_0().top_0().size_full());
         }
 
         if let Some(on_click) = self.on_click {
@@ -303,6 +303,8 @@ impl RenderOnce for Tab {
                     },
                 )
                 .absolute()
+                .left_0()
+                .top_0()
                 .size_full(),
             );
         }

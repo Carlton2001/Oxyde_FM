@@ -526,7 +526,7 @@ pub fn render_top_bar(
                         let seg = div()
                             .id(SharedString::from(format!("breadcrumb-{}-{}", p_id, index)))
                             .relative()
-                            .child(canvas({ let bounds = segment_bounds.clone(); move |rect, _, _| bounds.set(rect) }, |_, _, _, _| {}).absolute().size_full())
+                            .child(canvas({ let bounds = segment_bounds.clone(); move |rect, _, _| bounds.set(rect) }, |_, _, _, _| {}).absolute().left_0().top_0().size_full())
                             .flex_none()
                             .h(rems(1.5))
                             .px(rems(0.375))

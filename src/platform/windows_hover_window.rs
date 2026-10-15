@@ -265,6 +265,19 @@ unsafe extern "system" fn subclass(
             }
         }
         INITIALIZE_WINDOW => {
+            // GPUI creates WindowKind::PopUp with style 0 (WS_OVERLAPPED).
+            // Windows gives that style a non-client border even with DWM
+            // decoration disabled, shifting the painted client area sideways.
+            // Change the frame outside GPUI's borrow, before FRAMECHANGED.
+            unsafe {
+                let style = GetWindowLongPtrW(window, GWL_STYLE) as u32;
+                SetWindowLongPtrW(
+                    window,
+                    GWL_STYLE,
+                    ((style | WS_POPUP.0)
+                        & !(WS_CAPTION.0 | WS_THICKFRAME.0 | WS_BORDER.0 | WS_DLGFRAME.0)) as isize,
+                );
+            }
             // Keep the prototype's native surface plain: no system halo and
             // no additional custom shadow pass around moving previews.
             let policy = DWMNCRP_DISABLED;
@@ -487,10 +500,10 @@ fn place_now(window: HWND, size: Option<(f32, f32, f32)>, scale: f32) -> Result<
         let inset = (inset * scale).round() as i32;
         let (x, y) = if let Some((_, open_left, beside)) = anchor {
             let x = if beside {
-                if open_left || cursor.x + anchor_width + gap - inset + width > work.right {
-                    cursor.x - gap - width + inset
+                if open_left || cursor.x + anchor_width - inset + width > work.right {
+                    cursor.x - width + inset
                 } else {
-                    cursor.x + anchor_width + gap - inset
+                    cursor.x + anchor_width - inset
                 }
             } else if open_left {
                 cursor.x + anchor_width - width + inset
@@ -505,8 +518,10 @@ fn place_now(window: HWND, size: Option<(f32, f32, f32)>, scale: f32) -> Result<
                 anchor_top - gap - height + inset
             };
             (
-                x.clamp(work.left, work.right - width),
-                y.clamp(work.top, work.bottom - height),
+                // Transparent shadow margins may extend outside the work
+                // area; clamp the visible frame instead of shifting its anchor.
+                x.clamp(work.left - inset, work.right - width + inset),
+                y.clamp(work.top - inset, work.bottom - height + inset),
             )
         } else {
             (

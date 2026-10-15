@@ -15,6 +15,7 @@ use oxyde_lib::models::{DriveInfo, FileProperties};
 
 pub(crate) struct PropertiesWindow {
     owner: gpui::WeakEntity<super::OxydeApp>,
+    owner_window: gpui::AnyWindowHandle,
     properties_dialog: Option<PropertiesDialog>,
     context_menus: Vec<super::ContextMenuInstance>,
     scrollbar_origins: std::collections::HashMap<String, Point<f32>>,
@@ -40,8 +41,6 @@ pub(crate) struct PropertiesDialog {
     path: String,
     paths: Vec<String>,
     selection: Option<selection::SelectionProperties>,
-    system_properties_pending: bool,
-    system_properties_error: Option<String>,
     revision: u64,
     properties: Option<FileProperties>,
     drive: Option<DriveInfo>,

@@ -50,6 +50,7 @@ impl OxydeApp {
             return;
         }
         let owner = cx.entity().downgrade();
+        let owner_window = window.window_handle();
         let drive = self
             .state
             .drives
@@ -105,12 +106,11 @@ impl OxydeApp {
                         }
                         let mut view = PropertiesWindow {
                             owner,
+                            owner_window,
                             properties_dialog: Some(PropertiesDialog {
                                 path: path.clone(),
                                 paths: paths.clone(),
                                 selection: None,
-                                system_properties_pending: false,
-                                system_properties_error: None,
                                 revision: 0,
                                 properties: None,
                                 drive,

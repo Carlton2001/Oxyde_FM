@@ -6,12 +6,15 @@ use windows::core::w;
 struct TestWindow(HWND);
 impl TestWindow {
     fn new() -> Self {
+        Self::with_style(WS_POPUP)
+    }
+    fn with_style(style: WINDOW_STYLE) -> Self {
         Self(unsafe {
             CreateWindowExW(
                 WS_EX_APPWINDOW | WS_EX_TOPMOST,
                 w!("STATIC"),
                 w!("Oxyde hover test"),
-                WS_POPUP,
+                style,
                 0,
                 0,
                 100,
@@ -285,7 +288,9 @@ fn popup_coordinates_account_for_different_owner_and_menu_origins() {
 #[test]
 fn element_anchor_places_the_visible_frame_below_the_element() {
     let owner = TestWindow::new();
-    let hover = TestWindow::new();
+    // Match GPUI's WindowKind::PopUp creation style rather than using an
+    // already borderless test window, which hid the non-client offset.
+    let hover = TestWindow::with_style(WINDOW_STYLE(0));
     super::super::windows_window_owner::set_owner(hover.0, owner.0).unwrap();
     configure(hover.raw()).unwrap();
     let scale = unsafe { windows::Win32::UI::HiDpi::GetDpiForWindow(owner.0) } as f32 / 96.0;
@@ -297,38 +302,72 @@ fn element_anchor_places_the_visible_frame_below_the_element() {
         ..Default::default()
     };
     assert!(unsafe { GetMonitorInfoW(monitor, &mut info) }.as_bool());
-    let mut reference = POINT {
-        x: info.rcWork.left + (info.rcWork.right - info.rcWork.left) / 3,
-        y: info.rcWork.top + (info.rcWork.bottom - info.rcWork.top) / 3,
-    };
-    let screen_reference = reference;
-    assert!(
-        unsafe { windows::Win32::Graphics::Gdi::ScreenToClient(owner.0, &mut reference) }.as_bool()
-    );
-    set_anchor(
-        hover.raw(),
-        Some((
-            reference.x as f32 / scale,
-            reference.y as f32 / scale,
-            40.0,
-            20.0,
-        )),
-        false,
-        false,
-    )
-    .unwrap();
-    place(hover.raw(), Some((160.0, 100.0, 16.0)), scale).unwrap();
-    apply_pending(hover.0);
-    let mut bounds = windows::Win32::Foundation::RECT::default();
-    unsafe { GetWindowRect(hover.0, &mut bounds) }.unwrap();
-    assert_eq!(
-        bounds.left + (16.0 * scale).round() as i32,
-        screen_reference.x
-    );
-    assert_eq!(
-        bounds.top + (16.0 * scale).round() as i32,
-        screen_reference.y + (20.0 * scale).round() as i32 + (4.0 * scale).round() as i32
-    );
+    // Close-to-edge anchors must not be shifted by the transparent inset.
+    for offset in [0, 8, (info.rcWork.right - info.rcWork.left) / 3] {
+        let mut reference = POINT {
+            x: info.rcWork.left + offset,
+            y: info.rcWork.top + (info.rcWork.bottom - info.rcWork.top) / 3,
+        };
+        let screen_reference = reference;
+        assert!(
+            unsafe { windows::Win32::Graphics::Gdi::ScreenToClient(owner.0, &mut reference) }.as_bool()
+        );
+        set_anchor(
+            hover.raw(),
+            Some((
+                reference.x as f32 / scale,
+                reference.y as f32 / scale,
+                40.0,
+                20.0,
+            )),
+            false,
+            false,
+        )
+        .unwrap();
+        place(hover.raw(), Some((160.0, 100.0, 16.0)), scale).unwrap();
+        apply_pending(hover.0);
+        let mut bounds = windows::Win32::Foundation::RECT::default();
+        unsafe { GetWindowRect(hover.0, &mut bounds) }.unwrap();
+        let mut client_origin = POINT::default();
+        unsafe {
+            windows::Win32::Graphics::Gdi::ClientToScreen(hover.0, &mut client_origin)
+        }.ok().unwrap();
+        assert_eq!((client_origin.x, client_origin.y), (bounds.left, bounds.top));
+        assert_eq!(
+            client_origin.x + (16.0 * scale).round() as i32,
+            screen_reference.x
+        );
+        assert_eq!(
+            client_origin.y + (16.0 * scale).round() as i32,
+            screen_reference.y + (20.0 * scale).round() as i32 + (4.0 * scale).round() as i32
+        );
+    }
+}
+
+#[test]
+fn clicking_menu_anchor_leaves_the_toggle_to_the_owner() {
+    let owner = TestWindow::new();
+    let menu = TestWindow::new();
+    super::super::windows_window_owner::set_owner(menu.0, owner.0).unwrap();
+    configure_menu(menu.raw(), owner.raw(), owner.raw(), true).unwrap();
+    let scale = unsafe { windows::Win32::UI::HiDpi::GetDpiForWindow(owner.0) } as f32 / 96.0;
+    let mut cursor = POINT::default();
+    unsafe { GetCursorPos(&mut cursor) }.unwrap();
+    assert!(unsafe {
+        windows::Win32::Graphics::Gdi::ScreenToClient(owner.0, &mut cursor)
+    }.as_bool());
+    set_anchor(menu.raw(), Some((
+        cursor.x as f32 / scale - 8.0,
+        cursor.y as f32 / scale - 8.0,
+        32.0, 32.0,
+    )), false, true).unwrap();
+    unsafe { SendMessageW(owner.0, WM_LBUTTONDOWN, None, None) };
+    assert!(unsafe { IsWindow(Some(menu.0)) }.as_bool());
+    // Without a button area the native dismissal would precede the toggle
+    // and make it reopen the menu, as with the old point anchor.
+    set_anchor(menu.raw(), None, false, false).unwrap();
+    unsafe { SendMessageW(owner.0, WM_LBUTTONDOWN, None, None) };
+    assert!(!unsafe { IsWindow(Some(menu.0)) }.as_bool());
 }
 
 #[test]

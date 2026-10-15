@@ -9,7 +9,10 @@ pub(crate) fn render_pinned_menu(view: &OxydeApp, handle: Entity<OxydeApp>, wind
     #[cfg(target_os = "windows")]
     if crate::ui::components::popup::supported(window, cx) {
         let origin = view.context_anchor_points.get("sidebar-pinned").copied().unwrap_or_default();
-        crate::ui::components::popup::show("pinned-rail", crate::ui::components::popup::PopupAnchor::point(menu_position(origin, window.rem_size()), false), handle.clone(), window, cx,
+        // Include the rail's trailing padding so the menu starts outside
+        // the sidebar, while clicks on the button still reach its toggle.
+        let bounds = Bounds::new(origin, size(window.rem_size() * 2.5, window.rem_size() * 2.0));
+        crate::ui::components::popup::show("pinned-rail", crate::ui::components::popup::PopupAnchor::beside(bounds, false), handle.clone(), window, cx,
             |view| view.sidebar_collapsed && view.pinned_rail_open,
             |view, window, cx| render_pinned_contents(view, cx.entity(), window, cx),
             |view, _, cx| { view.pinned_rail_open = false; cx.notify(); });
@@ -18,8 +21,7 @@ pub(crate) fn render_pinned_menu(view: &OxydeApp, handle: Entity<OxydeApp>, wind
     render_pinned_contents(view, handle, window, cx)
 }
 
-// The reference is the measured pin button origin, with the historical rail gap.
-// Both transports use this fixed point in the source window's coordinates.
+// Align with the rail's outer edge, including its half-rem trailing padding.
 fn menu_position(origin: Point<Pixels>, rem: Pixels) -> Point<Pixels> {
     point(origin.x + rem * 2.5, origin.y)
 }

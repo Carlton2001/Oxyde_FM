@@ -1,6 +1,5 @@
 use crate::ui::app::OxydeApp;
 use crate::ui::i18n::Message;
-use crate::ui::scale::rem_pixels;
 use crate::ui::theme::OxydeTheme;
 use crate::ui::workspace::{SortColumn, SortDirection};
 use gpui::prelude::*;
@@ -268,9 +267,7 @@ fn header_cell(
             canvas(
                 |bounds, _, _| bounds,
                 move |_, bounds, _, cx| {
-                    // The dropdown has a small internal left inset; shift the filter
-                    // menu back slightly so its visible edge aligns with the header.
-                    let anchor = point(bounds.left() - rem_pixels(rems(0.25)), bounds.bottom());
+                    let anchor = point(bounds.left(), bounds.bottom());
                     anchor_handle.update(cx, |this, _| {
                         this.context_anchor_points
                             .insert(anchor_key.clone(), anchor);
@@ -278,6 +275,8 @@ fn header_cell(
                 },
             )
             .absolute()
+            .left_0()
+            .top_0()
             .size_full(),
         )
         .hover(|s| s.bg(theme.hover))

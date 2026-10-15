@@ -47,7 +47,7 @@ pub(crate) fn render(
         body = body.child(div().text_color(theme.error).child(cx.i18n().text(error)));
     }
     body = shortcut::run_menu(body, dialog, &handle, theme, window, cx);
-    for error in dialog.error.iter().chain(dialog.system_properties_error.iter()) {
+    if let Some(error) = &dialog.error {
         body = body.child(
             div()
                 .text_color(theme.error)
@@ -208,7 +208,6 @@ pub(crate) fn render(
                                         .text_color(theme.text),
                                 )
                                 .child(cx.i18n().text(Message::PropertiesSystem))
-                                .when(dialog.system_properties_pending, |button| button.opacity(0.5))
                                 .on_mouse_down(MouseButton::Left, move |_, window, cx| {
                                     system.update(cx, |this, cx| {
                                         this.system_file_properties(window, cx)

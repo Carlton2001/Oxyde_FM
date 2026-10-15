@@ -50,6 +50,8 @@ pub(super) fn render_sidebar_rail(
                     }
                 })
                 .absolute()
+                .left_0()
+                .top_0()
                 .size_full(),
             ),
         ),

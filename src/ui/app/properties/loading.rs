@@ -76,6 +76,12 @@ impl PropertiesWindow {
             return;
         }
         self.properties_dialog = None;
+        let owner_window = self.owner_window;
+        // Return activation to the owner before destroying its active owned
+        // window, rather than leaving Windows to choose another application.
+        cx.defer(move |cx| {
+            let _ = owner_window.update(cx, |_, window, _| window.activate_window());
+        });
         { crate::ui::components::tool_window::close_transients(window, cx); window.remove_window() };
         cx.notify();
     }
@@ -84,32 +90,21 @@ impl PropertiesWindow {
         let Some(dialog) = &self.properties_dialog else {
             return;
         };
-        if dialog.saving || dialog.system_properties_pending {
+        if dialog.saving {
             return;
         }
         let paths = dialog.paths.clone();
-        if paths.len() == 1 {
-            self.close_file_properties(window, cx);
-        } else if let Some(dialog) = &mut self.properties_dialog {
-            dialog.system_properties_pending = true;
-            dialog.system_properties_error = None;
-            cx.notify();
-        }
-        cx.spawn(async move |this, cx| {
+        self.close_file_properties(window, cx);
+        // The native dialog outlives this GPUI view, including for selections.
+        cx.spawn(async move |_, _| {
             let result = tokio::task::spawn_blocking(move || {
                 oxyde_lib::platform::platform().show_selection_properties(&paths)
             }).await;
-            let _ = this.update(cx, |this, cx| {
-                if let Some(dialog) = &mut this.properties_dialog {
-                    dialog.system_properties_pending = false;
-                    dialog.system_properties_error = match result {
-                        Ok(Ok(())) => None,
-                        Ok(Err(error)) => Some(error),
-                        Err(error) => Some(error.to_string()),
-                    };
-                    cx.notify();
-                }
-            });
+            match result {
+                Ok(Ok(())) => {}
+                Ok(Err(error)) => log::error!("Cannot open system properties: {error}"),
+                Err(error) => log::error!("System properties task failed: {error}"),
+            }
         }).detach();
     }
 }
