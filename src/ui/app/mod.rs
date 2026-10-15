@@ -1,3 +1,4 @@
+pub(crate) mod tool_geometry;
 use crate::ui::scale::{logical, rem_pixels};
 pub use crate::ui::theme::{OxydeTheme, ThemeContext};
 pub use crate::ui::workspace::WorkspaceState;

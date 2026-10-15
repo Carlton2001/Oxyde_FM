@@ -223,3 +223,7 @@ mod tests {
         set_reference(16);
     }
 }
+
+#[cfg(test)]
+#[path = "style/tests/shadows.rs"]
+mod shadow_tests;

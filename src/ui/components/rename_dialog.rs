@@ -42,6 +42,7 @@ pub fn render_rename_dialog(
         });
 
     Modal::new("rename-dialog", cx.i18n().text(title), body)
+        .header_background(theme.surface)
         .body_background(theme.active_background)
         .title_icon(if view.archive_creation.is_some() {
             "icons/archive.svg"

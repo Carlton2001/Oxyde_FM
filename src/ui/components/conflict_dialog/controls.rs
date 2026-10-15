@@ -108,7 +108,7 @@ pub(super) fn button_with_label(
     .whitespace_nowrap()
     .rounded_sm()
     .border(rems(0.0625))
-    .border_color(gpui::transparent_black())
+    .when(primary, |d| d.border_color(gpui::transparent_black()))
     .focus(|d| d.border_color(t.accent))
     .flex()
     .items_center()

@@ -67,10 +67,10 @@ impl OxydeApp {
             }
             let result = cx.open_window(
                 WindowOptions {
-                    window_bounds: Some(WindowBounds::Windowed(Bounds::new(
+                    window_bounds: Some(crate::ui::app::tool_geometry::restore("icons/settings-2.svg", Bounds::new(
                         origin,
                         size(px(480.0), px(600.0)),
-                    ))),
+                    ), cx)),
                     is_resizable: false,
                     is_minimizable: false,
                     titlebar: Some(TitlebarOptions {

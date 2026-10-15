@@ -1,6 +1,7 @@
 use super::*;
 use crate::ui::components::modal::{action_button, Modal};
 use crate::ui::theme::ThemeContext;
+use crate::ui::elements::button::{button_style, ButtonVariant};
 
 fn toggle(value: bool, theme: crate::ui::theme::OxydeTheme) -> impl IntoElement {
     div()
@@ -111,8 +112,7 @@ pub(crate) fn render(
                 close.update(cx, |this, cx| this.close_trash_settings(window, cx));
             })
             .action(
-                action_button("trash-settings-cancel")
-                    .bg(theme.control_hover)
+                button_style(action_button("trash-settings-cancel"), theme, ButtonVariant::Secondary, true)
                     .track_focus(&dialog.focus)
                     .child(cx.i18n().text(Message::Cancel))
                     .on_mouse_down(MouseButton::Left, move |_, window, cx| {
@@ -120,11 +120,9 @@ pub(crate) fn render(
                     }),
             )
             .action(
-                action_button("trash-settings-save")
+                button_style(action_button("trash-settings-save"), theme, ButtonVariant::Primary, !disabled)
                     .track_focus(&dialog.save_focus)
-                    .bg(theme.accent)
-                    .text_color(theme.text_on_accent)
-                    .opacity(if disabled { 0.5 } else { 1.0 })
+
                     .child(cx.i18n().text(Message::TrashSettingsOk))
                     .on_mouse_down(MouseButton::Left, move |_, _, cx| {
                         save.update(cx, |this, cx| this.save_trash_settings(cx));
@@ -296,9 +294,8 @@ fn render_body(
                         ),
                 )
                 .child(
-                    action_button("trash-settings-empty")
+                    button_style(action_button("trash-settings-empty"), theme, ButtonVariant::Secondary, !disabled && dialog.usage.1 > 0)
                         .flex_none()
-                        .bg(theme.control_hover)
                         .opacity(if disabled || dialog.usage.1 == 0 {
                             0.5
                         } else {

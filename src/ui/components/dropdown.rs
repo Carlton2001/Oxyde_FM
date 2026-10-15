@@ -278,7 +278,8 @@ impl<T: crate::ui::components::scrollbar::ScrollbarState + 'static> RenderOnce f
         }
 
         let requested_width = self.width.unwrap_or(calculated_width);
-        let right_padding = if self.is_context_menu { logical(5.0) } else { logical(4.0) };
+        // A field-only popup has no scrollbar gutter; keep its editor centered.
+        let right_padding = if self.is_context_menu && !self.items.is_empty() { logical(5.0) } else { logical(4.0) };
         let outer_width = (requested_width + logical(4.0) + right_padding)
             .min((crate::ui::components::popup::available_size(window, cx).width.as_f32() - logical(16.0)).max(1.0));
         let width = (outer_width - logical(4.0) - right_padding).max(1.0);

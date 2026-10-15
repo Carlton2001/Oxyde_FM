@@ -16,6 +16,8 @@ pub struct WindowPlacement {
 pub struct AppConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub window_placement: Option<WindowPlacement>,
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub tool_window_placements: std::collections::BTreeMap<String, WindowPlacement>,
     #[serde(default = "default_theme")]
     pub theme: String,
     #[serde(default = "default_language")]
@@ -82,6 +84,7 @@ impl Default for AppConfig {
     fn default() -> Self {
         Self {
             window_placement: None,
+            tool_window_placements: Default::default(),
             theme: default_theme(),
             language: default_language(),
             show_hidden: false,
@@ -123,12 +126,14 @@ impl AppConfig {
         let duplicate_search_window_size = self.duplicate_search_window_size.take();
         let operations_panel_position = self.operations_panel_position;
         let window_placement = self.window_placement;
+        let tool_window_placements = std::mem::take(&mut self.tool_window_placements);
         *self = Self {
             workspace_state,
             duplicate_search_options,
             duplicate_search_window_size,
             operations_panel_position,
             window_placement,
+            tool_window_placements,
             ..Self::default()
         };
     }
@@ -363,3 +368,7 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "config/tests/tool_placements.rs"]
+mod tool_placement_tests;

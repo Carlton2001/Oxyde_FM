@@ -137,7 +137,7 @@ impl OxydeApp {
                 .map(|dialog| dialog.request_id());
             let result = cx.open_window(
                 WindowOptions {
-                    window_bounds: Some(WindowBounds::Windowed(Bounds::new(
+                    window_bounds: Some(crate::ui::app::tool_geometry::restore(match kind { DialogKind::Trash => "icons/trash-2.svg", DialogKind::Conflict => "icons/copy-x.svg" }, Bounds::new(
                         origin,
                         size(
                             px(rem
@@ -147,7 +147,7 @@ impl OxydeApp {
                                 }),
                             px(rem * 38.0),
                         ),
-                    ))),
+                    ), cx)),
                     is_resizable: matches!(kind, DialogKind::Conflict),
                     window_min_size: matches!(kind, DialogKind::Conflict)
                         .then_some(size(px(rem * 40.0), px(rem * 12.0))),

@@ -398,3 +398,24 @@ Une sÃ©lection de plusieurs Ã©lÃ©ments ouvre une seule fenÃªtre via open_propert
 
 Les propriÃ©tÃ©s d'un seul Ã©lÃ©ment gardent leurs champs et onglets existants. Le bouton systÃ¨me passe par Platform::show_selection_properties. Sous Windows, il demande un IContextMenu au dossier Shell rÃ©el pour les Ã©lÃ©ments d'un mÃªme parent (identitÃ©s relatives), ou au Bureau pour des parents distincts (identitÃ©s absolues), puis invoque la commande properties par son identifiant sur un thread STA dÃ©diÃ©. Le thread active les contrÃ´les communs v6 localement et conserve une rÃ©fÃ©rence de thread Shell avec une boucle de messages jusqu'Ã  la fin des opÃ©rations asynchrones ; la fenÃªtre GPUI se ferme dÃ¨s le clic sur PropriÃ©tÃ©s systÃ¨me, pour un Ã©lÃ©ment comme pour une sÃ©lection multiple. La tÃ¢che native continue indÃ©pendamment de la vue fermÃ©e et journalise les Ã©checs. OK et Annuler rendent explicitement lâ€™activation Ã  la fenÃªtre propriÃ©taire. Les autres cibles signalent l'absence de prise en charge native de la multisÃ©lection ; leur chemin de propriÃ©tÃ© individuelle est conservÃ©.
 Les essais natifs de windows_shell_selection/tests/native_dialog.rs sont ignorÃ©s par dÃ©faut car ils ouvrent de vraies fenÃªtres. Ils vÃ©rifient la prÃ©sence d'onglets construits pour deux textes et pour une sÃ©lection texte/vidÃ©o, puis ferment uniquement les dialogues de leur processus ou ceux portant les noms uniques de leurs fichiers temporaires. Un HRESULT de succÃ¨s seul ne valide pas l'ouverture.
+
+### Positions des fenêtres secondaires
+
+Les fenêtres de recherche avancée, doublons, propriétés, Corbeille, conflits,
+gestionnaire des opérations et éléments concernés conservent leur position par
+famille dans `AppConfig::tool_window_placements`. `app/tool_geometry.rs` réutilise
+la validation et le bornage multi-écrans de `window_geometry`. La taille reste
+pilotée par le contenu ou par les réglages de taille existants. Les observations
+sont installées après création de la racine, via `tool_window::install_icon` ;
+les abonnements détachés sont détenus par la fenêtre et retirés avec elle.
+Les changements utilisent la même file différée de préférences que la fenêtre
+principale et sa vidange à la fermeture. Réinitialiser les préférences préserve
+ces positions.
+
+Un menu texte ouvert depuis le filtre Nom conserve le filtre comme parent et
+ferme seulement ses descendants. Le filtre ne reprend pas le focus pendant
+l'ouverture de ce menu enfant. Son champ occupe la largeur disponible, avec des
+marges symétriques sans gouttière de scrollbar pour ce menu sans lignes.
+Les modales intégrées utilisent les deux ombres externes du preset GPUI,
+redimensionnées avec le zoom ; le cadre ne découpe pas ses ombres. La vérification
+du code et des couches d'ombre ne remplace pas une vérification visuelle native.

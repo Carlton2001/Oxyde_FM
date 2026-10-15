@@ -51,10 +51,10 @@ impl OxydeApp {
             }
             let result = cx.open_window(
                 WindowOptions {
-                    window_bounds: Some(WindowBounds::Windowed(Bounds::new(
+                    window_bounds: Some(crate::ui::app::tool_geometry::restore("icons/search.svg", Bounds::new(
                         point(px(160.0), px(140.0)),
                         size(px(760.0), px(520.0)),
-                    ))),
+                    ), cx)),
                     is_resizable: false,
                     is_minimizable: false,
                     titlebar: Some(TitlebarOptions {

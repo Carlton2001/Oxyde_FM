@@ -240,7 +240,11 @@ impl OxydeApp {
                 let h = h.clone();
                 std::rc::Rc::new(move |_, cx| {
                     h.update(cx, |this, cx| {
-                        this.context_menus.clear();
+                        if this.context_menus.get(m_idx.wrapping_sub(1)).is_some_and(|menu| matches!(menu.content, crate::ui::app::ContextMenuContent::NameFilter { .. })) {
+                            this.context_menus.truncate(m_idx);
+                        } else {
+                            this.context_menus.clear();
+                        }
                         this.submenu_timer = None;
                         this.submenu_close_timer = None;
                         cx.notify();

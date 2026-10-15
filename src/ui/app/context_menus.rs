@@ -339,7 +339,12 @@ impl OxydeApp {
             super::dialog_windows::show_text_menu(items, position, window, cx);
             return;
         }
-        self.context_menus.clear();
+        // Preserve the editable filter while its text menu is open.
+        if let Some(index) = self.context_menus.iter().position(|menu| matches!(menu.content, ContextMenuContent::NameFilter { .. })) {
+            self.context_menus.truncate(index + 1);
+        } else {
+            self.context_menus.clear();
+        }
         self.context_menus.push(ContextMenuInstance {
             native_bounds: None,
             position,

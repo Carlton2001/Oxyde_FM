@@ -238,7 +238,7 @@ impl RenderOnce for Modal {
                     .flex_col()
                     .rounded_lg()
                     .shadow(crate::ui::style::rem_shadow(true))
-                    .bg(theme.surface)
+                    .bg(self.body_background.unwrap_or(theme.surface))
                     .text_color(theme.text)
                     .text_size(rems(0.8125))
                     .line_height(relative(1.25))
@@ -355,6 +355,8 @@ impl RenderOnce for Modal {
                     .when(!self.actions.is_empty(), |panel| {
                         panel.child(
                             super::tool_window::footer(cx)
+                                .rounded_b_lg()
+                                .bg(self.header_background.unwrap_or(theme.surface))
                                 .when(self.wrap_actions, |d| d.flex_wrap())
                                 .gap(rems(0.5))
                                 .children(self.actions),

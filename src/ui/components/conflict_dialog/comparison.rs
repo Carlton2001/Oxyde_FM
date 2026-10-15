@@ -262,6 +262,9 @@ pub(super) fn render_comparison(
                     pending.dialog.automatic.contains(&current.source.path),
                     |d| d.child(automatic_badge(cx)),
                 )
+                .px(rems(0.75)).py(rems(0.5))
+                .rounded_md().border(rems(0.0625)).border_color(t.border)
+                .bg(t.selected).font_weight(FontWeight::SEMIBOLD)
                 .text_color(t.accent)
                 .child(cx.i18n().text(if action == ConflictAction::Replace {
                     Message::ConflictReplace
@@ -274,8 +277,10 @@ pub(super) fn render_comparison(
         div()
             .flex()
             .justify_center()
-            .gap(rems(1.0))
-            .mt(rems(0.5))
+            .gap(rems(0.75))
+            .p(rems(0.75)).mt(rems(0.5))
+            .rounded_md().border(rems(0.0625)).border_color(t.border)
+            .bg(t.surface)
             .child(button(
                 "conflict-skip",
                 Message::ConflictSkip,

@@ -59,6 +59,7 @@ fn native_tool_icon(path: &str, cx: &App) -> Option<Vec<u8>> {
 /// Use the same official Lucide asset for the title and the native taskbar preview.
 pub(crate) fn install_icon(path: &'static str, window: &mut Window) {
     window.on_next_frame(move |window, cx| {
+        crate::ui::app::tool_geometry::observe(path, window, cx);
         let icon = native_tool_icon(path, cx).or_else(|| {
             cx.asset_source()
                 .load("icons/logo.png")

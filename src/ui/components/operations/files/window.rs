@@ -327,10 +327,10 @@ pub(super) fn open(owner: Entity<OxydeApp>, operation_id: String, cx: &mut App) 
         let title = count_label(Message::OpsAffectedItems, operation.sources.len(), cx);
         if let Err(error) = cx.open_window(
             WindowOptions {
-                window_bounds: Some(WindowBounds::Windowed(Bounds::new(
+                window_bounds: Some(crate::ui::app::tool_geometry::restore("icons/list.svg", Bounds::new(
                     point(px(200.0), px(160.0)),
                     size(px(680.0), px(520.0)),
-                ))),
+                ), cx)),
                 window_min_size: Some(size(px(400.0), px(300.0))),
                 titlebar: Some(TitlebarOptions {
                     appears_transparent: true,

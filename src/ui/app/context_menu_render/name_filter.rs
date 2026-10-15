@@ -20,7 +20,7 @@ impl OxydeApp {
     ) -> GenericDropdown {
         if crate::ui::components::popup::is_menu(_window, cx) {
             let focus = input.read(cx).focus_handle.clone();
-            if !focus.is_focused(_window) { _window.focus(&focus, cx); }
+            if !focus.is_focused(_window) && self.context_menus.len() == m_idx + 1 { _window.focus(&focus, cx); }
         }
         let input_width = (input.read(cx).placeholder_width(_window).as_f32() + logical(32.0)).max(logical(200.0));
         GenericDropdown {
@@ -31,7 +31,7 @@ impl OxydeApp {
         is_context_menu: true,
         bottom_padding: instance.bottom_padding,
         scroll_handle,
-        width: Some(input_width + logical(8.0)),
+        width: Some(input_width),
         max_height: logical(480.0),
         on_close: {
             let h = h.clone();
@@ -79,7 +79,7 @@ impl OxydeApp {
         is_dragging: false,
         header: Some(
             div()
-                .w(px(input_width))
+                .w_full().min_w_0()
                 .child(input.clone())
                 .into_any_element(),
         ),
