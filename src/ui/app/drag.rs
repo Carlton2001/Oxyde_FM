@@ -37,6 +37,9 @@ impl FileDragPreview {
         cx: &mut Context<Self>,
     ) -> Self {
         app_handle.update(cx, |app, _| {
+            // A completed drag must never become a filename rename click.
+            app.suppress_item_selection_click = true;
+            app.rename_click_candidate = None;
             app.file_drag_origin = app.state.find_pane(&app.state.active_pane_id)
                 .map(|pane| (pane.id.clone(), pane.active_tab().id.clone()));
         });

@@ -44,17 +44,31 @@ impl OxydeApp {
         &mut self,
         path: String,
         is_dir: bool,
-        click_count: usize,
+        event: &ClickEvent,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        let ClickEvent::Mouse(event) = event else {
+            return;
+        };
+        if self.suppress_item_selection_click
+            || event.down.click_count != 1
+            || event.down.modifiers != Modifiers::default()
+            || event.up.modifiers != Modifiers::default()
+        {
+            self.rename_click_candidate = None;
+            return;
+        }
         let now = std::time::Instant::now();
         let previous = self.rename_click_candidate.take();
         let is_same_selected_item = self
             .state
             .layout
             .find_pane(&self.state.active_pane_id)
-            .map(|pane| pane.active_tab().selected_paths.contains(&path))
+            .map(|pane| {
+                let selected = &pane.active_tab().selected_paths;
+                selected.len() == 1 && selected.contains(&path)
+            })
             .unwrap_or(false);
         let is_slow_second_click = previous
             .as_ref()
@@ -71,7 +85,7 @@ impl OxydeApp {
 
         if is_same_selected_item && is_slow_second_click {
             self.begin_rename(path, is_dir, true, window, cx);
-        } else if click_count <= 1 {
+        } else if is_same_selected_item {
             self.rename_click_candidate = Some((path, now));
         }
     }

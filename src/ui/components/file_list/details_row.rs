@@ -336,19 +336,20 @@ pub(super) fn render_details_row(params: DetailsRowParams<'_>, cx: &mut App) -> 
                                     let h_click = h.clone();
                                     let click_path = path.clone();
                                     let name = div()
+                                        .id(SharedString::from(format!("rename-name-{path}")))
                                         .flex_shrink(1.0)
                                         .min_w_0()
                                         .truncate()
                                         .font_weight(FontWeight::MEDIUM)
                                         .text_color(theme.text)
                                         .child(file_name.clone())
-                                        .on_mouse_down(MouseButton::Left, move |event, window, cx| {
+                                        .on_click(move |event, window, cx| {
                                             let path = click_path.clone();
                                             h_click.update(cx, |this, cx| {
                                                 this.handle_slow_rename_click(
                                                     path,
                                                     is_dir,
-                                                    event.click_count,
+                                                    event,
                                                     window,
                                                     cx,
                                                 );
