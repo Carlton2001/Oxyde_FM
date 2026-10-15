@@ -2,6 +2,7 @@ mod about;
 mod columns;
 mod controls;
 mod compression;
+mod default_format;
 mod data_actions;
 
 use controls::{choice, choice_with_icon, section};
@@ -33,7 +34,7 @@ pub fn render_settings_panel(view: &OxydeApp, handle: Entity<OxydeApp>, window: 
         crate::ui::components::popup::show("settings-panel", crate::ui::components::popup::PopupAnchor::element(bounds), handle.clone(), window, cx,
             |view| view.settings_open,
             |view, window, cx| render_settings_surface(view, cx.entity(), window, cx, None),
-            |view, _, cx| { view.settings_open = false; view.settings_about_open = false; view.settings_picker = None; view.settings_submenu_bounds = None; cx.notify(); });
+            |view, _, cx| { view.archive_format_bounds = None; view.settings_open = false; view.settings_about_open = false; view.settings_picker = None; view.settings_submenu_bounds = None; cx.notify(); });
         return div().into_any_element();
     }
     render_settings_surface(view, handle, window, cx, None)
@@ -45,6 +46,15 @@ fn render_settings_surface(
     cx: &mut Context<OxydeApp>,
     _only_picker: Option<SettingsPicker>,
 ) -> AnyElement {
+    // Only render this control in its actual owner, never in the parent menu.
+    #[cfg(target_os = "windows")]
+    let render_compression = _only_picker == Some(SettingsPicker::Compression)
+        || !crate::ui::components::popup::supported(window, cx);
+    #[cfg(not(target_os = "windows"))]
+    let render_compression = true;
+    let compression = if render_compression {
+        compression_table(view, handle.clone(), window, cx)
+    } else { Vec::new() };
     let theme = *cx.theme();
     let i18n = cx.i18n();
     let backdrop = handle.clone();
@@ -115,7 +125,6 @@ fn render_settings_surface(
     })
     .into_iter()
     .collect();
-    let compression = compression_table(view, handle.clone(), cx);
     // Keep the settings columns compact and stable when About is toggled.
     // Measure translated labels before allocating space to icons and controls.
     // These widths depend on the content, never on whether About is open.
@@ -224,7 +233,7 @@ fn render_settings_surface(
             crate::ui::components::popup::show("settings-picker", crate::ui::components::popup::PopupAnchor::beside(bounds, open_left), handle.clone(), window, cx,
                 move |view| view.settings_open && view.settings_picker == Some(kind),
                 move |view, window, cx| render_settings_surface(view, cx.entity(), window, cx, Some(kind)),
-                |view, _, cx| { view.settings_picker = None; view.settings_submenu_bounds = None; cx.notify(); });
+                |view, _, cx| { view.archive_format_bounds = None; view.settings_picker = None; view.settings_submenu_bounds = None; cx.notify(); });
         }
         return panel.into_any_element();
     }    let mut overlay = div()
@@ -236,6 +245,7 @@ fn render_settings_surface(
         .on_mouse_down(MouseButton::Left, move |_, _, cx| {
             cx.stop_propagation();
             backdrop.update(cx, |view, cx| {
+                view.archive_format_bounds = None;
                 view.settings_open = false;
                 view.settings_about_open = false;
                 view.settings_picker = None;

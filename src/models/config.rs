@@ -34,6 +34,8 @@ pub struct AppConfig {
     pub show_previews: bool,
     #[serde(default)]
     pub zip_quality: String,
+    #[serde(default = "default_archive_format")]
+    pub default_archive_format: String,
     #[serde(default)]
     pub seven_zip_quality: String,
     #[serde(default)]
@@ -67,6 +69,8 @@ pub struct AppConfig {
     pub duplicate_search_window_size: Option<serde_json::Value>,
 }
 
+fn default_archive_format() -> String { "zip".into() }
+
 fn default_theme() -> String {
     "dark".to_string()
 }
@@ -92,6 +96,7 @@ impl Default for AppConfig {
             use_system_icons: false,
             date_format: String::new(),
             show_previews: true,
+            default_archive_format: default_archive_format(),
             zip_quality: "fast".to_string(),
             seven_zip_quality: "fast".to_string(),
             zstd_quality: "fast".to_string(),
@@ -372,3 +377,7 @@ mod tests {
 #[cfg(test)]
 #[path = "config/tests/tool_placements.rs"]
 mod tool_placement_tests;
+
+#[cfg(test)]
+#[path = "config/tests/archive_format.rs"]
+mod archive_format_tests;

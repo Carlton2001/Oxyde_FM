@@ -98,6 +98,18 @@ impl OxydeApp {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        self.begin_rename_with_extension(path, is_dir, inline, None, window, cx);
+    }
+
+    pub(super) fn begin_rename_with_extension(
+        &mut self,
+        path: String,
+        is_dir: bool,
+        inline: bool,
+        extension: Option<&str>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         // Rename and breadcrumb editing share the same input entity.
         if self.breadcrumb_editing {
             self.cancel_breadcrumb_edit(cx);
@@ -107,16 +119,9 @@ impl OxydeApp {
             .and_then(|name| name.to_str())
             .unwrap_or("")
             .to_string();
-        let selected_len = if is_dir {
-            initial_name.len()
-        } else {
-            std::path::Path::new(&initial_name)
-                .file_stem()
-                .and_then(|stem| stem.to_str())
-                .map(str::len)
-                .unwrap_or(initial_name.len())
-        };
+        let selected_len = initial_selection_len(&initial_name, is_dir, extension);
         let initial_selection = Some(0..selected_len);
+
         let Some(handle) = self.handle.clone() else {
             return;
         };
@@ -532,3 +537,20 @@ impl OxydeApp {
         }
     }
 }
+
+fn initial_selection_len(name: &str, is_dir: bool, extension: Option<&str>) -> usize {
+    if is_dir {
+        return name.len();
+    }
+    if let Some(extension) = extension {
+        if let Some(stem) = name.strip_suffix(&format!(".{extension}")) {
+            return stem.len();
+        }
+    }
+    std::path::Path::new(name).file_stem().and_then(|stem| stem.to_str())
+        .map(str::len).unwrap_or(name.len())
+}
+
+#[cfg(test)]
+#[path = "rename/tests/selection.rs"]
+mod selection_tests;

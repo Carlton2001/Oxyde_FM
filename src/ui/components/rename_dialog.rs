@@ -41,9 +41,7 @@ pub fn render_rename_dialog(
             )
         });
 
-    Modal::new("rename-dialog", cx.i18n().text(title), body)
-        .header_background(theme.surface)
-        .body_background(theme.active_background)
+    let mut modal = Modal::new("rename-dialog", cx.i18n().text(title), body)
         .title_icon(if view.archive_creation.is_some() {
             "icons/archive.svg"
         } else {
@@ -53,12 +51,44 @@ pub fn render_rename_dialog(
         .body_gap(rems(0.375))
         .on_backdrop_dismiss(move |_, cx| {
             backdrop_handle.update(cx, |this, cx| this.cancel_rename(cx));
-        })
+        });
+    if let Some((_, extension)) = &view.archive_creation {
+        let mut formats = div().flex().flex_1().min_w_0().gap(rems(0.5));
+        for (format, label, suffix) in [
+            ("zip", "Zip", "zip"),
+            ("7z", "7z", "7z"),
+            ("tar", "Tar", "tar"),
+            ("zst", "Zst", "tar.zst"),
+        ] {
+            let format_handle = cancel_handle.clone();
+            formats = formats.child(
+                button_style(
+                    action_button(format!("archive-format-{format}"))
+                        .w(rems(3.25))
+                        .flex_none()
+                        .text_center(),
+                    theme,
+                    if extension == suffix {
+                        ButtonVariant::Primary
+                    } else {
+                        ButtonVariant::Secondary
+                    },
+                    true,
+                )
+                .child(label)
+                .on_mouse_down(MouseButton::Left, move |_, _, cx| {
+                    format_handle.update(cx, |this, cx| this.select_archive_format(format, cx));
+                }),
+            );
+        }
+        modal = modal.action(formats);
+    }
+    modal
         .action(
             button_style(
                 action_button("rename-cancel"),
                 theme,
-                ButtonVariant::Ghost,
+                ButtonVariant::Secondary,
                 true,
             )
             .child(cx.i18n().text(Message::Cancel))

@@ -624,3 +624,5 @@ operations-item-skipped = Ignoré
 operations-item-partial = Partiellement traité
 operations-item-unknown = État inconnu
 operations-item-interrupted = Interrompu
+
+default-archive-format = Type d’archive par défaut

@@ -28,7 +28,6 @@ impl OxydeApp {
 
     pub fn execute_compress_selected(
         &mut self,
-        format: &str,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -39,16 +38,40 @@ impl OxydeApp {
         let Some(first) = paths.first() else {
             return;
         };
-        let extension = if format == "zst" { "tar.zst" } else { format };
+        let format = self.default_archive_format().to_string();
+        let extension = if format == "zst" { "tar.zst" } else { &format };
         let destination = first.with_extension(extension);
-        self.begin_rename(
+        self.begin_rename_with_extension(
             destination.to_string_lossy().into_owned(),
             false,
             false,
+            Some(extension),
             window,
             cx,
         );
         self.archive_creation = Some((paths, extension.to_string()));
+    }
+
+    pub(crate) fn default_archive_format(&self) -> &str {
+        match self.config.default_archive_format.as_str() {
+            "7z" => "7z", "tar" => "tar", "zst" => "zst", _ => "zip",
+        }
+    }
+    pub(crate) fn set_default_archive_format(&mut self, format: &str, cx: &mut Context<Self>) {
+        self.config.default_archive_format = format.into();
+        self.save_preferences(cx);
+        cx.notify();
+    }
+    pub(crate) fn select_archive_format(&mut self, format: &str, cx: &mut Context<Self>) {
+        let Some((_, extension)) = self.archive_creation.as_mut() else { return; };
+        let next = if format == "zst" { "tar.zst" } else { &format };
+        self.editing_text = archive_name_for_format(&self.editing_text, extension, next);
+        *extension = next.into();
+        if let Some(input) = &self.editing_view {
+            input.update(cx, |input, cx| input.set_content(self.editing_text.clone(), cx));
+        }
+        self.rename_error = None;
+        cx.notify();
     }
 
     pub fn execute_extract_archive(&mut self, path: String, cx: &mut Context<Self>) {
@@ -131,3 +154,14 @@ fn extraction_jobs(paths: Vec<String>) -> Vec<(std::path::PathBuf, std::path::Pa
 #[cfg(test)]
 #[path = "archives/tests/extraction.rs"]
 mod extraction_tests;
+
+fn archive_name_for_format(name: &str, previous: &str, next: &str) -> String {
+    let suffix = format!(".{previous}");
+    let stem = if name.to_ascii_lowercase().ends_with(&suffix) {
+        &name[..name.len() - suffix.len()]
+    } else { name };
+    format!("{stem}.{next}")
+}
+#[cfg(test)]
+#[path = "archives/tests/creation.rs"]
+mod creation_tests;

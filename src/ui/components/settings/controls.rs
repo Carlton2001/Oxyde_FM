@@ -41,6 +41,7 @@ pub(super) fn picker(
     let paint_handle = handle.clone();
     let action = Rc::new(move |cx: &mut App| {
             handle.update(cx, |view, cx| {
+                view.archive_format_bounds = None;
                 if kind == SettingsPicker::About {
                     view.settings_about_open = !view.settings_about_open;
                     view.settings_picker = None;

@@ -925,3 +925,5 @@ operations-item-skipped = Übersprungen
 operations-item-partial = Teilweise bearbeitet
 operations-item-unknown = Status unbekannt
 operations-item-interrupted = Unterbrochen
+
+default-archive-format = Standard-Archivformat

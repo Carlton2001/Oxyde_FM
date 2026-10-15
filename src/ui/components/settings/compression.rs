@@ -5,7 +5,7 @@ use gpui::prelude::*;
 use gpui::*;
 use super::controls::icon;
 
-pub(super) fn compression_table(view: &OxydeApp, handle: Entity<OxydeApp>, cx: &App) -> Vec<AnyElement> {
+pub(super) fn compression_table(view: &OxydeApp, handle: Entity<OxydeApp>, window: &mut Window, cx: &mut Context<OxydeApp>) -> Vec<AnyElement> {
     let theme = *cx.theme();
     let i18n = cx.i18n();
     let header = div()
@@ -32,7 +32,7 @@ pub(super) fn compression_table(view: &OxydeApp, handle: Entity<OxydeApp>, cx: &
                     .child(i18n.text(message))
             }),
         );
-    let mut rows = vec![header.into_any_element()];
+    let mut rows = vec![super::default_format::render(view, handle.clone(), window, cx), header.into_any_element()];
     for (format, label) in [("zip", "ZIP"), ("7z", "7z"), ("zst", "Zst")] {
         let configured = view.compression_quality(format);
         let selected = if configured == "fast" || configured == "best" {

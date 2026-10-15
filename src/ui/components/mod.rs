@@ -408,53 +408,14 @@ fn oxyde_context_menu_items_raw(
         on_hover: None,
     });
 
-    let choices = ["zip", "7z", "tar", "zst"]
-        .into_iter()
-        .map(|format| {
-            let h = h_app.clone();
-            let mut args = crate::ui::i18n::FluentArgs::new();
-            args.set("format", format);
-            crate::ui::components::dropdown::DropdownItem::new(
-                i18n.text_with_args(Message::ArchiveFormat, &args)
-                    .to_string(),
-                move |window, app| {
-                    h.update(app, |this, cx| {
-                        this.context_menus.clear();
-                        this.execute_compress_selected(format, window, cx);
-                    });
-                },
-            )
-            .icon(IconName::Archive)
-        })
-        .collect::<Vec<_>>();
     let h = h_app.clone();
-    items.push(
-        crate::ui::components::dropdown::DropdownItem::new(
-            i18n.text(Message::Compress).to_string(),
-            |_, _| {},
-        )
-        .icon(IconName::Archive)
-        .stay_open(true)
-        .has_submenu(true)
-        .on_hover(move |position, open_left, app| {
+    items.push(crate::ui::components::dropdown::DropdownItem::new(
+        i18n.text(Message::Compress).to_string(), move |window, app| {
             h.update(app, |this, cx| {
-                use crate::ui::app::{ContextMenuContent, ContextMenuInstance};
-                this.context_menus.truncate(1);
-                this.context_menus.push(ContextMenuInstance {
-            native_bounds: None,
-                    position,
-                    content: ContextMenuContent::Items(choices.clone(), None),
-                    scroll_handle: UniformListScrollHandle::new(),
-                    width: px(0.0),
-                    bottom_padding: 0.0,
-                    open_left,
-                    hovered_item: None,
-                    native_request_id: None,
-                });
-                cx.notify();
+                this.context_menus.clear();
+                this.execute_compress_selected(window, cx);
             });
-        }),
-    );
+        }).icon(IconName::Archive));
 
     if !is_dir
         && matches!(

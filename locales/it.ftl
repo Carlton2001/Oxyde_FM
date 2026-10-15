@@ -925,3 +925,5 @@ operations-item-skipped = Ignorato
 operations-item-partial = Elaborato parzialmente
 operations-item-unknown = Stato sconosciuto
 operations-item-interrupted = Interrotto
+
+default-archive-format = Formato archivio predefinito

@@ -618,3 +618,5 @@ operations-item-skipped = Skipped
 operations-item-partial = Partially processed
 operations-item-unknown = Unknown status
 operations-item-interrupted = Interrupted
+
+default-archive-format = Default archive format
