@@ -1,6 +1,6 @@
 use crate::ui::components::tooltip::NativeTooltipExt;
 use super::OxydeApp;
-use crate::ui::components::input::TextInput;
+use crate::ui::components::input::{InputAppearance, TextInput, TextInputOptions};
 use crate::ui::i18n::{FluentArgs, I18nContext, Message};
 use crate::ui::theme::ThemeContext;
 use gpui::prelude::*;
@@ -636,10 +636,10 @@ impl OxydeApp {
                         this.open_text_context_menu(input, selected, position, window, cx)
                     });
                 },
-                true,
-                true,
-                false,
-                None,
+                TextInputOptions {
+                    appearance: InputAppearance::Bare,
+                    ..Default::default()
+                },
                 window,
             )
         });

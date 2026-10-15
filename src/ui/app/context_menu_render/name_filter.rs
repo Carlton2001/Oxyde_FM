@@ -80,7 +80,6 @@ impl OxydeApp {
         header: Some(
             div()
                 .w(px(input_width))
-                .h(px(crate::ui::style::row_height()))
                 .child(input.clone())
                 .into_any_element(),
         ),

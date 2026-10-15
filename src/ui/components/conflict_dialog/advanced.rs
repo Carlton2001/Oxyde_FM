@@ -34,6 +34,7 @@ pub(super) fn render_advanced_body(
     rows: Vec<usize>,
     comparison: Div,
     handle: &Entity<OxydeApp>,
+    window: &Window,
     cx: &mut Context<OxydeApp>,
 ) -> Div {
     let t = *cx.theme();
@@ -114,16 +115,11 @@ pub(super) fn render_advanced_body(
             input.set_placeholder(cx.i18n().text(Message::ConflictSearch), cx)
         });
         tabs = tabs.child(div().flex_1()).child(
-            div()
+            crate::ui::components::input::field_frame(&input, window, cx)
                 .relative()
                 .w(rems(15.0))
-                .h(rems(2.25))
                 .flex_none()
-                .rounded(rems(0.375))
-                .bg(t.surface)
-                .border(rems(0.0625))
-                .border_color(t.border)
-                .child(div().h_full().pr(rems(1.5)).child(input))
+                .child(div().flex_1().min_w_0().h_full().pr(rems(1.5)).child(input))
                 .child(
                     div().absolute().right(rems(0.75)).top(rems(0.625)).child(
                         svg()

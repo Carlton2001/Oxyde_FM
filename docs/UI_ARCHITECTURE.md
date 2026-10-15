@@ -132,11 +132,32 @@ Les clés manquantes ou impossibles à formater retombent sur le français ; si 
 
 ## Composants partagés et modales
 
+### Champs de saisie
+
+Les nouveaux champs classiques utilisent `TextInput::new` avec
+`TextInputOptions::default()` depuis `components::input`. Le composant fournit
+directement le cadre standard : hauteur 2,25 rem, texte 0,8125 rem, interligne
+1,25, fond `surface`, texte `text`, bordure `border` puis `accent` au focus,
+rayon `rounded_md` et marges horizontales de 0,75 rem. Ne pas recréer ce style
+dans chaque fenêtre ni imposer une hauteur différente au parent. Le bouton
+Effacer est activé explicitement par `clearable: true`.
+
+Les champs composés utilisent `input::field_frame(&input, window, cx)` avec un
+éditeur `InputAppearance::Embedded`, placé dans un conteneur
+`flex_1().min_w_0().h_full()`, et leurs icônes/commandes dans le même cadre.
+Le cadre partage exactement la surface du champ autonome et porte la bordure
+de focus. `Bare` supprime aussi les marges pour les contrôles qui les possèdent
+déjà ; `Inline` conserve la géométrie et la typographie du contenu environnant
+pour le renommage et l'édition du chemin. Ces variantes sont des exceptions
+explicites, pas le modèle d'une nouvelle fenêtre de formulaire. Le modèle et
+les callbacks restent chez l'appelant. Voir [INPUTS_AUDIT.md](INPUTS_AUDIT.md)
+pour l'inventaire, les exceptions et les exemples d'utilisation.
+
 Factoriser lorsqu'au moins deux usages partagent une structure ou un comportement stable. Une ressemblance visuelle seule ne suffit pas : préserver les différences utiles de taille, d'interaction, de focus et d'accessibilité.
 
 `src/ui/components/modal.rs` fournit `Modal`, un composant de présentation sans dépendance à `OxydeApp` :
 
-Les nouvelles fenêtres popup internes adoptent la présentation compacte de Tauri : barre de titre de 2,75 rem (texte de 0,875 rem, poids Medium), séparée du corps par une bordure ; corps avec marges horizontales de 1 rem et verticales de 1,25 rem ; pied avec bordure supérieure et marges de 0,625 rem × 1 rem. `Modal` applique ce cadre par défaut. Les formulaires utilisent `modal::form_row` pour aligner les libellés à gauche (5,5 rem) et les champs à droite, avec un intervalle de 0,75 rem ; le texte des formulaires et boutons mesure 0,8125 rem. Les champs compacts mesurent 2 rem de haut, les boutons ont une marge verticale de 0,375 rem. Tous les boutons de modales passent par `modal::action_button` ; le corps utilise un texte de 0,8125 rem et un intervalle de 0,375 rem par défaut. Les modales utilisent un interligne de 1,25 fois la taille du texte ; les formulaires réseau espacent leurs lignes de 0,375 rem. Les titres personnalisés conservent ces dimensions. Garder les séparateurs entre groupes de champs et les couleurs sémantiques dans les deux thèmes.
+Les nouvelles fenêtres popup internes adoptent la présentation compacte de Tauri : barre de titre de 2,75 rem (texte de 0,875 rem, poids Medium), séparée du corps par une bordure ; corps avec marges horizontales de 1 rem et verticales de 1,25 rem ; pied avec bordure supérieure et marges de 0,625 rem × 1 rem. `Modal` applique ce cadre par défaut. Les formulaires utilisent `modal::form_row` pour aligner les libellés à gauche (5,5 rem) et les champs à droite, avec un intervalle de 0,75 rem ; le texte des formulaires et boutons mesure 0,8125 rem. Les champs classiques suivent le modèle partagé de 2,25 rem de haut, les boutons ont une marge verticale de 0,375 rem. Tous les boutons de modales passent par `modal::action_button` ; le corps utilise un texte de 0,8125 rem et un intervalle de 0,375 rem par défaut. Les modales utilisent un interligne de 1,25 fois la taille du texte ; les formulaires réseau espacent leurs lignes de 0,375 rem. Les titres personnalisés conservent ces dimensions. Garder les séparateurs entre groupes de champs et les couleurs sémantiques dans les deux thèmes.
 
 - l'appelant fournit le contenu, les boutons et les callbacks ;
 - l'état métier et les opérations restent dans la vue appelante ;

@@ -140,6 +140,7 @@ pub(super) fn render(
                     .py(rems(0.5))
                     .border(rems(0.0625))
                     .border_color(theme.border)
+                    .bg(theme.surface)
                     .rounded_sm()
                     .h(rems(2.0))
                     .py_0()

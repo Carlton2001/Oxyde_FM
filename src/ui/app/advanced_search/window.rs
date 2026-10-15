@@ -1,3 +1,4 @@
+use crate::ui::components::input::{InputAppearance, TextInputOptions};
 use super::super::{ContextMenuContent, ContextMenuInstance};
 use super::{parse_advanced_path, AdvancedSearchDialog, AdvancedSearchWindow, OxydeApp};
 use crate::ui::{
@@ -152,10 +153,11 @@ impl AdvancedSearchWindow {
                             this.open_text_context_menu(input, selected, position, window, cx)
                         });
                     },
-                    false,
-                    true,
-                    false,
-                    None,
+                    TextInputOptions {
+                        appearance: InputAppearance::Embedded,
+                        clearable: true,
+                        ..Default::default()
+                    },
                     window,
                 )
             }));

@@ -200,6 +200,7 @@ pub(super) fn render(
                     .items_center()
                     .border(rems(0.0625))
                     .border_color(theme.border)
+                    .bg(theme.surface)
                     .rounded_sm()
                     .child(name),
             ),

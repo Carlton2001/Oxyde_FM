@@ -113,14 +113,8 @@ impl Render for DuplicateWindow {
                                 .items_center()
                                 .gap(rems(1.0))
                                 .child(
-                                    div()
+                                    crate::ui::components::input::field_frame(&self.filter, window, cx)
                                         .flex_1()
-                                        .h(rems(2.5))
-                                        .border(rems(0.0625))
-                                        .border_color(theme.border)
-                                        .rounded(rems(0.375))
-                                        .flex()
-                                        .items_center()
                                         .pl(rems(0.75))
                                         .child(
                                             svg()

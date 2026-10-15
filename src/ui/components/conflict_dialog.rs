@@ -10,7 +10,7 @@ use controls::{edit, restore_focus, visible};
 use frame::render_frame;
 
 use crate::ui::app::{OxydeApp, PendingFileOperation};
-use crate::ui::components::input::TextInput;
+use crate::ui::components::input::{InputAppearance, TextInput, TextInputOptions};
 use crate::ui::i18n::{FluentArgs, I18nContext, Message};
 use gpui::prelude::*;
 use gpui::*;
@@ -96,10 +96,11 @@ pub(crate) fn render_conflict_dialog(
                     restore_focus(&escape, window, cx);
                 },
                 |_, _, _, _, _| {},
-                false,
-                true,
-                false,
-                None,
+                TextInputOptions {
+                    appearance: InputAppearance::Embedded,
+                    clearable: true,
+                    ..Default::default()
+                },
                 window,
             )
         });
@@ -121,6 +122,7 @@ pub(crate) fn render_conflict_dialog(
             rows,
             comparison,
             &handle,
+            window,
             cx,
         )
     } else {

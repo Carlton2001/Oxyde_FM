@@ -1,3 +1,4 @@
+use crate::ui::components::input::{InputAppearance, TextInputOptions};
 use super::{count_label, row, Item};
 use crate::ui::app::OxydeApp;
 use crate::ui::components::{input::TextInput, tool_window};
@@ -58,10 +59,11 @@ impl FilesWindow {
                     window.remove_window();
                 },
                 |_, _, _, _, _| {},
-                false,
-                true,
-                false,
-                None,
+                TextInputOptions {
+                    appearance: InputAppearance::Embedded,
+                    clearable: true,
+                    ..Default::default()
+                },
                 window,
             )
         });
@@ -219,7 +221,7 @@ impl Render for FilesWindow {
                     .border_b(rems(0.0625))
                     .border_color(theme.border)
                     .child(
-                        crate::ui::components::input::field_frame(cx)
+                        crate::ui::components::input::field_frame(&self.input, window, cx)
                             .child(
                                 svg()
                                     .path("icons/search.svg")

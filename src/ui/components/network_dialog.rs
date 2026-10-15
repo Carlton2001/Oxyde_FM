@@ -169,19 +169,17 @@ fn field(
 ) -> AnyElement {
     let value = input.read(cx).content();
     let body = if busy {
-        div()
-            .h(rems(2.0))
-            .px_3()
-            .flex()
-            .items_center()
-            .child(if secret {
+        crate::ui::components::input::read_only_field(
+            if secret {
                 "*".repeat(value.chars().count())
             } else {
                 value.to_string()
-            })
-            .into_any_element()
+            },
+            cx,
+        )
+        .into_any_element()
     } else {
-        div().h(rems(2.0)).child(input).into_any_element()
+        input.into_any_element()
     };
     form_row(label, body, cx).into_any_element()
 }
@@ -374,6 +372,7 @@ pub(crate) fn render_network_dialog(
                     theme.border
                 })
                 .rounded_md()
+                .bg(theme.surface)
                 .px_3()
                 .h(rems(2.0))
                 .when(!busy && !dialog.loading, |d| {
@@ -580,6 +579,7 @@ pub(crate) fn render_network_dialog(
     let submit = handle.clone();
     let backdrop = handle.clone();
     let modal = Modal::new("network-dialog", title, body)
+        .body_background(theme.active_background)
         .on_backdrop_dismiss(move |_, cx| {
             backdrop.update(cx, |view, cx| {
                 if let Some(dialog) = &mut view.network_dialog {

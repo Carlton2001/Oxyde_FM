@@ -1,3 +1,4 @@
+use crate::ui::components::input::TextInputOptions;
 use super::*;
 use oxyde_lib::models::DriveInfo;
 use std::collections::HashSet;
@@ -201,10 +202,10 @@ impl OxydeApp {
                                 this.open_text_context_menu(input, selected, point, window, cx)
                             })
                         },
-                        false,
-                        false,
-                        false,
-                        None,
+                        TextInputOptions {
+                            clearable: true,
+                            ..Default::default()
+                        },
                         window,
                     );
                     cx.on_focus(&input.focus_handle, window, move |_, _, cx| {

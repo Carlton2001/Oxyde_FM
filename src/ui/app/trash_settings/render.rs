@@ -39,7 +39,7 @@ pub(crate) fn render(
     let close = handle.clone();
     let keyboard = handle.clone();
     let title_close = handle.clone();
-    let body = render_body(dialog, &handle, empty, size, cx);
+    let body = render_body(dialog, &handle, empty, size, window, cx);
     div()
         .absolute()
         .inset_0()
@@ -139,6 +139,7 @@ fn render_body(
     handle: &Entity<OxydeApp>,
     empty: Entity<OxydeApp>,
     size: String,
+    window: &Window,
     cx: &mut Context<OxydeApp>,
 ) -> Div {
     let theme = *cx.theme();
@@ -356,15 +357,8 @@ fn render_body(
                             ),
                     )
                     .child(
-                        div()
-                            .flex()
-                            .items_center()
+                        crate::ui::components::input::field_frame(&dialog.input, window, cx)
                             .flex_none()
-                            .h(rems(1.75))
-                            .bg(theme.surface)
-                            .border(rems(0.0625))
-                            .border_color(theme.border)
-                            .rounded_sm()
                             .overflow_hidden()
                             .opacity(if config.nuke_on_delete || disabled {
                                 0.5

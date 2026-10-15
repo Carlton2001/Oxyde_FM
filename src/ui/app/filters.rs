@@ -1,3 +1,4 @@
+use crate::ui::components::input::TextInputOptions;
 use crate::ui::app::{ContextMenuContent, ContextMenuHeader, ContextMenuInstance, OxydeApp};
 use crate::ui::i18n::{I18nContext, Message};
 use gpui::*;
@@ -286,10 +287,10 @@ impl OxydeApp {
                         this.open_text_context_menu(input, has_selection, position, window, cx)
                     });
                 },
-                false,
-                false,
-                false,
-                None,
+                TextInputOptions {
+                    clearable: true,
+                    ..Default::default()
+                },
                 window,
             )
         });
@@ -375,10 +376,10 @@ impl OxydeApp {
                         this.open_text_context_menu(input, has_selection, position, window, cx)
                     });
                 },
-                false,
-                false,
-                false,
-                None,
+                TextInputOptions {
+                    clearable: true,
+                    ..Default::default()
+                },
                 window,
             )
         });

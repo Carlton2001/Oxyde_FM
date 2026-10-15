@@ -25,7 +25,7 @@ pub fn render_rename_dialog(
 
     let body = div()
         .child(
-            div().h(rems(2.0)).w_full().child(
+            div().w_full().child(
                 input
                     .map(|input| input.into_any_element())
                     .unwrap_or_else(|| div().into_any_element()),
@@ -42,6 +42,7 @@ pub fn render_rename_dialog(
         });
 
     Modal::new("rename-dialog", cx.i18n().text(title), body)
+        .body_background(theme.active_background)
         .title_icon(if view.archive_creation.is_some() {
             "icons/archive.svg"
         } else {

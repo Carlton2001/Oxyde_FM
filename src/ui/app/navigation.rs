@@ -1,7 +1,7 @@
 use crate::ui::components::sidebar::sidebar_paths_equal;
 use crate::ui::scale::{logical};
 use crate::ui::app::OxydeApp;
-use crate::ui::components::input::TextInput;
+use crate::ui::components::input::{InputAppearance, TextInput, TextInputOptions};
 use crate::ui::i18n::{I18nContext, Message};
 use gpui::*;
 use oxyde_lib::commands::io::list_dir;
@@ -66,10 +66,12 @@ impl OxydeApp {
                         });
                     }
                 },
-                true,
-                false,
-                true,
-                Some(0..path.len()),
+                TextInputOptions {
+                    appearance: InputAppearance::Inline,
+                    submit_on_outside: true,
+                    initial_selection: Some(0..path.len()),
+                    ..Default::default()
+                },
                 window,
             )
             .with_path_submit()

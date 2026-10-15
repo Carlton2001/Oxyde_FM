@@ -1,5 +1,5 @@
 use super::PropertiesWindow;
-use crate::ui::components::input::TextInput;
+use crate::ui::components::input::{TextInput, TextInputOptions};
 use crate::ui::i18n::Message;
 use gpui::*;
 
@@ -58,10 +58,10 @@ impl PropertiesWindow {
                                 this.open_text_context_menu(input, selected, point, window, cx)
                             })
                         },
-                        false,
-                        false,
-                        false,
-                        None,
+                        TextInputOptions {
+                            clearable: true,
+                            ..Default::default()
+                        },
                         window,
                     )
                 }));

@@ -98,7 +98,7 @@ impl AdvancedSearchWindow {
         if d.help {
             body = self.render_advanced_help(body, handle.clone(), cx);
         } else {
-            body = self.render_advanced_settings(body, handle.clone(), units, cx);
+            body = self.render_advanced_settings(body, handle.clone(), units, window, cx);
         }
         if d.error {
             body = body.child(

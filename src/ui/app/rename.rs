@@ -1,5 +1,5 @@
 use super::{OxydeApp, Renommer, ToastKind};
-use crate::ui::components::input::TextInput;
+use crate::ui::components::input::{InputAppearance, TextInput, TextInputOptions};
 use crate::ui::i18n::{FluentArgs, I18n, I18nContext, Message};
 use gpui::*;
 
@@ -168,10 +168,16 @@ impl OxydeApp {
                         });
                     }
                 },
-                true,
-                false,
-                inline,
-                initial_selection,
+                TextInputOptions {
+                    appearance: if inline {
+                        InputAppearance::Inline
+                    } else {
+                        InputAppearance::Standard
+                    },
+                    submit_on_outside: inline,
+                    initial_selection: initial_selection,
+                    ..Default::default()
+                },
                 window,
             )
         });

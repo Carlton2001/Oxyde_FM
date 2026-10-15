@@ -22,6 +22,7 @@ impl AdvancedSearchWindow {
         mut body: Div,
         handle: Entity<Self>,
         units: [&'static str; 5],
+        window: &Window,
         cx: &mut Context<Self>,
     ) -> Div {
         let d = self.advanced_search.as_ref().unwrap();
@@ -42,7 +43,7 @@ impl AdvancedSearchWindow {
             d.inputs[index].update(cx, |input, cx| {
                 input.set_placeholder(cx.i18n().text(placeholder), cx)
             });
-            let mut field = crate::ui::components::input::field_frame(cx);
+            let mut field = crate::ui::components::input::field_frame(&d.inputs[index], window, cx);
             if index != 1 {
                 field = field.child(self.advanced_toggle(
                     if index == 0 { 0 } else { 1 },
@@ -176,16 +177,9 @@ impl AdvancedSearchWindow {
                 if index != start {
                     fields = fields.child("—");
                 }
-                let mut field = div()
+                let mut field = crate::ui::components::input::field_frame(&d.inputs[index], window, cx)
                     .flex_1()
                     .min_w_0()
-                    .flex()
-                    .items_center()
-                    .h(rems(2.25))
-                    .rounded_md()
-                    .border(rems(0.0625))
-                    .border_color(theme.border)
-                    .bg(theme.surface)
                     .child(
                         div()
                             .flex_1()

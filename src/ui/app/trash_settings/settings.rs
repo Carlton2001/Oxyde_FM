@@ -1,3 +1,4 @@
+use crate::ui::components::input::{InputAppearance, TextInputOptions};
 use super::*;
 
 impl OxydeApp {
@@ -39,10 +40,10 @@ impl OxydeApp {
                         this.open_text_context_menu(input, selection, position, window, cx)
                     });
                 },
-                true,
-                true,
-                false,
-                None,
+                TextInputOptions {
+                    appearance: InputAppearance::Bare,
+                    ..Default::default()
+                },
                 window,
             )
         });

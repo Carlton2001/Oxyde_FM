@@ -1,6 +1,6 @@
 use super::DuplicateWindow;
 use super::super::OxydeApp;
-use crate::ui::components::input::TextInput;
+use crate::ui::components::input::{InputAppearance, TextInput, TextInputOptions};
 use crate::ui::i18n::{FluentArgs, I18nContext, Message};
 use gpui::*;
 use oxyde_lib::commands::duplicates::{cancel_find_duplicates, DuplicateSearchState};
@@ -144,10 +144,11 @@ impl DuplicateWindow {
                 |_, _| {},
                 |_, _| {},
                 |_, _, _, _, _| {},
-                false,
-                true,
-                false,
-                None,
+                TextInputOptions {
+                    appearance: InputAppearance::Embedded,
+                    clearable: true,
+                    ..Default::default()
+                },
                 window,
             )
         });

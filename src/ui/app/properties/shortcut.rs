@@ -25,7 +25,6 @@ pub(super) fn fields(
         body = body.child(crate::ui::components::modal::form_row_with_label_width(
             cx.i18n().text(message),
             div()
-                .h(rems(2.0))
                 .flex_1()
                 .min_w_0()
                 .child(dialog.shortcut_inputs[index].clone()),
@@ -52,6 +51,7 @@ pub(super) fn fields(
                     .justify_between()
                     .border(rems(0.0625))
                     .border_color(theme.border)
+                    .bg(theme.surface)
                     .rounded_sm()
                     .child(
                         canvas(

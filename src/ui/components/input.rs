@@ -1,6 +1,9 @@
 mod completion_menu;
 mod field;
-pub(crate) use field::field_frame;
+mod options;
+mod render;
+pub(crate) use field::{field_frame, read_only_field};
+pub(crate) use options::{InputAppearance, TextInputOptions};
 use crate::ui::scale::rem_pixels;
 use crate::ui::theme::ThemeContext;
 use gpui::prelude::*;
@@ -48,9 +51,7 @@ pub struct TextInput {
     on_context_menu: Box<dyn Fn(Entity<TextInput>, bool, Point<Pixels>, &mut Window, &mut App)>,
     cursor_visible: bool,
     blink_epoch: usize,
-    pub minimal: bool,
-    compact: bool,
-    submit_on_outside: bool,
+    options: TextInputOptions,
     password: bool,
     path_submit: bool,
     completions: Vec<String>,
@@ -177,14 +178,11 @@ impl TextInput {
         on_escape: impl Fn(&mut Window, &mut App) + 'static,
         on_context_menu: impl Fn(Entity<TextInput>, bool, Point<Pixels>, &mut Window, &mut App)
             + 'static,
-        minimal: bool,
-        compact: bool,
-        submit_on_outside: bool,
-        initial_selection: Option<std::ops::Range<usize>>,
+        mut options: TextInputOptions,
         window: &mut Window,
     ) -> Self {
         let len = initial_text.len();
-        let selected_range = initial_selection.unwrap_or(len..len);
+        let selected_range = options.initial_selection.take().unwrap_or(len..len);
         let selection_anchor = selected_range.start;
         let focus_handle = cx.focus_handle();
 
@@ -225,9 +223,7 @@ impl TextInput {
             on_context_menu: Box::new(on_context_menu),
             cursor_visible: true,
             blink_epoch: 0,
-            minimal,
-            compact,
-            submit_on_outside,
+            options,
         }
     }
 
@@ -771,136 +767,6 @@ impl EntityInputHandler for TextInput {
             index
         };
         Some(self.utf16_offset_for_byte(byte_index))
-    }
-}
-
-impl Render for TextInput {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let focus_handle = self.focus_handle.clone();
-        let is_focused = focus_handle.is_focused(window);
-        let theme = *cx.theme();
-        if !is_focused || self.completions.is_empty() { self.completion_anchor = None; }
-
-        div()
-            .relative()
-            .flex()
-            .items_center()
-            .key_context("TextInput")
-            .track_focus(&focus_handle)
-            .cursor(CursorStyle::IBeam)
-            .on_action(cx.listener(Self::backspace))
-            .on_action(cx.listener(Self::delete))
-            .on_action(cx.listener(Self::enter))
-            .on_action(cx.listener(Self::escape))
-            .on_action(cx.listener(Self::completion_up))
-            .on_action(cx.listener(Self::completion_down))
-            .on_action(cx.listener(Self::complete_path))
-            .on_action(cx.listener(Self::move_left))
-            .on_action(cx.listener(Self::move_right))
-            .on_action(cx.listener(Self::select_all))
-            .on_action(cx.listener(Self::copy))
-            .on_action(cx.listener(Self::cut))
-            .on_action(cx.listener(Self::paste))
-            .on_action(cx.listener(Self::home))
-            .on_action(cx.listener(Self::end))
-            .on_mouse_down(MouseButton::Left, cx.listener(Self::on_mouse_down))
-            .on_mouse_down(MouseButton::Right, cx.listener(Self::on_right_mouse_down))
-            .when(self.submit_on_outside, |div| {
-                div.on_mouse_down_out(cx.listener(Self::submit_on_outside_click))
-            })
-            .on_mouse_up(MouseButton::Left, cx.listener(Self::on_mouse_up))
-            .on_mouse_up_out(MouseButton::Left, cx.listener(Self::on_mouse_up))
-            .on_mouse_move(cx.listener(Self::on_mouse_move))
-            .bg(if self.compact {
-                hsla(0.0, 0.0, 0.0, 0.0)
-            } else {
-                theme.surface
-            })
-            .border(rems(0.0625))
-            .border_color(if self.compact {
-                hsla(0.0, 0.0, 0.0, 0.0)
-            } else if is_focused {
-                theme.accent
-            } else {
-                theme.border
-            })
-            .rounded_sm()
-            .when(self.compact, |s| s.rounded_none())
-            .when(self.minimal && !self.compact, |s| s.h_full().px_3())
-            .when(self.minimal && self.compact, |s| s.h_full().px(rems(0.0)))
-            .when(!self.minimal, |s| s.h_full().px_3())
-            .when(!self.minimal && !self.content.is_empty(), |s| s.pr(rems(0.125)))
-            .when(self.path_submit, |s| s.pr(rems(0.0625)))
-            .w_full()
-            .when(is_focused && !self.completions.is_empty(), |input| {
-                #[cfg(target_os = "windows")]
-                if crate::ui::components::popup::supported(window, cx) { return input.child(completion_menu::surface(cx.entity())); }
-                let menu = completion_menu::render(self, window, cx);
-                input.child(deferred(div().absolute().top(relative(1.0)).left_0().w_full().child(menu)))
-            })
-            .child(
-                div()
-                    .flex_1()
-                    .min_w_0()
-                    .flex()
-                    .items_center()
-                    .child(TextInputElement { input: cx.entity() }),
-            )
-            .when(self.path_submit, |input| {
-                input.child(
-                    div()
-                        .id("path-submit")
-                        .size_6()
-                        .ml_2()
-                        .flex_none()
-                        .flex()
-                        .occlude()
-                        .cursor(CursorStyle::Arrow)
-                        .items_center()
-                        .justify_center()
-                        .rounded_sm()
-                        .hover(|style| style.bg(theme.control_hover))
-                        .on_mouse_down(
-                            MouseButton::Left,
-                            cx.listener(|this, _, window, cx| {
-                                cx.stop_propagation();
-                                (this.on_enter)(window, cx);
-                            }),
-                        )
-                        .child(
-                            svg()
-                                .path("icons/arrow-right.svg")
-                                .size_4()
-                                .text_color(theme.text_muted),
-                        ),
-                )
-            })
-            .when(!self.minimal && !self.content.is_empty(), |s: Div| {
-                let h_clear = cx.entity().clone();
-                s.child(
-                    div().flex().items_center().child(
-                        div()
-                            .p_1()
-                            .rounded_md()
-                            .cursor(CursorStyle::Arrow)
-                            .hover(|s| s.bg(theme.control_hover))
-                            .on_mouse_down(MouseButton::Left, move |_, window, cx| {
-                                h_clear.update(cx, |this, cx| {
-                                    this.content.clear();
-                                    this.selected_range = 0..0;
-                                    (this.on_change)("", window, cx);
-                                    cx.notify();
-                                });
-                            })
-                            .child(
-                                svg()
-                                    .path("icons/x.svg")
-                                    .size_3()
-                                    .text_color(theme.text_muted),
-                            ),
-                    ),
-                )
-            })
     }
 }
 
