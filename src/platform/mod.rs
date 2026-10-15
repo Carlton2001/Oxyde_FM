@@ -92,6 +92,9 @@ impl ShellDeleteOutcome {
 /// Toute fonctionnalité native (lecteurs, ouverture, raccourcis, etc.)
 /// doit passer par ce trait plutôt qu'appeler directement les API OS.
 pub trait Platform: Send + Sync {
+    /// Available OneDrive sync roots configured for the current user.
+    fn onedrive_installed(&self) -> bool { false }
+    fn onedrive_folders(&self) -> Vec<crate::models::QuickAccessItem> { Vec::new() }
     fn show_startup_error(&self, _title: &str, message: &str) { eprintln!("{message}"); }
     #[doc(hidden)]
     fn check_broker_pressure(&self) -> std::io::Result<()> { Ok(()) }
@@ -629,3 +632,6 @@ mod windows_resource_pressure;
 mod windows_icon_pixels;
 #[cfg(target_os = "windows")]
 mod windows_icon_source;
+
+#[cfg(target_os = "windows")]
+mod windows_onedrive;

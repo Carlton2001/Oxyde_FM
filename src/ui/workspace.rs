@@ -89,6 +89,7 @@ pub enum SortDirection {
 
 #[derive(Clone, Debug)]
 pub enum SidebarItem {
+    OneDrive { item: QuickAccessItem },
     Header(Message),
     Pinned {
         item: QuickAccessItem,
@@ -226,6 +227,7 @@ pub enum LayoutNode {
 
 pub struct WorkspaceState {
     pub pinned_items: Vec<QuickAccessItem>,
+    pub onedrive_items: Vec<QuickAccessItem>,
     pub drives: Vec<DriveInfo>,
     pub layout: LayoutNode,
     pub active_pane_id: String,

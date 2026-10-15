@@ -118,6 +118,16 @@ pub(super) fn left_column(view: &OxydeApp, handle: Entity<OxydeApp>, left_width:
                 view.save_preferences(cx);
             },
         ))
+        .when(view.onedrive_installed, |body| body.child(settings_row(
+            i18n.text(Message::SettingsOnedrive),
+            i18n.text(Message::SettingsOnedriveDescription),
+            "icons/cloudy.svg",
+            view.show_onedrive(),
+            "toggle-onedrive",
+            handle.clone(),
+            theme,
+            |view, cx| view.toggle_onedrive(cx),
+        )))
         .child(settings_row(
             i18n.text(Message::SettingsNetwork),
             i18n.text(Message::SettingsNetworkDescription),

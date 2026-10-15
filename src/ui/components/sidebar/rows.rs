@@ -38,6 +38,7 @@ pub(super) fn render_sidebar_rows(
     range.map(|i| {
         let theme    = *OxydeTheme::global(cx);
         let item     = &items[i];
+        let is_onedrive = matches!(item, SidebarItem::OneDrive { .. });
         let h        = h.clone();
 
         match item {
@@ -54,7 +55,7 @@ pub(super) fn render_sidebar_rows(
             }
 
             // ── Quick-access (pinned) item ─────────────────
-            SidebarItem::Pinned { item } => {
+            SidebarItem::Pinned { item } | SidebarItem::OneDrive { item } => {
                 let path      = item.path.clone();
                 let is_sel    = sel.as_deref().is_some_and(|selected| sidebar_paths_equal(selected, &path));
                 let sel_bg:   Hsla = theme.selected;
@@ -132,11 +133,11 @@ pub(super) fn render_sidebar_rows(
                     .child(
                         div().w_4().h_4().mr_2().flex().items_center().justify_center().flex_shrink_0()
                             .child({
-                                let icon_path = match path.as_str() {
+                                let icon_path = if is_onedrive { "icons/cloudy.svg" } else { match path.as_str() {
                                     "__network_vincinity__" => "icons/globe.svg",
                                     "trash://" => "icons/trash-sidebar.svg",
                                     _ => "icons/pin.svg",
-                                };
+                                }};
                                 svg().path(icon_path).size_4().text_color(if path == "__network_vincinity__" || path == "trash://" { theme.text } else { theme.accent })
                             })
                     )

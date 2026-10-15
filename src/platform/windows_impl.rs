@@ -11,6 +11,9 @@ impl WindowsPlatform {
 }
 
 impl Platform for WindowsPlatform {
+    fn onedrive_installed(&self) -> bool { super::windows_onedrive::installed() }
+    fn onedrive_folders(&self) -> Vec<crate::models::QuickAccessItem> { super::windows_onedrive::folders() }
+
     fn show_startup_error(&self, title: &str, message: &str) {
         use windows::core::{HSTRING, PCWSTR};
         use windows::Win32::UI::WindowsAndMessaging::{MessageBoxW, MB_ICONERROR, MB_OK};

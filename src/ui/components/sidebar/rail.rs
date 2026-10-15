@@ -81,6 +81,7 @@ pub(super) fn render_sidebar_rail(
                 None,
                 Some(drive.path.chars().next().unwrap_or('/').to_string()),
             ),
+            SidebarItem::OneDrive { item } => (item.path.clone(), item.name.clone(), Some("icons/cloudy.svg"), None),
             SidebarItem::Pinned { item }
                 if item.path == "__network_vincinity__" || item.path == "trash://" =>
             {

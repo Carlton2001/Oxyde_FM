@@ -22,6 +22,7 @@ impl WorkspaceState {
 
         let mut state = Self {
             pinned_items,
+            onedrive_items: Vec::new(),
             drives,
             layout: LayoutNode::Pane(Box::new(initial_pane)),
             active_pane_id: pane_id,

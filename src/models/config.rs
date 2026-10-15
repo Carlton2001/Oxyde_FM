@@ -51,10 +51,12 @@ pub struct AppConfig {
     pub show_grid_thumbnails: bool,
     #[serde(default)]
     pub show_checkboxes: bool,
-    #[serde(default = "default_true")]
+    #[serde(default)]
     pub sync_sidebar_with_path: bool,
     #[serde(default)]
     pub show_network: bool,
+    #[serde(default = "default_true")]
+    pub show_onedrive: bool,
     /// Window-local top-left coordinates for the operations panel.
     #[serde(default)]
     pub operations_panel_position: Option<[f32; 2]>,
@@ -105,8 +107,9 @@ impl Default for AppConfig {
             default_turbo_mode: true,
             show_grid_thumbnails: false,
             show_checkboxes: false,
-            sync_sidebar_with_path: true,
+            sync_sidebar_with_path: false,
             show_network: true,
+            show_onedrive: true,
             operations_panel_position: None,
             confirm_delete: true,
             workspace_state: None,
@@ -257,7 +260,7 @@ mod tests {
         assert_eq!(missing.ui_rem_size, 16);
         assert!(!missing.use_system_icons);
         assert!(!missing.show_checkboxes);
-        assert!(missing.sync_sidebar_with_path);
+        assert!(!missing.sync_sidebar_with_path);
         let legacy: AppConfig =
             serde_json::from_str(r#"{"theme":"oxyde-light","language":"en-US"}"#).unwrap();
         assert_eq!(ThemeId::from_id(&legacy.theme), ThemeId::Light);

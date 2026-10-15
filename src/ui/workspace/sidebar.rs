@@ -13,6 +13,9 @@ impl WorkspaceState {
             }
         }
 
+        for item in &self.onedrive_items {
+            new_items.push(SidebarItem::OneDrive { item: item.clone() });
+        }
         new_items.push(SidebarItem::Header(Message::SidebarDrives));
 
         for drive in &self.drives {
@@ -86,3 +89,7 @@ impl WorkspaceState {
         self.refresh_sidebar();
     }
 }
+
+#[cfg(test)]
+#[path = "tests/onedrive.rs"]
+mod onedrive_tests;

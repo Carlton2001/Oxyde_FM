@@ -927,3 +927,6 @@ operations-item-unknown = Stato sconosciuto
 operations-item-interrupted = Interrotto
 
 default-archive-format = Formato archivio predefinito
+
+settings-onedrive = OneDrive
+settings-onedrive-description = Mostra OneDrive nella barra laterale quando è configurato.

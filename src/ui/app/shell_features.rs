@@ -72,12 +72,25 @@ impl OxydeApp {
         let request = self.quick_access_request;
         cx.spawn(async move |this, cx| {
             let result =
-                tokio::task::spawn_blocking(oxyde_lib::commands::system::get_quick_access_items)
+                tokio::task::spawn_blocking(|| (oxyde_lib::commands::system::get_quick_access_items(), oxyde_lib::platform::platform().onedrive_folders(), oxyde_lib::platform::platform().onedrive_installed()))
                     .await;
             let _ = this.update(cx, |this, cx| {
                 if this.quick_access_request != request {
                     return;
                 }
+                let result = result.map(|(items, roots, installed)| {
+                    if this.onedrive_installed != installed {
+                        this.onedrive_installed = installed;
+                        cx.notify();
+                    }
+                    let roots = if this.config.show_onedrive { roots } else { Vec::new() };
+                    if !this.state.onedrive_items.iter().map(|i| (&i.path, &i.name)).eq(roots.iter().map(|i| (&i.path, &i.name))) {
+                        this.state.onedrive_items = roots;
+                        this.state.refresh_sidebar();
+                        cx.notify();
+                    }
+                    items
+                });
                 match result {
                     Ok(Ok(items)) => {
                         if !this

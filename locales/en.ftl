@@ -620,3 +620,6 @@ operations-item-unknown = Unknown status
 operations-item-interrupted = Interrupted
 
 default-archive-format = Default archive format
+
+settings-onedrive = OneDrive
+settings-onedrive-description = Show OneDrive in the sidebar when configured.

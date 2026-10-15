@@ -45,7 +45,7 @@ pub(super) fn render_sidebar_tree(
         .iter()
         .map(|item| match item {
             SidebarItem::Header(_) => 0.0,
-            SidebarItem::Pinned { item } => {
+            SidebarItem::Pinned { item } | SidebarItem::OneDrive { item } => {
                 pinned_display_name(item, _cx.i18n()).len() as f32 * logical(7.0) + logical(60.0)
             }
             SidebarItem::Drive { drive, .. } => {

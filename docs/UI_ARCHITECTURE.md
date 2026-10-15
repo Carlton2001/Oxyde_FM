@@ -419,3 +419,20 @@ marges sym�triques sans goutti�re de scrollbar pour ce menu sans lignes.
 Les modales int�gr�es utilisent les deux ombres externes du preset GPUI,
 redimensionn�es avec le zoom ; le cadre ne d�coupe pas ses ombres. La v�rification
 du code et des couches d'ombre ne remplace pas une v�rification visuelle native.
+
+### OneDrive dans la sidebar
+
+Sous Windows, Platform recherche en arrière-plan le client OneDrive dans ses
+emplacements utilisateur/machine standard et les racines UserFolder des comptes
+configurés dans le registre utilisateur. Seuls les dossiers existants sont
+présentés, après les épinglés et avant le séparateur des lecteurs, avec le SVG
+Lucide officiel cloudy et un bouton par compte dans le rail réduit.
+La préférence show_onedrive est activée par défaut. Les racines sont actualisées
+avec les accès rapides au démarrage puis toutes les cinq secondes. Une installation
+sans compte configuré ne produit aucune entrée ; les installations hors des
+emplacements standard ne sont pas détectées. Le rendu natif reste à vérifier sur
+une machine équipée de OneDrive.
+
+Le réglage OneDrive est visible uniquement si le client est installé, indépendamment
+des comptes configurés et de la valeur de show_onedrive. Cette disponibilité est
+actualisée en arrière-plan avec les accès rapides.

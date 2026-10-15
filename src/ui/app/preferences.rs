@@ -105,6 +105,7 @@ impl OxydeApp {
             return;
         }
         self.config.reset_preferences();
+        self.refresh_quick_access(cx);
         self.show_hidden = self.config.show_hidden;
         self.show_system = self.config.show_system;
         self.show_media_previews = self.config.show_previews;
@@ -255,6 +256,17 @@ impl OxydeApp {
         self.config.show_network = !self.config.show_network;
         self.save_preferences(cx);
     }
+    pub(crate) fn toggle_onedrive(&mut self, cx: &mut Context<Self>) {
+        self.config.show_onedrive = !self.config.show_onedrive;
+        self.save_preferences(cx);
+        if !self.config.show_onedrive {
+            self.state.onedrive_items.clear();
+            self.state.refresh_sidebar();
+        }
+        self.refresh_quick_access(cx);
+    }
+    pub(crate) fn show_onedrive(&self) -> bool { self.config.show_onedrive }
+
     pub(crate) fn show_network(&self) -> bool { self.config.show_network }
 
     pub(crate) fn set_language(&mut self, language: Language, cx: &mut Context<Self>) {

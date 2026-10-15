@@ -125,6 +125,8 @@ pub enum Message {
     DateFormatUs,
     DateFormatEuropean,
     DateFormatIso,
+    SettingsOnedrive,
+    SettingsOnedriveDescription,
     SettingsNetwork,
     SettingsNetworkDescription,
 
@@ -610,6 +612,8 @@ impl Message {
             Self::DateFormatUs => "date-format-us",
             Self::DateFormatEuropean => "date-format-european",
             Self::DateFormatIso => "date-format-iso",
+            Self::SettingsOnedrive => "settings-onedrive",
+            Self::SettingsOnedriveDescription => "settings-onedrive-description",
             Self::SettingsNetwork => "settings-network",
             Self::SettingsNetworkDescription => "settings-network-description",
 
@@ -1284,6 +1288,8 @@ mod tests {
                 Message::DateFormatUs,
                 Message::DateFormatEuropean,
                 Message::DateFormatIso,
+                Message::SettingsOnedrive,
+                Message::SettingsOnedriveDescription,
                 Message::SettingsNetwork,
                 Message::SettingsNetworkDescription,
 
