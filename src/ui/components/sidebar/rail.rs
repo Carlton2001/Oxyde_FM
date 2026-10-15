@@ -1,5 +1,6 @@
 use super::pinned_display_name;
-use super::toolbar::{sidebar_button, sidebar_toolbar};
+use super::toolbar::{sidebar_button, sidebar_button_with_tooltip, sidebar_toolbar};
+use crate::ui::components::tooltip::Tooltip;
 use crate::ui::app::{ContextMenuContent, ContextMenuInstance, OxydeApp};
 use crate::ui::i18n::{I18nContext, Message};
 use crate::ui::theme::ThemeContext;
@@ -101,6 +102,12 @@ pub(super) fn render_sidebar_rail(
         let menu_path = path.clone();
         let menu_item = item.clone();
         let is_drive = matches!(item, SidebarItem::Drive { .. });
+        let tooltip: Box<dyn Fn(&mut Window, &mut App) -> AnyView> = match item {
+            SidebarItem::Drive { drive, .. } => {
+                Box::new(Tooltip::for_drive(label, drive.clone()))
+            }
+            _ => Box::new(Tooltip::text(label)),
+        };
         let selected = view
             .state
             .layout
@@ -118,13 +125,14 @@ pub(super) fn render_sidebar_rail(
                 }
             });
         entries = entries.child(
-            sidebar_button(
+            sidebar_button_with_tooltip(
                 format!("rail-{path}"),
-                label.into(),
+                tooltip,
                 icon,
                 text,
                 crate::ui::theme::OxydeTheme {
                     control_hover: if selected { theme.selection_hover } else { theme.control_hover },
+                    text_muted: if selected { theme.accent } else { theme.text_muted },
                     ..theme
                 },
                 true,
@@ -189,7 +197,7 @@ pub(super) fn render_sidebar_rail(
             })
             .when(selected, |d| {
                 d.bg(theme.selected)
-                    .text_color(theme.text)
+                    .text_color(theme.accent)
             }),
         );
     }

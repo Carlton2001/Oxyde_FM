@@ -2,13 +2,13 @@ use super::{anchored_origin, cursor_origin};
 use gpui::{point, px, size, Bounds};
 
 #[test]
-fn ordinary_and_preview_metadata_follow_cursor_with_tauri_offset() {
+fn ordinary_and_preview_metadata_follow_cursor_with_half_offset() {
     let content = size(px(200.0), px(100.0));
     let viewport = size(px(1200.0), px(900.0));
     for cursor in [point(px(100.0), px(120.0)), point(px(160.0), px(180.0))] {
         assert_eq!(
-            cursor_origin(cursor, content, viewport, px(24.0), px(50.0)),
-            cursor + point(px(24.0), px(24.0))
+            cursor_origin(cursor, content, viewport, px(12.0), px(50.0)),
+            cursor + point(px(12.0), px(12.0))
         );
     }
 }
@@ -20,7 +20,7 @@ fn right_and_bottom_edges_match_tauri_clamping() {
             point(px(780.0), px(580.0)),
             size(px(200.0), px(100.0)),
             size(px(800.0), px(600.0)),
-            px(24.0),
+            px(12.0),
             px(50.0)
         ),
         point(px(550.0), px(450.0))
@@ -34,7 +34,7 @@ fn small_viewport_relaxes_margin_to_keep_content_visible() {
             point(px(200.0), px(110.0)),
             size(px(200.0), px(100.0)),
             size(px(220.0), px(120.0)),
-            px(24.0),
+            px(12.0),
             px(50.0)
         ),
         point(px(20.0), px(20.0))
@@ -49,10 +49,10 @@ fn offset_scales_with_interface_dimensions() {
             cursor,
             size(px(300.0), px(150.0)),
             size(px(1600.0), px(1200.0)),
-            px(36.0),
+            px(18.0),
             px(75.0)
         ),
-        point(px(136.0), px(136.0))
+        point(px(118.0), px(118.0))
     );
 }
 

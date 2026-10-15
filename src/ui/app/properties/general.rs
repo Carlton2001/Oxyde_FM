@@ -255,7 +255,7 @@ pub(super) fn render(
                             .top_0()
                             .h_full()
                             .w(relative(ratio))
-                            .bg(theme.accent),
+                            .bg(theme.drive_usage_color(drive.total_bytes, drive.free_bytes)),
                     )
                     .child(
                         div()

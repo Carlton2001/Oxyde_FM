@@ -16,6 +16,18 @@ pub(super) fn sidebar_button(
     enabled: bool,
     action: impl Fn(&MouseDownEvent, &mut Window, &mut App) + 'static,
 ) -> Stateful<Div> {
+    sidebar_button_with_tooltip(id, Tooltip::text(label), icon, text, theme, enabled, action)
+}
+
+pub(super) fn sidebar_button_with_tooltip(
+    id: String,
+    tooltip: impl Fn(&mut Window, &mut App) -> AnyView + 'static,
+    icon: Option<&'static str>,
+    text: Option<String>,
+    theme: OxydeTheme,
+    enabled: bool,
+    action: impl Fn(&MouseDownEvent, &mut Window, &mut App) + 'static,
+) -> Stateful<Div> {
     button_style(div().id(id), theme, ButtonVariant::Ghost, enabled)
         .size(rems(2.0))
         .flex_none()
@@ -23,7 +35,7 @@ pub(super) fn sidebar_button(
         .items_center()
         .justify_center()
         .rounded_md()
-        .native_tooltip(Tooltip::text(label))
+        .native_tooltip(tooltip)
         .when(enabled, |d| d.on_mouse_down(MouseButton::Left, action))
         .when_some(icon, |d, path| {
             d.child(svg().path(path).size(rems(1.125)).text_color(if enabled {

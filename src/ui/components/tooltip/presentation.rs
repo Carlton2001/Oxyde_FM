@@ -143,6 +143,7 @@ impl Render for DriveTooltip {
         let mut body = div().flex().flex_col().items_center().gap(rems(0.5))
             .child(div().max_w(rems(18.0)).text_size(rems(0.8125)).child(self.name.clone()));
         if let Some((used, ratio)) = usage {
+            let usage_color = theme.drive_usage_color(self.drive.total_bytes, self.drive.free_bytes);
             let chart = canvas(|bounds, _, _| bounds, move |_, bounds, window, _| {
                 let center = bounds.center();
                 let radius = bounds.size.width.as_f32() * 0.43;
@@ -150,7 +151,7 @@ impl Render for DriveTooltip {
                 let start = -std::f32::consts::FRAC_PI_2;
                 let split = start + std::f32::consts::TAU * ratio;
                 let end = start + std::f32::consts::TAU;
-                for (from, to, color) in [(start, split, theme.accent), (split, end, theme.border)] {
+                for (from, to, color) in [(start, split, usage_color), (split, end, theme.border)] {
                     if let Some(path) = ring_sector(center, radius, inner, from, to) { window.paint_path(path, color); }
                 }
             }).absolute().inset_0();
@@ -233,10 +234,13 @@ impl Render for Tooltip {
                 }
             })
         });
+        let width_limit = media_width.map(|width| {
+            if self.meta.is_some() { width.max(rem_pixels(rems(40.0))) } else { width }
+        }).unwrap_or_else(|| rem_pixels(rems(40.0)));
         let maximum_width = if self.native_presentation {
-            media_width.unwrap_or_else(|| rem_pixels(rems(26.5)))
+            width_limit
         } else {
-            media_width.unwrap_or_else(|| rem_pixels(rems(26.5))).min((window.viewport_size().width - rem_pixels(rems(2.0))).max(px(1.0)))
+            width_limit.min((window.viewport_size().width - rem_pixels(rems(2.0))).max(px(1.0)))
         };
         let mut tooltip_width = maximum_width;
         let title_lines: Vec<SharedString> = if self.file_info.is_some() {
@@ -247,9 +251,20 @@ impl Render for Tooltip {
             let line = window.text_system().shape_line(self.title.clone(), rem_pixels(rems(0.75)), &[TextRun {
                 len: self.title.len(), font: font.clone(), color: theme.accent, background_color: None, underline: None, strikethrough: None,
             }], None);
-            // A ready media preview determines the width; filenames wrap within it.
-            let preferred_width = line.width;
-            tooltip_width = if media_width.is_some() { maximum_width } else {
+            // Extra metadata may widen a ready preview's frame.
+            font.weight = crate::ui::style::DEFAULT_FONT_WEIGHT;
+            let metadata_width = self.meta.as_ref().map(|meta| {
+                meta.lines().map(|text| {
+                    window.text_system().shape_line(text.to_owned().into(), rem_pixels(rems(0.6875)), &[TextRun {
+                        len: text.len(), font: font.clone(), color: theme.text_muted,
+                        background_color: None, underline: None, strikethrough: None,
+                    }], None).width
+                }).fold(px(0.0), |width, line| width.max(line))
+            }).unwrap_or(px(0.0));
+            let preferred_width = line.width.max(metadata_width + px(1.0));
+            tooltip_width = if let Some(width) = media_width {
+                width.max(metadata_width + px(1.0) + chrome).min(maximum_width)
+            } else {
                 (preferred_width.max(rem_pixels(rems(14.0))) + chrome).min(maximum_width)
             };
             let wrap = |width: Pixels| filename_line_ranges(&self.title, (width - chrome).as_f32().max(1.0), |index| line.x_for_index(index).as_f32());
@@ -344,7 +359,7 @@ impl Render for Tooltip {
                 this.child(
                     div()
                         .flex_none()
-                        .max_w(rems(21.875))
+                        .max_w((tooltip_width - chrome).max(px(1.0)))
                         .text_color(theme.text_muted)
                         .text_size(rems(0.6875))
                         .child(meta),

@@ -123,21 +123,21 @@ fn placements_are_deferred_coalesced_and_cancelled_by_hide() {
 }
 
 #[test]
-fn visible_frame_stays_24_pixels_from_cursor_excluding_shadow_margin() {
+fn visible_frame_stays_12_pixels_from_cursor_excluding_shadow_margin() {
     for scale in [1, 2] {
         let cursor = 500 * scale;
         let extent = 300 * scale;
         let inset = 32 * scale;
-        let gap = 24 * scale;
+        let gap = 12 * scale;
         let origin = axis_origin(cursor, extent, 0, 2000 * scale, gap, inset);
         assert_eq!(origin + inset - cursor, gap);
         let cursor = 1900 * scale;
         let origin = axis_origin(cursor, extent, 0, 2000 * scale, gap, inset);
         assert_eq!(cursor - (origin + extent - inset), gap);
     }
-    let origin = axis_origin(-1000, 300, -1920, 0, 24, 32);
-    assert_eq!(origin + 32 - (-1000), 24);
-    assert_eq!(axis_origin(0, 300, 0, 800, 24, 32), 0);
+    let origin = axis_origin(-1000, 300, -1920, 0, 12, 32);
+    assert_eq!(origin + 32 - (-1000), 12);
+    assert_eq!(axis_origin(0, 300, 0, 800, 12, 32), 0);
 }
 
 #[test]

@@ -481,7 +481,7 @@ fn place_now(window: HWND, size: Option<(f32, f32, f32)>, scale: f32) -> Result<
                 0.0
             }
         } else {
-            24.0
+            12.0
         } * scale)
             .round() as i32;
         let inset = (inset * scale).round() as i32;

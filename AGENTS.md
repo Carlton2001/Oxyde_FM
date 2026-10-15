@@ -23,6 +23,7 @@ Oxyde est un explorateur de fichiers natif écrit en Rust, avec GPUI pour l'inte
 6. Pour toute icône Lucide, récupérer et utiliser le SVG officiel depuis `lucide-icons/lucide/icons/<nom>.svg`. Ne jamais dessiner, redessiner ou approximer une icône à la main, ni modifier son tracé. Si le SVG officiel n'est pas accessible, signaler le blocage au lieu de créer une variante.
 7. Seul l'utilisateur décide des cas de changement de curseur. Ne pas ajouter ni modifier un changement de curseur sans sa demande explicite, y compris le curseur en main sur les éléments cliquables. Conserver le curseur par défaut pour les nouvelles interactions, sauf instruction explicite de l'utilisateur.
 8. Toujours rédiger les messages de commit en anglais.
+   **Tout push vers GitHub exige une demande explicite de l’utilisateur pour l’opération concernée.** Ne jamais déduire cette autorisation d’une demande de modification, de commit, de fusion ou de fin de tâche. Une autorisation donnée pour un push précédent ne vaut pas pour les suivants. Cette règle s’applique aux branches et aux tags, via Git, une API, un MCP ou tout autre outil.
 9. Lorsqu’un changement modifie les workers ou du code partagé qu’ils utilisent, prévenir explicitement l’utilisateur qu’ils doivent être recompilés et fournir la commande Cargo à lancer. Par défaut : `cargo build --offline --bins` (fermer Oxyde avant de reconstruire), puis `cargo run --offline`. Ne pas laisser entendre que `cargo run` seul reconstruit les exécutables auxiliaires.
 
 ## Factorisation et taille des modules

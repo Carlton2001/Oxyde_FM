@@ -2,7 +2,7 @@
 use crate::ui::scale::rem_pixels;
 use gpui::*;
 
-const CURSOR_OFFSET: Rems = rems(1.5); // Tauri: 24 logical pixels at normal scale.
+const CURSOR_OFFSET: Rems = rems(0.75); // 12 logical pixels at normal scale.
 const EDGE_PADDING: Rems = rems(3.125); // Tauri: 50 logical pixels.
 
 pub(super) fn cursor_origin(

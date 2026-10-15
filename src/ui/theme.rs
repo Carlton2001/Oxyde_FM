@@ -53,6 +53,15 @@ pub struct OxydeTheme {
 impl Global for OxydeTheme {}
 
 impl OxydeTheme {
+    pub fn drive_usage_color(&self, total: u64, free: u64) -> Hsla {
+        let used = total.saturating_sub(free);
+        if total > 0 && u128::from(used) * 10 >= u128::from(total) * 9 {
+            self.error
+        } else {
+            self.accent
+        }
+    }
+
     pub fn for_id(id: ThemeId) -> Self {
         let mut theme = match id {
             ThemeId::Dark => Self::dark(),
@@ -92,8 +101,8 @@ impl OxydeTheme {
             },
             ThemeId::AyuDark => Self {
                 accent: rgb(0xe6b450).into(),
-                active_background: rgb(0x0b0e14).into(),
-                background: rgb(0x10151e).into(),
+                active_background: rgb(0x10151e).into(),
+                background: rgb(0x0b0e14).into(),
                 border: rgb(0x151a24).into(),
                 control_hover: rgb(0x191e2a).into(),
                 header: rgb(0x090c10).into(),
@@ -158,8 +167,8 @@ impl OxydeTheme {
             },
             ThemeId::GithubDark => Self {
                 accent: rgb(0x2f81f7).into(),
-                active_background: rgb(0x0d1117).into(),
-                background: rgb(0x161b22).into(),
+                active_background: rgb(0x161b22).into(),
+                background: rgb(0x0d1117).into(),
                 border: rgb(0x30363d).into(),
                 control_hover: rgb(0x21262d).into(),
                 header: rgb(0x010409).into(),
@@ -191,8 +200,8 @@ impl OxydeTheme {
             },
             ThemeId::Monokai => Self {
                 accent: rgb(0xfd971f).into(),
-                active_background: rgb(0x272822).into(),
-                background: rgb(0x32332c).into(),
+                active_background: rgb(0x32332c).into(),
+                background: rgb(0x272822).into(),
                 border: rgb(0x171814).into(),
                 control_hover: rgb(0x4a493e).into(),
                 header: rgb(0x1e1f1c).into(),
@@ -323,8 +332,8 @@ impl OxydeTheme {
             },
             ThemeId::SolarizedDark => Self {
                 accent: rgb(0x268bd2).into(),
-                active_background: rgb(0x002b36).into(),
-                background: rgb(0x073642).into(),
+                active_background: rgb(0x073642).into(),
+                background: rgb(0x002b36).into(),
                 border: rgb(0x073642).into(),
                 control_hover: rgb(0x0d3944).into(),
                 header: rgb(0x001e26).into(),
@@ -389,8 +398,8 @@ impl OxydeTheme {
             },
             ThemeId::WindowsDark => Self {
                 accent: rgb(0x52a8ff).into(),
-                active_background: rgb(0x181818).into(),
-                background: rgb(0x222222).into(),
+                active_background: rgb(0x222222).into(),
+                background: rgb(0x181818).into(),
                 border: rgb(0x282828).into(),
                 control_hover: rgb(0x2a2a2a).into(),
                 header: rgb(0x111111).into(),
@@ -479,8 +488,8 @@ impl OxydeTheme {
 
     pub fn dark() -> Self {
         Self {
-            background: rgb(0x1c1927).into(),
-            active_background: rgb(0x12101b).into(),
+            background: rgb(0x12101b).into(),
+            active_background: rgb(0x1c1927).into(),
             sidebar: rgb(0x08070d).into(),
             header: rgb(0x08070d).into(),
             surface: rgb(0x151320).into(),
