@@ -297,6 +297,7 @@ pub struct OxydeApp {
     pub(crate) operations_panel_view:
         Option<Entity<crate::ui::components::operations::OperationsPanelView>>,
     pub(crate) operations_panel_scroll: ScrollHandle,
+    pub(crate) expanded_operations: std::collections::HashSet<String>,
     pub(crate) archive_creation: Option<(Vec<std::path::PathBuf>, String)>,
     pub(crate) rename_error: Option<Message>,
     pub(crate) rename_shake_id: u64,
@@ -398,7 +399,7 @@ impl OxydeApp {
             submenu_timer: None,
             submenu_close_timer: None,
             dragging_tab: None,
-            file_ops: std::sync::Arc::new(oxyde_lib::systems::file_ops::FileOperationManager::new()),
+            file_ops: std::sync::Arc::new(oxyde_lib::systems::file_ops::FileOperationManager::with_persistent_history()),
             watcher_changes: std::sync::Arc::new(std::sync::Mutex::new(
                 std::collections::VecDeque::new(),
             )),
@@ -477,6 +478,7 @@ impl OxydeApp {
             next_toast_id: 0,
             operations_panel_view: None,
             operations_panel_scroll: ScrollHandle::new(),
+            expanded_operations: std::collections::HashSet::new(),
             archive_creation: None,
             rename_error: None,
             rename_shake_id: 0,

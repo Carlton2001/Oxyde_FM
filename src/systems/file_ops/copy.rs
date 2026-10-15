@@ -33,6 +33,7 @@ impl FileOperationManager {
             .ok();
         let mut journal = operation.lock().unwrap();
         journal.created_dirs.push(path.to_path_buf());
+        journal.item_directory_created(path);
         if let Some(identity) = identity {
             journal
                 .copied_directory_identities
@@ -231,6 +232,9 @@ impl FileOperationManager {
         let copy_name_suffix = op.lock().unwrap().copy_name_suffix.clone();
 
         for (selected, canonical_src) in selected_sources.iter().zip(&canonical_sources) {
+            let first_file = files_to_process.len();
+            let first_directory = directories_to_create.len();
+            let mut skipped = false;
             Self::archive_checkpoint(op)?;
             let src = selected.path();
             let mut dest_root = target_dir.join(source_name(src)?);
@@ -240,7 +244,7 @@ impl FileOperationManager {
                     && std::fs::canonicalize(&dest_root)
                         .is_ok_and(|destination| destination == *canonical_src));
             if self_transfer {
-                if is_move { continue; }
+                if is_move { op.lock().unwrap().item_skipped(src); continue; }
                 dest_root = crate::systems::transfer_naming::copy_name(src, &target_dir, selected.is_dir(),
                     &copy_name_suffix, &mut reserved_copy_names).map_err(|error| error.to_string())?;
                 if selected.is_dir() { fresh_copy_directories.push(dest_root.clone()); }
@@ -283,6 +287,7 @@ impl FileOperationManager {
                             .and_then(|map| Self::get_resolution(entry.path(), map))
                             == Some(ConflictAction::Replace);
                         if !replace {
+                            skipped = true;
                             walker.skip_current_dir();
                             continue;
                         }
@@ -307,6 +312,7 @@ impl FileOperationManager {
                         .and_then(|map| Self::get_resolution(entry.path(), map))
                         != Some(ConflictAction::Replace)
                 {
+                    skipped = true;
                     continue;
                 }
                 let file = entry.into_file().map_err(|error| error.to_string())?;
@@ -314,6 +320,9 @@ impl FileOperationManager {
                 total_files += 1;
                 files_to_process.push((file, dest_path, replace_existing));
             }
+            op.lock().unwrap().item_plan(src, dest_root,
+                files_to_process.len() - first_file + directories_to_create.len() - first_directory,
+                skipped, is_move && selected.is_dir());
         }
 
         {
@@ -358,10 +367,12 @@ impl FileOperationManager {
             if cancel_flag.load(Ordering::Relaxed) {
                 break;
             }
+            op.lock().unwrap().item_directory(directory, false);
             if fresh_copy_directories.contains(directory) {
                 destination_tree.reserve_copy_directory(directory, &mut |created| {
                     Self::record_created_copy_directory(op, &destination_tree, created, is_move)
                 }).map_err(|e| format!("Cannot create new copy directory {:?}: {e}", directory))?;
+                op.lock().unwrap().item_directory(directory, true);
                 continue;
             }
             destination_tree
@@ -373,6 +384,7 @@ impl FileOperationManager {
                     },
                 )
                 .map_err(|e| format!("Cannot create directory {:?}: {e}", directory))?;
+            op.lock().unwrap().item_directory(directory, true);
         }
         // A rename preserves the file itself and does not read its contents.
         // Let the filesystem determine volume boundaries (including mount points),
@@ -381,6 +393,7 @@ impl FileOperationManager {
             let mut remaining = Vec::new();
             for (source, destination, replace_existing) in files_to_process {
                 Self::archive_checkpoint(op)?;
+                op.lock().unwrap().item_started(source.path());
                 let destination_parents = destination_tree
                     .file_parents(
                         &destination,
@@ -404,6 +417,7 @@ impl FileOperationManager {
                 ) {
                     Ok((size, identity)) => {
                         let mut locked = op.lock().unwrap();
+                        locked.item_done(source.path());
                         locked.current_file = Some(source.path().to_string_lossy().into_owned());
                         if replace_existing {
                             locked.overwritten_files.push(destination.clone());
@@ -573,6 +587,7 @@ impl FileOperationManager {
                     },
                     &mut |directory, destination| {
                         let mut journal = op.lock().unwrap();
+                        journal.item_directory_removed(directory);
                         journal
                             .moved_dirs
                             .push((directory.to_path_buf(), destination.to_path_buf()));

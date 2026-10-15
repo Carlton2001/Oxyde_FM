@@ -225,7 +225,6 @@ operations-completed = Completato
 
 operations-error = Non riuscita
 
-operations-from = Da: { $path }
 
 operations-to = A: { $path }
 
@@ -915,3 +914,14 @@ storage-unavailable = Impossibile accedere ai dati di Oxyde. In modalità portat
 properties-selection-items = { $number } elementi
 properties-total-size = Dimensione totale
 properties-multiple-locations = Più posizioni
+operations-affected-items = Elementi interessati ({ $count })
+operations-view-items = Mostra tutti i { $count } elementi…
+operations-items-filter = Cerca nomi o percorsi…
+operations-no-matching-items = Nessun elemento corrispondente.
+operations-items-loading = Caricamento degli elementi…
+operations-item-done = Elaborato
+operations-item-not-processed = Non elaborato
+operations-item-skipped = Ignorato
+operations-item-partial = Elaborato parzialmente
+operations-item-unknown = Stato sconosciuto
+operations-item-interrupted = Interrotto

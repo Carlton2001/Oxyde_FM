@@ -42,16 +42,7 @@ impl AdvancedSearchWindow {
             d.inputs[index].update(cx, |input, cx| {
                 input.set_placeholder(cx.i18n().text(placeholder), cx)
             });
-            let mut field = div()
-                .flex()
-                .items_center()
-                .gap(rems(0.0))
-                .h(rems(2.25))
-                .rounded_md()
-                .overflow_hidden()
-                .border(rems(0.0625))
-                .border_color(theme.border)
-                .bg(theme.surface);
+            let mut field = crate::ui::components::input::field_frame(cx);
             if index != 1 {
                 field = field.child(self.advanced_toggle(
                     if index == 0 { 0 } else { 1 },

@@ -6,13 +6,14 @@ use gpui::*;
 use oxyde_lib::systems::file_ops::{FileOpType, OpStatus};
 
 /// One nonblocking notification per active operation, sharing the completion stack.
-pub(crate) fn render_operation_progress(app: &OxydeApp, cx: &App) -> Vec<AnyElement> {
+pub(crate) fn render_operation_progress(app: &OxydeApp, cx: &Context<OxydeApp>) -> Vec<AnyElement> {
     let theme = *cx.theme();
     app.file_ops
         .list_operations()
         .into_iter()
         .filter(|op| !super::is_final(&op.status))
         .map(|op| {
+            let owner = cx.entity();
             let (label, icon) = match op.op_type {
                 FileOpType::Copy => (Message::OpCopy, "icons/copy.svg"),
                 FileOpType::Move => (Message::OpMove, "icons/arrow-right.svg"),
@@ -37,6 +38,9 @@ pub(crate) fn render_operation_progress(app: &OxydeApp, cx: &App) -> Vec<AnyElem
             };
             div()
                 .id(SharedString::from(format!("operation-progress-{}", op.id)))
+                .on_click(move |_, _, cx| {
+                    super::open_operations_window(owner.clone(), cx);
+                })
                 .w(rems(24.0))
                 .min_h(rems(3.0))
                 .max_w_full()

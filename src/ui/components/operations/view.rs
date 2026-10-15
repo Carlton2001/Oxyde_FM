@@ -89,12 +89,13 @@ impl Render for OperationsPanelView {
                     window.remove_window();
                 }
             })
-            .child(super::super::tool_window::header(
+            .child(super::super::tool_window::header_with_actions(
                 "icons/download.svg",
                 title,
                 window.is_maximized(),
                 true,
                 cx,
+                super::title_actions::panel(app.clone(), cx),
                 |window, cx| {
                     super::super::tool_window::close_transients(window, cx);
                     window.remove_window();

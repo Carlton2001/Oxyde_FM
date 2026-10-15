@@ -4326,7 +4326,7 @@ dependencies = [
 
 [[package]]
 name = "oxyde"
-version = "1.1.6"
+version = "1.2.1"
 dependencies = [
  "blake3",
  "bzip2",

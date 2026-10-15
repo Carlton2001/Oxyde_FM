@@ -41,10 +41,7 @@ pub(super) fn render_operations_panel(
     let cards = operations
         .into_iter()
         .rev()
-        .enumerate()
-        .map(|(index, op)| {
-            super::card::render_operation_card(app, op, index % 2 == 1, handle.clone(), cx)
-        })
+        .map(|op| super::card::render_operation_card(app, op, handle.clone(), cx))
         .collect::<Vec<_>>();
     div()
         .flex_1()
@@ -60,7 +57,11 @@ pub(super) fn render_operations_panel(
                     div()
                         .id("operations-list")
                         .size_full()
-                        .pr(px(super::super::scrollbar::zed_track_width()))
+                        .flex()
+                        .flex_col()
+                        .gap(rems(0.75))
+                        .p(rems(0.75))
+                        .pr(rems(1.5))
                         .overflow_y_scroll()
                         .track_scroll(&app.operations_panel_scroll)
                         .when(cards.is_empty(), |el| {
@@ -103,7 +104,10 @@ pub(super) fn render_operations_panel(
                         .child(cx.i18n().text(Message::OpsDismissAll))
                         .on_click(move |_, _, cx| {
                             manager.dismiss_finished_operations();
-                            clear_handle.update(cx, |_, cx| cx.notify());
+                            clear_handle.update(cx, |app, cx| {
+                                app.expanded_operations.clear();
+                                cx.notify();
+                            });
                         }),
                     )
                 })

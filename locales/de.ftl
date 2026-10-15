@@ -225,7 +225,6 @@ operations-completed = Abgeschlossen
 
 operations-error = Fehlgeschlagen
 
-operations-from = Von: { $path }
 
 operations-to = Nach: { $path }
 
@@ -915,3 +914,14 @@ storage-unavailable = Auf die Oxyde-Daten konnte nicht zugegriffen werden. Im po
 properties-selection-items = { $number } Elemente
 properties-total-size = Gesamtgröße
 properties-multiple-locations = Mehrere Speicherorte
+operations-affected-items = Betroffene Elemente ({ $count })
+operations-view-items = Alle { $count } Elemente anzeigen…
+operations-items-filter = Namen oder Pfade suchen…
+operations-no-matching-items = Keine passenden Elemente.
+operations-items-loading = Elemente werden geladen…
+operations-item-done = Bearbeitet
+operations-item-not-processed = Nicht bearbeitet
+operations-item-skipped = Übersprungen
+operations-item-partial = Teilweise bearbeitet
+operations-item-unknown = Status unbekannt
+operations-item-interrupted = Unterbrochen

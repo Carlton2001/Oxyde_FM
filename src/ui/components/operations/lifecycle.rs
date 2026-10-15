@@ -4,6 +4,7 @@ use crate::ui::i18n::{I18nContext, Message};
 use gpui::*;
 
 pub(crate) fn close_operations_windows(cx: &mut App) {
+    super::files::close_windows(cx);
     for handle in cx.windows() {
         if let Some(handle) = handle.downcast::<OperationsPanelView>() {
             let _ = handle.update(cx, |_, window, cx| {

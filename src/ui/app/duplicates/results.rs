@@ -1,6 +1,7 @@
 use super::DuplicateWindow;
 use crate::ui::i18n::{FluentArgs, I18nContext, Message};
 use crate::ui::theme::OxydeTheme;
+use gpui::prelude::FluentBuilder;
 use gpui::*;
 
 impl DuplicateWindow {
@@ -93,8 +94,14 @@ impl DuplicateWindow {
                         .focus_visible(move |s| s.border(rems(0.0625)).border_color(theme.accent))
                         .p(rems(0.5))
                         .bg(theme.header)
+                        .rounded_t(rems(0.5625))
+                        .when(self.collapsed.contains(&index), |header| {
+                            header.rounded_b(rems(0.5625))
+                        })
                         .items_center()
-                        .border_b(rems(0.0625))
+                        .when(!self.collapsed.contains(&index), |header| {
+                            header.border_b(rems(0.0625))
+                        })
                         .border_color(theme.border)
                         .hover(move |s| s.bg(theme.hover))
                         .flex()

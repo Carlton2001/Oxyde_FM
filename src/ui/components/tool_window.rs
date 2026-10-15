@@ -86,6 +86,30 @@ pub(crate) fn header(
     cx: &App,
     on_close: impl Fn(&mut Window, &mut App) + 'static,
 ) -> impl IntoElement {
+    header_frame(icon, title, maximized, allow_resize, cx, None, on_close)
+}
+
+pub(crate) fn header_with_actions(
+    icon: &'static str,
+    title: SharedString,
+    maximized: bool,
+    allow_resize: bool,
+    cx: &App,
+    actions: impl IntoElement,
+    on_close: impl Fn(&mut Window, &mut App) + 'static,
+) -> impl IntoElement {
+    header_frame(icon, title, maximized, allow_resize, cx, Some(actions.into_any_element()), on_close)
+}
+
+fn header_frame(
+    icon: &'static str,
+    title: SharedString,
+    maximized: bool,
+    allow_resize: bool,
+    cx: &App,
+    actions: Option<AnyElement>,
+    on_close: impl Fn(&mut Window, &mut App) + 'static,
+) -> impl IntoElement {
     let theme = *cx.theme();
     div()
         .h(rems(2.25))
@@ -107,13 +131,15 @@ pub(crate) fn header(
         .child(
             div()
                 .flex_1()
+                .min_w_0()
                 .h_full()
                 .flex()
                 .items_center()
                 .window_control_area(WindowControlArea::Drag)
                 .font_weight(FontWeight::BOLD)
-                .child(title),
+                .child(div().truncate().child(title)),
         )
+        .when_some(actions, |header, actions| header.child(actions))
         .child(super::title_bar::render_window_controls_with_options(
             maximized,
             allow_resize,

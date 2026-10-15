@@ -1,4 +1,6 @@
 mod style;
+mod toolbar;
+pub(crate) use toolbar::toolbar_button_with_tooltip;
 pub use style::{button_style, ButtonVariant};
 
 use crate::ui::theme::ThemeContext;

@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="80" viewBox="0 0 800 80" preserveAspectRatio="none">
+  <defs>
+    <linearGradient id="fade" x1="0" y1="0" x2="0" y2="1" gradientUnits="objectBoundingBox">
+      <stop offset="0" stop-color="white" stop-opacity="0.65"/>
+      <stop offset="0.6" stop-color="white" stop-opacity="0.3"/>
+      <stop offset="1" stop-color="white" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <path fill="none" stroke="url(#fade)" stroke-width="1" d="M0 0H800 M0 16H800 M0 32H800 M0 48H800 M0 64H800 M0 80H800 M0 0V80 M40 0V80 M80 0V80 M120 0V80 M160 0V80 M200 0V80 M240 0V80 M280 0V80 M320 0V80 M360 0V80 M400 0V80 M440 0V80 M480 0V80 M520 0V80 M560 0V80 M600 0V80 M640 0V80 M680 0V80 M720 0V80 M760 0V80 M800 0V80"/>
+</svg>

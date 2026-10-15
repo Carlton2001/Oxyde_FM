@@ -90,8 +90,9 @@ impl Render for DuplicateWindow {
             .font_weight(crate::ui::style::DEFAULT_FONT_WEIGHT)
             .text_size(rems(0.8125))
             .line_height(relative(1.25))
-            .child(crate::ui::components::tool_window::header(
+            .child(crate::ui::components::tool_window::header_with_actions(
                 "icons/copy.svg", cx.i18n().text(Message::ToolDuplicates), window.is_maximized(), true, cx,
+                self.render_title_actions(cx),
                 { let cancellation = self.cancellation.clone(); move |window, _| {
                     cancel_find_duplicates(&cancellation); window.remove_window();
                 } },

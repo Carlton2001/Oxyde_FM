@@ -88,6 +88,7 @@ impl FileOperationManager {
 
             let (selected, dest, replace_existing) = &files[i];
             let src = selected.path();
+            operation.lock().unwrap().item_started(src);
             operation.lock().unwrap().current_file =
                 Some(src.to_string_lossy().into_owned());
 
@@ -147,6 +148,11 @@ impl FileOperationManager {
                 Some(source_file),
                 destination_parents,
                 &mut |bytes| {
+                    #[cfg(test)]
+                    {
+                        let id = operation.lock().unwrap().id.clone();
+                        super::super::item_outcomes::copy_progress_test_hook(&id, src, bytes);
+                    }
                     processed_bytes
                         .fetch_add(bytes.saturating_sub(copied), Ordering::Relaxed);
                     copied = bytes;
@@ -234,6 +240,8 @@ impl FileOperationManager {
                 journal.created_files.push(dest.clone());
             }
             journal.copied_files.push((src.to_path_buf(), dest.clone()));
+            journal.item_effect(src);
+            if !is_move && deferred_moves.is_none() { journal.item_done(src); }
             if let Some(identity) = moved_identity {
                 journal.moved_file_identities.push((dest.clone(), identity));
             }
@@ -283,6 +291,7 @@ impl FileOperationManager {
                     .unwrap()
                     .moved_files
                     .push((src.to_path_buf(), dest.clone()));
+                operation.lock().unwrap().item_done(src);
             }
 
             processed_files.fetch_add(1, Ordering::Relaxed);

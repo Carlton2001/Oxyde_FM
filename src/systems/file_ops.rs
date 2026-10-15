@@ -15,6 +15,9 @@ mod delete;
 mod execution;
 mod extract;
 mod scheduler;
+mod persistence;
+mod item_outcomes;
+pub use item_outcomes::ItemOutcome;
 
 const SPEED_HISTORY_LIMIT: usize = 60;
 const FILE_OPS_LOG_TARGET: &str = module_path!();
@@ -27,7 +30,7 @@ impl Drop for RestoreNormalPriority {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum OpStatus {
     Queued,
     Calculating,
@@ -39,7 +42,7 @@ pub enum OpStatus {
     // Note: WaitingForConflictResolution was removed — conflicts are resolved before the operation starts
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum FileOpType {
     Copy,
     Move,
@@ -51,6 +54,9 @@ pub enum FileOpType {
 
 #[derive(Debug, Clone)]
 pub struct FileOperation {
+    pub item_outcomes: HashMap<PathBuf, ItemOutcome>,
+    item_progress: HashMap<PathBuf, item_outcomes::ItemProgress>,
+    item_tracking_atomic: bool,
     pub id: String,
     pub sequence: u64,
     pub op_type: FileOpType,
@@ -106,6 +112,9 @@ pub struct FileOperation {
 impl FileOperation {
     fn snapshot(&self) -> Self {
         Self {
+            item_outcomes: self.snapshot_item_outcomes(),
+            item_progress: HashMap::new(),
+            item_tracking_atomic: self.item_tracking_atomic,
             id: self.id.clone(),
             sequence: self.sequence,
             op_type: self.op_type.clone(),
@@ -174,6 +183,9 @@ impl FileOperation {
         resolutions: Option<HashMap<String, ConflictAction>>,
     ) -> Self {
         Self {
+            item_progress: sources.iter().cloned().map(|path| (path, Default::default())).collect(),
+            item_outcomes: HashMap::new(),
+            item_tracking_atomic: false,
             id: Uuid::new_v4().to_string(),
             sequence: 0,
             op_type,
@@ -232,7 +244,8 @@ impl FileOperation {
 }
 
 pub struct FileOperationManager {
-    operations: Mutex<HashMap<String, Arc<Mutex<FileOperation>>>>,
+    operations: Arc<Mutex<HashMap<String, Arc<Mutex<FileOperation>>>>>,
+    persistence: Option<persistence::OperationPersistence>,
     next_sequence: AtomicU64,
     scheduler: Arc<OperationScheduler>,
 }
@@ -252,7 +265,8 @@ struct OperationScheduler {
 impl Default for FileOperationManager {
     fn default() -> Self {
         Self {
-            operations: Mutex::new(HashMap::new()),
+            operations: Arc::new(Mutex::new(HashMap::new())),
+            persistence: None,
             next_sequence: AtomicU64::new(1),
             scheduler: Arc::new(OperationScheduler {
                 slots: Arc::new(Semaphore::new(2)),

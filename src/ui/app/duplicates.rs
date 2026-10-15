@@ -2,6 +2,7 @@ mod lifecycle;
 mod results;
 mod search;
 mod sources;
+mod title_actions;
 mod window;
 
 pub(crate) use lifecycle::close_duplicate_windows;

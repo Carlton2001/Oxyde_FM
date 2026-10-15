@@ -1,9 +1,11 @@
 mod card;
 mod compact;
 mod footer;
+mod files;
 mod lifecycle;
 mod panel;
 mod view;
+mod title_actions;
 
 pub(crate) use compact::render_operation_progress;
 pub use footer::render_operations_footer;

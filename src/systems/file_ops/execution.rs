@@ -38,6 +38,9 @@ impl FileOperationManager {
                 platform().set_thread_priority(ThreadPriority::Background);
             }
 
+            op_clone.lock().unwrap().item_tracking_atomic = matches!(op_type, FileOpType::Compress | FileOpType::Extract)
+                || sources.iter().any(|path| crate::systems::archive_workspace::virtual_source(path).is_some())
+                || destination.as_ref().is_some_and(|path| crate::systems::archive_workspace::virtual_destination(path).is_some());
             match op_type {
                 FileOpType::Copy => {
                     Self::perform_copy(&op_clone, sources, destination, false, resolutions)

@@ -130,6 +130,7 @@ impl FileOperationManager {
                         std::thread::sleep(std::time::Duration::from_millis(100));
                     }
 
+                    operation.lock().unwrap().item_started(src);
                     let res = crate::systems::path_parents::remove(src, &mut || {
                         while pause.load(Ordering::Relaxed) {
                             if cancel.load(Ordering::Relaxed) {
@@ -148,6 +149,7 @@ impl FileOperationManager {
                         Ok(())
                     });
 
+                    let succeeded = res.is_ok();
                     if let Err(e) = res {
                         if e.kind() == std::io::ErrorKind::Interrupted && cancel.load(Ordering::Relaxed) {
                             return Ok(());
@@ -167,6 +169,7 @@ impl FileOperationManager {
                         }
                     }
 
+                    if succeeded { operation.lock().unwrap().item_complete(src); }
                     processed_files.fetch_add(1, Ordering::Relaxed);
 
                     if !is_turbo {
@@ -308,6 +311,7 @@ impl FileOperationManager {
                 ThreadPriority::Background
             });
             op.lock().unwrap().current_file = Some(source.to_string_lossy().into_owned());
+            op.lock().unwrap().item_started(source);
             #[cfg(target_os = "windows")]
             {
                 selected[index]
@@ -315,6 +319,7 @@ impl FileOperationManager {
                         let mut locked = op.lock().unwrap();
                         if deleted.path == source.to_string_lossy() {
                             locked.processed_files += 1;
+                            locked.item_complete(source);
                         }
                         locked.deleted_items.push(deleted);
                     })
@@ -323,6 +328,7 @@ impl FileOperationManager {
             #[cfg(not(target_os = "windows"))]
             {
                 platform().shell_delete(std::slice::from_ref(source), true)?;
+                op.lock().unwrap().item_complete(source);
                 op.lock().unwrap().processed_files += 1;
             }
             if !turbo_flag.load(Ordering::Relaxed) {

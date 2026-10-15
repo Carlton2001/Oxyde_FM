@@ -1,4 +1,6 @@
 mod completion_menu;
+mod field;
+pub(crate) use field::field_frame;
 use crate::ui::scale::rem_pixels;
 use crate::ui::theme::ThemeContext;
 use gpui::prelude::*;

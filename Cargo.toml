@@ -1,6 +1,6 @@
 [package]
 name = "oxyde"
-version = "1.1.6"
+version = "1.2.1"
 description = "Modern and fast file manager"
 authors = ["Carlton2001"]
 edition = "2021"
@@ -10,6 +10,9 @@ default-run = "oxyde"
 # builds responsive while preserving debug information and assertions.
 [profile.dev]
 opt-level = 1
+# Avoid unreliable hard links in the incremental cache on Windows workspaces.
+# Cargo still reuses unchanged crates and keeps compiler diagnostics enabled.
+incremental = false
 
 [profile.dev.package."*"]
 opt-level = 2
