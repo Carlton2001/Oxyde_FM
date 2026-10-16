@@ -36,6 +36,9 @@ impl Drop for Registration {
     }
 }
 
+#[path = "item_cancellation/speed_history.rs"]
+mod speed_history_tests;
+
 #[test]
 fn cancelled_second_file_is_interrupted_after_staging_cleanup_not_partial() {
     let temp = tempfile::tempdir_in(std::env::current_dir().unwrap().join("target")).unwrap();

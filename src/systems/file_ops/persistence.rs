@@ -7,6 +7,10 @@ type Operations = Arc<Mutex<HashMap<String, Arc<Mutex<FileOperation>>>>>;
 #[path = "tests/persistence.rs"]
 mod tests;
 
+#[cfg(test)]
+#[path = "tests/speed_history.rs"]
+mod speed_history_tests;
+
 #[derive(Serialize, Deserialize)]
 struct Record {
     #[serde(default)]

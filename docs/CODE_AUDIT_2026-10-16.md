@@ -130,6 +130,8 @@ Les constats ci-dessous distinguent reproduction, démonstration par le code et 
 
 ### A06 — P2 — Le renommage qui change seulement la casse est refusé sous Windows
 
+**Suivi de correction :** implémentée sur `codex/a06-a08-rename-and-speed-history`, issue du commit A03 `ae025d7`. Le parcours réel accepte une autre casse uniquement si les règles natives des noms, le parent retenu et l'identité de l'objet confirment la même entrée. Le renommage natif conserve l'interdiction de remplacer une cible indépendante. Les détails et validations sont consignés en fin de rapport ; les observations suivantes décrivent le défaut initial.
+
 **Catégorie / confiance :** fonctionnalité native ; confirmé par appel public, confiance élevée.
 
 **Références :** `src/commands/io.rs:257` ; `src/systems/item_rename.rs:44`.
@@ -163,6 +165,8 @@ Les constats ci-dessous distinguent reproduction, démonstration par le code et 
 **Validation :** dossiers `.zip`, `.7z`, `.tar.gz`, fichiers et sous-dossiers internes, archive réelle sous un dossier ainsi nommé, copie/déplacement/suppression/corbeille/compression/extraction. Vérifier aussi les watchers de ces onglets.
 
 ### A08 — P2 — Le graphe de vitesse disparaît à la fin d'une opération
+
+**Suivi de correction :** implémentée sur `codex/a06-a08-rename-and-speed-history`, issue du commit A03 `ae025d7`. La finalisation conserve les 60 derniers échantillons et remet à zéro les indicateurs instantanés. Les cartes finales et l'historique persistant peuvent réutiliser cette série. Les détails et validations sont consignés en fin de rapport ; les observations suivantes décrivent le défaut initial.
 
 **Catégorie / confiance :** incohérence entre exécution, interface et persistance ; établi directement par le code, confiance élevée ; pas d'essai visuel effectué.
 
@@ -373,3 +377,21 @@ Les nouveaux tests vérifient la précision sous la milliseconde sur le volume d
 Les tests de propriété ne créent pas de fenêtre GPUI interactive ; leur intégration au rendu est compilée et appuyée par la lecture du contrat de la dépendance. Aucun essai visuel, profil RSS/GPU d'une session réelle ni exécution Linux n'est ajouté. Voir aussi `docs/SHARED_PREVIEW_CACHE.md`.
 
 Le modèle partagé et les workers doivent être reconstruits : fermer Oxyde, exécuter `cargo build --offline --bins`, puis `cargo run --offline`. `cargo run` seul ne reconstruit pas les exécutables auxiliaires.
+
+## Corrections A06/A08 — contrat et validation
+
+**A06.** Le parcours public conserve la validation de la forme du renommage (même dossier, nom différent, nom final présent). Pour les objets réels, la validation d'existence se fait ensuite à partir des parents retenus et du handle de la source qui servira au renommage. Une cible existante est admise uniquement pour deux noms bruts différents mais équivalents selon les règles natives du dossier, avec le même identifiant de parent et le même identifiant de fichier. L'identité du fichier seule ne suffit pas : un autre lien physique reste une entrée indépendante. Les règles des dossiers Windows sensibles à la casse sont respectées.
+
+La publication utilise toujours le renommage relatif natif avec `ReplaceIfExists = false`, sans étape temporaire. Le handle source reste retenu entre la validation et l'appel natif, et la preuve d'identité de l'historique est vérifiée sur ce même handle. Une destination indépendante ou apparue après la validation est refusée. Le parcours d'édition des archives conserve son exigence de destination absente ; cette correction concerne les entrées réelles du système de fichiers.
+
+Les huit nouveaux tests Windows couvrent fichiers et dossiers, Unicode, nom identique, cibles ordinaires et liens physiques dans le même parent ou un autre, variantes coexistantes dans un dossier sensible à la casse, cible apparue tardivement, annulation, maintien du verrou de la source et renommage d'une jonction sans toucher sa cible. Les parcours publics Undo/Redo sont exercés sur fichiers et dossiers ; la jonction utilise aussi la preuve d'identité du renommage inverse. Avant correction, les six premiers scénarios donnaient trois échecs reproduisant le refus des changements de casse, et trois réussites confirmant les protections à préserver.
+
+**A08.** La finalisation réelle de `FileOperationManager` conserve la série déjà bornée à 60 échantillons. Elle remet à zéro `bytes_per_second`, `speed_sample_at` et `speed_sample_bytes`, quel que soit l'état final. Le rendu existant et la sérialisation réutilisent cette série ; aucun changement de présentation n'est nécessaire.
+
+Un test suspend une copie réelle pendant la progression du deuxième fichier, après publication vérifiée du premier, puis produit un échantillon positif par le calcul de progression existant. Il vérifie sa conservation après réussite, annulation et erreur due à une destination indépendante apparue tardivement. Un second test passe par la finalisation puis l'écriture/relecture de l'historique avec une série de 60 échantillons, et vérifie sa suppression après effacement de l'opération. Il compare la série finale réelle, qui peut inclure un dernier échantillon ajouté par la copie. Les deux tests échouaient avant correction parce que la finalisation vidait la série.
+
+**Résultat final :** `./scripts/test-windows.ps1 -Offline` réussit hors bac à sable, avec TEMP/TMP privés. La compilation de toutes les cibles et la reconstruction de l'application et de tous les workers passent sans avertissement. La suite complète totalise **1 137 tests distincts réussis, 21 ignorés, aucun échec** : 807 backend, 270 interface et 60 intégrations natives. Les dix nouveaux tests sont exécutés sans exclusion. Les anciens tests conservent leurs noms et leur découverte ; le sous-processus de vérification des exécutables Windows réexécute un test déjà compté dans les 807, sans constituer un scénario distinct supplémentaire. `git diff --check` et la vérification de formatage des trois nouveaux fichiers de tests réussissent. Journaux locaux : `target/a06-a08-validation/rename.log`, `speed-final.log` et `native-tests-final.log`.
+
+La validation reste native Windows sur le volume local ; elle ne comprend pas d'exécution Linux, de partage réseau ou d'essai visuel GPUI. Sous Linux, les règles existantes comparent les noms exactement et la destination indépendante reste refusée. Les API spécifiques des fixtures passent par le trait `Platform` et restent compilées uniquement pour les tests Windows.
+
+Le code partagé par les workers change : fermer Oxyde, lancer `cargo build --offline --bins`, puis `cargo run --offline`. `cargo run` seul ne reconstruit pas les exécutables auxiliaires.

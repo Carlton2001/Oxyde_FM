@@ -344,6 +344,9 @@ pub trait Platform: Send + Sync {
     #[cfg(all(test, target_os = "windows"))]
     fn set_fixture_file_attributes(&self, path: &std::path::Path, attributes: u32) -> Result<(), String>;
 
+    #[cfg(all(test, target_os = "windows"))]
+    fn set_fixture_case_sensitive(&self, path: &std::path::Path) -> std::io::Result<()>;
+
     /// Adjusts the current worker thread's scheduling priority.
     fn set_thread_priority(&self, priority: ThreadPriority);
 

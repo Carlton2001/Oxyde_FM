@@ -220,7 +220,7 @@ pub async fn rename_item_controlled_with_identity(
             .map_err(CommandError::ArchiveError)
         });
     }
-    validate_rename_target(&old_pb, &new_pb)?;
+    validate_rename_shape(&old_pb, &new_pb)?;
     info!("Renaming {:?} to {:?}", old_pb, new_pb);
     let identity = crate::systems::item_rename::rename_captured_with_checkpoint(&old_pb, &new_pb, None, &mut || {
         if cancel.load(std::sync::atomic::Ordering::Relaxed) {
@@ -240,6 +240,21 @@ fn validate_rename_target(
     old_path: &std::path::Path,
     new_path: &std::path::Path,
 ) -> Result<(), CommandError> {
+    validate_rename_shape(old_path, new_path)?;
+    // Archive edits retain their existing requirement for an absent entry.
+    if new_path.exists() {
+        return Err(CommandError::IoError(format!(
+            "Rename target already exists: {}",
+            new_path.display()
+        )));
+    }
+    Ok(())
+}
+
+fn validate_rename_shape(
+    old_path: &std::path::Path,
+    new_path: &std::path::Path,
+) -> Result<(), CommandError> {
     if old_path.parent() != new_path.parent() {
         return Err(CommandError::PathError(
             "Rename target must stay in the source directory".to_string(),
@@ -249,12 +264,6 @@ fn validate_rename_target(
         return Err(CommandError::PathError(
             "Source and rename target are identical".to_string(),
         ));
-    }
-    if new_path.exists() {
-        return Err(CommandError::IoError(format!(
-            "Rename target already exists: {}",
-            new_path.display()
-        )));
     }
     if new_path.file_name().is_none() {
         return Err(CommandError::PathError(

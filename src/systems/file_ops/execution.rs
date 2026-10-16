@@ -80,7 +80,10 @@ impl FileOperationManager {
             .started_at
             .map(|started| started.elapsed().as_millis().min(u64::MAX as u128) as u64);
         Self::finish_status(&mut locked, final_status.clone());
-        locked.speed_history.clear();
+        // Keep the bounded graph for final cards and persisted history.
+        locked.bytes_per_second = 0;
+        locked.speed_sample_at = None;
+        locked.speed_sample_bytes = 0;
 
         // Record exact filesystem effects, including partial or cancelled work,
         // so Undo never guesses from the original top-level paths.

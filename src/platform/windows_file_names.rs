@@ -60,3 +60,26 @@ pub(super) fn fold(name: &OsStr) -> OsString {
 #[cfg(test)]
 #[path = "windows_file_names/tests/comparison.rs"]
 mod tests;
+
+#[cfg(test)]
+pub(super) fn set_fixture_case_sensitive(path: &std::path::Path) -> io::Result<()> {
+    use std::os::windows::fs::OpenOptionsExt;
+    use windows::Win32::Storage::FileSystem::{
+        SetFileInformationByHandle, FILE_FLAG_BACKUP_SEMANTICS, FILE_READ_ATTRIBUTES,
+        FILE_WRITE_ATTRIBUTES,
+    };
+    let directory = std::fs::OpenOptions::new()
+        .access_mode(FILE_READ_ATTRIBUTES.0 | FILE_WRITE_ATTRIBUTES.0)
+        .custom_flags(FILE_FLAG_BACKUP_SEMANTICS.0)
+        .open(path)?;
+    let info = FILE_CASE_SENSITIVE_INFO { Flags: 1 };
+    unsafe {
+        SetFileInformationByHandle(
+            HANDLE(directory.as_raw_handle()),
+            FileCaseSensitiveInfo,
+            (&info as *const FILE_CASE_SENSITIVE_INFO).cast(),
+            std::mem::size_of_val(&info) as u32,
+        )
+    }
+    .map_err(|error| io::Error::from_raw_os_error((error.code().0 as u32 & 0xffff) as i32))
+}

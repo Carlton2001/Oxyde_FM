@@ -41,21 +41,31 @@ pub(crate) fn rename_captured_with_checkpoint(
     let destination_parents = separate_destination.as_ref().unwrap_or(&parents);
     let source = parents.resolved_path(source)?;
     let destination = destination_parents.resolved_path(destination)?;
-    match std::fs::symlink_metadata(&destination) {
-        Ok(_) => {
-            return Err(io::Error::new(
-                io::ErrorKind::AlreadyExists,
-                "Rename target already exists",
-            ));
-        }
-        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
-        Err(error) => return Err(error),
-    }
     let file = platform().open_rename_item(parents.directory(), &source)?;
     if let Some(expected) = expected {
         if !expected.matches(&file)? {
             return Err(history_failure(&source, true));
         }
+    }
+    match platform().track_source_item(destination_parents.directory(), &destination) {
+        Ok(target)
+            if !same_case_only_entry(
+                &file,
+                &target,
+                &parents,
+                destination_parents,
+                &source,
+                &destination,
+            )? =>
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::AlreadyExists,
+                "Rename target already exists",
+            ));
+        }
+        Ok(_) => {}
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error),
     }
     checkpoint()?;
     for parent in [parents.directory(), destination_parents.directory()] {
@@ -96,6 +106,33 @@ pub(crate) fn rename_captured_with_checkpoint(
     )
 }
 
+/// Identity alone is insufficient: two hard links are independent directory
+/// entries. Only a name-equivalent spelling in the same bound parent qualifies.
+fn same_case_only_entry(
+    source_file: &std::fs::File,
+    target_file: &std::fs::File,
+    source_parent: &HeldParents,
+    target_parent: &HeldParents,
+    source: &Path,
+    destination: &Path,
+) -> io::Result<bool> {
+    let (Some(source_name), Some(target_name)) = (source.file_name(), destination.file_name()) else {
+        return Ok(false);
+    };
+    if source_name == target_name {
+        return Ok(false);
+    }
+    let rules = platform().file_name_rules(target_parent.directory())?;
+    if rules.key(source_name) != rules.key(target_name) {
+        return Ok(false);
+    }
+    Ok(
+        platform().file_identity(source_parent.directory())?
+            == platform().file_identity(target_parent.directory())?
+            && platform().file_identity(source_file)? == platform().file_identity(target_file)?,
+    )
+}
+
 fn history_failure(path: &Path, changed: bool) -> io::Error {
     io::Error::other(crate::models::error::HistoryRenameFailure {
         issue: if changed {
@@ -115,6 +152,10 @@ pub(crate) fn rename_from_history(
     let expected = expected.ok_or_else(|| history_failure(source, false))?;
     rename_captured_with_checkpoint(source, destination, Some(expected), &mut || Ok(())).map(|_| ())
 }
+
+#[cfg(all(test, target_os = "windows"))]
+#[path = "item_rename/tests/case_only.rs"]
+mod case_only_tests;
 
 #[cfg(test)]
 mod tests {

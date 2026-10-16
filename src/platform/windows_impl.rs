@@ -14,6 +14,10 @@ impl Platform for WindowsPlatform {
     fn file_name_rules(&self, directory: &std::fs::File) -> std::io::Result<super::FileNameRules> {
         super::windows_file_names::rules(directory)
     }
+    #[cfg(test)]
+    fn set_fixture_case_sensitive(&self, path: &std::path::Path) -> std::io::Result<()> {
+        super::windows_file_names::set_fixture_case_sensitive(path)
+    }
     fn onedrive_installed(&self) -> bool { super::windows_onedrive::installed() }
     fn onedrive_folders(&self) -> Vec<crate::models::QuickAccessItem> { super::windows_onedrive::folders() }
 
