@@ -4,6 +4,8 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
+#[cfg(target_os = "windows")]
+mod trash_batch;
 
 impl FileOperationManager {
     #[doc(hidden)]
@@ -172,9 +174,6 @@ impl FileOperationManager {
                     if succeeded { operation.lock().unwrap().item_complete(src); }
                     processed_files.fetch_add(1, Ordering::Relaxed);
 
-                    if !is_turbo {
-                        std::thread::sleep(std::time::Duration::from_millis(5));
-                    }
                 }
 
                 if is_in_background_mode {
@@ -281,6 +280,8 @@ impl FileOperationManager {
         }
 
         #[cfg(target_os = "windows")]
+        let selection_started = std::time::Instant::now();
+        #[cfg(target_os = "windows")]
         let selected = real_sources
             .iter()
             .map(|path| {
@@ -291,51 +292,39 @@ impl FileOperationManager {
         #[cfg(target_os = "windows")]
         let selected = crate::systems::history_delete::collapse_roots(selected);
         #[cfg(target_os = "windows")]
+        log::info!(target: "oxyde_lib::delete_timing", "trash_selection op={} selected={} wall_s={:.6}",
+            op.lock().unwrap().id, selected.len(), selection_started.elapsed().as_secs_f64());
+        #[cfg(target_os = "windows")]
         let real_sources = selected.iter().map(|entry| entry.path().to_path_buf()).collect::<Vec<_>>();
         op.lock().unwrap().total_files = real_sources.len();
-        for (index, source) in real_sources.iter().enumerate() {
-            #[cfg(not(target_os = "windows"))]
-            let _ = index;
-            if cancel_flag.load(Ordering::Relaxed) {
-                return Ok(());
-            }
-            while pause_flag.load(Ordering::Relaxed) {
+        #[cfg(target_os = "windows")]
+        return Self::perform_selected_trash(op, selected, crate::platform::ShellDeleteControl {
+            cancel: cancel_flag, pause: pause_flag, turbo: turbo_flag,
+        });
+        #[cfg(not(target_os = "windows"))]
+        {
+            for source in &real_sources {
                 if cancel_flag.load(Ordering::Relaxed) {
                     return Ok(());
                 }
-                std::thread::sleep(std::time::Duration::from_millis(100));
-            }
-            platform().set_thread_priority(if turbo_flag.load(Ordering::Relaxed) {
-                ThreadPriority::Normal
-            } else {
-                ThreadPriority::Background
-            });
-            op.lock().unwrap().current_file = Some(source.to_string_lossy().into_owned());
-            op.lock().unwrap().item_started(source);
-            #[cfg(target_os = "windows")]
-            {
-                selected[index]
-                    .recycle(&mut |deleted| {
-                        let mut locked = op.lock().unwrap();
-                        if deleted.path == source.to_string_lossy() {
-                            locked.processed_files += 1;
-                            locked.item_complete(source);
-                        }
-                        locked.deleted_items.push(deleted);
-                    })
-                    .map_err(|error| error.to_string())?;
-            }
-            #[cfg(not(target_os = "windows"))]
-            {
+                while pause_flag.load(Ordering::Relaxed) {
+                    if cancel_flag.load(Ordering::Relaxed) {
+                        return Ok(());
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(100));
+                }
+                platform().set_thread_priority(if turbo_flag.load(Ordering::Relaxed) {
+                    ThreadPriority::Normal
+                } else {
+                    ThreadPriority::Background
+                });
+                op.lock().unwrap().current_file = Some(source.to_string_lossy().into_owned());
+                op.lock().unwrap().item_started(source);
                 platform().shell_delete(std::slice::from_ref(source), true)?;
                 op.lock().unwrap().item_complete(source);
                 op.lock().unwrap().processed_files += 1;
             }
-            if !turbo_flag.load(Ordering::Relaxed) {
-                std::thread::sleep(std::time::Duration::from_millis(25));
-            }
+            Ok(())
         }
-
-        Ok(())
     }
 }

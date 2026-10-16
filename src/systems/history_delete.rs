@@ -75,6 +75,7 @@ pub(super) struct PreparedDelete {
     identity: Option<HistoryFileIdentity>,
     resolved: String,
     ordinary_directory: bool,
+    ordinary_file: bool,
 }
 impl PreparedDelete {
     pub(super) fn new(path: &Path) -> Result<Self, CommandError> {
@@ -94,25 +95,37 @@ impl PreparedDelete {
             .replace('/', "\\");
         let metadata = source.file.metadata()?;
         let ordinary_directory = metadata.is_dir() && !platform().file_attributes(&metadata, "").2;
+        let ordinary_file = metadata.is_file() && !platform().file_attributes(&metadata, "").2;
         Ok(Self {
             path: path.to_path_buf(),
             source,
             identity,
             resolved,
             ordinary_directory,
+            ordinary_file,
         })
     }
     pub(super) fn path(&self) -> &Path {
         &self.path
     }
-    pub(super) fn recycle(
-        &self,
-        completed: &mut dyn FnMut(HistoryDeletedItem),
-    ) -> Result<(), CommandError> {
-        self.recycle_reporting(
-            &mut |path, proof| platform().shell_delete_tracked(path, proof),
-            completed,
-        )
+    pub(super) fn batch_file(&self) -> Option<(std::path::PathBuf, HistoryFileIdentity)> {
+        self.ordinary_file.then_some(())?;
+        Some((self.path.clone(), self.identity?))
+    }
+    pub(super) fn recycle_controlled(&self, control: crate::platform::ShellDeleteControl, completed: &mut dyn FnMut(HistoryDeletedItem)) -> Result<(), CommandError> {
+        self.recycle_reporting(&mut |path, proof| platform().shell_delete_tracked_controlled(path, proof, control.clone()), completed)
+    }
+    pub(super) fn record_outcome(&self, outcome: crate::platform::ShellDeleteOutcome, completed: &mut dyn FnMut(HistoryDeletedItem)) -> Result<(), CommandError> {
+        if outcome.completed {
+            let entry = HistoryDeletedItem::new(self.path.to_string_lossy().into_owned(), self.identity);
+            entry.remember_partial(outcome.effects);
+            completed(entry);
+        } else {
+            for effect in outcome.effects { completed(effect); }
+        }
+        if let Some(error) = outcome.error { return Err(dispatch_failure(&self.path, outcome.completed, error)); }
+        if !outcome.completed { return Err(dispatch_failure(&self.path, false, "Missing completion receipt".into())); }
+        Ok(())
     }
     #[cfg(test)]
     fn recycle_with(
@@ -152,27 +165,7 @@ impl PreparedDelete {
         // Shared DELETE access permits the Shell operation; its lookup is not atomic.
         let _source = &self.source;
         let outcome = delete(&self.path, self.identity);
-        if outcome.completed {
-            let entry = HistoryDeletedItem::new(
-                self.path.to_string_lossy().into_owned(),
-                self.identity,
-            );
-            entry.remember_partial(outcome.effects);
-            completed(entry);
-        } else {
-            for effect in outcome.effects { completed(effect); }
-        }
-        if let Some(error) = outcome.error {
-            return Err(dispatch_failure(&self.path, outcome.completed, error));
-        }
-        if !outcome.completed {
-            return Err(dispatch_failure(
-                &self.path,
-                false,
-                "Missing completion receipt".into(),
-            ));
-        }
-        Ok(())
+        self.record_outcome(outcome, completed)
     }
 }
 /// Drop descendant guards before recycling a parent directory; otherwise their

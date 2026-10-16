@@ -9,9 +9,8 @@ use oxyde_lib::systems::file_ops::{FileOpType, OpStatus};
 pub(crate) fn render_operation_progress(app: &OxydeApp, cx: &Context<OxydeApp>) -> Vec<AnyElement> {
     let theme = *cx.theme();
     app.file_ops
-        .list_operations()
+        .list_active_progress()
         .into_iter()
-        .filter(|op| !super::is_final(&op.status))
         .map(|op| {
             let owner = cx.entity();
             let (label, icon) = match op.op_type {

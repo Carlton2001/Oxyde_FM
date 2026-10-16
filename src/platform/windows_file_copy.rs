@@ -53,6 +53,7 @@ unsafe extern "system" fn callback(
         // Flush each completed stream while the native write handle is still
         // open, before CopyFileEx applies the final dates and readonly attribute.
         if stream_copied == stream_size {
+            let _timer = crate::systems::copy_diagnostics::Timer::start(crate::systems::copy_diagnostics::Phase::Flush);
             unsafe { FlushFileBuffers(destination) }.map_err(io_error)?;
         }
         Ok::<_, io::Error>(())

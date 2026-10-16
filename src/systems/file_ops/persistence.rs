@@ -28,10 +28,40 @@ struct Record {
     item_outcomes: std::collections::BTreeMap<PathBuf, ItemOutcome>,
 }
 
-fn encode(operations: &Operations) -> Result<Vec<u8>, serde_json::Error> {
-    let operations = operations.lock().unwrap();
-    let mut records: Vec<_> = operations
-        .values()
+type HistoryKey = Vec<(String, u64, OpStatus, Option<u64>, usize)>;
+type SelectedOperations = Vec<Arc<Mutex<FileOperation>>>;
+
+/// Final records are immutable through the manager API. Dismissal, replacement,
+/// final status changes and a new completion invalidate this lightweight key.
+/// Never clone sources/outcomes just to discover that nothing changed.
+fn selected_operations(operations: &Operations) -> (HistoryKey, SelectedOperations) {
+    let references: Vec<_> = operations.lock().unwrap().values().cloned().collect();
+    let mut finals: Vec<_> = references
+        .into_iter()
+        .filter_map(|operation| {
+            let op = operation.lock().unwrap();
+            FileOperationManager::is_final(&op.status).then(|| {
+                (
+                    (
+                        op.id.clone(),
+                        op.sequence,
+                        op.status.clone(),
+                        op.duration_ms,
+                        Arc::as_ptr(&operation) as usize,
+                    ),
+                    operation.clone(),
+                )
+            })
+        })
+        .collect();
+    finals.sort_by(|(a, _), (b, _)| a.1.cmp(&b.1).then_with(|| a.0.cmp(&b.0)));
+    let keep = finals.len().saturating_sub(10);
+    finals.into_iter().skip(keep).unzip()
+}
+
+fn encode_selected(operations: &SelectedOperations) -> Result<Vec<u8>, serde_json::Error> {
+    let records: Vec<_> = operations
+        .iter()
         .filter_map(|op| {
             let op = op.lock().unwrap();
             FileOperationManager::is_final(&op.status).then(|| Record {
@@ -46,16 +76,20 @@ fn encode(operations: &Operations) -> Result<Vec<u8>, serde_json::Error> {
                 processed_bytes: op.processed_bytes,
                 total_files: op.total_files,
                 processed_files: op.processed_files,
-                current_file: op.snapshot().current_file,
+                current_file: op.display_current_file(),
                 duration_ms: op.duration_ms,
                 speed_history: op.speed_history.clone(),
                 item_outcomes: op.snapshot_item_outcomes().into_iter().collect(),
             })
         })
         .collect();
-    records.sort_by_key(|op| op.sequence);
-    let records = &records[records.len().saturating_sub(10)..];
-    serde_json::to_vec_pretty(records)
+    // Both manager and per-operation locks have been released before JSON work.
+    serde_json::to_vec_pretty(&records)
+}
+
+#[cfg(test)]
+fn encode(operations: &Operations) -> Result<Vec<u8>, serde_json::Error> {
+    encode_selected(&selected_operations(operations).1)
 }
 
 pub(super) struct OperationPersistence {
@@ -141,12 +175,17 @@ impl FileOperationManager {
             .name("operation-history".into())
             .spawn(move || {
                 let mut previous = Vec::new();
+                let mut previous_key = None;
                 loop {
                     let stopping = !matches!(
                         receiver.recv_timeout(std::time::Duration::from_millis(100)),
                         Err(std::sync::mpsc::RecvTimeoutError::Timeout)
                     );
-                    if let Ok(bytes) = encode(&operations) {
+                    let (key, selected) = selected_operations(&operations);
+                    if !stopping && previous_key.as_ref() == Some(&key) {
+                        continue;
+                    }
+                    if let Ok(bytes) = encode_selected(&selected) {
                         if bytes != previous {
                             let result = (|| -> std::io::Result<()> {
                                 if let Some(parent) = path.parent() {
@@ -157,11 +196,16 @@ impl FileOperationManager {
                                 std::fs::rename(temporary, &path)
                             })();
                             match result {
-                                Ok(()) => previous = bytes,
+                                Ok(()) => {
+                                    previous = bytes;
+                                    previous_key = Some(key);
+                                }
                                 Err(error) => {
                                     log::warn!("Cannot save operation history: {error}");
                                 }
                             }
+                        } else {
+                            previous_key = Some(key);
                         }
                     }
                     if stopping {

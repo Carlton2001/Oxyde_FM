@@ -203,8 +203,7 @@ impl OxydeApp {
         op.compression_quality = self.archive_quality_for_path(op.destination.as_ref().unwrap());
         op.archive_qualities = self.archive_qualities();
         op.copy_name_suffix = cx.i18n().text(Message::CopyNameSuffix).to_string();
-        op.turbo = self.config.default_turbo_mode;
-        op.turbo_flag.store(op.turbo, std::sync::atomic::Ordering::Relaxed);
+        op.set_turbo(self.config.default_turbo_mode);
         let op_id = self
             .file_ops
             .queue_operation_on(&runtime, self.history.clone(), op);
@@ -224,10 +223,10 @@ impl OxydeApp {
                     cx.background_executor()
                         .timer(std::time::Duration::from_millis(200))
                         .await;
-                    let Some(operation) = operations.get_operation(&op_id) else {
+                    let Some((op_type, status)) = operations.operation_state(&op_id) else {
                         break;
                     };
-                    match operation.status {
+                    match status {
                         OpStatus::Queued
                         | OpStatus::Calculating
                         | OpStatus::Running
@@ -248,7 +247,7 @@ impl OxydeApp {
                                 this.refresh_all_tabs(cx);
                                 this.state.refresh_sidebar();
                                 this.reconcile_watchers(cx);
-                                let message = match operation.op_type {
+                                let message = match op_type {
                                     FileOpType::Copy => Message::ToastCopyCompleted,
                                     FileOpType::Move => Message::ToastMoveCompleted,
                                     FileOpType::Trash => Message::ToastTrashCompleted,

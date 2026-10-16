@@ -11,6 +11,16 @@ impl FileOperationManager {
     ) {
         let op_clone = op.clone();
         let started_at = std::time::Instant::now();
+        {
+            let operation = op.lock().unwrap();
+            if matches!(operation.op_type, FileOpType::Copy | FileOpType::Move) {
+                log::info!(target: "oxyde_lib::copy_timing", "copy_operation_start op={} type={:?} turbo={}",
+                    operation.id, operation.op_type, operation.turbo);
+            } else if matches!(operation.op_type, FileOpType::Delete | FileOpType::Trash) {
+                log::info!(target: "oxyde_lib::delete_timing", "delete_operation_start op={} type={:?} selected={} turbo={}",
+                    operation.id, operation.op_type, operation.sources.len(), operation.turbo);
+            }
+        }
 
         // Run blocking IO in a separate thread
         let result = tokio::task::spawn_blocking(move || {
@@ -246,6 +256,17 @@ impl FileOperationManager {
                 let tx = Transaction::new(t_type, details);
                 history_manager.push(tx);
             }
+        }
+        let operation = &*locked;
+        if matches!(operation.op_type, FileOpType::Copy | FileOpType::Move) {
+            log::info!(target: "oxyde_lib::copy_timing",
+                "copy_operation_end op={} status={:?} wall_s={:.6} processed_bytes={} total_bytes={} processed_files={} total_files={} turbo_final={}",
+                operation.id, operation.status, started_at.elapsed().as_secs_f64(), operation.processed_bytes,
+                operation.total_bytes, operation.processed_files, operation.total_files, operation.turbo);
+        } else if matches!(operation.op_type, FileOpType::Delete | FileOpType::Trash) {
+            log::info!(target: "oxyde_lib::delete_timing", "delete_operation_end op={} type={:?} status={:?} wall_s={:.6} processed_files={} total_files={} history_entries={} turbo_final={}",
+                operation.id, operation.op_type, operation.status, started_at.elapsed().as_secs_f64(),
+                operation.processed_files, operation.total_files, operation.deleted_items.len(), operation.turbo);
         }
     }
 }

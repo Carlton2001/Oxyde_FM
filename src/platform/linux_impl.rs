@@ -325,7 +325,10 @@ impl Platform for LinuxPlatform {
             output.write_all(&buffer[..count])?;
             copied += count as u64;
         }
-        output.sync_all()?;
+        {
+            let _timer = crate::systems::copy_diagnostics::Timer::start(crate::systems::copy_diagnostics::Phase::Flush);
+            output.sync_all()?;
+        }
         output.set_permissions(metadata.permissions())?;
         output.set_times(std::fs::FileTimes::new().set_modified(metadata.modified()?))?;
         Ok(())

@@ -1,5 +1,6 @@
 //! Copy into a private staging directory before publishing the completed file.
 use crate::platform::platform;
+use super::copy_diagnostics::{Phase, Timer};
 use std::io;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -42,6 +43,7 @@ impl Staging {
         parents: &super::path_parents::HeldParents,
         prefix: &str,
     ) -> io::Result<Self> {
+        let _timer = Timer::start(Phase::StagingCreate);
         let leaf = format!("{prefix}{}", uuid::Uuid::new_v4());
         let path = parents.resolved_path(Path::new(&leaf))?;
         let (directory, pin) = platform().create_copy_staging(parents.directory(), &path)?;
@@ -73,9 +75,12 @@ impl Staging {
         Ok(self.owned_identity.get())
     }
     pub(super) fn open_output(&self) -> io::Result<std::fs::File> {
+        let release_timer = Timer::start(Phase::WriterRelease);
         let expected = self
             .release_output()?
             .ok_or_else(|| io::Error::other("Copy output ownership unavailable"))?;
+        drop(release_timer);
+        let _open_timer = Timer::start(Phase::OutputOpen);
         let file = platform().open_copied_file(&self.directory, &self.file)?;
         if !expected.matches(&file)? {
             return Err(identity_changed(&self.file));
@@ -99,6 +104,7 @@ impl Staging {
 }
 impl Drop for Staging {
     fn drop(&mut self) {
+        let _timer = Timer::start(Phase::Cleanup);
         if let Err(error) = self.clean_owned_output() {
             log::warn!("Copy output preserved at {}: {error}", self.file.display());
             super::archive_recovery::retained(&platform().retained_file_path(&self.directory, &self.path).unwrap_or(self.path.clone()));
@@ -251,14 +257,20 @@ fn copy_with_parents_checked(
     progress: &mut dyn FnMut(u64) -> io::Result<()>,
     before_replace: Option<&mut dyn FnMut() -> io::Result<bool>>,
 ) -> io::Result<CopiedFile> {
+    let mut timing = super::copy_diagnostics::FileTiming::start(source, destination);
+    let parents_timer = Timer::start(Phase::Parents);
     let source_parents = super::path_parents::HeldParents::new(source)?;
     let source = source_parents.resolved_path(source)?;
     let destination = destination_parents.resolved_path(destination)?;
+    drop(parents_timer);
+    let checks_timer = Timer::start(Phase::Checks);
     progress(0)?;
     if replace {
         check_replacement(&destination)?;
     }
+    drop(checks_timer);
     let staging = Staging::new(&destination_parents)?;
+    let native_timer = super::copy_diagnostics::Timer::start(super::copy_diagnostics::Phase::Native);
     platform().copy_file_with_progress(
         &source,
         &staging.file,
@@ -267,8 +279,13 @@ fn copy_with_parents_checked(
         &mut |file| staging.capture_output(file),
         progress,
     )?;
+    drop(native_timer);
     let mut output = staging.open_output()?;
+    timing.bytes = output.metadata()?.len();
+    let hash_timer = super::copy_diagnostics::Timer::start(super::copy_diagnostics::Phase::Hash);
     let hash = hash(&mut output, progress)?;
+    drop(hash_timer);
+    let checks_timer = Timer::start(Phase::Checks);
     if expected.is_some_and(|expected| expected != hash) {
         // The output is still private: failure never publishes unexpected bytes.
         return Err(history_source_changed(&source));
@@ -277,7 +294,11 @@ fn copy_with_parents_checked(
     if replace && !exclusive {
         check_replacement(&destination)?;
     }
+    drop(checks_timer);
+    let publish_timer = super::copy_diagnostics::Timer::start(super::copy_diagnostics::Phase::Publish);
     destination_parents.rename(&output, &staging.file, &destination, replace && !exclusive)?;
+    drop(publish_timer);
+    timing.published = true;
     Ok(CopiedFile {
         file: output,
         hash,

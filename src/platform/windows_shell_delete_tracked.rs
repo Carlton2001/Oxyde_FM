@@ -11,8 +11,10 @@ use windows::Win32::Foundation::{E_ABORT, S_OK};
 use windows::Win32::System::Com::{CoCreateInstance, CLSCTX_INPROC_SERVER};
 use windows::Win32::System::Ole::{OleInitialize, OleUninitialize};
 use windows::Win32::UI::Shell::*;
+mod batch;
 #[path = "windows_shell_delete_tracked/effects.rs"]
 mod effects;
+pub(super) use batch::run_files;
 
 struct Apartment;
 impl Apartment {
@@ -42,6 +44,7 @@ struct Receipt {
     error: Option<String>,
     effects: effects::Effects,
     payload: Option<PathBuf>,
+    proof_time: std::time::Duration,
 }
 impl Receipt {
     fn fail(&mut self, error: String) {
@@ -107,8 +110,23 @@ struct DeleteSink {
     path: PathBuf,
     proof: Option<HistoryFileIdentity>,
     receipt: Arc<Mutex<Receipt>>,
+    control: Option<super::ShellDeleteControl>,
 }
 impl DeleteSink_Impl {
+    fn checkpoint(&self) -> windows::core::Result<()> {
+        if let Some(control) = &self.control {
+            loop {
+                if control.cancel.load(std::sync::atomic::Ordering::Relaxed) {
+                    return Err(self.record_failure("Operation cancelled".into()));
+                }
+                if !control.pause.load(std::sync::atomic::Ordering::Relaxed) {
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
+        }
+        Ok(())
+    }
     fn root_item(&self, item: &Ref<IShellItem>) -> windows::core::Result<bool> {
         let item = item.ok()?;
         Ok(unsafe { item.Compare(&self.root, SICHINT_CANONICAL.0 as u32)? } == 0)
@@ -124,7 +142,7 @@ impl DeleteSink_Impl {
 #[allow(non_snake_case)]
 impl IFileOperationProgressSink_Impl for DeleteSink_Impl {
     fn StartOperations(&self) -> windows::core::Result<()> {
-        Ok(())
+        self.checkpoint()
     }
     fn FinishOperations(&self, result: HRESULT) -> windows::core::Result<()> {
         if result.is_err() {
@@ -136,11 +154,15 @@ impl IFileOperationProgressSink_Impl for DeleteSink_Impl {
         Ok(())
     }
     fn PreDeleteItem(&self, _: u32, item: Ref<IShellItem>) -> windows::core::Result<()> {
+        self.checkpoint()?;
         if self
             .root_item(&item)
             .map_err(|e| self.record_failure(e.to_string()))?
         {
-            check_source(&self.path, self.proof).map_err(|e| self.record_failure(e))?;
+            let started = std::time::Instant::now();
+            let checked = check_source(&self.path, self.proof);
+            self.receipt.lock().unwrap_or_else(|p| p.into_inner()).proof_time += started.elapsed();
+            checked.map_err(|e| self.record_failure(e))?;
             self.receipt
                 .lock()
                 .unwrap_or_else(|p| p.into_inner())
@@ -259,7 +281,7 @@ impl IFileOperationProgressSink_Impl for DeleteSink_Impl {
         Ok(())
     }
     fn UpdateProgress(&self, _: u32, _: u32) -> windows::core::Result<()> {
-        Ok(())
+        self.checkpoint()
     }
     fn ResetTimer(&self) -> windows::core::Result<()> {
         Ok(())
@@ -278,7 +300,12 @@ fn flags(recycle: bool) -> FILEOPERATION_FLAGS {
     ))) | FOFX_EARLYFAILURE
 }
 
-fn delete(path: &Path, recycle: bool, proof: Option<HistoryFileIdentity>) -> ShellDeleteOutcome {
+fn delete(
+    path: &Path,
+    recycle: bool,
+    proof: Option<HistoryFileIdentity>,
+    control: Option<super::ShellDeleteControl>,
+) -> ShellDeleteOutcome {
     // Validate literal names before initializing any native operation.
     let buffer = match super::windows_shell_delete::source_buffer(&[path.to_path_buf()]) {
         Ok(buffer) => buffer,
@@ -303,6 +330,7 @@ fn delete(path: &Path, recycle: bool, proof: Option<HistoryFileIdentity>) -> She
                 path: path.to_path_buf(),
                 proof,
                 receipt: receipt.clone(),
+                control,
             }
             .into();
             // Observe the whole operation, including child deletions. Do not
@@ -330,11 +358,20 @@ pub(super) fn run(
     recycle: bool,
     proof: Option<HistoryFileIdentity>,
 ) -> ShellDeleteOutcome {
+    run_controlled(path, recycle, proof, None)
+}
+
+pub(super) fn run_controlled(
+    path: &Path,
+    recycle: bool,
+    proof: Option<HistoryFileIdentity>,
+    control: Option<super::ShellDeleteControl>,
+) -> ShellDeleteOutcome {
     // A fresh STA avoids borrowing the Tokio worker's existing COM apartment.
     let path = path.to_path_buf();
     match std::thread::Builder::new()
         .name("oxyde-shell-delete".into())
-        .spawn(move || delete(&path, recycle, proof))
+        .spawn(move || delete(&path, recycle, proof, control))
     {
         Ok(thread) => thread.join().unwrap_or_else(|_| ShellDeleteOutcome {
             completed: false,
@@ -447,6 +484,7 @@ mod tests {
                     path: path.clone(),
                     proof: Some(proof),
                     receipt: receipt.clone(),
+                    control: None,
                 }
                 .into();
                 unsafe {
@@ -496,6 +534,7 @@ mod tests {
                 path: path.clone(),
                 proof: Some(proof),
                 receipt: receipt.clone(),
+                control: None,
             }
             .into();
             unsafe {
@@ -532,6 +571,7 @@ mod tests {
                 path: path.clone(),
                 proof: Some(proof),
                 receipt: receipt.clone(),
+                control: None,
             }
             .into();
             let saved = path.with_extension("saved");

@@ -53,11 +53,13 @@ fn controls_and_dismissal_target_only_one_operation() {
         OpStatus::Paused
     );
     assert!(manager.get_operation(&first_id).unwrap().turbo);
+    assert!(manager.get_operation(&first_id).unwrap().turbo_flag.load(Ordering::Relaxed));
     assert_eq!(
         manager.get_operation(&second_id).unwrap().status,
         OpStatus::Queued
     );
     assert!(!manager.get_operation(&second_id).unwrap().turbo);
+    assert!(!manager.get_operation(&second_id).unwrap().turbo_flag.load(Ordering::Relaxed));
     assert!(manager.cancel_operation(&second_id));
     assert_eq!(
         manager.get_operation(&second_id).unwrap().status,

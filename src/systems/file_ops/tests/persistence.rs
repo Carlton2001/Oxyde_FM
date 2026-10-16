@@ -1,6 +1,104 @@
 use super::*;
 
 #[test]
+fn history_key_ignores_active_progress_and_tracks_finalization_dismissal_and_replacement() {
+    let manager = FileOperationManager::new();
+    let mut finished = FileOperation::new(
+        FileOpType::Trash,
+        (0..17_000)
+            .map(|i| PathBuf::from(format!("file-{i}")))
+            .collect(),
+        None,
+        None,
+    );
+    finished.status = OpStatus::Cancelled;
+    finished.sequence = 1;
+    let finished_id = finished.id.clone();
+    let active = FileOperation::new(FileOpType::Copy, vec!["active".into()], None, None);
+    let active_id = active.id.clone();
+    manager
+        .operations
+        .lock()
+        .unwrap()
+        .insert(finished_id.clone(), Arc::new(Mutex::new(finished)));
+    manager
+        .operations
+        .lock()
+        .unwrap()
+        .insert(active_id.clone(), Arc::new(Mutex::new(active)));
+    let (key, selected) = selected_operations(&manager.operations);
+    assert_eq!(key.len(), 1);
+    assert_eq!(selected.len(), 1);
+    for progress in 0..16 {
+        manager
+            .operations
+            .lock()
+            .unwrap()
+            .get(&active_id)
+            .unwrap()
+            .lock()
+            .unwrap()
+            .processed_files = progress;
+        assert_eq!(selected_operations(&manager.operations).0, key);
+    }
+    manager
+        .operations
+        .lock()
+        .unwrap()
+        .get(&active_id)
+        .unwrap()
+        .lock()
+        .unwrap()
+        .status = OpStatus::Completed;
+    assert_ne!(selected_operations(&manager.operations).0, key);
+    assert!(manager.dismiss_operation(&active_id));
+    assert_eq!(selected_operations(&manager.operations).0, key);
+    let mut replacement =
+        FileOperation::new(FileOpType::Trash, vec!["replacement".into()], None, None);
+    replacement.id = finished_id.clone();
+    replacement.sequence = 1;
+    replacement.status = OpStatus::Cancelled;
+    manager
+        .operations
+        .lock()
+        .unwrap()
+        .insert(finished_id.clone(), Arc::new(Mutex::new(replacement)));
+    assert_ne!(selected_operations(&manager.operations).0, key);
+    assert!(manager.dismiss_operation(&finished_id));
+    assert!(selected_operations(&manager.operations).0.is_empty());
+}
+
+#[test]
+fn unchanged_retained_history_keeps_the_same_key_and_preserves_serialized_outcomes() {
+    let manager = FileOperationManager::new();
+    for sequence in 0..15 {
+        let source = PathBuf::from(format!("file-{sequence}"));
+        let mut operation = FileOperation::new(FileOpType::Trash, vec![source.clone()], None, None);
+        operation.sequence = sequence;
+        operation.status = OpStatus::Cancelled;
+        operation.item_complete(&source);
+        let id = operation.id.clone();
+        manager
+            .operations
+            .lock()
+            .unwrap()
+            .insert(id, Arc::new(Mutex::new(operation)));
+    }
+    let (key, selected) = selected_operations(&manager.operations);
+    assert_eq!(key.len(), 10);
+    assert_eq!(key[0].1, 5);
+    assert_eq!(key.last().unwrap().1, 14);
+    let records: Vec<Record> =
+        serde_json::from_slice(&encode_selected(&selected).unwrap()).unwrap();
+    assert_eq!(records.len(), 10);
+    assert!(records.iter().all(|record| record
+        .item_outcomes
+        .values()
+        .all(|outcome| *outcome == ItemOutcome::Completed)));
+    assert_eq!(selected_operations(&manager.operations).0, key);
+}
+
+#[test]
 fn interrupted_outcome_survives_restart_and_ambiguous_old_partial_becomes_unknown() {
     let dir = tempfile::tempdir_in(std::env::current_dir().unwrap().join("target")).unwrap();
     let path = dir.path().join("operation_history.json");

@@ -489,6 +489,29 @@ impl Platform for WindowsPlatform {
             .is_some_and(|config| config.nuke_on_delete);
         super::windows_shell_delete_tracked::run(path, !immediate, proof)
     }
+    fn shell_delete_tracked_controlled(&self, path: &std::path::Path, proof: Option<crate::models::transaction::HistoryFileIdentity>, control: super::ShellDeleteControl) -> super::ShellDeleteOutcome {
+        let immediate = path.ancestors().last()
+            .and_then(|root| read_recycle_bin_config(root.to_string_lossy().into_owned()).ok())
+            .is_some_and(|config| config.nuke_on_delete);
+        super::windows_shell_delete_tracked::run_controlled(path, !immediate, proof, Some(control))
+    }
+    fn shell_delete_files_tracked(&self, files: &[(std::path::PathBuf, crate::models::transaction::HistoryFileIdentity)], control: super::ShellDeleteControl) -> Vec<super::ShellDeleteOutcome> {
+        let mut policies = std::collections::HashMap::new();
+        let mut results = Vec::with_capacity(files.len());
+        let mut pending = Vec::new();
+        let mut policy = None;
+        for (path, proof) in files {
+            let root = path.ancestors().last().unwrap_or(path).to_string_lossy().into_owned();
+            let recycle = *policies.entry(root.clone()).or_insert_with(|| !read_recycle_bin_config(root).is_ok_and(|config| config.nuke_on_delete));
+            if policy.is_some_and(|previous| previous != recycle) {
+                results.extend(super::windows_shell_delete_tracked::run_files(std::mem::take(&mut pending), control.clone()));
+            }
+            policy = Some(recycle);
+            pending.push((path.clone(), recycle, *proof));
+        }
+        if !pending.is_empty() { results.extend(super::windows_shell_delete_tracked::run_files(pending, control)); }
+        results
+    }
 
     fn run_preview_worker(&self, mode: &str, path: &std::path::Path) -> std::io::Result<Vec<u8>> {
         super::windows_preview_worker::run(mode, path)

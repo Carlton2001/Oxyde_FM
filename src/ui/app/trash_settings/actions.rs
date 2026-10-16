@@ -95,6 +95,7 @@ impl OxydeApp {
                             None,
                         );
                         op.archive_qualities = this.archive_qualities();
+                        op.set_turbo(this.config.default_turbo_mode);
                         let id =
                             this.file_ops
                                 .queue_operation_on(&runtime, this.history.clone(), op);

@@ -183,6 +183,8 @@ impl FileOperationManager {
         let mut archive_name_bytes = 0usize;
         let mut selected_sources = Vec::with_capacity(sources.len());
         let mut canonical_sources = Vec::with_capacity(sources.len());
+        let mut source_paths = crate::systems::source_path_set::SourcePathSet::default();
+        let selection_started = std::time::Instant::now();
         for source in &sources {
             Self::archive_checkpoint(op)?;
             let selected = crate::systems::source_selection::SelectedEntry::select(source)
@@ -194,9 +196,7 @@ impl FileOperationManager {
                     target_dir, canonical
                 ));
             }
-            if canonical_sources.iter().any(|existing: &PathBuf| {
-                canonical.starts_with(existing) || existing.starts_with(&canonical)
-            }) {
+            if !source_paths.insert(canonical.clone()) {
                 return Err(format!(
                     "Overlapping source paths are not supported: {:?}",
                     source
@@ -205,6 +205,10 @@ impl FileOperationManager {
             canonical_sources.push(canonical);
             selected_sources.push(selected);
         }
+
+        log::info!(target: "oxyde_lib::copy_timing",
+            "copy_source_selection op={} selected_roots={} wall_s={:.6}",
+            op.lock().unwrap().id, sources.len(), selection_started.elapsed().as_secs_f64());
 
         if !trash_entries.is_empty() {
             let mut names = std::collections::HashSet::new();
@@ -231,6 +235,7 @@ impl FileOperationManager {
         let mut fresh_copy_directories = Vec::new();
         let copy_name_suffix = op.lock().unwrap().copy_name_suffix.clone();
 
+        let traversal_started = std::time::Instant::now();
         for (selected, canonical_src) in selected_sources.iter().zip(&canonical_sources) {
             let first_file = files_to_process.len();
             let first_directory = directories_to_create.len();
@@ -324,6 +329,10 @@ impl FileOperationManager {
                 files_to_process.len() - first_file + directories_to_create.len() - first_directory,
                 skipped, is_move && selected.is_dir());
         }
+
+        log::info!(target: "oxyde_lib::copy_timing",
+            "copy_plan_traversal op={} files={} directories={} wall_s={:.6}",
+            op.lock().unwrap().id, total_files, directories_to_create.len(), traversal_started.elapsed().as_secs_f64());
 
         {
             let mut locked = op.lock().unwrap();
@@ -463,6 +472,11 @@ impl FileOperationManager {
         } else {
             Self::copy_worker_count(num_tasks, total_bytes, core_count)
         };
+
+        log::info!(target: "oxyde_lib::copy_timing",
+            "copy_plan op={} copying_files={} total_bytes={} workers_available={} turbo={} normal_workers=1",
+            op.lock().unwrap().id, num_tasks, total_bytes, concurrency,
+            turbo_flag.load(Ordering::Relaxed));
 
         let mut handles = Vec::with_capacity(concurrency);
         let recovery_target = {

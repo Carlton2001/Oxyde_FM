@@ -75,6 +75,13 @@ pub struct ShellDeleteOutcome {
     /// Confirmed descendants, including separately recycled payloads.
     pub effects: Vec<crate::models::transaction::HistoryDeletedItem>,
 }
+
+#[derive(Clone)]
+pub struct ShellDeleteControl {
+    pub cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    pub pause: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    pub turbo: std::sync::Arc<std::sync::atomic::AtomicBool>,
+}
 /// Keeps the selected archive and its ancestors retained for a parser session.
 #[doc(hidden)]
 pub struct RetainedArchiveSource {
@@ -328,6 +335,14 @@ pub trait Platform: Send + Sync {
     /// Windows obtains an item-level receipt, checking a known identity at dispatch.
     fn shell_delete_tracked(&self, path: &std::path::Path, _proof: Option<crate::models::transaction::HistoryFileIdentity>) -> ShellDeleteOutcome {
         ShellDeleteOutcome::from_result(self.shell_delete(&[path.to_path_buf()], true))
+    }
+    #[cfg(target_os = "windows")]
+    fn shell_delete_tracked_controlled(&self, path: &std::path::Path, proof: Option<crate::models::transaction::HistoryFileIdentity>, _control: ShellDeleteControl) -> ShellDeleteOutcome {
+        self.shell_delete_tracked(path, proof)
+    }
+    #[cfg(target_os = "windows")]
+    fn shell_delete_files_tracked(&self, files: &[(std::path::PathBuf, crate::models::transaction::HistoryFileIdentity)], control: ShellDeleteControl) -> Vec<ShellDeleteOutcome> {
+        files.iter().map(|(path, proof)| self.shell_delete_tracked_controlled(path, Some(*proof), control.clone())).collect()
     }
 
     /// Lists entries in the operating system's network neighborhood.

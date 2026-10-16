@@ -16,7 +16,7 @@ pub(crate) fn close_operations_windows(cx: &mut App) {
 }
 
 pub(crate) fn open_operations_window(app: Entity<OxydeApp>, cx: &mut App) {
-    if app.read(cx).file_ops.list_operations().is_empty() {
+    if app.read(cx).file_ops.operation_counts().0 == 0 {
         return;
     }
     for handle in cx.windows() {
@@ -31,7 +31,7 @@ pub(crate) fn open_operations_window(app: Entity<OxydeApp>, cx: &mut App) {
     let title = cx.i18n().text(Message::OpsShowPanel);
     cx.defer(move |cx| {
         let Some(owner) = owner.upgrade() else { return };
-        if owner.read(cx).file_ops.list_operations().is_empty() {
+        if owner.read(cx).file_ops.operation_counts().0 == 0 {
             return;
         }
         for handle in cx.windows() {

@@ -45,6 +45,10 @@ impl FileOperationManager {
             recovery_target,
         } = inputs;
 
+        let _timing_context = crate::systems::copy_diagnostics::WorkerScope::enter(
+            operation.lock().unwrap().id.clone(), thread_idx,
+        );
+
         let _priority_guard = RestoreNormalPriority;
         let mut is_in_background_mode = false;
 
@@ -92,6 +96,7 @@ impl FileOperationManager {
             operation.lock().unwrap().current_file =
                 Some(src.to_string_lossy().into_owned());
 
+            let prepare_started = std::time::Instant::now();
             let destination_parents = destination_tree
                 .file_parents(
                     dest,
@@ -111,6 +116,8 @@ impl FileOperationManager {
             #[cfg(all(target_os = "windows", not(test)))]
             { Self::archive_checkpoint(&operation)?; Self::verify_archive_item(&operation, dest.parent().ok_or("Missing copy parent")?, destination_parents.directory()).map_err(|e| e.to_string())?; }
 
+            let destination_prepare = prepare_started.elapsed();
+            let source_started = std::time::Instant::now();
             let source_guard = if is_move || deferred_moves.is_some() {
                 Some(
                     crate::systems::copied_source::CopiedSource::open_selected(selected).map_err(
@@ -140,6 +147,10 @@ impl FileOperationManager {
                 .or_else(|| copy_source.as_ref().map(|(_, file)| file))
                 .expect("selected copy source is held");
             let resolved_source = selected.resolved_path();
+            log::info!(target: "oxyde_lib::copy_timing",
+                "copy_prepare op={} worker={} source={:?} destination_parent_s={:.6} source_open_s={:.6}",
+                operation.lock().unwrap().id, thread_idx, src,
+                destination_prepare.as_secs_f64(), source_started.elapsed().as_secs_f64());
             let mut copied = 0;
             let output = crate::systems::file_copy::copy_with_parents_observed(
                 &resolved_source,
@@ -156,6 +167,7 @@ impl FileOperationManager {
                     processed_bytes
                         .fetch_add(bytes.saturating_sub(copied), Ordering::Relaxed);
                     copied = bytes;
+                    let mut pause_timer = None;
                     loop {
                         if cancel.load(Ordering::Relaxed)
                             || error_share.lock().unwrap().is_some()
@@ -176,6 +188,9 @@ impl FileOperationManager {
                         if !pause.load(Ordering::Relaxed) {
                             break;
                         }
+                        pause_timer.get_or_insert_with(|| crate::systems::copy_diagnostics::Timer::start(
+                            crate::systems::copy_diagnostics::Phase::Pause,
+                        ));
                         std::thread::sleep(std::time::Duration::from_millis(100));
                     }
                     Ok(())

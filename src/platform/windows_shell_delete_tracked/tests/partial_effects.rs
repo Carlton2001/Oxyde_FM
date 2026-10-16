@@ -29,6 +29,7 @@ fn failed_root_keeps_confirmed_descendant_and_excludes_skipped_and_foreign_items
             path: path.clone(),
             proof: None,
             receipt: receipt.clone(),
+            control: None,
         }
         .into();
         unsafe {
@@ -110,6 +111,7 @@ fn root_success_preserves_a_child_recycled_into_a_separate_payload() {
             path: path.clone(),
             proof: None,
             receipt: receipt.clone(),
+            control: None,
         }
         .into();
         unsafe {

@@ -1,6 +1,23 @@
 use super::*;
 
 #[test]
+fn overlapping_source_selections_are_refused_before_destination_changes() {
+    let root = tempfile::tempdir().unwrap();
+    let folder = root.path().join("source");
+    let file = folder.join("file.txt");
+    let target = root.path().join("destination");
+    std::fs::create_dir(&folder).unwrap();
+    std::fs::create_dir(&target).unwrap();
+    std::fs::write(&file, b"keep").unwrap();
+    for sources in [vec![folder.clone(), file.clone()], vec![file.clone(), folder.clone()], vec![file.clone(), file.clone()]] {
+        let result = FileOperationManager::perform_copy(&operation(), sources, Some(target.clone()), false, None);
+        assert!(result.unwrap_err().contains("Overlapping source paths"));
+        assert_eq!(std::fs::read_dir(&target).unwrap().count(), 0);
+        assert_eq!(std::fs::read(&file).unwrap(), b"keep");
+    }
+}
+
+#[test]
 fn move_merge_keeps_skipped_source_files() {
     let temp = tempfile::tempdir().unwrap();
     let source_root = temp.path().join("source");

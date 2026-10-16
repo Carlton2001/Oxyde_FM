@@ -109,6 +109,7 @@ impl OxydeApp {
                     operation.compression_quality =
                         this.archive_quality_for_path(operation.destination.as_ref().unwrap());
                     operation.archive_qualities = this.archive_qualities();
+                    operation.set_turbo(this.config.default_turbo_mode);
                     let id =
                         this.file_ops
                             .queue_operation_on(&runtime, this.history.clone(), operation);

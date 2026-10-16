@@ -10,10 +10,14 @@ mod archive_move_sources;
 pub mod file_ops;
 pub(crate) mod transfer_naming;
 pub(crate) mod file_copy;
+pub(crate) mod copy_diagnostics;
+#[doc(hidden)]
+pub mod copy_benchmark;
 mod copied_source;
 mod destination_tree;
 mod source_directories;
 mod source_selection;
+mod source_path_set;
 mod compression_sources;
 mod compression_output;
 pub(crate) mod history_move;

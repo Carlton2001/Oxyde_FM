@@ -61,7 +61,7 @@ impl Render for OperationsPanelView {
         let mut args = FluentArgs::new();
         args.set(
             "count",
-            app.read(cx).file_ops.list_operations().len() as i64,
+            app.read(cx).file_ops.operation_counts().0 as i64,
         );
         let title = cx.i18n().text_with_args(Message::OpsTitle, &args);
         window.set_window_title(title.as_ref());

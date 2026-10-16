@@ -16,6 +16,8 @@ mod execution;
 mod extract;
 mod scheduler;
 mod persistence;
+mod summaries;
+pub use summaries::OperationProgress;
 mod item_outcomes;
 pub use item_outcomes::ItemOutcome;
 
@@ -110,6 +112,14 @@ pub struct FileOperation {
 }
 
 impl FileOperation {
+    fn display_current_file(&self) -> Option<String> {
+        self.current_file.as_ref().map(|path| {
+            let path = Path::new(path);
+            self.archive_path_mappings.iter().find_map(|(root, archive)| {
+                path.strip_prefix(root).ok().map(|relative| archive.join(relative))
+            }).unwrap_or_else(|| path.to_path_buf()).to_string_lossy().into_owned()
+        })
+    }
     fn snapshot(&self) -> Self {
         Self {
             item_outcomes: self.snapshot_item_outcomes(),
@@ -125,19 +135,7 @@ impl FileOperation {
             processed_bytes: self.processed_bytes,
             total_files: self.total_files,
             processed_files: self.processed_files,
-            current_file: self.current_file.as_ref().map(|path| {
-                let path = Path::new(path);
-                self.archive_path_mappings
-                    .iter()
-                    .find_map(|(root, archive)| {
-                        path.strip_prefix(root)
-                            .ok()
-                            .map(|relative| archive.join(relative))
-                    })
-                    .unwrap_or_else(|| path.to_path_buf())
-                    .to_string_lossy()
-                    .into_owned()
-            }),
+            current_file: self.display_current_file(),
             bytes_per_second: self.bytes_per_second,
             speed_history: self.speed_history.clone(),
             duration_ms: self.duration_ms,
@@ -240,6 +238,12 @@ impl FileOperation {
             self.speed_history.remove(0);
         }
         self.speed_history.push(bytes_per_second);
+    }
+
+    /// Keep the displayed setting and the worker's live flag in sync.
+    pub fn set_turbo(&mut self, enabled: bool) {
+        self.turbo = enabled;
+        self.turbo_flag.store(enabled, Ordering::Relaxed);
     }
 }
 
@@ -394,8 +398,8 @@ impl FileOperationManager {
         if let Some(op_arc) = ops.get(id) {
             let mut locked = op_arc.lock().unwrap();
             if !Self::is_final(&locked.status) {
-                locked.turbo = enabled;
-                locked.turbo_flag.store(enabled, Ordering::Relaxed);
+                locked.set_turbo(enabled);
+                log::info!(target: "oxyde_lib::copy_timing", "operation_turbo op={} enabled={}", id, enabled);
             }
         }
     }
@@ -467,6 +471,8 @@ impl FileOperationManager {
     }
 
     pub fn cancel_operation(&self, id: &str) -> bool {
+        let requested = std::time::Instant::now();
+        log::info!(target: "oxyde_lib::delete_timing", "operation_cancel_requested op={}", id);
         let ops = self.operations.lock().unwrap();
         if let Some(op) = ops.get(id) {
             let mut locked_op = op.lock().unwrap();
@@ -474,6 +480,7 @@ impl FileOperationManager {
                 return false;
             }
             locked_op.cancel_flag.store(true, Ordering::Relaxed);
+            log::info!(target: "oxyde_lib::delete_timing", "operation_cancel_accepted op={} request_wait_s={:.6}", id, requested.elapsed().as_secs_f64());
             if !locked_op.execution_started {
                 locked_op.status = OpStatus::Cancelled;
             }

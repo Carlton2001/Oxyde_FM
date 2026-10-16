@@ -5,7 +5,6 @@ use crate::ui::i18n::{I18nContext, Message};
 use crate::ui::theme::ThemeContext;
 use gpui::prelude::*;
 use gpui::*;
-use super::is_final;
 
 pub fn render_operations_footer(
     app: &OxydeApp,
@@ -13,9 +12,8 @@ pub fn render_operations_footer(
     cx: &mut Context<OxydeApp>,
 ) -> impl IntoElement {
     let theme = *cx.theme();
-    let operations = app.file_ops.list_operations();
-    let enabled = !operations.is_empty();
-    let active = operations.iter().filter(|op| !is_final(&op.status)).count();
+    let (total, active) = app.file_ops.operation_counts();
+    let enabled = total > 0;
     let tooltip = cx.i18n().text(Message::OpsShowPanel);
     div()
         .id("title-operations")
