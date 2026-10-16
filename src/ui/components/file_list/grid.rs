@@ -82,10 +82,28 @@ pub(super) fn render_grid_file_list(
             .id(SharedString::from(format!("file-grid-empty-{pane_id}")))
             .flex_1()
             .flex()
-            .items_center()
             .justify_center()
+            .pt(px(crate::ui::style::column_header_height() + logical(18.0)))
             .text_color(theme.text_muted)
+            .text_size(rems(0.8125))
             .child(message)
+            .on_mouse_down(MouseButton::Left, {
+                let h = handle.clone();
+                let pid = pane_id.clone();
+                move |event, window, cx| {
+                    h.update(cx, |this, cx| {
+                        this.activate_pane(&pid, cx);
+                        this.focus_handle.focus(window, cx);
+                        if !event.modifiers.control && !event.modifiers.shift {
+                            if let Some(pane) = this.state.find_pane_mut(&pid) {
+                                pane.active_tab_mut().selected_paths.clear();
+                                pane.active_tab_mut().selection_anchor = None;
+                            }
+                        }
+                        cx.notify();
+                    });
+                }
+            })
             .on_mouse_down(MouseButton::Right, {
                 let h = handle.clone();
                 let pid = pane_id.clone();
