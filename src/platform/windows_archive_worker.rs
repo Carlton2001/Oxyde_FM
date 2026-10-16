@@ -35,8 +35,6 @@ pub(super) fn run_in(
     let bytes = confined(command, path, deadline, &|| Ok(()))?;
     archive_listing_protocol::decode(&bytes, path, internal)
 }
-#[cfg(test)]
-#[allow(dead_code)]
 pub(super) fn supervise(
     command: Command,
     path: &Path,
@@ -143,8 +141,6 @@ fn confined(
         }
     })
 }
-#[cfg(test)]
-#[allow(dead_code)]
 pub(super) fn supervise_index(
     command: Command,
     path: &Path,

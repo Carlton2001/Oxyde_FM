@@ -1,0 +1,42 @@
+name: Windows native tests
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '**.rs'
+      - Cargo.toml
+      - Cargo.lock
+      - 'locales/**'
+      - 'assets/**'
+      - '.cargo/**'
+      - scripts/test-windows.ps1
+      - .github/workflows/tests.yml
+  pull_request:
+    paths:
+      - '**.rs'
+      - Cargo.toml
+      - Cargo.lock
+      - 'locales/**'
+      - 'assets/**'
+      - '.cargo/**'
+      - scripts/test-windows.ps1
+      - .github/workflows/tests.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Rust stable
+        run: rustup update stable --no-self-update
+      - name: Compile all targets, build workers and run native tests
+        shell: pwsh
+        run: ./scripts/test-windows.ps1

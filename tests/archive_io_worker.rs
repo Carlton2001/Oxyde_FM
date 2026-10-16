@@ -1,41 +1,15 @@
 #![cfg(target_os = "windows")]
-mod platform { pub use oxyde_lib::platform::platform; }
-mod utils {
-    pub use oxyde_lib::utils::{archive_io_protocol, archive_listing_protocol, preview_protocol};
-    pub use oxyde_lib::utils::image_preview_decode;
-}
-mod models {
-    pub use oxyde_lib::models::error;
-    pub use oxyde_lib::models::*;
-}
-mod commands {
-    pub use oxyde_lib::commands::archive_io_worker;
-    pub use oxyde_lib::commands::archive_handle_worker;
-}
+use oxyde_lib::utils;
+use oxyde_lib::platform::worker_test_support::{
+    archive_io as windows_archive_io_worker,
+    archive_listing as windows_archive_worker,
+    preview as windows_preview_worker,
+};
 #[path = "support/iso.rs"]
 mod iso;
-#[allow(dead_code)]
-#[path = "../src/platform/windows_archive_io_worker.rs"]
-mod windows_archive_io_worker;
-#[allow(dead_code)]
-#[path = "../src/platform/windows_archive_worker.rs"]
-mod windows_archive_worker;
-#[allow(dead_code)]
-#[path = "../src/platform/windows_preview_worker.rs"]
-mod windows_preview_worker;
-#[allow(dead_code)]
-#[path = "../src/platform/windows_process_launch.rs"]
-mod windows_process_launch;
-#[allow(dead_code)]
-#[path = "../src/platform/windows_worker_budget.rs"]
-mod windows_worker_budget;
-#[allow(dead_code)]
-#[path = "../src/platform/windows_resource_pressure.rs"]
-mod windows_resource_pressure;
-use windows_process_launch::native_probe;
-#[allow(dead_code)]
-#[path = "../src/platform/windows_worker_sandbox.rs"]
-mod windows_worker_sandbox;
+#[path = "support/native_process.rs"]
+mod native_process;
+use native_process::native_probe;
 use oxyde_lib::utils::archive_io_state::ExtractionState;
 use std::io::{self, Cursor, Seek, SeekFrom, Write};
 use std::path::Path;

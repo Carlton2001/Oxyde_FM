@@ -176,8 +176,7 @@ pub(super) fn run(mode: &str, path: &Path) -> io::Result<Vec<u8>> {
     }
 }
 
-#[cfg(test)]
-fn run_image_mode_in(executable: &Path, path: &Path, deadline: Duration, thumbnail: bool) -> io::Result<Vec<u8>> {
+pub(super) fn run_image_mode_in(executable: &Path, path: &Path, deadline: Duration, thumbnail: bool) -> io::Result<Vec<u8>> {
     let source = crate::platform::platform().retain_archive_source(path)?;
     if source.file.metadata()?.len()
         > crate::utils::image_preview_decode::POLICY.encoded_bytes as u64

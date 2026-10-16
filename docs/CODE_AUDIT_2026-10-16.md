@@ -4,6 +4,8 @@
 
 Audit effectué sur `main`, révision `4f16bc915ea8d286d5e3eac422d32a17fc630e78`, sous Windows x86_64, avec Rust/Cargo 1.98.1. Aucun changement du code applicatif, des tests existants, des dépendances ou des réglages utilisateur. Aucun commit ni push.
 
+Les constats et chiffres de cette section décrivent la passe initiale d'audit. Les corrections ultérieures A01 et A02, leurs branches et leurs validations sont suivies dans les sections dédiées ci-dessous.
+
 Au départ, seuls quatre CSV étaient non suivis : `Benchmark_Smalls_Source_ED.csv`, `Benchmark_Video_Source_DD.csv`, `Benchmark_Video_Source_ED.csv`, `resultats.csv`. Ils ont été laissés intacts. Les sondes et journaux de cette passe sont dans `target/audit-2026-10-16/`, ignoré par Git ; ils ne constituent pas des tests de non-régression conservés.
 
 **Priorité : A01 reproduit une perte du contenu d'une source lors d'un déplacement de fichiers homonymes.** L'absence de collision entre sources ne garantit pas l'absence de collision entre destinations calculées.
@@ -52,6 +54,8 @@ Les constats ci-dessous distinguent reproduction, démonstration par le code et 
 **Régression / validation :** mêmes noms, casse différente sur volume Windows insensible à la casse, dossiers fusionnés avec descendants homonymes, cible initialement présente/absente, copie et déplacement, ordre inversé, modes normal/turbo, annulation et Undo. Vérifier les octets et les journaux, pas seulement le statut final. Ne pas modifier la politique existante de remplacement explicite d'un fichier indépendant.
 
 ### A02 — P2 — Trois suites d'intégration ne compilent plus
+
+**Suivi de correction :** traitée sur `codex/a02-worker-integration-tests`, issue du commit A01 `1459b66`. Les trois suites importent désormais `platform::worker_test_support` dans la bibliothèque compilée : leurs superviseurs, verrous de lancement et budgets sont ceux de la production. Les implémentations natives restent privées ; les façades artificielles `commands`/`utils`/`app_paths` et les inclusions de leurs sources disparaissent des harnesses. Les 25 scénarios propres à ces suites sont conservés. Le script `scripts/test-windows.ps1` et le workflow `.github/workflows/tests.yml` couvrent compilation de toutes les cibles, construction explicite des exécutables et tests Windows natifs. Les observations ci-dessous décrivent le défaut initial ; les résultats actuels sont consignés en fin de rapport.
 
 **Catégorie / confiance :** validation ; confirmé par compilation, confiance élevée.
 
@@ -295,3 +299,17 @@ La suite de régression `--test archive_io_pipeline` réussit également : **29 
 La vérification protège contre les collisions internes du plan ; elle ne constitue pas une transaction globale ni une nouvelle garantie contre toute modification concurrente externe. Aucun essai visuel GPUI ni runtime Linux n'a été effectué pour cette correction. Le repli Linux compare les noms exactement ; les montages Linux présentant d'autres règles de noms restent hors de cette validation. Les suites cassées décrites dans A02 ne sont pas corrigées ici.
 
 Cette correction modifie du code partagé par les workers : fermer Oxyde, exécuter `cargo build --offline --bins`, puis `cargo run --offline` avant de tester l'application reconstruite.
+
+## Correction A02 — validation et limites
+
+Avant correction, `cargo check --offline --locked --all-targets` reproduit E0583, E0433 et E0425 dans les trois harnesses. Après correction, cette commande réussit sans avertissement. La découverte et la comparaison des noms avec le commit A01 confirment **10 scénarios `preview_worker`, 4 `archive_listing_worker` et 11 `archive_io_worker`**, avec leurs noms et fixtures conservés. Les tests unitaires internes restent dans leur suite `--lib`, sans inclusion ni duplication dans chaque intégration.
+
+La première exécution complète révèle aussi une attente PDF obsolète : 256 × 512 pixels étaient attendus pour la page de 72 × 144 points. Le contrat actuel du renderer (`windows_pdf_thumbnail::PixelLayout::fit`), ses tests unitaires et `docs/SHARED_PREVIEW_CACHE.md` prévoient une enveloppe de 1024 pixels, soit 512 × 1024 dans ce scénario. L'assertion est mise en cohérence et le pixel central reste vérifié, avec les mêmes exigences de couleur/opacité et de suppression du fichier après réponse. Le renderer et son comportement ne changent pas.
+
+L'interface `platform::worker_test_support`, limitée à Windows et masquée de la documentation publique, appelle les superviseurs compilés de production. Elle fournit les points d'injection des exécutables et commandes adverses, et convertit les deux métriques de supervision sans exposer les modules natifs. La compilation des sondes utilise le même verrou d'héritage des handles que les workers. Aucun repli de décodage local, changement du confinement LPAC ou modification du chemin de fermeture PDF/Intel n'est introduit.
+
+Le workflow `Windows native tests` s'exécute sur les PR et les pushes sur `main` touchant les sources ou leurs ressources, ainsi que sur déclenchement manuel. Il appelle `scripts/test-windows.ps1` : compilation de toutes les cibles, construction de tous les exécutables, puis `cargo test --locked --all-targets -- --test-threads=1`, avec TEMP/TMP privés et restaurés à la sortie du script. La variante locale `./scripts/test-windows.ps1 -Offline` conserve les mêmes vérifications sans accès réseau. Le workflow hébergé n'a pas été exécuté sur GitHub pendant cette tâche ; aucun push n'a été demandé.
+
+**Résultat final :** `./scripts/test-windows.ps1 -Offline` réussit hors bac à sable. `cargo check --offline --locked --all-targets` et `cargo build --offline --locked --bins` passent sans avertissement. L'exécution de toutes les cibles totalise **1 095 tests réussis, 21 ignorés, aucun échec** : 781 backend, 257 interface, 29 pipeline d'archives, 11 entrées/sorties d'archives, 4 listing d'archives, 10 aperçus et 3 collisions de transfert. Les exécutables sans tests et l'exemple compilent également. Les 25 scénarios restaurés passent tous ; aucun n'est ignoré. Journaux locaux dans `target/a02-validation/`, dont `native-tests-final.log`. Le script PowerShell est également validé par son parseur et `git diff --check` ne relève pas d'erreur d'espacement.
+
+Les workers et leur code partagé doivent être reconstruits avant un essai applicatif : fermer Oxyde, lancer `cargo build --offline --bins`, puis `cargo run --offline`. La validation reste native Windows ; aucune exécution Linux ni validation visuelle GPUI n'est ajoutée par A02.

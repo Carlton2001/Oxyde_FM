@@ -570,6 +570,9 @@ mod windows_file_moves;
 #[cfg(target_os = "windows")]
 mod windows_file_names;
 #[cfg(target_os = "windows")]
+#[doc(hidden)]
+pub mod worker_test_support;
+#[cfg(target_os = "windows")]
 mod windows_file_tree;
 #[cfg(target_os = "windows")]
 mod windows_copy_staging;

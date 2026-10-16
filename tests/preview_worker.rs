@@ -1,27 +1,6 @@
 #![cfg(target_os = "windows")]
-mod utils {
-    pub use oxyde_lib::utils::image_preview_decode;
-    pub use oxyde_lib::utils::preview_protocol;
-}
-#[allow(dead_code)]
-#[path = "../src/platform/windows_preview_worker.rs"]
-mod transport;
-#[allow(dead_code)]
-#[path = "../src/platform/windows_process_launch.rs"]
-mod windows_process_launch;
-#[allow(dead_code)]
-#[path = "../src/platform/windows_resource_pressure.rs"]
-mod windows_resource_pressure;
-#[allow(dead_code)]
-#[path = "../src/platform/windows_worker_budget.rs"]
-mod windows_worker_budget;
-use transport as windows_preview_worker;
-mod platform {
-    pub use oxyde_lib::platform::platform;
-}
-#[allow(dead_code)]
-#[path = "../src/platform/windows_worker_sandbox.rs"]
-mod windows_worker_sandbox;
+use oxyde_lib::platform;
+use oxyde_lib::platform::worker_test_support::preview as transport;
 use oxyde_lib::utils::preview_protocol::{self, Reply};
 use std::path::Path;
 use std::time::{Duration, Instant};
@@ -224,8 +203,10 @@ fn actual_worker_renders_pdf_and_reads_office_thumbnail_and_text() {
     let Reply::Images { frames, .. } = reply else {
         panic!("Unexpected PDF worker reply")
     };
-    assert_eq!(frames[0].buffer().dimensions(), (256, 512));
-    let pixel = frames[0].buffer().get_pixel(128, 256).0;
+    // The current PDF contract fits the page into the shared 1024px envelope.
+    let pixels = frames[0].buffer();
+    assert_eq!(pixels.dimensions(), (512, 1024));
+    let pixel = pixels.get_pixel(pixels.width() / 2, pixels.height() / 2).0;
     // Native PDF/GPU rasterization at fractional DPI can differ by a few units.
     // Exact channel preservation is independently checked by the PNG fixture.
     assert!(
