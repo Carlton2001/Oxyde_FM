@@ -14,11 +14,11 @@ fn date_filter_keeps_previous_calendar_day_after_midnight() {
         .single()
         .unwrap();
     let mut tab = TabState::new("date-filter".into(), "C:\\".into());
-    tab.files = vec![oxyde_lib::models::FileEntry {
+    tab.files = std::sync::Arc::new(vec![oxyde_lib::models::FileEntry {
         name: "previous-day.txt".into(),
         modified: modified.timestamp_millis() as u64,
         ..Default::default()
-    }];
+    }]);
     tab.filter_dates.insert(DateGroup::Today);
     tab.update_cache_on(now.date_naive());
     assert!(tab.filtered_files().is_empty());
@@ -32,7 +32,7 @@ fn date_filters_counts_and_select_all_share_the_six_calendar_groups() {
     use chrono::{Local, TimeZone};
     let today = chrono::NaiveDate::from_ymd_opt(2026, 10, 28).unwrap();
     let mut tab = TabState::new("date-filter".into(), "C:\\".into());
-    tab.files = [
+    tab.files = std::sync::Arc::new([
         (10, 29),
         (10, 28),
         (10, 27),
@@ -53,8 +53,8 @@ fn date_filters_counts_and_select_all_share_the_six_calendar_groups() {
             .timestamp_millis() as u64,
         ..Default::default()
     })
-    .collect();
-    tab.files.push(oxyde_lib::models::FileEntry {
+    .collect());
+    std::sync::Arc::make_mut(&mut tab.files).push(oxyde_lib::models::FileEntry {
         name: "invalid.txt".into(),
         modified: u64::MAX,
         ..Default::default()
@@ -100,7 +100,7 @@ fn monday_filter_uses_calendar_week_and_yesterday_precedence() {
     use chrono::{Local, TimeZone};
     let today = chrono::NaiveDate::from_ymd_opt(2026, 10, 5).unwrap();
     let mut tab = TabState::new("date-filter".into(), "C:\\".into());
-    tab.files = [(10, 5), (10, 4), (10, 3), (9, 28), (9, 27)]
+    tab.files = std::sync::Arc::new([(10, 5), (10, 4), (10, 3), (9, 28), (9, 27)]
         .into_iter()
         .map(|(month, day)| oxyde_lib::models::FileEntry {
             name: format!("{month}-{day}.txt"),
@@ -111,7 +111,7 @@ fn monday_filter_uses_calendar_week_and_yesterday_precedence() {
                 .timestamp_millis() as u64,
             ..Default::default()
         })
-        .collect();
+        .collect());
     tab.filter_dates.insert(DateGroup::ThisWeek);
     tab.update_cache_on(today);
     assert!(tab.filtered_files().is_empty());
@@ -132,11 +132,11 @@ fn monday_filter_uses_calendar_week_and_yesterday_precedence() {
 #[test]
 fn trash_location_filter_matches_displayed_parent_and_combines_with_name() {
     let mut tab = TabState::new("trash".into(), "trash://".into());
-    tab.files = vec![
+    tab.files = std::sync::Arc::new(vec![
         oxyde_lib::models::FileEntry { name: "report.txt".into(), original_path: Some(std::path::Path::new("Documents").join("report.txt").to_string_lossy().into_owned()), ..Default::default() },
         oxyde_lib::models::FileEntry { name: "Documents.txt".into(), original_path: Some(std::path::Path::new("Downloads").join("Documents.txt").to_string_lossy().into_owned()), ..Default::default() },
         oxyde_lib::models::FileEntry { name: "missing".into(), ..Default::default() },
-    ];
+    ]);
     tab.filter_original_location = "DOCUMENTS".into();
     tab.update_cache();
     assert_eq!(tab.cached_filtered_files.len(), 1);
@@ -152,14 +152,14 @@ fn trash_location_filter_matches_displayed_parent_and_combines_with_name() {
 #[test]
 fn trash_sort_uses_original_location_and_deletion_time() {
     let mut tab = TabState::new("trash".into(), "trash://".into());
-    tab.files = vec![
+    tab.files = std::sync::Arc::new(vec![
         oxyde_lib::models::FileEntry { name: "A".into(), path: "id-a".into(),
             original_path: Some(std::path::Path::new("z-folder").join("A").to_string_lossy().into_owned()),
             deleted_time: Some(100), ..Default::default() },
         oxyde_lib::models::FileEntry { name: "Z".into(), path: "id-z".into(),
             original_path: Some(std::path::Path::new("a-folder").join("Z").to_string_lossy().into_owned()),
             deleted_time: Some(200), ..Default::default() },
-    ];
+    ]);
     tab.sort_column = SortColumn::OriginalLocation;
     tab.sort_direction = SortDirection::Ascending;
     tab.sort_files();
@@ -392,10 +392,10 @@ fn date_grouping_is_optional_in_legacy_tabs_and_independent_in_duplicates() {
 #[test]
 fn selecting_every_present_type_remains_an_explicit_filter_state() {
     let mut tab = TabState::new("tab".to_string(), String::new());
-    tab.files = vec![FileEntry {
+    tab.files = std::sync::Arc::new(vec![FileEntry {
         name: "notes.txt".to_string(),
         ..FileEntry::default()
-    }];
+    }]);
     tab.filter_types.insert("TXT".to_string());
 
     tab.update_cache();

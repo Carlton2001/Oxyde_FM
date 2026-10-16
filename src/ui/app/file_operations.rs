@@ -219,19 +219,29 @@ impl OxydeApp {
         cx.spawn(move |_, cx: &mut AsyncApp| {
             let mut cx = cx.clone();
             async move {
+                let mut previous = None;
                 loop {
                     cx.background_executor()
                         .timer(std::time::Duration::from_millis(200))
                         .await;
-                    let Some((op_type, status)) = operations.operation_state(&op_id) else {
-                        break;
-                    };
+                    let Some(progress) = operations.operation_progress(&op_id) else { break; };
+                    let changed = previous.as_ref() != Some(&progress);
+                    let op_type = progress.op_type.clone();
+                    let status = progress.status.clone();
+                    previous = Some(progress);
                     match status {
                         OpStatus::Queued
                         | OpStatus::Calculating
                         | OpStatus::Running
                         | OpStatus::Paused => {
-                            handle.update(&mut cx, |_, cx| cx.notify());
+                            handle.update(&mut cx, |app, cx| {
+                                if changed { cx.notify(); }
+                                else if let Some(panel) = &app.operations_panel_view {
+                                    // Keep detailed progress/ETA polling in its own window;
+                                    // an unchanged badge must not redraw directory panes.
+                                    panel.update(cx, |_, cx| cx.notify());
+                                }
+                            });
                         }
                         OpStatus::Error(error) => {
                             handle.update(&mut cx, |this, cx| {

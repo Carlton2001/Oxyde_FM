@@ -6,14 +6,14 @@ fn fixture(mode: ViewMode) -> TabState {
     crate::ui::scale::set_reference(16);
     let mut tab = TabState::new("test".into(), "folder".into());
     tab.view_mode = mode;
-    tab.files = (0..100)
+    tab.files = std::sync::Arc::new((0..100)
         .map(|index| FileEntry {
             name: format!("file-{index:03}"),
             path: format!("folder/file-{index:03}"),
             modified: 0,
             ..Default::default()
         })
-        .collect();
+        .collect());
     tab.update_cache();
     tab.keyboard_cursor = Some("folder/file-090".into());
     tab

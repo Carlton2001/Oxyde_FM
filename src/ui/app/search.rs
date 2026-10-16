@@ -155,7 +155,7 @@ mod tests {
             chrono::Local::now().date_naive(),
         );
         tab.collapsed_date_groups.insert(group);
-        tab.files.push(oxyde_lib::models::FileEntry {
+        std::sync::Arc::make_mut(&mut tab.files).push(oxyde_lib::models::FileEntry {
             name: "result.json".into(),
             path: "folder/result.json".into(),
             modified,
@@ -765,8 +765,7 @@ impl OxydeApp {
                     tab.back_stack.push(tab.path.clone());
                     tab.forward_stack.clear();
                     tab.path = root.clone();
-                    tab.files.clear();
-                    tab.cached_filtered_files.clear();
+                    tab.clear_files();
                     tab.selected_paths.clear();
                     tab.selection_anchor = None;
                     tab.load_status = crate::ui::workspace::TabLoadStatus::Loading;
@@ -811,7 +810,7 @@ impl OxydeApp {
             cancellation: Arc::new(SearchCancellation(cancellation.clone())),
         });
         tab.search_text = query.clone();
-        tab.files.clear();
+        tab.files = Default::default();
         tab.update_cache();
         tab.selected_paths.clear();
         tab.selection_anchor = None;
@@ -837,6 +836,7 @@ impl OxydeApp {
                 cancellation.clone(),
             )
         };
+        let Some(presentation_handle) = self.handle.clone() else { return; };
         cx.spawn(async move |this, cx| loop {
             cx.background_executor()
                 .timer(std::time::Duration::from_millis(100))
@@ -868,6 +868,14 @@ impl OxydeApp {
             let done = events
                 .iter()
                 .any(oxyde_lib::commands::search::QuickSearchEvent::is_terminal);
+            let mut additions = Vec::new();
+            for event in &mut events {
+                if let oxyde_lib::commands::search::QuickSearchEvent::Batch(files) = event { additions.append(files); }
+            }
+            if !additions.is_empty() {
+                let owner = super::file_preparation::Owner::Search { id: id.clone(), path: path.clone(), cancellation: cancellation.clone() };
+                if !super::file_preparation::prepare(&presentation_handle, cx, &owner, crate::ui::workspace::FileUpdate::Append(additions.into())).await { break; }
+            }
             if this
                 .update(cx, |this, cx| {
                     let Some(tab) = this.state.find_tab_mut(&id) else {
@@ -883,9 +891,7 @@ impl OxydeApp {
                     for event in events {
                         use oxyde_lib::commands::search::QuickSearchEvent;
                         match event {
-                            QuickSearchEvent::Batch(files) => {
-                                tab.files.extend(files);
-                            }
+                            QuickSearchEvent::Batch(_) => {}
                             QuickSearchEvent::ArchiveSkipped { path, detail } => {
                                 if let Some(search) = &mut tab.quick_search {
                                     search.archive_warnings.record(path, detail);
@@ -909,8 +915,6 @@ impl OxydeApp {
                             }
                         }
                     }
-                    tab.sort_files();
-                    tab.update_cache();
                     cx.notify();
                 })
                 .is_err()

@@ -194,6 +194,10 @@ pub fn get_file_entry_from_path(path: &Path) -> Result<FileEntry, CommandError> 
     // Use symlink_metadata to get attributes of the link itself (e.g. Hidden/System on 'Documents and Settings')
     let metadata =
         std::fs::symlink_metadata(path).map_err(|e| CommandError::IoError(e.to_string()))?;
+    Ok(file_entry_from_metadata(path, &metadata))
+}
+
+pub(crate) fn file_entry_from_metadata(path: &Path, metadata: &std::fs::Metadata) -> FileEntry {
     let name = path
         .file_name()
         .unwrap_or_default()
@@ -208,7 +212,7 @@ pub fn get_file_entry_from_path(path: &Path) -> Result<FileEntry, CommandError> 
         .as_millis() as u64;
 
     let (is_hidden, is_system, is_reparse_point) =
-        crate::utils::get_file_attributes(&metadata, &name);
+        crate::utils::get_file_attributes(metadata, &name);
 
     // For is_dir, we want to know if it behaves like a directory.
     // On Windows, a Junction/SymlinkDir has the Directory attribute in its symlink_metadata too.
@@ -231,8 +235,8 @@ pub fn get_file_entry_from_path(path: &Path) -> Result<FileEntry, CommandError> 
     // Retrieve size: if it's a file, get len. If symlink/junction, size is usually 0/irrelevant for listing.
     let size = if is_dir { 0 } else { metadata.len() };
 
-    Ok(FileEntry {
-        content_stamp: FileStamp::for_entry(path, &metadata),
+    FileEntry {
+        content_stamp: FileStamp::for_entry(path, metadata),
         archive_path: None,
         name,
         path: path.to_string_lossy().to_string(),
@@ -249,5 +253,9 @@ pub fn get_file_entry_from_path(path: &Path) -> Result<FileEntry, CommandError> 
         original_path: None,
         network_details: None,
         deleted_time: None,
-    })
+    }
 }
+
+#[cfg(test)]
+#[path = "file_entry/tests/listing_metadata.rs"]
+mod listing_metadata_tests;

@@ -17,12 +17,12 @@ fn tab(id: &str, day: NaiveDate, group: DateGroup) -> TabState {
         .single()
         .unwrap();
     let mut tab = TabState::new(id.into(), "fixture".into());
-    tab.files = vec![FileEntry {
+    tab.files = std::sync::Arc::new(vec![FileEntry {
         name: "Document école.txt".into(),
         path: format!("fixture/{id}/Document école.txt"),
         modified: timestamp.timestamp_millis() as u64,
         ..Default::default()
-    }];
+    }]);
     tab.filter_dates.insert(group);
     tab.update_cache_on(day);
     tab.calendar_reference = Some(reference(day));
@@ -109,10 +109,10 @@ fn obsolete_results_cannot_override_a_filter_edit_navigation_or_reload() {
             }
             1 => {
                 tab.path = "another-folder".into();
-                tab.files.clear();
+                tab.files = Default::default();
             }
             _ => {
-                tab.files[0].name = "new result.txt".into();
+                std::sync::Arc::make_mut(&mut tab.files)[0].name = "new result.txt".into();
             }
         }
         tab.update_cache_on(day);

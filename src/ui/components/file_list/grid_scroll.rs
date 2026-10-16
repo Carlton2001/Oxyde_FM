@@ -1,3 +1,4 @@
+#[cfg(test)]
 use crate::ui::date_groups::{row_height, DisplayRow};
 use std::ops::Range;
 
@@ -7,7 +8,21 @@ pub(super) struct VisibleGridRows {
     pub(super) bottom: f32,
 }
 
+pub(super) fn visible_prefix(heights: &[f32], grouped: bool, offset: f32, viewport: f32) -> VisibleGridRows {
+    let count = heights.len().saturating_sub(1);
+    if !grouped {
+        let row = crate::ui::style::grid_card_row_height();
+        let start = ((offset.max(0.0) / row).floor() as usize).min(count);
+        let end = (((offset + viewport + row) / row).ceil() as usize).min(count).max(start);
+        return VisibleGridRows { range: start..end, top: start as f32 * row, bottom: end as f32 * row };
+    }
+    let start = heights[1..].partition_point(|height| *height < offset).min(count);
+    let end = heights[..count].partition_point(|height| *height < offset + viewport + crate::ui::style::grid_card_row_height()).min(count).max(start);
+    VisibleGridRows { range: start..end, top: heights[start], bottom: heights[end] }
+}
+
 /// Keep uniform grids O(1); grouped grids retain their variable header heights.
+#[cfg(test)]
 pub(super) fn visible_rows(
     rows: &[DisplayRow],
     grouped: bool,

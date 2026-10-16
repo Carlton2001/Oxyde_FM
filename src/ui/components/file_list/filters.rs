@@ -8,14 +8,14 @@ pub fn get_type_filter_items(
     i18n: &crate::ui::i18n::I18n,
     h: Entity<OxydeApp>,
     pid: String,
-    tab_files: Vec<FileEntry>,
+    tab_files: std::sync::Arc<Vec<FileEntry>>,
     current_filters: std::collections::HashSet<String>,
     pos: Point<Pixels>,
 ) -> Vec<crate::ui::components::dropdown::DropdownItem> {
     use crate::ui::components::dropdown::{DropdownItem, IconName};
 
     let mut exts = std::collections::HashMap::<String, u64>::new();
-    for f in &tab_files {
+    for f in tab_files.iter() {
         *exts.entry(file_type_label(f)).or_default() += 1;
     }
     let mut sorted_exts: Vec<String> = exts.keys().cloned().collect();
@@ -65,7 +65,7 @@ pub fn get_date_filter_items(
     i18n: &crate::ui::i18n::I18n,
     handle: Entity<OxydeApp>,
     pane_id: String,
-    files: Vec<oxyde_lib::models::FileEntry>,
+    files: std::sync::Arc<Vec<oxyde_lib::models::FileEntry>>,
     current_filters: std::collections::HashSet<crate::ui::date_groups::DateGroup>,
     pos: Point<Pixels>,
 ) -> Vec<crate::ui::components::dropdown::DropdownItem> {
@@ -120,7 +120,7 @@ pub fn get_size_filter_items(
     i18n: &crate::ui::i18n::I18n,
     handle: Entity<OxydeApp>,
     pane_id: String,
-    files: Vec<oxyde_lib::models::FileEntry>,
+    files: std::sync::Arc<Vec<oxyde_lib::models::FileEntry>>,
     current_filters: std::collections::HashSet<crate::ui::workspace::SizeCategory>,
     pos: Point<Pixels>,
 ) -> Vec<crate::ui::components::dropdown::DropdownItem> {
@@ -137,7 +137,7 @@ pub fn get_size_filter_items(
     ];
 
     let mut present_categories = std::collections::HashMap::<_, u64>::new();
-    for f in &files {
+    for f in files.iter() {
         for cat in &categories {
             if cat.matches(f.size) {
                 *present_categories.entry(*cat).or_default() += 1;

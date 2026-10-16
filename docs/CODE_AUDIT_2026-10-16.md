@@ -4,7 +4,7 @@
 
 Audit effectué sur `main`, révision `4f16bc915ea8d286d5e3eac422d32a17fc630e78`, sous Windows x86_64, avec Rust/Cargo 1.98.1. Aucun changement du code applicatif, des tests existants, des dépendances ou des réglages utilisateur. Aucun commit ni push.
 
-Les constats et chiffres de cette section décrivent la passe initiale d'audit. Les corrections ultérieures A01 et A02, leurs branches et leurs validations sont suivies dans les sections dédiées ci-dessous.
+Les constats et chiffres de cette section décrivent la passe initiale d'audit. Les corrections ultérieures A01–A09 et les optimisations O01–O04, leurs branches et leurs validations sont suivies dans les sections dédiées ci-dessous.
 
 Au départ, seuls quatre CSV étaient non suivis : `Benchmark_Smalls_Source_ED.csv`, `Benchmark_Video_Source_DD.csv`, `Benchmark_Video_Source_ED.csv`, `resultats.csv`. Ils ont été laissés intacts. Les sondes et journaux de cette passe sont dans `target/audit-2026-10-16/`, ignoré par Git ; ils ne constituent pas des tests de non-régression conservés.
 
@@ -212,7 +212,7 @@ Les constats ci-dessous distinguent reproduction, démonstration par le code et 
 
 ## Optimisations proposées sans changement fonctionnel
 
-Ces points correspondent à des coûts identifiables dans le code. Leur gain final n'a pas été benchmarké ; ils ne sont pas présentés comme des accélérations déjà démontrées.
+Le tableau conserve les observations et propositions de l'audit initial. O01–O04 sont désormais implémentées sur `codex/o01-o04-performance`, issue du commit A09 `6240d0a`. Les mesures ciblées, contrats préservés et limites de validation figurent dans la section « Optimisations O01–O04 » en fin de rapport ; aucun gain global de rendu ou de performance réseau n'est déduit de ces microbenchmarks.
 
 | ID | Coût actuel et références | Proposition et mesure utile | Risque à contrôler |
 | --- | --- | --- | --- |
@@ -431,3 +431,46 @@ Une deuxième exécution générale a rencontré un autre incident dans `platfor
 Le périmètre corrigé est la lecture des fichiers texte bruts. Le parseur Office existant, qui assemble le XML décompressé puis le texte sans balises, conserve son comportement et ses limites de mémoire ; la recherche de contenu dans les archives reste signalée comme indisponible selon A04. Cette correction ne crée pas de plafond RSS global, de budget disque temporaire ou de transaction contre les modifications concurrentes du fichier lu. Validation native Windows ; exécution Linux, partage réseau et essai visuel GPUI non ajoutés.
 
 Le code partagé et ses dépendances doivent être reconstruits avec les workers : fermer Oxyde, lancer `cargo build --offline --bins`, puis `cargo run --offline`. `cargo run` seul ne reconstruit pas les exécutables auxiliaires.
+
+## Optimisations O01–O04 — contrats et mesures
+
+Branche `codex/o01-o04-performance`, basée sur A09 `6240d0a`. Cette étape regroupe les quatre optimisations et leur validation. Les quatre CSV personnels non suivis restent intacts.
+
+**O01 — instantanés et géométrie.** Les listes d'entrées, leur résultat filtré et la carte des sous-dossiers utilisent des instantanés `Arc` ; les mutations existantes passent par copie à l'écriture. Sans filtre, les listes complète et filtrée partagent le même instantané. Détails et Grille conservent les identifiants et callbacks des lignes et réutilisent la présentation tant que fichiers, colonnes, groupement, groupes repliés, référence calendaire et zoom restent identiques. La grille groupée trouve ses lignes visibles par recherche dans les hauteurs cumulées ; la grille uniforme garde ses calculs directs et les mêmes limites de visibilité. Un effacement invalide la présentation, tandis qu'une ancienne frame reste propriétaire de ses données jusqu'à sa libération.
+
+Le suivi des opérations compare un résumé sans historique par fichier toutes les 200 ms. Un résumé inchangé, notamment en pause, ne notifie plus la vue racine ; la fenêtre des opérations conserve son rafraîchissement détaillé. Les changements de compteurs ou d'état et les traitements terminaux restent propagés.
+
+**O02 — métadonnées et préparation.** Le listing construit les entrées à partir des métadonnées déjà obtenues par `DirEntry`, sans réouverture supplémentaire du nom pour les fichiers ordinaires. La lecture de la cible d'un lien pour sa signature de contenu reste appliquée. La commande publique `list_dir` conserve son tri naturel. Le listing brut utilisé par l'UI évite ce tri complet intermédiaire ; un départage naturel limité aux égalités de clés UI conserve l'ordre antérieur des noms Unicode de même minuscule, dans les deux directions. Les listes du fournisseur réseau, la corbeille et les lots de recherche gardent leurs égalités stables selon leur ordre d'arrivée. L'ordre lexical visible, notamment `file10` avant `file2`, ne change pas.
+
+Tri, filtrage et préparation des ensembles de valeurs de colonnes passent dans `spawn_blocking` pour les listings, lots de recherche/corbeille et changements de tri/filtre. Un sémaphore borne à deux les préparations physiques, y compris si leur tâche UI est abandonnée. L'application vérifie identifiant stable, chemin, révision et identité de l'instantané source, avec en plus numéro de listing ou identité d'annulation de recherche. Une configuration devenue obsolète est recalculée ; un propriétaire disparu ou remplacé est rejeté. Les lots attendent leur préparation avant de traiter la fin du flux.
+
+**O03 — totaux des conflits.** Le sous-module privé `commands/ops/conflicts` agrège les tailles et compteurs par arbre dans un cache limité à un appel. Les sélections imbriquées déjà agrégées sont élaguées, y compris quand elles arrivent du plus profond au plus haut. La préparation suivante crée un cache neuf et revoit les destinations modifiées. Les vérifications au lancement et en sortie de file sont conservées. L'ordre du parcours des conflits, les métadonnées des entrées et la politique `WalkDir` envers liens et erreurs restent ceux du parcours précédent ; aucune transaction globale du système de fichiers n'est ajoutée.
+
+**O04 — validation des chemins.** Le fil d'Ariane vérifie les répertoires en arrière-plan et ne publie le résultat que si saisie, révision, panneau, onglet et chemin courant correspondent toujours. Une nouvelle saisie ou une annulation abandonne la tâche UI ; une vérification système déjà démarrée peut finir sans publier son résultat. Le retour de chemin invalide, les raccourcis de voisinage réseau et de serveur UNC restent conservés. Le fantôme de glissement reçoit le type de l'entrée déjà connue et ne sonde plus le disque pendant son rendu. Aucun changement de curseur ou d'icône.
+
+### Mesures ciblées et régressions
+
+Observations locales uniques sous Windows, avec le profil de tests optimisé du projet. Ce sont des mesures de préparation de données, sans seuil de durée fragile dans les assertions :
+
+| Scénario | Observation | Portée |
+| --- | --- | --- |
+| 1 000 fichiers ordinaires, 3 constructions par fichier | Réouverture des 3 000 noms : 55,7 ms ; métadonnées réutilisées : 0,46 ms | Métadonnées initiales déjà collectées ; ne mesure pas tout le listing ni un partage lent. |
+| Deux états de panneaux partageant 20 000 entrées | 2 000 réutilisations : 25,4 µs ; 10 copies et reconstructions de lignes : 32,7 ms | Cache chaud, préparation seulement ; nombres d'itérations volontairement distincts. |
+| Même scénario, 100 000 entrées | 2 000 réutilisations : 93,2 µs ; 10 copies et reconstructions : 182,2 ms | Ne mesure ni dessin GPUI ni latence de sélection. |
+| Ajout d'un résultat parmi 100 000 entrées | Capture de requête : 17,2 µs ; préparation avec lancement/jonction du thread : 58,7 ms ; installation : 10,5 µs | Une ancienne frame reste détenue ; n'inclut pas sa destruction ultérieure. |
+| Racine et 24 dossiers imbriqués, 24 fichiers | 649 visites de l'ancien calcul contre 49 pour l'agrégation, totaux identiques | Ordre inverse également vérifié, sans double comptage ; pas de mesure SMB. |
+| Validation de chemin volontairement bloquée | Un timer de 10 ms progresse sur l'exécuteur à thread unique pendant la vérification | Backend injecté, pas une mesure de latence d'une fenêtre réelle. |
+
+Journaux des mesures : `target/o01-o04-validation/metadata-final.log`, `ui-final.log`, `preparation-final.log` et `conflicts-final.log`. Les tests conservés couvrent aussi les instantanés encore détenus après mutation, la libération du cache après effacement, le redimensionnement, le repli des groupes, les limites exactes des lignes visibles à plusieurs zooms, tous les tris existants, les propriétaires obsolètes et les résumés d'opérations inchangés. Les fixtures de jonctions Windows comparent les nouveaux résultats à l'ancien parcours et conservent les octets des cibles témoins.
+
+**Validation native :** `./scripts/test-windows.ps1 -Offline` réussit, avec TEMP/TMP privés : compilation de toutes les cibles et construction explicite des exécutables sans avertissement, puis **1 160 tests distincts réussis, 21 ignorés, aucun échec**. Répartition : 822 backend, 277 interface, 60 intégrations natives et un test d'allocations. Les 29 tests du pipeline d'archives passent. La comparaison des noms et statuts avec la validation A09 retrouve les 1 166 scénarios antérieurs, sans suppression ni changement de statut, et 15 nouveaux tests réussis. Le test backend réexécuté dans un sous-processus n'est compté qu'une fois. Journaux : `target/o01-o04-validation/native-tests-complete.log` et `scenario-comparison.json`. Le formatage des quinze nouveaux fichiers Rust et `git diff --check` passent également.
+
+Sur les sources finales, une vérification complémentaire de toutes les cibles et une reconstruction de tous les exécutables passent sans avertissement ; les 277 tests d'interface sont rejoués avec succès (un ignoré). Journaux : `source-final-check.log`, `source-final-build.log`, `source-final-ui.log` dans le même répertoire.
+
+### Limites conservées
+
+La première construction d'une présentation reste linéaire sur le thread UI. Les agrégats de sélection et certaines interactions de menus peuvent encore parcourir les entrées ; les chemins locaux de renommage et de mise à jour de tailles conservent leur préparation synchrone. La préparation de lots reste un tri complet de l'instantané en arrière-plan, sans fusion incrémentale. Les filtres peuvent encore créer un second ensemble de `FileEntry`, et les snapshots d'anciennes frames peuvent coexister temporairement. Ces changements ne constituent donc ni une borne RSS globale ni la suppression de tout travail linéaire dans l'UI.
+
+Aucun essai visuel GPUI, mesure de peinture/latence d'interaction, compteur global d'allocations UI, parcours réel sur SMB indisponible ou exécution Linux n'est ajouté. Les mesures établissent les coûts locaux supprimés ou déplacés ; elles ne démontrent pas un gain global de vitesse sur toute session applicative.
+
+Le code partagé par les workers est modifié : fermer Oxyde, lancer `cargo build --offline --bins`, puis `cargo run --offline`. `cargo run` seul ne reconstruit pas les exécutables auxiliaires.

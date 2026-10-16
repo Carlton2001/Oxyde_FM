@@ -3,6 +3,10 @@ mod operations;
 mod sidebar;
 mod snapshots;
 mod tab;
+mod presentation;
+mod sorting;
+mod preparation;
+pub(crate) use preparation::FileUpdate;
 mod tree;
 
 use crate::ui::date_groups::{CalendarReference, DateGroup};
@@ -125,7 +129,7 @@ pub struct TabState {
     pub id: String,
     pub path: String,
     pub archive_root: Option<std::path::PathBuf>,
-    pub files: Vec<FileEntry>,
+    pub files: std::sync::Arc<Vec<FileEntry>>,
     pub show_size_histogram: bool,
     pub size_calculation: Option<std::sync::Arc<gpui::Task<()>>>,
     pub back_stack: Vec<String>,
@@ -148,7 +152,8 @@ pub struct TabState {
     pub view_mode: ViewMode,
     pub group_by_date: bool,
     pub collapsed_date_groups: std::collections::HashSet<crate::ui::date_groups::DateGroup>,
-    pub cached_filtered_files: Vec<FileEntry>,
+    pub cached_filtered_files: std::sync::Arc<Vec<FileEntry>>,
+    presentation_cache: std::cell::RefCell<Option<std::sync::Arc<presentation::Presentation>>>,
     filter_cache_revision: u64,
     calendar_reference: Option<CalendarReference>,
     pub type_col_width: f32,
@@ -182,14 +187,14 @@ pub(crate) struct CalendarFilterRequest {
     tab_id: String,
     revision: u64,
     reference: CalendarReference,
-    files: Vec<FileEntry>,
+    files: std::sync::Arc<Vec<FileEntry>>,
     filters: FileFilters,
 }
 pub(crate) struct CalendarFilterResult {
     tab_id: String,
     revision: u64,
     reference: CalendarReference,
-    files: Vec<FileEntry>,
+    files: std::sync::Arc<Vec<FileEntry>>,
 }
 #[derive(Clone)]
 pub struct TabStripState {

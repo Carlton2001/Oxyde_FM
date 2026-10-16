@@ -18,7 +18,8 @@ impl OxydeApp {
             } else {
                 tab.filter_sizes.remove(&category);
             }
-            tab.update_cache();
+            let id = tab.id.clone();
+            self.prepare_current_tab(id, cx);
             cx.notify();
         }
     }
@@ -117,7 +118,8 @@ impl OxydeApp {
             } else {
                 tab.filter_dates.remove(&category);
             }
-            tab.update_cache();
+            let id = tab.id.clone();
+            self.prepare_current_tab(id, cx);
             cx.notify();
         }
     }
@@ -183,8 +185,8 @@ impl OxydeApp {
                 tab.sort_column = column;
                 tab.sort_direction = crate::ui::workspace::SortDirection::Ascending;
             }
-            tab.sort_files();
-            tab.update_cache();
+            let id = tab.id.clone();
+            self.prepare_current_tab(id, cx);
             cx.notify();
         }
     }
@@ -197,7 +199,8 @@ impl OxydeApp {
             } else {
                 tab.filter_types.insert(filter);
             }
-            tab.update_cache();
+            let id = tab.id.clone();
+            self.prepare_current_tab(id, cx);
             cx.notify();
         }
     }
@@ -206,7 +209,8 @@ impl OxydeApp {
         if let Some(pane) = self.state.find_pane_mut(pane_id) {
             let tab = pane.active_tab_mut();
             tab.filter_types.clear();
-            tab.update_cache();
+            let id = tab.id.clone();
+            self.prepare_current_tab(id, cx);
             cx.notify();
         }
     }
@@ -215,7 +219,8 @@ impl OxydeApp {
         if let Some(pane) = self.state.find_pane_mut(pane_id) {
             let tab = pane.active_tab_mut();
             tab.filter_sizes.clear();
-            tab.update_cache();
+            let id = tab.id.clone();
+            self.prepare_current_tab(id, cx);
             cx.notify();
         }
     }
@@ -224,7 +229,8 @@ impl OxydeApp {
         if let Some(pane) = self.state.find_pane_mut(pane_id) {
             let tab = pane.active_tab_mut();
             tab.filter_dates.clear();
-            tab.update_cache();
+            let id = tab.id.clone();
+            self.prepare_current_tab(id, cx);
             cx.notify();
         }
     }
@@ -233,7 +239,8 @@ impl OxydeApp {
         if let Some(pane) = self.state.find_pane_mut(pane_id) {
             let tab = pane.active_tab_mut();
             tab.filter_name = name;
-            tab.update_cache();
+            let id = tab.id.clone();
+            self.prepare_current_tab(id, cx);
             cx.notify();
         }
     }
@@ -322,7 +329,8 @@ impl OxydeApp {
         if let Some(pane) = self.state.find_pane_mut(pane_id) {
             let tab = pane.active_tab_mut();
             tab.filter_original_location = name;
-            tab.update_cache();
+            let id = tab.id.clone();
+            self.prepare_current_tab(id, cx);
             cx.notify();
         }
     }

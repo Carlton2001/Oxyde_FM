@@ -2,6 +2,31 @@ use super::visible_rows;
 use crate::ui::date_groups::{content_height, DateGroup, DisplayRow};
 
 #[test]
+fn cached_prefix_geometry_matches_the_previous_scan_at_boundaries_and_zoom_levels() {
+    for zoom in [12, 24, 16] {
+        crate::ui::scale::set_reference(zoom);
+        for grouped in [false, true] {
+            let mut rows = Vec::new();
+            for index in 0..80 {
+                if grouped && index % 10 == 0 { rows.push(DisplayRow::Header(DateGroup::Older, 10)); }
+                rows.push(DisplayRow::Files(vec![index]));
+            }
+            let mut heights = vec![0.0];
+            for row in &rows { heights.push(heights.last().unwrap() + crate::ui::date_groups::row_height(row, true)); }
+            for offset in heights.iter().flat_map(|height| [*height, *height + 0.5, *height + 100.0]) {
+                for viewport in [0.0, 1.0, 320.0, 1000.0] {
+                    let old = visible_rows(&rows, grouped, offset, viewport);
+                    let new = super::visible_prefix(&heights, grouped, offset, viewport);
+                    assert_eq!(old.range, new.range);
+                    assert_eq!(old.top, new.top);
+                    assert_eq!(old.bottom, new.bottom);
+                }
+            }
+        }
+    }
+}
+
+#[test]
 fn final_grid_row_remains_visible_with_the_details_sized_empty_space() {
     crate::ui::scale::set_reference(16);
     let rows: Vec<_> = (0..100).map(|i| DisplayRow::Files(vec![i])).collect();

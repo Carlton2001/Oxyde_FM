@@ -21,6 +21,7 @@ mod shell_features;
 mod calendar;
 mod clipboard;
 mod file_operations;
+mod file_preparation;
 mod archives;
 mod rename;
 mod context_menus;
@@ -183,6 +184,7 @@ pub struct FileDragData {
 
 pub struct FileDragPreview {
     pub paths: Vec<String>,
+    single_is_dir: bool,
     pub cursor_offset: Point<Pixels>,
     pub app_handle: Entity<OxydeApp>,
     _subscription: Subscription,
@@ -194,7 +196,9 @@ pub struct OxydeApp {
     pub(crate) next_file_request: u64,
     pub(crate) next_native_menu_request: u64,
     pub(crate) pending_file_requests: std::collections::HashMap<String, u64>,
-    pub folder_has_subdirs: std::collections::HashMap<String, bool>,
+    pending_preparations: std::collections::HashMap<String, (u64, Task<()>)>,
+    next_preparation: u64,
+    pub folder_has_subdirs: std::sync::Arc<std::collections::HashMap<String, bool>>,
     pub(crate) pending_sidebar_requests: std::collections::HashMap<String, u64>,
     pub history: std::sync::Arc<oxyde_lib::models::HistoryManager>,
     pub(crate) history_operation_in_progress: bool,
@@ -288,6 +292,8 @@ pub struct OxydeApp {
     pub breadcrumb_pane_id: Option<String>,
     pub breadcrumb_shake_id: u64,
     pub breadcrumb_invalid: bool,
+    breadcrumb_validation_revision: u64,
+    breadcrumb_validation_task: Option<Task<()>>,
     rename_click_candidate: Option<(String, std::time::Instant)>,
     rename_pending: bool,
     rename_cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
@@ -359,7 +365,9 @@ impl OxydeApp {
             next_file_request: 0,
             next_native_menu_request: 0,
             pending_file_requests: std::collections::HashMap::new(),
-            folder_has_subdirs: std::collections::HashMap::new(),
+            folder_has_subdirs: Default::default(),
+            pending_preparations: Default::default(),
+            next_preparation: 0,
             pending_sidebar_requests: std::collections::HashMap::new(),
             history: std::sync::Arc::new(oxyde_lib::models::HistoryManager::new()),
             history_operation_in_progress: false,
@@ -470,6 +478,8 @@ impl OxydeApp {
             pinned_rail_open: false,
             breadcrumb_text: String::new(),
             breadcrumb_pane_id: None,
+            breadcrumb_validation_revision: 0,
+            breadcrumb_validation_task: None,
             breadcrumb_shake_id: 0,
             breadcrumb_invalid: false,
             rename_click_candidate: None,

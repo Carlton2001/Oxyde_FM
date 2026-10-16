@@ -238,7 +238,7 @@ pub(super) fn render_details_row(params: DetailsRowParams<'_>, cx: &mut App) -> 
                 move |_, cursor_offset, _window, cx| {
                     let app = h_drag.clone();
                     let paths = drag_paths.clone();
-                    cx.new(|cx| FileDragPreview::new(paths, cursor_offset, app, cx))
+                    cx.new(|cx| FileDragPreview::new(paths, cursor_offset, is_dir, app, cx))
                 }
             })
             .when(can_drop, |row| {

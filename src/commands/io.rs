@@ -10,6 +10,15 @@ pub async fn list_dir(
     show_hidden: Option<bool>,
     show_system: Option<bool>,
 ) -> Result<Vec<FileEntry>, CommandError> {
+    list_dir_impl(path, show_hidden, show_system, true).await
+}
+
+/// UI preparation supplies its own stable sort in the background.
+pub async fn list_dir_unsorted(path: String, show_hidden: Option<bool>, show_system: Option<bool>) -> Result<Vec<FileEntry>, CommandError> {
+    list_dir_impl(path, show_hidden, show_system, false).await
+}
+
+async fn list_dir_impl(path: String, show_hidden: Option<bool>, show_system: Option<bool>, ordered: bool) -> Result<Vec<FileEntry>, CommandError> {
     let show_hidden = show_hidden.unwrap_or(false);
     let show_system = show_system.unwrap_or(false);
 
@@ -60,7 +69,7 @@ pub async fn list_dir(
     }
 
     tokio::task::spawn_blocking(move || {
-        list_dir_blocking(path, show_hidden, show_system)
+        list_dir_blocking(path, show_hidden, show_system, ordered)
     })
     .await
     .map_err(|e| CommandError::IoError(e.to_string()))?
@@ -78,6 +87,7 @@ fn list_dir_blocking(
     path: String,
     show_hidden: bool,
     show_system: bool,
+    ordered: bool,
 ) -> Result<Vec<FileEntry>, CommandError> {
     let path_buf = PathBuf::from(&path);
     if let Some((archive, internal)) = crate::utils::archive::resolve_virtual_path(&path_buf) {
@@ -86,7 +96,7 @@ fn list_dir_blocking(
                 archive.to_string_lossy().into_owned(),
                 internal,
             )?;
-            sort_file_entries(&mut entries);
+            if ordered { sort_file_entries(&mut entries); }
             return Ok(entries);
         }
     }
@@ -111,11 +121,11 @@ fn list_dir_blocking(
                 continue;
             }
 
-            entries.push(crate::models::get_file_entry_from_path(&entry.path())?);
+            entries.push(crate::models::file_entry::file_entry_from_metadata(&entry.path(), &metadata));
         }
     }
 
-    sort_file_entries(&mut entries);
+    if ordered { sort_file_entries(&mut entries); }
     Ok(entries)
 }
 
@@ -126,6 +136,10 @@ fn sort_file_entries(entries: &mut [FileEntry]) {
             .then_with(|| crate::utils::compare_natural(&a.name, &b.name))
     });
 }
+
+#[cfg(test)]
+#[path = "io/tests/listing_preparation.rs"]
+mod listing_preparation_tests;
 
 /// Worker-only local creation: capture the newly created object before closing it.
 pub fn create_local_folder(

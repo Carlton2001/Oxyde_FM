@@ -47,7 +47,7 @@ impl TabState {
             pending_reveal: None,
             path: path.clone(),
             archive_root: None,
-            files: Vec::new(),
+            files: Default::default(),
             show_size_histogram: false,
             size_calculation: None,
             back_stack: Vec::new(),
@@ -70,7 +70,8 @@ impl TabState {
             view_mode: ViewMode::Grid,
             group_by_date: false,
             collapsed_date_groups: Default::default(),
-            cached_filtered_files: Vec::new(),
+            cached_filtered_files: Default::default(),
+            presentation_cache: Default::default(),
             filter_cache_revision: 0,
             calendar_reference: None,
             type_col_width: 100.0,
@@ -91,7 +92,7 @@ impl TabState {
 
         // We use the full files list instead of cached_filtered_files
         // to keep columns stable while the user interacts with filters.
-        for f in &self.files {
+        for f in self.files.iter() {
             self.column_type_labels.insert(crate::ui::components::file_list::file_type_label(f));
 
             self.column_size_values.insert((f.size, f.is_dir, f.is_calculated));
@@ -103,51 +104,6 @@ impl TabState {
     }
 
     pub fn sort_files(&mut self) {
-        // Build each normalized key once; keep folders first in both directions.
-        #[derive(PartialEq, Eq, PartialOrd, Ord)]
-        enum Value {
-            Text(String),
-            Number(u64),
-            Deleted(Option<i64>),
-            Location(Option<std::path::PathBuf>),
-        }
-        let col = self.sort_column;
-        let key = |file: &FileEntry| {
-            let name = file.name.to_lowercase();
-            let value = match col {
-                SortColumn::Name => Value::Text(String::new()),
-                SortColumn::Type => Value::Text(
-                    std::path::Path::new(&file.name)
-                        .extension()
-                        .and_then(|extension| extension.to_str())
-                        .unwrap_or("")
-                        .to_lowercase(),
-                ),
-                SortColumn::Size => Value::Number(file.size),
-                SortColumn::Modified => Value::Number(file.modified),
-                SortColumn::DeletedAt => Value::Deleted(file.deleted_time),
-                SortColumn::OriginalLocation => Value::Text(
-                    file.original_path
-                        .as_deref()
-                        .and_then(|path| std::path::Path::new(path).parent())
-                        .map(|path| path.to_string_lossy().to_lowercase())
-                        .unwrap_or_default(),
-                ),
-                SortColumn::Location => Value::Location(
-                    std::path::Path::new(&file.path)
-                        .parent()
-                        .map(std::path::Path::to_path_buf),
-                ),
-            };
-            (value, name)
-        };
-        match self.sort_direction {
-            SortDirection::Ascending => self
-                .files
-                .sort_by_cached_key(|file| (!file.is_dir, key(file))),
-            SortDirection::Descending => self
-                .files
-                .sort_by_cached_key(|file| (!file.is_dir, std::cmp::Reverse(key(file)))),
-        }
+        super::sorting::sort_files(std::sync::Arc::make_mut(&mut self.files).as_mut_slice(), self.sort_column, self.sort_direction);
     }
 }

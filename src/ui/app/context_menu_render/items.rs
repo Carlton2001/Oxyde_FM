@@ -32,7 +32,7 @@ impl OxydeApp {
                     if let Some(pane) = self.state.find_pane(&pid_cap) {
                         let tab = pane.active_tab();
                         let mut all_present = std::collections::HashSet::new();
-                        for f in &tab.files {
+                        for f in tab.files.iter() {
                             if f.is_dir {
                                 all_present.insert("Dossier".to_string());
                             } else if let Some(ext) = std::path::Path::new(&f.name)
@@ -69,7 +69,7 @@ impl OxydeApp {
                             if let Some(pane) = this.state.find_pane_mut(&pid_inner) {
                                 let tab = pane.active_tab_mut();
                                 let all_files = tab.files.clone();
-                                for f in &all_files {
+                                for f in all_files.iter() {
                                     if f.is_dir {
                                         tab.filter_types.insert("Dossier".to_string());
                                     } else if let Some(ext) =
@@ -80,7 +80,8 @@ impl OxydeApp {
                                         tab.filter_types.insert(ext.to_uppercase());
                                     }
                                 }
-                                tab.update_cache();
+                                let id = tab.id.clone();
+                                this.prepare_current_tab(id, cx);
                             }
                         }
                         cx.notify();
@@ -106,7 +107,7 @@ impl OxydeApp {
                             SizeCategory::Huge,
                         ];
                         let mut present = std::collections::HashSet::new();
-                        for f in &tab.files {
+                        for f in tab.files.iter() {
                             for cat in &categories {
                                 if cat.matches(f.size) {
                                     present.insert(*cat);
@@ -146,7 +147,8 @@ impl OxydeApp {
                                 tab.filter_sizes.insert(SizeCategory::Moyen);
                                 tab.filter_sizes.insert(SizeCategory::Grand);
                                 tab.filter_sizes.insert(SizeCategory::Huge);
-                                tab.update_cache();
+                                let id = tab.id.clone();
+                                this.prepare_current_tab(id, cx);
                             }
                         }
                         cx.notify();
@@ -194,7 +196,8 @@ impl OxydeApp {
                             if let Some(p) = this.state.find_pane_mut(&pid_inner) {
                                 let tab = p.active_tab_mut();
                                 tab.filter_dates.extend(crate::ui::date_groups::DateGroup::ALL);
-                                tab.update_cache();
+                                let id = tab.id.clone();
+                                this.prepare_current_tab(id, cx);
                             }
                         }
                         cx.notify();

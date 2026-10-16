@@ -5,7 +5,7 @@ use std::cmp::Ordering;
 fn old_sort(tab: &mut TabState) {
     let col = tab.sort_column;
     let dir = tab.sort_direction;
-    tab.files.sort_by(|a, b| {
+    std::sync::Arc::make_mut(&mut tab.files).sort_by(|a, b| {
         // Folders always first
         if a.is_dir && !b.is_dir {
             return Ordering::Less;
@@ -99,9 +99,9 @@ fn prepared_sort_preserves_all_columns_directions_and_stable_ties() {
     ] {
         for direction in [SortDirection::Ascending, SortDirection::Descending] {
             let mut old = TabState::new("old".into(), String::new());
-            old.files = fixture(300);
+            old.files = std::sync::Arc::new(fixture(300));
             // Equal names/keys with distinct paths exercise stable ordering.
-            old.files.extend([
+            std::sync::Arc::make_mut(&mut old.files).extend([
                 FileEntry {
                     name: "same".into(),
                     path: "first".into(),
@@ -133,7 +133,7 @@ fn prepared_sort_preserves_all_columns_directions_and_stable_ties() {
 #[test]
 fn prepared_filters_preserve_unicode_case_and_accent_distinctions() {
     let mut tab = TabState::new("filter".into(), String::new());
-    tab.files = vec![
+    tab.files = std::sync::Arc::new(vec![
         FileEntry {
             name: "École.txt".into(),
             original_path: Some(
@@ -148,7 +148,7 @@ fn prepared_filters_preserve_unicode_case_and_accent_distinctions() {
             name: "ecole.txt".into(),
             ..Default::default()
         },
-    ];
+    ]);
     tab.filter_name = "ÉCOLE".into();
     tab.filter_original_location = "RÉSUMÉ".into();
     tab.update_cache();
@@ -168,8 +168,8 @@ fn profile_prepared_name_sort() {
     let mut old_time = std::time::Duration::ZERO;
     let mut prepared_time = std::time::Duration::ZERO;
     for _ in 0..5 {
-        old.files = files.clone();
-        prepared.files = files.clone();
+        old.files = std::sync::Arc::new(files.clone());
+        prepared.files = std::sync::Arc::new(files.clone());
         let start = std::time::Instant::now();
         old_sort(&mut old);
         old_time += start.elapsed();

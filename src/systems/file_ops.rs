@@ -44,7 +44,7 @@ pub enum OpStatus {
     // Note: WaitingForConflictResolution was removed — conflicts are resolved before the operation starts
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum FileOpType {
     Copy,
     Move,

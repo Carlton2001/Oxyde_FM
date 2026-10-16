@@ -87,7 +87,7 @@ impl OxydeApp {
                 crate::ui::components::file_list::clear_grid_thumbnails(cx);
                 this.state.layout.visit_panes(&mut |pane| {
                     for tab in &pane.tabs {
-                        for file in &tab.files {
+                        for file in tab.files.iter() {
                             crate::ui::components::icons::invalidate_file_icon(&file.path, cx);
                             crate::ui::components::file_list::invalidate_thumbnail(&file.path, cx);
                         }

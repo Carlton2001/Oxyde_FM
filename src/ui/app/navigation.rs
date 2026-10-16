@@ -4,125 +4,13 @@ use crate::ui::app::OxydeApp;
 use crate::ui::components::input::{InputAppearance, TextInput, TextInputOptions};
 use crate::ui::i18n::{I18nContext, Message};
 use gpui::*;
-use oxyde_lib::commands::io::list_dir;
+use oxyde_lib::commands::io::list_dir_unsorted as list_dir;
 
 mod trash_loading;
 
+mod breadcrumb;
+
 impl OxydeApp {
-    pub(crate) fn begin_breadcrumb_edit(
-        &mut self,
-        pane_id: String,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        if self.inline_rename || self.editing_path.is_some() {
-            return;
-        }
-        let Some(path) = self
-            .state
-            .layout
-            .find_pane(&pane_id)
-            .map(|pane| pane.active_tab().path.clone())
-        else {
-            return;
-        };
-        if path == "trash://" {
-            return;
-        }
-        let Some(handle) = self.handle.clone() else {
-            return;
-        };
-        self.breadcrumb_editing = true;
-        let path = crate::ui::components::input::native_path_text(&path);
-        self.breadcrumb_text = path.clone();
-        self.breadcrumb_invalid = false;
-        self.breadcrumb_pane_id = Some(pane_id);
-        let input = cx.new(|cx| {
-            TextInput::new(
-                cx,
-                cx.i18n().text(Message::PathPlaceholder).to_string(),
-                path.clone(),
-                {
-                    let handle = handle.clone();
-                    move |text, _, cx| {
-                        handle.update(cx, |this, cx| {
-                            this.breadcrumb_text = text.to_string();
-                            this.breadcrumb_invalid = false;
-                            cx.notify();
-                        })
-                    }
-                },
-                {
-                    let handle = handle.clone();
-                    move |_, cx| handle.update(cx, |this, cx| this.submit_breadcrumb_edit(cx))
-                },
-                {
-                    let handle = handle.clone();
-                    move |_, cx| handle.update(cx, |this, cx| this.cancel_breadcrumb_edit(cx))
-                },
-                {
-                    let handle = handle.clone();
-                    move |input, has_selection, position, window, cx| {
-                        handle.update(cx, |this, cx| {
-                            this.open_text_context_menu(input, has_selection, position, window, cx)
-                        });
-                    }
-                },
-                TextInputOptions {
-                    appearance: InputAppearance::Inline,
-                    submit_on_outside: true,
-                    initial_selection: Some(0..path.len()),
-                    ..Default::default()
-                },
-                window,
-            )
-            .with_path_submit()
-        });
-        let focus = input.read(cx).focus_handle.clone();
-        self.editing_view = Some(input);
-        window.focus(&focus, cx);
-        cx.on_next_frame(window, move |this, window, cx| {
-            if this.breadcrumb_editing {
-                window.focus(&focus, cx);
-            }
-        });
-        cx.notify();
-    }
-
-    pub(crate) fn submit_breadcrumb_edit(&mut self, cx: &mut Context<Self>) {
-        if !self.breadcrumb_editing || !self.context_menus.is_empty() {
-            return;
-        }
-        let path = crate::ui::components::input::navigation_path_text(&self.breadcrumb_text);
-        let network_server = cfg!(target_os = "windows")
-            && oxyde_lib::commands::io::is_network_server(&path);
-        if path != "__network_vincinity__" && !network_server && !std::path::Path::new(&path).is_dir() {
-            self.breadcrumb_shake_id = self.breadcrumb_shake_id.wrapping_add(1);
-            self.breadcrumb_invalid = true;
-            cx.notify();
-            return;
-        }
-        let pane_id = self.breadcrumb_pane_id.take();
-        self.breadcrumb_editing = false;
-        self.breadcrumb_invalid = false;
-        self.editing_view = None;
-        if let Some(pane_id) = pane_id {
-            if !path.is_empty() {
-                self.navigate_to(&pane_id, path, cx);
-            }
-        }
-        cx.notify();
-    }
-
-    pub(crate) fn cancel_breadcrumb_edit(&mut self, cx: &mut Context<Self>) {
-        self.breadcrumb_editing = false;
-        self.breadcrumb_invalid = false;
-        self.breadcrumb_pane_id = None;
-        self.editing_view = None;
-        self.context_menus.clear();
-        cx.notify();
-    }
-
     /// Refresh the file list of a specific tab without disturbing its scroll / selection / filters.
     pub fn refresh_tab_files(
         &mut self,
@@ -472,8 +360,7 @@ impl OxydeApp {
             if let Some(search) = active_tab.quick_search.take() {
                 search.cancellation.0.store(true, std::sync::atomic::Ordering::Relaxed);
             }
-            active_tab.files.clear();
-            active_tab.cached_filtered_files.clear();
+            active_tab.clear_files();
             active_tab.filter_types.clear();
             active_tab.filter_name.clear();
             active_tab.filter_original_location.clear();
@@ -543,6 +430,28 @@ impl OxydeApp {
                     Some(show_system),
                 )
                 .await;
+                let result = match result {
+                    Ok(entries) => {
+                        let owner = super::file_preparation::Owner::Listing {
+                            id: tab_id.clone(), path: path.clone(), request: request_id,
+                        };
+                        // Network-provider listings did not receive the old natural
+                        // pre-sort. Keep their UI ties in provider arrival order.
+                        let update = if cfg!(target_os = "windows")
+                            && (path == "__network_vincinity__"
+                                || oxyde_lib::commands::io::is_network_server(&path))
+                        {
+                            crate::ui::workspace::FileUpdate::Replace(entries.into())
+                        } else {
+                            crate::ui::workspace::FileUpdate::Listing(entries.into())
+                        };
+                        if !super::file_preparation::prepare(&handle, &mut cx, &owner, update).await {
+                            return;
+                        }
+                        Ok(())
+                    }
+                    Err(error) => Err(error),
+                };
                 let handle_for_subdirectory_check = handle.clone();
                 handle.update(&mut cx, move |this, cx| {
                     if this.pending_file_requests.get(&tab_id) != Some(&request_id) {
@@ -557,11 +466,8 @@ impl OxydeApp {
                             return;
                         }
                         match result {
-                            Ok(entries) => {
+                            Ok(()) => {
                                 tab.archive_root = archive_root;
-                                tab.files = entries;
-                                tab.sort_files();
-                                tab.update_cache();
                                 tab.load_status = crate::ui::workspace::TabLoadStatus::Ready;
                                 refresh_subdirectory_flags = path != "trash://";
                                 if reset_scroll {
@@ -570,8 +476,7 @@ impl OxydeApp {
                                 tab.reveal_pending_item(pane_width);
                             }
                             Err(error) => {
-                                tab.files.clear();
-                                tab.cached_filtered_files.clear();
+                                tab.clear_files();
                                 tab.load_status = crate::ui::errors::path_load_status(&error);
                                 log::warn!("Cannot list {}: {error:?}", path);
                             }
@@ -601,7 +506,7 @@ impl OxydeApp {
                                             return;
                                         }
                                         for node in nodes {
-                                            this.folder_has_subdirs
+                                            std::sync::Arc::make_mut(&mut this.folder_has_subdirs)
                                                 .insert(node.path, node.has_subdirs);
                                         }
                                         cx.notify();

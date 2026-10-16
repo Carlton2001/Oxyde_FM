@@ -237,6 +237,7 @@ pub(super) fn render_grid_card(params: GridCardParams<'_>, cx: &mut App) -> Stat
                         FileDragPreview::new(
                             paths,
                             cursor_offset,
+                            is_dir,
                             app,
                             cx,
                         )

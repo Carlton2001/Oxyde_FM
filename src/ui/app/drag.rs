@@ -33,6 +33,7 @@ impl FileDragPreview {
     pub fn new(
         paths: Vec<String>,
         cursor_offset: Point<Pixels>,
+        single_is_dir: bool,
         app_handle: Entity<OxydeApp>,
         cx: &mut Context<Self>,
     ) -> Self {
@@ -46,6 +47,7 @@ impl FileDragPreview {
         let sub = cx.observe(&app_handle, |_, _entity, cx| cx.notify());
         Self {
             paths,
+            single_is_dir,
             cursor_offset,
             app_handle,
             _subscription: sub,
@@ -96,7 +98,7 @@ impl Render for FileDragPreview {
 
         let (icon_path, name_label) = if self.paths.len() == 1 {
             let p = std::path::Path::new(&self.paths[0]);
-            let is_dir = p.is_dir();
+            let is_dir = self.single_is_dir;
             let name = p
                 .file_name()
                 .and_then(|n| n.to_str())

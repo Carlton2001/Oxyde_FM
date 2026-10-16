@@ -6,7 +6,7 @@ use crate::ui::app::{ContextMenuContent, ContextMenuInstance, DragTarget, OxydeA
 use crate::ui::components::{with_grid_sort, pane_context_menu_items};
 use crate::ui::components::scrollbar::{render_scrollbar, ScrollbarAxis};
 use crate::ui::components::tooltip::Tooltip;
-use crate::ui::date_groups::{display_rows, DisplayRow};
+use crate::ui::date_groups::{DisplayRow};
 use crate::ui::format::{format_number, format_size};
 use crate::ui::i18n::{FluentArgs, I18nContext, Message};
 use crate::ui::scale::logical;
@@ -26,10 +26,7 @@ pub(super) fn render_grid_file_list(
     let tab = pane.active_tab();
     let search_results = tab.quick_search.is_some();
     let calculating_sizes = tab.size_calculation.is_some();
-    let files = tab.filtered_files().to_vec();
-    let histogram_total = if tab.show_size_histogram && files.iter().all(|file| !file.is_dir || file.is_calculated) {
-        files.iter().fold(0u64, |total, file| total.saturating_add(file.size))
-    } else { 0 };
+    let files = tab.cached_filtered_files.clone();
     let selected = tab.selected_paths.clone();
     let inline_rename = view.inline_rename;
     let editing_path = view.editing_path.clone();
@@ -55,7 +52,9 @@ pub(super) fn render_grid_file_list(
     let grid = crate::ui::style::GridGeometry::for_viewport(pane_width, crate::ui::components::scrollbar::zed_track_width());
     let columns = grid.columns;
     let card_width = grid.cell_width - logical(4.0);
-    let rows = display_rows(&files, tab.group_by_date, &tab.collapsed_date_groups, columns);
+    let presentation = tab.presentation(true, columns);
+    let rows = presentation.rows.clone();
+    let histogram_total = if tab.show_size_histogram { presentation.histogram_total } else { 0 };
     let empty_message = if !files.is_empty() {
         None
     } else if !tab.files.is_empty() {
@@ -69,7 +68,7 @@ pub(super) fn render_grid_file_list(
             TabLoadStatus::ArchiveListing(failure) => Some(crate::ui::format::error_detail(&failure.to_string(), cx.i18n())),
         }
     };
-    let folders = files.iter().filter(|file| file.is_dir).count();
+    let folders = presentation.folders;
     let file_count = files.len().saturating_sub(folders);
     let mut folder_args = FluentArgs::new();
     folder_args.set("count", folders);
@@ -224,19 +223,19 @@ pub(super) fn render_grid_file_list(
             let scroll = tab.list_scroll.0.borrow().base_handle.clone();
             let viewport = view.pane_sizes.get(&pane_id).map(|size| size.height).unwrap_or(view.list_height).max(logical(200.0));
             let actual_viewport = scroll.bounds().size.height.as_f32();
-            let max_scroll = (crate::ui::date_groups::content_height(&rows, true) + crate::ui::style::row_height() - if actual_viewport > 0.0 { actual_viewport } else { viewport }).max(0.0);
+            let max_scroll = (*presentation.heights.last().unwrap() + crate::ui::style::row_height() - if actual_viewport > 0.0 { actual_viewport } else { viewport }).max(0.0);
             let offset = (-scroll.offset().y.as_f32()).clamp(0.0, max_scroll);
             if scroll.offset().y.as_f32() != -offset {
                 scroll.set_offset(point(px(0.0), px(-offset)));
             }
-            let visible = super::grid_scroll::visible_rows(&rows, tab.group_by_date, offset, if actual_viewport > 0.0 { actual_viewport } else { viewport });
+            let visible = super::grid_scroll::visible_prefix(&presentation.heights, tab.group_by_date, offset, if actual_viewport > 0.0 { actual_viewport } else { viewport });
             let scroll_handle = handle.clone();
             div().id(SharedString::from(if tab.group_by_date { format!("file-grid-grouped-{pane_id}") } else { format!("file-grid-{pane_id}") }))
                 .h_full().flex().flex_col().overflow_y_scroll().track_scroll(&scroll)
                 .on_scroll_wheel(move |_, _, cx| scroll_handle.update(cx, |_, cx| cx.notify()))
                 .child(div().h(px(visible.top)).flex_none())
                 .children(render_rows(visible.range, cx))
-                .child(div().h(px((crate::ui::date_groups::content_height(&rows, true) - visible.bottom).max(0.0))).flex_none())
+                .child(div().h(px((*presentation.heights.last().unwrap() - visible.bottom).max(0.0))).flex_none())
                 .child(div().w_full().flex_none().h(px(crate::ui::style::row_height())))
                 .into_any_element()
         };
@@ -249,7 +248,7 @@ pub(super) fn render_grid_file_list(
             .size
             .height
             .as_f32();
-        let content_height = crate::ui::date_groups::content_height(&rows, true) + crate::ui::style::row_height();
+        let content_height = *presentation.heights.last().unwrap() + crate::ui::style::row_height();
         let scroll_offset = -tab
             .list_scroll
             .0

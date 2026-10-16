@@ -95,8 +95,8 @@ pub fn with_grid_sort(
                     let tab = pane.active_tab_mut();
                     if let Some(column) = selected_column { tab.sort_column = column; }
                     if let Some(direction) = selected_direction { tab.sort_direction = direction; }
-                    tab.sort_files();
-                    tab.update_cache();
+                    let id = tab.id.clone();
+                    this.prepare_current_tab(id, cx);
                 }
                 this.context_menus.clear();
                 cx.notify();

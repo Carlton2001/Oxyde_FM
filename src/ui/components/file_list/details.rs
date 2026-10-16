@@ -7,7 +7,7 @@ use crate::ui::app::{ContextMenuContent, ContextMenuInstance, DragTarget, FileDr
 use crate::ui::components::{with_grid_sort, pane_context_menu_items};
 use crate::ui::components::scrollbar::{render_scrollbar, ScrollbarAxis};
 use crate::ui::components::tooltip::Tooltip;
-use crate::ui::date_groups::{display_rows, DisplayRow};
+use crate::ui::date_groups::{DisplayRow};
 use crate::ui::format::{format_number, format_size};
 use crate::ui::i18n::{FluentArgs, I18nContext, Language, Message};
 use crate::ui::scale::{logical, rem_pixels};
@@ -31,11 +31,10 @@ pub(super) fn render_details_file_list(
     let active_tab = pane.active_tab();
     let search_results = active_tab.quick_search.is_some();
     let calculating_sizes = active_tab.size_calculation.is_some();
-    let files = active_tab.filtered_files().to_vec();
-    let histogram_total = if active_tab.show_size_histogram && files.iter().all(|file| !file.is_dir || file.is_calculated) {
-        files.iter().fold(0u64, |total, file| total.saturating_add(file.size))
-    } else { 0 };
-    let rows = display_rows(&files, active_tab.group_by_date, &active_tab.collapsed_date_groups, 1);
+    let presentation = active_tab.presentation(false, 1);
+    let files = presentation.files.clone();
+    let histogram_total = if active_tab.show_size_histogram { presentation.histogram_total } else { 0 };
+    let rows = presentation.rows.clone();
     let count = (rows.len() + 1) as f32;
     let empty_message = if !files.is_empty() {
         None
@@ -86,12 +85,12 @@ pub(super) fn render_details_file_list(
     let show_media_previews = view.show_media_previews;
 
     let selected_paths = active_tab.selected_paths.clone();
-    let displayed_folders = files.iter().filter(|file| file.is_dir).count();
+    let displayed_folders = presentation.folders;
     let displayed_files = files.len().saturating_sub(displayed_folders);
-    let selected_entries: Vec<&FileEntry> = files
+    let selected_entries: Vec<&FileEntry> = if selected_paths.is_empty() { Vec::new() } else { files
         .iter()
         .filter(|file| selected_paths.contains(&file.path))
-        .collect();
+        .collect() };
     let selected_folders = selected_entries.iter().filter(|file| file.is_dir).count();
     let selected_files = selected_entries.len().saturating_sub(selected_folders);
     let selected_bytes: u64 = selected_entries

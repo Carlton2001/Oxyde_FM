@@ -356,7 +356,7 @@ impl OxydeApp {
         let retained = |path: &str| !removed.iter().any(|root| path_on_drive(path, root));
         self.state.expanded_paths.retain(|path| retained(path));
         self.state.sidebar_nodes.retain(|path, _| retained(path));
-        self.folder_has_subdirs.retain(|path, _| retained(path));
+        std::sync::Arc::make_mut(&mut self.folder_has_subdirs).retain(|path, _| retained(path));
         self.pending_sidebar_requests
             .retain(|path, _| retained(path));
         if self
@@ -501,8 +501,7 @@ fn redirect_tabs(
             if let Some(search) = tab.quick_search.take() {
                 search.cancellation.0.store(true, std::sync::atomic::Ordering::Relaxed);
             }
-            tab.files.clear();
-            tab.cached_filtered_files.clear();
+            tab.clear_files();
             tab.selected_paths.clear();
             tab.selection_anchor = None;
             tab.load_status = crate::ui::workspace::TabLoadStatus::Loading;

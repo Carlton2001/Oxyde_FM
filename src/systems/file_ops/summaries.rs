@@ -1,6 +1,7 @@
 //! Cheap display queries: never materialize per-file history for badges or polling.
 use super::{FileOpType, FileOperationManager, OpStatus};
 
+#[derive(Clone, Debug, PartialEq)]
 pub struct OperationProgress {
     pub id: String,
     pub op_type: FileOpType,
@@ -12,6 +13,13 @@ pub struct OperationProgress {
 }
 
 impl FileOperationManager {
+    pub fn operation_progress(&self, id: &str) -> Option<OperationProgress> {
+        let operations = self.operations.lock().unwrap();
+        let op = operations.get(id)?.lock().unwrap();
+        Some(OperationProgress { id: op.id.clone(), op_type: op.op_type.clone(), status: op.status.clone(),
+            total_bytes: op.total_bytes, processed_bytes: op.processed_bytes,
+            total_files: op.total_files, processed_files: op.processed_files })
+    }
     pub fn operation_counts(&self) -> (usize, usize) {
         let operations = self.operations.lock().unwrap();
         let active = operations
@@ -59,3 +67,7 @@ impl FileOperationManager {
 #[cfg(test)]
 #[path = "tests/summaries.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "tests/progress_poll.rs"]
+mod progress_poll_tests;

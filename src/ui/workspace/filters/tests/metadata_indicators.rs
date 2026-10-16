@@ -4,10 +4,10 @@ use oxyde_lib::models::FileEntry;
 #[test]
 fn all_or_no_present_values_keep_metadata_indicators_inactive() {
     let mut tab = TabState::new("filters".into(), "C:\\".into());
-    tab.files = vec![
+    tab.files = std::sync::Arc::new(vec![
         FileEntry { name: "small.txt".into(), size: 100, ..Default::default() },
         FileEntry { name: "large.mov".into(), size: 2_000_000_000, ..Default::default() },
-    ];
+    ]);
     assert_eq!(tab.metadata_filter_flags(), (false, false, false));
     tab.filter_types.extend(["TXT".into(), "MOV".into()]);
     tab.filter_sizes.extend([SizeCategory::Minuscule, SizeCategory::Huge]);

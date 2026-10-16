@@ -72,7 +72,7 @@ impl OxydeApp {
                         match result {
                             Ok(size) => {
                                 if let Some(file) =
-                                    tab.files.iter_mut().find(|file| file.path == path)
+                                    std::sync::Arc::make_mut(&mut tab.files).iter_mut().find(|file| file.path == path)
                                 {
                                     file.size = size.size;
                                     file.files_count = Some(size.files_count);

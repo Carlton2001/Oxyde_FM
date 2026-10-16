@@ -37,7 +37,7 @@ impl SizeCategory {
 }
 
 impl FileFilters {
-    fn from_tab(tab: &TabState) -> Self {
+    pub(super) fn from_tab(tab: &TabState) -> Self {
         Self {
             filter_types: tab.filter_types.clone(),
             filter_name: tab.filter_name.clone(),
@@ -46,7 +46,12 @@ impl FileFilters {
             filter_dates: tab.filter_dates.clone(),
         }
     }
-    fn filtered_files_on(&self, files: &[FileEntry], today: chrono::NaiveDate) -> Vec<FileEntry> {
+    pub(super) fn snapshot(&self, files: &std::sync::Arc<Vec<FileEntry>>, today: chrono::NaiveDate) -> std::sync::Arc<Vec<FileEntry>> {
+        if self.filter_types.is_empty() && self.filter_name.is_empty() && self.filter_original_location.is_empty() && self.filter_sizes.is_empty() && self.filter_dates.is_empty() {
+            files.clone()
+        } else { self.filtered_files_on(files, today).into() }
+    }
+    pub(super) fn filtered_files_on(&self, files: &[FileEntry], today: chrono::NaiveDate) -> Vec<FileEntry> {
         if !self.filter_types.is_empty()
             || !self.filter_name.is_empty()
             || !self.filter_original_location.is_empty()
@@ -110,9 +115,7 @@ impl FileFilters {
 
 impl CalendarFilterRequest {
     pub fn calculate(self) -> CalendarFilterResult {
-        let files = self
-            .filters
-            .filtered_files_on(&self.files, self.reference.today);
+        let files = self.filters.snapshot(&self.files, self.reference.today);
         CalendarFilterResult {
             tab_id: self.tab_id,
             revision: self.revision,
@@ -145,10 +148,11 @@ impl TabState {
     }
 
     fn update_cache_on(&mut self, today: chrono::NaiveDate) {
+        self.presentation_cache.get_mut().take();
         let mut reference = CalendarReference::current();
         reference.today = today;
         self.cached_filtered_files =
-            FileFilters::from_tab(self).filtered_files_on(&self.files, today);
+            FileFilters::from_tab(self).snapshot(&self.files, today);
         self.calendar_reference = Some(reference);
         self.filter_cache_revision = self.filter_cache_revision.wrapping_add(1);
         self.recalculate_column_widths();
@@ -175,6 +179,7 @@ impl TabState {
             return false;
         }
         self.cached_filtered_files = result.files;
+        self.presentation_cache.get_mut().take();
         self.calendar_reference = Some(result.reference);
         self.filter_cache_revision = self.filter_cache_revision.wrapping_add(1);
         true

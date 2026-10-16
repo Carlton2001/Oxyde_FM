@@ -131,6 +131,9 @@ pub async fn purge_recycle_bin(paths: Vec<String>) -> Result<(), CommandError> {
     Ok(())
 }
 
+mod conflicts;
+use conflicts::check_conflicts_real;
+
 pub async fn check_conflicts(
     paths: Vec<String>,
     target_dir: String,
@@ -177,127 +180,6 @@ pub fn is_self_transfer(source: &std::path::Path, target_dir: &std::path::Path) 
     source.file_name().is_some_and(|name| {
         crate::systems::transfer_naming::same_entry(source, &target_dir.join(name))
     })
-}
-
-fn check_conflicts_real(
-    paths: Vec<String>,
-    target_dir: String,
-) -> Result<Vec<ConflictEntry>, CommandError> {
-    let mut conflicts = Vec::new();
-    let target_base = validate_path(&target_dir)?;
-
-    let sources: Vec<_> = paths.iter().map(PathBuf::from).collect();
-    let trash_entries = crate::platform::platform()
-        .trash_transfer_entries(&sources)
-        .map_err(CommandError::TrashError)?;
-    for path_str in paths {
-        let source_path = validate_path(&path_str)?;
-
-        // Conflict check
-        let display_path = trash_entries
-            .iter()
-            .find(|entry| entry.path == source_path)
-            .map(|entry| entry.original_path.as_path())
-            .unwrap_or(&source_path);
-        if let Some(file_name) = display_path.file_name() {
-            let target_path = target_base.join(file_name);
-            if crate::systems::transfer_naming::same_entry(&source_path, &target_path) {
-                continue;
-            }
-            if target_path.exists() {
-                // Initial top-level conflict found
-                add_conflict_recursive(&source_path, &target_path, &mut conflicts)?;
-            }
-        }
-    }
-
-    Ok(conflicts)
-}
-
-fn add_conflict_recursive(
-    source_path: &std::path::Path,
-    target_path: &std::path::Path,
-    conflicts: &mut Vec<ConflictEntry>,
-) -> Result<(), CommandError> {
-    let mut source_entry = get_file_entry_from_path(source_path)?;
-    let mut target_entry = get_file_entry_from_path(target_path)?;
-    source_entry.name = target_entry.name.clone();
-
-    if source_entry.is_dir {
-        // Calculate size and item count for the folder itself
-        let mut s = 0;
-        let mut f: u64 = 0;
-        let mut i = 0;
-        for entry in walkdir::WalkDir::new(source_path)
-            .into_iter()
-            .filter_map(|e| e.ok())
-        {
-            if entry.file_type().is_dir() {
-                f += 1;
-            } else {
-                i += 1;
-                s += entry.metadata().map(|m| m.len()).unwrap_or(0);
-            }
-        }
-        f = f.saturating_sub(1);
-        source_entry.size = s;
-        source_entry.folders_count = Some(f);
-        source_entry.files_count = Some(i);
-
-        // Do the same for target folder
-        let mut ts = 0;
-        let mut tf: u64 = 0;
-        let mut ti = 0;
-        for entry in walkdir::WalkDir::new(target_path)
-            .into_iter()
-            .filter_map(|e| e.ok())
-        {
-            if entry.file_type().is_dir() {
-                tf += 1;
-            } else {
-                ti += 1;
-                ts += entry.metadata().map(|m| m.len()).unwrap_or(0);
-            }
-        }
-        tf = tf.saturating_sub(1);
-        target_entry.size = ts;
-        target_entry.folders_count = Some(tf);
-        target_entry.files_count = Some(ti);
-
-        // Add the folder conflict itself
-        conflicts.push(ConflictEntry {
-            name: target_path
-                .file_name()
-                .map(|n| n.to_string_lossy().to_string())
-                .unwrap_or_default(),
-            source: source_entry,
-            target: target_entry,
-        });
-
-        // Now recursively check children for conflicts
-        for entry in std::fs::read_dir(source_path)? {
-            let entry = entry?;
-            let entry_path = entry.path();
-            let entry_name = entry.file_name();
-            let target_child_path = target_path.join(&entry_name);
-
-            if target_child_path.exists() {
-                add_conflict_recursive(&entry_path, &target_child_path, conflicts)?;
-            }
-        }
-    } else {
-        // Individual file conflict
-        conflicts.push(ConflictEntry {
-            name: target_path
-                .file_name()
-                .map(|n| n.to_string_lossy().to_string())
-                .unwrap_or_default(),
-            source: source_entry,
-            target: target_entry,
-        });
-    }
-
-    Ok(())
 }
 
 #[derive(Debug, Clone)]
