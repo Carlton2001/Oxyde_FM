@@ -187,6 +187,7 @@ pub fn advanced_search(
                     if matches {
                         let (hidden, system, _) = crate::utils::get_file_attributes(&m, &name);
                         batch.push(FileEntry {
+                            content_stamp: crate::models::FileStamp::for_entry(path, &m),
                             name,
                             path: path.to_string_lossy().into_owned(),
                             is_dir: m.is_dir(),
@@ -312,6 +313,7 @@ pub fn quick_search(
                 if let Ok(metadata) = entry.metadata() {
                     let (hidden, system, _) = crate::utils::get_file_attributes(&metadata, &name);
                     batch.push(FileEntry {
+                        content_stamp: crate::models::FileStamp::for_entry(entry.path(), &metadata),
                         name,
                         path: entry.path().to_string_lossy().into_owned(),
                         is_dir: metadata.is_dir(),
@@ -698,3 +700,7 @@ mod criteria_tests;
 #[cfg(test)]
 #[path = "search/tests/visibility_tests.rs"]
 mod visibility_tests;
+
+#[cfg(test)]
+#[path = "search/tests/content_stamps.rs"]
+mod content_stamp_tests;

@@ -9,7 +9,7 @@ pub use error::CommandError;
 pub use config::{AppConfig, ConfigManager};
 pub use file_entry::{
     get_file_entry_from_path, ConflictAction, ConflictEntry, DriveInfo,
-    FileEntry, FileProperties, FolderSizeResult, NetResource, QuickAccessItem,
+    FileEntry, FileStamp, FileProperties, FolderSizeResult, NetResource, QuickAccessItem,
     ShortcutInfo, SidebarNode, TrashEntry, WinMenuItem,
 };
 pub use history::HistoryManager;

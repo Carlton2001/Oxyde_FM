@@ -2,15 +2,18 @@ use crate::ui::components::icons::render_file_icon;
 use crate::ui::theme::OxydeTheme;
 use gpui::prelude::*;
 use gpui::*;
+mod lifecycle;
+pub(crate) use lifecycle::clear_grid_thumbnails;
+use lifecycle::Source;
 
 struct GridThumbnailAsset;
 pub(crate) fn invalidate_thumbnail(path: &str, cx: &mut App) {
     crate::ui::components::tooltip::invalidate_media_preview(path);
-    cx.remove_asset::<GridThumbnailAsset>(&SharedString::from(path.to_string()));
+    lifecycle::invalidate(path, cx);
 }
 
 impl Asset for GridThumbnailAsset {
-    type Source = SharedString;
+    type Source = Source;
     type Output = Result<std::sync::Arc<RenderImage>, ImageCacheError>;
 
     fn load(
@@ -19,7 +22,8 @@ impl Asset for GridThumbnailAsset {
     ) -> impl std::future::Future<Output = Self::Output> + Send + 'static {
         let renderer = cx.svg_renderer();
         let task = crate::ui::preview_jobs::load(move || {
-            crate::ui::preview_disk::load_grid(&source, &renderer).map_err(|error| ImageCacheError::Asset(error.into()))
+            crate::ui::preview_disk::load_grid(&source.path, source.stamp.as_ref(), &renderer)
+                .map_err(|error| ImageCacheError::Asset(error.into()))
         });
         async move {
             let image = task
@@ -31,20 +35,35 @@ impl Asset for GridThumbnailAsset {
 }
 
 pub(super) fn render_grid_thumbnail(
-    path: String,
+    file: &oxyde_lib::models::FileEntry,
+    pane_id: &str,
     fallback_icon: crate::ui::components::icons::IconType,
     theme: OxydeTheme,
     system: bool,
 ) -> impl IntoElement {
+    let path = file.path.clone();
     let fallback_path = path.clone();
-    let source: SharedString = path.clone().into();
+    let source = Source::for_file(file);
+    let owner: SharedString = format!("grid-thumbnail-owner-{pane_id}-{path}").into();
     img(move |window: &mut Window, cx: &mut App| {
-        window.use_asset::<GridThumbnailAsset>(&source, cx)
+        let source = lifecycle::use_source(&source, &owner, window, cx);
+        let result = window.use_asset::<GridThumbnailAsset>(&source, cx);
+        if let Some(Ok(image)) = &result {
+            lifecycle::loaded(&source, image, cx);
+        }
+        result
     })
     .id(SharedString::from(format!("grid-thumbnail-{path}")))
     .size(rems(5.0))
     .object_fit(ObjectFit::Contain)
     .with_fallback(move || {
-        render_file_icon(fallback_path.clone(), fallback_icon, rems(4.0), &theme, system, true)
+        render_file_icon(
+            fallback_path.clone(),
+            fallback_icon,
+            rems(4.0),
+            &theme,
+            system,
+            true,
+        )
     })
 }

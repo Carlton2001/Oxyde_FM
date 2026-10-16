@@ -11,6 +11,9 @@ pub struct NetworkDetails {
 
 #[derive(Debug, Clone, Default)]
 pub struct FileEntry {
+    /// Full-resolution filesystem stamp captured by the listing/search worker.
+    /// Virtual entries and sources without filesystem metadata leave this unset.
+    pub content_stamp: Option<FileStamp>,
     /// Known origin from archive listing/search. None for real filesystem entries.
     /// Shared within a listing; UI capability checks require no filesystem I/O.
     pub archive_path: Option<std::sync::Arc<std::path::PathBuf>>,
@@ -31,6 +34,28 @@ pub struct FileEntry {
     pub deleted_time: Option<i64>,
 }
 
+/// File revision used by asynchronous consumers; this does not establish object identity.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct FileStamp {
+    pub length: u64,
+    pub modified: SystemTime,
+}
+
+impl FileStamp {
+    pub fn from_metadata(metadata: &std::fs::Metadata) -> Option<Self> {
+        Some(Self { length: metadata.len(), modified: metadata.modified().ok()? })
+    }
+
+    /// Worker-only: a file link previews its target, so use that target's stamp.
+    pub fn for_entry(path: &Path, metadata: &std::fs::Metadata) -> Option<Self> {
+        if metadata.file_type().is_symlink() {
+            Self::from_metadata(&std::fs::metadata(path).ok()?)
+        } else {
+            Self::from_metadata(metadata)
+        }
+    }
+}
+
 impl FileEntry {
     pub fn is_navigable_archive(&self) -> bool {
         !self.is_dir && self.archive_path.is_none() && crate::utils::archive::navigable_format(Path::new(&self.path))
@@ -49,6 +74,10 @@ impl FileEntry {
 #[cfg(test)]
 #[path = "file_entry/tests/archive_capabilities.rs"]
 mod archive_capability_tests;
+
+#[cfg(test)]
+#[path = "file_entry/tests/content_stamps.rs"]
+mod content_stamp_tests;
 
 #[derive(Debug, Clone)]
 pub struct ShortcutInfo {
@@ -203,6 +232,7 @@ pub fn get_file_entry_from_path(path: &Path) -> Result<FileEntry, CommandError> 
     let size = if is_dir { 0 } else { metadata.len() };
 
     Ok(FileEntry {
+        content_stamp: FileStamp::for_entry(path, &metadata),
         archive_path: None,
         name,
         path: path.to_string_lossy().to_string(),

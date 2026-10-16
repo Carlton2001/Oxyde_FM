@@ -8,8 +8,8 @@ use std::{
         atomic::{AtomicU64, Ordering},
         Arc, Mutex, OnceLock, Weak,
     },
-    time::SystemTime,
 };
+use oxyde_lib::models::FileStamp as Stamp;
 
 const SIDE: u32 = oxyde_lib::utils::image_preview_decode::POLICY.output_side;
 const MAX_BYTES: usize = 24 * 1024;
@@ -27,19 +27,8 @@ fn generation_lock(key: Option<&Key>) -> Option<Arc<Mutex<()>>> {
     Some(lock)
 }
 
-#[derive(Clone, PartialEq, Eq)]
-struct Stamp {
-    length: u64,
-    modified: SystemTime,
-}
-impl Stamp {
-    fn read(path: &Path) -> Option<Self> {
-        let metadata = std::fs::metadata(path).ok()?;
-        Some(Self {
-            length: metadata.len(),
-            modified: metadata.modified().ok()?,
-        })
-    }
+fn read_stamp(path: &Path) -> Option<Stamp> {
+    Stamp::from_metadata(&std::fs::metadata(path).ok()?)
 }
 struct Key {
     source: PathBuf,
@@ -58,7 +47,7 @@ impl Key {
         Self::in_root(source, kind, &oxyde_lib::app_paths::cache_dir()?.join("thumbnails"))
     }
     fn in_root(source: &Path, kind: &str, root: &Path) -> Option<Self> {
-        let stamp = Stamp::read(source)?;
+        let stamp = read_stamp(source)?;
         let source = std::path::absolute(source).ok()?;
         let side = GRID_SIDE;
         let max_bytes = MAX_BYTES;
@@ -78,7 +67,7 @@ impl Key {
         })
     }
     fn valid(&self) -> bool {
-        Stamp::read(&self.source).as_ref() == Some(&self.stamp)
+        read_stamp(&self.source).as_ref() == Some(&self.stamp)
     }
     fn read(&self) -> Option<Pixels> {
         let file = oxyde_lib::platform::platform()
@@ -189,7 +178,40 @@ fn first_frame(image: &RenderImage) -> Option<RgbaImage> {
     )
 }
 
-pub(crate) fn load_grid(path: &str, renderer: &SvgRenderer) -> Result<Arc<RenderImage>, String> {
+/// All metadata checks and decoding in this function run on a preview worker.
+pub(crate) fn load_grid(path: &str, expected: Option<&Stamp>, renderer: &SvgRenderer) -> Result<Arc<RenderImage>, String> {
+    checked_grid_image(Path::new(path), expected, || load_grid_pixels(path, renderer))
+}
+
+fn checked_grid_image(path: &Path, expected: Option<&Stamp>, load: impl FnOnce() -> Result<RgbaImage, String>) -> Result<Arc<RenderImage>, String> {
+    checked_grid_image_with_metadata(expected, || {
+        let metadata = std::fs::metadata(path).map_err(|error| error.to_string())?;
+        Ok((metadata.len(), Stamp::from_metadata(&metadata)))
+    }, load)
+}
+
+fn checked_grid_image_with_metadata(
+    expected: Option<&Stamp>,
+    mut metadata: impl FnMut() -> Result<(u64, Option<Stamp>), String>,
+    load: impl FnOnce() -> Result<RgbaImage, String>,
+) -> Result<Arc<RenderImage>, String> {
+    let before = metadata()?;
+    if expected.is_some_and(|expected| Some(expected) != before.1.as_ref()) {
+        return Err("Thumbnail source changed since listing".into());
+    }
+    let pixels = load()?;
+    if metadata()? != before {
+        return Err("Thumbnail source changed during loading".into());
+    }
+    if pixels.width() > GRID_SIDE || pixels.height() > GRID_SIDE {
+        return Err("Thumbnail exceeds grid pixel envelope".into());
+    }
+    // Independent of the tooltip budget. The card lease owns this one-frame,
+    // at most 128 x 128 image until its last visible use is released.
+    Ok(Arc::new(RenderImage::new(vec![Frame::new(pixels)])))
+}
+
+fn load_grid_pixels(path: &str, renderer: &SvgRenderer) -> Result<RgbaImage, String> {
     let pdf = Path::new(path)
         .extension()
         .is_some_and(|extension| extension.eq_ignore_ascii_case("pdf"));
@@ -215,11 +237,13 @@ pub(crate) fn load_grid(path: &str, renderer: &SvgRenderer) -> Result<Arc<Render
         if let Some(key) = key { key.write(&Pixels { bgra: pixels.clone(), animated: false, limited: false }); }
         pixels
     };
-    // Keep the existing grid asset lifetime separate from the bounded tooltip
-    // budget: retained grid thumbnails must not consume its 256 preview slots.
-    Ok(Arc::new(RenderImage::new(vec![Frame::new(pixels)])))
+    Ok(pixels)
 }
 
 #[cfg(test)]
 #[path = "preview_disk/tests/persistence.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "preview_disk/tests/grid_revision.rs"]
+mod grid_revision_tests;

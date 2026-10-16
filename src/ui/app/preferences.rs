@@ -84,6 +84,7 @@ impl OxydeApp {
                 this.settings_data_status = None;
                 this.toast(if result.is_ok() { super::ToastKind::Success } else { super::ToastKind::Error }, if result.is_ok() { Message::SettingsCacheCleared } else { Message::SettingsCacheError }, String::new(), 0, cx);
                 if let Err(error) = result { log::warn!("Cache cleanup failed: {error}"); }
+                crate::ui::components::file_list::clear_grid_thumbnails(cx);
                 this.state.layout.visit_panes(&mut |pane| {
                     for tab in &pane.tabs {
                         for file in &tab.files {

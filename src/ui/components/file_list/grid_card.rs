@@ -261,7 +261,7 @@ pub(super) fn render_grid_card(params: GridCardParams<'_>, cx: &mut App) -> Stat
                             && !is_dir
                             && matches!(crate::ui::components::icons::get_preview_type(&path), crate::ui::components::icons::PreviewType::Image | crate::ui::components::icons::PreviewType::Pdf)
                         {
-                            render_grid_thumbnail(path.clone(), icon, theme, use_system_icons).into_any_element()
+                            render_grid_thumbnail(file, &pid, icon, theme, use_system_icons).into_any_element()
                         } else {
                             render_file_icon(path.clone(), icon, rems(4.0), &theme, use_system_icons, true)
                         }),

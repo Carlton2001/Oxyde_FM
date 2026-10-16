@@ -263,6 +263,7 @@ fn list_seven_zip(path: &Path, internal_prefix: &str) -> Result<Vec<FileEntry>, 
                     seen.insert(entry_name.clone());
                     let is_dir = entry.is_dir || parts.len() > 1;
                     entries.push(FileEntry {
+                        content_stamp: None,
                         archive_path: Some(archive_origin.clone()),
                         name: entry_name.clone(),
                         path: virtual_entry_path(path, internal_prefix, &entry_name)?,

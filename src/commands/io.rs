@@ -20,6 +20,7 @@ pub async fn list_dir(
         let entries = trash_items
             .into_iter()
             .map(|t| FileEntry {
+                content_stamp: None,
                 archive_path: None,
                 name: t.name,
                 path: t.path,
