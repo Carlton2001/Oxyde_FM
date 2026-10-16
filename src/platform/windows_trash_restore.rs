@@ -9,6 +9,7 @@ use std::{
     path::{Path, PathBuf},
 };
 fn failure(issue: TrashRestoreIssue, path: &Path, detail: impl ToString) -> io::Error {
+    log::warn!(target: "oxyde_lib::trash_restore", "stage=native_validation_or_move issue={issue:?} path={path:?} error={}", detail.to_string());
     io::Error::other(TrashRestoreFailure {
         issue,
         path: path.to_string_lossy().into_owned(),
@@ -54,13 +55,13 @@ impl Selection {
             return Err(failure(Unavailable, &source, "Invalid trash selection"));
         }
         let parents =
-            HeldParents::new(&source).map_err(|error| failure(Unavailable, &source, error))?;
+            HeldParents::new(&source).map_err(|error| failure(Unavailable, &source, format!("stage=hold_source_parents: {error:?}")))?;
         let metadata_path = source.with_file_name(format!("$I{}", &leaf[2..]));
         let mut metadata = super::platform()
             .open_copied_file(parents.directory(), &parents.resolved_path(&metadata_path)?)
-            .map_err(|error| failure(Unavailable, &metadata_path, error))?;
+            .map_err(|error| failure(Unavailable, &metadata_path, format!("stage=open_metadata: {error:?}")))?;
         let bytes = super::windows_trash::metadata_bytes(&mut metadata)
-            .map_err(|error| failure(Unavailable, &metadata_path, error))?;
+            .map_err(|error| failure(Unavailable, &metadata_path, format!("stage=read_metadata: {error:?}")))?;
         let mut captured_original = super::windows_trash::parse_original_path(&bytes)
             .ok_or_else(|| failure(Unavailable, &metadata_path, "Invalid original path"))?;
         // Preserve the existing shortcut correction, before any native move.
@@ -92,9 +93,9 @@ impl Selection {
         }
         let payload = super::platform()
             .open_rename_item(parents.directory(), &parents.resolved_path(&source)?)
-            .map_err(|error| failure(Unavailable, &source, error))?;
+            .map_err(|error| failure(Unavailable, &source, format!("stage=open_payload: {error:?}")))?;
         let destination =
-            HeldParents::new(&original).map_err(|error| failure(Unavailable, &original, error))?;
+            HeldParents::new(&original).map_err(|error| failure(Unavailable, &original, format!("stage=hold_destination_parents: {error:?}")))?;
         Ok(Self {
             payload,
             metadata,
@@ -117,7 +118,7 @@ impl Selection {
                         TrashRestoreIssue::Unavailable
                     },
                     &self.original,
-                    error,
+                    format!("stage=rename_payload: {error:?}"),
                 )
             })?;
         // Restoration has succeeded. Failure of sidecar cleanup must not report

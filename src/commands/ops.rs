@@ -135,20 +135,33 @@ pub fn list_trash() -> Result<Vec<TrashEntry>, CommandError> {
 
 /// Empty the Recycle Bin (permanently delete all items)
 pub async fn empty_trash() -> Result<(), CommandError> {
-    info!("Emptying recycle bin...");
+    let started = std::time::Instant::now();
+    info!(target: "oxyde_lib::trash_purge", "stage=start mode=empty_native");
 
     crate::platform::platform()
         .empty_trash()
-        .map_err(CommandError::TrashError)?;
+        .map_err(|error| {
+            log::warn!(target: "oxyde_lib::trash_purge", "stage=empty_native_failed wall_s={:.6} error={error}", started.elapsed().as_secs_f64());
+            CommandError::TrashError(error)
+        })?;
+
+    info!(target: "oxyde_lib::trash_purge", "stage=end mode=empty_native wall_s={:.6}", started.elapsed().as_secs_f64());
 
     Ok(())
 }
 
 /// Permanently delete specific items from the Recycle Bin
 pub async fn purge_recycle_bin(paths: Vec<String>) -> Result<(), CommandError> {
+    let started = std::time::Instant::now();
+    info!(target: "oxyde_lib::trash_purge", "stage=start mode=selected requested={}", paths.len());
     let trash_items = crate::platform::platform()
         .list_trash_items()
-        .map_err(CommandError::TrashError)?;
+        .map_err(|error| {
+            log::warn!(target: "oxyde_lib::trash_purge", "stage=enumeration_failed wall_s={:.6} error={error}", started.elapsed().as_secs_f64());
+            CommandError::TrashError(error)
+        })?;
+
+    info!(target: "oxyde_lib::trash_purge", "stage=enumerated available={} wall_s={:.6}", trash_items.len(), started.elapsed().as_secs_f64());
 
     let normalize = |p: &std::path::Path| -> String {
         p.to_string_lossy()
@@ -171,15 +184,22 @@ pub async fn purge_recycle_bin(paths: Vec<String>) -> Result<(), CommandError> {
 
         if let Some(item) = trash_map.get(&normalized_target) {
             items_to_purge.push(item.clone());
+        } else {
+            log::warn!(target: "oxyde_lib::trash_purge", "stage=selection_unavailable id={path_str:?}");
         }
     }
 
     if !items_to_purge.is_empty() {
+        info!(target: "oxyde_lib::trash_purge", "stage=shell_delete_start selected={} preparation_s={:.6}", items_to_purge.len(), started.elapsed().as_secs_f64());
         crate::platform::platform()
             .purge_trash_items(items_to_purge)
-            .map_err(CommandError::TrashError)?;
+            .map_err(|error| {
+                log::warn!(target: "oxyde_lib::trash_purge", "stage=shell_delete_failed wall_s={:.6} error={error}", started.elapsed().as_secs_f64());
+                CommandError::TrashError(error)
+            })?;
     }
 
+    info!(target: "oxyde_lib::trash_purge", "stage=end mode=selected wall_s={:.6}", started.elapsed().as_secs_f64());
     Ok(())
 }
 
@@ -370,6 +390,7 @@ fn normalize_restore_path(path: &std::path::Path) -> String {
         .trim_start_matches("\\\\?\\")
         .to_string()
 }
+#[cfg(test)]
 fn select_restoration_tasks(
     items: &[trash::TrashItem],
     paths: Vec<String>,
@@ -413,30 +434,16 @@ fn select_restoration_tasks(
     }
     Ok(selected)
 }
-pub async fn restore_items(paths: Vec<String>) -> Result<Vec<String>, CommandError> {
-    info!("Restoring items: {:?}", paths);
-    let items = crate::platform::platform()
-        .list_trash_items()
-        .map_err(CommandError::TrashError)?
-        .iter()
-        .map(item_with_correct_restore_name)
-        .collect::<Vec<_>>();
-    let tasks = select_restoration_tasks(&items, paths)?;
-    if tasks.is_empty() {
-        return Err(CommandError::TrashError(
-            "No matching items found in Recycle Bin".into(),
-        ));
-    }
-    let restored = tasks
-        .iter()
-        .map(|item| item.original_path().to_string_lossy().into_owned())
-        .collect();
-    crate::platform::platform()
-        .restore_trash_items(tasks)
-        .map_err(CommandError::TrashError)?;
-    Ok(restored)
-}
+mod trash_restore;
+pub use trash_restore::{restore_items_report, TrashRestoreReport};
 
+pub async fn restore_items(paths: Vec<String>) -> Result<Vec<String>, CommandError> {
+    let report = restore_items_report(paths).await?;
+    if let Some((_, error)) = report.failures.into_iter().next() {
+        return Err(CommandError::TrashError(error));
+    }
+    Ok(report.restored)
+}
 /// Replay the same system deletion policy used by the operation queue.
 /// Recycle Bin capacity is decided by the OS, without a fixed size or item limit.
 #[cfg(not(target_os = "windows"))]

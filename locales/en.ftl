@@ -623,3 +623,5 @@ default-archive-format = Default archive format
 
 settings-onedrive = OneDrive
 settings-onedrive-description = Show OneDrive in the sidebar when configured.
+
+trash-restore-summary = Restoration finished: { $restored } item(s) restored, { $failed } failed. Other items were processed. See the log for error details.

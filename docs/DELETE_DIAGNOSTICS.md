@@ -148,3 +148,28 @@ test d'existence de l'historique ne doit pas appeler `list_operations()`.
 
 Pour vérifier la fluidité, conserver l'historique existant et survoler les fichiers
 avec le gestionnaire fermé : aucune nouvelle copie massive n'est nécessaire.
+
+## Restauration et vidage : erreurs indépendantes (2026-10-16)
+
+La restauration depuis la vue Corbeille utilise `restore_items_report` : index des
+identifiants et chemins d'origine, dédoublonnage, préparation et déplacement d'un
+seul élément à la fois. Un élément indisponible, ambigu ou en conflit est signalé
+sans bloquer les suivants. Aucun écrasement ni création automatique du dossier
+d'origine. Le bilan traduit affiche les réussites, les échecs et le premier chemin
+en échec. Les appels historiques `restore_items` conservent leur contrat Result,
+mais traitent également les éléments indépendants avant de retourner une erreur.
+La restauration du journal d'annulation garde son propre protocole de preuves.
+
+Logs `oxyde_lib::trash_restore` : début, énumération, résolution des noms,
+progression toutes les 256 tentatives, bilan et durées. Chaque échec contient
+l'identifiant, la destination et la cause. Les erreurs natives précisent l'étape
+(hold_source_parents, open_metadata, read_metadata, open_payload,
+hold_destination_parents, rename_payload) et le Debug de l'erreur IO, incluant
+le code système. Les réussites individuelles sont au niveau Debug ; les échecs
+et les bilans restent disponibles avec la configuration de log normale.
+
+Logs `oxyde_lib::trash_purge` : distinguent `empty_native` (paramètres) et
+`selected` (vue Corbeille), énumération, préparation et appel Shell, erreurs et
+durée totale. Le moteur de vidage n'est pas remplacé dans ce changement ; ces
+mesures doivent permettre de situer sa lenteur. Aucun essai automatique ne vide
+la corbeille réelle de l'utilisateur.

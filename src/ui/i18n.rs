@@ -433,6 +433,7 @@ pub enum Message {
     TrashRestoreChanged,
     TrashRestoreConflict,
     TrashRestoreUnavailable,
+    TrashRestoreSummary,
     HistoryDeleteChanged,
     HistoryDeleteUnverified,
 
@@ -948,6 +949,7 @@ impl Message {
             Self::TrashRestoreChanged => "trash-restore-changed",
             Self::TrashRestoreConflict => "trash-restore-conflict",
             Self::TrashRestoreUnavailable => "trash-restore-unavailable",
+            Self::TrashRestoreSummary => "trash-restore-summary",
             Self::HistoryDeleteChanged => "history-delete-changed",
             Self::HistoryDeleteUnverified => "history-delete-unverified",
 

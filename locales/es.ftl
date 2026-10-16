@@ -930,3 +930,5 @@ default-archive-format = Formato de archivo predeterminado
 
 settings-onedrive = OneDrive
 settings-onedrive-description = Mostrar OneDrive en la barra lateral cuando esté configurado.
+
+trash-restore-summary = Restauración terminada: { $restored } elemento(s) restaurado(s), { $failed } fallido(s). Los demás elementos se procesaron. Consulte el registro para más detalles.

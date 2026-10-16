@@ -16,13 +16,20 @@ impl OxydeApp {
         cx.spawn(async move |this, cx| {
             let runtime = tokio::runtime::Handle::current();
             let result = tokio::task::spawn_blocking(move || runtime.block_on(async move {
-                if restore { oxyde_lib::commands::ops::restore_items(paths).await.map(|_| ()) }
-                else { oxyde_lib::commands::ops::purge_recycle_bin(paths).await }
+                if restore { oxyde_lib::commands::ops::restore_items_report(paths).await.map(Some) }
+                else { oxyde_lib::commands::ops::purge_recycle_bin(paths).await.map(|_| None) }
             })).await;
             let _ = this.update(cx, |this, cx| {
                 this.trash_busy = false;
                 let error = match result {
-                    Ok(Ok(())) => None,
+                    Ok(Ok(Some(report))) if !report.failures.is_empty() => {
+                        let mut args = crate::ui::i18n::FluentArgs::new();
+                        args.set("restored", report.restored.len().to_string());
+                        args.set("failed", report.failures.len().to_string());
+                        let detail = format!("{}\n{}", cx.i18n().text_with_args(Message::TrashRestoreSummary, &args), report.failures[0].0);
+                        Some(detail)
+                    }
+                    Ok(Ok(_)) => None,
                     Ok(Err(error)) => Some(error.to_string()),
                     Err(error) => Some(error.to_string()),
                 };
