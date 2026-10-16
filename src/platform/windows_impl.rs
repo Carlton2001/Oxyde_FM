@@ -11,6 +11,9 @@ impl WindowsPlatform {
 }
 
 impl Platform for WindowsPlatform {
+    fn file_name_rules(&self, directory: &std::fs::File) -> std::io::Result<super::FileNameRules> {
+        super::windows_file_names::rules(directory)
+    }
     fn onedrive_installed(&self) -> bool { super::windows_onedrive::installed() }
     fn onedrive_folders(&self) -> Vec<crate::models::QuickAccessItem> { super::windows_onedrive::folders() }
 

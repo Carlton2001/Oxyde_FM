@@ -933,3 +933,4 @@ settings-onedrive = OneDrive
 settings-onedrive-description = OneDrive in der Seitenleiste anzeigen, wenn es eingerichtet ist.
 
 trash-restore-summary = Wiederherstellung beendet: { $restored } Element(e) wiederhergestellt, { $failed } fehlgeschlagen. Andere Elemente wurden verarbeitet. Fehlerdetails stehen im Protokoll.
+transfer-destination-collision = Mehrere ausgewählte Elemente würden dasselbe Ziel verwenden: { $path }. Benennen Sie sie um oder übertragen Sie sie einzeln. Es wurden keine Dateien übertragen.

@@ -3,6 +3,9 @@ use chrono::{DateTime, Local, NaiveDateTime};
 pub use oxyde_lib::models::preferences::DateFormat;
 use oxyde_lib::models::preferences::Language;
 pub struct DateFormatPreference(pub DateFormat);
+#[cfg(test)]
+#[path = "format/tests/transfer_collision.rs"]
+mod transfer_collision_tests;
 impl gpui::Global for DateFormatPreference {}
 
 pub fn drive_label(label: &str, path: &str, i18n: &crate::ui::i18n::I18n) -> String {
@@ -366,7 +369,7 @@ pub fn error_detail(detail: &str, i18n: &crate::ui::i18n::I18n) -> String {
         args.set("locations", recovery.locations.iter().map(|path| display_paths(path)).collect::<Vec<_>>().join("\n"));
         let mut text = i18n.text_with_args(if recovery.completed { Message::ArchiveRecoveryCompleted } else { Message::ArchiveRecoveryStopped }, &args).to_string();
         let cause = &recovery.cause;
-        if ArchiveLimitFailure::from_message(cause).is_some() || oxyde_lib::models::error::ArchiveProcessingFailure::from_message(cause) || oxyde_lib::models::error::ArchiveSourceConflict::from_message(cause) || oxyde_lib::models::error::SourceSelectionFailure::from_message(cause).is_some() {
+        if ArchiveLimitFailure::from_message(cause).is_some() || oxyde_lib::models::error::ArchiveProcessingFailure::from_message(cause) || oxyde_lib::models::error::ArchiveSourceConflict::from_message(cause) || oxyde_lib::models::error::SourceSelectionFailure::from_message(cause).is_some() || oxyde_lib::models::error::TransferDestinationCollision::from_message(cause).is_some() {
             text.push('\n'); text.push_str(&error_detail(cause, i18n));
         }
         if recovery.omitted > 0 { args.set("count", format_number(recovery.omitted, i18n.language())); text.push('\n'); text.push_str(&i18n.text_with_args(Message::ArchiveRecoveryMore, &args)); }
@@ -398,6 +401,11 @@ pub fn error_detail(detail: &str, i18n: &crate::ui::i18n::I18n) -> String {
             TrashRestoreIssue::Unavailable => Message::TrashRestoreUnavailable,
         };
         return i18n.text(message).to_string();
+    }
+    if let Some(path) = oxyde_lib::models::error::TransferDestinationCollision::from_message(detail) {
+        let mut args = FluentArgs::new();
+        args.set("path", display_paths(path));
+        return i18n.text_with_args(Message::TransferDestinationCollision, &args).to_string();
     }
     if let Some(changed) = oxyde_lib::models::error::SourceSelectionFailure::from_message(detail) {
         return i18n.text(if changed { Message::TransferSourceChanged } else { Message::TransferSourceUnverified }).to_string();

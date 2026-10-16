@@ -1,4 +1,6 @@
 use crate::models::{DriveInfo, QuickAccessItem};
+mod file_names;
+pub use file_names::FileNameRules;
 
 #[derive(Debug)]
 pub enum NetworkDisconnectError {
@@ -99,6 +101,8 @@ impl ShellDeleteOutcome {
 /// Toute fonctionnalité native (lecteurs, ouverture, raccourcis, etc.)
 /// doit passer par ce trait plutôt qu'appeler directement les API OS.
 pub trait Platform: Send + Sync {
+    /// Name comparison of an existing directory; newly created children inherit it.
+    fn file_name_rules(&self, directory: &std::fs::File) -> std::io::Result<FileNameRules>;
     /// Available OneDrive sync roots configured for the current user.
     fn onedrive_installed(&self) -> bool { false }
     fn onedrive_folders(&self) -> Vec<crate::models::QuickAccessItem> { Vec::new() }
@@ -563,6 +567,8 @@ mod windows_preview_quota;
 mod windows_pdf_thumbnail;
 #[cfg(target_os = "windows")]
 mod windows_file_moves;
+#[cfg(target_os = "windows")]
+mod windows_file_names;
 #[cfg(target_os = "windows")]
 mod windows_file_tree;
 #[cfg(target_os = "windows")]

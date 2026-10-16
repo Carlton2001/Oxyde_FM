@@ -1,4 +1,5 @@
 mod worker;
+mod destinations;
 
 use super::{FileOperation, FileOperationManager, OpStatus, FILE_OPS_LOG_TARGET};
 use crate::models::ConflictAction;
@@ -329,6 +330,13 @@ impl FileOperationManager {
                 files_to_process.len() - first_file + directories_to_create.len() - first_directory,
                 skipped, is_move && selected.is_dir());
         }
+
+        destinations::validate(
+            &target_dir,
+            &directories_to_create,
+            files_to_process.iter().map(|(_, destination, _)| destination),
+            &mut || Self::archive_checkpoint(op).map_err(std::io::Error::other),
+        ).map_err(|error| error.to_string())?;
 
         log::info!(target: "oxyde_lib::copy_timing",
             "copy_plan_traversal op={} files={} directories={} wall_s={:.6}",

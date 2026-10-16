@@ -1,5 +1,22 @@
 use std::fmt;
 
+/// Stable cause retained through the string-based operation status.
+#[derive(Debug)]
+pub struct TransferDestinationCollision {
+    pub path: String,
+}
+impl fmt::Display for TransferDestinationCollision {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Transfer destination collision: {}", self.path)
+    }
+}
+impl std::error::Error for TransferDestinationCollision {}
+impl TransferDestinationCollision {
+    pub fn from_message(message: &str) -> Option<&str> {
+        message.split_once("Transfer destination collision: ").map(|(_, path)| path)
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TrashRestoreIssue {
     Ambiguous,

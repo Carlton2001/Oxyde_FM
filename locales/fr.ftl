@@ -632,3 +632,4 @@ settings-onedrive = OneDrive
 settings-onedrive-description = Afficher OneDrive dans la barre latérale lorsqu’il est configuré.
 
 trash-restore-summary = Restauration terminée : { $restored } élément(s) restauré(s), { $failed } en échec. Les autres éléments ont été traités. Consultez le journal pour le détail des erreurs.
+transfer-destination-collision = Plusieurs éléments sélectionnés aboutiraient à la même destination : { $path }. Renommez-les ou transférez-les séparément. Aucun fichier n’a été transféré.
