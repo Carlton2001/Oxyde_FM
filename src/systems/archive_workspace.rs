@@ -10,7 +10,7 @@ use crate::commands::archive::{
 #[cfg(any(not(target_os = "windows"), test))]
 use crate::commands::archive::extract_open_archive_with_budget;
 use crate::systems::file_ops::{FileOpType, FileOperation, FileOperationManager};
-use crate::utils::archive::{split_virtual_path, ArchiveFormat};
+use crate::utils::archive::{resolve_virtual_path, ArchiveFormat};
 use crate::utils::archive_limits::{ArchiveBudget, ArchiveLimits};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -88,12 +88,11 @@ pub(crate) fn lock_for_operation<'a>(
 }
 
 pub(crate) fn virtual_source(path: &Path) -> Option<(PathBuf, String)> {
-    split_virtual_path(&path.to_string_lossy())
-        .filter(|(archive, inner)| archive.is_file() && !inner.is_empty())
+    resolve_virtual_path(path).filter(|(_, inner)| !inner.is_empty())
 }
 
 pub(crate) fn virtual_destination(path: &Path) -> Option<(PathBuf, String)> {
-    split_virtual_path(&path.to_string_lossy()).filter(|(archive, _)| archive.is_file())
+    resolve_virtual_path(path)
 }
 
 pub(crate) fn writable(path: &Path) -> bool {

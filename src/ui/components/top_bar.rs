@@ -122,7 +122,7 @@ pub fn render_top_bar(
     } else { None };
     let selected = !active_tab.selected_paths.is_empty();
     let ordinary = special_path_label.is_none()
-        && oxyde_lib::utils::archive::split_virtual_path(&current_path).is_none();
+        && active_tab.archive_root.is_none();
 
     let undo_tooltip = history_state.undo.map(|operation| {
         super::history_actions::operation_label(_cx.i18n(), Message::UndoOperation, operation)
@@ -228,7 +228,7 @@ pub fn render_top_bar(
                 (selected && (ordinary || is_trash_path) && !view.trash_busy, "cut-btn", "icons/scissors.svg", Message::Cut, "Ctrl+X".into(), 3),
                 (selected && !is_trash_path && !is_network_neighborhood, "copy-btn", "icons/copy.svg", Message::Copy, "Ctrl+C".into(), 4),
                 (ordinary && view.clipboard_has_files, "paste-btn", "icons/clipboard-paste.svg", Message::Paste, "Ctrl+V".into(), 5),
-                (selected && !is_trash_path && !is_network_neighborhood && oxyde_lib::utils::archive::split_virtual_path(&current_path).is_none(),
+                (selected && !is_trash_path && !is_network_neighborhood && active_tab.archive_root.is_none(),
                     "delete-btn", if permanent_delete { "icons/trash-2.svg" } else { "icons/trash.svg" },
                     if permanent_delete { Message::TrashDeletePermanent } else { Message::Delete }, String::new(), 6),
                 (is_trash_path && selected, "trash-delete-btn", "icons/trash-2.svg", Message::TrashDeletePermanent, String::new(), 7),

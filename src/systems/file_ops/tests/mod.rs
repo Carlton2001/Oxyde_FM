@@ -21,3 +21,4 @@ mod copy_history;
 mod move_history;
 mod transfer_safety;
 mod destination_collisions;
+mod real_archive_directories;

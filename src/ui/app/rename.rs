@@ -372,6 +372,7 @@ impl OxydeApp {
                         let current_path = current_path.clone();
                         move || {
                             let i18n = I18n::for_language(language);
+                            let in_archive = oxyde_lib::utils::archive::resolve_virtual_path(std::path::Path::new(&current_path)).is_some();
                             for counter in 0.. {
                                 let name = if counter == 0 {
                                     i18n.text(Message::NewFolderName).to_string()
@@ -382,13 +383,13 @@ impl OxydeApp {
                                         .replace(['\u{2068}', '\u{2069}'], "")
                                 };
                                 let path = std::path::Path::new(&current_path).join(name);
-                                let created = if oxyde_lib::utils::archive::split_virtual_path(&current_path).is_some() {
+                                let created = if in_archive {
                                     oxyde_lib::commands::archive::create_archive_directory_with_quality(&path, &quality).map(|()| None)
                                 } else {
                                     oxyde_lib::commands::io::create_local_folder(&path)
                                 };
                                 match created {
-                                    Ok(identity) => return Ok((path, identity)),
+                                    Ok(identity) => return Ok((path, identity, in_archive)),
                                     Err(error)
                                         if error.kind() == std::io::ErrorKind::AlreadyExists =>
                                     {
@@ -402,14 +403,14 @@ impl OxydeApp {
                     })
                     .await;
                     handle.update(&mut cx, |this, cx| match created {
-                        Ok(Ok((folder_path, identity))) => {
+                        Ok(Ok((folder_path, identity, in_archive))) => {
                             this.queue_created_item_rename(
                                 tab_id,
                                 folder_path.to_string_lossy().into_owned(),
                                 true,
                                 cx,
                             );
-                            if oxyde_lib::utils::archive::split_virtual_path(&current_path).is_none() {
+                            if !in_archive {
                                 this.history.push(Transaction::new(
                                     TransactionType::NewFolder,
                                     TransactionDetails {

@@ -27,7 +27,7 @@ impl FileOperationManager {
 
         for src in &sources {
             if let Some((archive_path, internal_path)) =
-                crate::utils::archive::split_virtual_path(&src.to_string_lossy())
+                crate::utils::archive::resolve_virtual_path(src)
             {
                 if internal_path.is_empty() {
                     real_sources.push(src.clone());
@@ -242,7 +242,7 @@ impl FileOperationManager {
 
         for src in &sources {
             if let Some((archive_path, internal_path)) =
-                crate::utils::archive::split_virtual_path(&src.to_string_lossy())
+                crate::utils::archive::resolve_virtual_path(src)
             {
                 if internal_path.is_empty() {
                     real_sources.push(src.clone());

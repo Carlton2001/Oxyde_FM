@@ -6,7 +6,19 @@ mod scroll;
 #[cfg(test)]
 mod prepared_sort_tests;
 
+#[cfg(test)]
+#[path = "tab/tests/archive_watchers.rs"]
+mod archive_watcher_tests;
+
 impl TabState {
+    /// The archive's containing directory reports replacement/deletion events.
+    /// This consumes the location resolved by the listing worker, without I/O.
+    pub(crate) fn watched_path(&self) -> String {
+        self.archive_root.as_ref().and_then(|root| root.parent())
+            .map(|parent| parent.to_string_lossy().into_owned())
+            .unwrap_or_else(|| self.path.clone())
+    }
+
     pub(crate) fn reveal_pending_item(&mut self, width: f32) {
         let Some(path) = self.pending_reveal.take() else { return; };
         let Some(index) = self.filtered_files().iter().position(|file| file.path == path) else { return; };
@@ -34,6 +46,7 @@ impl TabState {
             search_revision: 0,
             pending_reveal: None,
             path: path.clone(),
+            archive_root: None,
             files: Vec::new(),
             show_size_histogram: false,
             size_calculation: None,

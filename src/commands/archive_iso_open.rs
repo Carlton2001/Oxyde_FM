@@ -76,8 +76,9 @@ impl Entry {
         })
     }
 
-    fn file_entry(&self, archive: &Path) -> io::Result<FileEntry> {
+    fn file_entry(&self, archive: &std::sync::Arc<PathBuf>) -> io::Result<FileEntry> {
         Ok(FileEntry {
+            archive_path: Some(archive.clone()),
             name: self
                 .path
                 .file_name()
@@ -306,11 +307,12 @@ pub(super) fn indexed_file(
         &budget,
         checkpoint,
     )?;
+    let archive_origin = std::sync::Arc::new(archive.to_path_buf());
     index(&mut image)?
         .iter()
         .map(|entry| {
             budget.checkpoint(checkpoint)?;
-            Ok(entry.file_entry(archive)?)
+            Ok(entry.file_entry(&archive_origin)?)
         })
         .collect()
 }

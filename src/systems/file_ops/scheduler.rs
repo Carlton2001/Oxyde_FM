@@ -240,6 +240,9 @@ impl FileOperationManager {
             .iter()
             .chain(destinations.iter())
             .map(|path| {
+                // Conservative lexical reservation only, not archive routing:
+                // over-reserving an archive-named directory is safe and avoids
+                // filesystem I/O while queue_operation_on runs on the UI thread.
                 let path = crate::utils::archive::split_virtual_path(&path.to_string_lossy())
                     .map(|(archive, _)| archive)
                     .unwrap_or_else(|| path.clone());

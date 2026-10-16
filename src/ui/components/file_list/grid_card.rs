@@ -64,6 +64,8 @@ pub(super) fn render_grid_card(params: GridCardParams<'_>, cx: &mut App) -> Stat
         use_system_icons,
         show_checkboxes,
     } = params;
+    let can_browse = is_dir || file.is_navigable_archive() || file.needs_mount_for_browsing();
+    let can_drop = is_dir || file.is_writable_archive();
     let file_name_tt = name.clone();
     let path_tt = path.clone();
     let ext_tt = file_type_label(file);
@@ -156,7 +158,7 @@ pub(super) fn render_grid_card(params: GridCardParams<'_>, cx: &mut App) -> Stat
             let path = path.clone();
             move |_, _, cx| {
                 cx.stop_propagation();
-                if is_dir || oxyde_lib::utils::archive::is_navigable_archive(std::path::Path::new(&path)) || oxyde_lib::utils::disk_image::needs_mount_for_browsing(std::path::Path::new(&path)) {
+                if can_browse {
                     h.update(cx, |this, cx| {
                         this.open_directory_item(&pid, path.clone(), true, cx)
                     });
@@ -332,7 +334,7 @@ pub(super) fn render_grid_card(params: GridCardParams<'_>, cx: &mut App) -> Stat
                     file_type_display(file, cx.i18n())
                 }),
         );
-    if is_dir || oxyde_lib::utils::archive::is_writable_archive(std::path::Path::new(&path)) {
+    if can_drop {
         card = card
             .drag_over::<FileDragData>({
                 let h = h.clone();

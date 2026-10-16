@@ -276,14 +276,7 @@ impl OxydeApp {
                             let mut reloads: Vec<(String, usize, String)> = Vec::new();
                             this.state.layout.visit_panes(&mut |p| {
                                 for (idx, tab) in p.tabs.iter().enumerate() {
-                                    let watched =
-                                        oxyde_lib::utils::archive::split_virtual_path(&tab.path)
-                                            .and_then(|(archive, _)| {
-                                                archive.parent().map(|parent| {
-                                                    parent.to_string_lossy().into_owned()
-                                                })
-                                            })
-                                            .unwrap_or_else(|| tab.path.clone());
+                                    let watched = tab.watched_path();
                                     if changed.contains(&watched) {
                                         reloads.push((p.id.clone(), idx, tab.path.clone()));
                                     }
@@ -389,9 +382,7 @@ impl OxydeApp {
                 pane.tabs
                     .iter()
                     .filter(|tab| !tab.path.is_empty() && !tab.path.starts_with("search://"))
-                    .map(|tab| oxyde_lib::utils::archive::split_virtual_path(&tab.path)
-                        .and_then(|(archive, _)| archive.parent().map(|parent| parent.to_string_lossy().into_owned()))
-                        .unwrap_or_else(|| tab.path.clone())),
+                    .map(|tab| tab.watched_path()),
             );
         });
         needed.extend(self.state.expanded_paths.iter().cloned());

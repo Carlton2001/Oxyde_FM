@@ -43,9 +43,9 @@ impl OxydeApp {
         is_dir: bool,
         cx: &mut Context<Self>,
     ) {
-        let navigable_archive =
-            oxyde_lib::utils::archive::is_navigable_archive(std::path::Path::new(&path));
-        if oxyde_lib::utils::disk_image::needs_mount_for_browsing(std::path::Path::new(&path)) {
+        let entry = self.file_for_action(&path, is_dir);
+        let navigable_archive = entry.is_navigable_archive();
+        if entry.needs_mount_for_browsing() {
             self.open_disk_image(pane_id.to_string(), path, false, cx);
         } else if is_dir || navigable_archive {
             self.open_directory_item(pane_id, path, false, cx);

@@ -79,6 +79,8 @@ pub(super) fn render_details_row(params: DetailsRowParams<'_>, cx: &mut App) -> 
         trash_panel,
         language,
     } = params;
+    let can_browse = is_dir || file.is_navigable_archive() || file.needs_mount_for_browsing();
+    let can_drop = is_dir || file.is_writable_archive();
     {
         let file_name_tt = file.name.clone();
         let path_tt = path.clone();
@@ -164,7 +166,7 @@ pub(super) fn render_details_row(params: DetailsRowParams<'_>, cx: &mut App) -> 
                 let p_id_cap = p_id.clone();
                 move |_, _, cx| {
                     cx.stop_propagation();
-                    if is_dir || oxyde_lib::utils::archive::is_navigable_archive(std::path::Path::new(&p)) || oxyde_lib::utils::disk_image::needs_mount_for_browsing(std::path::Path::new(&p)) {
+                    if can_browse {
                         h_inner_inner.update(cx, |v, cx| v.open_directory_item(&p_id_cap, p.clone(), true, cx));
                     }
                 }
@@ -239,7 +241,7 @@ pub(super) fn render_details_row(params: DetailsRowParams<'_>, cx: &mut App) -> 
                     cx.new(|cx| FileDragPreview::new(paths, cursor_offset, app, cx))
                 }
             })
-            .when(is_dir || oxyde_lib::utils::archive::is_writable_archive(std::path::Path::new(&path)), |row| {
+            .when(can_drop, |row| {
                 let h_drop = h.clone();
                 let target_path = path.clone();
                 row

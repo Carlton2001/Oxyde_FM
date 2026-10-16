@@ -109,6 +109,7 @@ pub(super) fn indexed_file(
     let archive = Archive::read(&mut source, &Password::empty()).map_err(archive_error)?;
     budget.check_entry_count(archive.files.len())?;
     let mut entries = Vec::new();
+    let archive_origin = std::sync::Arc::new(archive_path.to_path_buf());
     for entry in &archive.files {
         budget.checkpoint(checkpoint)?;
         budget.entry(entry.name(), 0)?;
@@ -123,6 +124,7 @@ pub(super) fn indexed_file(
             .to_string_lossy()
             .into_owned();
         entries.push(FileEntry {
+            archive_path: Some(archive_origin.clone()),
             name,
             path: archive_path.join(relative).to_string_lossy().into_owned(),
             is_dir: entry.is_directory(),

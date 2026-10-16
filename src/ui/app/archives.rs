@@ -2,6 +2,23 @@ use super::OxydeApp;
 use gpui::*;
 
 impl OxydeApp {
+    /// Entry origin was resolved by listing/search workers, never by UI rendering.
+    pub(crate) fn file_for_action(&self, path: &str, is_dir: bool) -> oxyde_lib::models::FileEntry {
+        let mut found = None;
+        self.state.layout.visit_panes(&mut |pane| {
+            if found.is_some() { return; }
+            for tab in &pane.tabs {
+                if let Some(file) = tab.files.iter().find(|file| file.path == path) {
+                    found = Some(file.clone());
+                    return;
+                }
+            }
+        });
+        found.unwrap_or_else(|| oxyde_lib::models::FileEntry {
+            path: path.into(), is_dir, ..Default::default()
+        })
+    }
+
     pub(super) fn archive_qualities(&self) -> std::collections::HashMap<String, String> {
         std::collections::HashMap::from([
             ("zip".into(), self.config.zip_quality.clone()),
@@ -11,9 +28,16 @@ impl OxydeApp {
     }
 
     pub(super) fn archive_quality_for_path(&self, path: &std::path::Path) -> String {
-        let archive = oxyde_lib::utils::archive::split_virtual_path(&path.to_string_lossy())
-            .map(|(archive, _)| archive)
-            .unwrap_or_else(|| path.to_path_buf());
+        let mut archive = self.file_for_action(&path.to_string_lossy(), false).archive_path
+            .map(|root| root.as_ref().clone());
+        self.state.layout.visit_panes(&mut |pane| {
+            for tab in &pane.tabs {
+                if let Some(root) = &tab.archive_root {
+                    if path.starts_with(root) { archive = Some(root.clone()); }
+                }
+            }
+        });
+        let archive = archive.unwrap_or_else(|| path.to_path_buf());
         match archive
             .extension()
             .and_then(|e| e.to_str())
@@ -34,7 +58,8 @@ impl OxydeApp {
         let Some(pane) = self.state.layout.find_pane(&self.state.active_pane_id) else {
             return;
         };
-        let paths = compression_sources(pane.active_tab().selected_paths.iter().cloned());
+        let tab = pane.active_tab();
+        let paths = compression_sources(tab.files.iter().filter(|file| tab.selected_paths.contains(&file.path)).cloned());
         let Some(first) = paths.first() else {
             return;
         };
@@ -75,7 +100,8 @@ impl OxydeApp {
     }
 
     pub fn execute_extract_archive(&mut self, path: String, cx: &mut Context<Self>) {
-        for (source, destination) in extraction_jobs(self.context_action_paths(&path)) {
+        let files = self.context_action_paths(&path).iter().map(|path| self.file_for_action(path, false)).collect();
+        for (source, destination) in extraction_jobs(files) {
             self.queue_archive_operation(
                 oxyde_lib::systems::file_ops::FileOpType::Extract,
                 vec![source],
@@ -121,25 +147,20 @@ impl OxydeApp {
     }
 }
 
-fn compression_sources(paths: impl IntoIterator<Item = String>) -> Vec<std::path::PathBuf> {
+fn compression_sources(paths: impl IntoIterator<Item = oxyde_lib::models::FileEntry>) -> Vec<std::path::PathBuf> {
     let mut sources: Vec<_> = paths.into_iter()
-        .filter(|path| !oxyde_lib::utils::archive::split_virtual_path(path)
-            .is_some_and(|(_, internal)| !internal.is_empty()))
-        .map(std::path::PathBuf::from).collect();
+        .filter(|file| file.archive_path.is_none())
+        .map(|file| std::path::PathBuf::from(file.path)).collect();
     sources.sort();
     sources
 }
 
-fn extraction_jobs(paths: Vec<String>) -> Vec<(std::path::PathBuf, std::path::PathBuf)> {
-    use oxyde_lib::utils::archive::{split_virtual_path, ArchiveFormat};
-    paths.into_iter().filter_map(|path| {
-        if split_virtual_path(&path).is_some_and(|(_, internal)| !internal.is_empty()) {
+fn extraction_jobs(paths: Vec<oxyde_lib::models::FileEntry>) -> Vec<(std::path::PathBuf, std::path::PathBuf)> {
+    paths.into_iter().filter_map(|file| {
+        if !file.is_navigable_archive() {
             return None;
         }
-        let source = std::path::PathBuf::from(path);
-        if !matches!(ArchiveFormat::from_path(&source), Some(format) if format != ArchiveFormat::Rar) {
-            return None;
-        }
+        let source = std::path::PathBuf::from(file.path);
         let parent = source.parent()?;
         let name = source.file_name().unwrap_or_default().to_string_lossy();
         let stem = [".tar.gz", ".tar.xz", ".tar.zst", ".tar.bz2"]

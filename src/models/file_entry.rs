@@ -11,6 +11,9 @@ pub struct NetworkDetails {
 
 #[derive(Debug, Clone, Default)]
 pub struct FileEntry {
+    /// Known origin from archive listing/search. None for real filesystem entries.
+    /// Shared within a listing; UI capability checks require no filesystem I/O.
+    pub archive_path: Option<std::sync::Arc<std::path::PathBuf>>,
     pub network_details: Option<NetworkDetails>,
     pub name: String,
     pub path: String,
@@ -27,6 +30,25 @@ pub struct FileEntry {
     pub original_path: Option<String>,
     pub deleted_time: Option<i64>,
 }
+
+impl FileEntry {
+    pub fn is_navigable_archive(&self) -> bool {
+        !self.is_dir && self.archive_path.is_none() && crate::utils::archive::navigable_format(Path::new(&self.path))
+    }
+    pub fn is_writable_archive(&self) -> bool {
+        !self.is_dir && self.archive_path.is_none() && crate::utils::archive::writable_format(Path::new(&self.path))
+    }
+    pub fn is_disk_image(&self) -> bool {
+        !self.is_dir && self.archive_path.is_none() && crate::utils::disk_image::disk_image_format(Path::new(&self.path))
+    }
+    pub fn needs_mount_for_browsing(&self) -> bool {
+        self.is_disk_image() && crate::utils::disk_image::mount_format(Path::new(&self.path))
+    }
+}
+
+#[cfg(test)]
+#[path = "file_entry/tests/archive_capabilities.rs"]
+mod archive_capability_tests;
 
 #[derive(Debug, Clone)]
 pub struct ShortcutInfo {
@@ -181,6 +203,7 @@ pub fn get_file_entry_from_path(path: &Path) -> Result<FileEntry, CommandError> 
     let size = if is_dir { 0 } else { metadata.len() };
 
     Ok(FileEntry {
+        archive_path: None,
         name,
         path: path.to_string_lossy().to_string(),
         is_dir,

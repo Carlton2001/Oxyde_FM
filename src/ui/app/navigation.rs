@@ -464,6 +464,7 @@ impl OxydeApp {
             active_tab.size_calculation = None;
             active_tab.show_size_histogram = false;
             active_tab.path = path.clone();
+            active_tab.archive_root = None;
             active_tab.search_revision = active_tab.search_revision.wrapping_add(1);
             active_tab.search_input = None;
             active_tab.search_text.clear();
@@ -531,6 +532,11 @@ impl OxydeApp {
         cx.spawn(move |_, cx: &mut AsyncApp| {
             let mut cx = cx.clone();
             async move {
+                let context_path = path.clone();
+                let archive_root = tokio::task::spawn_blocking(move || {
+                    oxyde_lib::utils::archive::resolve_virtual_path(std::path::Path::new(&context_path))
+                        .map(|(archive, _)| archive)
+                }).await.unwrap_or(None);
                 let result = list_dir(
                     path.clone(),
                     Some(show_hidden),
@@ -552,6 +558,7 @@ impl OxydeApp {
                         }
                         match result {
                             Ok(entries) => {
+                                tab.archive_root = archive_root;
                                 tab.files = entries;
                                 tab.sort_files();
                                 tab.update_cache();
@@ -571,6 +578,7 @@ impl OxydeApp {
                         }
                         cx.notify();
                     }
+                    this.reconcile_watchers(cx);
                     if refresh_subdirectory_flags {
                         let handle = handle_for_subdirectory_check.clone();
                         let tab_id = tab_id.clone();

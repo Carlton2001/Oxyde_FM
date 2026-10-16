@@ -226,6 +226,7 @@ fn decode_io(
         return Err(metadata_limit());
     }
     let parent = archive.join(relative_archive_path(internal)?);
+    let archive_path = std::sync::Arc::new(archive.to_path_buf());
     let mut magic = [0; 8];
     bytes.read_exact(&mut magic)?;
     if &magic != mode.magic() {
@@ -290,6 +291,7 @@ fn decode_io(
             return Err(invalid());
         }
         entries.push(FileEntry {
+            archive_path: Some(archive_path.clone()),
             name: match mode {
                 Mode::Directory => name.into(),
                 Mode::Index => relative

@@ -165,6 +165,8 @@ fn oxyde_context_menu_items_raw(
 ) -> Vec<crate::ui::components::dropdown::DropdownItem> {
     use crate::ui::components::dropdown::IconName;
 
+    let entry = view.file_for_action(&path, is_dir);
+
     if view.state.find_pane(&view.state.active_pane_id).is_some_and(|pane| pane.active_tab().path == "trash://") {
         return trash_context_menu_items(i18n, h_app, Some(path), view);
     }
@@ -207,8 +209,8 @@ fn oxyde_context_menu_items_raw(
                 h.update(app, |this, cx| {
                     this.context_menus.clear();
                     if is_dir
-                        || oxyde_lib::utils::archive::is_navigable_archive(std::path::Path::new(&p))
-                        || oxyde_lib::utils::disk_image::needs_mount_for_browsing(std::path::Path::new(&p))
+                        || this.file_for_action(&p, is_dir).is_navigable_archive()
+                        || this.file_for_action(&p, is_dir).needs_mount_for_browsing()
                     {
                         let pane_id = this.state.active_pane_id.clone();
                         this.open_file_item(&pane_id, p.clone(), is_dir, cx);
@@ -222,8 +224,8 @@ fn oxyde_context_menu_items_raw(
     });
 
     if is_dir
-        || oxyde_lib::utils::archive::is_navigable_archive(std::path::Path::new(&path))
-        || oxyde_lib::utils::disk_image::needs_mount_for_browsing(std::path::Path::new(&path))
+        || entry.is_navigable_archive()
+        || entry.needs_mount_for_browsing()
     {
         items.push(crate::ui::components::dropdown::DropdownItem {
             label: i18n.text(Message::OpenNewTab).to_string(),
@@ -244,8 +246,8 @@ fn oxyde_context_menu_items_raw(
                             .into_iter().flat_map(|pane| pane.active_tab().files.iter())
                             .filter(|file| paths.contains(&file.path)
                                 && (file.is_dir
-                                    || oxyde_lib::utils::archive::is_navigable_archive(std::path::Path::new(&file.path))
-                                    || oxyde_lib::utils::disk_image::needs_mount_for_browsing(std::path::Path::new(&file.path))))
+                                    || file.is_navigable_archive()
+                                    || file.needs_mount_for_browsing()))
                             .map(|file| file.path.clone()).collect();
                         for path in directories {
                             this.open_directory_item(&p_id, path, true, cx);
@@ -258,7 +260,7 @@ fn oxyde_context_menu_items_raw(
     }
     if !is_dir
         && cfg!(target_os = "windows")
-        && oxyde_lib::utils::disk_image::is_disk_image(std::path::Path::new(&path))
+        && entry.is_disk_image()
     {
         let mounted = view
             .mounted_disk_images

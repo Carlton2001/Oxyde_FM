@@ -90,6 +90,7 @@ impl OxydeApp {
 
 fn file_entry(entry: TrashEntry) -> FileEntry {
     FileEntry {
+        archive_path: None,
         name: entry.name, path: entry.path, is_dir: entry.is_dir,
         size: entry.size, modified: entry.modified,
         original_path: Some(entry.original_path), deleted_time: Some(entry.deleted_time as i64),

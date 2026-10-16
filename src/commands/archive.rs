@@ -233,6 +233,7 @@ fn list_indexed_metadata(
 
 fn list_seven_zip(path: &Path, internal_prefix: &str) -> Result<Vec<FileEntry>, CommandError> {
     let mut entries = Vec::new();
+    let archive_origin = std::sync::Arc::new(path.to_path_buf());
     let normalized = relative_archive_path(internal_prefix)?
         .to_string_lossy()
         .replace('\\', "/");
@@ -262,6 +263,7 @@ fn list_seven_zip(path: &Path, internal_prefix: &str) -> Result<Vec<FileEntry>, 
                     seen.insert(entry_name.clone());
                     let is_dir = entry.is_dir || parts.len() > 1;
                     entries.push(FileEntry {
+                        archive_path: Some(archive_origin.clone()),
                         name: entry_name.clone(),
                         path: virtual_entry_path(path, internal_prefix, &entry_name)?,
                         is_dir,

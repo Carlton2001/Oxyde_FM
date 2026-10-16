@@ -20,6 +20,7 @@ pub async fn list_dir(
         let entries = trash_items
             .into_iter()
             .map(|t| FileEntry {
+                archive_path: None,
                 name: t.name,
                 path: t.path,
                 is_dir: t.is_dir,
@@ -78,7 +79,7 @@ fn list_dir_blocking(
     show_system: bool,
 ) -> Result<Vec<FileEntry>, CommandError> {
     let path_buf = PathBuf::from(&path);
-    if let Some((archive, internal)) = crate::utils::archive::split_virtual_path(&path) {
+    if let Some((archive, internal)) = crate::utils::archive::resolve_virtual_path(&path_buf) {
         if archive.is_file() {
             let mut entries = crate::commands::archive::list_archive_contents(
                 archive.to_string_lossy().into_owned(),
@@ -135,7 +136,7 @@ fn sort_file_entries(entries: &mut [FileEntry]) {
 pub fn create_local_folder(
     path: &std::path::Path,
 ) -> std::io::Result<Option<crate::models::transaction::HistoryFileIdentity>> {
-    if crate::utils::archive::split_virtual_path(&path.to_string_lossy()).is_some() {
+    if crate::utils::archive::resolve_virtual_path(path).is_some() {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
             "Local folder creation requires a filesystem path",

@@ -48,7 +48,8 @@ pub fn is_archive(path: &Path) -> bool {
     ArchiveFormat::from_path(path).is_some()
 }
 
-/// Splits a virtual path like C:\path\to\archive.zip\folder into (archive_path, internal_path)
+/// Lexical candidate only: this does not establish that the ancestor is a file.
+/// Business operations must use `resolve_virtual_path` on a background worker.
 pub fn split_virtual_path(path: &str) -> Option<(PathBuf, String)> {
     let path_buf = PathBuf::from(path);
     let mut current = path_buf.as_path();
@@ -67,22 +68,34 @@ pub fn split_virtual_path(path: &str) -> Option<(PathBuf, String)> {
     result
 }
 
-/// Archives opened as directories by the native UI (nested archives remain files).
-pub fn is_navigable_archive(path: &Path) -> bool {
+/// Resolve the actual archive file, skipping ordinary directories with archive suffixes.
+/// Includes the archive root itself (empty internal path). Performs filesystem I/O.
+pub fn resolve_virtual_path(path: &Path) -> Option<(PathBuf, String)> {
+    path.ancestors().find_map(|candidate| {
+        if !is_archive(candidate) || !candidate.is_file() { return None; }
+        let internal = path.strip_prefix(candidate).ok()?.to_string_lossy().replace('\\', "/");
+        Some((candidate.to_path_buf(), internal))
+    })
+}
+
+pub(crate) fn navigable_format(path: &Path) -> bool {
     matches!(ArchiveFormat::from_path(path), Some(format) if format != ArchiveFormat::Rar)
-        && split_virtual_path(&path.to_string_lossy())
-            .is_some_and(|(_, internal)| internal.is_empty())
+}
+
+pub(crate) fn writable_format(path: &Path) -> bool {
+    matches!(ArchiveFormat::from_path(path), Some(ArchiveFormat::Zip | ArchiveFormat::SevenZip | ArchiveFormat::Tar | ArchiveFormat::TarZst))
+}
+
+/// Archives opened as directories by the native UI (nested archives remain files).
+/// Filesystem query: UI rendering uses the origin carried by `FileEntry` instead.
+pub fn is_navigable_archive(path: &Path) -> bool {
+    navigable_format(path) && path.is_file()
 }
 
 pub fn is_writable_archive(path: &Path) -> bool {
-    matches!(
-        ArchiveFormat::from_path(path),
-        Some(
-            ArchiveFormat::Zip
-                | ArchiveFormat::SevenZip
-                | ArchiveFormat::Tar
-                | ArchiveFormat::TarZst
-        )
-    ) && split_virtual_path(&path.to_string_lossy())
-        .is_some_and(|(_, internal)| internal.is_empty())
+    writable_format(path) && path.is_file()
 }
+
+#[cfg(test)]
+#[path = "archive/tests/path_resolution.rs"]
+mod path_resolution_tests;

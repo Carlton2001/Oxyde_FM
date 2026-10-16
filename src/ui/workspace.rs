@@ -124,6 +124,7 @@ pub struct TabState {
     pub pending_reveal: Option<String>,
     pub id: String,
     pub path: String,
+    pub archive_root: Option<std::path::PathBuf>,
     pub files: Vec<FileEntry>,
     pub show_size_histogram: bool,
     pub size_calculation: Option<std::sync::Arc<gpui::Task<()>>>,

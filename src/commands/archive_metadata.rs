@@ -62,7 +62,7 @@ fn invalid(message: &str) -> CommandError {
 }
 
 fn member(
-    archive_path: &Path,
+    archive_path: &std::sync::Arc<std::path::PathBuf>,
     name: &str,
     directory: bool,
     size: u64,
@@ -79,6 +79,7 @@ fn member(
         };
     };
     Ok(Some(FileEntry {
+        archive_path: Some(archive_path.clone()),
         name: name.to_string_lossy().into_owned(),
         path: archive_path.join(&relative).to_string_lossy().into_owned(),
         is_dir: directory,
@@ -115,6 +116,7 @@ pub(super) fn indexed_file(
     checkpoint: &dyn Fn() -> io::Result<()>,
 ) -> Result<Vec<FileEntry>, CommandError> {
     let budget = ArchiveBudget::new(limits);
+    let archive_origin = std::sync::Arc::new(path.to_path_buf());
     budget.checkpoint(checkpoint)?;
     let format = ArchiveFormat::from_path(path)
         .filter(|format| {
@@ -160,7 +162,7 @@ pub(super) fn indexed_file(
                 .and_then(|dt| u64::try_from(dt.and_utc().timestamp_millis()).ok())
                 .unwrap_or(0);
             if let Some(entry) = member(
-                path,
+                &archive_origin,
                 file.name(),
                 file.is_dir(),
                 file.size(),
@@ -179,7 +181,7 @@ pub(super) fn indexed_file(
             budget: &budget,
             checkpoint,
         }));
-        tar_files(path, archive.entries_with_seek()?, &budget, checkpoint)?
+        tar_files(&archive_origin, archive.entries_with_seek()?, &budget, checkpoint)?
     } else {
         let decoder: Box<dyn Read + '_> = match format {
             ArchiveFormat::TarGz => Box::new(flate2::read::GzDecoder::new(source)),
@@ -193,14 +195,14 @@ pub(super) fn indexed_file(
             budget: &budget,
             checkpoint,
         });
-        tar_files(path, archive.entries()?, &budget, checkpoint)?
+        tar_files(&archive_origin, archive.entries()?, &budget, checkpoint)?
     };
     budget.checkpoint(checkpoint)?;
     Ok(files)
 }
 
 fn tar_files<R: Read>(
-    archive_path: &Path,
+    archive_path: &std::sync::Arc<std::path::PathBuf>,
     entries: tar::Entries<'_, R>,
     budget: &ArchiveBudget,
     checkpoint: &dyn Fn() -> io::Result<()>,
