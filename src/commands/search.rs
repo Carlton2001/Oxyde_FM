@@ -13,12 +13,9 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::SystemTime;
 
-#[derive(Clone)]
-enum SearchPattern {
-    Glob(Pattern, bool, bool),   // (pattern, ignore_accents, case_sensitive)
-    Regex(Regex, bool),          // (regex, ignore_accents)
-    Literal(String, bool, bool), // (query, case_sensitive, ignore_accents)
-}
+mod criteria;
+use criteria::{SearchParams, SearchPattern};
+pub use criteria::ArchiveSearchLimitation;
 
 static DISK_IO_LOCKS: Lazy<DashMap<u64, Arc<Mutex<()>>>> = Lazy::new(DashMap::new);
 
@@ -143,6 +140,7 @@ pub fn advanced_search(
                 max_size: options.max_size,
                 min_date: options.min_date,
                 max_date: options.max_date,
+                content,
             };
             let mut batch = Vec::new();
             let mut count = 0;
@@ -158,7 +156,7 @@ pub fn advanced_search(
                     let name = e.file_name().to_string_lossy();
                     e.metadata().is_ok_and(|m| {
                         let (hidden, system, _) = crate::utils::get_file_attributes(&m, &name);
-                        (show_hidden || !hidden) && (show_system || !system)
+                        crate::utils::visibility::is_visible(hidden, system, show_hidden, show_system)
                     })
                 });
             for entry in walker {
@@ -176,23 +174,12 @@ pub fn advanced_search(
                 let path = entry.path();
                 let name = entry.file_name().to_string_lossy().into_owned();
                 if let Ok(m) = entry.metadata() {
-                    let modified = m
-                        .modified()
-                        .unwrap_or(SystemTime::UNIX_EPOCH)
-                        .duration_since(SystemTime::UNIX_EPOCH)
-                        .unwrap_or_default()
-                        .as_millis() as u64;
-                    let matches = params.pattern.matches(&name)
-                        && (!m.is_dir()
-                            || (options.min_size.is_none()
-                                && options.max_size.is_none()
-                                && content.is_none()))
-                        && options.min_size.is_none_or(|v| m.len() >= v)
-                        && options.max_size.is_none_or(|v| m.len() <= v)
-                        && options.min_date.is_none_or(|v| modified >= v)
-                        && options.max_date.is_none_or(|v| modified <= v)
-                        && content.as_ref().is_none_or(|r| {
-                            file_contains_content(path, r, options.ignore_accents, &cancellation)
+                    let modified = m.modified().ok()
+                        .and_then(|date| date.duration_since(SystemTime::UNIX_EPOCH).ok())
+                        .map(|date| date.as_millis() as u64);
+                    let matches = params.matches_metadata(&name, m.is_dir(), m.len(), modified)
+                        && params.content.as_ref().is_none_or(|pattern| {
+                            file_contains_content(path, pattern, options.ignore_accents, &cancellation)
                         });
                     if cancellation.load(Ordering::Relaxed) {
                         return Ok(());
@@ -204,7 +191,7 @@ pub fn advanced_search(
                             path: path.to_string_lossy().into_owned(),
                             is_dir: m.is_dir(),
                             size: if m.is_dir() { 0 } else { m.len() },
-                            modified,
+                            modified: modified.unwrap_or_default(),
                             is_hidden: hidden,
                             is_system: system,
                             is_symlink: entry.file_type().is_symlink(),
@@ -212,7 +199,6 @@ pub fn advanced_search(
                         });
                     }
                     if options.archives && !m.is_dir() && is_archive(path) {
-                        // As in Tauri, archive entries are matched by name and metadata.
                         match search_archive(path, &params, &cancellation) {
                             Ok(entries) => batch.extend(entries),
                             Err(_) if cancellation.load(Ordering::Relaxed) => return Ok(()),
@@ -297,24 +283,11 @@ pub fn quick_search(
                     return true;
                 }
                 let name = entry.file_name().to_string_lossy();
-                if !show_system
-                    && entry.file_type().is_dir()
-                    && matches!(
-                        name.to_ascii_lowercase().as_str(),
-                        "windows"
-                            | "programdata"
-                            | "$recycle.bin"
-                            | "system volume information"
-                            | "winsxs"
-                    )
-                {
-                    return false;
-                }
                 let Ok(metadata) = entry.metadata() else {
                     return false;
                 };
                 let (hidden, system, _) = crate::utils::get_file_attributes(&metadata, &name);
-                (show_hidden || !hidden) && (show_system || !system)
+                crate::utils::visibility::is_visible(hidden, system, show_hidden, show_system)
             });
         let mut batch = Vec::new();
         let mut count = 0;
@@ -383,64 +356,6 @@ pub fn quick_search(
     receiver
 }
 
-impl SearchPattern {
-    fn matches(&self, text: &str) -> bool {
-        match self {
-            SearchPattern::Glob(p, ia, case_sensitive) => {
-                let target = if *ia {
-                    crate::utils::remove_accents(text)
-                } else {
-                    text.to_string()
-                };
-                let target = if *case_sensitive {
-                    target
-                } else {
-                    target.to_lowercase()
-                };
-                p.matches_with(
-                    &target,
-                    glob::MatchOptions {
-                        case_sensitive: *case_sensitive,
-                        require_literal_separator: false,
-                        require_literal_leading_dot: false,
-                    },
-                )
-            }
-            SearchPattern::Regex(r, ia) => {
-                if *ia {
-                    r.is_match(&crate::utils::remove_accents(text))
-                } else {
-                    r.is_match(text)
-                }
-            }
-            SearchPattern::Literal(q, cs, ia) => {
-                let (target, query) = if *ia {
-                    (
-                        crate::utils::remove_accents(text),
-                        crate::utils::remove_accents(q),
-                    )
-                } else {
-                    (text.to_string(), q.clone())
-                };
-
-                if *cs {
-                    target.contains(&query)
-                } else {
-                    target.to_lowercase().contains(&query.to_lowercase())
-                }
-            }
-        }
-    }
-}
-
-struct SearchParams {
-    pattern: SearchPattern,
-    min_size: Option<u64>,
-    max_size: Option<u64>,
-    min_date: Option<u64>,
-    max_date: Option<u64>,
-}
-
 fn search_archive(
     archive_path: &std::path::Path,
     params: &SearchParams,
@@ -451,6 +366,17 @@ fn search_archive(
         Some(f) => f,
         None => return Ok(results),
     };
+
+    // Metadata-only workers cannot verify content or supply dates for every format.
+    // Report the limitation instead of treating an unchecked criterion as a match.
+    let limitation = if params.content.is_some() {
+        Some(ArchiveSearchLimitation::ContentNotSearched)
+    } else if params.has_date_filter() && matches!(format, ArchiveFormat::Iso | ArchiveFormat::SevenZip) {
+        Some(ArchiveSearchLimitation::DatesUnavailable)
+    } else { None };
+    if let Some(reason) = limitation {
+        return Err(crate::models::CommandError::ArchiveError(reason.message().into()));
+    }
 
     let checkpoint = || {
         if cancellation.load(Ordering::Relaxed) {
@@ -467,20 +393,9 @@ fn search_archive(
         if checkpoint().is_err() {
             break;
         }
-        if !params.pattern.matches(&entry.name) {
-            continue;
-        }
-        if !entry.is_dir
-            && (params.min_size.is_some_and(|min| entry.size < min)
-                || params.max_size.is_some_and(|max| entry.size > max))
-        {
-            continue;
-        }
-        // ISO and 7z dates remain unavailable, as in the previous readers.
-        if !matches!(format, ArchiveFormat::Iso | ArchiveFormat::SevenZip)
-            && (params.min_date.is_some_and(|min| entry.modified < min)
-                || params.max_date.is_some_and(|max| entry.modified > max))
-        {
+        let modified = (!matches!(format, ArchiveFormat::Iso | ArchiveFormat::SevenZip))
+            .then_some(entry.modified);
+        if !params.matches_metadata(&entry.name, entry.is_dir, entry.size, modified) {
             continue;
         }
         results.push(entry);
@@ -775,3 +690,11 @@ mod content_tests;
 #[cfg(test)]
 #[path = "search/tests/quick_search_tests.rs"]
 mod quick_search_tests;
+
+#[cfg(test)]
+#[path = "search/tests/criteria_tests.rs"]
+mod criteria_tests;
+
+#[cfg(test)]
+#[path = "search/tests/visibility_tests.rs"]
+mod visibility_tests;

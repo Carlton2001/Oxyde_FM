@@ -106,13 +106,7 @@ fn list_dir_blocking(
 
             let (is_hidden, is_system, _) = crate::utils::get_file_attributes(&metadata, &name);
 
-            // System flag takes precedence: once is_system is true, only show_system matters.
-            // Hidden check is only applied to non-system files (mirrors React V1 logic).
-            if is_system {
-                if !show_system {
-                    continue;
-                }
-            } else if is_hidden && !show_hidden {
+            if !crate::utils::visibility::is_visible(is_hidden, is_system, show_hidden, show_system) {
                 continue;
             }
 

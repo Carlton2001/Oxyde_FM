@@ -858,6 +858,8 @@ quick-search-archives-skipped =
     }
 quick-search-archive-skipped-detail = Erstes übersprungenes Archiv: { $path }. { $reason }
 quick-search-archive-unreadable = Dieses Archiv ist ungültig, wird nicht unterstützt oder kann nicht gelesen werden.
+quick-search-archive-content-not-searched = Inhalte in Archiven werden nicht durchsucht. Die Einträge dieses Archivs werden bei aktivem Inhaltsfilter ausgeschlossen.
+quick-search-archive-dates-unavailable = Für dieses Archivformat sind keine Datumsangaben der Einträge verfügbar. Seine Einträge werden bei aktivem Datumsfilter ausgeschlossen.
 
 undo-new-folder-changed = Der Ordner entspricht nicht mehr dem ursprünglich erstellten Ordner: { $detail }. Das Rückgängigmachen wurde zum Schutz Ihrer Dateien abgebrochen.
 undo-new-folder-unverified = Der Verlauf kann diesen Ordner nicht überprüfen: { $detail }. Der Ordner und sein Inhalt bleiben erhalten.

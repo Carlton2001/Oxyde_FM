@@ -403,6 +403,15 @@ impl Platform for WindowsPlatform {
         }
     }
 
+    #[cfg(test)]
+    fn set_fixture_file_attributes(&self, path: &std::path::Path, attributes: u32) -> Result<(), String> {
+        use std::os::windows::ffi::OsStrExt;
+        use windows::{core::PCWSTR, Win32::Storage::FileSystem::{SetFileAttributesW, FILE_FLAGS_AND_ATTRIBUTES}};
+        let path: Vec<u16> = path.as_os_str().encode_wide().chain(Some(0)).collect();
+        unsafe { SetFileAttributesW(PCWSTR(path.as_ptr()), FILE_FLAGS_AND_ATTRIBUTES(attributes)) }
+            .map_err(|error| error.to_string())
+    }
+
     fn native_context_menu_items(
         &self,
         path: &[String],

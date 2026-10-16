@@ -340,6 +340,10 @@ pub trait Platform: Send + Sync {
     /// Mark an application-owned staging or undo-backup file as hidden.
     fn set_hidden_attribute(&self, path: &std::path::Path, hidden: bool) -> Result<(), String>;
 
+    /// Native fixture setup only; absent from production builds and other targets.
+    #[cfg(all(test, target_os = "windows"))]
+    fn set_fixture_file_attributes(&self, path: &std::path::Path, attributes: u32) -> Result<(), String>;
+
     /// Adjusts the current worker thread's scheduling priority.
     fn set_thread_priority(&self, priority: ThreadPriority);
 

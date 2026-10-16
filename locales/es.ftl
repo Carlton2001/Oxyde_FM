@@ -858,6 +858,8 @@ quick-search-archives-skipped =
     }
 quick-search-archive-skipped-detail = Primer archivo comprimido omitido: { $path }. { $reason }
 quick-search-archive-unreadable = Este archivo comprimido no es válido, no es compatible o no se puede leer.
+quick-search-archive-content-not-searched = No se busca en el contenido de los archivos comprimidos. Las entradas de este archivo se excluyen mientras haya un filtro de contenido activo.
+quick-search-archive-dates-unavailable = Las fechas de las entradas no están disponibles para este formato de archivo comprimido. Sus entradas se excluyen mientras haya un filtro de fecha activo.
 
 undo-new-folder-changed = La carpeta ya no corresponde a la que se creó: { $detail }. Se detuvo Deshacer para conservar sus archivos.
 undo-new-folder-unverified = El historial no permite verificar esta carpeta: { $detail }. Se conservan la carpeta y su contenido.

@@ -858,6 +858,8 @@ quick-search-archives-skipped =
     }
 quick-search-archive-skipped-detail = Primo archivio ignorato: { $path }. { $reason }
 quick-search-archive-unreadable = Questo archivio non è valido, non è supportato o non è leggibile.
+quick-search-archive-content-not-searched = Il contenuto degli archivi non viene cercato. Le voci di questo archivio vengono escluse quando è attivo un filtro sul contenuto.
+quick-search-archive-dates-unavailable = Le date delle voci non sono disponibili per questo formato di archivio. Le sue voci vengono escluse quando è attivo un filtro sulla data.
 
 undo-new-folder-changed = La cartella non corrisponde più a quella creata: { $detail }. L’annullamento è stato interrotto per preservare i file.
 undo-new-folder-unverified = La cronologia non consente di verificare questa cartella: { $detail }. La cartella e il suo contenuto sono conservati.

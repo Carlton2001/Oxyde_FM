@@ -339,6 +339,7 @@
             max_size: None,
             min_date: None,
             max_date: None,
+            content: None,
         }
     }
 

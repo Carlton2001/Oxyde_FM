@@ -551,6 +551,8 @@ quick-search-archives-skipped =
     }
 quick-search-archive-skipped-detail = First skipped archive: { $path }. { $reason }
 quick-search-archive-unreadable = This archive is invalid, unsupported, or unreadable.
+quick-search-archive-content-not-searched = Content inside archives is not searched. Entries from this archive are excluded while a content filter is active.
+quick-search-archive-dates-unavailable = Entry dates are unavailable for this archive format. Its entries are excluded while a date filter is active.
 
 undo-new-folder-changed = The folder no longer matches the one that was created: { $detail }. Undo stopped to preserve your files.
 undo-new-folder-unverified = The history cannot verify this folder: { $detail }. The folder and its contents have been preserved.

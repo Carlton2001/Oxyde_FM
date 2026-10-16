@@ -87,6 +87,8 @@ Les constats ci-dessous distinguent reproduction, démonstration par le code et 
 
 ### A04 — P2 — Les résultats d'archives peuvent contourner les critères de recherche avancée
 
+**Suivi de correction :** implémentée sur `codex/a04-a05-search-consistency`, issue du commit A07 `4f79f24`. Les fichiers réels et les entrées d'archives partagent le prédicat nom/type/taille/date. Les dossiers sont exclus avec un critère de taille ou de contenu. Une archive dont le contenu n'est pas recherché, ou dont les dates nécessaires ne sont pas disponibles (ISO/7z), est signalée dans le bandeau existant et ses entrées ne sont pas présentées comme correspondantes. Les détails et validations sont consignés en fin de rapport ; les observations suivantes décrivent le défaut initial.
+
 **Catégorie / confiance :** exactitude des résultats ; reproduction confirmée, confiance élevée.
 
 **Références :** `src/commands/search.rs:214`, `:217`, `:436`, `:473`. Tests actuels séparés dans `search/tests/quick_search_tests.rs` et `archive_search_tests.rs`.
@@ -104,6 +106,8 @@ Les constats ci-dessous distinguent reproduction, démonstration par le code et 
 **Validation :** combinaisons contenu littéral/regex, minimum/maximum, dossiers/fichiers et formats ; comparer les mêmes fixtures sous forme ordinaire et archivée. Ne pas inventer des dates pour ISO/7z lorsque les lecteurs n'en fournissent pas.
 
 ### A05 — P2 — La recherche n'applique pas les mêmes règles de visibilité que le listing
+
+**Suivi de correction :** implémentée avec A04. Le listing et les deux recherches utilisent la même décision de visibilité, avec priorité à l'attribut System. La recherche rapide n'exclut plus une branche à partir de son seul nom. Les attributs restent obtenus par `Platform` ; aucun emplacement utilisateur n'est assimilé implicitement à une branche système.
 
 **Catégorie / confiance :** résultats manquants ; deux reproductions confirmées, confiance élevée.
 
@@ -329,3 +333,19 @@ Les régressions couvrent les vrais dossiers `.zip`, `.7z`, `.tar.gz`, l'archive
 **Résultat final :** `./scripts/test-windows.ps1 -Offline` réussit hors bac à sable, avec TEMP/TMP privés. `cargo check --offline --locked --all-targets` et la reconstruction de tous les exécutables passent sans avertissement. La suite complète totalise **1 106 tests réussis, 21 ignorés, aucun échec** : 787 backend, 259 interface et 60 intégrations natives. Les 11 nouveaux tests sont exécutés, sans exclusion. La construction `release` de tous les exécutables et les mêmes 60 tests d'intégration en `release` réussissent également. Journaux locaux : `target/a07-validation/native-tests-final.log`, `release-build.log` et `release-integration.log`. Le premier essai de reconstruction de développement avait été bloqué par l'exécutable Oxyde ouvert ; la validation finale a été relancée après sa fermeture. `git diff --check` ne relève pas d'erreur d'espacement.
 
 Ce changement modifie les workers et leur code partagé : fermer Oxyde puis reconstruire avec `cargo build --offline --bins`, avant `cargo run --offline`.
+
+## Corrections A04/A05 — contrat et validation
+
+Le sous-module privé `commands/search/criteria.rs` isole les motifs et le contrat de prédicats auparavant incorporés dans la traversée. La recherche de noms conserve les mêmes modes littéral, glob et regex, avec casse et accents. Le prédicat de métadonnées est commun aux fichiers réels et aux entrées d'archives : les bornes sont inclusives, un dossier ne satisfait pas un filtre de taille ou de contenu, et une date indisponible ne satisfait pas un filtre de date. Le contenu des fichiers ordinaires conserve ses lecteurs et son annulation.
+
+La recherche dans les archives reste limitée aux noms et métadonnées. Avec un critère de contenu actif, elle émet un avertissement par archive et ne renvoie aucun membre non vérifié ; les résultats ordinaires continuent. Sans ce critère, les noms et métadonnées restent recherchés dans tous les formats déjà pris en charge. ISO et 7z restent dépourvus de dates d'entrée dans les lecteurs actuels : un critère de date les exclut avec un motif explicite, sans date synthétique. Ces refus ont lieu avant le lancement d'un worker de métadonnées inutile. Les motifs stables `ArchiveSearchLimitation` sont traduits au rendu en français, anglais, allemand, espagnol et italien dans le bandeau d'archives ignorées et son détail existants. Aucun décodage de contenu d'archive dans le processus UI ni repli local n'est ajouté.
+
+`utils::visibility::is_visible` conserve la priorité System du listing : un élément System, même Hidden, dépend seulement de `show_system` ; Hidden ne dépend de `show_hidden` que pour les éléments non System. Le listing, la recherche rapide et la recherche avancée utilisent cette décision. La recherche rapide ne traite plus les noms `Windows`, `ProgramData`, `$Recycle.Bin`, `System Volume Information` ou `WinSxS` comme des attributs. Le filtrage des branches repose sur leurs attributs réels ; liens et limites de résultats conservent leur politique existante.
+
+Les cinq nouveaux scénarios publics de recherche reproduisent les défauts avant correction (22 anciens tests réussis, 5 nouveaux en échec), puis passent après correction. Les fixtures comparent fichiers ordinaires et archivés dans ZIP, TAR, TAR.GZ, TAR.XZ, TAR.BZ2 et TAR.ZST, avec critères de contenu littéral/regex et bornes de taille, puis couvrent ISO et 7z, les dates indisponibles et la recherche sans restriction. Les tests de prédicats vérifient les bornes de date, les accents, les regex, les dossiers et les motifs d'avertissement. Les fixtures Windows couvrent les quatre combinaisons de préférences et les attributs aucun/Hidden/System/les deux, pour les fichiers et les branches récursives, en comparant les deux recherches au listing. Les dossiers homonymes des emplacements système restent entièrement privés aux fixtures ; aucun attribut d'un dossier système réel n'a été modifié. Les tests d'interface vérifient le détail localisé et la préservation du chemin d'archive dans les cinq langues.
+
+**Résultat final :** `./scripts/test-windows.ps1 -Offline` réussit hors bac à sable, avec TEMP/TMP privés. La compilation de toutes les cibles et la construction de tous les exécutables passent sans avertissement. La suite complète totalise **1 115 tests réussis, 21 ignorés, aucun échec** : 795 backend, 260 interface et 60 intégrations natives. Les neuf nouveaux tests sont exécutés sans exclusion ; les anciens scénarios conservent leurs noms et leur découverte. `git diff --check` ne relève pas d'erreur d'espacement. Journal complet : `target/a04-a05-validation/native-tests-final.log`.
+
+Les tests unitaires de recherche utilisent les indexeurs locaux de fixtures ; les suites natives de workers vérifient séparément le transport et l'isolation. La préparation des attributs Windows des fixtures passe elle aussi par un point de test du trait `Platform`, compilé uniquement pour les tests Windows. Après cette extraction finale du helper, `cargo check --offline --locked --all-targets` est relancé sans avertissement et les deux tests de visibilité concernés sont réexécutés avec succès (`visibility-final.log`). Aucun essai visuel GPUI ni exécution Linux n'est ajouté. Journaux locaux dans `target/a04-a05-validation/`.
+
+Le code partagé lié aux workers change : fermer Oxyde, lancer `cargo build --offline --bins`, puis `cargo run --offline`. `cargo run` seul ne reconstruit pas les exécutables auxiliaires.

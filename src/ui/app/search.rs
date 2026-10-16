@@ -185,6 +185,10 @@ pub struct ArchiveSearchWarnings {
     first: Option<(String, String)>,
 }
 
+#[cfg(test)]
+#[path = "search/tests/archive_limitations.rs"]
+mod archive_limitation_tests;
+
 impl ArchiveSearchWarnings {
     fn record(&mut self, path: String, detail: String) {
         self.count = self.count.saturating_add(1);
@@ -207,7 +211,13 @@ impl ArchiveSearchWarnings {
         let Some((path, detail)) = &self.first else {
             return String::new();
         };
-        let reason = if oxyde_lib::models::error::ArchiveLimitFailure::from_message(detail)
+        use oxyde_lib::commands::search::ArchiveSearchLimitation;
+        let reason = if let Some(limitation) = ArchiveSearchLimitation::from_message(detail) {
+            i18n.text(match limitation {
+                ArchiveSearchLimitation::ContentNotSearched => Message::QuickSearchArchiveContentNotSearched,
+                ArchiveSearchLimitation::DatesUnavailable => Message::QuickSearchArchiveDatesUnavailable,
+            }).to_string()
+        } else if oxyde_lib::models::error::ArchiveLimitFailure::from_message(detail)
             .is_some()
             || oxyde_lib::models::error::ArchiveSourceConflict::from_message(detail)
             || oxyde_lib::models::error::ArchiveListingFailure::from_message(detail).is_some()
