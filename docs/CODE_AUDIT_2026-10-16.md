@@ -4,7 +4,7 @@
 
 Audit effectué sur `main`, révision `4f16bc915ea8d286d5e3eac422d32a17fc630e78`, sous Windows x86_64, avec Rust/Cargo 1.98.1. Aucun changement du code applicatif, des tests existants, des dépendances ou des réglages utilisateur. Aucun commit ni push.
 
-Les constats et chiffres de cette section décrivent la passe initiale d'audit. Les corrections ultérieures A01–A09 et les optimisations O01–O04, leurs branches et leurs validations sont suivies dans les sections dédiées ci-dessous.
+Les constats et chiffres de cette section décrivent la passe initiale d'audit. Les corrections ultérieures A01–A10 et les optimisations O01–O04, leurs branches et leurs validations sont suivies dans les sections dédiées ci-dessous.
 
 Au départ, seuls quatre CSV étaient non suivis : `Benchmark_Smalls_Source_ED.csv`, `Benchmark_Video_Source_DD.csv`, `Benchmark_Video_Source_ED.csv`, `resultats.csv`. Ils ont été laissés intacts. Les sondes et journaux de cette passe sont dans `target/audit-2026-10-16/`, ignoré par Git ; ils ne constituent pas des tests de non-régression conservés.
 
@@ -199,6 +199,8 @@ Les constats ci-dessous distinguent reproduction, démonstration par le code et 
 **Validation :** croissance mémoire pour lignes de tailles croissantes, correspondance en fin et frontière de blocs, accents/Unicode, regex longues, annulation pendant lecture et erreur d'encodage. Le gain exact et la stratégie générale restent à établir.
 
 ### A10 — P3 — Le guide d'architecture décrit encore l'extraction/reconstruction comme locale sous Windows
+
+**Suivi de correction :** guide actualisé sur `codex/a10-archive-architecture-docs`, issue du commit O01–O04 `9ff458d`. La section « Archives natives » distingue les codecs Decode/Encode du worker Windows, les contrôles et effets conservés dans le parent, les variantes locales des tests unitaires/Linux et la validation d'intégration de production. Les reliquats R1/R9 restent explicitement ouverts dans leurs périmètres respectifs. Les observations ci-dessous décrivent l'incohérence initiale.
 
 **Catégorie / confiance :** documentation ; incohérence confirmée, confiance élevée.
 
@@ -474,3 +476,13 @@ La première construction d'une présentation reste linéaire sur le thread UI. 
 Aucun essai visuel GPUI, mesure de peinture/latence d'interaction, compteur global d'allocations UI, parcours réel sur SMB indisponible ou exécution Linux n'est ajouté. Les mesures établissent les coûts locaux supprimés ou déplacés ; elles ne démontrent pas un gain global de vitesse sur toute session applicative.
 
 Le code partagé par les workers est modifié : fermer Oxyde, lancer `cargo build --offline --bins`, puis `cargo run --offline`. `cargo run` seul ne reconstruit pas les exécutables auxiliaires.
+
+## Correction A10 — architecture des archives
+
+Correction documentaire sur `codex/a10-archive-architecture-docs`, depuis le commit O01–O04 `9ff458d`. La phrase « Extraction et reconstruction restent locales » est remplacée dans `UI_ARCHITECTURE.md` par les chemins de production Windows : `archive_io::decode`, `archive_encode::run` et `Platform::run_archive_io_worker`, puis préparation et publication dans `archive_workspace/native_commit.rs`. La création d'archives et la reconstruction partagent l'encodeur ; le parent conserve sources, contrôles, écritures, décisions de conflit et récupération.
+
+Les conditions `cfg(all(target_os = "windows", not(test)))` et `cfg(any(not(target_os = "windows"), test))` sont rapprochées des implémentations d'extraction, compression et workspace. Le guide distingue les tests unitaires locaux de la bibliothèque et les intégrations Windows compilant cette bibliothèque sans `cfg(test)`. Le comportement local Linux est décrit par le code ; aucune validation Linux n'est revendiquée.
+
+Les liens vers le chantier d'isolation et les deux rapports du 13 octobre sont vérifiés. Les reliquats R1 pour les autres services natifs et R9 hors de la fidélité TAR non compressé restent ouverts ; cette synchronisation documentaire ne crée aucune garantie nouvelle. Le remplacement dans le guide préserve les octets hors du paragraphe concerné. Aucun code, test, dépendance ou exécutable n'est modifié par A10.
+
+**Validation du 17 octobre 2026 :** `cargo check --offline --locked --all-targets` réussit sans avertissement. `cargo test --offline --locked --test archive_io_pipeline -- --test-threads=1` réussit hors bac à sable, avec TEMP/TMP privés : **29 tests passés, aucun ignoré, aucun échec**. Les chemins de décodage natif et reconstruction, les quatre formats de reconstruction, la publication groupée, les récupérations et la fidélité TAR sont exercés. `git diff --check` passe et les trois liens locaux ajoutés sont valides. Journaux : `target/a10-validation/check.log` et `archive-pipeline.log`. Aucune exécution Linux ni validation visuelle GPUI n'est ajoutée ; aucune reconstruction supplémentaire des workers n'est nécessaire pour ces seuls changements documentaires.
