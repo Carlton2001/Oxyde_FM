@@ -4351,6 +4351,7 @@ dependencies = [
  "raw-window-handle",
  "rayon",
  "regex",
+ "regex-automata",
  "rust-embed",
  "serde",
  "serde_json",

@@ -38,7 +38,7 @@ pub fn remove_accents(s: &str) -> String {
     s.nfd().filter(|c| !char_is_mark(*c)).collect()
 }
 
-fn char_is_mark(c: char) -> bool {
+pub(crate) fn char_is_mark(c: char) -> bool {
     // Unicode mark category starts from '\u{0300}' to '\u{036F}' for basic accents
     // We check if the character is in the combining diacritical marks block
     ('\u{0300}'..='\u{036F}').contains(&c)

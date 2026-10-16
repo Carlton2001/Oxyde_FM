@@ -1,4 +1,5 @@
 use super::*;
+use crate::commands::search::ContentPattern;
 
 #[test]
 fn shared_metadata_predicate_preserves_name_date_bounds_and_directory_rules() {
@@ -27,7 +28,7 @@ fn shared_metadata_predicate_preserves_name_date_bounds_and_directory_rules() {
     params.min_date = None;
     params.max_date = None;
     assert!(params.matches_metadata("Été12.txt", true, 0, None));
-    params.content = Some(Regex::new("anything").unwrap());
+    params.content = Some(ContentPattern::new("anything", true).unwrap());
     assert!(!params.matches_metadata("Été12.txt", true, 0, None));
     assert!(params.matches_metadata("Été12.txt", false, 0, None));
 }

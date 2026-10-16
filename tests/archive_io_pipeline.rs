@@ -693,7 +693,10 @@ fn interrupted_preparation_leaves_every_original_archive_unchanged() {
         );
         let error = result.unwrap_err();
         assert!(error.contains("Operation cancelled"));
-        assert!(oxyde_lib::models::error::ArchiveRecoveryFailure::from_message(&error).is_none());
+        assert!(
+            oxyde_lib::models::error::ArchiveRecoveryFailure::from_message(&error).is_none(),
+            "{error}"
+        );
         assert_eq!(fs::read(source).unwrap(), before);
         assert_eq!(fs::read(target).unwrap(), target_before);
     });

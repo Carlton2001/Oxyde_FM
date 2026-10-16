@@ -61,7 +61,7 @@ pub(super) struct SearchParams {
     pub(super) max_size: Option<u64>,
     pub(super) min_date: Option<u64>,
     pub(super) max_date: Option<u64>,
-    pub(super) content: Option<Regex>,
+    pub(super) content: Option<super::content::ContentPattern>,
 }
 
 impl SearchParams {

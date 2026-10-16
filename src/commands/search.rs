@@ -5,15 +5,17 @@ use crate::utils::hardware::get_physical_disk_id;
 use dashmap::DashMap;
 use glob::Pattern;
 use once_cell::sync::Lazy;
-use regex::{Regex, RegexBuilder};
+use regex::RegexBuilder;
 use std::fs::File;
-use std::io::{BufRead, BufReader, Read};
+use std::io::Read;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::SystemTime;
 
+mod content;
 mod criteria;
+use content::{text_reader_contains_content, ContentPattern};
 use criteria::{SearchParams, SearchPattern};
 pub use criteria::ArchiveSearchLimitation;
 
@@ -123,16 +125,8 @@ pub fn advanced_search(
                 } else {
                     options.content.clone()
                 };
-                Some(
-                    RegexBuilder::new(&if options.content_regex {
-                        query
-                    } else {
-                        regex::escape(&query)
-                    })
-                    .case_insensitive(!options.case_sensitive)
-                    .build()
-                    .map_err(|e| e.to_string())?,
-                )
+                let query = if options.content_regex { query } else { regex::escape(&query) };
+                Some(ContentPattern::new(&query, options.case_sensitive)?)
             };
             let params = SearchParams {
                 pattern,
@@ -482,7 +476,7 @@ impl<R: Read> Read for ContentReader<'_, R> {
 
 fn office_file_contains_content(
     path: &std::path::Path,
-    pattern: &Regex,
+    pattern: &ContentPattern,
     ignore_accents: bool,
     cancellation: &AtomicBool,
 ) -> bool {
@@ -537,7 +531,7 @@ fn office_file_contains_content(
 
 fn office_entry_contains_content(
     reader: impl Read,
-    pattern: &Regex,
+    pattern: &ContentPattern,
     ignore_accents: bool,
     cancellation: &AtomicBool,
 ) -> bool {
@@ -618,7 +612,7 @@ fn content_lock<'a>(
 
 fn file_contains_content(
     path: &std::path::Path,
-    pattern: &Regex,
+    pattern: &ContentPattern,
     ignore_accents: bool,
     cancellation: &AtomicBool,
 ) -> bool {
@@ -647,7 +641,7 @@ fn file_contains_content(
 
 fn read_file_and_check(
     path: &std::path::Path,
-    pattern: &Regex,
+    pattern: &ContentPattern,
     ignore_accents: bool,
     cancellation: &AtomicBool,
 ) -> bool {
@@ -657,32 +651,6 @@ fn read_file_and_check(
     };
 
     text_reader_contains_content(file, pattern, ignore_accents, cancellation)
-}
-
-fn text_reader_contains_content(
-    reader: impl Read,
-    pattern: &Regex,
-    ignore_accents: bool,
-    cancellation: &AtomicBool,
-) -> bool {
-    let reader = BufReader::new(ContentReader {
-        inner: reader,
-        cancellation,
-    });
-    for line in reader.lines().map_while(Result::ok) {
-        if cancellation.load(Ordering::Relaxed) {
-            return false;
-        }
-        let matched = if ignore_accents {
-            pattern.is_match(&crate::utils::remove_accents(&line))
-        } else {
-            pattern.is_match(&line)
-        };
-        if matched && !cancellation.load(Ordering::Relaxed) {
-            return true;
-        }
-    }
-    false
 }
 
 #[cfg(test)]

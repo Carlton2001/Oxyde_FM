@@ -29,20 +29,20 @@
                 bytes: &bytes,
                 cancellation: &cancellation
             },
-            &Regex::new("needle").unwrap(),
+            &ContentPattern::new("needle", true).unwrap(),
             false,
             &cancellation,
         ));
         assert!(bytes.get() <= 64 * 1024);
         assert!(text_reader_contains_content(
             Cursor::new("Résumé\n"),
-            &Regex::new("(?i)resume").unwrap(),
+            &ContentPattern::new("(?i)resume", true).unwrap(),
             true,
             &AtomicBool::new(false)
         ));
         assert!(!text_reader_contains_content(
             Cursor::new(b"invalid\xff\nneedle\n"),
-            &Regex::new("needle").unwrap(),
+            &ContentPattern::new("needle", true).unwrap(),
             false,
             &AtomicBool::new(false)
         ));
@@ -69,7 +69,7 @@
                 bytes: &bytes,
                 cancellation: &cancellation
             },
-            &Regex::new("(?i)resume").unwrap(),
+            &ContentPattern::new("(?i)resume", true).unwrap(),
             true,
             &cancellation,
         ));
@@ -77,13 +77,13 @@
         cancellation.store(false, Ordering::Relaxed);
         assert!(office_entry_contains_content(
             archive.by_name("word/document.xml").unwrap(),
-            &Regex::new("(?i)resume").unwrap(),
+            &ContentPattern::new("(?i)resume", true).unwrap(),
             true,
             &cancellation
         ));
         assert!(office_entry_contains_content(
             Cursor::new("<w:p>Résumé</w:p>"),
-            &Regex::new("Résumé").unwrap(),
+            &ContentPattern::new("Résumé", true).unwrap(),
             false,
             &cancellation
         ));

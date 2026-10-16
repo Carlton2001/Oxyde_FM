@@ -54,6 +54,7 @@ uuid = { version = "1.20.0", features = ["serde", "v4"] }
 chrono = { version = "0.4.43", features = ["serde"] }
 percent-encoding = "2.3.1"
 regex = "1.10"
+regex-automata = { version = "0.4.18", default-features = false, features = ["std", "syntax", "nfa-thompson", "unicode"] }
 unicode-normalization = "0.1.23"
 blake3 = "1.8.3"
 rayon = "1.11.0"
