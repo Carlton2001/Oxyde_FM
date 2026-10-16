@@ -34,6 +34,7 @@ impl OxydeApp {
             | ("enter" | "up", false, true, false)
             | ("c" | "z" | "n" | "tab" | "pageup" | "pagedown" | "+" | "=" | "add", true, false, _)
             | ("a" | "x" | "v" | "y" | "r" | "f" | "-" | "subtract" | "0", true, false, false)
+            | ("a", true, false, true)
             | ("c", true, true, false));
         if !recognized { return false; }
         if !self.context_menus.is_empty() {
@@ -48,6 +49,7 @@ impl OxydeApp {
         match (key.key.as_str(), m.control, m.alt, m.shift) {
             ("up" | "down" | "left" | "right", false, false, shift) => self.move_file_selection(key.key.as_str(), shift, cx),
             ("a", true, false, false) => self.execute_tout_selectionner(cx),
+            ("a", true, false, true) => self.deselect_all(&pane_id, cx),
             ("c", true, false, false) => self.execute_copier(cx),
             ("c", true, false, true) => self.execute_copy_text(false, cx),
             ("c", true, true, false) => self.execute_copy_text(true, cx),

@@ -142,6 +142,7 @@ menu-close-other-tabs = Cerrar otras pestañas
 menu-close-tab = Cerrar pestaña
 
 menu-select-all = Seleccionar todo
+menu-deselect-all = Deseleccionar todo
 
 menu-select-all-checks = Marcar todos
 

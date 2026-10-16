@@ -142,6 +142,7 @@ menu-close-other-tabs = Chiudi altre schede
 menu-close-tab = Chiudi scheda
 
 menu-select-all = Seleziona tutto
+menu-deselect-all = Deseleziona tutto
 
 menu-select-all-checks = Seleziona tutte le caselle
 

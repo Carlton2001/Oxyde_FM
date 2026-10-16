@@ -246,6 +246,24 @@ impl OxydeApp {
         }
     }
 
+    pub(crate) fn all_files_selected(&self, pane_id: &str) -> bool {
+        self.state.find_pane(pane_id).is_some_and(|pane| {
+            let tab = pane.active_tab();
+            let files = tab.filtered_files();
+            !files.is_empty() && files.iter().all(|file| tab.selected_paths.contains(&file.path))
+        })
+    }
+
+    pub(crate) fn deselect_all(&mut self, pane_id: &str, cx: &mut Context<Self>) {
+        if let Some(pane) = self.state.find_pane_mut(pane_id) {
+            let tab = pane.active_tab_mut();
+            tab.selected_paths.clear();
+            tab.selection_anchor = None;
+            tab.keyboard_cursor = None;
+            cx.notify();
+        }
+    }
+
     pub fn select_all(&mut self, pane_id: &str, cx: &mut Context<Self>) {
         if let Some(pane) = self.state.find_pane_mut(pane_id) {
             let tab = pane.active_tab_mut();

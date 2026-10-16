@@ -392,6 +392,7 @@ pub(super) fn render_grid_file_list(
             theme.background
         })
         .child(contents)
+        .child(super::selection_button::render(view, &pane_id, handle.clone(), theme, cx))
         .when_some(
             match &view.drag_target {
                 Some(DragTarget::SelectionRectangle {

@@ -6,6 +6,7 @@ mod grid_scroll;
 mod grid_card;
 mod headers;
 mod presentation;
+mod selection_button;
 mod thumbnails;
 
 pub use filters::{get_date_filter_items, get_size_filter_items, get_type_filter_items};

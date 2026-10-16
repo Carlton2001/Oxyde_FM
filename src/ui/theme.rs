@@ -332,34 +332,34 @@ impl OxydeTheme {
             },
             ThemeId::SolarizedDark => Self {
                 accent: rgb(0x268bd2).into(),
-                active_background: rgb(0x073642).into(),
-                background: rgb(0x002b36).into(),
-                border: rgb(0x073642).into(),
-                control_hover: rgb(0x0d3944).into(),
-                header: rgb(0x001e26).into(),
-                hover: rgb(0x0d3944).into(),
+                active_background: rgb(0x002b36).into(),
+                background: rgb(0x00252f).into(),
+                border: rgb(0x24505b).into(),
+                control_hover: rgb(0x24535e).into(),
+                header: rgb(0x073642).into(),
+                hover: rgb(0x174652).into(),
                 icon_muted: rgb(0x839496).into(),
-                menu_border: rgb(0x08404f).into(),
-                menu_hover: rgb(0x0d3944).into(),
-                menu_surface: rgb(0x073642).into(),
-                scrollbar_thumb: rgb(0x0d4a5a).into(),
-                scrollbar_thumb_drag: rgb(0x135d6f).into(),
-                scrollbar_thumb_hover: rgb(0x135d6f).into(),
+                menu_border: rgb(0x34616b).into(),
+                menu_hover: rgb(0x24535e).into(),
+                menu_surface: rgb(0x103f4b).into(),
+                scrollbar_thumb: rgb(0x34616b).into(),
+                scrollbar_thumb_drag: rgb(0x719197).into(),
+                scrollbar_thumb_hover: rgb(0x527a82).into(),
                 sidebar: rgb(0x001e26).into(),
-                surface: rgb(0x073642).into(),
-                tab_active: rgb(0x073642).into(),
-                tab_close_hover: rgb(0x13505e).into(),
-                text: rgb(0x839496).into(),
-                text_muted: rgb(0x586e75).into(),
+                surface: rgb(0x0b3a46).into(),
+                tab_active: rgb(0x0b3a46).into(),
+                tab_close_hover: rgb(0x345e68).into(),
+                text: rgb(0xa9b8b8).into(),
+                text_muted: rgb(0x839496).into(),
                 text_on_accent: rgb(0xfdf6e3).into(),
                 drag_hover: rgba(0x268bd226).into(),
-                selected: rgba(0x268bd233).into(),
-                selection_hover: rgba(0x268bd24d).into(),
-                icon_disabled: rgba(0x839496a6).into(),
+                selected: rgba(0x268bd247).into(),
+                selection_hover: rgba(0x268bd261).into(),
+                icon_disabled: rgba(0x83949680).into(),
                 scrollbar_track_hover: rgba(0x586e7518).into(),
-                search_banner: rgb(0x073642).into(),
-                badge_surface: rgb(0x073642).into(),
-                stepper_surface: rgb(0x073642).into(),
+                search_banner: rgb(0x124550).into(),
+                badge_surface: rgb(0x194854).into(),
+                stepper_surface: rgb(0x194854).into(),
                 dialog_tabs: rgb(0x073642).into(),
                 ..Self::dark()
             },
@@ -431,6 +431,11 @@ impl OxydeTheme {
             },
         };
         theme.file_icons = crate::ui::components::icons::FileIconPalette::for_theme(id);
+        // Oxyde Dark needs stronger feedback; keep other palettes unchanged.
+        // Custom actions and shared buttons still use the same control token.
+        if id == ThemeId::Dark {
+            theme.control_hover = theme.control_hover.blend(theme.text.opacity(0.12));
+        }
         theme
     }
 

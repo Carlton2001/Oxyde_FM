@@ -82,6 +82,7 @@ menu-duplicate-tab = Duplicate tab
 menu-close-other-tabs = Close other tabs
 menu-close-tab = Close tab
 menu-select-all = Select all
+menu-deselect-all = Deselect all
 menu-select-all-checks = Check all
 menu-deselect-all-checks = Uncheck all
 column-name = Name

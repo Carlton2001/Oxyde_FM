@@ -142,6 +142,7 @@ menu-close-other-tabs = Andere Tabs schließen
 menu-close-tab = Tab schließen
 
 menu-select-all = Alle auswählen
+menu-deselect-all = Auswahl aufheben
 
 menu-select-all-checks = Alle markieren
 

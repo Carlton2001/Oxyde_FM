@@ -348,6 +348,7 @@ pub(super) fn render_details_file_list(
                         )
                 )
         )
+        .child(super::selection_button::render(view, &pane_id, handle.clone(), theme, cx))
         // 3. Gutters interactifs
         .child(
             div()

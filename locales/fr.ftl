@@ -88,6 +88,7 @@ menu-duplicate-tab = Dupliquer l’onglet
 menu-close-other-tabs = Fermer les autres onglets
 menu-close-tab = Fermer l’onglet
 menu-select-all = Tout sélectionner
+menu-deselect-all = Tout désélectionner
 menu-select-all-checks = Tout cocher
 menu-deselect-all-checks = Tout décocher
 column-name = Nom
