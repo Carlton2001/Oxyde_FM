@@ -2,6 +2,8 @@ use std::ffi::OsString;
 use std::os::windows::ffi::OsStringExt;
 use std::path::{Path, PathBuf};
 
+pub(super) mod listing;
+
 /// The Shell may expose an opaque `$R…` name. Its `$I…` sidecar records
 /// the original path, including extensions hidden by the Shell.
 pub(super) fn original_path(id: &Path) -> Option<PathBuf> {

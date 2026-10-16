@@ -6,6 +6,8 @@ use crate::ui::i18n::{I18nContext, Message};
 use gpui::*;
 use oxyde_lib::commands::io::list_dir;
 
+mod trash_loading;
+
 impl OxydeApp {
     pub(crate) fn begin_breadcrumb_edit(
         &mut self,
@@ -522,6 +524,10 @@ impl OxydeApp {
         let show_hidden = self.show_hidden;
         let show_system = self.show_system;
         let pane_width = self.pane_sizes.get(pane_id).map(|size| size.width).unwrap_or(self.list_width);
+        if path == "trash://" {
+            self.request_trash_files(tab_id, request_id, pane_width, reset_scroll, cx);
+            return;
+        }
         cx.spawn(move |_, cx: &mut AsyncApp| {
             let mut cx = cx.clone();
             async move {

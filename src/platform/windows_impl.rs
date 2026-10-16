@@ -210,6 +210,12 @@ impl Platform for WindowsPlatform {
     fn list_trash_items(&self) -> Result<Vec<trash::TrashItem>, String> {
         trash::os_limited::list().map_err(|error| error.to_string())
     }
+    fn list_trash_entries(&self) -> Result<Option<Vec<crate::models::TrashEntry>>, String> {
+        super::windows_trash::listing::list().map(Some)
+    }
+    fn stream_trash_entries(&self, emit: &mut dyn FnMut(Vec<crate::models::TrashEntry>) -> bool) -> Result<(), String> {
+        super::windows_trash::listing::stream(emit)
+    }
     fn restore_trash_items(&self, items: Vec<trash::TrashItem>) -> Result<(), String> {
         super::windows_trash_restore::restore(items)
     }

@@ -285,6 +285,16 @@ pub trait Platform: Send + Sync {
     ) -> std::io::Result<()>;
     /// Blocking native trash operations; callers must run them on a worker.
     fn list_trash_items(&self) -> Result<Vec<trash::TrashItem>, String>;
+    /// Optional optimized display listing; never used as authority for mutations.
+    fn list_trash_entries(&self) -> Result<Option<Vec<crate::models::TrashEntry>>, String> {
+        Ok(None)
+    }
+    /// Return false when the display request has been cancelled.
+    fn stream_trash_entries(&self, emit: &mut dyn FnMut(Vec<crate::models::TrashEntry>) -> bool) -> Result<(), String> {
+        let entries = crate::commands::ops::list_trash_unsorted().map_err(|error| error.to_string())?;
+        emit(entries);
+        Ok(())
+    }
     fn restore_trash_items(&self, items: Vec<trash::TrashItem>) -> Result<(), String>;
     #[cfg(target_os = "windows")]
     fn restore_trash_history(&self, items: Vec<trash::TrashItem>, journal: &[crate::models::transaction::HistoryDeletedItem]) -> Result<(), String>;

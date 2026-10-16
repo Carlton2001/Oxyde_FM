@@ -14,7 +14,7 @@ pub async fn list_dir(
     let show_system = show_system.unwrap_or(false);
 
     if path == "trash://" {
-        let trash_items = tokio::task::spawn_blocking(crate::commands::ops::list_trash)
+        let trash_items = tokio::task::spawn_blocking(crate::commands::ops::list_trash_unsorted)
             .await
             .map_err(|error| CommandError::IoError(error.to_string()))??;
         let entries = trash_items

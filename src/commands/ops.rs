@@ -1,6 +1,6 @@
 use crate::models::{
     get_file_entry_from_path, CommandError, ConflictEntry, HistoryManager,
-    Transaction, TransactionType, TrashEntry,
+    Transaction, TransactionType,
 };
 use crate::utils::path_security::validate_path;
 use log::info;
@@ -57,81 +57,9 @@ pub(crate) fn item_with_correct_restore_name(item: &trash::TrashItem) -> trash::
     item
 }
 
-/// List all items in the Windows Recycle Bin
-pub fn list_trash() -> Result<Vec<TrashEntry>, CommandError> {
-    let trash_items =
-        crate::platform::platform().list_trash_items().map_err(CommandError::TrashError)?;
-
-    let mut entries: Vec<TrashEntry> = trash_items
-        .into_iter()
-        .map(|item| {
-            let original_path = original_trash_path(&item);
-            let mut name = original_path
-                .file_name()
-                .map(|n| n.to_string_lossy().to_string())
-                .unwrap_or_else(|| original_path.to_string_lossy().to_string());
-
-            // On Windows, Shell API sometimes returns names without .lnk even if original_path had it.
-            // Check the real trash file extension to be sure.
-            let trash_path = PathBuf::from(&item.id);
-            if let Some(ext) = trash_path.extension() {
-                let ext_str = ext.to_string_lossy().to_lowercase();
-                if (ext_str == "lnk" || ext_str == "url")
-                    && !name.to_lowercase().ends_with(&format!(".{}", ext_str))
-                {
-                    name.push_str(&format!(".{}", ext_str));
-                }
-            }
-            let deleted_time = (item.time_deleted.max(0) as u64) * 1000;
-
-            // Convert OsString id to PathBuf for metadata access
-            let trash_path = PathBuf::from(&item.id);
-
-            // Check if it's a directory
-            let is_dir = std::fs::metadata(&trash_path)
-                .map(|m| m.is_dir())
-                .unwrap_or(false);
-
-            let size = if is_dir {
-                0
-            } else {
-                std::fs::metadata(&trash_path).map(|m| m.len()).unwrap_or(0)
-            };
-
-            // Get the file's modification time
-            let modified = std::fs::metadata(&trash_path)
-                .and_then(|m| m.modified())
-                .map(|t| {
-                    t.duration_since(std::time::UNIX_EPOCH)
-                        .unwrap_or_default()
-                        .as_millis() as u64
-                })
-                .unwrap_or(deleted_time);
-
-            TrashEntry {
-                name,
-                // Use the internal trash path (item.id) as unique identifier
-                path: trash_path.to_string_lossy().to_string(),
-                original_path: original_path.to_string_lossy().to_string(),
-                is_dir,
-                size,
-                deleted_time,
-                modified,
-            }
-        })
-        .collect();
-
-    // Sort by name (folders first, then files)
-    entries.sort_by(|a, b| {
-        if a.is_dir == b.is_dir {
-            a.name.to_lowercase().cmp(&b.name.to_lowercase())
-        } else {
-            b.is_dir.cmp(&a.is_dir)
-        }
-    });
-
-    Ok(entries)
-}
+mod trash_listing;
+pub use trash_listing::list_trash;
+pub(crate) use trash_listing::list_trash_unsorted;
 
 /// Empty the Recycle Bin (permanently delete all items)
 pub async fn empty_trash() -> Result<(), CommandError> {
