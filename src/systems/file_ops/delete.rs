@@ -168,19 +168,16 @@ impl FileOperationManager {
             handles.push(handle);
         }
 
-        // Loop to emit progress
+        // Publish progress every 300 ms, but notice the end within one short poll.
+        let mut last_progress = std::time::Instant::now();
         while handles.iter().any(|h| !h.is_finished()) {
-            std::thread::sleep(std::time::Duration::from_millis(300));
-            let current = processed_files_atomic.load(Ordering::Relaxed);
-            let mut locked = op.lock().unwrap();
-            locked.processed_files = current;
-            drop(locked);
-
-            if cancel_flag.load(Ordering::Relaxed) {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+            if cancel_flag.load(Ordering::Relaxed) || error_captured.lock().unwrap().is_some() {
                 break;
             }
-            if error_captured.lock().unwrap().is_some() {
-                break;
+            if last_progress.elapsed() >= std::time::Duration::from_millis(300) {
+                op.lock().unwrap().processed_files = processed_files_atomic.load(Ordering::Relaxed);
+                last_progress = std::time::Instant::now();
             }
         }
 
