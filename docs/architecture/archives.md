@@ -7,7 +7,7 @@ Sous Windows de production, les codecs sont exécutés dans des workers ; le par
 | Usage | Point d’entrée | Contrat |
 | --- | --- | --- |
 | Navigation et index de recherche | `Platform::list_archive_directory`, worker `oxyde-archive-list-worker` | Métadonnées validées, chemins internes relatifs ; 512 Mio, 120 s, réponse 32 Mio maximum |
-| Extraction | `systems/archive_io.rs`, `archive_io::decode` | Courtier Decode ; lectures/écritures bornées et sorties possédées par le parent |
+| Extraction | `systems/archive_io.rs`, `archive_io::decode` | Courtier Decode ; lectures/écritures bornées et sorties possédées par le parent. ZIP lit sa source via une fenêtre de 256 Kio conservée entre les repositionnements |
 | Création et reconstruction | `systems/archive_encode.rs`, `archive_encode::run` | Même encodeur via `Platform::run_archive_io_worker` |
 | Modification d’une archive | `archive_workspace/native_commit.rs` | Préparation, contrôles de l’original, publication avec backup et récupération |
 
@@ -30,11 +30,11 @@ La création/reconstruction 7z réserve un job de 2 Gio, y compris sans Turbo po
 | Format | Travail parallèle et limites |
 | --- | --- |
 | ZIP | Jusqu’à 16 fichiers compressés simultanément selon le CPU, assemblés dans l’ordre sans recompression. Admission estimée à 768 Mio pour sources, résultats et encodeurs ; fichier de plus de 256 Mio traité en flux sur un thread. Un fichier unique n’est pas découpé en DEFLATE parallèle. |
-| 7z | LZMA2 multithread, nombre de threads réduit selon le dictionnaire et une enveloppe estimée de 1,5 Gio pour les encodeurs. Petits fichiers regroupés en blocs solides de 128 Mio maximum, séparés par les gros fichiers. Dictionnaires rapide/normal/meilleur : 1/16/32 Mio. |
-| TAR.ZST | Jusqu’à 8 threads Zstandard, 2 au niveau meilleur, fenêtre de 8 Mio. Nombre fixé au démarrage du flux. |
+| 7z | LZMA2 multithread, y compris pour les gros fichiers, nombre de threads réduit selon le dictionnaire et une enveloppe estimée de 1,5 Gio pour les encodeurs. Petits fichiers regroupés en blocs solides de 128 Mio maximum, séparés par les gros fichiers. Dictionnaires rapide/normal/meilleur : 1/16/32 Mio. |
+| TAR.ZST | Jusqu’à 8 threads Zstandard, 2 au niveau meilleur, fenêtre de 8 Mio. Contrat : nombre fixé au démarrage du flux ; activer ou couper Turbo ensuite ne change que la priorité. |
 | TAR | Pas de compression : parcours et écriture séquentiels, priorité Turbo conservée. |
 
-L’encodeur LZMA2 multithread de la dépendance peut accumuler ses tâches sans borne liée au nombre de threads. Pour éviter une file proportionnelle à un fichier arbitrairement grand, les fichiers 7z de plus de 256 Mio restent en flux monothread. Les répertoires sont enregistrés immédiatement, même si des fichiers précédents attendent encore leur bloc solide ; l’ordre interne des entrées 7z peut donc changer. Les estimations d’admission ne remplacent pas la limite dure de mémoire du job. Le parallélisme ZIP et 7z est réévalué aux frontières des fichiers/blocs ; les tâches déjà lancées peuvent terminer leur calcul après une désactivation de Turbo ou pendant une pause, mais les effets restent bloqués par le parent.
+Depuis sevenz-rust2 0.24 (lzma-rust2 0.22), l’encodeur LZMA2 multithread garde au plus un segment par thread en attente : la mémoire ne croît plus avec la taille d’un fichier, et la limite monothread de 256 Mio ne concerne plus que ZIP. Les répertoires sont enregistrés immédiatement, même si des fichiers précédents attendent encore leur bloc solide ; l’ordre interne des entrées 7z peut donc changer. Les estimations d’admission ne remplacent pas la limite dure de mémoire du job. Le parallélisme ZIP et 7z est réévalué aux frontières des fichiers/blocs ; les tâches déjà lancées peuvent terminer leur calcul après une désactivation de Turbo ou pendant une pause, mais les effets restent bloqués par le parent.
 
 Une conversation de contrôle reste active pendant les calculs et finalisations sans I/O. Les codecs et leurs threads restent dans le worker isolé ; le protocole et la publication par le parent sont conservés. Ces changements ciblent le parcours Windows ; les encodeurs locaux Linux restent distincts et ne sont pas validés ici.
 

@@ -4,6 +4,8 @@ Sous Windows, les fichiers ordinaires à identité capturée passent en lots She
 
 La progression est publiée au retour d’un lot. Pause et annulation sont vérifiées avant les lots et dans les callbacks ; un appel Windows déjà bloqué reste dépendant du système. Les priorités suivent le turbo. Aucune attente artificielle par élément n’est ajoutée.
 
+L’exemple `delete_tree_benchmark [PARENT]` chronomètre la suppression définitive d’un dossier généré (plat, imbriqué, gros fichiers), sans et avec Turbo.
+
 ## Où chercher dans `oxyde.log`
 
 | Cible / événement | Usage |

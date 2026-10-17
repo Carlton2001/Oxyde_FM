@@ -32,14 +32,20 @@ Les priorités passent toutes par `apply_thread_priority` / `follow_turbo_priori
 
 | Opération | Priorité Turbo | Concurrence Turbo | Moment d’application |
 | --- | --- | --- | --- |
-| Copie, déplacement entre volumes | Normale | Jusqu’à 4 fichiers, si au moins 8 fichiers de moins de 32 Mio en moyenne | Priorité : entre fichiers et pendant la copie. Concurrence : aux frontières de fichiers. |
+| Copie, déplacement entre volumes | Normale | SSD (sources et destination) : jusqu’à 4 fichiers dès 2 fichiers. Disque rotatif, réseau ou inconnu : jusqu’à 4 seulement si au moins 8 fichiers de moins de 32 Mio en moyenne | Priorité : entre fichiers et pendant la copie. Concurrence : aux frontières de fichiers. |
 | Renommage sur le même volume | Normale | Aucune | Au démarrage de l’opération |
 | Suppression définitive | Haute, dès le démarrage | Jusqu’à 4 éléments sélectionnés | Entre éléments et pendant le parcours d’un dossier |
 | Corbeille | Normale | Aucune | Avant chaque lot et aux points de contrôle du Shell, dossiers compris |
 | Compression | Priorité du processus worker | ZIP, 7z, TAR.ZST : [limites](archives.md#compression-et-turbo-sous-windows) | Aux frontières de fichiers ou de blocs ; TAR.ZST au démarrage du flux |
-| Extraction | Priorité du processus worker | Aucune | Aux points de contrôle |
+| Extraction | Priorité du processus worker | Aucune ; le décodage reste monothread | Aux points de contrôle |
 
-Limites structurelles : un dossier supprimé reste parcouru par un seul worker, le Shell traite la Corbeille de façon séquentielle, TAR n’a rien à compresser et un renommage ne transfère pas de données. Les seuils de copie, l’absence de décodage parallèle et la limite de 256 Mio en compression relèvent de l’implémentation actuelle : voir les [pistes restantes](../reports/2026-10-17-turbo-coverage.md#pistes-à-suivre-par-priorité).
+Le type de stockage vient de `Platform::is_ssd` (pénalité de recherche), interrogé une fois par lecteur ; les chemins `\\?\` sont normalisés. Chaque copie relit sa sortie pour la vérifier : sous Windows, cette lecture attend l’analyse de Defender (15 à 25 ms par fichier mesurés), latence que plusieurs workers recouvrent.
+
+Limites structurelles : le Shell traite la Corbeille de façon séquentielle, TAR n’a rien à compresser, un renommage ne transfère pas de données et un fichier ZIP reste un flux DEFLATE unique. Limites d’implémentation actuelles :
+
+- Un dossier supprimé reste parcouru par un seul thread (environ 35 µs par fichier sur NVMe) ; déléguer chaque fichier à des workers s’est révélé plus lent. Paralléliser des sous-arbres indépendants exigerait un point de contrôle partageable entre threads.
+- Le décodage 7z multithread de lzma-rust2 bufferise des segments LZMA2 entiers sans borne : il reste désactivé.
+- L’extraction ZIP en parallèle demanderait plusieurs flux simultanés dans le protocole du worker.
 
 ## Conflits et intégrité
 

@@ -6,6 +6,8 @@ La [mesure avant/après du 17 octobre](../reports/2026-10-17-archive-transport.m
 
 Le [bilan Turbo](../reports/2026-10-17-archive-turbo.md) mesure les quatre formats et précise les limites du parallélisme et des réservations mémoire.
 
+L’exemple `archive_extraction_benchmark` mesure l’extraction de production sans et avec Turbo, pour les quatre formats créés depuis le même dossier ; les contenus extraits sont vérifiés hors chronométrage. Les lignes `archive_worker_timing` séparent `read_handler_s` (lectures de la source) et `chunk_handler_s` (écriture des données décodées).
+
 ## Comparaison reproductible
 
 Fermer Oxyde avant de reconstruire les binaires partagés :

@@ -8,7 +8,7 @@ Après [construction des binaires](../guides/development.md), copier un même é
 Get-Content "$env:APPDATA\oxyde\oxyde.log" | Select-String 'copy_timing'
 ```
 
-Comparer plusieurs passages normal/turbo en alternant leur ordre, avec mêmes fichiers, destination et supports. Le cache Windows reste actif. Un petit lot et un lot de gros fichiers suffisent pour un premier diagnostic ; ne pas lancer systématiquement une campagne volumineuse.
+L’exemple `copy_concurrency_benchmark DESTINATION...` compare la politique de production à 1, 2 et 4 workers sur des fichiers générés (gros, moyens, petits) ; `COPY_BENCH_SET` limite le jeu mesuré. Comparer plusieurs passages normal/turbo en alternant leur ordre, avec mêmes fichiers, destination et supports. Le cache Windows reste actif. Un petit lot et un lot de gros fichiers suffisent pour un premier diagnostic ; ne pas lancer systématiquement une campagne volumineuse.
 
 ## Lire les phases
 
