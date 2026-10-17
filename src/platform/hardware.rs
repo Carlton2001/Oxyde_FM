@@ -18,10 +18,24 @@ use windows::Win32::System::Ioctl::{
 #[cfg(target_os = "windows")]
 use windows::Win32::System::IO::DeviceIoControl;
 
+/// Verbatim prefixes (`\\?\C:\`, `\\?\UNC\host\`) name the same drive or share;
+/// strip them so they are not mistaken for UNC network paths.
+#[cfg(target_os = "windows")]
+fn plain_path(path: &Path) -> std::borrow::Cow<'_, str> {
+    let text = path.to_string_lossy();
+    if let Some(rest) = text.strip_prefix(r"\\?\UNC\") {
+        format!(r"\\{rest}").into()
+    } else if let Some(rest) = text.strip_prefix(r"\\?\") {
+        rest.to_owned().into()
+    } else {
+        text
+    }
+}
+
 pub fn is_network_path(path: &Path) -> bool {
     #[cfg(target_os = "windows")]
     {
-        let path_str = path.to_string_lossy();
+        let path_str = plain_path(path);
         if path_str.starts_with("\\\\") {
             return true;
         }
@@ -43,7 +57,7 @@ pub fn is_network_path(path: &Path) -> bool {
 pub fn get_physical_disk_id(path: &Path) -> u64 {
     #[cfg(target_os = "windows")]
     {
-        let path_str = path.to_string_lossy();
+        let path_str = plain_path(path);
         if let Some(stripped) = path_str.strip_prefix("\\\\") {
             // UNC Path: Hash the host part to throttle per-server
             let parts: Vec<&str> = stripped.split('\\').collect();
@@ -119,7 +133,7 @@ pub fn is_ssd(path: &Path) -> bool {
             return false;
         }
 
-        let path_str = path.to_string_lossy();
+        let path_str = plain_path(path);
         if path_str.len() < 2 {
             return false;
         }
@@ -178,3 +192,7 @@ pub fn is_ssd(path: &Path) -> bool {
     }
     false
 }
+
+#[cfg(all(test, target_os = "windows"))]
+#[path = "hardware/tests/paths.rs"]
+mod tests;

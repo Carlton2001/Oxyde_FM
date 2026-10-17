@@ -11,6 +11,18 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
+// Measurement hook only: zero keeps the production policy.
+static BENCHMARK_WORKERS: AtomicUsize = AtomicUsize::new(0);
+
+/// Forces the Turbo copy worker count while `run` executes. Benchmarks only.
+#[doc(hidden)]
+pub fn with_copy_workers_for_benchmark<R>(workers: usize, run: impl FnOnce() -> R) -> R {
+    BENCHMARK_WORKERS.store(workers, Ordering::Relaxed);
+    let result = run();
+    BENCHMARK_WORKERS.store(0, Ordering::Relaxed);
+    result
+}
+
 impl FileOperationManager {
     fn record_created_copy_directory(
         operation: &Arc<Mutex<FileOperation>>,
@@ -464,20 +476,33 @@ impl FileOperationManager {
         let files_to_process_arc = Arc::new(files_to_process);
         let current_index = Arc::new(AtomicUsize::new(0));
 
-        // Parallel streams help with many small files, but contend for the same disk
-        // when copying a handful of files or large files.
+        // On solid-state storage, parallel streams also hide per-file latency
+        // (security scans of each read-back). Rotational or unknown storage keeps
+        // one stream for a handful of files or large files, to avoid seek contention.
+        let solid_state = num_tasks > 1 && {
+            // One storage query per drive or share, not per file.
+            let mut drives = HashMap::new();
+            let mut solid = |path: &Path| {
+                let drive = path.components().next().map(|part| part.as_os_str().to_owned());
+                *drives.entry(drive).or_insert_with(|| platform().is_ssd(path))
+            };
+            solid(&target_dir) && files_to_process_arc.iter().all(|(selected, _, _)| solid(selected.path()))
+        };
         let core_count = std::thread::available_parallelism()
             .map(|n| n.get())
             .unwrap_or(4);
         let concurrency = if num_tasks == 0 {
             0
         } else {
-            Self::copy_worker_count(num_tasks, total_bytes, core_count)
+            match BENCHMARK_WORKERS.load(Ordering::Relaxed) {
+                0 => Self::copy_worker_count(num_tasks, total_bytes, core_count, solid_state),
+                forced => forced.min(num_tasks),
+            }
         };
 
         log::info!(target: "oxyde_lib::copy_timing",
-            "copy_plan op={} copying_files={} total_bytes={} workers_available={} turbo={} normal_workers=1",
-            op.lock().unwrap().id, num_tasks, total_bytes, concurrency,
+            "copy_plan op={} copying_files={} total_bytes={} workers_available={} solid_state={} turbo={} normal_workers=1",
+            op.lock().unwrap().id, num_tasks, total_bytes, concurrency, solid_state,
             turbo_flag.load(Ordering::Relaxed));
 
         let mut handles = Vec::with_capacity(concurrency);
@@ -525,9 +550,16 @@ impl FileOperationManager {
             handles.push(handle);
         }
 
-        // Loop to emit progress while workers are running
+        // Emit progress every 500 ms, but notice the end within one short poll:
+        // a fixed 500 ms sleep delayed every copy's completion by up to that much.
         while handles.iter().any(|h| !h.is_finished()) {
-            std::thread::sleep(std::time::Duration::from_millis(500));
+            std::thread::sleep(std::time::Duration::from_millis(20));
+            if cancel_flag.load(Ordering::Relaxed) || error_captured.lock().unwrap().is_some() {
+                break;
+            }
+            if last_emit.elapsed() < std::time::Duration::from_millis(500) {
+                continue;
+            }
             Self::emit_progress(
                 op,
                 &processed_bytes_atomic,
@@ -536,13 +568,6 @@ impl FileOperationManager {
                 &mut last_emit,
                 &mut speed_samples,
             );
-
-            if cancel_flag.load(Ordering::Relaxed) {
-                break;
-            }
-            if error_captured.lock().unwrap().is_some() {
-                break;
-            }
         }
 
         // Wait for all threads
@@ -659,8 +684,12 @@ impl FileOperationManager {
         *last_emit = std::time::Instant::now();
     }
 
-    pub(super) fn copy_worker_count(file_count: usize, total_bytes: u64, core_count: usize) -> usize {
-        if file_count < 8 || total_bytes / file_count as u64 >= 32 * 1024 * 1024 {
+    pub(super) fn copy_worker_count(file_count: usize, total_bytes: u64, core_count: usize, solid_state: bool) -> usize {
+        if file_count < 2 {
+            1
+        } else if solid_state {
+            core_count.clamp(2, 4)
+        } else if file_count < 8 || total_bytes / file_count as u64 >= 32 * 1024 * 1024 {
             1
         } else {
             core_count.clamp(2, 4)

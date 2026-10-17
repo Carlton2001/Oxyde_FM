@@ -19,6 +19,7 @@ mod extract;
 mod scheduler;
 mod summaries;
 pub use summaries::OperationProgress;
+pub use copy::with_copy_workers_for_benchmark;
 mod item_outcomes;
 pub use item_outcomes::ItemOutcome;
 

@@ -50,17 +50,17 @@ fn copy_and_archive_progress_feed_speed_graph() {
 
 #[test]
 fn copy_uses_parallel_workers_only_for_many_small_files() {
-    assert_eq!(FileOperationManager::copy_worker_count(0, 0, 8), 1);
-    assert_eq!(
-        FileOperationManager::copy_worker_count(3, 3 * 1024 * 1024, 8),
-        1
-    );
-    assert_eq!(
-        FileOperationManager::copy_worker_count(8, 8 * 1024 * 1024, 8),
-        4
-    );
-    assert_eq!(
-        FileOperationManager::copy_worker_count(8, 8 * 64 * 1024 * 1024, 8),
-        1
-    );
+    // Rotational or unknown storage: unchanged conservative rule.
+    assert_eq!(FileOperationManager::copy_worker_count(0, 0, 8, false), 1);
+    assert_eq!(FileOperationManager::copy_worker_count(3, 3 * 1024 * 1024, 8, false), 1);
+    assert_eq!(FileOperationManager::copy_worker_count(8, 8 * 1024 * 1024, 8, false), 4);
+    assert_eq!(FileOperationManager::copy_worker_count(8, 8 * 64 * 1024 * 1024, 8, false), 1);
+}
+
+#[test]
+fn solid_state_copy_parallelizes_large_and_few_files_within_core_bounds() {
+    assert_eq!(FileOperationManager::copy_worker_count(1, 1 << 30, 8, true), 1);
+    assert_eq!(FileOperationManager::copy_worker_count(2, 2 << 30, 8, true), 4);
+    assert_eq!(FileOperationManager::copy_worker_count(8, 8 * 64 * 1024 * 1024, 8, true), 4);
+    assert_eq!(FileOperationManager::copy_worker_count(8, 8 * 64 * 1024 * 1024, 1, true), 2);
 }
