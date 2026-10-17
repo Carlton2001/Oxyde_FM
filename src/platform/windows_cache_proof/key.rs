@@ -31,6 +31,26 @@ impl Drop for Descriptor {
 fn native(error: windows::core::Error) -> io::Error {
     io::Error::other(error.to_string())
 }
+fn descriptor(sddl: &str) -> io::Result<Descriptor> {
+    let sddl: Vec<_> = sddl.encode_utf16().chain([0]).collect();
+    let mut raw = PSECURITY_DESCRIPTOR::default();
+    unsafe {
+        ConvertStringSecurityDescriptorToSecurityDescriptorW(
+            PCWSTR(sddl.as_ptr()),
+            SDDL_REVISION_1,
+            &mut raw,
+            None,
+        )
+    }
+    .map_err(native)?;
+    Ok(Descriptor(raw))
+}
+/// The DACL as Windows writes it back. Windows abbreviates some SIDs (`LA` for
+/// the built-in Administrator account, as on CI runners), so the expected
+/// text is compared in this same canonical form, never as written by hand.
+pub(super) fn canonical(sddl: &str) -> io::Result<String> {
+    dacl_text(&descriptor(sddl)?)
+}
 fn check_permissions(file: &File, expected: &str) -> io::Result<()> {
     let mut raw = PSECURITY_DESCRIPTOR::default();
     unsafe {
@@ -47,7 +67,15 @@ fn check_permissions(file: &File, expected: &str) -> io::Result<()> {
     }
     .ok()
     .map_err(native)?;
-    let descriptor = Descriptor(raw);
+    if dacl_text(&Descriptor(raw))? != canonical(expected)? {
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "Cache signing key permissions are not private",
+        ));
+    }
+    Ok(())
+}
+fn dacl_text(descriptor: &Descriptor) -> io::Result<String> {
     let mut text = windows::core::PWSTR::null();
     unsafe {
         ConvertSecurityDescriptorToStringSecurityDescriptorW(
@@ -68,15 +96,7 @@ fn check_permissions(file: &File, expected: &str) -> io::Result<()> {
         }
     }
     let allocation = Text(text);
-    let actual =
-        unsafe { allocation.0.to_string() }.map_err(|error| io::Error::other(error.to_string()))?;
-    if actual != expected {
-        return Err(io::Error::new(
-            io::ErrorKind::PermissionDenied,
-            "Cache signing key permissions are not private",
-        ));
-    }
-    Ok(())
+    unsafe { allocation.0.to_string() }.map_err(|error| io::Error::other(error.to_string()))
 }
 pub(in crate::platform) fn load(path: &Path) -> io::Result<[u8; 32]> {
     let expected = format!(
@@ -92,18 +112,7 @@ pub(in crate::platform) fn load(path: &Path) -> io::Result<[u8; 32]> {
     );
     match created {
         Ok(mut file) => {
-            let sddl: Vec<_> = expected.encode_utf16().chain([0]).collect();
-            let mut raw = PSECURITY_DESCRIPTOR::default();
-            unsafe {
-                ConvertStringSecurityDescriptorToSecurityDescriptorW(
-                    PCWSTR(sddl.as_ptr()),
-                    SDDL_REVISION_1,
-                    &mut raw,
-                    None,
-                )
-            }
-            .map_err(native)?;
-            let descriptor = Descriptor(raw);
+            let descriptor = descriptor(&expected)?;
             unsafe {
                 SetKernelObjectSecurity(
                     HANDLE(file.as_raw_handle()),

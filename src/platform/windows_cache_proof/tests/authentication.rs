@@ -40,3 +40,15 @@ fn signing_key_lookup_refuses_an_ancestor_junction_without_touching_its_target()
     assert_eq!(std::fs::read(foreign).unwrap(), b"external key witness");
     std::fs::remove_dir(link).unwrap();
 }
+
+#[test]
+fn builtin_administrator_sid_is_compared_in_its_abbreviated_canonical_form() {
+    // CI runners use the built-in Administrator account (RID 500), which
+    // Windows writes back as `LA` instead of its full SID.
+    let user = super::super::windows_worker_sandbox::parent_user_sid().unwrap();
+    let machine = user.rsplit_once('-').unwrap().0;
+    let written = format!("D:P(A;;FA;;;{machine}-500)(A;;FA;;;SY)");
+    let canonical = key::canonical(&written).unwrap();
+    assert_eq!(canonical, "D:P(A;;FA;;;LA)(A;;FA;;;SY)");
+    assert_eq!(key::canonical(&canonical).unwrap(), canonical);
+}
