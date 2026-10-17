@@ -34,7 +34,7 @@ Les priorités passent toutes par `apply_thread_priority` / `follow_turbo_priori
 | --- | --- | --- | --- |
 | Copie, déplacement entre volumes | Normale | SSD (sources et destination) : jusqu’à 4 fichiers dès 2 fichiers. Disque rotatif, réseau ou inconnu : jusqu’à 4 seulement si au moins 8 fichiers de moins de 32 Mio en moyenne | Priorité : entre fichiers et pendant la copie. Concurrence : aux frontières de fichiers. |
 | Renommage sur le même volume | Normale | Aucune | Au démarrage de l’opération |
-| Suppression définitive | Haute, dès le démarrage | Jusqu’à 4 éléments sélectionnés | Entre éléments et pendant le parcours d’un dossier |
+| Suppression définitive | Haute, dès le démarrage | Jusqu’à 4 éléments sélectionnés ; dans un dossier sélectionné seul, ses sous-dossiers de premier niveau sur jusqu’à 4 workers | Priorité : entre éléments et pendant le parcours. Workers : fixés au démarrage de chaque élément. |
 | Corbeille | Normale | Aucune | Avant chaque lot et aux points de contrôle du Shell, dossiers compris |
 | Compression | Priorité du processus worker | ZIP, 7z, TAR.ZST : [limites](archives.md#compression-et-turbo-sous-windows) | Aux frontières de fichiers ou de blocs ; TAR.ZST au démarrage du flux |
 | Extraction | Priorité du processus worker | Aucune ; le décodage reste monothread | Aux points de contrôle |
@@ -43,7 +43,7 @@ Le type de stockage vient de `Platform::is_ssd` (pénalité de recherche), inter
 
 Limites structurelles : le Shell traite la Corbeille de façon séquentielle, TAR n’a rien à compresser, un renommage ne transfère pas de données et un fichier ZIP reste un flux DEFLATE unique. Limites d’implémentation actuelles :
 
-- Un dossier supprimé reste parcouru par un seul thread (environ 35 µs par fichier sur NVMe) ; déléguer chaque fichier à des workers s’est révélé plus lent. Paralléliser des sous-arbres indépendants exigerait un point de contrôle partageable entre threads.
+- Suppression d’un dossier en Turbo : le thread appelant énumère le dossier sélectionné et ouvre chaque enfant ; les sous-dossiers de premier niveau, déjà retenus, sont confiés à une file bornée et supprimés en entier par un worker. Le dossier sélectionné est supprimé en dernier. Le point de contrôle de `Platform::remove_operation_tree` est `Fn + Sync` : pause, annulation et priorité s’appliquent dans chaque worker ; un échec arrête les autres à leur prochain point de contrôle. Les fichiers directement dans le dossier sélectionné restent supprimés un à un (déléguer chaque fichier s’est révélé plus lent).
 - Le décodage 7z multithread de lzma-rust2 bufferise des segments LZMA2 entiers sans borne : il reste désactivé.
 - L’extraction ZIP en parallèle demanderait plusieurs flux simultanés dans le protocole du worker.
 

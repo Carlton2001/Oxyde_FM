@@ -217,7 +217,9 @@ pub trait Platform: Send + Sync {
     fn rename_operation_file(&self, file: &std::fs::File, source: &std::path::Path, parent: &std::fs::File, destination: &std::path::Path, replace: bool) -> std::io::Result<()>;
     /// Remove the selected object and its children by retained identities on Windows.
     /// Reparse entries are removed themselves; their targets are never traversed.
-    fn remove_operation_tree(&self, parent: &std::fs::File, path: &std::path::Path, checkpoint: &mut dyn FnMut() -> std::io::Result<()>) -> std::io::Result<()>;
+    /// `workers` above one lets Windows remove independent subfolders in parallel;
+    /// the checkpoint is then called from several threads.
+    fn remove_operation_tree(&self, parent: &std::fs::File, path: &std::path::Path, workers: usize, checkpoint: &(dyn Fn() -> std::io::Result<()> + Sync)) -> std::io::Result<()>;
     /// Exclusively create hidden copy staging and a retained non-deletable marker on Windows.
     fn create_copy_staging(&self, parent: &std::fs::File, path: &std::path::Path) -> std::io::Result<(std::fs::File, std::fs::File)>;
     /// Create a private archive writer relative to staging; retain rename/delete

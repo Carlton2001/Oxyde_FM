@@ -118,8 +118,8 @@ impl Platform for WindowsPlatform {
     fn rename_operation_file(&self, file: &std::fs::File, _source: &std::path::Path, parent: &std::fs::File, destination: &std::path::Path, replace: bool) -> std::io::Result<()> {
         super::windows_file_moves::rename_relative(file, parent, destination, replace)
     }
-    fn remove_operation_tree(&self, parent: &std::fs::File, path: &std::path::Path, checkpoint: &mut dyn FnMut() -> std::io::Result<()>) -> std::io::Result<()> {
-        super::windows_file_tree::remove(parent, path, checkpoint)
+    fn remove_operation_tree(&self, parent: &std::fs::File, path: &std::path::Path, workers: usize, checkpoint: &(dyn Fn() -> std::io::Result<()> + Sync)) -> std::io::Result<()> {
+        super::windows_file_tree::remove(parent, path, workers, checkpoint)
     }
     fn create_copy_staging(&self, parent: &std::fs::File, path: &std::path::Path) -> std::io::Result<(std::fs::File, std::fs::File)> {
         super::windows_copy_staging::create(parent, path)

@@ -62,6 +62,9 @@ impl FileOperationManager {
             .map(|n| n.get())
             .unwrap_or(4);
         let concurrency = core_count.clamp(2, 4);
+        // Turbo shares one budget: a single selected folder gets every worker
+        // for its subfolders; several items split them. Fixed per item start.
+        let tree_workers = (concurrency / total_items.min(concurrency)).max(1);
 
         let mut handles = Vec::with_capacity(concurrency);
         let real_sources_arc = Arc::new(real_sources);
@@ -124,7 +127,8 @@ impl FileOperationManager {
                     }
 
                     operation.lock().unwrap().item_started(src);
-                    let res = crate::systems::path_parents::remove(src, &mut || {
+                    let workers = if turbo.load(Ordering::Relaxed) { tree_workers } else { 1 };
+                    let res = crate::systems::path_parents::remove(src, workers, &|| {
                         while pause.load(Ordering::Relaxed) {
                             if cancel.load(Ordering::Relaxed) {
                                 return Err(std::io::Error::new(std::io::ErrorKind::Interrupted, "Operation cancelled"));

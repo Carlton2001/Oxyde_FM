@@ -202,11 +202,12 @@ fn move_opened_file(
 
 pub(crate) fn remove(
     path: &Path,
-    checkpoint: &mut dyn FnMut() -> io::Result<()>,
+    workers: usize,
+    checkpoint: &(dyn Fn() -> io::Result<()> + Sync),
 ) -> io::Result<()> {
     let parents = HeldParents::new(path)?;
     let resolved = parents.resolved_path(path)?;
-    platform().remove_operation_tree(parents.directory(), &resolved, checkpoint)
+    platform().remove_operation_tree(parents.directory(), &resolved, workers, checkpoint)
 }
 
 #[cfg(all(test, target_os = "windows"))]
@@ -215,7 +216,7 @@ mod tests {
     #[test]
     fn recursive_delete_removes_selected_and_nested_junctions_without_traversal() {
         use crate::platform::windows_reparse_tests::{Retarget, junction};
-        for nested in [false, true] {
+        for (nested, workers) in [(false, 1), (true, 1), (false, 4), (true, 4)] {
             let root = tempfile::tempdir().unwrap();
             let first = root.path().join("first");
             let second = root.path().join("second");
@@ -235,9 +236,9 @@ mod tests {
             let template = root.path().join("template");
             junction(&link, &first);
             junction(&template, &second);
-            let mut retarget = Some(Retarget::new(&link, &template));
-            remove(&selected, &mut || {
-                if let Some(retarget) = retarget.take() {
+            let retarget = std::sync::Mutex::new(Some(Retarget::new(&link, &template)));
+            remove(&selected, workers, &|| {
+                if let Some(retarget) = retarget.lock().unwrap().take() {
                     retarget.apply();
                 }
                 Ok(())
@@ -258,125 +259,135 @@ mod tests {
 
     #[test]
     fn recursive_delete_never_enumerates_a_new_reparse_target() {
-        use crate::platform::windows_reparse_tests::{Retarget, junction};
-        let root = tempfile::tempdir().unwrap();
-        let selected = root.path().join("selected");
-        let outside = root.path().join("outside");
-        std::fs::create_dir(&selected).unwrap();
-        std::fs::create_dir(&outside).unwrap();
-        std::fs::write(outside.join("witness"), b"outside witness").unwrap();
-        let template = root.path().join("template");
-        junction(&template, &outside);
-        let mut retarget = Some(Retarget::new(&selected, &template));
-        remove(&selected, &mut || {
-            if let Some(retarget) = retarget.take() {
-                retarget.apply();
-            }
-            Ok(())
-        })
-        .unwrap();
-        assert!(!selected.exists());
-        assert_eq!(
-            std::fs::read(outside.join("witness")).unwrap(),
-            b"outside witness"
-        );
-        std::fs::remove_dir(template).unwrap();
+        for workers in [1, 4] {
+            use crate::platform::windows_reparse_tests::{Retarget, junction};
+            let root = tempfile::tempdir().unwrap();
+            let selected = root.path().join("selected");
+            let outside = root.path().join("outside");
+            std::fs::create_dir(&selected).unwrap();
+            std::fs::create_dir(&outside).unwrap();
+            std::fs::write(outside.join("witness"), b"outside witness").unwrap();
+            let template = root.path().join("template");
+            junction(&template, &outside);
+            let retarget = std::sync::Mutex::new(Some(Retarget::new(&selected, &template)));
+            remove(&selected, workers, &|| {
+                if let Some(retarget) = retarget.lock().unwrap().take() {
+                    retarget.apply();
+                }
+                Ok(())
+            })
+            .unwrap();
+            assert!(!selected.exists());
+            assert_eq!(
+                std::fs::read(outside.join("witness")).unwrap(),
+                b"outside witness"
+            );
+            std::fs::remove_dir(template).unwrap();
+        }
     }
 
     #[test]
     fn recursive_delete_handles_wide_deep_unicode_trees_and_preserves_external_hard_links() {
-        let root = tempfile::tempdir().unwrap();
-        let selected = root.path().join("selected");
-        std::fs::create_dir(&selected).unwrap();
-        for index in 0..300 {
-            std::fs::write(selected.join(format!("f-{index}-é雪")), b"data").unwrap();
+        for workers in [1, 4] {
+            let root = tempfile::tempdir().unwrap();
+            let selected = root.path().join("selected");
+            std::fs::create_dir(&selected).unwrap();
+            for index in 0..300 {
+                std::fs::write(selected.join(format!("f-{index}-é雪")), b"data").unwrap();
+            }
+            let mut nested = selected.clone();
+            for _ in 0..80 {
+                nested.push("d");
+                std::fs::create_dir(&nested).unwrap();
+            }
+            let file = nested.join("data");
+            std::fs::write(&file, b"hard link witness").unwrap();
+            let alias = root.path().join("external-alias");
+            std::fs::hard_link(&file, &alias).unwrap();
+            remove(&selected, workers, &|| Ok(())).unwrap();
+            assert!(!selected.exists());
+            assert_eq!(std::fs::read(alias).unwrap(), b"hard link witness");
         }
-        let mut nested = selected.clone();
-        for _ in 0..80 {
-            nested.push("d");
-            std::fs::create_dir(&nested).unwrap();
-        }
-        let file = nested.join("data");
-        std::fs::write(&file, b"hard link witness").unwrap();
-        let alias = root.path().join("external-alias");
-        std::fs::hard_link(&file, &alias).unwrap();
-        remove(&selected, &mut || Ok(())).unwrap();
-        assert!(!selected.exists());
-        assert_eq!(std::fs::read(alias).unwrap(), b"hard link witness");
     }
 
     #[test]
     fn recursive_delete_can_be_cancelled_after_partial_progress_and_releases_handles() {
-        let root = tempfile::tempdir().unwrap();
-        let selected = root.path().join("selected");
-        std::fs::create_dir(&selected).unwrap();
-        for index in 0..25 {
-            std::fs::write(selected.join(format!("file-{index}")), b"data").unwrap();
-        }
-        let error = remove(&selected, &mut || {
-            if std::fs::read_dir(&selected)?.count() < 25 {
-                return Err(io::Error::new(io::ErrorKind::Interrupted, "cancelled"));
+        for workers in [1, 4] {
+            let root = tempfile::tempdir().unwrap();
+            let selected = root.path().join("selected");
+            std::fs::create_dir(&selected).unwrap();
+            for index in 0..25 {
+                std::fs::write(selected.join(format!("file-{index}")), b"data").unwrap();
             }
-            Ok(())
-        })
-        .unwrap_err();
-        assert_eq!(error.kind(), io::ErrorKind::Interrupted);
-        let remaining = std::fs::read_dir(&selected).unwrap().count();
-        assert!((1..25).contains(&remaining));
-        std::fs::rename(selected, root.path().join("released")).unwrap();
+            let error = remove(&selected, workers, &|| {
+                if std::fs::read_dir(&selected)?.count() < 25 {
+                    return Err(io::Error::new(io::ErrorKind::Interrupted, "cancelled"));
+                }
+                Ok(())
+            })
+            .unwrap_err();
+            assert_eq!(error.kind(), io::ErrorKind::Interrupted);
+            let remaining = std::fs::read_dir(&selected).unwrap().count();
+            assert!((1..25).contains(&remaining));
+            std::fs::rename(selected, root.path().join("released")).unwrap();
+        }
     }
 
     #[test]
     fn recursive_delete_reports_readonly_children_and_preserves_their_contents() {
-        let root = tempfile::tempdir().unwrap();
-        let selected = root.path().join("selected");
-        std::fs::create_dir(&selected).unwrap();
-        let protected = selected.join("readonly");
-        std::fs::write(&protected, b"protected data").unwrap();
-        let mut permissions = std::fs::metadata(&protected).unwrap().permissions();
-        permissions.set_readonly(true);
-        std::fs::set_permissions(&protected, permissions).unwrap();
-        let error = remove(&selected, &mut || Ok(())).unwrap_err();
-        assert_eq!(error.kind(), io::ErrorKind::PermissionDenied);
-        assert_eq!(std::fs::read(&protected).unwrap(), b"protected data");
-        let mut permissions = std::fs::metadata(&protected).unwrap().permissions();
-        permissions.set_readonly(false);
-        std::fs::set_permissions(protected, permissions).unwrap();
-        std::fs::rename(selected, root.path().join("released")).unwrap();
+        for workers in [1, 4] {
+            let root = tempfile::tempdir().unwrap();
+            let selected = root.path().join("selected");
+            std::fs::create_dir(&selected).unwrap();
+            let protected = selected.join("readonly");
+            std::fs::write(&protected, b"protected data").unwrap();
+            let mut permissions = std::fs::metadata(&protected).unwrap().permissions();
+            permissions.set_readonly(true);
+            std::fs::set_permissions(&protected, permissions).unwrap();
+            let error = remove(&selected, workers, &|| Ok(())).unwrap_err();
+            assert_eq!(error.kind(), io::ErrorKind::PermissionDenied);
+            assert_eq!(std::fs::read(&protected).unwrap(), b"protected data");
+            let mut permissions = std::fs::metadata(&protected).unwrap().permissions();
+            permissions.set_readonly(false);
+            std::fs::set_permissions(protected, permissions).unwrap();
+            std::fs::rename(selected, root.path().join("released")).unwrap();
+        }
     }
     #[test]
     fn recursive_delete_keeps_the_selected_directory_identity() {
-        let root = tempfile::tempdir().unwrap();
-        let selected = root.path().join("selected");
-        let foreign = root.path().join("foreign");
-        std::fs::create_dir(&selected).unwrap();
-        std::fs::create_dir(&foreign).unwrap();
-        std::fs::write(selected.join("content"), b"selected").unwrap();
-        std::fs::write(foreign.join("witness"), b"foreign witness").unwrap();
-        let mut changed = false;
-        let mut attempted = false;
-        remove(&selected, &mut || {
-            if !attempted {
-                attempted = true;
-                if std::fs::rename(&selected, root.path().join("original")).is_ok() {
+        for workers in [1, 4] {
+            let root = tempfile::tempdir().unwrap();
+            let selected = root.path().join("selected");
+            let foreign = root.path().join("foreign");
+            std::fs::create_dir(&selected).unwrap();
+            std::fs::create_dir(&foreign).unwrap();
+            std::fs::write(selected.join("content"), b"selected").unwrap();
+            std::fs::write(foreign.join("witness"), b"foreign witness").unwrap();
+            let changed = std::sync::atomic::AtomicBool::new(false);
+            let attempted = std::sync::atomic::AtomicBool::new(false);
+            remove(&selected, workers, &|| {
+                if !attempted.swap(true, std::sync::atomic::Ordering::SeqCst)
+                    && std::fs::rename(&selected, root.path().join("original")).is_ok()
+                {
                     std::fs::rename(&foreign, &selected)?;
-                    changed = true;
+                    changed.store(true, std::sync::atomic::Ordering::SeqCst);
                 }
-            }
-            Ok(())
-        })
-        .unwrap();
-        let witness = if changed {
-            selected.join("witness")
-        } else {
-            foreign.join("witness")
-        };
-        assert_eq!(std::fs::read(witness).unwrap(), b"foreign witness");
-        assert!(
-            !changed,
-            "the selected directory must remain fixed during deletion"
-        );
-        assert!(!selected.exists());
+                Ok(())
+            })
+            .unwrap();
+            let changed = changed.into_inner();
+            let witness = if changed {
+                selected.join("witness")
+            } else {
+                foreign.join("witness")
+            };
+            assert_eq!(std::fs::read(witness).unwrap(), b"foreign witness");
+            assert!(
+                !changed,
+                "the selected directory must remain fixed during deletion"
+            );
+            assert!(!selected.exists());
+        }
     }
     #[test]
     fn move_never_follows_a_reparse_point_installed_on_the_retained_parent() {
@@ -561,7 +572,7 @@ mod tests {
         junction(&link, &selected);
         junction(&template, &outside);
         let retarget = Retarget::new(&link, &template);
-        remove(&link.join("file"), &mut || {
+        remove(&link.join("file"), 1, &|| {
             retarget.apply();
             Ok(())
         })
@@ -577,21 +588,23 @@ mod tests {
     }
     #[test]
     fn deletion_keeps_parent_fixed_until_the_selected_file_is_removed() {
-        let root = tempfile::tempdir().unwrap();
-        let parent = root.path().join("parent");
-        std::fs::create_dir(&parent).unwrap();
-        let selected = parent.join("selected");
-        std::fs::write(&selected, b"selected").unwrap();
-        let witness = root.path().join("witness");
-        std::fs::write(&witness, b"outside").unwrap();
-        remove(&selected, &mut || {
-            assert!(std::fs::rename(&parent, root.path().join("replaced")).is_err());
-            Ok(())
-        })
-        .unwrap();
-        assert!(!selected.exists());
-        assert_eq!(std::fs::read(witness).unwrap(), b"outside");
-        std::fs::rename(&parent, root.path().join("replaced")).unwrap();
+        for workers in [1, 4] {
+            let root = tempfile::tempdir().unwrap();
+            let parent = root.path().join("parent");
+            std::fs::create_dir(&parent).unwrap();
+            let selected = parent.join("selected");
+            std::fs::write(&selected, b"selected").unwrap();
+            let witness = root.path().join("witness");
+            std::fs::write(&witness, b"outside").unwrap();
+            remove(&selected, workers, &|| {
+                assert!(std::fs::rename(&parent, root.path().join("replaced")).is_err());
+                Ok(())
+            })
+            .unwrap();
+            assert!(!selected.exists());
+            assert_eq!(std::fs::read(witness).unwrap(), b"outside");
+            std::fs::rename(&parent, root.path().join("replaced")).unwrap();
+        }
     }
 
     #[test]
@@ -632,3 +645,7 @@ mod tests {
         std::fs::remove_dir(link).unwrap();
     }
 }
+
+#[cfg(all(test, target_os = "windows"))]
+#[path = "path_parents/tests/parallel.rs"]
+mod parallel_tests;
