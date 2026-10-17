@@ -132,11 +132,9 @@ pub(super) fn encode<T: Exchange>(
                     flush_solid(&mut writer, &mut solid, connection)?;
                     solid_bytes = 0;
                 }
-                writer.set_content_methods(vec![seven_options(
-                    level as u32,
-                    turbo(connection)? && entry.size <= ZIP_BUFFER,
-                )
-                .into()]);
+                // lzma-rust2 0.22 keeps at most one chunk per thread in flight, so
+                // large files no longer need a single-threaded stream to bound memory.
+                writer.set_content_methods(vec![seven_options(level as u32, turbo(connection)?).into()]);
                 if !entry.directory && entry.size <= SOLID_BUFFER {
                     let mut bytes = Vec::with_capacity(entry.size as usize);
                     let mut reader = io::BufReader::with_capacity(
