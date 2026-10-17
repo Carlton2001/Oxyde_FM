@@ -69,6 +69,8 @@ impl OxydeApp {
 
             let is_root =
                 tab_data.path.len() <= 3 && tab_data.path.chars().nth(1) == Some(':');
+            let is_virtual = matches!(tab_data.path.as_str(), "__network_vincinity__" | "trash://")
+                || crate::ui::app::search::search_label(&tab_data.path, cx.i18n()).is_some();
             let label = if let Some(label) = crate::ui::app::search::search_label(&tab_data.path, cx.i18n()) {
                 label
             } else if tab_data.path == "__network_vincinity__" {
@@ -145,7 +147,8 @@ impl OxydeApp {
                 label.clone(),
             )
             .selected(is_tab_active)
-            .when(self.context_menus.is_empty(), |tab| tab.tooltip_path(tab_data.path.clone()))
+            // Internal locations show their translated name, never their technical path.
+            .when(self.context_menus.is_empty(), |tab| tab.tooltip_path(if is_virtual { label.clone() } else { tab_data.path.clone() }))
             .position(position)
             .icon(tab_icon.clone())
             .on_click({
