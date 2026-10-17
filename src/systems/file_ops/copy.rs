@@ -3,7 +3,7 @@ mod destinations;
 
 use super::{FileOperation, FileOperationManager, OpStatus, FILE_OPS_LOG_TARGET};
 use crate::models::ConflictAction;
-use crate::platform::{platform, ThreadPriority};
+use crate::platform::{follow_turbo_priority, platform, ThreadPriority};
 #[cfg(all(target_os = "windows", not(test)))]
 use crate::utils::archive_limits::{ArchiveBudget, ArchiveLimits};
 use std::collections::HashMap;
@@ -372,13 +372,7 @@ impl FileOperationManager {
             )
         };
 
-        let last_turbo_state = turbo_flag.load(Ordering::Relaxed);
-        // Ensure starting priority matches initial mode
-        if last_turbo_state {
-            platform().set_thread_priority(ThreadPriority::Normal);
-        } else {
-            platform().set_thread_priority(ThreadPriority::Background);
-        }
+        follow_turbo_priority(turbo_flag.load(Ordering::Relaxed), ThreadPriority::Normal);
 
         for directory in &directories_to_create {
             if cancel_flag.load(Ordering::Relaxed) {

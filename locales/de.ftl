@@ -696,7 +696,7 @@ settings-cache-error = Der Cache konnte nicht vollständig geleert werden. Versu
 
 settings-preferences-reset = Einstellungen zurückgesetzt.
 
-settings-turbo-description = Standard-Turbomodus für neue Kopier- und Verschiebevorgänge. Laufende Übertragungen behalten ihre Einstellung.
+settings-turbo-description = Standard-Turbomodus für neue Kopier-, Verschiebe-, Lösch-, Papierkorb-, Komprimierungs- und Entpackvorgänge. Laufende Vorgänge behalten ihre Einstellung.
 
 settings-search-limit-description = Maximale Ergebnisse für neue Schnell- und erweiterte Suchen. Schritte von 500, mindestens 500.
 

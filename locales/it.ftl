@@ -384,7 +384,7 @@ settings-region-language = Regione e Lingua
 
 settings-performance = Prestazioni
 
-settings-turbo = Trasferimenti Turbo
+settings-turbo = Operazioni Turbo
 
 settings-search-limit = Limite ricerca
 
@@ -696,7 +696,7 @@ settings-cache-error = Impossibile svuotare l’intera cache. Riprova.
 
 settings-preferences-reset = Preferenze ripristinate.
 
-settings-turbo-description = Modalità Turbo predefinita per nuove copie e spostamenti. I trasferimenti in corso mantengono l’impostazione attuale.
+settings-turbo-description = Modalità Turbo predefinita per nuove copie, spostamenti, eliminazioni, spostamenti nel Cestino, compressioni ed estrazioni. Le operazioni in corso mantengono l’impostazione attuale.
 
 settings-search-limit-description = Numero massimo di risultati per nuove ricerche rapide e avanzate. Incrementi di 500, minimo 500.
 

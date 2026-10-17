@@ -1,5 +1,5 @@
 use super::{FileOperation, FileOperationManager, OpStatus, RestoreNormalPriority};
-use crate::platform::{platform, ThreadPriority};
+use crate::platform::{follow_turbo_priority, platform, ThreadPriority};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -90,7 +90,6 @@ impl FileOperationManager {
 
             let handle = std::thread::spawn(move || {
                 let _priority_guard = RestoreNormalPriority;
-                let mut is_in_background_mode = false;
 
                 loop {
                     if cancel.load(Ordering::Relaxed) {
@@ -98,15 +97,7 @@ impl FileOperationManager {
                     }
 
                     let is_turbo = turbo.load(Ordering::Relaxed);
-
-                    if is_turbo && is_in_background_mode {
-                        platform().set_thread_priority(ThreadPriority::Normal);
-                        platform().set_thread_priority(ThreadPriority::High);
-                        is_in_background_mode = false;
-                    } else if !is_turbo && !is_in_background_mode {
-                        platform().set_thread_priority(ThreadPriority::Background);
-                        is_in_background_mode = true;
-                    }
+                    follow_turbo_priority(is_turbo, ThreadPriority::High);
 
                     if !is_turbo && thread_idx > 0 {
                         if idx.load(Ordering::Relaxed) >= total_items {
@@ -143,11 +134,7 @@ impl FileOperationManager {
                         if cancel.load(Ordering::Relaxed) {
                             return Err(std::io::Error::new(std::io::ErrorKind::Interrupted, "Operation cancelled"));
                         }
-                        let is_turbo = turbo.load(Ordering::Relaxed);
-                        if is_turbo == is_in_background_mode {
-                            platform().set_thread_priority(if is_turbo { ThreadPriority::High } else { ThreadPriority::Background });
-                            is_in_background_mode = !is_turbo;
-                        }
+                        follow_turbo_priority(turbo.load(Ordering::Relaxed), ThreadPriority::High);
                         Ok(())
                     });
 
@@ -174,10 +161,6 @@ impl FileOperationManager {
                     if succeeded { operation.lock().unwrap().item_complete(src); }
                     processed_files.fetch_add(1, Ordering::Relaxed);
 
-                }
-
-                if is_in_background_mode {
-                    platform().set_thread_priority(ThreadPriority::Normal);
                 }
 
                 Ok::<(), String>(())
@@ -313,11 +296,7 @@ impl FileOperationManager {
                     }
                     std::thread::sleep(std::time::Duration::from_millis(100));
                 }
-                platform().set_thread_priority(if turbo_flag.load(Ordering::Relaxed) {
-                    ThreadPriority::Normal
-                } else {
-                    ThreadPriority::Background
-                });
+                follow_turbo_priority(turbo_flag.load(Ordering::Relaxed), ThreadPriority::Normal);
                 op.lock().unwrap().current_file = Some(source.to_string_lossy().into_owned());
                 op.lock().unwrap().item_started(source);
                 platform().shell_delete(std::slice::from_ref(source), true)?;

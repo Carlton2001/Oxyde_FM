@@ -6,7 +6,9 @@ use std::sync::{Arc, Mutex};
 use tokio::sync::{Notify, Semaphore};
 use uuid::Uuid;
 
-use crate::platform::{platform, ThreadPriority};
+use crate::platform::{follow_turbo_priority, RestoreNormalPriority, ThreadPriority};
+#[cfg(test)]
+use crate::platform::platform;
 
 mod archive_transfer;
 mod compress;
@@ -22,14 +24,6 @@ pub use item_outcomes::ItemOutcome;
 
 const SPEED_HISTORY_LIMIT: usize = 60;
 const FILE_OPS_LOG_TARGET: &str = module_path!();
-
-struct RestoreNormalPriority;
-
-impl Drop for RestoreNormalPriority {
-    fn drop(&mut self) {
-        platform().set_thread_priority(ThreadPriority::Normal);
-    }
-}
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum OpStatus {
@@ -325,11 +319,7 @@ impl FileOperationManager {
         if cancel.load(Ordering::Relaxed) {
             return Err("Operation cancelled".into());
         }
-        platform().set_thread_priority(if turbo.load(Ordering::Relaxed) {
-            ThreadPriority::Normal
-        } else {
-            ThreadPriority::Background
-        });
+        follow_turbo_priority(turbo.load(Ordering::Relaxed), ThreadPriority::Normal);
         Ok(())
     }
 

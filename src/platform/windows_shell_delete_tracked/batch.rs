@@ -42,11 +42,7 @@ fn execute(
         .collect();
     let result = (|| -> windows::core::Result<bool> {
         let _apartment = Apartment::new()?;
-        super::super::platform().set_thread_priority(if control.turbo.load(Ordering::Relaxed) {
-            super::super::ThreadPriority::Normal
-        } else {
-            super::super::ThreadPriority::Background
-        });
+        control.follow_turbo();
         let operation: IFileOperation =
             unsafe { CoCreateInstance(&FileOperation, None, CLSCTX_INPROC_SERVER)? };
         // Caller splits batches by recycle policy, never mixing permanent and recycled entries.

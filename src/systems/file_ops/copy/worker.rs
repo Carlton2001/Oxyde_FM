@@ -1,5 +1,5 @@
 use super::super::{FileOperation, FileOperationManager, RestoreNormalPriority, FILE_OPS_LOG_TARGET};
-use crate::platform::{platform, ThreadPriority};
+use crate::platform::{follow_turbo_priority, ThreadPriority};
 use crate::systems::archive_move_sources::ArchiveMoveSources;
 use crate::systems::destination_tree::DestinationTree;
 use crate::systems::source_selection::SelectedFile;
@@ -50,7 +50,6 @@ impl FileOperationManager {
         );
 
         let _priority_guard = RestoreNormalPriority;
-        let mut is_in_background_mode = false;
 
         loop {
             if cancel.load(Ordering::Relaxed) {
@@ -58,15 +57,7 @@ impl FileOperationManager {
             }
 
             let is_turbo = turbo.load(Ordering::Relaxed);
-
-            // Dynamic Priority Adjustment
-            if is_turbo && is_in_background_mode {
-                platform().set_thread_priority(ThreadPriority::Normal);
-                is_in_background_mode = false;
-            } else if !is_turbo && !is_in_background_mode {
-                platform().set_thread_priority(ThreadPriority::Background);
-                is_in_background_mode = true;
-            }
+            follow_turbo_priority(is_turbo, ThreadPriority::Normal);
 
             // Normal mode keeps one worker active; fast mode can use the
             // extra workers selected for a large batch of small files.
@@ -177,14 +168,7 @@ impl FileOperationManager {
                                 "Operation cancelled",
                             ));
                         }
-                        let fast = turbo.load(Ordering::Relaxed);
-                        if fast && is_in_background_mode {
-                            platform().set_thread_priority(ThreadPriority::Normal);
-                            is_in_background_mode = false;
-                        } else if !fast && !is_in_background_mode {
-                            platform().set_thread_priority(ThreadPriority::Background);
-                            is_in_background_mode = true;
-                        }
+                        follow_turbo_priority(turbo.load(Ordering::Relaxed), ThreadPriority::Normal);
                         if !pause.load(Ordering::Relaxed) {
                             break;
                         }
@@ -310,11 +294,6 @@ impl FileOperationManager {
             }
 
             processed_files.fetch_add(1, Ordering::Relaxed);
-        }
-
-        // Cleanup: Ensure priority is restored before thread dies
-        if is_in_background_mode {
-            platform().set_thread_priority(ThreadPriority::Normal);
         }
 
         Ok::<(), String>(())

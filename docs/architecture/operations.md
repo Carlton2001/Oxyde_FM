@@ -24,6 +24,23 @@ La liste des opérations reste uniquement en mémoire pendant la session. Aucun 
 
 Les reçus réels priment sur la progression. Les transferts suivent les descendants et la suppression de la racine déplacée ; les suppressions suivent la confirmation effective. Les anciens bilans Partiel non discriminants sont chargés comme inconnus, avec versionnement JSON. Une erreur finale ne supprime pas les reçus confirmés.
 
+## Contrat Turbo
+
+La préférence fixe le mode initial des six types d’opérations ; le bouton agit sur une seule opération. Turbo ne pilote ni navigation, ni recherche, ni aperçus. Sans Turbo, les threads de travail passent en mode d’arrière-plan Windows.
+
+Les priorités passent toutes par `apply_thread_priority` / `follow_turbo_priority` (`src/platform/thread_priority.rs`). Chaque transition est absolue — y compris le retour à `THREAD_PRIORITY_NORMAL` — et un état déjà appliqué n’est pas renvoyé au système. `RestoreNormalPriority` rend les threads réutilisés à la priorité normale ; un échec natif inattendu est journalisé. Linux n’applique aucune priorité.
+
+| Opération | Priorité Turbo | Concurrence Turbo | Moment d’application |
+| --- | --- | --- | --- |
+| Copie, déplacement entre volumes | Normale | Jusqu’à 4 fichiers, si au moins 8 fichiers de moins de 32 Mio en moyenne | Priorité : entre fichiers et pendant la copie. Concurrence : aux frontières de fichiers. |
+| Renommage sur le même volume | Normale | Aucune | Au démarrage de l’opération |
+| Suppression définitive | Haute, dès le démarrage | Jusqu’à 4 éléments sélectionnés | Entre éléments et pendant le parcours d’un dossier |
+| Corbeille | Normale | Aucune | Avant chaque lot et aux points de contrôle du Shell, dossiers compris |
+| Compression | Priorité du processus worker | ZIP, 7z, TAR.ZST : [limites](archives.md#compression-et-turbo-sous-windows) | Aux frontières de fichiers ou de blocs ; TAR.ZST au démarrage du flux |
+| Extraction | Priorité du processus worker | Aucune | Aux points de contrôle |
+
+Limites structurelles : un dossier supprimé reste parcouru par un seul worker, le Shell traite la Corbeille de façon séquentielle, TAR n’a rien à compresser et un renommage ne transfère pas de données. Les seuils de copie, l’absence de décodage parallèle et la limite de 256 Mio en compression relèvent de l’implémentation actuelle : voir les [pistes restantes](../reports/2026-10-17-turbo-coverage.md#pistes-à-suivre-par-priorité).
+
 ## Conflits et intégrité
 
 Le plan réserve toutes les destinations avant le premier effet, y compris entre racines distinctes. L’autorisation de remplacer une destination existante ne permet pas d’écraser une autre source du même lot. Un déplacement sur soi est ignoré ; une copie sur soi choisit un nom libre traduit et le backend garde la publication exclusive.

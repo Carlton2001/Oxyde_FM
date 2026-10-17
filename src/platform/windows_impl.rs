@@ -563,17 +563,34 @@ impl Platform for WindowsPlatform {
     }
 
     fn set_thread_priority(&self, priority: ThreadPriority) {
+        use windows::Win32::Foundation::{
+            ERROR_SUCCESS, ERROR_THREAD_MODE_ALREADY_BACKGROUND, ERROR_THREAD_MODE_NOT_BACKGROUND,
+        };
         use windows::Win32::System::Threading::{
             GetCurrentThread, SetThreadPriority, THREAD_MODE_BACKGROUND_BEGIN,
-            THREAD_MODE_BACKGROUND_END, THREAD_PRIORITY_HIGHEST,
+            THREAD_MODE_BACKGROUND_END, THREAD_PRIORITY_HIGHEST, THREAD_PRIORITY_NORMAL,
         };
-        let native_priority = match priority {
-            ThreadPriority::Background => THREAD_MODE_BACKGROUND_BEGIN,
-            ThreadPriority::Normal => THREAD_MODE_BACKGROUND_END,
-            ThreadPriority::High => THREAD_PRIORITY_HIGHEST,
+        // Each transition is absolute: leave or enter background mode, then set
+        // the base priority, so Normal never inherits an earlier High.
+        let set = |value, tolerated: windows::Win32::Foundation::WIN32_ERROR| {
+            if let Err(error) = unsafe { SetThreadPriority(GetCurrentThread(), value) } {
+                if error.code() != tolerated.to_hresult() {
+                    log::warn!("Cannot set thread priority {priority:?} ({}): {error}", value.0);
+                }
+            }
         };
-        unsafe {
-            let _ = SetThreadPriority(GetCurrentThread(), native_priority);
+        match priority {
+            ThreadPriority::Background => {
+                set(THREAD_PRIORITY_NORMAL, ERROR_SUCCESS);
+                set(THREAD_MODE_BACKGROUND_BEGIN, ERROR_THREAD_MODE_ALREADY_BACKGROUND);
+            }
+            ThreadPriority::Normal | ThreadPriority::High => {
+                set(THREAD_MODE_BACKGROUND_END, ERROR_THREAD_MODE_NOT_BACKGROUND);
+                set(
+                    if priority == ThreadPriority::High { THREAD_PRIORITY_HIGHEST } else { THREAD_PRIORITY_NORMAL },
+                    ERROR_SUCCESS,
+                );
+            }
         }
     }
 

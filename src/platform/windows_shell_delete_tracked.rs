@@ -115,6 +115,7 @@ struct DeleteSink {
 impl DeleteSink_Impl {
     fn checkpoint(&self) -> windows::core::Result<()> {
         if let Some(control) = &self.control {
+            control.follow_turbo();
             loop {
                 if control.cancel.load(std::sync::atomic::Ordering::Relaxed) {
                     return Err(self.record_failure("Operation cancelled".into()));
@@ -318,6 +319,9 @@ fn delete(
         }
     };
     let receipt = Arc::new(Mutex::new(Receipt::default()));
+    if let Some(control) = &control {
+        control.follow_turbo();
+    }
     let result = (|| -> windows::core::Result<bool> {
         let _apartment = Apartment::new()?;
         unsafe {

@@ -220,7 +220,7 @@ settings-network-description = Show the network neighborhood in the left panel.
 
 settings-region-language = Region & language
 settings-performance = Performance
-settings-turbo = Turbo file transfers
+settings-turbo = Turbo operations
 settings-search-limit = Search limit
 settings-data = Application data
 settings-clear-cache = Clear cache
@@ -390,7 +390,7 @@ settings-cache-cleared = Cache cleared.
 settings-cache-error = Could not clear the entire cache. Try again.
 settings-preferences-reset = Preferences reset.
 
-settings-turbo-description = Default Turbo mode for new copies and moves. Transfers already running keep their current setting.
+settings-turbo-description = Default Turbo mode for new copies, moves, deletions, Trash moves, compressions and extractions. Operations already running keep their current setting.
 settings-search-limit-description = Maximum results for new quick and advanced searches. Steps of 500, minimum 500.
 
 navigation-up = Up

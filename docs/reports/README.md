@@ -9,6 +9,7 @@ Les références actives décrivent les contrats ; les bilans ci-dessous décriv
 | [Code, 17 octobre](2026-10-17-code-review.md) | Corrections A01–A10 et optimisations O01–O04 intégrées |
 | [Transport d’archives, 17 octobre](2026-10-17-archive-transport.md) | Correction des attentes IPC, mesures avant/après et validation native |
 | [Turbo des archives, 17 octobre](2026-10-17-archive-turbo.md) | Parallélisme, mesures ZIP/7z/TAR.ZST/TAR et répartition de la mémoire |
+| [Couverture de Turbo, 17 octobre](2026-10-17-turbo-coverage.md) | Effets par opération, lacunes et pistes de correction priorisées |
 
 ## Retrouver une preuve complète
 

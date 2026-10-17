@@ -1,6 +1,6 @@
 use super::{FileOpType, FileOperation, FileOperationManager, OpStatus, RestoreNormalPriority};
 use crate::models::{HistoryManager, Transaction, TransactionDetails, TransactionType};
-use crate::platform::{platform, ThreadPriority};
+use crate::platform::{follow_turbo_priority, ThreadPriority};
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
 
@@ -43,10 +43,8 @@ impl FileOperationManager {
                 )
             };
 
-            // Set initial thread priority based on turbo mode
-            if !initial_turbo {
-                platform().set_thread_priority(ThreadPriority::Background);
-            }
+            // Each operation then follows Turbo with its own priority.
+            follow_turbo_priority(initial_turbo, ThreadPriority::Normal);
 
             op_clone.lock().unwrap().item_tracking_atomic = matches!(op_type, FileOpType::Compress | FileOpType::Extract)
                 || sources.iter().any(|path| crate::systems::archive_workspace::virtual_source(path).is_some())

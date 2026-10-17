@@ -59,11 +59,7 @@ impl FileOperationManager {
                 }
                 std::thread::sleep(std::time::Duration::from_millis(50));
             }
-            platform().set_thread_priority(if control.turbo.load(Ordering::Relaxed) {
-                ThreadPriority::Normal
-            } else {
-                ThreadPriority::Background
-            });
+            follow_turbo_priority(control.turbo.load(Ordering::Relaxed), ThreadPriority::Normal);
             let mut files = Vec::new();
             for item in selected[index..].iter().take(batch_size) {
                 let Some(file) = item.batch_file() else {

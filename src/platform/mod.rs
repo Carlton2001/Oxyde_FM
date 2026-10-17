@@ -8,12 +8,8 @@ pub enum NetworkDisconnectError {
     Other(String),
 }
 
-#[derive(Clone, Copy)]
-pub enum ThreadPriority {
-    Background,
-    Normal,
-    High,
-}
+mod thread_priority;
+pub use thread_priority::{apply_thread_priority, follow_turbo_priority, RestoreNormalPriority, ThreadPriority};
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
 pub struct MountedDiskImage {
@@ -83,6 +79,12 @@ pub struct ShellDeleteControl {
     pub cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
     pub pause: std::sync::Arc<std::sync::atomic::AtomicBool>,
     pub turbo: std::sync::Arc<std::sync::atomic::AtomicBool>,
+}
+impl ShellDeleteControl {
+    /// Re-evaluated at native checkpoints, so Turbo also reaches folder recycling.
+    pub fn follow_turbo(&self) {
+        follow_turbo_priority(self.turbo.load(std::sync::atomic::Ordering::Relaxed), ThreadPriority::Normal);
+    }
 }
 /// Keeps the selected archive and its ancestors retained for a parser session.
 #[doc(hidden)]
@@ -347,7 +349,8 @@ pub trait Platform: Send + Sync {
     #[cfg(all(test, target_os = "windows"))]
     fn set_fixture_case_sensitive(&self, path: &std::path::Path) -> std::io::Result<()>;
 
-    /// Adjusts the current worker thread's scheduling priority.
+    /// Applies an absolute scheduling priority to the current worker thread.
+    /// Callers go through `apply_thread_priority`, which tracks the applied state.
     fn set_thread_priority(&self, priority: ThreadPriority);
 
     /// Deletes files permanently or sends them to the system trash.
