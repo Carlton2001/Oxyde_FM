@@ -110,6 +110,8 @@ tooltip-size = Tamaño: { $value }
 tooltip-modified = Modificado: { $value }
 
 tooltip-location = Ubicación: { $value }
+tooltip-original-location = Ubicación original: { $value }
+tooltip-deleted = Eliminado: { $value }
 
 menu-open = Abrir
 

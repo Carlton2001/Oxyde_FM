@@ -8,7 +8,8 @@ const MAX_FRAMES: usize = 256;
 const MAX_SIDE: u32 = 1024;
 
 pub enum Reply {
-    Images { frames: Vec<Frame>, limited: bool },
+    /// `natural_size` is the intrinsic display size of a vector source.
+    Images { frames: Vec<Frame>, limited: bool, natural_size: Option<(u32, u32)> },
     Text(String),
     Error { limit: bool, detail: String },
 }
@@ -24,6 +25,12 @@ fn number(input: &mut impl Read) -> io::Result<u32> {
 fn put(out: &mut impl Write, value: u32) -> io::Result<()> {
     out.write_all(&value.to_le_bytes())
 }
+fn natural_side(value: u32) -> io::Result<u32> {
+    if value == 0 || value > crate::utils::image_preview_decode::MAX_NATURAL_SIDE {
+        return Err(invalid());
+    }
+    Ok(value)
+}
 fn layout(width: u32, height: u32) -> io::Result<usize> {
     if width == 0 || height == 0 || width > MAX_SIDE || height > MAX_SIDE {
         return Err(invalid());
@@ -34,11 +41,17 @@ fn layout(width: u32, height: u32) -> io::Result<usize> {
 pub fn encode(reply: Reply, out: &mut impl Write) -> io::Result<()> {
     out.write_all(b"OXYP1")?;
     match reply {
-        Reply::Images { frames, limited } => {
+        Reply::Images { frames, limited, natural_size } => {
             if frames.is_empty() || frames.len() > MAX_FRAMES {
                 return Err(invalid());
             }
-            out.write_all(&[0, u8::from(limited)])?;
+            out.write_all(&[0, u8::from(limited) | if natural_size.is_some() { 2 } else { 0 }])?;
+            if let Some((width, height)) = natural_size {
+                natural_side(width)?;
+                natural_side(height)?;
+                put(out, width)?;
+                put(out, height)?;
+            }
             put(out, frames.len() as u32)?;
             let mut total = 0;
             for frame in frames {
@@ -88,9 +101,14 @@ pub fn decode(bytes: &[u8]) -> io::Result<Reply> {
         0 => {
             let mut flag = [0];
             input.read_exact(&mut flag)?;
-            if flag[0] > 1 {
+            if flag[0] > 3 {
                 return Err(invalid());
             }
+            let natural_size = if flag[0] & 2 != 0 {
+                Some((natural_side(number(&mut input)?)?, natural_side(number(&mut input)?)?))
+            } else {
+                None
+            };
             let count = number(&mut input)? as usize;
             if count == 0 || count > MAX_FRAMES {
                 return Err(invalid());
@@ -129,7 +147,8 @@ pub fn decode(bytes: &[u8]) -> io::Result<Reply> {
             }
             Reply::Images {
                 frames,
-                limited: flag[0] == 1,
+                limited: flag[0] & 1 != 0,
+                natural_size,
             }
         }
         1..=3 => {
@@ -177,14 +196,16 @@ mod tests {
             Reply::Images {
                 frames: vec![frame],
                 limited: true,
+                natural_size: Some((21, 30)),
             },
             &mut bytes,
         )
         .unwrap();
-        let Reply::Images { frames, limited } = decode(&bytes).unwrap() else {
+        let Reply::Images { frames, limited, natural_size } = decode(&bytes).unwrap() else {
             panic!()
         };
         assert!(limited);
+        assert_eq!(natural_size, Some((21, 30)));
         assert_eq!(frames[0].buffer().as_raw(), &[1, 2, 3, 4, 1, 2, 3, 4]);
         assert_eq!(frames[0].delay().numer_denom_ms(), (30, 1));
         for end in 0..bytes.len() {
@@ -196,7 +217,7 @@ mod tests {
     #[test]
     fn malformed_sizes_counts_delays_and_flags_are_refused() {
         for (flag, count, width, height, num, den) in [
-            (2, 1, 1, 1, 0, 1),
+            (4, 1, 1, 1, 0, 1),
             (0, 0, 1, 1, 0, 1),
             (0, 257, 1, 1, 0, 1),
             (0, 1, 0, 1, 0, 1),

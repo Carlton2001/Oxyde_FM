@@ -13,7 +13,7 @@ mod position;
 use video::CancelVideoPreview;
 use crate::ui::components::icons::{get_preview_type, PreviewType};
 use crate::ui::format::format_date;
-use crate::ui::i18n::{I18nContext, Message};
+use crate::ui::i18n::{FluentArgs, I18nContext, Message};
 use gpui::*;
 use std::sync::Arc;
 
@@ -42,9 +42,12 @@ pub struct Tooltip {
 }
 
 struct FileInfo {
-    location: Option<String>,
+    type_label: String,
+    /// Complete location line; wrapped after path separators.
+    location: Option<SharedString>,
+    /// Context lines after the location, such as the deletion date.
+    extra: Vec<SharedString>,
     network: Option<oxyde_lib::models::FileEntry>,
-    ext: String,
     size: (u64, bool, bool),
     date: u64,
 }
@@ -90,25 +93,38 @@ impl Tooltip {
             }).into()
         }
     }
-    pub fn for_trash(file: oxyde_lib::models::FileEntry, ext: String, previews: bool) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
+    /// The single entry point for pane items, in list and grid views alike.
+    /// Order: name, type, size, modification date, location, context lines.
+    pub(crate) fn for_item(file: oxyde_lib::models::FileEntry, search_result: bool, previews: bool) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
         move |_, cx| {
-            let view = Self::new_for_file(file.name.clone(), file.path.clone(), ext.clone(),
-                (file.size, file.is_dir, file.is_calculated), file.modified, previews, None, cx);
-            let location = file.original_path.as_deref().and_then(|path| std::path::Path::new(path).parent())
-                .map(|path| path.to_string_lossy().into_owned()).unwrap_or_default();
-            let date = file.deleted_time.and_then(|date| u64::try_from(date).ok()).unwrap_or(0);
-            let metadata = format!("{} : {}\n{} : {}", cx.i18n().text(Message::TrashOriginalLocation), location,
-                cx.i18n().text(Message::TrashDeletedAt), format_date(date, crate::ui::format::date_format(cx)));
-            view.update(cx, |tooltip, _| tooltip.meta = Some(metadata.into()));
-            view.into()
+            if file.original_path.is_none() && crate::ui::components::file_list::network_entry(&file) {
+                return cx.new(|_| Self {
+                    native_presentation: false, title: file.name.clone().into(), wrap_title: false, meta: None, shortcut: None,
+                    file_info: Some(FileInfo { type_label: String::new(), location: None, extra: Vec::new(), network: Some(file.clone()), size: (0, false, false), date: 0 }),
+                    fixed_bounds: None, preview_view: None,
+                }).into();
+            }
+            let parent = |path: &str| std::path::Path::new(path).parent().map(|parent| parent.to_string_lossy().into_owned());
+            let line = |message: Message, value: String| {
+                let mut args = FluentArgs::new(); args.set("value", value);
+                cx.i18n().text_with_args(message, &args)
+            };
+            let (location, extra) = if let Some(original) = &file.original_path {
+                let deleted = file.deleted_time.and_then(|date| u64::try_from(date).ok()).unwrap_or(0);
+                (Some(line(Message::TooltipOriginalLocation, parent(original).unwrap_or_default())),
+                    vec![line(Message::TooltipDeleted, format_date(deleted, crate::ui::format::date_format(cx)))])
+            } else if search_result {
+                (parent(&file.path).map(|parent| line(Message::TooltipLocation, parent)), Vec::new())
+            } else {
+                (None, Vec::new())
+            };
+            let info = FileInfo {
+                type_label: crate::ui::components::file_list::file_type_display(&file, cx.i18n()),
+                location, extra, network: None,
+                size: (file.size, file.is_dir, file.is_calculated), date: file.modified,
+            };
+            Self::new_for_file(file.name.clone(), file.path.clone(), info, previews, cx).into()
         }
-    }
-    pub fn for_network(file: oxyde_lib::models::FileEntry) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
-        move |_, cx| cx.new(|_| Self {
-            native_presentation: false, title: file.name.clone().into(), wrap_title: false, meta: None, shortcut: None,
-            file_info: Some(FileInfo { location: None, network: Some(file.clone()), ext: "Réseau".into(), size: (0, false, false), date: 0 }),
-            fixed_bounds: None, preview_view: None,
-        }).into()
     }
     /// Keep action labels and their optional keyboard shortcut on one line.
     pub fn with_shortcut(
@@ -174,87 +190,11 @@ impl Tooltip {
         }
     }
 
-    /// Crée un constructeur de tooltip pour un fichier sans aperçu média (nom + métadonnées uniquement).
-    pub fn for_file_no_preview(
-        name: String,
-        ext: String,
-        size: (u64, bool, bool),
-        date: u64,
-    ) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
-        move |_, cx| {
-            cx.new(|_| Self {
-                native_presentation: false, title: SharedString::from(name.clone()),
-                wrap_title: false,
-                meta: None,
-                shortcut: None,
-                file_info: Some(FileInfo {
-                    location: None,
-                    network: None,
-                    ext: ext.clone(),
-                    size,
-                    date,
-                }),
-                fixed_bounds: None, preview_view: None,
-            })
-            .into()
-        }
-    }
-
-    /// Crée un constructeur de tooltip complet pour un fichier avec preview possible.
-    pub fn for_file_full(
-        name: String,
-        path: String,
-        ext: String,
-        size: (u64, bool, bool),
-        date: u64,
-    ) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
-        let path_clone = path.clone();
-        move |_, cx| {
-            Self::new_for_file_full(
-                name.clone(),
-                path_clone.clone(),
-                ext.clone(),
-                size,
-                date,
-                cx,
-            )
-            .into()
-        }
-    }
-
-    pub fn new_for_file_full(
-        name: String,
-        path: String,
-        ext: String,
-        size: (u64, bool, bool),
-        date: u64,
-        cx: &mut App,
-    ) -> Entity<Self> {
-        Self::new_for_file(name, path, ext, size, date, true, None, cx)
-    }
-
-    pub fn for_search_result(
-        file: oxyde_lib::models::FileEntry,
-        ext: String,
-        previews: bool,
-    ) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
-        move |_, cx| {
-            let location = std::path::Path::new(&file.path).parent()
-                .map(|parent| parent.to_string_lossy().into_owned());
-            Self::new_for_file(file.name.clone(), file.path.clone(), ext.clone(),
-                (file.size, file.is_dir, file.is_calculated), file.modified, previews, location, cx).into()
-        }
-    }
-
     pub fn duplicate_result(name: String, location: String, cx: &mut App) -> AnyView {
         cx.new(|_| DuplicateResultTooltip { name: name.into(), location }).into()
     }
 
-    #[allow(clippy::too_many_arguments)]
-    fn new_for_file(
-        name: String, path: String, ext: String, size: (u64, bool, bool),
-        date: u64, previews: bool, location: Option<String>, cx: &mut App,
-    ) -> Entity<Self> {
+    fn new_for_file(name: String, path: String, info: FileInfo, previews: bool, cx: &mut App) -> Entity<Self> {
         let preview_type = get_preview_type(&name);
         cx.new(|cx| {
             let preview_view = if previews && preview_type != PreviewType::None {
@@ -271,7 +211,7 @@ impl Tooltip {
                 wrap_title: false,
                 meta: None,
                 shortcut: None,
-                file_info: Some(FileInfo { location, network: None, ext, size, date }),
+                file_info: Some(info),
                 fixed_bounds: None,
                 preview_view,
             }

@@ -51,6 +51,8 @@ impl fmt::Display for PreviewError {
 pub(crate) struct PreviewImage {
     pub(crate) image: Arc<RenderImage>,
     pub(crate) notice: Option<Message>,
+    /// Intrinsic size of a vector source, displayed from the sharper raster.
+    pub(crate) natural_size: Option<(u32, u32)>,
 }
 
 fn read_bounded(input: impl Read, limit: usize) -> Result<Vec<u8>, PreviewError> {
@@ -79,6 +81,7 @@ fn decode(
     Ok(PreviewImage {
         image,
         notice: decoded.limited.then_some(Message::PreviewAnimationStatic),
+        natural_size: decoded.natural_size,
     })
 }
 
@@ -106,12 +109,13 @@ fn load_path_mode(path: &Path, renderer: &SvgRenderer, thumbnail: bool) -> Resul
             .and_then(|bytes| oxyde_lib::utils::preview_protocol::decode(&bytes))
             .map_err(|error| PreviewError::Worker(error.to_string()))?;
         match reply {
-            oxyde_lib::utils::preview_protocol::Reply::Images { frames, limited } => {
+            oxyde_lib::utils::preview_protocol::Reply::Images { frames, limited, natural_size } => {
                 let image = Arc::new(RenderImage::new(frames));
                 crate::ui::preview_budget::admit(&image).map_err(PreviewError::Memory)?;
                 Ok(PreviewImage {
                     image,
                     notice: limited.then_some(Message::PreviewAnimationStatic),
+                    natural_size,
                 })
             }
             oxyde_lib::utils::preview_protocol::Reply::Error { limit: true, .. } => {

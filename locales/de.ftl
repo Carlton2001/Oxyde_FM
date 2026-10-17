@@ -110,6 +110,8 @@ tooltip-size = Größe: { $value }
 tooltip-modified = Geändert: { $value }
 
 tooltip-location = Speicherort: { $value }
+tooltip-original-location = Ursprünglicher Speicherort: { $value }
+tooltip-deleted = Gelöscht: { $value }
 
 menu-open = Öffnen
 

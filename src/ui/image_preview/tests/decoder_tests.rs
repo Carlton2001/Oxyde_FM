@@ -266,6 +266,7 @@ fn image_preview_svg_renders_colors_and_preserves_tall_aspect_ratio() {
         let image = decode(data.as_bytes(), &renderer, POLICY).unwrap();
         let size = image.image.size(0);
         assert!(size.width.0 <= 1024 && size.height.0 <= 1024);
+        assert_eq!(image.natural_size, Some((width, height)));
         assert!(
             (size.width.0 as f32 / size.height.0 as f32 - width as f32 / height as f32).abs()
                 < 0.01

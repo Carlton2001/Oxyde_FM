@@ -10,7 +10,7 @@ mod selection_button;
 mod thumbnails;
 
 pub use filters::{get_date_filter_items, get_size_filter_items, get_type_filter_items};
-pub(crate) use presentation::file_type_label;
+pub(crate) use presentation::{file_type_display, file_type_label, network_entry};
 pub(crate) use thumbnails::{invalidate_thumbnail, clear_grid_thumbnails};
 
 use crate::ui::app::OxydeApp;

@@ -38,6 +38,7 @@ fn preview(frames: usize) -> PreviewImage {
                 .collect::<Vec<_>>(),
         )),
         notice: Some(crate::ui::i18n::Message::PreviewAnimationStatic),
+        natural_size: None,
     }
 }
 

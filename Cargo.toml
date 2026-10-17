@@ -44,6 +44,7 @@ zip = { version = "9.0.4", features = ["chrono"] }
 sevenz-rust2 = "0.24.0"
 tar = "0.4.40"
 flate2 = "1.0.30"
+usvg = { version = "0.46.0", default-features = false }
 xz2 = "0.1.7"
 zstd = { version = "0.14.0", features = ["zstdmt"] }
 bzip2 = "0.6.1"

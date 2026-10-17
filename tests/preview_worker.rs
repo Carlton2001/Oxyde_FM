@@ -85,7 +85,7 @@ fn actual_headless_worker_preserves_raster_svg_and_animation_without_preferences
     image::RgbaImage::from_pixel(2, 1, image::Rgba([11, 22, 33, 255]))
         .save(&path)
         .unwrap();
-    let Reply::Images { frames, limited } = worker("image", &path) else {
+    let Reply::Images { frames, limited, .. } = worker("image", &path) else {
         panic!()
     };
     assert!(!limited);
@@ -113,7 +113,7 @@ fn actual_headless_worker_preserves_raster_svg_and_animation_without_preferences
     image::codecs::gif::GifEncoder::new(file)
         .encode_frames(frames)
         .unwrap();
-    let Reply::Images { frames, limited } = worker("image", &path) else {
+    let Reply::Images { frames, limited, .. } = worker("image", &path) else {
         panic!()
     };
     assert!(!limited);

@@ -1,5 +1,5 @@
 use crate::ui::components::tooltip::NativeTooltipExt;
-use super::presentation::{file_type_display, file_type_label, network_category, network_entry, selection_checkbox, size_histogram, size_loading};
+use super::presentation::{file_type_display, network_category, selection_checkbox, size_histogram, size_loading};
 use crate::ui::app::{ContextMenuContent, ContextMenuInstance, FileDragData, FileDragPreview, OxydeApp};
 use crate::ui::components::{paths_match, with_grid_sort, oxyde_context_menu_items};
 use crate::ui::components::icons::render_file_icon;
@@ -82,11 +82,6 @@ pub(super) fn render_details_row(params: DetailsRowParams<'_>, cx: &mut App) -> 
     let can_browse = is_dir || file.is_navigable_archive() || file.needs_mount_for_browsing();
     let can_drop = is_dir || file.is_writable_archive();
     {
-        let file_name_tt = file.name.clone();
-        let path_tt = path.clone();
-        let ext_tt = file_type_label(file);
-        let size_tt = (file.size, is_dir, file.is_calculated);
-        let date_tt = file.modified;
         let is_dimmed = file.is_hidden || file.is_system;
         div()
             .id(SharedString::from(format!("file-row-{}", path))).relative().when(histogram_total > 0, |d| d.child(size_histogram(file.size, histogram_total, theme.accent))).when(is_selected, |d| d.child(div().absolute().left_0().top_0().bottom_0().w(rems(0.1875)).bg(theme.accent)))
@@ -96,11 +91,7 @@ pub(super) fn render_details_row(params: DetailsRowParams<'_>, cx: &mut App) -> 
             .w(px(total_w))
             .bg(if is_selected { theme.selected } else if is_active_pane { theme.active_background } else { theme.background })
             .when(!is_selected, |s| s.hover(|s| s.bg(theme.hover)))
-            .when(show_tooltips && file.original_path.is_some(), |d| d.file_tooltip(h.clone(), p_id.clone(), path.clone(), cx, Tooltip::for_trash(file.clone(), ext_tt.clone(), show_media_previews)))
-            .when(show_tooltips && file.original_path.is_none() && network_entry(file), |d| d.file_tooltip(h.clone(), p_id.clone(), path.clone(), cx, Tooltip::for_network(file.clone())))
-            .when(show_tooltips && file.original_path.is_none() && !network_entry(file) && search_results, |d| d.file_tooltip(h.clone(), p_id.clone(), path.clone(), cx, Tooltip::for_search_result(file.clone(), ext_tt.clone(), show_media_previews)))
-            .when(show_tooltips && file.original_path.is_none() && !search_results && !network_entry(file) && show_media_previews, |d| d.file_tooltip(h.clone(), p_id.clone(), path.clone(), cx, Tooltip::for_file_full(file_name_tt.clone(), path_tt, ext_tt.clone(), size_tt, date_tt)))
-            .when(show_tooltips && file.original_path.is_none() && !search_results && !network_entry(file) && !show_media_previews, |d| d.file_tooltip(h.clone(), p_id.clone(), path.clone(), cx, Tooltip::for_file_no_preview(file_name_tt, ext_tt, size_tt, date_tt)))
+            .when(show_tooltips, |d| d.file_tooltip(h.clone(), p_id.clone(), path.clone(), cx, Tooltip::for_item(file.clone(), search_results, show_media_previews)))
             .on_mouse_down(MouseButton::Left, {
                 let p = path.clone();
                 let h_inner_inner = h.clone();

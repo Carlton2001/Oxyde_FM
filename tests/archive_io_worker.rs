@@ -403,7 +403,7 @@ fn listing_search_and_preview_advance_while_archive_io_is_confirmed_paused() {
         let reply =
             windows_preview_worker::run_image_in(Path::new(env!("CARGO_BIN_EXE_oxyde-image-worker")), &image, Duration::from_secs(15))
                 .unwrap();
-        let utils::preview_protocol::Reply::Images { frames, limited } =
+        let utils::preview_protocol::Reply::Images { frames, limited, .. } =
             utils::preview_protocol::decode(&reply).unwrap()
         else {
             panic!("Expected image");

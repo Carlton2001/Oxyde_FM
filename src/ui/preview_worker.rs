@@ -37,6 +37,7 @@ pub(crate) fn run_if_requested() -> bool {
                 let reply = Reply::Images {
                     frames: vec![image::Frame::new(image)],
                     limited: false,
+                    natural_size: None,
                 };
                 match video_packet(reply, pts, &mut output) {
                     Ok(()) => true,
@@ -90,6 +91,7 @@ pub(crate) fn run_if_requested() -> bool {
                     Reply::Images {
                         frames,
                         limited: preview.notice.is_some(),
+                        natural_size: preview.natural_size,
                     }
                 }
                 Err(error) => Reply::Error {

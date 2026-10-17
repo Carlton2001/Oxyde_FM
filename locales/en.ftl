@@ -64,6 +64,8 @@ tooltip-type = Type: { $value }
 tooltip-size = Size: { $value }
 tooltip-modified = Modified: { $value }
 tooltip-location = Location: { $value }
+tooltip-original-location = Original location: { $value }
+tooltip-deleted = Deleted: { $value }
 
 ## Main interface and commands
 menu-open = Open

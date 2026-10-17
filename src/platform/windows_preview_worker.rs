@@ -549,6 +549,7 @@ pub(super) fn supervise_stream(
                     Reply::Images {
                         mut frames,
                         limited: false,
+                        ..
                     } if frames.len() == 1 => {
                         let image = frames.remove(0).into_buffer();
                         if image.width() > 640 || image.height() > 640 {

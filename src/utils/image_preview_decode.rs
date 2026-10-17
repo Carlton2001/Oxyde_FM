@@ -50,6 +50,18 @@ impl fmt::Display for PreviewError {
 pub struct DecodedImage {
     pub frames: Vec<Frame>,
     pub limited: bool,
+    /// Intrinsic SVG size: the raster stays large and sharp, the display uses this size.
+    pub natural_size: Option<(u32, u32)>,
+}
+
+/// Largest intrinsic side carried to the display; the raster is bounded separately.
+pub const MAX_NATURAL_SIDE: u32 = 32768;
+
+fn svg_natural_size(data: &[u8]) -> Option<(u32, u32)> {
+    // usvg resolves units, viewBox and SVGZ; GPUI does not expose the parsed size.
+    let size = usvg::Tree::from_data(data, &usvg::Options::default()).ok()?.size();
+    let side = |value: f32| (value.ceil() as u32).clamp(1, MAX_NATURAL_SIDE);
+    Some((side(size.width()), side(size.height())))
 }
 
 pub fn read_bounded(mut input: impl Read, limit: usize) -> Result<Vec<u8>, PreviewError> {
@@ -233,9 +245,16 @@ pub fn decode(
     policy: Policy,
     svg: &dyn Fn(&[u8], Policy) -> Result<Vec<Frame>, PreviewError>,
 ) -> Result<DecodedImage, PreviewError> {
-    let (frames, limited) = match image::guess_format(data) {
-        Ok(format) => raster(data, format, policy)?,
-        Err(_) => (svg(data, policy)?, false),
+    let (frames, limited, natural_size) = match image::guess_format(data) {
+        Ok(format) => {
+            let (frames, limited) = raster(data, format, policy)?;
+            (frames, limited, None)
+        }
+        Err(_) => {
+            // The renderer has already bounded SVGZ expansion before this second parse.
+            let frames = svg(data, policy)?;
+            (frames, false, svg_natural_size(data))
+        }
     };
-    Ok(DecodedImage { frames, limited })
+    Ok(DecodedImage { frames, limited, natural_size })
 }

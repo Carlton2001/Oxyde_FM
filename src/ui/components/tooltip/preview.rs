@@ -11,12 +11,18 @@ use std::sync::Arc;
 use std::time::Duration;
 
 const PREVIEW_LOADING_DELAY: Duration = Duration::from_secs(1);
+/// One height envelope for every preview type; images are never enlarged.
+const PREVIEW_MAXIMUM_HEIGHT: Rems = rems(15.0);
+/// Preferred width of a text excerpt; the bubble may still be narrower.
+pub(super) const TEXT_PREVIEW_WIDTH: Rems = rems(20.0);
 
 impl PreviewTask {
-    pub(super) fn preferred_size(&self, image: &RenderImage, maximum_width: Pixels) -> Size<Pixels> {
-        let height = rem_pixels(if self.media_asset.is_some() { rems(18.75) } else { rems(12.5) });
-        let natural = image.size(0);
-        fit_media_size(natural.width.0 as f32, natural.height.0 as f32, maximum_width, height)
+    /// A vector source keeps its intrinsic size; its larger raster only keeps it sharp.
+    pub(super) fn preferred_size(&self, image: &RenderImage, natural_size: Option<(u32, u32)>, maximum_width: Pixels) -> Size<Pixels> {
+        let height = rem_pixels(PREVIEW_MAXIMUM_HEIGHT);
+        let (width, natural_height) = natural_size.map(|(width, height)| (width as f32, height as f32))
+            .unwrap_or_else(|| { let size = image.size(0); (size.width.0 as f32, size.height.0 as f32) });
+        fit_media_size(width, natural_height, maximum_width, height)
     }
     pub(super) fn cached_for_handover(&self, cx: &mut App) -> bool {
         if let Some(source) = &self.media_asset {
@@ -44,20 +50,21 @@ impl PreviewTask {
         }
         self.data.is_some() || self.message.is_some()
     }
-    pub(super) fn loaded_image(&self, window: &mut Window, cx: &mut App) -> Option<Arc<RenderImage>> {
+    /// The loaded raster and, for a vector source, its intrinsic size.
+    pub(super) fn loaded_image(&self, window: &mut Window, cx: &mut App) -> Option<(Arc<RenderImage>, Option<(u32, u32)>)> {
         if let Some(source) = &self.media_asset {
             return window
                 .use_asset::<TooltipPreviewAsset>(source, cx)
-                .and_then(Result::ok).map(|(image, _)| image);
+                .and_then(Result::ok).map(|(image, _)| (image, None));
         }
         if let Some(source) = &self.original_image {
             return window
                 .use_asset::<TooltipImageAsset>(source, cx)
                 .and_then(Result::ok)
-                .map(|(preview, _)| preview.image);
+                .map(|(preview, _)| (preview.image, preview.natural_size));
         }
         match &self.data {
-            Some(PreviewData::Image(image)) => Some(image.clone()),
+            Some(PreviewData::Image(image)) => Some((image.clone(), None)),
             _ => None,
         }
     }
@@ -345,11 +352,11 @@ mod media_size_tests;
 impl Render for PreviewTask {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = *OxydeTheme::global(cx);
-        if let Some(image) = self.loaded_image(window, cx) {
+        if let Some((image, natural_size)) = self.loaded_image(window, cx) {
             let maximum = self.maximum_size.map(|limit| limit.width).unwrap_or_else(||
                 rem_pixels(rems(48.375))
                     .min((window.viewport_size().width - rem_pixels(rems(3.625))).max(px(1.0))));
-            let mut size = self.preferred_size(&image, maximum);
+            let mut size = self.preferred_size(&image, natural_size, maximum);
             if let Some(limit) = self.maximum_size {
                 let height = (limit.height - rem_pixels(rems(2.0))).max(px(1.0));
                 let scale = (limit.width / size.width).min(height / size.height).min(1.0);
@@ -388,8 +395,7 @@ impl Render for PreviewTask {
                     .into_any_element(),
                 PreviewData::Text(t) => div()
                     .w_full()
-                    .max_w(rems(21.875))
-                    .max_h(self.maximum_size.map(|limit| limit.height).unwrap_or_else(|| rem_pixels(rems(12.5))).min(rem_pixels(rems(12.5))))
+                    .max_h(self.maximum_size.map(|limit| limit.height).unwrap_or_else(|| rem_pixels(PREVIEW_MAXIMUM_HEIGHT)).min(rem_pixels(PREVIEW_MAXIMUM_HEIGHT)))
                     .overflow_hidden()
                     .rounded(rems(0.25))
                     .bg(theme.sidebar)

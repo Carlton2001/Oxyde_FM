@@ -75,7 +75,7 @@ pub(crate) fn file_type_label(f: &FileEntry) -> String {
         .unwrap_or_else(|| "Fichier".to_string())
 }
 
-pub(super) fn file_type_display(f: &FileEntry, i18n: &crate::ui::i18n::I18n) -> String {
+pub(crate) fn file_type_display(f: &FileEntry, i18n: &crate::ui::i18n::I18n) -> String {
     let message = if network_entry(f) {
         Some(Message::SidebarNetwork)
     } else if f.is_symlink {
@@ -95,7 +95,7 @@ pub(super) fn file_type_display(f: &FileEntry, i18n: &crate::ui::i18n::I18n) -> 
 }
 
 /// Shell devices and UNC server roots belong to the network neighborhood.
-pub(super) fn network_entry(file: &FileEntry) -> bool {
+pub(crate) fn network_entry(file: &FileEntry) -> bool {
     file.path.starts_with("::{") || file.path.starts_with('?')
         || file.path.strip_prefix("\\\\").is_some_and(|tail| {
             let server = tail.trim_end_matches('\\');

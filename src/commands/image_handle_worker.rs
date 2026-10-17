@@ -58,6 +58,7 @@ pub fn run_if_requested(
             Ok(decoded) => Reply::Images {
                 frames: decoded.frames,
                 limited: decoded.limited,
+                natural_size: decoded.natural_size,
             },
             Err(error) => Reply::Error {
                 limit: matches!(error, image_preview_decode::PreviewError::Limit(_)),

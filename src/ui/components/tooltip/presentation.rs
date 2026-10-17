@@ -10,6 +10,9 @@ use gpui::prelude::FluentBuilder;
 use gpui::*;
 use unicode_segmentation::UnicodeSegmentation;
 
+const ITEM_MINIMUM_WIDTH: Rems = rems(14.0);
+const ITEM_MAXIMUM_WIDTH: Rems = rems(30.0);
+
 fn filename_line_ranges(name: &str, width: f32, x_for_index: impl Fn(usize) -> f32) -> Vec<std::ops::Range<usize>> {
     text_line_ranges(name, width, true, x_for_index)
 }
@@ -224,64 +227,54 @@ impl Render for Tooltip {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = *OxydeTheme::global(cx);
         let chrome = rem_pixels(rems(1.625));
+        // Pane items share one envelope, with or without a preview; other tooltips keep 40rem.
+        let width_limit = rem_pixels(if self.file_info.is_some() { ITEM_MAXIMUM_WIDTH } else { rems(40.0) });
         let media_width = self.preview_view.clone().and_then(|preview| {
             preview.update(cx, |preview, cx| {
                 if matches!(preview.data, Some(super::PreviewData::Text(_))) {
-                    Some(rem_pixels(rems(21.875)) + chrome)
+                    Some(rem_pixels(super::preview::TEXT_PREVIEW_WIDTH))
                 } else {
-                    preview.loaded_image(window, cx).map(|image|
-                        preview.preferred_size(&image, rem_pixels(rems(48.375))).width + chrome)
+                    preview.loaded_image(window, cx).map(|(image, natural_size)|
+                        preview.preferred_size(&image, natural_size, width_limit - chrome).width)
                 }
             })
         });
-        let width_limit = media_width.map(|width| {
-            if self.meta.is_some() { width.max(rem_pixels(rems(40.0))) } else { width }
-        }).unwrap_or_else(|| rem_pixels(rems(40.0)));
         let maximum_width = if self.native_presentation {
             width_limit
         } else {
             width_limit.min((window.viewport_size().width - rem_pixels(rems(2.0))).max(px(1.0)))
         };
         let mut tooltip_width = maximum_width;
-        let title_lines: Vec<SharedString> = if self.file_info.is_some() {
-            let mut font = window.text_style().font();
-            font.family = "Inter".into();
-            font.weight = FontWeight::MEDIUM;
-            font.features = TNUM.clone();
-            let line = window.text_system().shape_line(self.title.clone(), rem_pixels(rems(0.75)), &[TextRun {
-                len: self.title.len(), font: font.clone(), color: theme.accent, background_color: None, underline: None, strikethrough: None,
-            }], None);
-            // Extra metadata may widen a ready preview's frame.
-            font.weight = crate::ui::style::DEFAULT_FONT_WEIGHT;
-            let metadata_width = self.meta.as_ref().map(|meta| {
-                meta.lines().map(|text| {
-                    window.text_system().shape_line(text.to_owned().into(), rem_pixels(rems(0.6875)), &[TextRun {
-                        len: text.len(), font: font.clone(), color: theme.text_muted,
-                        background_color: None, underline: None, strikethrough: None,
-                    }], None).width
-                }).fold(px(0.0), |width, line| width.max(line))
-            }).unwrap_or(px(0.0));
-            let preferred_width = line.width.max(metadata_width + px(1.0));
-            tooltip_width = if let Some(width) = media_width {
-                width.max(metadata_width + px(1.0) + chrome).min(maximum_width)
-            } else {
-                (preferred_width.max(rem_pixels(rems(14.0))) + chrome).min(maximum_width)
+        let mut meta_lines: Option<Vec<SharedString>> = None;
+        let mut body_lines: Vec<SharedString> = Vec::new();
+        let title_lines: Vec<SharedString> = if let Some(info) = &self.file_info {
+            // One rule for every line: the widest line or preview sets the width
+            // within [14rem, 30rem]; a line wider than that wraps, never truncates.
+            let shape = |text: &SharedString, size: Rems, weight: FontWeight| {
+                let mut font = window.text_style().font();
+                font.family = "Inter".into(); font.weight = weight; font.features = TNUM.clone();
+                window.text_system().shape_line(text.clone(), rem_pixels(size), &[TextRun {
+                    len: text.len(), font, color: theme.text, background_color: None, underline: None, strikethrough: None,
+                }], None)
             };
-            let wrap = |width: Pixels| filename_line_ranges(&self.title, (width - chrome).as_f32().max(1.0), |index| line.x_for_index(index).as_f32());
-            if wrap(tooltip_width).len() > 2 {
-                if wrap(maximum_width).len() <= 2 {
-                    let mut lower = tooltip_width.as_f32();
-                    let mut upper = maximum_width.as_f32();
-                    for _ in 0..14 {
-                        let middle = (lower + upper) / 2.0;
-                        if wrap(px(middle)).len() <= 2 { upper = middle; } else { lower = middle; }
-                    }
-                    tooltip_width = px(upper.ceil()).min(maximum_width);
-                } else {
-                    tooltip_width = maximum_width;
-                }
-            }
-            wrap(tooltip_width).into_iter().map(|range| self.title[range].to_string().into()).collect()
+            let title = shape(&self.title, rems(0.75), FontWeight::MEDIUM);
+            let body: Vec<SharedString> = if let Some(file) = &info.network {
+                network_tooltip_lines(file, cx.i18n())
+            } else {
+                file_detail_lines(info, cx).into_iter().chain(info.location.clone()).chain(info.extra.iter().cloned()).collect()
+            };
+            let shaped: Vec<_> = body.iter().map(|text| (text, shape(text, rems(0.6875), crate::ui::style::DEFAULT_FONT_WEIGHT))).collect();
+            let natural = shaped.iter().fold(title.width, |width, (_, line)| width.max(line.width))
+                .max(media_width.unwrap_or(px(0.0)));
+            // The slack absorbs layout rounding so a fitting line never wraps.
+            tooltip_width = (natural + px(1.0) + chrome).max(rem_pixels(ITEM_MINIMUM_WIDTH)).min(maximum_width);
+            let content = (tooltip_width - chrome - px(1.0)).as_f32().max(1.0);
+            body_lines = shaped.iter().flat_map(|(text, line)| {
+                location_line_ranges(text, content, |index| line.x_for_index(index).as_f32())
+                    .into_iter().map(|range| SharedString::from(text[range].to_string()))
+            }).collect();
+            filename_line_ranges(&self.title, content, |index| title.x_for_index(index).as_f32())
+                .into_iter().map(|range| self.title[range].to_string().into()).collect()
         } else if self.wrap_title {
             let mut font = window.text_style().font();
             font.family = "Inter".into();
@@ -297,17 +290,23 @@ impl Render for Tooltip {
         } else if let Some(meta) = &self.meta {
             // Resolve the width before laying out percentage-width flex rows.
             // Standalone tooltips must not inherit a host row's line height.
-            let measure = |text: SharedString, font_size: Rems, weight: FontWeight| {
+            let shape = |text: SharedString, font_size: Rems, weight: FontWeight| {
                 let mut font = window.text_style().font();
                 font.family = "Inter".into(); font.weight = weight; font.features = TNUM.clone();
                 window.text_system().shape_line(text.clone(), rem_pixels(font_size), &[TextRun {
                     len: text.len(), font, color: theme.text, background_color: None, underline: None, strikethrough: None,
-                }], None).width
+                }], None)
             };
-            let title_width = measure(self.title.clone(), rems(0.75), FontWeight::MEDIUM);
-            let meta_width = meta.lines().map(|line| measure(line.to_string().into(), rems(0.6875), crate::ui::style::DEFAULT_FONT_WEIGHT))
-                .fold(px(0.0), |width, line| width.max(line));
-            tooltip_width = (title_width.max(meta_width) + chrome).min(maximum_width);
+            let title_width = shape(self.title.clone(), rems(0.75), FontWeight::MEDIUM).width;
+            let shaped_meta: Vec<_> = meta.lines().map(|line| (line.to_owned(), shape(line.to_owned().into(), rems(0.6875), crate::ui::style::DEFAULT_FONT_WEIGHT))).collect();
+            let meta_width = shaped_meta.iter().fold(px(0.0), |width, (_, line)| width.max(line.width));
+            // The slack absorbs layout rounding so a fitting line never wraps.
+            tooltip_width = (title_width.max(meta_width) + chrome + px(1.0)).min(maximum_width);
+            let content_width = (tooltip_width - chrome - px(1.0)).as_f32().max(1.0);
+            meta_lines = Some(shaped_meta.iter().flat_map(|(text, line)| {
+                location_line_ranges(text, content_width, |index| line.x_for_index(index).as_f32())
+                    .into_iter().map(|range| SharedString::from(text[range].to_string()))
+            }).collect());
             vec![self.title.clone()]
         } else {
             vec![self.title.clone()]
@@ -362,58 +361,16 @@ impl Render for Tooltip {
                         .max_w((tooltip_width - chrome).max(px(1.0)))
                         .text_color(theme.text_muted)
                         .text_size(rems(0.6875))
-                        .child(meta),
+                        .map(|block| match meta_lines {
+                            Some(lines) => block.flex().flex_col()
+                                .children(lines.into_iter().map(|line| div().whitespace_nowrap().child(line))),
+                            None => block.child(meta),
+                        }),
                 )
             })
-            .when_some(self.file_info.as_ref(), |this, info| {
-                if let Some(file) = &info.network {
-                    return this.child(div().flex().flex_col().text_size(rems(0.6875)).text_color(theme.text_muted).children(network_tooltip_lines(file, cx.i18n()).into_iter().map(|line| div().child(line))));
-                }
-                let i18n = cx.i18n();
-                let mut args = FluentArgs::new();
-                let type_label = match info.ext.as_str() {
-                    "Réseau" => i18n.text(Message::SidebarNetwork).to_string(),
-                    "Dossier" => i18n.text(Message::FileTypeFolder).to_string(),
-                    "Fichier" => i18n.text(Message::FileTypeFile).to_string(),
-                    "Symlink" => i18n.text(Message::FileTypeSymlink).to_string(),
-                    "Junction" => i18n.text(Message::FileTypeJunction).to_string(),
-                    _ => info.ext.clone(),
-                };
-                args.set("value", type_label);
-                let file_type = i18n.text_with_args(Message::TooltipType, &args);
-                args.set(
-                    "value",
-                    format_size(info.size.0, info.size.1, info.size.2, i18n.language()),
-                );
-                let file_size = i18n.text_with_args(Message::TooltipSize, &args);
-                args.set("value", format_date(info.date, crate::ui::format::date_format(cx)));
-                let modified = i18n.text_with_args(Message::TooltipModified, &args);
-                let location_lines = info.location.as_ref().map(|location| {
-                    args.set("value", location.clone());
-                    let text = i18n.text_with_args(Message::TooltipLocation, &args);
-                    let mut font = window.text_style().font();
-                    font.family = "Inter".into();
-                    font.weight = crate::ui::style::DEFAULT_FONT_WEIGHT;
-                    font.features = TNUM.clone();
-                    let line = window.text_system().shape_line(text.clone(), rem_pixels(rems(0.6875)), &[TextRun {
-                        len: text.len(), font, color: theme.text_muted, background_color: None,
-                        underline: None, strikethrough: None,
-                    }], None);
-                    location_line_ranges(&text, (tooltip_width - chrome - px(1.0)).as_f32().max(1.0), |index| line.x_for_index(index).as_f32())
-                        .into_iter().map(|range| text[range].to_string()).collect::<Vec<_>>()
-                });
-                this.child(
-                    div()
-                        .flex()
-                        .flex_col()
-                        .text_size(rems(0.6875))
-                        .text_color(theme.text_muted)
-                        .child(file_type)
-                        .when(info.ext != "Réseau", |tooltip| {
-                            tooltip.child(file_size).child(modified)
-                        })
-                        .when_some(location_lines, |tooltip, lines| tooltip.children(lines.into_iter().map(|line| div().whitespace_nowrap().child(line)))),
-                )
+            .when(self.file_info.is_some(), |this| {
+                this.child(div().flex().flex_col().text_size(rems(0.6875)).text_color(theme.text_muted)
+                    .children(body_lines.into_iter().map(|line| div().whitespace_nowrap().child(line))))
             });
 
         box_div.text_style().font_features = Some(TNUM.clone());
@@ -442,6 +399,18 @@ impl Render for Tooltip {
             }
         }
     }
+}
+
+/// Type, size and modification date lines, measured before layout so they never wrap.
+fn file_detail_lines(info: &super::FileInfo, cx: &App) -> Vec<SharedString> {
+    let i18n = cx.i18n();
+    let mut args = FluentArgs::new();
+    args.set("value", info.type_label.clone());
+    let type_line = i18n.text_with_args(Message::TooltipType, &args);
+    args.set("value", format_size(info.size.0, info.size.1, info.size.2, i18n.language()));
+    let size_line = i18n.text_with_args(Message::TooltipSize, &args);
+    args.set("value", format_date(info.date, crate::ui::format::date_format(cx)));
+    vec![type_line, size_line, i18n.text_with_args(Message::TooltipModified, &args)]
 }
 
 fn network_tooltip_lines(file: &oxyde_lib::models::FileEntry, i18n: &crate::ui::i18n::I18n) -> Vec<SharedString> {

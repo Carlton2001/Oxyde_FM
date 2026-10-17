@@ -762,6 +762,7 @@ pub(super) fn worker_reply(mode: &str, path: &Path) -> crate::utils::preview_pro
         Ok(Reply::Images {
             frames: vec![image::Frame::new(image)],
             limited: false,
+            natural_size: None,
         })
     })();
     result.unwrap_or_else(|error| Reply::Error {
