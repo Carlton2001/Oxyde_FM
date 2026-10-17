@@ -187,7 +187,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "trailer\n<< /Size 5 /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n"
     )?;
     fs::write(root.join("aperçus/document.pdf"), pdf)?;
-    fs::write(root.join("LISEZ-MOI.txt"), "Jeu neuf, inerte et indépendant. Archives normales vérifiées par extraction via le worker natif. Les références sont conservées pour comparaison. Modifier les copies dans modification, utiliser transfert/source et cible pour copie/déplacement, et destinations pour les sorties. Le ZIP chemin-refuse ne doit jamais créer sortie-interdite.txt. Protocole détaillé : security/VERIFICATION_VISUELLE.md. Aucun lancement d'interface ni application associée par ce générateur.\n")?;
+    fs::write(root.join("LISEZ-MOI.txt"), "Jeu neuf, inerte et indépendant. Archives normales vérifiées par extraction via le worker natif. Les références sont conservées pour comparaison. Modifier les copies dans modification, utiliser transfert/source et cible pour copie/déplacement, et destinations pour les sorties. Le ZIP chemin-refuse ne doit jamais créer sortie-interdite.txt. Protocole détaillé : docs/guides/visual-checks.md. Aucun lancement d'interface ni application associée par ce générateur.\n")?;
     let mut files = Vec::new();
     let mut total = 0u64;
     for entry in walkdir::WalkDir::new(&root) {

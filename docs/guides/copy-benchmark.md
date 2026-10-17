@@ -66,9 +66,6 @@ contrôlées ; les modes `plain` ne calculent aucune empreinte.
   avant la publication. Inclut le coût de jonction du thread ; peut être presque
   nul si l'empreinte est déjà prête. Le temps total attend toujours les deux tâches.
 
-Les deux nouvelles colonnes sont ajoutées à la fin du CSV ; les noms et l'ordre
-des colonnes précédentes sont conservés.
-
 Le mode natif réutilise le callback de production qui vide chaque flux terminé.
 L'empreinte native et l'empreinte en ligne ne réalisent pas le même contrôle : la
 première relit la destination, la seconde représente les blocs transférés.

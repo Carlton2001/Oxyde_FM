@@ -1,28 +1,35 @@
 # Documentation d’Oxyde
 
-Les chemins de code cités entre accents graves sont relatifs à la racine du dépôt.
+Oxyde utilise Rust, GPUI et Tokio. Choisir une référence selon le travail à faire :
 
-## Interface native
+| Besoin | Document |
+| --- | --- |
+| Compiler, tester ou découper un module | [Développement](guides/development.md) |
+| Construire une version installable ou portable | [Distribution Windows](guides/distribution.md) |
+| Modifier thèmes, langues ou composants | [Interface](architecture/interface.md) |
+| Modifier menus, infobulles ou fenêtres secondaires | [Fenêtres](architecture/windows.md) |
+| Comprendre les aperçus et leurs caches | [Aperçus](architecture/previews.md) |
+| Modifier les parcours d’archives | [Archives](architecture/archives.md) |
+| Comprendre les opérations et leurs bilans | [Opérations](architecture/operations.md) |
+| Modifier le listing, les filtres ou la recherche | [Navigation et recherche](architecture/search.md) |
+| Diagnostiquer copies, suppressions ou fermeture | [Copie](diagnostics/copy.md), [suppression](diagnostics/delete.md), [fermeture](diagnostics/shutdown.md) |
+| Comparer les moteurs de copie | [Benchmark](guides/copy-benchmark.md) |
+| Connaître les protections et limites restantes | [Sécurité](security/status.md) |
+| Réexaminer les dépendances conservées | [Dépendances](security/dependencies.md) |
+| Préparer un essai manuel | [Validation visuelle](guides/visual-checks.md) |
+| Retrouver un audit ou une preuve datée | [Bilans et historique](reports/README.md) |
 
-- [Architecture de l’interface](UI_ARCHITECTURE.md) : thèmes, langues, composants, préférences et validation.
-- [Audit des fenêtres transitoires](POPUP_WINDOWS_AUDIT.md) : migration des menus et infobulles, résultats et limites.
-- [Plan des fenêtres transitoires](POPUP_WINDOWS_PLAN.md) : étapes et contexte de la migration.
-- [Prototype du survol natif](NATIVE_HOVER_PROTOTYPE.md) : diagnostic et expérimentation.
+Les [consignes des agents](../AGENTS.md) restent à la racine. Les chemins de code entre accents graves partent de la racine du dépôt.
 
-## Aperçus et fermeture
+## Entretenir cette documentation
 
-- [Sessions d’aperçus d’images](IMAGE_PREVIEW_SESSIONS.md).
-- [Cache partagé des aperçus](SHARED_PREVIEW_CACHE.md).
-- [Diagnostic de fermeture PDF sous Windows](SHUTDOWN_DIAGNOSTICS.md).
+- **Nommage :** dossiers et fichiers en anglais, minuscules et `kebab-case` ; contenu technique en français. Exceptions : `README.md` pour les points d’entrée et `AGENTS.md` pour les consignes.
+- **Classement :** `guides/` pour une procédure, `architecture/` pour un contrat actuel, `diagnostics/` pour un problème, `security/` pour les garanties/décisions, `reports/` pour un résultat daté.
+- **Rapports :** `YYYY-MM-DD-subject.md`. Indiquer révision/périmètre, résultat, validation et limites. Une mesure passée n’est jamais une validation de la version actuelle.
+- **Taille :** viser une page courte (environ 40–100 lignes), une question par document. Au-delà, enlever les répétitions avant de scinder ; éviter de remplacer un gros document par une multitude de petites notes.
+- **Rédaction :** commencer par la réponse ou la procédure. Décrire l’état actuel, garder les exceptions utiles et les points d’entrée du code. Éviter les récits de chantier, listes exhaustives de tests et valeurs recopiées sans nécessité.
+- **Source unique :** chaque règle a une référence ; les autres documents font un lien. Une correction met à jour le contrat concerné plutôt que d’ajouter un paragraphe chronologique.
+- **Retrait :** fusionner les doublons, retirer les plans achevés. Conserver dans le bilan la révision Git permettant de retrouver les preuves uniques et les décisions ; maintenir les points encore ouverts dans la référence active.
+- **Format :** UTF-8 sans BOM, fins de ligne LF, liens relatifs valides. Mettre à jour cet index lors d’un ajout, déplacement ou retrait.
 
-## Distribution et sécurité
-
-- [Construction et installation](../installer/README.md).
-- [Synthèse des travaux de sécurité et points restants](../security/AUDIT_SECURITE_RELIQUAT.md).
-- [Isolation des archives](../security/ISOLATION_ARCHIVES.md).
-- [Maintenance des dépendances](../security/DEPENDENCY_MAINTENANCE.md).
-- [Protocole et résultats de validation visuelle](../security/VERIFICATION_VISUELLE.md).
-
-Les audits conservent des résultats datés et des limites de validation ; consulter leur périmètre avant d’en tirer une conclusion sur la version actuelle.
-
-Les [consignes de développement](../AGENTS.md) restent à la racine.
+Le README racine présente la version publiée ; sa mise à jour est réservée à la prochaine version.
