@@ -16,6 +16,11 @@ pub(super) struct Timing {
     read_bytes: u64,
     write_bytes: u64,
     handler: Duration,
+    // Handler shares: source reads versus decoded output written by the parent.
+    read_handler: Duration,
+    chunk_handler: Duration,
+    chunks: u64,
+    chunk_bytes: u64,
     controls: Duration,
     sleeps: u64,
     sleep: Duration,
@@ -38,6 +43,10 @@ impl Timing {
             read_bytes: 0,
             write_bytes: 0,
             handler: Duration::ZERO,
+            read_handler: Duration::ZERO,
+            chunk_handler: Duration::ZERO,
+            chunks: 0,
+            chunk_bytes: 0,
             controls: Duration::ZERO,
             sleeps: 0,
             sleep: Duration::ZERO,
@@ -58,6 +67,10 @@ impl Timing {
                 self.writes += 1;
                 self.write_bytes += frame.data.len() as u64;
             }
+            Message::Chunk { .. } => {
+                self.chunks += 1;
+                self.chunk_bytes += frame.data.len() as u64;
+            }
             Message::Checkpoint => self.checkpoints += 1,
             _ => {}
         }
@@ -67,9 +80,18 @@ impl Timing {
         frame: Frame,
         handler: &mut dyn FnMut(Frame) -> io::Result<Frame>,
     ) -> io::Result<Frame> {
+        let share = match frame.message {
+            Message::Read { .. } => Some(&mut self.read_handler),
+            Message::Chunk { .. } => Some(&mut self.chunk_handler),
+            _ => None,
+        };
         let started = Instant::now();
         let result = handler(frame);
-        self.handler += started.elapsed();
+        let elapsed = started.elapsed();
+        if let Some(share) = share {
+            *share += elapsed;
+        }
+        self.handler += elapsed;
         result
     }
     pub fn waited(&mut self, duration: Duration) {
@@ -84,10 +106,10 @@ impl Timing {
 impl Drop for Timing {
     fn drop(&mut self) {
         log::info!(target: "oxyde_lib::archive_timing",
-            "archive_worker_timing mode={} success={} wall_s={:.6} setup_s={:.6} handler_s={:.6} controls_s={:.6} transport_wait_s={:.6} transport_waits={} frames={} reads={} read_bytes={} writes={} write_bytes={} checkpoints={}",
+            "archive_worker_timing mode={} success={} wall_s={:.6} setup_s={:.6} handler_s={:.6} read_handler_s={:.6} chunk_handler_s={:.6} controls_s={:.6} transport_wait_s={:.6} transport_waits={} frames={} reads={} read_bytes={} writes={} write_bytes={} checkpoints={} chunks={} chunk_bytes={}",
             self.mode, self.success, self.started.elapsed().as_secs_f64(), self.setup.as_secs_f64(),
-            self.handler.as_secs_f64(), self.controls.as_secs_f64(), self.sleep.as_secs_f64(), self.sleeps, self.frames,
-            self.reads, self.read_bytes, self.writes, self.write_bytes, self.checkpoints);
+            self.handler.as_secs_f64(), self.read_handler.as_secs_f64(), self.chunk_handler.as_secs_f64(), self.controls.as_secs_f64(), self.sleep.as_secs_f64(), self.sleeps, self.frames,
+            self.reads, self.read_bytes, self.writes, self.write_bytes, self.checkpoints, self.chunks, self.chunk_bytes);
     }
 }
 

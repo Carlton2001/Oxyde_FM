@@ -87,6 +87,75 @@ impl<T: Exchange> Seek for Reader<T> {
     }
 }
 
+/// Keeps the last fetched window across seeks. `io::BufReader` discards its
+/// buffer on every relative seek, which multiplies source requests for codecs
+/// that reposition between small reads (ZIP).
+pub struct WindowReader<R> {
+    inner: R,
+    window: Vec<u8>,
+    start: u64,
+    cursor: u64,
+    capacity: usize,
+}
+
+impl<R> WindowReader<R> {
+    pub fn new(inner: R, capacity: usize) -> Self {
+        Self {
+            inner,
+            window: Vec::new(),
+            start: 0,
+            cursor: 0,
+            capacity: capacity.max(1),
+        }
+    }
+}
+
+impl<R: Read + Seek> Read for WindowReader<R> {
+    fn read(&mut self, output: &mut [u8]) -> io::Result<usize> {
+        if output.is_empty() {
+            return Ok(0);
+        }
+        let end = self.start + self.window.len() as u64;
+        if self.cursor < self.start || self.cursor >= end {
+            self.inner.seek(SeekFrom::Start(self.cursor))?;
+            if output.len() >= self.capacity {
+                let count = self.inner.read(output)?;
+                self.cursor += count as u64;
+                return Ok(count);
+            }
+            self.window.resize(self.capacity, 0);
+            let count = self.inner.read(&mut self.window);
+            let count = match count {
+                Ok(count) => count,
+                Err(error) => {
+                    self.window.clear();
+                    return Err(error);
+                }
+            };
+            self.window.truncate(count);
+            self.start = self.cursor;
+            if count == 0 {
+                return Ok(0);
+            }
+        }
+        let offset = (self.cursor - self.start) as usize;
+        let count = output.len().min(self.window.len() - offset);
+        output[..count].copy_from_slice(&self.window[offset..offset + count]);
+        self.cursor += count as u64;
+        Ok(count)
+    }
+}
+
+impl<R: Seek> Seek for WindowReader<R> {
+    fn seek(&mut self, from: SeekFrom) -> io::Result<u64> {
+        self.cursor = match from {
+            SeekFrom::End(_) => self.inner.seek(from)?,
+            _ => position(self.cursor, u64::MAX, from)?,
+        };
+        Ok(self.cursor)
+    }
+}
+
 pub struct Writer<T> {
     connection: Connection<T>,
     cursor: u64,
@@ -251,6 +320,28 @@ mod tests {
         assert_eq!(writer.size(), 6);
         writer.flush().unwrap();
         assert_eq!(connection.lock().unwrap().output.get_ref(), b"ABCdef");
+    }
+
+    #[test]
+    fn window_reader_serves_backward_and_forward_seeks_without_new_requests() {
+        let connection = broker();
+        let mut reader = WindowReader::new(Reader::new(connection.clone(), 9, 6), 4);
+        let mut bytes = [0; 2];
+        reader.read_exact(&mut bytes).unwrap();
+        assert_eq!(&bytes, b"ab");
+        reader.seek(SeekFrom::Current(1)).unwrap();
+        reader.read_exact(&mut bytes[..1]).unwrap();
+        assert_eq!(bytes[0], b'd');
+        reader.seek(SeekFrom::Start(0)).unwrap();
+        reader.read_exact(&mut bytes).unwrap();
+        assert_eq!(&bytes, b"ab");
+        assert_eq!(connection.lock().unwrap().calls, 1);
+        reader.seek(SeekFrom::End(-2)).unwrap();
+        reader.read_exact(&mut bytes).unwrap();
+        assert_eq!(&bytes, b"ef");
+        assert_eq!(reader.read(&mut bytes).unwrap(), 0);
+        assert_eq!(connection.lock().unwrap().calls, 2);
+        assert!(reader.seek(SeekFrom::Start(7)).is_ok_and(|_| reader.read(&mut bytes).is_err()));
     }
 
     struct WrongReply;

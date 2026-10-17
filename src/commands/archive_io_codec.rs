@@ -3,7 +3,7 @@ use crate::models::CommandError;
 use crate::utils::archive_io_protocol::{
     invalid, Entry, Format, Frame, Limits, Message, Operation, Quality, Timestamp, MAX_BLOCK,
 };
-use crate::utils::archive_io_stream::{Connection, Exchange, Reader, Writer};
+use crate::utils::archive_io_stream::{Connection, Exchange, Reader, WindowReader, Writer};
 use crate::utils::archive_limits::{ArchiveBudget, ArchiveLimits, BudgetReader};
 use crate::utils::archive_security::relative_archive_path;
 use std::io::{self, Read, Seek, Write};
@@ -203,7 +203,7 @@ fn decode<T: Exchange + 'static>(
     match format {
         Format::Zip => {
             let mut archive =
-                zip::ZipArchive::new(io::BufReader::new(Reader::new(connection.clone(), 0, size)))
+                zip::ZipArchive::new(WindowReader::new(Reader::new(connection.clone(), 0, size), MAX_BLOCK))
                     .map_err(io::Error::other)?;
             budget.check_entry_count(archive.len())?;
             let mut selection = None;

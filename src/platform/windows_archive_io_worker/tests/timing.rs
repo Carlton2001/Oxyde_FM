@@ -49,3 +49,23 @@ fn measured_handler_keeps_the_original_error_and_receives_the_frame_once() {
     assert_eq!(error.kind(), io::ErrorKind::PermissionDenied);
     assert_eq!(error.to_string(), "fixture");
 }
+
+#[test]
+fn decoded_chunks_and_their_handler_time_are_counted_apart_from_source_reads() {
+    let mut value = timing();
+    let chunk = Frame::data(Message::Chunk { id: 1, offset: 0 }, vec![0; 24]);
+    value.frame(&chunk);
+    value
+        .handle(chunk, &mut |_| {
+            std::thread::sleep(std::time::Duration::from_millis(2));
+            Ok(Frame::new(Message::Checkpoint))
+        })
+        .unwrap();
+    value
+        .handle(Frame::new(Message::Checkpoint), &mut |frame| Ok(frame))
+        .unwrap();
+    assert_eq!((value.chunks, value.chunk_bytes, value.writes), (1, 24, 0));
+    assert!(value.chunk_handler >= std::time::Duration::from_millis(2));
+    assert_eq!(value.read_handler, std::time::Duration::ZERO);
+    assert!(value.handler >= value.chunk_handler);
+}
