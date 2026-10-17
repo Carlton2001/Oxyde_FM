@@ -258,7 +258,19 @@ impl OxydeApp {
                         let Some(main) = owner.upgrade() else {
                             unreachable!()
                         };
-                        let observed = cx.observe(&main, |_, _, cx| cx.notify());
+                        // Close from the notification, before a frame without content
+                        // is presented: DWM would fade out that blank surface.
+                        let observed = cx.observe_in(&main, window, |view: &mut DialogWindow, main, window, cx| {
+                            let open = view.kind.active(main.read(cx))
+                                && (view.kind != DialogKind::Trash
+                                    || main.read(cx).trash_settings.as_ref().map(|d| d.request_id()) == view.trash_request);
+                            if open {
+                                cx.notify();
+                            } else {
+                                crate::ui::components::tool_window::close_transients(window, cx);
+                                window.remove_window();
+                            }
+                        });
                         let released = cx.observe_release_in(&main, window, |_, _, window, cx| {
                             { crate::ui::components::tool_window::close_transients(window, cx); window.remove_window() }
                         });
