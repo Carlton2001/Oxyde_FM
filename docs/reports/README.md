@@ -8,6 +8,7 @@ Les références actives décrivent les contrats ; les bilans ci-dessous décriv
 | [Fenêtres et aperçus, 15 octobre](2026-10-15-windows.md) | Migration, corrections après essais et validation manquante |
 | [Code, 17 octobre](2026-10-17-code-review.md) | Corrections A01–A10 et optimisations O01–O04 intégrées |
 | [Transport d’archives, 17 octobre](2026-10-17-archive-transport.md) | Correction des attentes IPC, mesures avant/après et validation native |
+| [Turbo des archives, 17 octobre](2026-10-17-archive-turbo.md) | Parallélisme, mesures ZIP/7z/TAR.ZST/TAR et répartition de la mémoire |
 
 ## Retrouver une preuve complète
 

@@ -9,6 +9,9 @@ use crate::utils::archive_security::relative_archive_path;
 use std::io::{self, Read, Seek, Write};
 use std::time::Duration;
 
+mod encode;
+use encode::encode;
+
 fn request<T: Exchange>(connection: &Connection<T>, frame: Frame) -> io::Result<Frame> {
     connection.lock().map_err(|_| invalid())?.exchange(frame)
 }
@@ -124,7 +127,7 @@ fn copy_entry<T: Exchange>(
     notify(connection, Frame::new(Message::End { id: entry.id }))
 }
 
-pub fn run<T: Exchange + 'static>(
+pub fn run<T: Exchange + Send + 'static>(
     connection: Connection<T>,
     operation: Operation,
 ) -> Result<(), CommandError> {
@@ -141,15 +144,32 @@ pub fn run<T: Exchange + 'static>(
             output_limit,
             ..
         } => {
-            encode(
-                &connection,
-                format,
-                quality,
-                entries,
-                output_limit,
-                &budget,
-                &checkpoint,
-            )?;
+            // Codec finish/MT backpressure can spend seconds computing without an
+            // I/O request. Keep the control conversation alive during that work.
+            std::thread::scope(|scope| -> Result<(), CommandError> {
+                let encoder_connection = connection.clone();
+                let handle = scope.spawn(move || {
+                    let budget = ArchiveBudget::new(archive_limits(limits)?);
+                    let checkpoint =
+                        || notify(&encoder_connection, Frame::new(Message::Checkpoint));
+                    encode(
+                        &encoder_connection,
+                        format,
+                        quality,
+                        entries,
+                        output_limit,
+                        &budget,
+                        &checkpoint,
+                    )
+                });
+                while !handle.is_finished() {
+                    checkpoint()?;
+                    std::thread::sleep(Duration::from_millis(20));
+                }
+                handle
+                    .join()
+                    .map_err(|_| io::Error::other("Archive encoder panicked"))?
+            })?;
         }
         Operation::Decode {
             format,
@@ -169,164 +189,6 @@ pub fn run<T: Exchange + 'static>(
     }
     notify(&connection, Frame::new(Message::Finished))?;
     Ok(())
-}
-
-fn encode<T: Exchange>(
-    connection: &Connection<T>,
-    format: Format,
-    quality: Quality,
-    entries: u64,
-    output_limit: u64,
-    budget: &ArchiveBudget,
-    checkpoint: &dyn Fn() -> io::Result<()>,
-) -> Result<(), CommandError> {
-    budget.check_entry_count(entries.try_into().map_err(|_| invalid())?)?;
-    let output = Writer::new(connection.clone(), output_limit);
-    let level = match quality {
-        Quality::Fast => 1,
-        Quality::Normal => 6,
-        Quality::Best => 9,
-    };
-    match format {
-        Format::Zip => {
-            let mut writer = zip::ZipWriter::new(io::BufWriter::new(output));
-            for id in 0..entries {
-                budget.checkpoint(checkpoint)?;
-                let entry = metadata(connection, id)?;
-                budget.entry(&entry.name, entry.size)?;
-                notify(connection, Frame::new(Message::Begin { id }))?;
-                let options = zip::write::SimpleFileOptions::default()
-                    .compression_method(zip::CompressionMethod::Deflated)
-                    .compression_level(Some(
-                        if connection.lock().map_err(|_| invalid())?.turbo() {
-                            1
-                        } else {
-                            level
-                        },
-                    ));
-                if entry.directory {
-                    writer
-                        .add_directory(format!("{}/", entry.name.trim_end_matches('/')), options)
-                        .map_err(io::Error::other)?;
-                } else {
-                    writer
-                        .start_file(entry.name, options)
-                        .map_err(io::Error::other)?;
-                    let mut reader = Reader::new(connection.clone(), id, entry.size);
-                    if budget.copy(&mut reader, &mut writer, checkpoint)? != entry.size {
-                        return Err(invalid().into());
-                    }
-                }
-                notify(connection, Frame::new(Message::End { id }))?;
-            }
-            writer.finish().map_err(io::Error::other)?.flush()?;
-        }
-        Format::SevenZip => {
-            let mut writer = sevenz_rust2::ArchiveWriter::new(output)
-                .map_err(super::archive_seven_open::archive_error)?;
-            writer.set_content_methods(vec![
-                sevenz_rust2::encoder_options::Lzma2Options::from_level(level as u32).into(),
-            ]);
-            for id in 0..entries {
-                budget.checkpoint(checkpoint)?;
-                let entry = metadata(connection, id)?;
-                budget.entry(&entry.name, entry.size)?;
-                notify(connection, Frame::new(Message::Begin { id }))?;
-                let mut seven = if entry.directory {
-                    sevenz_rust2::ArchiveEntry::new_directory(&entry.name)
-                } else {
-                    sevenz_rust2::ArchiveEntry::new_file(&entry.name)
-                };
-                for (time, value, flag) in [
-                    (
-                        entry.modified,
-                        &mut seven.last_modified_date,
-                        &mut seven.has_last_modified_date,
-                    ),
-                    (
-                        entry.created,
-                        &mut seven.creation_date,
-                        &mut seven.has_creation_date,
-                    ),
-                    (
-                        entry.accessed,
-                        &mut seven.access_date,
-                        &mut seven.has_access_date,
-                    ),
-                ] {
-                    if let Some(time) = time {
-                        if let Ok(date) = time.system()?.try_into() {
-                            *value = date;
-                            *flag = u64::from(date) > 0;
-                        }
-                    }
-                }
-                let reader =
-                    (!entry.directory).then(|| Reader::new(connection.clone(), id, entry.size));
-                let encoded = writer
-                    .push_archive_entry(seven, reader)
-                    .map_err(super::archive_seven_open::archive_error)?;
-                if !entry.directory && encoded.size() != entry.size {
-                    return Err(invalid().into());
-                }
-                notify(connection, Frame::new(Message::End { id }))?;
-            }
-            writer.finish()?.flush()?;
-        }
-        Format::Tar | Format::TarZst => {
-            let level = match quality {
-                Quality::Fast => 1,
-                Quality::Normal => 3,
-                Quality::Best => 19,
-            };
-            if format == Format::TarZst {
-                let encoder = zstd::stream::write::Encoder::new(output, level)?;
-                let mut writer = tar::Builder::new(encoder);
-                encode_tar(connection, entries, &mut writer, budget, checkpoint)?;
-                writer.into_inner()?.finish()?.flush()?;
-            } else {
-                let mut writer = tar::Builder::new(io::BufWriter::new(output));
-                encode_tar(connection, entries, &mut writer, budget, checkpoint)?;
-                writer.into_inner()?.flush()?;
-            }
-        }
-        _ => return Err(invalid().into()),
-    }
-    Ok(())
-}
-
-fn encode_tar<T: Exchange, W: Write>(
-    connection: &Connection<T>,
-    entries: u64,
-    writer: &mut tar::Builder<W>,
-    budget: &ArchiveBudget,
-    checkpoint: &dyn Fn() -> io::Result<()>,
-) -> io::Result<()> {
-    for id in 0..entries {
-        budget.checkpoint(checkpoint)?;
-        let entry = metadata(connection, id)?;
-        budget.entry(&entry.name, entry.size)?;
-        notify(connection, Frame::new(Message::Begin { id }))?;
-        let mut header = tar::Header::new_gnu();
-        header.set_entry_type(if entry.directory {
-            tar::EntryType::Directory
-        } else {
-            tar::EntryType::Regular
-        });
-        header.set_size(entry.size);
-        header.set_mode(entry.mode);
-        if let Some(time) = entry.modified.filter(|time| time.seconds >= 0) {
-            header.set_mtime(time.seconds as u64);
-        }
-        header.set_cksum();
-        writer.append_data(
-            &mut header,
-            entry.name,
-            Reader::new(connection.clone(), id, entry.size),
-        )?;
-        notify(connection, Frame::new(Message::End { id }))?;
-    }
-    writer.finish()
 }
 
 fn decode<T: Exchange + 'static>(

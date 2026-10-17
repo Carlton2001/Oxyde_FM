@@ -22,6 +22,8 @@ mod cache_crash_recovery;
 mod grouped_publication;
 #[path = "support/tar_fidelity.rs"]
 mod tar_fidelity;
+#[path = "support/archive_turbo.rs"]
+mod archive_turbo;
 #[path = "support/broker_cancellation.rs"]
 mod broker_cancellation;
 
@@ -996,7 +998,7 @@ fn production_compression_boundaries_fail_before_worker_or_staging_and_preserve_
 }
 
 #[test]
-fn production_turbo_changes_new_zip_entry_level_and_empty_encoders_finish() {
+fn production_turbo_preserves_zip_quality_and_empty_encoders_finish() {
     native(|| {
         let temp = tempfile::tempdir().unwrap();
         let source = temp.path().join("source");
@@ -1019,7 +1021,7 @@ fn production_turbo_changes_new_zip_entry_level_and_empty_encoders_finish() {
             let mut zip = zip::ZipArchive::new(fs::File::open(archive).unwrap()).unwrap();
             sizes.push(zip.by_index(0).unwrap().compressed_size());
         }
-        assert!(sizes[0] < sizes[1]);
+        assert_eq!(sizes[0], sizes[1]);
         for extension in ["zip", "7z", "tar", "tar.zst"] {
             let archive = temp.path().join(format!("empty.{extension}"));
             FileOperationManager::perform_compress(

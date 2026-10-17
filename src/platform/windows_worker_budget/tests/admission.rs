@@ -40,6 +40,23 @@ fn large_workers_leave_an_envelope_and_process_slot_for_navigation() {
 }
 
 #[test]
+fn seven_encoder_reservation_preserves_navigation_without_admitting_a_second_bulk_job() {
+    let budget = Budget::with_reserve(MEMORY_BYTES, MAX_WORKERS, INTERACTIVE_RESERVE);
+    let encoder = budget
+        .acquire(2 * 1024 * 1024 * 1024, &|| Ok(()), Duration::ZERO)
+        .unwrap();
+    assert!(budget
+        .acquire(1024 * 1024 * 1024, &|| Ok(()), Duration::ZERO)
+        .is_err());
+    let navigation = budget
+        .acquire(INTERACTIVE_RESERVE, &|| Ok(()), Duration::ZERO)
+        .unwrap();
+    assert_eq!(budget.usage.lock().unwrap().bytes, MEMORY_BYTES);
+    drop((encoder, navigation));
+    assert_eq!(budget.usage.lock().unwrap().bytes, 0);
+}
+
+#[test]
 fn cancelled_wait_and_failed_preparation_return_to_a_usable_budget() {
     let budget = Budget::new(1024, 1);
     let permit = budget.acquire(512, &|| Ok(()), Duration::ZERO).unwrap();

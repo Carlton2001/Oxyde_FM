@@ -25,6 +25,67 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         path: &Path,
         expected: &BTreeMap<String, Option<String>>,
     ) -> Result<(), Box<dyn std::error::Error>> {
+        if path.extension().and_then(|s| s.to_str()) == Some("7z") {
+            let mut archive =
+                sevenz_rust2::ArchiveReader::open(path, sevenz_rust2::Password::empty())?;
+            let mut actual = BTreeMap::new();
+            archive.for_each_entries(|entry, reader| {
+                let name = entry.name().trim_end_matches('/').to_owned();
+                let value =
+                    if entry.is_directory() {
+                        None
+                    } else {
+                        Some(hash(reader).map_err(|e| {
+                            sevenz_rust2::Error::Io(e, "benchmark verification".into())
+                        })?)
+                    };
+                if actual.insert(name, value).is_some() {
+                    return Err(sevenz_rust2::Error::Io(
+                        io::Error::other("Duplicate member"),
+                        "benchmark verification".into(),
+                    ));
+                }
+                Ok(true)
+            })?;
+            if &actual != expected {
+                return Err("7z contents differ".into());
+            }
+            return Ok(());
+        }
+        if matches!(
+            path.extension().and_then(|s| s.to_str()),
+            Some("tar" | "zst")
+        ) {
+            let input: Box<dyn Read> = if path.extension().and_then(|s| s.to_str()) == Some("zst") {
+                Box::new(zstd::stream::read::Decoder::new(File::open(path)?)?)
+            } else {
+                Box::new(File::open(path)?)
+            };
+            let mut archive = tar::Archive::new(input);
+            let mut actual = BTreeMap::new();
+            for entry in archive.entries()? {
+                let mut entry = entry?;
+                let name = entry
+                    .path()?
+                    .to_str()
+                    .ok_or("Non-Unicode archive path")?
+                    .replace('\\', "/")
+                    .trim_end_matches('/')
+                    .to_owned();
+                let value = if entry.header().entry_type().is_dir() {
+                    None
+                } else {
+                    Some(hash(&mut entry)?)
+                };
+                if actual.insert(name, value).is_some() {
+                    return Err("Duplicate member".into());
+                }
+            }
+            if &actual != expected {
+                return Err("TAR contents differ".into());
+            }
+            return Ok(());
+        }
         let mut archive = zip::ZipArchive::new(File::open(path)?)?;
         let mut actual = BTreeMap::new();
         for index in 0..archive.len() {
@@ -153,14 +214,32 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Err("Build all debug binaries before this benchmark".into());
     }
     let mut results = Vec::new();
+    let format = std::env::args().nth(2).unwrap_or_else(|| "zip".into());
+    if !matches!(format.as_str(), "zip" | "7z" | "tar" | "tar.zst") {
+        return Err("Unsupported benchmark format".into());
+    }
+    let selected_mode = std::env::args().nth(3);
     for (mode, level) in [
         ("production-fast", 1),
         ("production-fast-turbo", 1),
+        ("production-normal-turbo", 6),
         ("direct-fast", 1),
         ("direct-normal", 6),
     ] {
+        if selected_mode.as_deref().is_some_and(|selected| {
+            if selected == "turbo" {
+                !mode.ends_with("-turbo")
+            } else {
+                selected != mode
+            }
+        }) {
+            continue;
+        }
+        if format != "zip" && mode.starts_with("direct-") {
+            continue;
+        }
         platform().set_thread_priority(ThreadPriority::Normal);
-        let output = output_root.join(format!("{mode}.zip"));
+        let output = output_root.join(format!("{mode}.{format}"));
         eprintln!("BEGIN {mode}");
         let started = Instant::now();
         if mode.starts_with("production-") {
@@ -170,7 +249,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Some(output.clone()),
                 None,
             );
-            operation.compression_quality = "fast".into();
+            operation.compression_quality = if level == 1 { "fast" } else { "normal" }.into();
             operation.turbo_flag.store(
                 mode.ends_with("-turbo"),
                 std::sync::atomic::Ordering::Relaxed,
@@ -192,13 +271,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let bytes = fs::metadata(&output)?.len();
         // Independent decompression and BLAKE3 checks are outside the timed interval.
         verify(&output, &expected)?;
-        let result = serde_json::json!({"mode": mode, "level": level, "seconds": seconds, "archive_bytes": bytes, "contents_verified": true});
+        let actual_level = match format.as_str() {
+            "tar" => 0,
+            "tar.zst" if level == 6 => 3,
+            _ => level,
+        };
+        let result = serde_json::json!({"mode": mode, "quality": if level == 1 { "fast" } else { "normal" }, "level": actual_level, "seconds": seconds, "archive_bytes": bytes, "contents_verified": true});
         eprintln!("RESULT {result}");
         results.push(result);
         fs::remove_file(&output)?;
     }
+    if results.is_empty() {
+        return Err("No benchmark mode selected".into());
+    }
     let report = serde_json::json!({
-        "source": source, "entries": entries.len(), "source_bytes": total_bytes,
+        "format": format, "source": source, "entries": entries.len(), "source_bytes": total_bytes,
         "results": results,
         "limits": "One warm-cache pass, production first; direct modes omit sandbox, broker and source guards. Source manifest hashing and output verification are excluded. No Explorer timing is measured."
     });

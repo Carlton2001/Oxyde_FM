@@ -20,11 +20,32 @@ use windows::Win32::System::Threading::{
 };
 
 const MEMORY_BYTES: usize = 1024 * 1024 * 1024;
+const SEVEN_ENCODE_MEMORY_BYTES: usize = 2 * MEMORY_BYTES;
 static TARGETED: Mutex<()> = Mutex::new(());
 static BULK: Mutex<()> = Mutex::new(());
 
 mod timing;
 mod transport;
+
+fn worker_memory(operation: &Operation) -> usize {
+    if matches!(
+        operation,
+        Operation::Encode {
+            format: crate::utils::archive_io_protocol::Format::SevenZip,
+            ..
+        }
+    ) {
+        // LZMA2 dictionaries and pending solid blocks share this envelope. The
+        // common 2.5 GiB admission still reserves 512 MiB for navigation.
+        SEVEN_ENCODE_MEMORY_BYTES
+    } else {
+        MEMORY_BYTES
+    }
+}
+
+#[cfg(test)]
+#[path = "windows_archive_io_worker/tests/memory.rs"]
+mod memory_tests;
 
 fn cancelled() -> io::Error {
     io::Error::new(io::ErrorKind::Interrupted, "Operation cancelled")
@@ -122,6 +143,7 @@ pub(super) fn run_in(
     command
         .arg(crate::commands::archive_io_worker::FLAG)
         .arg(session.to_string());
+    let memory = worker_memory(&operation);
     supervise(
         command,
         *session.as_bytes(),
@@ -129,7 +151,7 @@ pub(super) fn run_in(
         controls,
         handler,
         deadline,
-        MEMORY_BYTES,
+        memory,
     )
 }
 

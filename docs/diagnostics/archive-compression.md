@@ -1,8 +1,10 @@
-# Mesurer la compression ZIP
+# Mesurer la compression des archives
 
 Les logs `oxyde_lib::archive_timing` distinguent préparation du plan, encodage et publication. Le superviseur Windows ajoute démarrage du worker, temps des handlers du parent, contrôles, attentes d’événements et compteurs de trames/lectures/écritures/checkpoints. Les compteurs ne changent ni limites ni protocole.
 
 La [mesure avant/après du 17 octobre](../reports/2026-10-17-archive-transport.md) documente la correction du transport partagé Decode/Encode.
+
+Le [bilan Turbo](../reports/2026-10-17-archive-turbo.md) mesure les quatre formats et précise les limites du parallélisme et des réservations mémoire.
 
 ## Comparaison reproductible
 
@@ -14,16 +16,23 @@ $env:RUST_LOG = "warn,oxyde_lib::archive_timing=info"
 cargo run --offline --example archive_compression_benchmark -- "C:\donnees\dossier"
 ```
 
+Un second argument choisit le format : `zip` (défaut), `7z`, `tar` ou `tar.zst`. Par exemple : `cargo run --offline --example archive_compression_benchmark -- "C:\donnees\dossier" 7z`.
+
+Un troisième argument facultatif filtre un mode, par exemple `production-normal-turbo`, ou `turbo` pour les deux qualités avec Turbo. Le rapport indique le niveau effectif du codec (TAR : 0, sans compression).
+
 Sans argument, l’outil génère un petit jeu privé sous `target/`. Avec un dossier, il le lit sans y écrire ; liens et points de réanalyse sont refusés. Les sorties sont créées dans un nouveau `target/archive-compression-<uuid>/`.
 
 | Mode | Ce qui est mesuré |
 | --- | --- |
 | `production-fast` | Parcours Windows de production, worker isolé, niveau ZIP 1, sans Turbo |
 | `production-fast-turbo` | Même parcours et niveau 1, avec Turbo |
+| `production-normal-turbo` | Parcours de production, qualité normale conservée avec Turbo |
 | `direct-fast` | Même bibliothèque ZIP et niveau 1, écriture directe dans l’outil de mesure |
 | `direct-normal` | Même écriture directe au niveau 6 |
 
-Les archives sont décompressées et leur inventaire/contenu vérifiés contre les empreintes BLAKE3 des sources. Cette vérification et la préparation du manifeste sont hors chronométrage. Les ZIP vérifiés sont supprimés ; le rapport JSON et les fixtures générées restent disponibles.
+Les modes directs concernent uniquement ZIP. Les modes de production sont exécutés pour chaque format choisi ; les niveaux numériques ZIP/7z ne correspondent pas aux niveaux Zstandard.
+
+Les archives sont décompressées et leur inventaire/contenu vérifiés contre les empreintes BLAKE3 des sources. Cette vérification et la préparation du manifeste sont hors chronométrage. Les archives vérifiées sont supprimées ; le rapport JSON et les fixtures générées restent disponibles.
 
 ## Interprétation
 
