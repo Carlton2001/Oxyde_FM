@@ -26,6 +26,12 @@ try {
     $report = $json | ConvertFrom-Json
     [IO.File]::WriteAllText($reportPath, $json, [Text.UTF8Encoding]::new($false))
     Write-Host "Windows x86_64: $($report.vulnerabilities.count) published vulnerabilities."
+    foreach ($vulnerability in $report.vulnerabilities.list) {
+        $advisory = $vulnerability.advisory
+        Write-Host "VULNERABILITY: $($vulnerability.package.name) $($vulnerability.package.version) $($advisory.id) - $($advisory.title)"
+        Write-Host "  Advisory: https://rustsec.org/advisories/$($advisory.id).html"
+        Write-Host "  Patched versions: $($vulnerability.versions.patched -join ', ')"
+    }
     foreach ($category in $report.warnings.PSObject.Properties) {
         foreach ($warning in $category.Value) {
             Write-Host "$($category.Name): $($warning.package.name) $($warning.package.version) $($warning.advisory.id)"

@@ -9,6 +9,8 @@ use oxyde_lib::platform::worker_test_support::{
 mod iso;
 #[path = "support/native_process.rs"]
 mod native_process;
+#[path = "support/archive_transport.rs"]
+mod transport_tests;
 use native_process::native_probe;
 use oxyde_lib::utils::archive_io_state::ExtractionState;
 use std::io::{self, Cursor, Seek, SeekFrom, Write};

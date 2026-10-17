@@ -7,6 +7,7 @@ Les références actives décrivent les contrats ; les bilans ci-dessous décriv
 | [Sécurité, 13 octobre](2026-10-13-security.md) | Décisions, commits, bornes de tests et limites |
 | [Fenêtres et aperçus, 15 octobre](2026-10-15-windows.md) | Migration, corrections après essais et validation manquante |
 | [Code, 17 octobre](2026-10-17-code-review.md) | Corrections A01–A10 et optimisations O01–O04 intégrées |
+| [Transport d’archives, 17 octobre](2026-10-17-archive-transport.md) | Correction des attentes IPC, mesures avant/après et validation native |
 
 ## Retrouver une preuve complète
 

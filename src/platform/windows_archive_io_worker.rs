@@ -1,21 +1,20 @@
-//! Polled duplex archive supervision. No codec or pathname requests in this layer.
+//! Event-driven duplex archive supervision. No codec or pathname requests here.
 use super::windows_worker_sandbox::Worker;
 use crate::models::error::{ArchiveLimitFailure, ArchiveLimitKind, ArchiveSourceConflict};
 use crate::utils::archive_io_protocol::{
-    invalid, Control, FailureKind, Frame, Message, Operation, Wire, HEADER, MAX_FRAME,
+    invalid, Control, FailureKind, Frame, Message, Operation, Wire,
 };
-use std::io::{self, Read, Write};
+use std::io;
 use std::os::windows::io::AsRawHandle;
 use std::path::Path;
 use std::process::Command;
 use std::sync::{mpsc, Mutex, MutexGuard, TryLockError};
 use std::time::{Duration, Instant};
-use windows::Win32::Foundation::{ERROR_BROKEN_PIPE, HANDLE};
+use windows::Win32::Foundation::HANDLE;
 use windows::Win32::System::JobObjects::{
     JobObjectExtendedLimitInformation, QueryInformationJobObject,
     JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
 };
-use windows::Win32::System::Pipes::PeekNamedPipe;
 use windows::Win32::System::Threading::{
     SetPriorityClass, BELOW_NORMAL_PRIORITY_CLASS, NORMAL_PRIORITY_CLASS,
 };
@@ -23,6 +22,9 @@ use windows::Win32::System::Threading::{
 const MEMORY_BYTES: usize = 1024 * 1024 * 1024;
 static TARGETED: Mutex<()> = Mutex::new(());
 static BULK: Mutex<()> = Mutex::new(());
+
+mod timing;
+mod transport;
 
 fn cancelled() -> io::Error {
     io::Error::new(io::ErrorKind::Interrupted, "Operation cancelled")
@@ -227,23 +229,11 @@ pub(super) fn supervise(
     memory: usize,
 ) -> io::Result<Stats> {
     check(controls)?;
-    let (mut worker, mut output, mut input) =
+    let mut timing = timing::Timing::new(&operation);
+    let (mut worker, output, input) =
         Worker::start_duplex_checked(command, memory, &|| check(controls).map(|_| ()))?;
-    let (send, receive) = mpsc::sync_channel::<Vec<u8>>(1);
-    let (completed, completions) = mpsc::sync_channel(1);
-    // Dropping the job/child at every exit closes the child's input reader and
-    // releases this helper on normal Windows pipes. Never wait for it indefinitely.
-    let writer = std::thread::Builder::new()
-        .name("archive-io-pipe".into())
-        .spawn(move || {
-            while let Ok(bytes) = receive.recv() {
-                let result = input.write_all(&bytes).and_then(|_| input.flush());
-                let failed = result.is_err();
-                if completed.send(result).is_err() || failed {
-                    break;
-                }
-            }
-        })?;
+    timing.started_worker();
+    let pipe = transport::Pipe::start(output, input, session)?;
     let mut wire = Wire::new(session);
     let mut outgoing = Vec::new();
     wire.write(
@@ -254,8 +244,8 @@ pub(super) fn supervise(
     )?;
     let mut pending_output = Some(outgoing);
     let mut writes = 0usize;
-    let mut bytes = Vec::with_capacity(HEADER);
-    let mut chunk = [0; 64 * 1024];
+    let mut incoming = None;
+    let mut closed = false;
     let started = Instant::now();
     let mut paused_at = None;
     let mut paused_time = Duration::ZERO;
@@ -263,7 +253,9 @@ pub(super) fn supervise(
     let mut terminal_at = None;
     let mut priority = None;
     let result = (|| loop {
+        let before_controls = Instant::now();
         let control = check(controls)?;
+        timing.controlled(before_controls.elapsed());
         if priority != Some(control.turbo) {
             unsafe {
                 SetPriorityClass(
@@ -298,12 +290,8 @@ pub(super) fn supervise(
         if terminal_at.is_some_and(|at: Instant| at.elapsed() >= Duration::from_secs(1)) {
             return Err(invalid());
         }
-        while let Ok(result) = completions.try_recv() {
-            result?;
-            writes = writes.checked_sub(1).ok_or_else(invalid)?;
-        }
         if let Some(packet) = pending_output.take() {
-            match send.try_send(packet) {
+            match pipe.send(packet) {
                 Ok(()) => writes += 1,
                 Err(mpsc::TrySendError::Full(packet)) => pending_output = Some(packet),
                 Err(mpsc::TrySendError::Disconnected(_)) => return Err(invalid()),
@@ -328,110 +316,72 @@ pub(super) fn supervise(
                 if frame.message == Message::Finished {
                     terminal_at = Some(Instant::now());
                 }
-                wire.write(&mut packet, &handler(frame)?)?;
+                wire.write(&mut packet, &timing.handle(frame, handler)?)?;
             }
             pending_output = Some(packet);
+            continue;
         }
-        let mut available = 0;
-        let peek = unsafe {
-            PeekNamedPipe(
-                HANDLE(output.as_raw_handle()),
-                None,
-                0,
-                None,
-                Some(&mut available),
-                None,
-            )
-        };
-        if let Err(error) = peek {
-            if error.code() != windows::core::HRESULT::from_win32(ERROR_BROKEN_PIPE.0) {
-                return Err(io::Error::other(error.to_string()));
-            }
-        }
-        if available > 0 && pending_output.is_none() {
+        if let Some(frame) = if pending_output.is_none() {
+            incoming.take()
+        } else {
+            None
+        } {
             if terminal_at.is_some() {
                 return Err(invalid());
             }
-            let target = if bytes.len() < HEADER {
-                HEADER
-            } else {
-                wire.frame_size(&bytes[..HEADER])?
-            };
-            if target > MAX_FRAME {
-                return Err(invalid());
-            }
-            let count = (available as usize)
-                .min(chunk.len())
-                .min(target - bytes.len());
-            if count > 0 {
-                let count = output.read(&mut chunk[..count])?;
-                if count == 0 {
+            timing.frame(&frame);
+            let mut packet = Vec::new();
+            if frame.message == Message::Paused {
+                let Some((_, requested_at, acknowledged)) = &mut deferred else {
+                    return Err(invalid());
+                };
+                if *acknowledged {
                     return Err(invalid());
                 }
-                bytes
-                    .try_reserve_exact(target - bytes.len())
-                    .map_err(io::Error::other)?;
-                bytes.extend_from_slice(&chunk[..count]);
-            }
-            if bytes.len() >= HEADER && bytes.len() == wire.frame_size(&bytes[..HEADER])? {
-                let frame = wire.read(&mut bytes.as_slice())?;
-                bytes.clear();
-                let mut packet = Vec::new();
-                if frame.message == Message::Paused {
-                    let Some((_, requested_at, acknowledged)) = &mut deferred else {
-                        return Err(invalid());
-                    };
-                    if *acknowledged {
-                        return Err(invalid());
-                    }
-                    *acknowledged = true;
-                    if requested_at.elapsed() <= Duration::from_secs(1) {
-                        paused_at = Some(Instant::now());
-                    }
+                *acknowledged = true;
+                if requested_at.elapsed() <= Duration::from_secs(1) {
+                    paused_at = Some(Instant::now());
+                }
+            } else {
+                if deferred.is_some() {
+                    return Err(invalid());
+                }
+                if matches!(frame.message, Message::Failure { .. }) {
+                    return Err(checked_failure(&frame, &operation));
+                }
+                if control.paused {
+                    wire.write(
+                        &mut packet,
+                        &Frame::new(Message::Ack {
+                            pause: true,
+                            turbo: control.turbo,
+                        }),
+                    )?;
+                    deferred = Some((frame, Instant::now(), false));
+                } else if frame.message == Message::Checkpoint {
+                    wire.write(
+                        &mut packet,
+                        &Frame::new(Message::Ack {
+                            pause: false,
+                            turbo: control.turbo,
+                        }),
+                    )?;
                 } else {
-                    if deferred.is_some() {
-                        return Err(invalid());
+                    if frame.message == Message::Finished {
+                        terminal_at = Some(Instant::now());
                     }
-                    if matches!(frame.message, Message::Failure { .. }) {
-                        return Err(checked_failure(&frame, &operation));
-                    }
-                    if control.paused {
-                        wire.write(
-                            &mut packet,
-                            &Frame::new(Message::Ack {
-                                pause: true,
-                                turbo: control.turbo,
-                            }),
-                        )?;
-                        deferred = Some((frame, Instant::now(), false));
-                    } else if frame.message == Message::Checkpoint {
-                        wire.write(
-                            &mut packet,
-                            &Frame::new(Message::Ack {
-                                pause: false,
-                                turbo: control.turbo,
-                            }),
-                        )?;
-                    } else {
-                        if frame.message == Message::Finished {
-                            terminal_at = Some(Instant::now());
-                        }
-                        wire.write(&mut packet, &handler(frame)?)?;
-                    }
-                }
-                if !packet.is_empty() {
-                    pending_output = Some(packet);
+                    wire.write(&mut packet, &timing.handle(frame, handler)?)?;
                 }
             }
+            if !packet.is_empty() {
+                pending_output = Some(packet);
+            }
+            pipe.read_next()?;
+            continue;
         }
         if let Some(status) = worker.child.try_wait()? {
-            if available == 0 {
-                if !status.success()
-                    || terminal_at.is_none()
-                    || !bytes.is_empty()
-                    || pending_output.is_some()
-                    || writes != 0
-                {
+            if closed && incoming.is_none() && writes == 0 {
+                if !status.success() || terminal_at.is_none() || pending_output.is_some() {
                     #[cfg(test)]
                     eprintln!(
                         "Archive LPAC worker exit without complete protocol: {status}; terminal={}",
@@ -456,15 +406,38 @@ pub(super) fn supervise(
                 });
             }
         }
-        if available == 0 || pending_output.is_some() {
-            std::thread::sleep(Duration::from_millis(1));
+        let before_wait = Instant::now();
+        let event = pipe.wait(Duration::from_millis(5));
+        timing.waited(before_wait.elapsed());
+        match event {
+            Ok(transport::Event::Frame(frame)) => {
+                if incoming.replace(frame).is_some() {
+                    return Err(invalid());
+                }
+            }
+            Ok(transport::Event::Written(result)) => {
+                result?;
+                writes = writes.checked_sub(1).ok_or_else(invalid)?;
+            }
+            Ok(transport::Event::Closed(result)) => {
+                result?;
+                closed = true;
+                if terminal_at.is_none() && incoming.is_none() {
+                    return Err(invalid());
+                }
+            }
+            Err(mpsc::RecvTimeoutError::Timeout) => {}
+            Err(mpsc::RecvTimeoutError::Disconnected) => return Err(invalid()),
         }
     })();
-    drop(send);
+    let helpers = pipe.close();
     drop(worker); // Kill closes the pipe reader before a helper could linger.
-    if writer.is_finished() {
-        let _ = writer.join();
+    for helper in helpers {
+        if helper.is_finished() {
+            let _ = helper.join();
+        }
     }
+    timing.success = result.is_ok();
     result
 }
 

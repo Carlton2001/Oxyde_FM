@@ -13,6 +13,8 @@ Sous Windows de production, les codecs sont exécutés dans des workers ; le par
 
 Les workers Decode/Encode, listing/index sont en LPAC sans capacité. Le parent valide chemins, types, tailles et séquences ; il retient sources et sorties. Les erreurs typées sont traduites au rendu, sans exposer les codes internes.
 
+Le transport Decode/Encode réveille le superviseur sur réception ou fin d’écriture, avec files de capacité un et un crédit par trame lue. Les helpers peuvent bloquer sur les pipes ; le superviseur garde ses contrôles de pause, annulation et délai. Son attente inactive demande au maximum 5 ms avant revérification, sans garantie absolue sur l’ordonnancement ni les callbacks natifs. Une trame partielle ne bloque pas cette surveillance. Les helpers ne sont jamais joints sans borne à la fermeture.
+
 Les variantes locales sous `cfg(any(not(target_os = "windows"), test))` servent Linux et les tests unitaires. Ceux-ci ne prouvent pas le parcours Windows de production (`cfg(all(target_os = "windows", not(test)))`). `tests/archive_io_pipeline.rs` lie la bibliothèque sans `cfg(test)` et exerce les véritables workers Windows.
 
 ## Formats et mutations

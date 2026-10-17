@@ -356,14 +356,14 @@ fn decode<T: Exchange + 'static>(
                 }
                 let meta = empty_entry(
                     index as u64,
-                    entry.name().into(),
+                    entry.name().map_err(io::Error::other)?.into_owned(),
                     entry.is_dir(),
                     entry.size(),
                 );
                 let chosen = requested.as_ref().is_none_or(|requested| {
-                    relative_archive_path(entry.name()).is_ok_and(|path| path == *requested)
+                    relative_archive_path(&meta.name).is_ok_and(|path| path == *requested)
                 });
-                budget.entry(entry.name(), if chosen { meta.size } else { 0 })?;
+                budget.entry(&meta.name, if chosen { meta.size } else { 0 })?;
                 if requested.is_some() && chosen {
                     if selection.is_some() || meta.directory {
                         return Err(invalid().into());
@@ -383,7 +383,7 @@ fn decode<T: Exchange + 'static>(
                 let mut entry = archive.by_index(index).map_err(io::Error::other)?;
                 let meta = empty_entry(
                     index as u64,
-                    entry.name().into(),
+                    entry.name().map_err(io::Error::other)?.into_owned(),
                     entry.is_dir(),
                     entry.size(),
                 );

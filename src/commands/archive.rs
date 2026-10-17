@@ -88,7 +88,8 @@ fn extract_zip_file_with_checkpoint(
         let entry = archive
             .by_index_raw(index)
             .map_err(|e| CommandError::ArchiveError(e.to_string()))?;
-        budget.entry(entry.name(), 0)?;
+        let name = entry.name().map_err(io::Error::other)?;
+        budget.entry(&name, 0)?;
         if entry
             .unix_mode()
             .is_some_and(|mode| mode & 0o170000 == 0o120000)
@@ -97,7 +98,7 @@ fn extract_zip_file_with_checkpoint(
                 "Archive links are not supported".into(),
             ));
         }
-        if relative_archive_path(entry.name())? == requested {
+        if relative_archive_path(&name)? == requested {
             if selected.is_some() || entry.is_dir() {
                 return Err(CommandError::ArchiveError("Ambiguous archive file".into()));
             }
@@ -361,14 +362,16 @@ pub(crate) fn extract_open_archive_with_budget(
                         "Archive links are not supported".into(),
                     ));
                 }
-                budget.entry(entry.name(), if entry.is_dir() { 0 } else { entry.size() })?;
+                let name = entry.name().map_err(io::Error::other)?;
+                budget.entry(&name, if entry.is_dir() { 0 } else { entry.size() })?;
             }
             for index in 0..archive.len() {
                 budget.checkpoint(checkpoint)?;
                 let mut entry = archive
                     .by_index(index)
                     .map_err(|e| CommandError::ArchiveError(e.to_string()))?;
-                let destination = root.destination(entry.name(), entry.is_dir())?;
+                let name = entry.name().map_err(io::Error::other)?;
+                let destination = root.destination(&name, entry.is_dir())?;
                 if !entry.is_dir() {
                     let mut output = platform().create_archive_file(&destination.path)?;
                     let size = entry.size();

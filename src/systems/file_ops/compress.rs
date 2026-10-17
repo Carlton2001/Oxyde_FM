@@ -78,6 +78,7 @@ impl FileOperationManager {
         _rename: Option<(&Path, &Path)>,
     ) -> Result<(), String> {
         let requested = destination.ok_or("Missing archive destination")?;
+        let timing_started = std::time::Instant::now();
         let update_destination = matches!(op.lock().unwrap().op_type, FileOpType::Compress);
         let destination_parents =
             crate::systems::path_parents::HeldParents::new(&requested).map_err(|error| error.to_string())?;
@@ -98,6 +99,7 @@ impl FileOperationManager {
         })
         .map_err(|error| error.to_string())?;
         let total_bytes = entries.iter().map(|entry| entry.source.size()).sum();
+        log::info!(target: "oxyde_lib::archive_timing", "archive_compress_plan entries={} source_bytes={} wall_s={:.6}", entries.len(), total_bytes, timing_started.elapsed().as_secs_f64());
         after_plan().map_err(|error| error.to_string())?;
         {
             let mut locked = op.lock().unwrap();
@@ -114,6 +116,7 @@ impl FileOperationManager {
         }
         let mut output = crate::systems::compression_output::Output::new(&destination_parents)
             .map_err(|error| error.to_string())?;
+        let encoding_started = std::time::Instant::now();
         #[cfg(all(target_os = "windows", not(test)))]
         {
             { let mut op = op.lock().unwrap(); op.processed_files = 0; op.processed_bytes = 0; op.speed_sample_at = Some(std::time::Instant::now()); op.speed_sample_bytes = 0; op.bytes_per_second = 0; }
@@ -248,6 +251,8 @@ impl FileOperationManager {
             _ => return Err("Unsupported compression format".into()),
         }
         }
+        log::info!(target: "oxyde_lib::archive_timing", "archive_compress_encode wall_s={:.6}", encoding_started.elapsed().as_secs_f64());
+        let publication_started = std::time::Instant::now();
         Self::archive_checkpoint(op)?;
         output.file.sync_all().map_err(|error| error.to_string())?;
         let mut final_target = target;
@@ -278,6 +283,7 @@ impl FileOperationManager {
             };
             op.lock().unwrap().destination = Some(display_path);
         }
+        log::info!(target: "oxyde_lib::archive_timing", "archive_compress_end publication_s={:.6} total_s={:.6}", publication_started.elapsed().as_secs_f64(), timing_started.elapsed().as_secs_f64());
         Ok(())
     }
 

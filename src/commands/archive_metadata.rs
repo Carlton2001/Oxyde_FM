@@ -163,7 +163,7 @@ pub(super) fn indexed_file(
                 .unwrap_or(0);
             if let Some(entry) = member(
                 &archive_origin,
-                file.name(),
+                &file.name().map_err(|error| invalid(&error.to_string()))?,
                 file.is_dir(),
                 file.size(),
                 modified,

@@ -120,8 +120,9 @@ impl FileOperationManager {
                 if entry.unix_mode().is_some_and(|mode| mode & 0o170000 == 0o120000) {
                     return Err("Archive contains a symbolic link".into());
                 }
+                let name = entry.name().map_err(|error| error.to_string())?;
                 budget
-                    .entry(entry.name(), if entry.is_dir() { 0 } else { entry.size() })
+                    .entry(&name, if entry.is_dir() { 0 } else { entry.size() })
                     .map_err(|error| error.to_string())?;
                 total_bytes = total_bytes
                     .checked_add(if entry.is_dir() { 0 } else { entry.size() })
@@ -138,8 +139,9 @@ impl FileOperationManager {
                     .checkpoint(&checkpoint)
                     .map_err(|error| error.to_string())?;
                 let mut entry = archive.by_index(index).map_err(|error| error.to_string())?;
+                let name = entry.name().map_err(|error| error.to_string())?;
                 let destination = extraction_root
-                    .destination(entry.name(), entry.is_dir())
+                    .destination(&name, entry.is_dir())
                     .map_err(|error| error.to_string())?;
                 let output = &destination.path;
                 op.lock().unwrap().current_file = Some(output.to_string_lossy().into_owned());

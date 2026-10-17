@@ -14,6 +14,7 @@ Oxyde utilise Rust, GPUI et Tokio. Choisir une référence selon le travail à f
 | Modifier le listing, les filtres ou la recherche | [Navigation et recherche](architecture/search.md) |
 | Diagnostiquer copies, suppressions ou fermeture | [Copie](diagnostics/copy.md), [suppression](diagnostics/delete.md), [fermeture](diagnostics/shutdown.md) |
 | Comparer les moteurs de copie | [Benchmark](guides/copy-benchmark.md) |
+| Mesurer la compression et les échanges du worker | [Compression ZIP](diagnostics/archive-compression.md) |
 | Connaître les protections et limites restantes | [Sécurité](security/status.md) |
 | Réexaminer les dépendances conservées | [Dépendances](security/dependencies.md) |
 | Préparer un essai manuel | [Validation visuelle](guides/visual-checks.md) |
