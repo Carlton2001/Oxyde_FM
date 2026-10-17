@@ -66,6 +66,7 @@ pub(crate) fn render_delete_confirmation(
                 div().child(cx.i18n().text(if pending.permanent_prompt { Message::TrashPermanentDeletePrompt } else { Message::TrashDeletePrompt })),
             )
             .title_icon("icons/trash-2.svg")
+            .standalone(false)
             .on_backdrop_dismiss(move |window, cx| {
                 close.update(cx, |this, cx| {
                     this.pending_trash_delete = None;

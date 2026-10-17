@@ -80,14 +80,14 @@ pub(crate) fn install_icon(path: &'static str, window: &mut Window) {
 }
 
 pub(crate) fn header(
-    icon: &'static str,
+    icon: impl Into<SharedString>,
     title: SharedString,
     maximized: bool,
     allow_resize: bool,
     cx: &App,
     on_close: impl Fn(&mut Window, &mut App) + 'static,
 ) -> impl IntoElement {
-    header_frame(icon, title, maximized, allow_resize, cx, None, on_close)
+    header_frame(icon.into(), title, maximized, allow_resize, cx, None, on_close)
 }
 
 pub(crate) fn header_with_actions(
@@ -99,11 +99,11 @@ pub(crate) fn header_with_actions(
     actions: impl IntoElement,
     on_close: impl Fn(&mut Window, &mut App) + 'static,
 ) -> impl IntoElement {
-    header_frame(icon, title, maximized, allow_resize, cx, Some(actions.into_any_element()), on_close)
+    header_frame(icon.into(), title, maximized, allow_resize, cx, Some(actions.into_any_element()), on_close)
 }
 
 fn header_frame(
-    icon: &'static str,
+    icon: SharedString,
     title: SharedString,
     maximized: bool,
     allow_resize: bool,

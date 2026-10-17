@@ -22,7 +22,6 @@ pub(crate) fn render_settings_confirmation(
     let keyboard = handle.clone();
     let cancel = handle.clone();
     let confirm = handle.clone();
-    let close = handle.clone();
     let backdrop = handle;
     div()
         .absolute()
@@ -64,19 +63,7 @@ pub(crate) fn render_settings_confirmation(
             Modal::new("settings-data-confirmation", cx.i18n().text(title),
                 div().child(cx.i18n().text(prompt)))
                 .title_icon(icon_path)
-                .header(
-                    div().w_full().flex().items_center().gap(rems(0.5))
-                        .child(svg().path(icon_path).size(rems(1.0)).text_color(theme.text_muted))
-                        .child(div().flex_1().text_size(rems(0.875))
-                            .font_weight(FontWeight::MEDIUM).child(cx.i18n().text(title)))
-                        .child(div().id("settings-confirm-close").p(rems(0.25)).rounded_md()
-                            .hover(|d| d.bg(theme.control_hover))
-                            .on_mouse_down(MouseButton::Left, move |_, window, cx| {
-                                cx.stop_propagation();
-                                close.update(cx, |view, cx| view.resolve_settings_confirmation(false, window, cx));
-                            })
-                            .child(svg().path("icons/x.svg").size(rems(1.0)).text_color(theme.text_muted))),
-                )
+                .standalone(false)
                 .on_backdrop_dismiss(move |window, cx| {
                     backdrop.update(cx, |view, cx| view.resolve_settings_confirmation(false, window, cx));
                 })

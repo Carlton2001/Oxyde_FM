@@ -24,23 +24,50 @@ fn menu_position(
 #[path = "dialog_windows/tests/menu_position.rs"]
 mod menu_position_tests;
 
-#[derive(Clone, Copy)]
+mod fixed;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum DialogKind {
     Trash,
     Conflict,
+    Rename,
+    Network,
+    NetworkForce,
+    TrashDelete,
+    SettingsConfirmation,
+    Notice,
 }
 
+pub(super) const DIALOG_KINDS: usize = 8;
+
 impl DialogKind {
+    pub(super) const FIXED: [Self; 6] = [
+        Self::Rename,
+        Self::Network,
+        Self::NetworkForce,
+        Self::TrashDelete,
+        Self::SettingsConfirmation,
+        Self::Notice,
+    ];
+
     fn index(self) -> usize {
-        match self {
-            Self::Trash => 0,
-            Self::Conflict => 1,
-        }
+        self as usize
     }
     fn active(self, app: &OxydeApp) -> bool {
         match self {
             Self::Trash => app.trash_settings.is_some(),
             Self::Conflict => !app.pending_file_operations.is_empty(),
+            _ => self.fixed_active(app),
+        }
+    }
+    fn icon(self) -> &'static str {
+        match self {
+            Self::Trash | Self::TrashDelete => "icons/trash-2.svg",
+            Self::Conflict => "icons/copy-x.svg",
+            Self::Rename => "icons/pencil.svg",
+            Self::Network | Self::NetworkForce => "icons/server.svg",
+            Self::SettingsConfirmation => "icons/settings.svg",
+            Self::Notice => "icons/circle-x.svg",
         }
     }
 }
@@ -53,6 +80,7 @@ pub(super) struct DialogWindow {
     simple_size: Option<Size<Pixels>>,
     restoring_simple_width: Option<Pixels>,
     context_menus: Vec<super::ContextMenuInstance>,
+    focus: FocusHandle,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -116,7 +144,9 @@ impl OxydeApp {
         }
         self.dialog_windows_open[kind.index()] = true;
         let owner = cx.entity().downgrade();
-        let origin = window.bounds().origin + point(px(60.0), px(60.0));
+        let owner_bounds = window.bounds();
+        let owner_window = window.window_handle();
+        let origin = owner_bounds.origin + point(px(60.0), px(60.0));
         let native_owner = {
             raw_window_handle::HasWindowHandle::window_handle(window).ok().map(|handle| handle.as_raw())
         };
@@ -135,16 +165,30 @@ impl OxydeApp {
                 .trash_settings
                 .as_ref()
                 .map(|dialog| dialog.request_id());
-            let result = cx.open_window(
+            let initial_focus = kind.initial_focus(main.read(cx), cx);
+            let restore_focus = main.read(cx).focus_handle.clone();
+            let fixed_size = size(px(rem * kind.fixed_width()), px(rem * 10.0));
+            let options = if kind.is_fixed() {
+                // The native lock owns placement; start centered to avoid a jump.
                 WindowOptions {
-                    window_bounds: Some(crate::ui::app::tool_geometry::restore(match kind { DialogKind::Trash => "icons/trash-2.svg", DialogKind::Conflict => "icons/copy-x.svg" }, Bounds::new(
+                    window_bounds: Some(WindowBounds::Windowed(Bounds::new(
+                        owner_bounds.center() - point(fixed_size.width / 2.0, fixed_size.height / 2.0),
+                        fixed_size,
+                    ))),
+                    is_resizable: false,
+                    is_minimizable: false,
+                    titlebar: Some(TitlebarOptions {
+                        appears_transparent: true,
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                }
+            } else {
+                WindowOptions {
+                    window_bounds: Some(crate::ui::app::tool_geometry::restore(kind.icon(), Bounds::new(
                         origin,
                         size(
-                            px(rem
-                                * match kind {
-                                    DialogKind::Trash => 28.0,
-                                    DialogKind::Conflict => 44.0,
-                                }),
+                            px(rem * if kind == DialogKind::Trash { 28.0 } else { 44.0 }),
                             px(rem * 38.0),
                         ),
                     ), cx)),
@@ -157,23 +201,29 @@ impl OxydeApp {
                         ..Default::default()
                     }),
                     ..Default::default()
-                },
+                }
+            };
+            let result = cx.open_window(
+                options,
                 move |window, cx| {
                     window.set_rem_size(px(rem));
                     if let (Some(owner), Ok(handle)) = (
                         native_owner, raw_window_handle::HasWindowHandle::window_handle(window),
                     ) {
-                        if let Err(error) = oxyde_lib::platform::platform().set_window_owner(handle.as_raw(), owner) {
-                            log::warn!("Cannot attach recycle bin properties window to Oxyde: {error}");
+                        let platform = oxyde_lib::platform::platform();
+                        let attached = if kind.is_fixed() {
+                            platform.configure_fixed_dialog(handle.as_raw(), owner).or_else(|error| {
+                                log::debug!("{error}");
+                                platform.set_window_owner(handle.as_raw(), owner)
+                            })
+                        } else {
+                            platform.set_window_owner(handle.as_raw(), owner)
+                        };
+                        if let Err(error) = attached {
+                            log::warn!("Cannot attach dialog window to Oxyde: {error}");
                         }
                     }
-                    tool_window::install_icon(
-                        match kind {
-                            DialogKind::Trash => "icons/trash-2.svg",
-                            DialogKind::Conflict => "icons/copy-x.svg",
-                        },
-                        window,
-                    );
+                    tool_window::install_icon(kind.icon(), window);
                     let closing = close.clone();
                     window.on_window_should_close(cx, move |window, cx| {
                         let Some(main) = closing.upgrade() else {
@@ -195,6 +245,7 @@ impl OxydeApp {
                                     cx.notify();
                                 }
                                 DialogKind::Conflict => app.cancel_pending_file_operation(cx),
+                                _ => return kind.request_fixed_close(app, window, cx),
                             }
                             true
                         });
@@ -212,11 +263,26 @@ impl OxydeApp {
                             { crate::ui::components::tool_window::close_transients(window, cx); window.remove_window() }
                         });
                         let cleanup = owner.clone();
+                        let dialog_focus = initial_focus.clone();
                         cx.on_release(move |_, cx| {
                             if let Some(main) = cleanup.upgrade() {
                                 main.update(cx, |app, cx| {
                                     app.dialog_windows_open[kind.index()] = false;
                                     cx.notify();
+                                });
+                            }
+                            if kind.is_fixed() {
+                                // Dialog callbacks focus inside this window; give
+                                // the owner its keyboard back when it kept a stale target.
+                                cx.defer(move |cx| {
+                                    let _ = owner_window.update(cx, |_, window, cx| {
+                                        let stale = window.focused(cx).is_none_or(|focused| {
+                                            dialog_focus.as_ref() == Some(&focused)
+                                        });
+                                        if stale {
+                                            window.focus(&restore_focus, cx);
+                                        }
+                                    });
                                 });
                             }
                         })
@@ -232,7 +298,12 @@ impl OxydeApp {
                                     pending.dialog.reset_focus();
                                 }
                             }
+                            _ => {}
                         });
+                        let focus = cx.focus_handle();
+                        if kind.is_fixed() {
+                            window.focus(initial_focus.as_ref().unwrap_or(&focus), cx);
+                        }
                         DialogWindow {
                             owner,
                             kind,
@@ -241,6 +312,7 @@ impl OxydeApp {
                             simple_size: None,
                             restoring_simple_width: None,
                             context_menus: Vec::new(),
+                            focus,
                             _subscriptions: vec![observed, released],
                         }
                     })
@@ -255,8 +327,11 @@ impl OxydeApp {
                         DialogKind::Conflict => {
                             app.pending_file_operations.pop_front();
                         }
+                        _ => kind.discard_fixed(app, cx),
                     }
-                    app.file_operation_notice = Some((Message::OperationFailed, error.to_string()));
+                    if kind != DialogKind::Notice {
+                        app.file_operation_notice = Some((Message::OperationFailed, error.to_string()));
+                    }
                     cx.notify();
                 });
             }
@@ -325,6 +400,11 @@ impl Render for DialogWindow {
             self.restoring_simple_width = None;
         }
         let simple_width = self.restoring_simple_width;
+        if kind.is_fixed() && window.focused(cx).is_none() {
+            let focus = kind.initial_focus(owner.read(cx), cx).unwrap_or_else(|| self.focus.clone());
+            window.focus(&focus, cx);
+        }
+        let focus = self.focus.clone();
         let content = owner.update(cx, |app, cx| match kind {
             DialogKind::Trash => {
                 super::trash_settings::render(app, owner.clone(), window, cx).into_any_element()
@@ -335,6 +415,7 @@ impl Render for DialogWindow {
                 conflict_dialog::render_conflict_dialog(pending, system, simple_width, window, owner.clone(), cx)
                     .into_any_element()
             }
+            _ => kind.render_fixed(app, owner.clone(), &focus, window, cx),
         });
         let root = div()
             .size_full()

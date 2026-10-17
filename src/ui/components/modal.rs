@@ -76,6 +76,7 @@ pub struct Modal {
     width: AbsoluteLength,
     body_gap: AbsoluteLength,
     on_backdrop_dismiss: Option<Box<dyn Fn(&mut Window, &mut App)>>,
+    on_close: Option<Box<dyn Fn(&mut Window, &mut App)>>,
     header: Option<AnyElement>,
     wrap_actions: bool,
     body_padding: (Rems, Rems),
@@ -111,6 +112,7 @@ impl Modal {
             width: rems(27.5).into(),
             body_gap: rems(0.375).into(),
             on_backdrop_dismiss: None,
+            on_close: None,
             header: None,
             wrap_actions: false,
             body_padding: (rems(1.0), rems(1.25)),
@@ -162,6 +164,12 @@ impl Modal {
         self
     }
 
+    /// Title-bar close of a standalone window; defaults to the backdrop dismissal.
+    pub fn on_close(mut self, callback: impl Fn(&mut Window, &mut App) + 'static) -> Self {
+        self.on_close = Some(Box::new(callback));
+        self
+    }
+
     pub fn on_backdrop_dismiss(
         mut self,
         callback: impl Fn(&mut Window, &mut App) + 'static,
@@ -180,7 +188,16 @@ impl RenderOnce for Modal {
             };
             let fill_window = self.fill_window;
             let content_width = self.content_width;
-            let header = self.header.unwrap_or_else(|| div().child(self.title).into_any_element());
+            let on_close = self.on_close.or(self.on_backdrop_dismiss);
+            let title = self.title;
+            let header = self.header.unwrap_or_else(|| {
+                // Same title bar as Properties and the other secondary windows.
+                window.set_window_title(title.as_ref());
+                super::tool_window::header(
+                    self.title_icon.unwrap_or_default(), title, false, false, cx,
+                    move |window, cx| if let Some(close) = &on_close { close(window, cx) },
+                ).into_any_element()
+            });
             return div().id(self.id).relative().w_full().max_h(height_limit)
                 .when(fill_window, |frame| frame.h_full())
                 .flex().flex_col().bg(self.body_background.unwrap_or(theme.active_background))

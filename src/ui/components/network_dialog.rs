@@ -76,41 +76,10 @@ pub(crate) fn render_force_confirmation(
                 div().child(cx.i18n().text_with_args(Message::NetworkForcePrompt, &args)),
             )
             .title_icon("icons/triangle-alert.svg")
-            .header(
-                div()
-                    .w_full()
-                    .flex()
-                    .items_center()
-                    .gap(rems(0.5))
-                    .child(
-                        svg()
-                            .path("icons/triangle-alert.svg")
-                            .size(rems(1.0))
-                            .text_color(theme.error),
-                    )
-                    .child(
-                        div()
-                            .flex_1()
-                            .text_size(rems(0.875))
-                            .child(cx.i18n().text(Message::DisconnectThisNetworkDrive)),
-                    )
-                    .child(
-                        div()
-                            .id("network-force-close")
-                            .p_1()
-                            .on_click(move |_, window, cx| {
-                                close.update(cx, |view, cx| {
-                                    view.resolve_network_force(false, window, cx)
-                                });
-                            })
-                            .child(
-                                svg()
-                                    .path("icons/x.svg")
-                                    .size(rems(1.0))
-                                    .text_color(theme.text_muted),
-                            ),
-                    ),
-            )
+            .standalone(false)
+            .on_close(move |window, cx| {
+                close.update(cx, |view, cx| view.resolve_network_force(false, window, cx));
+            })
             .action(
                 button_style(action_button("network-force-cancel"), theme, ButtonVariant::Secondary, true)
                     .border(rems(0.0625))
@@ -525,73 +494,15 @@ pub(crate) fn render_network_dialog(
                 .child(cx.i18n().text_with_args(*key, &args)),
         );
     }
-    let h = handle.clone();
-    let close = handle.clone();
-    let header = div()
-        .id("network-dialog-header")
-        .flex()
-        .w_full()
-        .items_center()
-        .gap(rems(0.5))
-        .on_mouse_down(MouseButton::Left, move |_, _, cx| {
-            h.update(cx, |view, cx| {
-                if let Some(dialog) = &mut view.network_dialog {
-                    dialog.letter_open = false;
-                    cx.notify();
-                }
-            })
-        })
-        .child(
-            svg()
-                .path(if disconnect {
-                    "icons/server-off.svg"
-                } else {
-                    "icons/server.svg"
-                })
-                .size(rems(1.0))
-                .text_color(theme.text_muted),
-        )
-        .child(
-            div()
-                .flex_1()
-                .text_size(rems(0.875))
-                .font_weight(FontWeight::MEDIUM)
-                .child(title.clone()),
-        )
-        .child(
-            div()
-                .id("network-dialog-close")
-                .p_1()
-                .rounded_md()
-                .hover(|s| s.bg(theme.control_hover))
-                .on_mouse_down(MouseButton::Left, move |_, window, cx| {
-                    cx.stop_propagation();
-                    close.update(cx, |view, cx| view.cancel_network_dialog(window, cx));
-                })
-                .child(
-                    svg()
-                        .path("icons/x.svg")
-                        .size(rems(1.0))
-                        .text_color(theme.text_muted),
-                ),
-        );
     let cancel = handle.clone();
     let submit = handle.clone();
-    let backdrop = handle.clone();
+    let close = handle.clone();
     let modal = Modal::new("network-dialog", title, body)
+        .title_icon(if disconnect { "icons/server-off.svg" } else { "icons/server.svg" })
+        .standalone(false)
         .body_background(theme.active_background)
-        .on_backdrop_dismiss(move |_, cx| {
-            backdrop.update(cx, |view, cx| {
-                if let Some(dialog) = &mut view.network_dialog {
-        if dialog.letter_open {
-                        dialog.letter_open = false;
-                        cx.notify();
-                    }
-                }
-            })
-        })
+        .on_close(move |window, cx| close.update(cx, |view, cx| view.cancel_network_dialog(window, cx)))
         .width(rems(30.0))
-        .header(header)
         .action(
             button_style(action_button("network-cancel"), theme, ButtonVariant::Secondary, !busy)
                 .track_focus(&dialog.controls[2])

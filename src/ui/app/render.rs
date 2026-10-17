@@ -325,23 +325,6 @@ impl Render for OxydeApp {
                     )
             });
 
-        // Keep modal content below transient context menus in the render tree:
-        // a text field inside the rename dialog can open its own context menu.
-        if self.network_force_confirmation.is_some() {
-            root = root.child(deferred(crate::ui::components::network_dialog::render_force_confirmation(self, handle.clone(), _window, cx)));
-        } else if self.network_dialog.is_some() {
-            root = root.child(deferred(crate::ui::components::network_dialog::render_network_dialog(self, handle.clone(), _window, cx)));
-        }
-        if self.editing_path.is_some() && !self.inline_rename {
-            root = root.child(deferred(
-                crate::ui::components::rename_dialog::render_rename_dialog(
-                    self,
-                    handle.clone(),
-                    cx,
-                ),
-            ));
-        }
-
         root = self.render_context_menus(root, handle.clone(), window_handle, win_h, _window, cx);
 
         // SETTINGS OVERLAY
@@ -352,43 +335,11 @@ impl Render for OxydeApp {
             root = root.child(deferred(render_settings_panel(self, handle.clone(), _window, cx)));
         }
 
-        if self.pending_trash_delete.is_some() { root = root.child(deferred(trash_settings::render_delete_confirmation(self, handle.clone(), _window, cx))); }
         self.ensure_dialog_window(dialog_windows::DialogKind::Trash, _window, cx);
-        if self.settings_confirmation.is_some() {
-            root = root.child(deferred(
-                crate::ui::components::settings::render_settings_confirmation(
-                    self, handle.clone(), _window, cx,
-                ),
-            ));
-        }
-
         self.ensure_dialog_window(dialog_windows::DialogKind::Conflict, _window, cx);
-
-        if let Some((key, detail)) = self.file_operation_notice.clone() {
-            let mut args = FluentArgs::new();
-            args.set("detail", crate::ui::format::error_detail(&detail, cx.i18n()));
-            let message = cx.i18n().text_with_args(key, &args);
-            let close_handle = handle.clone();
-            let theme = *cx.theme();
-            root = root.child(deferred(
-                crate::ui::components::modal::Modal::new(
-                    "operation-notice",
-                    cx.i18n().text(Message::OperationFailed),
-                    div().text_color(theme.text_muted).child(message),
-                )
-                .title_icon("icons/circle-x.svg")
-                .action(
-                    crate::ui::components::modal::action_button("operation-notice-close")
-                        .hover(|d| d.bg(theme.control_hover))
-                        .child(cx.i18n().text(Message::Close))
-                        .on_mouse_down(MouseButton::Left, move |_, _, cx| {
-                            close_handle.update(cx, |this, cx| {
-                                this.file_operation_notice = None;
-                                cx.notify();
-                            });
-                        }),
-                ),
-            ));
+        // Modal prompts are fixed native windows centered over this one.
+        for kind in dialog_windows::DialogKind::FIXED {
+            self.ensure_dialog_window(kind, _window, cx);
         }
 
         root = root.child(deferred(self.render_toasts(_window, cx)));

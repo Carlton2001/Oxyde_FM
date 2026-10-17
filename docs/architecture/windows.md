@@ -11,6 +11,7 @@ Sous Windows, les menus et infobulles utilisent des fenêtres GPUI possédées. 
 | Menu interactif | `components::popup` avec factory, condition de validité et callback de fermeture |
 | Suggestions de chemin | `popup::show_passive` ; focus et clavier restent dans le champ |
 | Fenêtre secondaire | `components::tool_window` ; état métier dans la vue appelante |
+| Invite modale (renommage, compression, lecteur réseau, confirmations, avis d’échec) | `DialogKind` fixe de `app/dialog_windows` ; `Modal::standalone`, jamais de surcouche dans la fenêtre principale |
 
 Un identifiant réutilise la fenêtre existante ; une demande en attente est remplacée par la plus récente. La factory reconstruit l’état actuel, sans copie métier figée. À la fermeture, lire la spec actuelle plutôt qu’un callback capturé à la première ouverture.
 
@@ -23,6 +24,10 @@ Un identifiant réutilise la fenêtre existante ; une demande en attente est rem
 - Ne jamais appeler `Window::dispatch_event` dans le constructeur d’`App::open_window` : la racine n’est pas installée. Initialiser les modificateurs après retour via le handle non typé.
 
 Les appels Win32 passent par `Platform`. Placement et activation susceptibles de rappeler GPUI sont différés et regroupés, jamais synchrones pendant un rendu ou `Window::update`. Créer près du propriétaire pour conserver un DPI initial cohérent.
+
+## Invites modales fixes
+
+Les invites sont de vraies fenêtres possédées, au gabarit des Propriétés (`tool_window::header`, pied commun, largeur fixe, hauteur ajustée au contenu). `Platform::configure_fixed_dialog` désactive le propriétaire tant qu’elles sont visibles et verrouille leur position au centre de celui-ci, bornée à sa zone de travail ; ni déplacement, ni redimensionnement, ni réduction. `follow_fixed_dialog_owner` les recentre quand la fenêtre principale bouge. Le propriétaire est réactivé avant le masquage pour que Windows lui rende l’activation. La fermeture par la barre de titre ou Alt+F4 passe par `request_fixed_close`, qui respecte les opérations occupées ; à la libération, le focus du propriétaire revient à `focus_handle` s’il pointait encore vers l’invite. Linux ouvre la même fenêtre sans verrouillage.
 
 ## Focus et fermeture
 

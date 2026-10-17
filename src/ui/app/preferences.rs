@@ -354,6 +354,11 @@ impl OxydeApp {
 
     pub(crate) fn observe_main_window(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let subscription = cx.observe_window_bounds(window, |this, window, cx| {
+            if let Ok(handle) = raw_window_handle::HasWindowHandle::window_handle(window) {
+                if let Err(error) = oxyde_lib::platform::platform().follow_fixed_dialog_owner(handle.as_raw()) {
+                    log::debug!("Cannot recenter fixed dialogs: {error}");
+                }
+            }
             let Some(placement) = crate::ui::window_geometry::capture(window) else { return; };
             if this.config.window_placement == Some(placement) { return; }
             this.config.window_placement = Some(placement);

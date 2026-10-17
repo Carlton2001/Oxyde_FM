@@ -800,6 +800,14 @@ impl Platform for WindowsPlatform {
         super::windows_hover_window::set_anchor(window, bounds, open_left, beside)
     }
 
+    fn configure_fixed_dialog(&self, window: raw_window_handle::RawWindowHandle, owner: raw_window_handle::RawWindowHandle) -> Result<(), String> {
+        super::windows_fixed_dialog::configure(window, owner)
+    }
+
+    fn follow_fixed_dialog_owner(&self, owner: raw_window_handle::RawWindowHandle) -> Result<(), String> {
+        super::windows_fixed_dialog::follow_owner(owner)
+    }
+
     fn configure_menu_window(&self, window: raw_window_handle::RawWindowHandle, owner: raw_window_handle::RawWindowHandle, coordinate_owner: raw_window_handle::RawWindowHandle, activate: bool) -> Result<(), String> {
         self.set_window_owner(window, owner)?;
         super::windows_hover_window::configure_menu(window, owner, coordinate_owner, activate)?;

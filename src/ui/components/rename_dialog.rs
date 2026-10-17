@@ -47,6 +47,7 @@ pub fn render_rename_dialog(
         } else {
             "icons/pencil.svg"
         })
+        .standalone(false)
         .width(rems(30.0))
         .body_gap(rems(0.375))
         .on_backdrop_dismiss(move |_, cx| {

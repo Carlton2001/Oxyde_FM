@@ -490,6 +490,13 @@ pub trait Platform: Send + Sync {
     /// Set a fixed owner-client anchor (x, y, width, height), or follow the cursor.
     fn set_popup_anchor(&self, window: raw_window_handle::RawWindowHandle, bounds: Option<(f32, f32, f32, f32)>, open_left: bool, beside: bool) -> Result<(), String>;
 
+    /// Own a fixed dialog, disable its owner while shown and keep it centered
+    /// over the owner. UI thread only; Win32 work is deferred to the message loop.
+    fn configure_fixed_dialog(&self, window: raw_window_handle::RawWindowHandle, owner: raw_window_handle::RawWindowHandle) -> Result<(), String>;
+
+    /// Recenter the fixed dialogs of a moved or resized owner.
+    fn follow_fixed_dialog_owner(&self, owner: raw_window_handle::RawWindowHandle) -> Result<(), String>;
+
     fn configure_menu_window(&self, window: raw_window_handle::RawWindowHandle, owner: raw_window_handle::RawWindowHandle, coordinate_owner: raw_window_handle::RawWindowHandle, activate: bool) -> Result<(), String>;
     fn popup_point_to_owner(&self, window: raw_window_handle::RawWindowHandle, owner: raw_window_handle::RawWindowHandle, point: (f32, f32)) -> Result<(f32, f32), String>;
     fn popup_family_active(&self, owner: raw_window_handle::RawWindowHandle) -> bool;
@@ -549,6 +556,8 @@ mod windows_window_owner;
 
 #[cfg(target_os = "windows")]
 mod windows_hover_window;
+#[cfg(target_os = "windows")]
+mod windows_fixed_dialog;
 #[cfg(target_os = "windows")]
 mod windows_drives;
 #[cfg(target_os = "windows")]
