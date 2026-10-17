@@ -410,7 +410,7 @@ impl OxydeApp {
             submenu_timer: None,
             submenu_close_timer: None,
             dragging_tab: None,
-            file_ops: std::sync::Arc::new(oxyde_lib::systems::file_ops::FileOperationManager::with_persistent_history()),
+            file_ops: std::sync::Arc::new(oxyde_lib::systems::file_ops::FileOperationManager::new()),
             watcher_changes: std::sync::Arc::new(std::sync::Mutex::new(
                 std::collections::VecDeque::new(),
             )),

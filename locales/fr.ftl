@@ -119,8 +119,8 @@ operation-extract = Extraction
 operation-extract-here = Extraire l’archive
 operation-new-folder = Nouveau dossier
 operations-title = { $count ->
-    [1] Opération
-   *[other] Opérations
+    [1] Opération ({ $count })
+   *[other] Opérations ({ $count })
     }
 operations-show-panel = Afficher les opérations
 operations-hide-panel = Masquer les opérations
@@ -132,7 +132,10 @@ operations-cancelled = Annulée
 operations-completed = Terminée
 operations-error = Échec
 operations-to = Vers : { $path }
-operations-items = { $done } / { $total } éléments
+operations-items = { $count ->
+    [1] { $done } / { $total } élément
+   *[other] { $done } / { $total } éléments
+    }
 operations-remaining = Temps restant : { $seconds } s
 operations-duration = Durée : { $duration }
 operations-average = Moyenne : { $speed }
@@ -616,7 +619,10 @@ storage-unavailable = Impossible d’accéder aux données d’Oxyde. En mode po
 properties-selection-items = { $number } éléments
 properties-total-size = Taille totale
 properties-multiple-locations = Plusieurs emplacements
-operations-affected-items = Éléments concernés ({ $count })
+operations-affected-items = { $count ->
+    [1] Élément concerné ({ $number })
+   *[other] Éléments concernés ({ $number })
+    }
 operations-view-items = Voir les { $count } éléments…
 operations-items-filter = Rechercher un nom ou un chemin…
 operations-no-matching-items = Aucun élément correspondant.

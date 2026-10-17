@@ -8,9 +8,9 @@ Chaque opération active occupe une notification compacte de progression. Sa fin
 
 Les opérations actives restent dépliées ; les états finaux sont repliés par défaut. Les détails montrent au plus cinq racines sélectionnées. « Éléments concernés » ouvre une liste virtualisée par opération, avec filtre du chemin complet préparé en arrière-plan et rejet des résultats obsolètes. Les icônes réutilisent `render_file_icon`.
 
-Le graphe reste consultable après la fin. Les résumés de la fenêtre principale passent par `operation_counts()`, `list_active_progress()` et `operation_state()` ; ne pas cloner toutes les sources et tous les bilans pour un compteur ou un simple survol.
+Le graphe s’affiche uniquement pendant les opérations actives ayant des mesures de débit. Il disparaît dans les états finaux ; la durée et le débit moyen restent visibles dans les détails. Les résumés de la fenêtre principale passent par `operation_counts()`, `list_active_progress()` et `operation_state()` ; ne pas cloner toutes les sources et tous les bilans pour un compteur ou un simple survol.
 
-`operation_history.json` conserve les dix dernières opérations finales par ordre de création, avec détails d’affichage et bilans. Un thread dédié écrit seulement si nécessaire, puis à l’arrêt. Les effacements sont persistés ; les tâches actives et les données d’Undo/Redo ne sont pas restaurées par ce fichier.
+La liste des opérations reste uniquement en mémoire pendant la session. Aucun historique d’opérations n’est écrit ni restauré au démarrage ; les anciens fichiers `operation_history.json` sont ignorés.
 
 ## Bilans individuels
 

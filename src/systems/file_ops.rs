@@ -15,7 +15,6 @@ mod delete;
 mod execution;
 mod extract;
 mod scheduler;
-mod persistence;
 mod summaries;
 pub use summaries::OperationProgress;
 mod item_outcomes;
@@ -249,7 +248,6 @@ impl FileOperation {
 
 pub struct FileOperationManager {
     operations: Arc<Mutex<HashMap<String, Arc<Mutex<FileOperation>>>>>,
-    persistence: Option<persistence::OperationPersistence>,
     next_sequence: AtomicU64,
     scheduler: Arc<OperationScheduler>,
 }
@@ -270,7 +268,6 @@ impl Default for FileOperationManager {
     fn default() -> Self {
         Self {
             operations: Arc::new(Mutex::new(HashMap::new())),
-            persistence: None,
             next_sequence: AtomicU64::new(1),
             scheduler: Arc::new(OperationScheduler {
                 slots: Arc::new(Semaphore::new(2)),

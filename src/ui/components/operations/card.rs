@@ -87,6 +87,7 @@ pub(super) fn render_operation_card(
         "total",
         format_number(operation.total_files as u64, cx.i18n().language()),
     );
+    args.set("count", operation.total_files as i64);
     let items = cx.i18n().text_with_args(Message::OpsItems, &args);
     let id = operation.id.clone();
     let manager = app.file_ops.clone();
@@ -208,7 +209,7 @@ pub(super) fn render_operation_card(
     body = body.child(metrics::render(&operation, cx));
     if let Some(destination) = &operation.destination {
         let mut args = FluentArgs::new();
-        args.set("path", destination.to_string_lossy().into_owned());
+        args.set("path", crate::ui::format::display_paths(&destination.to_string_lossy()));
         body = body.child(
             div()
                 .flex()

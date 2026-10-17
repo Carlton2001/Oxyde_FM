@@ -1156,6 +1156,10 @@ impl<T> I18nContext for Context<'_, T> {
 }
 
 #[cfg(test)]
+#[path = "i18n/tests/operations.rs"]
+mod operation_count_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -1800,12 +1804,13 @@ mod tests {
             (Language::Italian, "Operazione", "Operazioni"),
         ] {
             let i18n = I18n::for_language(language);
-            for count in [0, 1, 2, 1000] {
+            for count in [0, 1, 2] {
                 let mut args = FluentArgs::new();
                 args.set("count", count);
                 assert_eq!(
-                    i18n.text_with_args(Message::OpsTitle, &args).as_ref(),
-                    if count == 1 { singular } else { plural },
+                    i18n.text_with_args(Message::OpsTitle, &args)
+                        .replace(['\u{2068}', '\u{2069}'], ""),
+                    format!("{} ({count})", if count == 1 { singular } else { plural }),
                 );
             }
         }

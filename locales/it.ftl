@@ -204,8 +204,8 @@ operation-new-folder = Nuova cartella
 
 
 operations-title = { $count ->
-    [1] Operazione
-   *[other] Operazioni
+    [1] Operazione ({ $count })
+   *[other] Operazioni ({ $count })
     }
 
 operations-show-panel = Mostra operazioni
@@ -229,7 +229,10 @@ operations-error = Non riuscita
 
 operations-to = A: { $path }
 
-operations-items = { $done } / { $total } elementi
+operations-items = { $count ->
+    [1] { $done } / { $total } elemento
+   *[other] { $done } / { $total } elementi
+    }
 
 operations-remaining = Tempo rimanente: { $seconds } s
 
@@ -917,7 +920,10 @@ storage-unavailable = Impossibile accedere ai dati di Oxyde. In modalità portat
 properties-selection-items = { $number } elementi
 properties-total-size = Dimensione totale
 properties-multiple-locations = Più posizioni
-operations-affected-items = Elementi interessati ({ $count })
+operations-affected-items = { $count ->
+    [1] Elemento interessato ({ $number })
+   *[other] Elementi interessati ({ $number })
+    }
 operations-view-items = Mostra tutti i { $count } elementi…
 operations-items-filter = Cerca nomi o percorsi…
 operations-no-matching-items = Nessun elemento corrispondente.

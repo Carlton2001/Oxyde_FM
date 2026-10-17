@@ -132,7 +132,7 @@ pub(super) fn render(operation: &FileOperation, cx: &App) -> Div {
                         }),
                 ),
         )
-        .when(!operation.speed_history.is_empty(), |metrics| {
+        .when(!final_state && !operation.speed_history.is_empty(), |metrics| {
             metrics.child(
                 div()
                     .relative()

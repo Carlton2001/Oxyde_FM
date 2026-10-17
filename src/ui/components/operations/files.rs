@@ -45,7 +45,8 @@ impl Item {
 
 fn count_label(message: Message, count: usize, cx: &App) -> SharedString {
     let mut args = FluentArgs::new();
-    args.set("count", format_number(count as u64, cx.i18n().language()));
+    args.set("count", count as i64);
+    args.set("number", format_number(count as u64, cx.i18n().language()));
     cx.i18n().text_with_args(message, &args)
 }
 

@@ -113,8 +113,8 @@ operation-extract = Extraction
 operation-extract-here = Extract archive
 operation-new-folder = New folder
 operations-title = { $count ->
-    [1] Operation
-   *[other] Operations
+    [1] Operation ({ $count })
+   *[other] Operations ({ $count })
     }
 operations-show-panel = Show operations
 operations-hide-panel = Hide operations
@@ -126,7 +126,10 @@ operations-cancelled = Cancelled
 operations-completed = Completed
 operations-error = Failed
 operations-to = To: { $path }
-operations-items = { $done } / { $total } items
+operations-items = { $count ->
+    [1] { $done } / { $total } item
+   *[other] { $done } / { $total } items
+    }
 operations-remaining = Time remaining: { $seconds } s
 operations-duration = Duration: { $duration }
 operations-average = Average: { $speed }
@@ -610,7 +613,10 @@ storage-unavailable = Could not access Oxyde data. In portable mode, the data fo
 properties-selection-items = { $number } items
 properties-total-size = Total size
 properties-multiple-locations = Multiple locations
-operations-affected-items = Items involved ({ $count })
+operations-affected-items = { $count ->
+    [1] Item involved ({ $number })
+   *[other] Items involved ({ $number })
+    }
 operations-view-items = View all { $count } items…
 operations-items-filter = Search names or paths…
 operations-no-matching-items = No matching items.

@@ -204,8 +204,8 @@ operation-new-folder = Nueva carpeta
 
 
 operations-title = { $count ->
-    [1] Operación
-   *[other] Operaciones
+    [1] Operación ({ $count })
+   *[other] Operaciones ({ $count })
     }
 
 operations-show-panel = Mostrar operaciones
@@ -229,7 +229,10 @@ operations-error = Fallida
 
 operations-to = Hasta: { $path }
 
-operations-items = { $done } / { $total } elementos
+operations-items = { $count ->
+    [1] { $done } / { $total } elemento
+   *[other] { $done } / { $total } elementos
+    }
 
 operations-remaining = Tiempo restante: { $seconds } s
 
@@ -917,7 +920,10 @@ storage-unavailable = No se pudo acceder a los datos de Oxyde. En modo portátil
 properties-selection-items = { $number } elementos
 properties-total-size = Tamaño total
 properties-multiple-locations = Varias ubicaciones
-operations-affected-items = Elementos de la operación ({ $count })
+operations-affected-items = { $count ->
+    [1] Elemento de la operación ({ $number })
+   *[other] Elementos de la operación ({ $number })
+    }
 operations-view-items = Ver los { $count } elementos…
 operations-items-filter = Buscar nombres o rutas…
 operations-no-matching-items = No hay elementos coincidentes.

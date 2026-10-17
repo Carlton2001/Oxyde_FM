@@ -204,8 +204,8 @@ operation-new-folder = Neuer Ordner
 
 
 operations-title = { $count ->
-    [1] Vorgang
-   *[other] Vorgänge
+    [1] Vorgang ({ $count })
+   *[other] Vorgänge ({ $count })
     }
 
 operations-show-panel = Vorgänge anzeigen
@@ -229,7 +229,10 @@ operations-error = Fehlgeschlagen
 
 operations-to = Nach: { $path }
 
-operations-items = { $done } / { $total } Elemente
+operations-items = { $count ->
+    [1] { $done } / { $total } Element
+   *[other] { $done } / { $total } Elemente
+    }
 
 operations-remaining = Verbleibende Zeit: { $seconds } s
 
@@ -917,7 +920,10 @@ storage-unavailable = Auf die Oxyde-Daten konnte nicht zugegriffen werden. Im po
 properties-selection-items = { $number } Elemente
 properties-total-size = Gesamtgröße
 properties-multiple-locations = Mehrere Speicherorte
-operations-affected-items = Betroffene Elemente ({ $count })
+operations-affected-items = { $count ->
+    [1] Betroffenes Element ({ $number })
+   *[other] Betroffene Elemente ({ $number })
+    }
 operations-view-items = Alle { $count } Elemente anzeigen…
 operations-items-filter = Namen oder Pfade suchen…
 operations-no-matching-items = Keine passenden Elemente.
