@@ -20,7 +20,7 @@ pub fn button_style(
     enabled: bool,
 ) -> Stateful<Div> {
     let (background, foreground, hover) = match variant {
-        ButtonVariant::Ghost => (transparent_black(), theme.text_muted, theme.control_hover),
+        ButtonVariant::Ghost => (transparent_black(), theme.text, theme.control_hover),
         ButtonVariant::Secondary => (theme.control_hover, theme.text, theme.selected),
         ButtonVariant::Primary => (theme.accent, theme.text_on_accent, theme.accent),
         ButtonVariant::Danger => (theme.error, theme.text_on_danger, theme.danger_hover),

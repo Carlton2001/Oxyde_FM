@@ -328,7 +328,7 @@ impl OxydeApp {
                                 svg()
                                     .path("icons/x.svg")
                                     .size(rems(0.875))
-                                    .text_color(theme.text_muted),
+                                    .text_color(theme.text),
                             ),
                     )
             }))

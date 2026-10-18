@@ -126,7 +126,7 @@ pub(super) fn render_advanced_body(
                             .path("icons/search.svg")
                             .size(rems(0.875))
                             .flex_none()
-                            .text_color(t.text_muted),
+                            .text_color(t.text),
                     ),
                 ),
         );
@@ -193,7 +193,7 @@ pub(super) fn render_advanced_body(
                             })
                             .size(rems(0.875))
                             .flex_none()
-                            .text_color(t.text_muted),
+                            .text_color(t.text),
                     )
                     .on_mouse_down(MouseButton::Left, move |_, _, cx| {
                         cx.stop_propagation();

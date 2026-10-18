@@ -81,7 +81,7 @@ impl AdvancedSearchWindow {
                             svg()
                                 .path("icons/code.svg")
                                 .size(rems(0.875))
-                                .text_color(theme.text_muted),
+                                .text_color(theme.text),
                         )
                         .child(cx.i18n().text(Message::AdvancedRegexHelpTitle)),
                 )

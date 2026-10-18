@@ -107,7 +107,7 @@ pub(super) fn render(
             svg()
                 .path(crate::ui::components::icons::drive_icon_path(drive))
                 .size(rems(3.0))
-                .text_color(theme.icon_muted)
+                .text_color(theme.text)
                 .into_any_element()
         }
     } else {

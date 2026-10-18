@@ -103,7 +103,7 @@ impl RenderOnce for TabBar {
             .on_mouse_down(MouseButton::Left, move |_, window, cx| {
                 on_new_tab(window, cx);
             })
-            .child(svg().path("icons/plus.svg").size_4().text_color(theme.text_muted))
+            .child(svg().path("icons/plus.svg").size_4().text_color(theme.text))
             .into_any_element()
         });
         let (inline_button, fixed_button) = if overflow {
@@ -129,7 +129,7 @@ impl RenderOnce for TabBar {
                     svg()
                         .path(icon)
                         .size_4()
-                        .text_color(theme.text_muted)
+                        .text_color(theme.text)
                         .when(at_edge, |s| s.opacity(0.4)),
                 )
         };

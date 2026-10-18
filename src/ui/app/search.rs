@@ -401,7 +401,7 @@ impl OxydeApp {
                         svg()
                             .path("icons/search.svg")
                             .size(rems(1.0))
-                            .text_color(theme.text_muted),
+                            .text_color(theme.text),
                     )
                     .on_hover(move |hovered, window, cx| {
                         hover_handle.update(cx, |this, cx| {

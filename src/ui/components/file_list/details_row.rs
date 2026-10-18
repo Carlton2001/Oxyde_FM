@@ -364,7 +364,7 @@ pub(super) fn render_details_row(params: DetailsRowParams<'_>, cx: &mut App) -> 
                                                         svg()
                                                             .path("icons/chevron-right.svg")
                                                             .size_3()
-                                                            .text_color(theme.text_muted.opacity(0.65)),
+                                                            .text_color(theme.text),
                                                     ),
                                             )
                                             .into_any_element()

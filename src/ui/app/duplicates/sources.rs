@@ -20,7 +20,7 @@ impl DuplicateWindow {
                     svg()
                         .path(icon)
                         .size(rems(0.875))
-                        .text_color(theme.text_muted),
+                        .text_color(theme.text),
                 )
                 .child(cx.i18n().text(message).to_uppercase())
         };
@@ -168,7 +168,7 @@ impl DuplicateWindow {
                             .path(self.location_icons[index])
                             .size(rems(0.875))
                             .flex_none()
-                            .text_color(theme.text_muted),
+                            .text_color(theme.text),
                     )
                     .child(content),
             );

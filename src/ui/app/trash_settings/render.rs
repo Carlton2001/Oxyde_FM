@@ -155,7 +155,7 @@ fn render_body(
                     .path(icon)
                     .size(rems(0.8125))
                     .flex_none()
-                    .text_color(theme.text_muted),
+                    .text_color(theme.text),
             )
             .child(cx.i18n().text(message).to_uppercase())
     };
@@ -219,7 +219,7 @@ fn render_body(
                         .text_color(if selected {
                             theme.accent
                         } else {
-                            theme.icon_muted
+                            theme.text
                         }),
                 )
                 .child(div().flex_1().min_w_0().truncate().child(format!(

@@ -227,7 +227,7 @@ impl Render for FilesWindow {
                                     .path("icons/search.svg")
                                     .size(rems(1.0))
                                     .ml(rems(0.625))
-                                    .text_color(theme.text_muted),
+                                    .text_color(theme.text),
                             )
                             .child(div().flex_1().min_w_0().h_full().child(self.input.clone())),
                     ),

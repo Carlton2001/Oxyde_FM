@@ -20,7 +20,7 @@ pub fn render_title_bar(
     let theme = *cx.theme();
 
     let btn_hover_bg: Hsla = theme.control_hover;
-    let icon_color: Hsla = theme.text_muted;
+    let icon_color: Hsla = theme.text;
 
     let action_button = |id: &'static str, icon: &'static str, label: Message| {
         div().id(id).w(rems(2.25)).h_full().flex().items_center()
@@ -168,7 +168,9 @@ pub fn render_title_bar(
         }))
 }
 
-/// Shared native title-bar controls. The caller owns its close lifecycle.
+/// Shared title-bar controls. The caller owns its close lifecycle.
+/// Dedicated caption symbols use a 12-unit grid and a one-unit stroke,
+/// independently of the Lucide assets and their global stroke setting.
 pub fn render_window_controls(
     is_maximized: bool,
     cx: &App,
@@ -200,16 +202,16 @@ pub(crate) fn render_window_controls_with_options(
             })
             .child(
                 svg()
-                    .path("icons/window-minimize.svg")
+                    .path("visuals/window-controls/minimize.svg")
                     .size_3()
-                    .text_color(theme.text_muted),
+                    .text_color(theme.text),
             )
     };
 
     let maximize_icon = if is_maximized {
-        "icons/window-restore.svg"
+        "visuals/window-controls/restore.svg"
     } else {
-        "icons/window-maximize.svg"
+        "visuals/window-controls/maximize.svg"
     };
     let maximize_btn = div()
         .id("wc-maximize")
@@ -224,7 +226,7 @@ pub(crate) fn render_window_controls_with_options(
         .on_mouse_down(MouseButton::Left, |_, window, _| {
             window.zoom_window();
         })
-        .child(svg().path(maximize_icon).size_3().text_color(theme.text_muted));
+        .child(svg().path(maximize_icon).size_3().text_color(theme.text));
 
     let close_btn = div()
         .id("wc-close")
@@ -242,9 +244,9 @@ pub(crate) fn render_window_controls_with_options(
         })
         .child(
             svg()
-                .path("icons/x.svg")
+                .path("visuals/window-controls/close.svg")
                 .size_3()
-                .text_color(theme.text_muted)
+                .text_color(theme.text)
                 .group_hover("window-close", |s| s.text_color(theme.text_on_danger)),
         );
 

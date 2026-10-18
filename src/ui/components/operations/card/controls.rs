@@ -48,7 +48,7 @@ pub(super) fn render(
             .child(
                 svg()
                     .path("icons/x.svg")
-                    .text_color(theme.icon_muted)
+                    .text_color(theme.text)
                     .size(rems(0.875)),
             )
             .child(cx.i18n().text(Message::OpsDismiss))
@@ -127,7 +127,7 @@ pub(super) fn render(
                         .text_color(if turbo {
                             theme.accent
                         } else {
-                            theme.text_muted
+                            theme.text
                         })
                         .size_4(),
                 )
@@ -155,7 +155,7 @@ pub(super) fn render(
                 .child(
                     svg()
                         .path("icons/x.svg")
-                        .text_color(theme.text_muted)
+                        .text_color(theme.text)
                         .size_4(),
                 )
                 .on_click(move |_, _, cx| {

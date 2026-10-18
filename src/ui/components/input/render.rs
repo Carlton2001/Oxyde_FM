@@ -93,7 +93,7 @@ impl Render for TextInput {
                             svg()
                                 .path("icons/arrow-right.svg")
                                 .size_4()
-                                .text_color(theme.text_muted),
+                                .text_color(theme.text),
                         ),
                 )
             })
@@ -120,7 +120,7 @@ impl Render for TextInput {
                                     svg()
                                         .path("icons/x.svg")
                                         .size_3()
-                                        .text_color(theme.text_muted),
+                                        .text_color(theme.text),
                                 ),
                         ),
                     )

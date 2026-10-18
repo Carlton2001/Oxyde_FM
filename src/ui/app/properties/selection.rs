@@ -188,7 +188,7 @@ pub(super) fn render(
                 svg()
                     .path("icons/folder.svg")
                     .size(rems(3.0))
-                    .text_color(theme.icon_muted),
+                    .text_color(theme.text),
             )
             .child(
                 div()

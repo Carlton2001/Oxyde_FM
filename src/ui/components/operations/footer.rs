@@ -36,7 +36,7 @@ pub fn render_operations_footer(
         .child({
             let icon = div().size_4().rounded_full().child(svg()
                 .path("icons/download.svg")
-                .text_color(if active > 0 { theme.accent } else { theme.text_muted })
+                .text_color(if active > 0 { theme.accent } else { theme.text })
                 .size_4());
             if active > 0 {
                 icon.with_animation(

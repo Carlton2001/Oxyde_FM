@@ -224,7 +224,7 @@ impl<T: crate::ui::components::scrollbar::ScrollbarState + 'static> RenderOnce f
         let menu_bg: Hsla = theme.menu_surface;
         let menu_border: Hsla = theme.menu_border; // ~8% white — subtle but visible
         let item_hover: Hsla = theme.menu_hover; // Distinct but restrained hover state
-        let icon_color: Hsla = theme.icon_muted; // ~33% white for icons
+        let icon_color: Hsla = theme.text;
         let chevron_color: Hsla = theme.icon_disabled; // ~20% white for chevron arrow
 
         let mut calculated_width: f32 = logical(180.0);

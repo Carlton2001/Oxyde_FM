@@ -37,7 +37,7 @@ impl AdvancedSearchWindow {
                                 "icons/chevron-right.svg"
                             })
                             .size(rems(1.0))
-                            .text_color(theme.text_muted),
+                            .text_color(theme.text),
                     )
                     .on_click(move |_, _, cx| {
                         h.update(cx, |this, cx| {

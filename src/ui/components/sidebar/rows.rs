@@ -270,7 +270,7 @@ pub(super) fn render_sidebar_rows(
                             .child(svg()
                                 .path(if is_exp { "icons/chevron-down.svg" } else { "icons/chevron-right.svg" })
                                 .size_full()
-                                .text_color(theme.text_muted)))
+                                .text_color(theme.text)))
                     )
                     // Drive icon + label
                     .child(
@@ -400,7 +400,7 @@ pub(super) fn render_sidebar_rows(
                             )
                             .child(if has_subs {
                                 svg().path(if is_exp { "icons/chevron-down.svg" } else { "icons/chevron-right.svg" })
-                                    .size_full().text_color(theme.text_muted)
+                                    .size_full().text_color(theme.text)
                             } else {
                                 svg().path("").size_full()
                             })

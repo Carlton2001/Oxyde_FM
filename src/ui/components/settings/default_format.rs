@@ -104,7 +104,7 @@ pub(super) fn render(
         svg()
             .path("icons/chevron-down.svg")
             .size(rems(0.875))
-            .text_color(theme.text_muted),
+            .text_color(theme.text),
     )
     .on_mouse_down(MouseButton::Left, move |_, window, cx| {
         cx.stop_propagation();

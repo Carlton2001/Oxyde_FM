@@ -135,7 +135,7 @@ pub(super) fn render_operation_card(
                     })
                     .size(rems(0.875))
                     .flex_none()
-                    .text_color(theme.icon_muted),
+                    .text_color(theme.text),
             )
         })
         .child(
@@ -221,7 +221,7 @@ pub(super) fn render_operation_card(
                         .size(rems(0.9375))
                         .mt(rems(0.0625))
                         .flex_none()
-                        .text_color(theme.icon_muted),
+                        .text_color(theme.text),
                 )
                 .child(
                     div()

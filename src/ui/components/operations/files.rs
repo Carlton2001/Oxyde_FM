@@ -144,7 +144,7 @@ pub(super) fn preview(
                     svg()
                         .path("icons/list.svg")
                         .size(rems(0.875))
-                        .text_color(theme.icon_muted),
+                        .text_color(theme.text),
                 )
                 .child(count_label(
                     Message::OpsViewItems,

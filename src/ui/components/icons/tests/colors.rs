@@ -16,7 +16,7 @@ fn pdf_color_depends_on_filename_and_preserves_other_text_documents() {
     ] {
         assert_eq!(
             file_icon_color(path, IconType::FileText, &theme),
-            theme.text_muted
+            theme.text
         );
     }
     assert_eq!(
@@ -38,9 +38,9 @@ fn categories_use_the_active_palette_for_every_theme() {
             (IconType::FileVideo, theme.file_icons.video),
             (IconType::FileCode, theme.file_icons.code),
             (IconType::Link2, theme.file_icons.code),
-            (IconType::Package, theme.text_muted),
-            (IconType::Disc, theme.text_muted),
-            (IconType::File, theme.text_muted),
+            (IconType::Package, theme.text),
+            (IconType::Disc, theme.text),
+            (IconType::File, theme.text),
         ] {
             assert_eq!(
                 file_icon_color("entry", icon, &theme),

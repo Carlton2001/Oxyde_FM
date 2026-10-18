@@ -78,7 +78,7 @@ pub(super) fn file_icon_color(path: &str, icon: IconType, theme: &OxydeTheme) ->
         {
             palette.pdf
         }
-        _ => theme.text_muted,
+        _ => theme.text,
     }
 }
 

@@ -79,7 +79,7 @@ pub(super) fn fields(
                             .path("icons/chevron-down.svg")
                             .size(rems(0.75))
                             .flex_none()
-                            .text_color(theme.text_muted),
+                            .text_color(theme.text),
                     )
                     .on_mouse_down(MouseButton::Left, move |event, window, cx| {
                         picker.update(cx, |this, cx| {
@@ -150,7 +150,7 @@ pub(super) fn tabs(
                             if active {
                                 theme.accent
                             } else {
-                                theme.text_muted
+                                theme.text
                             },
                         ))
                         .rounded_none()

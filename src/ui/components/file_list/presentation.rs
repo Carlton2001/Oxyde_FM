@@ -52,7 +52,7 @@ pub(super) fn date_group_button(pane_id: &str, enabled: bool, handle: Entity<Oxy
             cx.stop_propagation();
             handle.update(cx, |view, cx| view.toggle_date_grouping(&pane_id, cx));
         })
-        .child(svg().path("icons/calendar-days.svg").size(rems(1.0)).text_color(if enabled { theme.accent } else { theme.text_muted }))
+        .child(svg().path("icons/calendar-days.svg").size(rems(1.0)).text_color(if enabled { theme.accent } else { theme.text }))
 }
 
 /// Returns the display type label for a file entry.
@@ -228,7 +228,7 @@ pub(super) fn view_mode_button(
         .child(svg().path(icon).size_4().text_color(if selected {
             theme.accent
         } else {
-            theme.text_muted
+            theme.text
         }))
 }
 

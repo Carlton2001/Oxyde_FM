@@ -135,7 +135,7 @@ pub(super) fn render_sidebar_rail(
                 text,
                 crate::ui::theme::OxydeTheme {
                     control_hover: if selected { theme.selection_hover } else { theme.control_hover },
-                    text_muted: if selected { theme.accent } else { theme.text_muted },
+                    text: if selected { theme.accent } else { theme.text },
                     ..theme
                 },
                 true,

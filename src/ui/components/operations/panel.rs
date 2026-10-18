@@ -99,7 +99,7 @@ pub(super) fn render_operations_panel(
                                 .path("icons/broom.svg")
                                 .size(rems(0.875))
                                 .flex_none()
-                                .text_color(theme.text_muted),
+                                .text_color(theme.text),
                         )
                         .child(cx.i18n().text(Message::OpsDismissAll))
                         .on_click(move |_, _, cx| {

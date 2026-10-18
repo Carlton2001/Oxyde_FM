@@ -6,6 +6,9 @@ use std::borrow::Cow;
 #[folder = "assets/"]
 struct Assets;
 
+// SVG units in Lucide's 24 × 24 viewBox; scales with the rendered icon size.
+const ICON_STROKE_WIDTH: &str = "1.5";
+
 pub struct EmbeddedAssetSource;
 
 impl EmbeddedAssetSource {
@@ -32,7 +35,27 @@ impl AssetSource for EmbeddedAssetSource {
     fn load(&self, path: &str) -> Result<Option<Cow<'static, [u8]>>> {
         // Rust-embed handles paths with standard separators, even on Windows
         match Assets::get(path) {
-            Some(file) => Ok(Some(file.data)),
+            Some(file) => {
+                if path.starts_with("icons/") && path.ends_with(".svg") {
+                    let source = std::str::from_utf8(&file.data)?;
+                    // Only override the root's default stroke. Keep official paths
+                    // and any deliberate per-shape stroke overrides intact.
+                    if let Some(root_end) = source.find('>') {
+                        let root = &source[..root_end];
+                        if root.contains("stroke-width=\"2\"") {
+                            let root = root.replacen(
+                                "stroke-width=\"2\"",
+                                &format!("stroke-width=\"{ICON_STROKE_WIDTH}\""),
+                                1,
+                            );
+                            return Ok(Some(Cow::Owned(
+                                format!("{root}{}", &source[root_end..]).into_bytes(),
+                            )));
+                        }
+                    }
+                }
+                Ok(Some(file.data))
+            }
             None => Ok(None),
         }
     }

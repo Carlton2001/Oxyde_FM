@@ -79,7 +79,7 @@ fn render_pinned_contents(
                 .min_w_0()
                 .rounded(rems(0.3125))
                 .hover(|row| row.bg(theme.menu_hover))
-                .child(svg().path("icons/pin.svg").size(rems(1.0)).flex_none().text_color(theme.icon_muted))
+                .child(svg().path("icons/pin.svg").size(rems(1.0)).flex_none().text_color(theme.text))
                 .child(div().flex_1().min_w_0().truncate().child(pinned_display_name(item, cx.i18n())))
                 .on_mouse_down(MouseButton::Left, move |_, _, cx| {
                     cx.stop_propagation();

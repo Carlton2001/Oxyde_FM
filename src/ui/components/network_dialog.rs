@@ -276,7 +276,7 @@ pub(crate) fn render_network_dialog(
                             svg()
                                 .path("icons/hard-drive.svg")
                                 .size(rems(1.125))
-                                .text_color(theme.text_muted),
+                                .text_color(theme.text),
                         )
                         .child(
                             div()
@@ -369,7 +369,7 @@ pub(crate) fn render_network_dialog(
                     svg()
                         .path("icons/chevron-down.svg")
                         .size(rems(0.875))
-                        .text_color(theme.text_muted),
+                        .text_color(theme.text),
                 ),
         );
         if dialog.letter_open {

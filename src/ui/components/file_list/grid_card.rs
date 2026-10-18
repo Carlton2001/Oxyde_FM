@@ -252,7 +252,7 @@ pub(super) fn render_grid_card(params: GridCardParams<'_>, cx: &mut App) -> Stat
                             .h_full()
                             .flex()
                             .items_center()
-                            .child(svg().path("icons/chevron-right.svg").size_3().text_color(theme.text_muted.opacity(0.75))),
+                            .child(svg().path("icons/chevron-right.svg").size_3().text_color(theme.text)),
                     )
                 }),
         )

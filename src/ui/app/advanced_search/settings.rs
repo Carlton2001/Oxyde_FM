@@ -58,7 +58,7 @@ impl AdvancedSearchWindow {
                         .path("icons/folder.svg")
                         .size(rems(1.0))
                         .ml(rems(0.625))
-                        .text_color(theme.text_muted),
+                        .text_color(theme.text),
                 );
             }
             let regex_enabled = match index {
@@ -121,7 +121,7 @@ impl AdvancedSearchWindow {
                     svg()
                         .path("icons/chevron-down.svg")
                         .size(rems(0.75))
-                        .text_color(theme.text_muted),
+                        .text_color(theme.text),
                 )
                 .on_mouse_down(MouseButton::Left, move |event, _, cx| {
                     unit_handle.update(cx, |this, cx| {
@@ -201,7 +201,7 @@ impl AdvancedSearchWindow {
                                 svg()
                                     .path("icons/calendar-days.svg")
                                     .size(rems(1.0))
-                                    .text_color(theme.text_muted),
+                                    .text_color(theme.text),
                             )
                             .on_click(move |_, window, cx| {
                                 h.update(cx, |this, cx| {
@@ -283,7 +283,7 @@ impl AdvancedSearchWindow {
                         .text_color(if checked {
                             theme.text_on_accent
                         } else {
-                            theme.text_muted
+                            theme.text
                         }),
                 )
                 .native_tooltip(crate::ui::components::tooltip::Tooltip::text(
@@ -333,7 +333,7 @@ impl AdvancedSearchWindow {
                                 .text_color(if checked {
                                     theme.text_on_accent
                                 } else {
-                                    theme.text_muted
+                                    theme.text
                                 }),
                         )
                     }),

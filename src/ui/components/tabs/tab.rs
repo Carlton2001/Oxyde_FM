@@ -263,7 +263,7 @@ impl RenderOnce for Tab {
                     rem_pixels(rems(1.25))
                 })
                 .gap_2()
-                .when_some(self.icon, |s, icon| s.child(icon.render(text_color, &theme)))
+                .when_some(self.icon, |s, icon| s.child(icon.render(theme.text, &theme)))
                 .child(div().flex_1().min_w_0().text_ellipsis().child(self.label.clone()))
                 .when_some(self.on_close, |s, on_close| {
                     s.child(
@@ -287,7 +287,7 @@ impl RenderOnce for Tab {
                                 svg()
                                     .path("icons/x.svg")
                                     .size_3()
-                                    .text_color(theme.icon_muted)
+                                    .text_color(theme.text)
                                     .group_hover("tab", |st| st.text_color(theme.text)),
                             ),
                     )

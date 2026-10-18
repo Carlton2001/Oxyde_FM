@@ -68,7 +68,7 @@ impl AdvancedSearchWindow {
                             .text_color(if d.help == help {
                                 theme.accent
                             } else {
-                                theme.text_muted
+                                theme.text
                             }),
                     )
                     .track_focus(&d.controls[if help { 7 } else { 6 }])

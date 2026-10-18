@@ -126,7 +126,7 @@ fn header_frame(
                 svg()
                     .path(icon)
                     .size(rems(1.0))
-                    .text_color(theme.text_muted),
+                    .text_color(theme.text),
             ),
         )
         .child(

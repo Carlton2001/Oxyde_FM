@@ -27,7 +27,7 @@ pub fn stepper(
             .items_center()
             .justify_center()
             .rounded_md()
-            .text_color(theme.text_muted)
+            .text_color(theme.text)
             .when(!enabled, |button| button.opacity(0.4))
             .when(enabled, |button| {
                 button.hover(|style| style.bg(theme.control_hover))

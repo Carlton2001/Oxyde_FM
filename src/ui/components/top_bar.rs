@@ -131,10 +131,10 @@ pub fn render_top_bar(
         super::history_actions::operation_label(_cx.i18n(), Message::RedoOperation, operation)
     });
     // Shared constants for consistent look
-    let icon_active = theme.text_muted;
+    let icon_active = theme.text;
     let icon_disabled = theme.icon_disabled;
     let hover_bg: Hsla = theme.control_hover;
-    let crumb_sep: Hsla = theme.icon_muted; // chevrons — dim separator
+    let crumb_sep: Hsla = theme.text; // Chevrons open the directory menu.
     let crumb_parent: Hsla = theme.text_muted; // parent segments — readable but recessed
     let crumb_current = theme.text; // current segment — full brightness
 
@@ -686,7 +686,7 @@ pub fn render_top_bar(
                             .items_center()
                             .justify_center()
                             .flex_none()
-                            .child(svg().path(root_icon).size_4().text_color(if total_parts == 1 { crumb_current } else { crumb_parent })),
+                            .child(svg().path(root_icon).size_4().text_color(theme.text)),
                     )
                     .child(div()
                         .relative()
