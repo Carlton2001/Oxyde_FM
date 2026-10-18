@@ -3,7 +3,6 @@
 use crate::models::CommandError;
 use image::RgbaImage;
 use lazy_static::lazy_static;
-use std::io::Cursor;
 use std::os::windows::ffi::OsStrExt;
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -25,6 +24,11 @@ pub fn purge_icon_cache() {
     cache.clear();
 }
 
+/// Hold while removing generated files so an old request cannot republish one.
+pub fn pause_cache_writes() -> impl Drop {
+    super::windows_icon_persistence::pause()
+}
+
 fn shell_icon_path(path: &str) -> String {
     path.replace('/', "\\")
 }
@@ -34,10 +38,9 @@ pub(super) fn cache_key(path: &str, size: &str) -> String {
     format!("{}_{}", blake3::hash(path.as_bytes()).to_hex(), size)
 }
 
-pub fn get_file_icon(path: String, size: String) -> Result<Vec<u8>, CommandError> {
+pub fn get_file_icon(path: String, size: String) -> Result<RgbaImage, CommandError> {
     // Breadcrumbs use forward slashes; Shell APIs require Windows separators.
     let path = shell_icon_path(&path);
-    let cache_dir = crate::app_paths::cache_dir().map(|p| p.join("icons"));
 
     // Virtual path logic (copying the folder "C:\Windows" spirit)
     let (real_path, use_attributes) = if let Some(ext) = path.strip_prefix("oxyde_ext_") {
@@ -54,26 +57,28 @@ pub fn get_file_icon(path: String, size: String) -> Result<Vec<u8>, CommandError
     // Hash the exact path to avoid collisions and overly long cache filenames.
     let cache_key = cache_key(&path, &size);
 
-    extract_icon_png(&real_path, &size, use_attributes, cache_dir, cache_key)
+    // The parent persists validated pixels asynchronously. A recycled Shell
+    // worker must never delay its reply for PNG encoding or disk publication.
+    extract_icon_image(&real_path, &size, use_attributes, None, cache_key)
         .map_err(|e| CommandError::SystemError(format!("Failed to extract icon: {}", e)))
 }
 
-pub fn extract_icon_png(
+fn extract_icon_image(
     path: &str,
     size: &str,
     use_attributes: bool,
     cache_dir: Option<PathBuf>,
     cache_key: String,
-) -> Result<Vec<u8>, String> {
+) -> Result<RgbaImage, String> {
     super::windows_icon_cache::cached_or_generate(
         &ICON_CACHE,
         cache_dir.as_deref(),
         &cache_key,
-        || generate_icon_png(path, size, use_attributes),
+        || generate_icon_image(path, size, use_attributes),
     )
 }
 
-fn generate_icon_png(path: &str, size: &str, use_attributes: bool) -> Result<Vec<u8>, String> {
+fn generate_icon_image(path: &str, size: &str, use_attributes: bool) -> Result<RgbaImage, String> {
     let wide_path: Vec<u16> = std::ffi::OsStr::new(path)
         .encode_wide()
         .chain(std::iter::once(0))
@@ -144,18 +149,8 @@ fn generate_icon_png(path: &str, size: &str, use_attributes: bool) -> Result<Vec
         let target_size = if size == "small" { 32 } else { 96 };
 
         // The converter owns the Shell icon and releases it even on an error/unwind.
-        let icon_bitmap = icon_to_bitmap(hicon, target_size)
-            .map_err(|error| format!("Failed to convert icon to bitmap: {error}"))?;
-
-        // Encode to PNG
-        let mut png_buffer = Vec::new();
-        let mut cursor = Cursor::new(&mut png_buffer);
-
-        if let Err(e) = icon_bitmap.write_to(&mut cursor, image::ImageFormat::Png) {
-            return Err(format!("Failed to encode icon to PNG: {}", e));
-        }
-
-        Ok(png_buffer)
+        icon_to_bitmap(hicon, target_size)
+            .map_err(|error| format!("Failed to convert icon to bitmap: {error}"))
     }
 }
 
@@ -236,6 +231,22 @@ fn icon_to_bitmap(hicon: HICON, target_size: i32) -> Result<RgbaImage, String> {
         image::imageops::FilterType::Lanczos3,
     ))
 }
+
+#[cfg(test)]
+#[path = "icons/tests/executables.rs"]
+mod executable_tests;
+
+#[cfg(test)]
+#[path = "icons/tests/comparison.rs"]
+mod comparison_tests;
+
+#[cfg(test)]
+#[path = "icons/tests/tauri_comparison.rs"]
+mod tauri_comparison_tests;
+
+#[cfg(test)]
+#[path = "icons/tests/deferred.rs"]
+mod deferred_tests;
 
 #[cfg(test)]
 mod tests {

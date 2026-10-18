@@ -751,8 +751,7 @@ pub(super) fn worker_reply(mode: &str, path: &Path) -> crate::utils::preview_pro
                 let _com = super::windows_com::ComApartment::mta_or_existing()
                     .map_err(|error| CommandError::SystemError(error.to_string()))?;
                 let size = if mode == "icon-small" { "small" } else { "large" };
-                let bytes = super::icons::get_file_icon(path, size.into())?;
-                super::windows_icon_cache::decode_icon_png(&bytes).map_err(CommandError::Other)
+                super::icons::get_file_icon(path, size.into())
             }
             "thumbnail" => get_thumbnail_uncached(path),
             "office" => get_office_thumbnail_uncached(path),

@@ -364,7 +364,7 @@ impl OxydeApp {
                 div()
                     .flex_none()
                     .w(rems(0.0625))
-                    .h(rems(1.25))
+                    .h(rems(1.0))
                     .mr(rems(0.25))
                     .bg(theme.border),
             )

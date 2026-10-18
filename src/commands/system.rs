@@ -32,6 +32,8 @@ pub fn remove_from_quick_access(path: String) -> Result<(), CommandError> {
 
 pub fn clear_app_cache() -> Result<(), CommandError> {
     #[cfg(target_os = "windows")]
+    let _pause = crate::platform::icons::pause_cache_writes();
+    #[cfg(target_os = "windows")]
     crate::platform::icons::purge_icon_cache();
     if let Some(root) = crate::app_paths::cache_dir() {
         clear_generated_cache(&root)?;

@@ -325,6 +325,7 @@ impl Platform for WindowsPlatform {
     fn finish_process_shutdown(&self) -> Result<(), String> {
         super::windows_preview_worker::shutdown_image_session();
         super::windows_preview_worker::shutdown_icon_session();
+        super::windows_icon_persistence::shutdown();
         // A captured shutdown dump showed the final thread spinning in Intel's
         // igd10um64xe through d3d11 / Windows.Data.Pdf during process detach,
         // after main, GPUI and Tokio had finished. ExitProcess (including

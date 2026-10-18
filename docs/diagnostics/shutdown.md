@@ -7,7 +7,7 @@ Référence : `SHUTDOWN-PDF-INTEL-2026-10-04`. Le contournement Windows a été 
 1. Fermer les fenêtres et terminer le nettoyage applicatif : historique, temporaires et dernières préférences, y compris le debounce de géométrie.
 2. Sortir de GPUI puis arrêter Tokio de façon bornée et vider les logs.
 3. Appeler `Platform::finish_process_shutdown` à la toute fin.
-4. Sous Windows, arrêter les superviseurs image puis icônes (attentes bornées, deux secondes chacun), puis `TerminateProcess(GetCurrentProcess(), 0)`. Linux retourne normalement.
+4. Sous Windows, arrêter les superviseurs image puis icônes, puis la file de persistance des icônes (attentes bornées, deux secondes chacun), puis `TerminateProcess(GetCurrentProcess(), 0)`. La file abandonne les demandes en attente ; l'écriture active peut terminer pendant ce délai. Linux retourne normalement.
 
 `TerminateProcess` évite les callbacks finaux de détachement des DLL ; `std::process::exit` n’est pas un remplacement équivalent. Ce contournement ne remplace aucune sauvegarde ni hook de fermeture. Les workers sans état applicatif sérialisent et vident leur réponse avant leur sortie finale.
 

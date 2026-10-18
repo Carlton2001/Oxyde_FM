@@ -581,6 +581,8 @@ mod windows_icon_bitmap;
 #[cfg(target_os = "windows")]
 mod windows_icon_cache;
 #[cfg(target_os = "windows")]
+mod windows_icon_persistence;
+#[cfg(target_os = "windows")]
 mod windows_preview_cache;
 #[cfg(target_os = "windows")]
 mod windows_preview_quota;

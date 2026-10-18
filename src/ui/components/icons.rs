@@ -459,7 +459,7 @@ impl Asset for SystemIconAsset {
         source: Self::Source,
         _cx: &mut App,
     ) -> impl std::future::Future<Output = Self::Output> + Send + 'static {
-        let task = crate::ui::preview_jobs::load(move || {
+        let task = crate::ui::preview_jobs::load_icon(move || {
             oxyde_lib::platform::platform()
                 .file_icon(source.0.to_string(), source.1)
                 .map(|mut image| {

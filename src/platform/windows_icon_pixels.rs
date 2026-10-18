@@ -9,6 +9,7 @@ struct PixelCache {
     bytes: usize,
     byte_limit: usize,
     entry_limit: usize,
+    generation: u64,
 }
 impl PixelCache {
     fn new(byte_limit: usize, entry_limit: usize) -> Self {
@@ -18,6 +19,7 @@ impl PixelCache {
             bytes: 0,
             byte_limit,
             entry_limit,
+            generation: 0,
         }
     }
     fn insert(&mut self, key: String, image: RgbaImage) {
@@ -41,39 +43,62 @@ impl PixelCache {
         self.order.push_back(key.clone());
         self.images.insert(key, image);
     }
+    fn insert_if_current(&mut self, generation: u64, key: String, image: RgbaImage) -> bool {
+        if self.generation != generation {
+            return false;
+        }
+        self.insert(key, image);
+        true
+    }
+
+    fn clear(&mut self) {
+        let generation = self.generation.wrapping_add(1);
+        *self = Self::new(self.byte_limit, self.entry_limit);
+        self.generation = generation;
+    }
 }
 fn cache() -> &'static Mutex<PixelCache> {
     static CACHE: OnceLock<Mutex<PixelCache>> = OnceLock::new();
     CACHE.get_or_init(|| Mutex::new(PixelCache::new(32 * 1024 * 1024, 1000)))
 }
 pub(super) fn clear() {
+    let _pause = super::windows_icon_persistence::pause();
     super::windows_preview_worker::reset_icon_session();
-    *cache().lock().unwrap_or_else(|error| error.into_inner()) =
-        PixelCache::new(32 * 1024 * 1024, 1000);
+    cache()
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+        .clear();
 }
 pub(super) fn get(path: String, large: bool) -> Result<RgbaImage, String> {
     let path = path.replace('/', "\\");
     let mode = if large { "icon-large" } else { "icon-small" };
     let key = format!("{mode}|{path}");
-    if let Some(image) = cache()
-        .lock()
-        .map_err(|error| error.to_string())?
-        .images
-        .get(&key)
-        .cloned()
-    {
-        return Ok(image);
-    }
+    let generation = {
+        let memory = cache().lock().map_err(|error| error.to_string())?;
+        if let Some(image) = memory.images.get(&key).cloned() {
+            return Ok(image);
+        }
+        memory.generation
+    };
+    let persistence_revision = super::windows_icon_persistence::revision();
     // Consult the persisted PNG before starting a Shell process. Decoding remains
     // bounded by the icon policy and happens on the caller's background thread.
-    if let Some(directory) = crate::app_paths::cache_dir().map(|path| path.join("icons")) {
+    let disk = crate::app_paths::cache_dir().map(|directory| {
         let size = if large { "large" } else { "small" };
-        let filename = super::icons::cache_key(&path, size);
-        if let Ok(bytes) = super::windows_icon_cache::read_cached_png(&directory.join(format!("{filename}.png"))) {
-            if let Ok(image) = super::windows_icon_cache::decode_icon_png(&bytes) {
-                cache().lock().map_err(|error| error.to_string())?.insert(key, image.clone());
-                return Ok(image);
-            }
+        (
+            directory.join("icons"),
+            super::icons::cache_key(&path, size),
+        )
+    });
+    if let Some((directory, filename)) = &disk {
+        if let Ok(image) =
+            super::windows_icon_cache::read_cached_png(&directory.join(format!("{filename}.png")))
+        {
+            cache()
+                .lock()
+                .map_err(|error| error.to_string())?
+                .insert_if_current(generation, key, image.clone());
+            return Ok(image);
         }
     }
     // No cache lock across file I/O, IPC or Shell handlers.
@@ -89,15 +114,24 @@ pub(super) fn get(path: String, large: bool) -> Result<RgbaImage, String> {
         crate::utils::preview_protocol::Reply::Error { detail, .. } => return Err(detail),
         _ => return Err("Unexpected icon worker reply".into()),
     };
-    if image.width() > 256 || image.height() > 256 {
+    if image.width() == 0 || image.height() == 0 || image.width() > 256 || image.height() > 256 {
         return Err("Icon worker dimensions exceed their limit".into());
     }
-    cache()
+    let retained = cache()
         .lock()
         .map_err(|error| error.to_string())?
-        .insert(key, image.clone());
+        .insert_if_current(generation, key, image.clone());
+    if retained {
+        if let (Some(revision), Some((directory, filename))) = (persistence_revision, disk) {
+            super::windows_icon_persistence::enqueue(revision, &directory, &filename, &image);
+        }
+    }
     Ok(image)
 }
+
+#[cfg(test)]
+#[path = "windows_icon_pixels/tests/generation.rs"]
+mod generation_tests;
 
 #[cfg(test)]
 mod tests {
