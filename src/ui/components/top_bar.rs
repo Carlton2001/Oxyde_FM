@@ -747,7 +747,7 @@ pub fn render_top_bar(
                                     .top_0()
                                     .h_full()
                                     .w(rems(1.5))
-                                    .bg(linear_gradient(logical(90.0), linear_color_stop(theme.surface, 0.0), linear_color_stop(theme.surface.alpha(0.0), 1.0))),
+                                    .bg(linear_gradient(90.0, linear_color_stop(theme.surface, 0.0), linear_color_stop(theme.surface.alpha(0.0), 1.0))),
                             )
                         })
                         .when(fade_right, |bar| {
@@ -758,7 +758,7 @@ pub fn render_top_bar(
                                     .top_0()
                                     .h_full()
                                     .w(rems(1.5))
-                                    .bg(linear_gradient(logical(270.0), linear_color_stop(theme.surface, 0.0), linear_color_stop(theme.surface.alpha(0.0), 1.0))),
+                                    .bg(linear_gradient(270.0, linear_color_stop(theme.surface, 0.0), linear_color_stop(theme.surface.alpha(0.0), 1.0))),
                             )
                         }))
                     },
