@@ -4,7 +4,7 @@ use super::AdvancedSearchWindow;
 use crate::ui::{
     components::{
         dropdown::DropdownItem,
-        modal::{action_button, form_row_with_label_width},
+        modal::{action_button, responsive_form_row},
     },
     i18n::{I18nContext, Message},
     theme::ThemeContext,
@@ -12,8 +12,8 @@ use crate::ui::{
 use gpui::prelude::*;
 use gpui::*;
 
-fn form_row(label: SharedString, value: impl IntoElement, cx: &App) -> impl IntoElement {
-    form_row_with_label_width(label, value, rems(9.0), cx)
+fn form_row(label: SharedString, value: impl IntoElement, compact: bool, cx: &App) -> impl IntoElement {
+    responsive_form_row(label, value, rems(9.0), compact, cx)
 }
 
 impl AdvancedSearchWindow {
@@ -27,6 +27,7 @@ impl AdvancedSearchWindow {
     ) -> Div {
         let d = self.advanced_search.as_ref().unwrap();
         let theme = *cx.theme();
+        let compact = window.viewport_size().width < rems(40.0).to_pixels(window.rem_size());
         for (index, label, placeholder) in [
             (
                 0,
@@ -78,12 +79,13 @@ impl AdvancedSearchWindow {
                     })
                     .child(d.inputs[index].clone()),
             );
-            body = body.child(form_row(cx.i18n().text(label), field, cx));
+            body = body.child(form_row(cx.i18n().text(label), field, compact, cx));
             if index == 1 {
                 body = body.child(form_row(
                     "".into(),
                     div()
                         .flex()
+                        .flex_wrap()
                         .gap(rems(0.75))
                         .child(self.advanced_toggle(
                             2,
@@ -99,7 +101,7 @@ impl AdvancedSearchWindow {
                             handle.clone(),
                             cx,
                         )),
-                    cx,
+                    compact, cx,
                 ));
             }
         }
@@ -173,13 +175,15 @@ impl AdvancedSearchWindow {
                     )
                 });
             }
-            let mut fields = div().flex().items_center().gap(rems(0.5));
+            let mut fields = div().flex().items_center().gap(rems(0.5))
+                .when(compact, |fields| fields.flex_col().items_stretch());
             for index in start..=start + 1 {
-                if index != start {
+                if index != start && !compact {
                     fields = fields.child("—");
                 }
                 let mut field = crate::ui::components::input::field_frame(&d.inputs[index], window, cx)
                     .flex_1()
+                    .when(compact, |field| field.flex_none().w_full())
                     .min_w_0()
                     .child(
                         div()
@@ -227,17 +231,23 @@ impl AdvancedSearchWindow {
                             }),
                     );
                 }
-                fields = fields.child(field);
+                fields = if compact {
+                    fields.child(div().flex().flex_col().gap(rems(0.25))
+                        .child(div().text_color(theme.text_muted).child(cx.i18n().text(
+                            if index == start { Message::AdvancedMin } else { Message::AdvancedMax })))
+                        .child(field))
+                } else { fields.child(field) };
             }
             if start == 3 {
                 fields = fields.child(unit.take().unwrap());
             }
-            body = body.child(form_row(cx.i18n().text(label), fields, cx));
+            body = body.child(form_row(cx.i18n().text(label), fields, compact, cx));
         }
         body = body.child(form_row(
             cx.i18n().text(Message::AdvancedGlobalOptions),
             div()
                 .flex()
+                .flex_wrap()
                 .gap(rems(0.75))
                 .child(self.advanced_toggle(
                     4,
@@ -253,7 +263,7 @@ impl AdvancedSearchWindow {
                     handle.clone(),
                     cx,
                 )),
-            cx,
+            compact, cx,
         ));
         body
     }

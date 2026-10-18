@@ -17,9 +17,10 @@ pub(crate) fn render(
     let height_limit = crate::ui::components::tool_window::content_height_limit(window, cx);
     let presentation = dialog.properties.as_ref().map(property_presentation);
     let label_width = general::label_width(presentation.as_ref(), theme, window, cx);
+    let compact = window.viewport_size().width < rems(28.0).to_pixels(window.rem_size());
     let mut body = div().flex().flex_col().gap(rems(0.375));
     if dialog.paths.len() > 1 {
-        body = super::selection::render(dialog, label_width, theme, cx);
+        body = super::selection::render(dialog, label_width, compact, theme, cx);
     } else if let Some(p) = dialog.properties.as_ref().filter(|_| !dialog.shortcut_tab) {
         body = general::render(
             body,
@@ -27,11 +28,12 @@ pub(crate) fn render(
             p,
             presentation.as_ref().unwrap(),
             label_width,
+            compact,
             theme,
             cx,
         );
     } else if dialog.shortcut_tab {
-        body = shortcut::fields(body, dialog, &handle, theme, cx);
+        body = shortcut::fields(body, dialog, &handle, compact, theme, cx);
     } else if dialog.error.is_none() {
         body = body.child(cx.i18n().text(Message::PropertiesLoading));
     }

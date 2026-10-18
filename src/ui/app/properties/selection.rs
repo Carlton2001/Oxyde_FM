@@ -2,6 +2,7 @@ use super::{PropertiesDialog, PropertiesWindow};
 use crate::ui::i18n::{FluentArgs, I18nContext, Message};
 use crate::ui::theme::OxydeTheme;
 use gpui::*;
+use gpui::prelude::FluentBuilder;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 #[derive(Debug)]
@@ -152,6 +153,7 @@ impl PropertiesWindow {
 pub(super) fn render(
     dialog: &PropertiesDialog,
     label_width: f32,
+    compact: bool,
     theme: OxydeTheme,
     cx: &mut Context<PropertiesWindow>,
 ) -> Div {
@@ -164,25 +166,13 @@ pub(super) fn render(
     let name = cx
         .i18n()
         .text_with_args(Message::PropertiesSelectionItems, &args);
-    let row = |label: SharedString, value: String| {
-        div()
-            .flex()
-            .gap(rems(0.75))
-            .items_start()
-            .child(
-                div()
-                    .w(px(label_width))
-                    .flex_none()
-                    .text_color(theme.text_muted)
-                    .child(label),
-            )
-            .child(div().flex_1().min_w_0().child(value))
-    };
+    let row = |label, value| super::general::property_row(label, value, label_width, compact, theme);
     let mut body = div().flex().flex_col().gap(rems(0.375)).child(
         div()
             .flex()
             .items_center()
             .gap(rems(1.25))
+            .when(compact, |header| header.flex_col().items_stretch().gap(rems(0.75)))
             .mb(rems(1.25))
             .child(
                 svg()
@@ -195,7 +185,7 @@ pub(super) fn render(
                     .flex_1()
                     .min_w_0()
                     .px(rems(0.625))
-                    .h(rems(2.0))
+                    .min_h(rems(2.0))
                     .flex()
                     .items_center()
                     .border(rems(0.0625))

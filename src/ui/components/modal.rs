@@ -15,19 +15,35 @@ pub fn form_row_with_label_width(
     width: Rems,
     cx: &App,
 ) -> impl IntoElement {
+    responsive_form_row(label, value, width, false, cx)
+}
+
+/// The calling view chooses when its label and value should stack.
+pub(crate) fn responsive_form_row(
+    label: SharedString,
+    value: impl IntoElement,
+    width: Rems,
+    stacked: bool,
+    cx: &App,
+) -> Div {
     div()
         .flex()
         .items_center()
         .gap(rems(0.75))
-        .child(
+        .min_w_0()
+        .when(stacked, |row| row.flex_col().items_stretch().gap(rems(0.375)))
+        .when(!stacked || !label.is_empty(), |row| row.child(
             div()
                 .w(width)
+                .when(stacked, |label| label.w_full())
                 .flex_none()
                 .text_size(rems(0.8125))
                 .text_color(cx.theme().text_muted)
                 .child(label),
-        )
-        .child(div().flex_1().min_w_0().child(value))
+        ))
+        .child(div().min_w_0()
+            .when(!stacked, |value| value.flex_1())
+            .when(stacked, |value| value.w_full()).child(value))
 }
 
 /// Compact action dimensions shared by every application modal.

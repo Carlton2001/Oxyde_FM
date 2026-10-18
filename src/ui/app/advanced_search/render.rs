@@ -112,6 +112,7 @@ impl AdvancedSearchWindow {
         let cancel = handle.clone();
         let submit = handle.clone();
         let keyboard = handle.clone();
+        let compact = window.viewport_size().width < rems(40.0).to_pixels(window.rem_size());
         let height_limit = crate::ui::components::tool_window::content_height_limit(window, cx);
         let body = crate::ui::components::scroll_area::scroll_area("advanced-form-scroll-state",
             div().when(d.help, |frame| frame.flex_1()),
@@ -150,7 +151,8 @@ impl AdvancedSearchWindow {
             .child(
                 crate::ui::components::tool_window::footer(cx)
                     .child(
-                        div().flex_1().flex().child(
+                        div().flex_1().min_w_0().flex()
+                            .when(compact, |reset| reset.w_full().flex_basis(relative(1.0))).child(
                             crate::ui::components::tool_window::action_button(
                                 "advanced-reset",
                                 "".into(),

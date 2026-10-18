@@ -10,6 +10,7 @@ pub(super) fn fields(
     mut body: Div,
     dialog: &PropertiesDialog,
     handle: &Entity<PropertiesWindow>,
+    compact: bool,
     theme: OxydeTheme,
     cx: &mut Context<PropertiesWindow>,
 ) -> Div {
@@ -22,13 +23,14 @@ pub(super) fn fields(
     .into_iter()
     .enumerate()
     {
-        body = body.child(crate::ui::components::modal::form_row_with_label_width(
+        body = body.child(crate::ui::components::modal::responsive_form_row(
             cx.i18n().text(message),
             div()
                 .flex_1()
                 .min_w_0()
                 .child(dialog.shortcut_inputs[index].clone()),
             rems(6.0),
+            compact,
             cx,
         ));
     }
@@ -36,7 +38,7 @@ pub(super) fn fields(
     let measure = handle.clone();
     body =
         body.child(general::divider(theme))
-            .child(crate::ui::components::modal::form_row_with_label_width(
+            .child(crate::ui::components::modal::responsive_form_row(
                 cx.i18n().text(Message::ShortcutRun),
                 div()
                     .id("shortcut-run")
@@ -99,6 +101,7 @@ pub(super) fn fields(
                         });
                     }),
                 rems(6.0),
+                compact,
                 cx,
             ));
     body

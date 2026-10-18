@@ -68,31 +68,29 @@ pub(super) fn divider(theme: OxydeTheme) -> Div {
         .my(rems(0.75))
 }
 
+pub(super) fn property_row(label: SharedString, value: String, label_width: f32, compact: bool, theme: OxydeTheme) -> Div {
+    div().flex().gap(rems(0.75)).items_start().min_w_0()
+        .when(compact, |row| row.flex_col().items_stretch().gap(rems(0.25)))
+        .child(div().w(px(label_width)).flex_none()
+            .when(compact, |label| label.w_full())
+            .when(!compact, |label| label.whitespace_nowrap())
+            .text_color(theme.text_muted).child(label))
+        .child(div().min_w_0().when(!compact, |value| value.flex_1())
+            .when(compact, |value| value.w_full()).child(value))
+}
+
 pub(super) fn render(
     mut body: Div,
     view: &PropertiesWindow,
     p: &FileProperties,
     presentation: &PropertyPresentation<'_>,
     label_width: f32,
+    compact: bool,
     theme: OxydeTheme,
     cx: &mut Context<PropertiesWindow>,
 ) -> Div {
     let dialog = view.properties_dialog.as_ref().unwrap();
-    let row = |label: SharedString, value: String| {
-        div()
-            .flex()
-            .gap(rems(0.75))
-            .items_start()
-            .child(
-                div()
-                    .w(px(label_width))
-                    .flex_none()
-                    .whitespace_nowrap()
-                    .text_color(theme.text_muted)
-                    .child(label),
-            )
-            .child(div().flex_1().min_w_0().child(value))
-    };
+    let row = |label, value| property_row(label, value, label_width, compact, theme);
     let icon = get_icon_type(presentation.name, p.is_dir, Some(&p.path), false, false);
     let graphic = if let Some(drive) = &dialog.drive {
         if cfg!(target_os = "windows") && view.use_system_icons(cx) {
@@ -130,6 +128,7 @@ pub(super) fn render(
             .flex()
             .items_center()
             .gap(rems(1.25))
+            .when(compact, |header| header.flex_col().items_stretch().gap(rems(0.75)))
             .mb(rems(1.25))
             .child(div().flex_none().child(graphic))
             .child(
@@ -172,11 +171,13 @@ pub(super) fn render(
             .flex()
             .items_center()
             .gap(rems(0.75))
+            .when(compact, |row| row.flex_col().items_stretch().gap(rems(0.25)))
             .child(
                 div()
                     .w(px(label_width))
                     .flex_none()
                     .whitespace_nowrap()
+                    .when(compact, |label| label.w_full().whitespace_normal())
                     .text_color(theme.text_muted)
                     .child(cx.i18n().text(Message::ColumnType)),
             )

@@ -183,6 +183,7 @@ pub(crate) fn footer(cx: &App) -> Div {
         .border_t(rems(0.0625))
         .border_color(cx.theme().border)
         .flex()
+        .flex_wrap()
         .items_center()
         .justify_end()
         .gap(rems(0.5))
@@ -197,7 +198,7 @@ pub(crate) fn action_button(
     use crate::ui::elements::button::{button_style, ButtonVariant};
     button_style(div().id(id), *cx.theme(),
         if primary { ButtonVariant::Primary } else { ButtonVariant::Secondary }, true)
-        .tab_index(0).flex().items_center().justify_center()
+        .tab_index(0).flex_none().whitespace_nowrap().flex().items_center().justify_center()
         .gap(rems(0.5)).px(rems(0.75)).py(rems(0.375))
         .text_size(rems(0.8125))
         .rounded(rems(0.375))
