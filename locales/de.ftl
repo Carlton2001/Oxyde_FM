@@ -366,6 +366,10 @@ settings-checkboxes = Auswahl-Checkboxen
 
 settings-checkboxes-description = Mehrere Elemente auswählen, ohne Strg gedrückt zu halten.
 
+settings-animations = Oberflächenanimationen
+
+settings-animations-description = Kurze Überblendungen und Übergänge für erscheinende Elemente.
+
 settings-path-tracking = Aktivem Pfad folgen
 
 settings-path-tracking-description = Übergeordnete Ordner aufklappen und den aktiven Ordner in der Seitenleiste anzeigen.

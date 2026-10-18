@@ -16,7 +16,13 @@ pub(crate) struct Toast {
     pub count: usize,
     created: std::time::Instant,
     archive_source: Option<String>,
+    /// Set while the card fades out before removal.
+    leaving: bool,
 }
+
+/// Exit fade, shorter than the entrance so dismissal feels immediate.
+const TOAST_EXIT: std::time::Duration = std::time::Duration::from_millis(100);
+const TOAST_ENTER: std::time::Duration = std::time::Duration::from_millis(140);
 
 impl OxydeApp {
     pub(crate) fn archive_recovery_notice(&mut self, detail: &str, cx: &mut Context<Self>) -> bool {
@@ -89,6 +95,7 @@ impl OxydeApp {
             count,
             created: std::time::Instant::now(),
             archive_source: None,
+            leaving: false,
         });
         // Bound the overlay when many independent actions finish together.
         if self.toasts.len() > 5 {
@@ -104,16 +111,18 @@ impl OxydeApp {
                 }))
                 .await;
             let _ = this.update(cx, |this, cx| {
-                this.toasts.retain(|toast| {
-                    toast.id != id
-                        || toast.archive_source.is_some()
-                        || oxyde_lib::models::error::ArchiveLimitFailure::from_message(
+                let expires = this.toasts.iter().any(|toast| {
+                    toast.id == id
+                        && toast.archive_source.is_none()
+                        && oxyde_lib::models::error::ArchiveLimitFailure::from_message(
                             &toast.detail,
                         )
-                        .is_some()
-                        || oxyde_lib::models::error::ArchiveRecoveryFailure::from_message(&toast.detail).is_some()
+                        .is_none()
+                        && oxyde_lib::models::error::ArchiveRecoveryFailure::from_message(&toast.detail).is_none()
                 });
-                cx.notify();
+                if expires {
+                    this.dismiss_toast(id, cx);
+                }
             });
         })
         .detach();
@@ -209,6 +218,28 @@ impl OxydeApp {
         .detach();
     }
 
+    /// Fades a card out, then removes it; without animations it leaves at once.
+    fn dismiss_toast(&mut self, id: u64, cx: &mut Context<Self>) {
+        if cx.reduce_motion() {
+            self.toasts.retain(|toast| toast.id != id);
+            cx.notify();
+            return;
+        }
+        let Some(toast) = self.toasts.iter_mut().find(|toast| toast.id == id && !toast.leaving) else {
+            return;
+        };
+        toast.leaving = true;
+        cx.notify();
+        cx.spawn(async move |this, cx| {
+            cx.background_executor().timer(TOAST_EXIT).await;
+            let _ = this.update(cx, |this, cx| {
+                this.toasts.retain(|toast| toast.id != id);
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
     pub(crate) fn render_toasts(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = *cx.theme();
         let handle = cx.entity();
@@ -239,6 +270,7 @@ impl OxydeApp {
                     ToastKind::Error => ("icons/circle-x.svg", theme.toast_error),
                 };
                 let message = cx.i18n().text_with_args(toast.message, &args);
+                let leaving = toast.leaving;
                 let width = if source.is_some() || toast.message == Message::ArchiveRecoveryNotice || message.chars().count() > 120 { 40.0 } else { 24.0 };
                 stack_width = stack_width.max(width);
                 div()
@@ -313,10 +345,7 @@ impl OxydeApp {
                             .flex_shrink_0()
                             .hover(|style| style.bg(theme.hover))
                             .on_click(move |_, _, cx| {
-                                close.update(cx, |this, cx| {
-                                    this.toasts.retain(|toast| toast.id != id);
-                                    cx.notify();
-                                });
+                                close.update(cx, |this, cx| this.dismiss_toast(id, cx));
                             })
                             .child(
                                 svg()
@@ -325,7 +354,25 @@ impl OxydeApp {
                                     .text_color(theme.text),
                             ),
                     )
-                    .into_any_element()
+                    .relative()
+                    .map(|card| {
+                        let shift = window.rem_size() * 0.5;
+                        if leaving {
+                            card.with_animation(
+                                SharedString::from(format!("toast-exit-{id}")),
+                                Animation::new(TOAST_EXIT).with_easing(ease_out_quint()),
+                                |card, delta| card.opacity(1.0 - delta),
+                            )
+                            .into_any_element()
+                        } else {
+                            card.with_animation(
+                                SharedString::from(format!("toast-enter-{id}")),
+                                Animation::new(TOAST_ENTER).with_easing(ease_out_quint()),
+                                move |card, delta| card.left(shift * (1.0 - delta)).opacity(delta),
+                            )
+                            .into_any_element()
+                        }
+                    })
             }));
         if cards.is_empty() { return div(); }
         let maximum_height = notification_height(window.viewport_size().height, window.rem_size());

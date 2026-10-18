@@ -1,5 +1,6 @@
 use crate::ui::elements::button::{button_style, ButtonVariant};
 #[cfg(target_os = "windows")]
+mod breadcrumb_glide;
 mod breadcrumb_menu;
 use crate::ui::components::tooltip::NativeTooltipExt;
 use crate::ui::scale::{logical};
@@ -93,7 +94,8 @@ pub fn render_top_bar(
     let total_parts = path_parts.len();
     let breadcrumb_path_changed = *active_tab.breadcrumb_scroll_path.borrow() != current_path;
     if breadcrumb_path_changed {
-        *active_tab.breadcrumb_scroll_path.borrow_mut() = current_path.clone();
+        let previous = active_tab.breadcrumb_scroll_path.replace(current_path.clone());
+        breadcrumb_glide::start(&active_tab.breadcrumb_glide, &previous, &current_path, &breadcrumb_scroll, _cx);
         if total_parts == 0 {
             breadcrumb_scroll.set_offset(point(px(0.0), px(0.0)));
         }
@@ -311,10 +313,10 @@ pub fn render_top_bar(
                             let animation_id = SharedString::from(format!("breadcrumb-shake-{}", view.breadcrumb_shake_id));
                             bar.child(field_shell.with_animation(
                                 animation_id,
-                                Animation::new(std::time::Duration::from_millis(480)),
+                                Animation::new(std::time::Duration::from_millis(300)),
                                 |field_shell, delta| {
                                     let amplitude = (1.0 - delta) * logical(8.0);
-                                    let offset = (delta * std::f32::consts::PI * 8.0).sin() * amplitude;
+                                    let offset = (delta * std::f32::consts::PI * 6.0).sin() * amplitude;
                                     field_shell.relative().left(px(offset))
                                 },
                             ))
@@ -677,6 +679,8 @@ pub fn render_top_bar(
                     let viewport_width = breadcrumb_viewport_width.clone();
                     let resize_scroll = breadcrumb_scroll.clone();
                     let auto_scroll_to_end = breadcrumb_path_changed;
+                    let glide = active_tab.breadcrumb_glide.clone();
+                    let wheel_glide = active_tab.breadcrumb_glide.clone();
                     bar.child(
                         div()
                             .w_4()
@@ -694,11 +698,11 @@ pub fn render_top_bar(
                         .flex_1()
                         .min_w_0()
                         .h_full()
-                        .child(canvas(|bounds, _, _| bounds, move |_, bounds: Bounds<Pixels>, _, cx| {
+                        .child(canvas(|bounds, _, _| bounds, move |_, bounds: Bounds<Pixels>, window, cx| {
                             measure_handle.update(cx, |_, cx| {
                                 {
                                     let available = bounds.size.width.as_f32().max(0.0);
-                                    if auto_scroll_to_end {
+                                    if !breadcrumb_glide::advance(&glide, &resize_scroll, window) && auto_scroll_to_end {
                                         resize_scroll.set_offset(point(-resize_scroll.max_offset().x, px(0.0)));
                                     }
                                     if (viewport_width.get() - available).abs() > 1.0 {
@@ -730,6 +734,7 @@ pub fn render_top_bar(
                                     };
                                     let max = wheel_scroll.max_offset().x;
                                     if max > px(0.0) && amount != px(0.0) {
+                                        wheel_glide.set(None);
                                         let offset = wheel_scroll.offset();
                                         let x = (offset.x + amount * 1.5).clamp(-max, px(0.0));
                                         wheel_scroll.set_offset(point(x, offset.y));

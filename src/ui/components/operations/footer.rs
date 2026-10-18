@@ -38,23 +38,28 @@ pub fn render_operations_footer(
                 .path("icons/download.svg")
                 .text_color(if active > 0 { theme.accent } else { theme.text })
                 .size_4());
+            let halo = move |breath: f32, strength: f32| vec![BoxShadow {
+                inset: false,
+                color: theme.accent.opacity((0.2 + 0.5 * breath) * strength),
+                offset: point(px(0.0), px(0.0)),
+                blur_radius: crate::ui::scale::rem_pixels(rems(0.375 + 0.375 * breath)),
+                spread_radius: crate::ui::scale::rem_pixels(rems(0.0625 + 0.125 * breath)),
+            }];
+            // The shared glow spring lets the halo fade out when the last operation ends.
+            let glow = crate::ui::elements::motion::linger(active > 0);
             if active > 0 {
                 icon.with_animation(
                     "operations-breathing",
                     Animation::new(std::time::Duration::from_millis(2200)).repeat(),
-                    move |icon, delta| {
-                        let breath = (1.0 - (delta * std::f32::consts::TAU).cos()) * 0.5;
-                        icon.shadow(vec![BoxShadow {
-                            inset: false,
-                            color: theme.accent.opacity(0.2 + 0.5 * breath),
-                            offset: point(px(0.0), px(0.0)),
-                            blur_radius: crate::ui::scale::rem_pixels(rems(0.375 + 0.375 * breath)),
-                            spread_radius: crate::ui::scale::rem_pixels(rems(0.0625 + 0.125 * breath)),
-                        }])
-                    },
-                ).into_any_element()
+                    move |icon, delta| icon.shadow(halo((1.0 - (delta * std::f32::consts::TAU).cos()) * 0.5, 1.0)),
+                )
+                .with_spring("operations-glow", glow, |icon, _| icon)
+                .into_any_element()
             } else {
-                icon.into_any_element()
+                icon.with_spring("operations-glow", glow, move |icon, strength| {
+                    icon.when(strength > 0.0, |icon| icon.shadow(halo(0.5, strength)))
+                })
+                .into_any_element()
             }
         })
         .when(enabled, |button| {

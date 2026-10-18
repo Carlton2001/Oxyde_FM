@@ -56,7 +56,13 @@ impl Element for FramedContent {
             let measured = *measured;
             let handle = Window::window_handle(window);
             cx.defer(move |cx| {
-                root.update(cx, |root, _| root.measured = Some(measured));
+                root.update(cx, |root, cx| {
+                    // The first measure reveals the menu: render its entrance.
+                    if root.measured.is_none() {
+                        cx.notify();
+                    }
+                    root.measured = Some(measured);
+                });
                 let _ = handle.update(cx, |_, window, cx| position(root.read(cx), window));
             });
         }

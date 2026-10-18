@@ -57,6 +57,7 @@ impl TabState {
             breadcrumb_scroll: ScrollHandle::new(),
             breadcrumb_scroll_path: std::cell::RefCell::new(String::new()),
             breadcrumb_viewport_width: std::rc::Rc::new(std::cell::Cell::new(0.0)),
+            breadcrumb_glide: Default::default(),
             sort_column: SortColumn::Name,
             sort_direction: SortDirection::Ascending,
             filter_types: std::collections::HashSet::new(),

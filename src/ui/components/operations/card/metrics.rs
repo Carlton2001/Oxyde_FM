@@ -160,8 +160,13 @@ pub(super) fn render(operation: &FileOperation, cx: &App) -> Div {
                         div()
                             .h_full()
                             .rounded_full()
-                            .w(relative(percentage as f32 / 100.0))
-                            .bg(color.opacity(0.7)),
+                            .bg(color.opacity(0.7))
+                            // Glide between worker updates instead of stepping.
+                            .with_spring(
+                                SharedString::from(format!("operation-card-fill-{}", operation.id)),
+                                crate::ui::elements::motion::slide(percentage as f32 / 100.0),
+                                |fill, fraction| fill.w(relative(fraction)),
+                            ),
                     ),
             )
         })

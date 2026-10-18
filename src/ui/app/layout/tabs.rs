@@ -1,4 +1,5 @@
 use crate::ui::app::{FileDragData, OxydeApp};
+use crate::ui::elements::motion;
 use crate::ui::components::tabs::{Tab, TabBar, TabDragPreview, TabPosition};
 use crate::ui::i18n::{FluentArgs, I18nContext, Message};
 use super::ThemeContext;
@@ -444,15 +445,13 @@ impl OxydeApp {
                             .w(rems(0.125))
                             .h_full()
                             .bg(theme.accent)
-                            .when(
-                                self.drop_target_pane.as_ref() == Some(&p_id_cap)
-                                    && self.drop_target_idx == Some(t_ix),
-                                |s| s.opacity(1.0),
-                            )
-                            .when(
-                                !(self.drop_target_pane.as_ref() == Some(&p_id_cap)
-                                    && self.drop_target_idx == Some(t_ix)),
-                                |s| s.opacity(0.0),
+                            .with_spring(
+                                SharedString::from(format!("tab-drop-marker-{p_id_cap}-{t_ix}")),
+                                motion::presence(
+                                    self.drop_target_pane.as_ref() == Some(&p_id_cap)
+                                        && self.drop_target_idx == Some(t_ix),
+                                ),
+                                |s, v| s.opacity(v),
                             ),
                     )
                     // Visual Drop Indicator (Marker - Right side of this tab, only for the last one)
@@ -465,15 +464,13 @@ impl OxydeApp {
                                 .w(rems(0.125))
                                 .h_full()
                                 .bg(theme.accent)
-                                .when(
-                                    self.drop_target_pane.as_ref() == Some(&p_id_cap)
-                                        && self.drop_target_idx == Some(tabs_count),
-                                    |s| s.opacity(1.0),
-                                )
-                                .when(
-                                    !(self.drop_target_pane.as_ref() == Some(&p_id_cap)
-                                        && self.drop_target_idx == Some(tabs_count)),
-                                    |s| s.opacity(0.0),
+                                .with_spring(
+                                    SharedString::from(format!("tab-drop-marker-{p_id_cap}-end")),
+                                    motion::presence(
+                                        self.drop_target_pane.as_ref() == Some(&p_id_cap)
+                                            && self.drop_target_idx == Some(tabs_count),
+                                    ),
+                                    |s, v| s.opacity(v),
                                 ),
                         )
                     }),

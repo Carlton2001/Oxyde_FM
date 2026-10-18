@@ -74,15 +74,22 @@ pub(crate) fn render_operation_progress(app: &OxydeApp, cx: &Context<OxydeApp>) 
                         .rounded_full()
                         .bg(theme.border)
                         .overflow_hidden()
-                        .child(
-                            crate::ui::elements::rounded_fill::rounded_fill(
-                                ratio,
-                                rems(0.125),
-                                theme.accent,
-                            )
-                            .absolute()
-                            .size_full(),
-                        )
+                        // Glide between worker updates instead of stepping.
+                        .child(div().absolute().size_full().with_spring(
+                            SharedString::from(format!("operation-fill-{}", op.id)),
+                            crate::ui::elements::motion::slide(ratio),
+                            move |fill, ratio| {
+                                fill.child(
+                                    crate::ui::elements::rounded_fill::rounded_fill(
+                                        ratio,
+                                        rems(0.125),
+                                        theme.accent,
+                                    )
+                                    .absolute()
+                                    .size_full(),
+                                )
+                            },
+                        ))
                         .when(finalizing, |bar| {
                             bar.child(
                                 div()
@@ -121,11 +128,15 @@ pub(crate) fn render_operation_progress(app: &OxydeApp, cx: &Context<OxydeApp>) 
                                                 ),
                                             )))
                                             .with_animation(
-                                                "operation-finalizing-shimmer",
+                                                SharedString::from(format!(
+                                                    "operation-finalizing-shimmer-{}",
+                                                    op.id
+                                                )),
                                                 Animation::new(std::time::Duration::from_millis(
                                                     1800,
                                                 ))
-                                                .repeat(),
+                                                .repeat()
+                                                .with_easing(ease_in_out),
                                                 |reflection, delta| {
                                                     reflection.left(relative(-0.4 + 1.4 * delta))
                                                 },

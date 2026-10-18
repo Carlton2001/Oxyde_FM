@@ -648,8 +648,21 @@ impl Render for MenuWindow {
                 )
                 .absolute()
                 .size_0(),
-            )
-            .into_any_element();
+            );
+        // Hidden until measured and placed; then a brief fade, closing stays instant.
+        let wrapped = if self.measured.is_none() {
+            wrapped.opacity(0.0).into_any_element()
+        } else {
+            let lift = window.rem_size() * 0.1875;
+            wrapped
+                .relative()
+                .with_animation(
+                    "menu-entrance",
+                    Animation::new(std::time::Duration::from_millis(90)).with_easing(ease_out_quint()),
+                    move |menu, delta| menu.top(lift * (1.0 - delta)).opacity(delta),
+                )
+                .into_any_element()
+        };
         FramedContent {
             content: wrapped,
             root,

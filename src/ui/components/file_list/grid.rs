@@ -304,7 +304,8 @@ pub(super) fn render_grid_file_list(
             .child(div().absolute().map(|zone| match super::measured_rail(view, &pane_id, &tab.list_scroll.0.borrow().base_handle) {
                 Some((top, height)) => zone.top(px(top)).h(px(height)),
                 None => zone.top_0().bottom_0(),
-            }).right_0().w(rems(3.625)).group("file-list-scroll-zone").child(render_scrollbar(
+            }).right_0().w(rems(3.625)).group("file-list-scroll-zone")
+            .map(|zone| super::scroll_top::hover_zone(zone, handle.clone(), &pane_id)).child(render_scrollbar(
                 theme,
                 handle.clone(),
                 ScrollbarAxis::Vertical,
@@ -325,7 +326,7 @@ pub(super) fn render_grid_file_list(
                         });
                     }
                 },
-            )).child(super::scroll_top::button(theme, handle.clone(), pane_id.clone(), scroll_offset, viewport_height, content_height)))
+            )).child(super::scroll_top::button(theme, handle.clone(), pane_id.clone(), view.scroll_zone_hover.as_deref() == Some(pane_id.as_str()), scroll_offset, viewport_height, content_height)))
             .on_mouse_down(MouseButton::Left, {
                 let h = handle.clone();
                 let pid = pane_id.clone();

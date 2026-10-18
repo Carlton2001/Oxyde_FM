@@ -61,3 +61,17 @@ une mise en page trop rigide.
 `AppConfig` conserve les réglages ; les globals appliquent immédiatement thème et langue. La file de sauvegarde écrit en arrière-plan et dans l’ordre. Garder les anciennes configurations lisibles avec des valeurs par défaut ; ne pas écraser une configuration illisible. La réinitialisation conserve session, géométrie et préférences de doublons.
 
 Le rendu ne fait ni I/O ni calcul lourd. Réutiliser les résumés d’historique/opérations et les instantanés préparés par révision. Les réponses asynchrones doivent vérifier leur propriétaire et leur révision avant publication. Voir [opérations](operations.md) et [validation visuelle](../guides/visual-checks.md).
+
+### Animations
+
+Une animation n’est jamais sur le chemin d’une action : le clic, la navigation et
+le dépôt restent immédiats. N’animer que des éléments qui apparaissent en marge
+(fondus, glissements de quelques pixels), en 150 ms au plus, sortie plus courte
+que l’entrée, sans rebond. Ne pas animer le contenu des listes, la sélection, le
+survol des lignes, le changement d’onglet ni le redimensionnement.
+
+`elements/motion.rs` fournit des ressorts critiquement amortis (`presence`,
+`linger`, `slide`) qui se réorientent sans saut. La préférence « Animations de
+l’interface » pilote `App::set_reduce_motion` : GPUI rend alors chaque animation
+dans son état final, sans image supplémentaire. Une animation répétée doit être
+retirée du rendu dès qu’elle n’a plus d’objet.

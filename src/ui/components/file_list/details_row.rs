@@ -314,10 +314,10 @@ pub(super) fn render_details_row(params: DetailsRowParams<'_>, cx: &mut App) -> 
                                     if has_error {
                                         field.with_animation(
                                             SharedString::from(format!("rename-shake-{rename_shake_id}")),
-                                            Animation::new(std::time::Duration::from_millis(480)),
+                                            Animation::new(std::time::Duration::from_millis(300)),
                                             |field, delta| {
                                                 let amplitude = (1.0 - delta) * logical(8.0);
-                                                let offset = (delta * std::f32::consts::PI * 8.0).sin() * amplitude;
+                                                let offset = (delta * std::f32::consts::PI * 6.0).sin() * amplitude;
                                                 field.relative().left(px(offset))
                                             },
                                         ).into_any_element()

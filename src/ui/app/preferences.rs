@@ -111,6 +111,7 @@ impl OxydeApp {
         self.show_system = self.config.show_system;
         self.show_media_previews = self.config.show_previews;
         self.show_grid_thumbnails = self.config.show_grid_thumbnails;
+        cx.set_reduce_motion(!self.config.animations);
         self.sidebar_follow_path = None;
         self.sidebar_follow_task = None;
         self.finish_pointer_drag(cx);
@@ -168,6 +169,12 @@ impl OxydeApp {
     pub(crate) fn show_checkboxes(&self) -> bool { self.config.show_checkboxes }
     pub(crate) fn toggle_checkboxes(&mut self, cx: &mut Context<Self>) {
         self.config.show_checkboxes = !self.config.show_checkboxes;
+        self.save_preferences(cx);
+    }
+    pub(crate) fn animations_enabled(&self) -> bool { self.config.animations }
+    pub(crate) fn toggle_animations(&mut self, cx: &mut Context<Self>) {
+        self.config.animations = !self.config.animations;
+        cx.set_reduce_motion(!self.config.animations);
         self.save_preferences(cx);
     }
     pub(crate) fn use_system_icons(&self) -> bool { self.config.use_system_icons }

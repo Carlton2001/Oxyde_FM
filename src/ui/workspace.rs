@@ -139,6 +139,8 @@ pub struct TabState {
     pub breadcrumb_scroll: ScrollHandle,
     pub breadcrumb_scroll_path: std::cell::RefCell<String>,
     pub breadcrumb_viewport_width: std::rc::Rc<std::cell::Cell<f32>>,
+    /// Start time and offset of a breadcrumb glide toward its end.
+    pub breadcrumb_glide: std::rc::Rc<std::cell::Cell<Option<(std::time::Instant, f32)>>>,
     pub sort_column: SortColumn,
     pub sort_direction: SortDirection,
     pub filter_types: std::collections::HashSet<String>,

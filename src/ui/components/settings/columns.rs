@@ -66,6 +66,16 @@ pub(super) fn left_column(view: &OxydeApp, handle: Entity<OxydeApp>, left_width:
             |view, cx| view.toggle_checkboxes(cx),
         ))
         .child(settings_row(
+            i18n.text(Message::SettingsAnimations),
+            i18n.text(Message::SettingsAnimationsDescription),
+            "icons/sparkles.svg",
+            view.animations_enabled(),
+            "toggle-animations",
+            handle.clone(),
+            theme,
+            |view, cx| view.toggle_animations(cx),
+        ))
+        .child(settings_row(
             i18n.text(Message::SettingsPathTracking),
             i18n.text(Message::SettingsPathTrackingDescription),
             "icons/folder-tree.svg",

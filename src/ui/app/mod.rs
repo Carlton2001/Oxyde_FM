@@ -217,6 +217,10 @@ pub struct OxydeApp {
     pub highlight_top_zone: bool,
     pub highlight_bottom_zone: bool,
     pub highlight_split_pane: Option<String>,
+    /// Last pane offered a split highlight during the current tab drag, kept so the highlight can fade out.
+    pub(crate) split_highlight_last: Option<String>,
+    /// Pane whose vertical scrollbar zone is under the pointer.
+    pub(crate) scroll_zone_hover: Option<String>,
     pub grab_offset: f32,
     pub sidebar_width: f32,
     pub(crate) sidebar_collapsed: bool,
@@ -342,6 +346,7 @@ impl OxydeApp {
         load_failed: bool,
         cx: &mut Context<Self>,
     ) -> Self {
+        cx.set_reduce_motion(!config.animations);
         let restored_workspace = config
             .workspace_state
             .as_ref()
@@ -386,6 +391,8 @@ impl OxydeApp {
             highlight_top_zone: false,
             highlight_bottom_zone: false,
             highlight_split_pane: None,
+            split_highlight_last: None,
+            scroll_zone_hover: None,
             grab_offset: 0.0,
             sidebar_width,
             sidebar_collapsed: config
