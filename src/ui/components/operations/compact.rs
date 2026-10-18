@@ -37,6 +37,7 @@ pub(crate) fn render_operation_progress(app: &OxydeApp, cx: &Context<OxydeApp>) 
             };
             div()
                 .id(SharedString::from(format!("operation-progress-{}", op.id)))
+                .flex_none()
                 .on_click(move |_, _, cx| {
                     super::open_operations_window(owner.clone(), cx);
                 })

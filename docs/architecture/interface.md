@@ -46,6 +46,18 @@ fournissent leur rayon intérieur via `select_menu`. Leur rail peut être plus l
 que le viewport, sans modifier la plage de défilement du contenu. Conserver les
 propriétaires des événements, identifiants et conversions de coordonnées.
 
+Pour les formulaires, modales, paramètres et notifications, `components/scroll_area.rs`
+compose ces ascenseurs avec un état local par surface et par fenêtre. La vue
+appelante conserve le cadre, les contraintes et l’identifiant du viewport.
+Les poignées réservent leur place uniquement en cas de débordement ; les deux
+axes gardent leurs coordonnées et captures dans leur fenêtre propriétaire.
+
+Les formulaires secondaires adaptent leur disposition à la largeur disponible
+en rems : `modal::responsive_form_row` empile un libellé et sa valeur si la vue
+le demande. Les pieds de fenêtre peuvent passer sur plusieurs lignes. Le zoom
+ne doit pas déclencher un agrandissement de la largeur native pour compenser
+une mise en page trop rigide.
+
 `AppConfig` conserve les réglages ; les globals appliquent immédiatement thème et langue. La file de sauvegarde écrit en arrière-plan et dans l’ordre. Garder les anciennes configurations lisibles avec des valeurs par défaut ; ne pas écraser une configuration illisible. La réinitialisation conserve session, géométrie et préférences de doublons.
 
 Le rendu ne fait ni I/O ni calcul lourd. Réutiliser les résumés d’historique/opérations et les instantanés préparés par révision. Les réponses asynchrones doivent vérifier leur propriétaire et leur révision avant publication. Voir [opérations](operations.md) et [validation visuelle](../guides/visual-checks.md).

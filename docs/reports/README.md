@@ -10,6 +10,7 @@ Les références actives décrivent les contrats ; les bilans ci-dessous décriv
 | [Transport d’archives, 17 octobre](2026-10-17-archive-transport.md) | Correction des attentes IPC, mesures avant/après et validation native |
 | [Turbo des archives, 17 octobre](2026-10-17-archive-turbo.md) | Parallélisme, mesures ZIP/7z/TAR.ZST/TAR et répartition de la mémoire |
 | [Couverture de Turbo, 17 octobre](2026-10-17-turbo-coverage.md) | Effets par opération, lacunes et pistes de correction priorisées |
+| [Corrections UI, 18 octobre](2026-10-18-ui-audit-fixes.md) | Douze corrections, commits, vérifications et parcours visuels précis |
 
 ## Retrouver une preuve complète
 

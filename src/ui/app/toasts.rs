@@ -209,20 +209,12 @@ impl OxydeApp {
         .detach();
     }
 
-    pub(crate) fn render_toasts(&self, window: &Window, cx: &Context<Self>) -> impl IntoElement {
+    pub(crate) fn render_toasts(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = *cx.theme();
         let handle = cx.entity();
-        div()
-            .absolute()
-            .bottom(crate::ui::style::STATUS_BAR_HEIGHT + rems(0.5))
-            .right(rems(0.5))
-            .flex()
-            .flex_col()
-            .items_end()
-            .gap(rems(0.5))
-            .max_w(window.viewport_size().width - rem_pixels(rems(1.0)))
-            .children(crate::ui::components::operations::render_operation_progress(self, cx))
-            .children(self.toasts.iter().map(|toast| {
+        let mut cards = crate::ui::components::operations::render_operation_progress(self, cx);
+        let mut stack_width = 24.0_f32;
+        cards.extend(self.toasts.iter().map(|toast| {
                 let id = toast.id;
                 let close = handle.clone();
                 let export = handle.clone();
@@ -248,12 +240,12 @@ impl OxydeApp {
                 };
                 let message = cx.i18n().text_with_args(toast.message, &args);
                 let width = if source.is_some() || toast.message == Message::ArchiveRecoveryNotice || message.chars().count() > 120 { 40.0 } else { 24.0 };
+                stack_width = stack_width.max(width);
                 div()
                     .id(("toast", id))
-                    .max_w(
-                        rem_pixels(rems(width))
-                            .min((window.viewport_size().width - rem_pixels(rems(2.0))).max(px(1.0))),
-                    )
+                    .flex_none()
+                    .w(rems(width))
+                    .max_w_full()
                     .px(rems(1.0))
                     .py(rems(0.75))
                     .rounded(rems(0.5))
@@ -331,6 +323,26 @@ impl OxydeApp {
                                     .text_color(theme.text),
                             ),
                     )
-            }))
+                    .into_any_element()
+            }));
+        if cards.is_empty() { return div(); }
+        let maximum_height = notification_height(window.viewport_size().height, window.rem_size());
+        div().absolute()
+            .bottom(crate::ui::style::STATUS_BAR_HEIGHT)
+            .right_0()
+            .child(crate::ui::components::scroll_area::scroll_area("notification-stack-scroll-state",
+                div().w(rems(stack_width + 1.0)).max_w((window.viewport_size().width - rem_pixels(rems(0.5))).max(px(0.0)))
+                    .max_h(maximum_height),
+                div().id("notification-stack-scroll").flex().flex_col().items_end()
+                    .gap(rems(0.5)).p(rems(0.5)).children(cards), false, window, cx))
     }
 }
+
+fn notification_height(viewport: Pixels, rem: Pixels) -> Pixels {
+    (viewport - (crate::ui::style::STATUS_BAR_HEIGHT + crate::ui::components::title_bar::TITLEBAR_H + rems(1.5))
+        .to_pixels(rem)).max(px(0.0))
+}
+
+#[cfg(test)]
+#[path = "toasts/tests/geometry.rs"]
+mod tests;
