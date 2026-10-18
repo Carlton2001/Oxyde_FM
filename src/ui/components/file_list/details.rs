@@ -282,30 +282,7 @@ pub(super) fn render_details_file_list(
                                     });
                                 }
                             })
-                            .on_mouse_down(MouseButton::Right, {
-                                 let h = handle.clone();
-                                 let p_id_cap = pane_id.clone();
-                                 move |e, _, cx| {
-                                     let pos = e.position;
-                                     let p_id_cap_cap = p_id_cap.clone();
-                                      h.update(cx, |this, cx| {
-                                          this.activate_pane(&p_id_cap_cap, cx);
-                                          this.context_menus.clear();
-                                          this.context_menus.push(ContextMenuInstance {
-            native_bounds: None,
-                                              position: pos,
-                                              content: ContextMenuContent::Items(with_grid_sort(pane_context_menu_items(cx.i18n(), h.clone(), p_id_cap_cap.clone(), this), this, h.clone(), &p_id_cap_cap, cx.i18n()), None),
-                                              scroll_handle: UniformListScrollHandle::new(),
-                                              width: px(0.0),
-                                              bottom_padding: 0.0,
-                                              open_left: false,
-                                    hovered_item: None,
-                                    native_request_id: None,
-                                          });
-                                          cx.notify();
-                                      });
-                                 }
-                             })
+                            .on_mouse_down(MouseButton::Right, background_menu(handle.clone(), pane_id.clone()))
                             .drag_over::<FileDragData>({
                                 let p_id_cap = pane_id.clone();
                                 let h_over = handle.clone();
@@ -349,6 +326,16 @@ pub(super) fn render_details_file_list(
                         )
                 )
         )
+        // Blank area right of the last column also opens the background menu.
+        .child(
+            div()
+                .absolute()
+                .top(px(crate::ui::style::column_header_height()))
+                .bottom(px(status_bar_height() + h_track))
+                .left(active_tab.list_scroll_h.offset().x + rem_pixels(rems(0.5)) + px(total_w))
+                .right_0()
+                .on_mouse_down(MouseButton::Right, background_menu(handle.clone(), pane_id.clone()))
+        )
         .child(super::selection_button::render(view, &pane_id, handle.clone(), theme, cx))
         // 3. Gutters interactifs
         .child(
@@ -358,6 +345,7 @@ pub(super) fn render_details_file_list(
                 .left_0()
                 .bottom_0()
                 .w(rems(0.5))
+                .on_mouse_down(MouseButton::Right, background_menu(handle.clone(), pane_id.clone()))
                 .on_mouse_down(MouseButton::Left, {
                     let h = handle.clone();
                     let p_id_cap = pane_id.clone();
@@ -393,6 +381,7 @@ pub(super) fn render_details_file_list(
                 .right(px(crate::ui::components::scrollbar::zed_track_width()))
                 .bottom_0()
                 .w(rems(0.5))
+                .on_mouse_down(MouseButton::Right, background_menu(handle.clone(), pane_id.clone()))
                 .on_mouse_down(MouseButton::Left, {
                     let h = handle.clone();
                     let p_id_cap = pane_id.clone();
@@ -605,4 +594,29 @@ pub(super) fn render_details_file_list(
     );
 
     container.into_any_element()
+}
+
+/// Opens the folder background menu from any blank area of the details view.
+fn background_menu(handle: Entity<OxydeApp>, pane_id: String) -> impl Fn(&MouseDownEvent, &mut Window, &mut App) + 'static {
+    move |event, _, cx| {
+        cx.stop_propagation();
+        let position = event.position;
+        handle.update(cx, |this, cx| {
+            this.activate_pane(&pane_id, cx);
+            let items = with_grid_sort(pane_context_menu_items(cx.i18n(), handle.clone(), pane_id.clone(), this), this, handle.clone(), &pane_id, cx.i18n());
+            this.context_menus.clear();
+            this.context_menus.push(ContextMenuInstance {
+                native_bounds: None,
+                position,
+                content: ContextMenuContent::Items(items, None),
+                scroll_handle: UniformListScrollHandle::new(),
+                width: px(0.0),
+                bottom_padding: 0.0,
+                open_left: false,
+                hovered_item: None,
+                native_request_id: None,
+            });
+            cx.notify();
+        });
+    }
 }

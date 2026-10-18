@@ -267,9 +267,7 @@ undo-operation = Deshacer: { $operation }
 
 redo-operation = Rehacer: { $operation }
 
-shortcut-back = Alt+Izquierda
 
-shortcut-forward = Alt+Derecha
 
 sidebar-quick-access = Acceso rápido
 
@@ -716,7 +714,6 @@ trash-restore = Restaurar
 trash-restore-all = Restaurar todo
 trash-delete-permanent = Eliminar permanentemente
 trash-delete-all = Vaciar la papelera
-trash-all = Todo
 trash-original-location = Ubicación original
 trash-deleted-at = Fecha de eliminación
 

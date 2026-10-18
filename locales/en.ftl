@@ -148,8 +148,6 @@ operations-empty = No operations
 name-filter-placeholder = Filter by name…
 undo-operation = Undo: { $operation }
 redo-operation = Redo: { $operation }
-shortcut-back = Alt+Left
-shortcut-forward = Alt+Right
 
 ## Sidebar, filters and navigation errors
 sidebar-quick-access = Quick access
@@ -409,7 +407,6 @@ trash-restore = Restore
 trash-restore-all = Restore all
 trash-delete-permanent = Delete permanently
 trash-delete-all = Empty Recycle Bin
-trash-all = All
 trash-original-location = Original location
 trash-deleted-at = Date deleted
 

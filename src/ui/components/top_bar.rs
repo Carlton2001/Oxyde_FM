@@ -174,7 +174,7 @@ pub fn render_top_bar(
                     if can_go_back {
                         let p_id = pane_id.clone();
                         btn = btn
-                            .when(show_tooltips, |d| d.native_tooltip(Tooltip::with_meta(_cx.i18n().text(Message::Back), _cx.i18n().text(Message::ShortcutBack))))
+                            .when(show_tooltips, |d| d.native_tooltip(Tooltip::with_shortcut(_cx.i18n().text(Message::Back), Some("Alt+←".into()))))
                             .on_mouse_down(MouseButton::Left, {
                                 let h = handle.clone();
                                 move |_, _, cx| { h.update(cx, |v: &mut OxydeApp, cx| v.go_back(&p_id, cx)); }
@@ -203,7 +203,7 @@ pub fn render_top_bar(
                     if can_go_forward {
                         let p_id = pane_id.clone();
                         btn = btn
-                            .when(show_tooltips, |d| d.native_tooltip(Tooltip::with_meta(_cx.i18n().text(Message::Forward), _cx.i18n().text(Message::ShortcutForward))))
+                            .when(show_tooltips, |d| d.native_tooltip(Tooltip::with_shortcut(_cx.i18n().text(Message::Forward), Some("Alt+→".into()))))
                             .on_mouse_down(MouseButton::Left, {
                                 let h = handle.clone();
                                 move |_, _, cx| { h.update(cx, |v: &mut OxydeApp, cx| v.go_forward(&p_id, cx)); }
@@ -221,8 +221,10 @@ pub fn render_top_bar(
         .child({
             let mut actions = div().flex().items_center().gap_1().ml_1().flex_shrink_0();
             let permanent_delete = view.shift_delete || view.pane_delete_is_permanent(&pane_id);
+            let mut has_previous = false;
             for (visible, id, icon, label, tip, action) in [
                 (parent_path.is_some(), "up-btn", "icons/arrow-up.svg", Message::Up, "Alt+↑".into(), 0u8),
+                (ordinary, "new-folder-btn", "icons/folder-plus.svg", Message::NewFolder, "Ctrl+Shift+N".into(), 11),
                 (!is_trash_path && has_undo_entry, "undo-btn", "icons/undo-2.svg", Message::Undo,
                     if undo_blocked_by_overwrite { _cx.i18n().text(Message::UndoOverwriteUnavailable).to_string() }
                     else { undo_tooltip.clone().unwrap_or_default() }, 1),
@@ -233,19 +235,19 @@ pub fn render_top_bar(
                 (selected && !is_trash_path && !is_network_neighborhood && active_tab.archive_root.is_none(),
                     "delete-btn", if permanent_delete { "icons/trash-2.svg" } else { "icons/trash.svg" },
                     if permanent_delete { Message::TrashDeletePermanent } else { Message::Delete }, String::new(), 6),
+                (is_trash_path && selected, "trash-restore-btn", "icons/rotate-ccw.svg", Message::TrashRestoreSelection, String::new(), 8),
                 (is_trash_path && selected, "trash-delete-btn", "icons/trash-2.svg", Message::TrashDeletePermanent, String::new(), 7),
-                (is_trash_path, "trash-restore-btn", "icons/rotate-ccw.svg", Message::TrashRestoreSelection, String::new(), 8),
                 (is_trash_path, "trash-restore-all-btn", "icons/rotate-ccw.svg", Message::TrashRestoreAll, String::new(), 9),
                 (is_trash_path, "trash-delete-all-btn", "icons/trash-2.svg", Message::TrashDeleteAll, String::new(), 10),
             ] {
                 if !visible { continue; }
                 let enabled = (action != 1 || can_undo)
                     && (!matches!(action, 1 | 2) || !view.history_operation_in_progress)
-                    && (action < 7 || (!view.trash_busy && if action < 9 { selected } else { !active_tab.files.is_empty() }));
+                    && (!(7..=10).contains(&action) || (!view.trash_busy && (action < 9 || !active_tab.files.is_empty())));
                 let mut button = div().id(id).min_w(rems(1.5)).h_6().px(rems(0.125)).flex().items_center().justify_center().rounded_md()
                     .when(show_tooltips && (action == 1 || action == 2), |d| d.native_tooltip(Tooltip::with_meta(_cx.i18n().text(label), tip.clone())))
                     .when(show_tooltips && action == 6, |d| d.native_tooltip(Tooltip::for_delete(handle.clone(), pane_id.clone())))
-                    .when(show_tooltips && action != 1 && action != 2 && action != 6, |d| d.native_tooltip(Tooltip::with_shortcut(_cx.i18n().text(label),
+                    .when(show_tooltips && !matches!(action, 1 | 2 | 6 | 9 | 10), |d| d.native_tooltip(Tooltip::with_shortcut(_cx.i18n().text(label),
                         (!tip.is_empty()).then(|| SharedString::from(tip)))));
                 if enabled {
                     let h = handle.clone();
@@ -267,21 +269,28 @@ pub fn render_top_bar(
                                     8 => this.execute_trash_action(true, false, cx),
                                     9 => this.execute_trash_action(true, true, cx),
                                     10 => this.execute_trash_action(false, true, cx),
+                                    11 => this.create_new_folder(&p, cx),
                                     _ => this.execute_supprimer(cx),
                                 }
                                 cx.notify();
                             });
                         });
                 }
-                actions = actions.child(button.child(svg().path(icon).size_4()
-                    .text_color(if !enabled { icon_disabled } else if action == 7 || action == 10 || (action == 6 && permanent_delete) { theme.error } else { icon_active }))
-                    .when(action == 9 || action == 10, |button| button.child(
-                        div().ml(rems(0.125)).text_size(rems(0.625)).text_color(theme.text_muted)
-                            .child(_cx.i18n().text(Message::TrashAll))
-                    )));
+                let color = if !enabled { icon_disabled } else if matches!(action, 7 | 10) || (action == 6 && permanent_delete) { theme.error } else { icon_active };
+                // Whole-bin actions carry their label and sit after a separator.
+                if action == 9 && has_previous {
+                    actions = actions.child(div().w(rems(0.0625)).h(rems(1.0)).mx_2().flex_shrink_0().bg(theme.border));
+                }
+                let labelled = matches!(action, 9 | 10);
+                has_previous = true;
+                actions = actions.child(button.child(svg().path(icon).size_4().text_color(color))
+                    .when(labelled, |button| button.px(rems(0.375)).gap(rems(0.375)).text_size(rems(0.8125)).text_color(color)
+                        .child(_cx.i18n().text(label))));
             }
             actions
         })
+        // The Recycle Bin shows its actions instead of a breadcrumb.
+        .when(!is_trash_path, |bar| bar
         // The only separator divides the actions from the breadcrumb.
         .child(div().w(rems(0.0625)).h(rems(1.0)).mx_3().flex_shrink_0().bg(theme.border))
         .child(
@@ -772,7 +781,7 @@ pub fn render_top_bar(
                         }))
                     },
                 )
-        )
+        ))
         .when(!is_trash_path && !is_network_neighborhood && !current_path.starts_with("::{"), |bar| {
             bar.child(view.render_quick_search_control(&pane_id, _cx))
         })

@@ -176,10 +176,11 @@ pub(super) fn render_sidebar_rail(
                 };
                 let expand = cx.i18n().text(Message::ExpandAll);
                 let collapse = cx.i18n().text(Message::CollapseAll);
-                let items = items
+                // Re-section after filtering so no empty section remains.
+                let items = super::super::context_menu_sections(items
                     .into_iter()
                     .filter(|item| item.label != expand.as_ref() && item.label != collapse.as_ref())
-                    .collect();
+                    .collect(), cx.i18n());
                 menu.update(cx, |this, cx| {
                     this.pinned_rail_open = false;
                     this.context_menus.clear();

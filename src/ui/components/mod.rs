@@ -24,10 +24,28 @@ mod history_actions;
 use crate::ui::i18n::{I18n, Message};
 use gpui::*;
 
-/// Tauri menu sections: navigation, editing/state, destructive actions,
-/// information, sorting and native Shell actions. Empty sections disappear.
+/// Menu sections, in Explorer order: navigation, tree, network, item state,
+/// clipboard, creation, selection, archives, history, renaming/deletion, sort,
+/// information and native Shell actions. Empty sections disappear.
 pub(crate) fn context_menu_sections(items: Vec<dropdown::DropdownItem>, i18n: &I18n) -> Vec<dropdown::DropdownItem> {
     use dropdown::IconName;
+    const GROUPS: &[&[Message]] = &[
+        &[Message::OpenFileLocation, Message::Open, Message::OpenNewTab],
+        &[Message::ExpandAll, Message::CollapseAll],
+        &[Message::MapNetworkDrive, Message::DisconnectNetworkDrive, Message::DisconnectThisNetworkDrive],
+        &[Message::MountDiskImage, Message::UnmountDiskImage, Message::PinQuickAccess,
+            Message::UnpinQuickAccess, Message::EjectDrive, Message::TrashRestore, Message::TrashRestoreAll],
+        &[Message::Cut, Message::Copy, Message::Paste],
+        &[Message::NewFolder],
+        &[Message::SelectAll],
+        &[Message::Compress, Message::OpExtractHere],
+        &[], // Undo/Redo, recognised by their icons.
+        &[Message::Rename, Message::Delete, Message::TrashDeletePermanent, Message::TrashDeleteAll],
+        &[Message::SortBy],
+        &[Message::Properties],
+        &[Message::MoreOptions],
+    ];
+    const HISTORY: usize = 8;
     let mut result = Vec::new();
     let mut previous_group = None;
     let mut pending_separator = false;
@@ -36,14 +54,11 @@ pub(crate) fn context_menu_sections(items: Vec<dropdown::DropdownItem>, i18n: &I
             pending_separator = true;
             continue;
         }
-        let group = if [Message::OpenFileLocation, Message::Open, Message::OpenNewTab, Message::ExpandAll, Message::CollapseAll]
-            .iter().any(|message| item.label == i18n.text(*message).as_ref()) { 0 }
-            else if [Message::Delete, Message::TrashDeletePermanent].iter()
-                .any(|message| item.label == i18n.text(*message).as_ref()) { 2 }
-            else if item.label == i18n.text(Message::Properties).as_ref() { 3 }
-            else if item.label == i18n.text(Message::SortBy).as_ref() { 4 }
-            else if item.label == i18n.text(Message::MoreOptions).as_ref() { 5 }
-            else { 1 };
+        let group = if matches!(item.icon, Some(IconName::Undo | IconName::Redo)) { HISTORY } else {
+            GROUPS.iter().position(|messages| messages.iter()
+                .any(|message| item.label == i18n.text(*message).as_ref()))
+                .unwrap_or(GROUPS.len())
+        };
         if !result.is_empty() && (pending_separator || previous_group != Some(group)) {
             result.push(dropdown::DropdownItem::separator());
         }
@@ -131,10 +146,10 @@ pub fn with_grid_sort(
                 cx.notify();
             });
         });
-    items.insert(items.len().saturating_sub(1), sort);
-    let sort_index = items.len().saturating_sub(2);
-    items.insert(sort_index, dropdown::DropdownItem::separator());
-    items.insert(items.len().saturating_sub(1), dropdown::DropdownItem::separator());
+    // Sorting always sits just above the information section.
+    let index = items.iter().position(|item| [Message::Properties, Message::MoreOptions].into_iter()
+        .any(|message| item.label == i18n.text(message).as_ref())).unwrap_or(items.len());
+    items.insert(index, sort);
     context_menu_sections(items, i18n)
 }
 
@@ -673,25 +688,6 @@ pub fn tab_context_menu_items(
             }),
             on_hover: None,
         },
-        crate::ui::components::dropdown::DropdownItem {
-            label: i18n.text(Message::CloseOtherTabs).to_string(),
-            icon: Some(IconName::CopyX),
-            badge: None,
-            stay_open: false,
-            has_submenu: false,
-            is_dimmed: !can_close_other_tabs,
-            on_click: std::rc::Rc::new({
-                let h = h_app.clone();
-                let p_id = pane_id.clone();
-                move |_, app| {
-                    h.update(app, |this, cx| {
-                        this.context_menus.clear();
-                        this.close_other_tabs(&p_id, tab_idx, cx);
-                    });
-                }
-            }),
-            on_hover: None,
-        },
         crate::ui::components::dropdown::DropdownItem::separator(),
         crate::ui::components::dropdown::DropdownItem {
             label: i18n.text(Message::CloseTab).to_string(),
@@ -712,6 +708,25 @@ pub fn tab_context_menu_items(
             }),
             on_hover: None,
         },
+        crate::ui::components::dropdown::DropdownItem {
+            label: i18n.text(Message::CloseOtherTabs).to_string(),
+            icon: Some(IconName::CopyX),
+            badge: None,
+            stay_open: false,
+            has_submenu: false,
+            is_dimmed: !can_close_other_tabs,
+            on_click: std::rc::Rc::new({
+                let h = h_app.clone();
+                let p_id = pane_id.clone();
+                move |_, app| {
+                    h.update(app, |this, cx| {
+                        this.context_menus.clear();
+                        this.close_other_tabs(&p_id, tab_idx, cx);
+                    });
+                }
+            }),
+            on_hover: None,
+        },
     ]
 }
 
@@ -723,10 +738,12 @@ pub fn oxyde_context_menu_items(
     path: String,
     view: &crate::ui::app::OxydeApp,
 ) -> Vec<dropdown::DropdownItem> {
-    let mut items = network::network_actions(i18n, h.clone(), &path, false);
-    items.extend(oxyde_context_menu_items_raw(
-        i18n, h.clone(), is_dir, is_pinned, path.clone(), view,
-    ));
+    let actions = network::network_actions(i18n, h.clone(), &path, false);
+    let mut items = network::insert_after_open(
+        oxyde_context_menu_items_raw(i18n, h.clone(), is_dir, is_pinned, path.clone(), view),
+        actions,
+        i18n,
+    );
     if !path.starts_with("trash:") {
         history_actions::insert_menu_items(&mut items, i18n, h, view);
     }
@@ -735,7 +752,7 @@ pub fn oxyde_context_menu_items(
 
 pub fn pane_context_menu_items(i18n: &I18n, h: Entity<crate::ui::app::OxydeApp>, pane_id: String, view: &crate::ui::app::OxydeApp) -> Vec<dropdown::DropdownItem> {
     let path = view.state.find_pane(&pane_id).map(|pane| pane.active_tab().path.as_str()).unwrap_or_default();
-    if path == "trash://" { return trash_context_menu_items(i18n, h, None, view); }
+    if path == "trash://" { return context_menu_sections(trash_context_menu_items(i18n, h, None, view), i18n); }
     let mut items = network::network_actions(i18n, h.clone(), path, false);
     if path == "__network_vincinity__" {
         let h = h.clone();
@@ -784,9 +801,79 @@ mod context_menu_tests {
             let boundaries: Vec<_> = items.iter().enumerate()
                 .filter_map(|(index, item)| matches!(item.icon, Some(dropdown::IconName::Separator)).then_some(index))
                 .collect();
-            assert_eq!(boundaries, vec![2, 6, 8, 10, 12]);
+            assert_eq!(boundaries, vec![2, 4, 6, 9, 11, 13]);
             assert!(!matches!(items.last().unwrap().icon, Some(dropdown::IconName::Separator)));
         }
+    }
+
+    fn labels_by_section(items: &[dropdown::DropdownItem]) -> Vec<Vec<String>> {
+        items.split(|item| matches!(item.icon, Some(dropdown::IconName::Separator)))
+            .map(|section| section.iter().map(|item| item.label.clone()).collect())
+            .collect()
+    }
+
+    #[test]
+    fn file_menu_splits_actions_by_family() {
+        let i18n = I18n::for_language(crate::ui::i18n::Language::English);
+        let action = |message| dropdown::DropdownItem::new(i18n.text(message).to_string(), |_, _| {});
+        let text = |message| i18n.text(message).to_string();
+        let items = context_menu_sections(vec![
+            action(Message::Open), action(Message::MapNetworkDrive), action(Message::PinQuickAccess),
+            action(Message::Cut), action(Message::Copy), action(Message::Paste),
+            action(Message::Compress), action(Message::OpExtractHere),
+            dropdown::DropdownItem::new("Undo".to_string(), |_, _| {}).icon(dropdown::IconName::Undo),
+            dropdown::DropdownItem::new("Redo".to_string(), |_, _| {}).icon(dropdown::IconName::Redo),
+            action(Message::Rename), action(Message::Delete), action(Message::Properties),
+        ], &i18n);
+        assert_eq!(labels_by_section(&items), vec![
+            vec![text(Message::Open)], vec![text(Message::MapNetworkDrive)],
+            vec![text(Message::PinQuickAccess)],
+            vec![text(Message::Cut), text(Message::Copy), text(Message::Paste)],
+            vec![text(Message::Compress), text(Message::OpExtractHere)],
+            vec!["Undo".to_string(), "Redo".to_string()],
+            vec![text(Message::Rename), text(Message::Delete)], vec![text(Message::Properties)],
+        ]);
+    }
+
+    #[test]
+    fn background_and_trash_menus_isolate_their_families() {
+        let i18n = I18n::for_language(crate::ui::i18n::Language::English);
+        let action = |message| dropdown::DropdownItem::new(i18n.text(message).to_string(), |_, _| {});
+        let text = |message| i18n.text(message).to_string();
+        let background = context_menu_sections(vec![
+            action(Message::NewFolder), action(Message::SelectAll), action(Message::Paste),
+            action(Message::Properties),
+        ], &i18n);
+        assert_eq!(labels_by_section(&background).len(), 4);
+        let trash = context_menu_sections(vec![
+            action(Message::Cut), action(Message::TrashRestore), action(Message::TrashDeletePermanent),
+            dropdown::DropdownItem::separator(), action(Message::Properties),
+        ], &i18n);
+        assert_eq!(labels_by_section(&trash), vec![
+            vec![text(Message::Cut)], vec![text(Message::TrashRestore)],
+            vec![text(Message::TrashDeletePermanent)], vec![text(Message::Properties)],
+        ]);
+        let empty = context_menu_sections(vec![
+            action(Message::TrashRestoreAll), action(Message::TrashDeleteAll),
+        ], &i18n);
+        assert_eq!(labels_by_section(&empty).len(), 2);
+    }
+
+    #[test]
+    fn tree_actions_and_ejection_get_their_own_sections() {
+        let i18n = I18n::for_language(crate::ui::i18n::Language::English);
+        let action = |message| dropdown::DropdownItem::new(i18n.text(message).to_string(), |_, _| {});
+        let items = context_menu_sections(vec![
+            action(Message::Open), action(Message::OpenNewTab), action(Message::ExpandAll),
+            action(Message::CollapseAll), action(Message::EjectDrive), action(Message::Properties),
+        ], &i18n);
+        assert_eq!(labels_by_section(&items).iter().map(Vec::len).collect::<Vec<_>>(), vec![2, 2, 1, 1]);
+        // Removing a whole section afterwards must not leave two separators.
+        let filtered = context_menu_sections(items.into_iter()
+            .filter(|item| item.label != i18n.text(Message::ExpandAll).as_ref()
+                && item.label != i18n.text(Message::CollapseAll).as_ref())
+            .collect(), &i18n);
+        assert_eq!(labels_by_section(&filtered).iter().map(Vec::len).collect::<Vec<_>>(), vec![2, 1, 1]);
     }
 }
 
@@ -808,7 +895,8 @@ fn trash_context_menu_items(i18n: &I18n, handle: Entity<crate::ui::app::OxydeApp
         let mut item = DropdownItem::new(i18n.text(label).to_string(), move |_, cx| {
             h.update(cx, |this, cx| { this.execute_trash_action(restore, all, cx); this.context_menus.clear(); cx.notify(); });
         }).icon(icon);
-        item.is_dimmed = view.trash_busy;
+        item.is_dimmed = view.trash_busy || (all && view.state.find_pane(&view.state.active_pane_id)
+            .is_some_and(|pane| pane.active_tab().files.is_empty()));
         items.push(item);
     }
     items.push(DropdownItem::separator());

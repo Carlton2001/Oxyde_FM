@@ -19,7 +19,7 @@ pub(super) fn operation_label(i18n: &I18n, message: Message, operation: Transact
 
 pub(super) fn insert_menu_items(items: &mut Vec<DropdownItem>, i18n: &I18n, handle: Entity<OxydeApp>, view: &OxydeApp) {
     let position = items.iter().position(|item| {
-        [Message::Delete, Message::Properties, Message::MoreOptions].into_iter()
+        [Message::Rename, Message::Delete, Message::Properties, Message::MoreOptions].into_iter()
             .any(|message| item.label == i18n.text(message).as_ref())
     }).unwrap_or(items.len());
     items.splice(position..position, menu_items(i18n, handle, view));

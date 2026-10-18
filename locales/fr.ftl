@@ -154,8 +154,6 @@ operations-empty = Aucune opération
 name-filter-placeholder = Filtrer par nom…
 undo-operation = Annuler : { $operation }
 redo-operation = Rétablir : { $operation }
-shortcut-back = Alt+Gauche
-shortcut-forward = Alt+Droite
 
 ## Sidebar, filters and navigation errors
 sidebar-quick-access = Accès rapide
@@ -415,7 +413,6 @@ trash-restore = Restaurer
 trash-restore-all = Tout restaurer
 trash-delete-permanent = Supprimer définitivement
 trash-delete-all = Vider la Corbeille
-trash-all = Tous
 trash-original-location = Emplacement d’origine
 trash-deleted-at = Date de suppression
 
