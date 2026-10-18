@@ -2,7 +2,7 @@ mod completion_menu;
 mod field;
 mod options;
 mod render;
-pub(crate) use field::{field_frame, read_only_field};
+pub(crate) use field::{control_frame, field_frame, read_only_field};
 pub(crate) use options::{InputAppearance, TextInputOptions};
 use crate::ui::scale::rem_pixels;
 use crate::ui::theme::ThemeContext;

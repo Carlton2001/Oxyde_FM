@@ -320,7 +320,7 @@ pub(crate) fn render_network_dialog(
         let h = handle.clone();
         let letter_bounds = handle.clone();
         let mut letter = div().relative().flex().flex_col().child(
-            div()
+            crate::ui::components::input::control_frame(dialog.controls[0].is_focused(window), cx)
                 .id("network-letter")
                 .relative()
                 .child(canvas(|bounds, _, _| bounds, move |bounds, _, window, cx| {
@@ -333,19 +333,8 @@ pub(crate) fn render_network_dialog(
                 }).absolute().inset_0().size_full())
                 .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
                 .track_focus(&dialog.controls[0])
-                .flex()
-                .items_center()
                 .justify_between()
-                .border(rems(0.0625))
-                .border_color(if dialog.controls[0].is_focused(window) {
-                    theme.accent
-                } else {
-                    theme.border
-                })
-                .rounded_md()
-                .bg(theme.surface)
                 .px_3()
-                .h(rems(2.0))
                 .when(!busy && !dialog.loading, |d| {
                     d.hover(|s| s.bg(theme.control_hover))
                 })

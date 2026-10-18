@@ -22,11 +22,12 @@ fn standard_surface(input: Div, focused: bool, theme: &OxydeTheme) -> Div {
 
 /// Frame for an Embedded editor and its prefix/suffix controls.
 pub(crate) fn field_frame(input: &Entity<TextInput>, window: &Window, cx: &App) -> Div {
-    standard_surface(
-        div(),
-        input.read(cx).focus_handle.is_focused(window),
-        cx.theme(),
-    )
+    control_frame(input.read(cx).focus_handle.is_focused(window), cx)
+}
+
+/// Matching frame for non-editable form controls such as selection pickers.
+pub(crate) fn control_frame(focused: bool, cx: &App) -> Div {
+    standard_surface(div(), focused, cx.theme())
 }
 
 /// Non-editable snapshot used while a form is busy; never installs input handlers.
