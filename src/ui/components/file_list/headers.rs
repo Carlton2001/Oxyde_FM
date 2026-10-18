@@ -72,7 +72,9 @@ pub(super) fn render_headers(
                             .get(&anchor_key)
                             .copied()
                             .unwrap_or(fallback);
+                        if this.close_menu_owned_by(&anchor_key, cx) { return; }
                         this.open_name_filter(&pid, anchor, window, cx);
+                        this.mark_menu_owner(anchor_key.clone());
                     });
                 }
             }),
@@ -85,8 +87,11 @@ pub(super) fn render_headers(
                 let handle = handle.clone(); let pane_id = pane_id.clone(); let trash = tab.path == "trash://";
                 move |event, window, cx| {
                     if trash { handle.update(cx, |this, cx| {
-                        let anchor = this.context_anchor_points.get(&format!("filter-{pane_id}-location")).copied().unwrap_or(event.position);
+                        let anchor_key = format!("filter-{pane_id}-location");
+                        if this.close_menu_owned_by(&anchor_key, cx) { return; }
+                        let anchor = this.context_anchor_points.get(&anchor_key).copied().unwrap_or(event.position);
                         this.open_original_location_filter(&pane_id, anchor, window, cx);
+                        this.mark_menu_owner(anchor_key);
                     }); }
                 }
             })
@@ -121,7 +126,9 @@ pub(super) fn render_headers(
                             .get(&anchor_key)
                             .copied()
                             .unwrap_or(fallback);
+                        if this.close_menu_owned_by(&anchor_key, cx) { return; }
                         this.open_type_filter_menu(&pid, anchor, cx);
+                        this.mark_menu_owner(anchor_key.clone());
                     });
                 }
             }),
@@ -156,7 +163,9 @@ pub(super) fn render_headers(
                             .get(&anchor_key)
                             .copied()
                             .unwrap_or(fallback);
+                        if this.close_menu_owned_by(&anchor_key, cx) { return; }
                         this.open_size_filter_menu(&pid, anchor, cx);
+                        this.mark_menu_owner(anchor_key.clone());
                     });
                 }
             }),
@@ -193,7 +202,9 @@ pub(super) fn render_headers(
                             .get(&anchor_key)
                             .copied()
                             .unwrap_or(fallback);
+                        if this.close_menu_owned_by(&anchor_key, cx) { return; }
                         this.open_date_filter_menu(&pid, anchor, cx);
+                        this.mark_menu_owner(anchor_key.clone());
                     });
                 }
             }),

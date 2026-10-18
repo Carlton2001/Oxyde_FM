@@ -403,6 +403,13 @@ pub fn render_top_bar(
                                                    let handle = handle.clone();
                                                    let p_id_cap = p_id_cap.clone();
                                                    let path_cap = path_cap.clone();
+                                                   // A second click on the same chevron closes its menu.
+                                                   let was_open = handle.update(cx, |this, cx| {
+                                                       let open = this.breadcrumb_menu.as_ref().is_some_and(|(pane, path, current, _)| *pane == p_id_cap && *path == path_cap && *current == idx_cap);
+                                                       if open { this.breadcrumb_menu = None; cx.notify(); }
+                                                       open
+                                                   });
+                                                   if was_open { return; }
                                                    cx.spawn(move |cx: &mut AsyncApp| {
                                                        let cx = cx.clone();
                                                        let handle = handle.clone();

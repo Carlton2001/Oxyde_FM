@@ -128,6 +128,12 @@ impl AdvancedSearchWindow {
                 )
                 .on_mouse_down(MouseButton::Left, move |event, _, cx| {
                     unit_handle.update(cx, |this, cx| {
+                        let dismissed = this.unit_menu_dismissed.take().is_some_and(|at| at.elapsed() < std::time::Duration::from_millis(300));
+                        if dismissed || this.unit_menu.take().is_some_and(|scroll| this.context_menus.first().is_some_and(|menu| std::rc::Rc::ptr_eq(&menu.scroll_handle.0, &scroll.0))) {
+                            this.context_menus.clear();
+                            cx.notify();
+                            return;
+                        }
                         let items = units
                             .into_iter()
                             .enumerate()
@@ -155,6 +161,7 @@ impl AdvancedSearchWindow {
                             hovered_item: None,
                             native_request_id: None,
                         });
+                        this.unit_menu = this.context_menus.first().map(|menu| menu.scroll_handle.clone());
                         cx.notify();
                     });
                 }),

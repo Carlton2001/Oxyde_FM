@@ -239,6 +239,10 @@ pub struct OxydeApp {
     pub scrollbar_origins: std::collections::HashMap<String, Point<f32>>,
     pub breadcrumb_menu: Option<(String, String, usize, Vec<FileEntry>)>, // (pane_id, path, index, dirs)
     pub context_menus: Vec<ContextMenuInstance>,
+    /// Control that opened the current root menu, identified with that menu's scroll state.
+    pub(crate) context_menu_owner: Option<(SharedString, UniformListScrollHandle)>,
+    /// Owner whose menu the native outside click just dismissed, before the click reaches it.
+    pub(crate) dismissed_menu_owner: Option<(SharedString, std::time::Instant)>,
     pub(crate) context_anchor_points: std::collections::HashMap<String, Point<Pixels>>,
     pub submenu_timer: Option<Task<()>>,
     pub submenu_close_timer: Option<Task<()>>,
@@ -417,6 +421,8 @@ impl OxydeApp {
             scrollbar_origins: std::collections::HashMap::new(),
             breadcrumb_menu: None,
             context_menus: Vec::new(),
+            context_menu_owner: None,
+            dismissed_menu_owner: None,
             context_anchor_points: std::collections::HashMap::new(),
             submenu_timer: None,
             submenu_close_timer: None,

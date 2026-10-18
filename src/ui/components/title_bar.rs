@@ -51,6 +51,7 @@ pub fn render_title_bar(
         }).absolute().size_full())
         .on_mouse_down(MouseButton::Left, move |_, _, cx| {
             tools_handle.update(cx, |view, cx| {
+                if view.close_menu_owned_by("title-tools", cx) { return; }
                 let Some(bounds) = view.tools_button_bounds else { return; };
                 use crate::ui::app::{ContextMenuContent, ContextMenuInstance};
                 use crate::ui::components::dropdown::DropdownItem;
@@ -83,6 +84,7 @@ pub fn render_title_bar(
                     width: px(0.0), bottom_padding: 0.0, open_left: true,
                     hovered_item: None, native_request_id: None,
                 });
+                view.mark_menu_owner("title-tools");
                 cx.notify();
             });
         });

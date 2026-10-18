@@ -198,6 +198,8 @@ impl AdvancedSearchWindow {
             owner,
             advanced_search,
             context_menus: Vec::new(),
+            unit_menu: None,
+            unit_menu_dismissed: None,
             handle: cx.entity().downgrade(),
             scrollbar_origins: std::collections::HashMap::new(),
             grab_offset: 0.0,

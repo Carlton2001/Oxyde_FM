@@ -394,7 +394,13 @@ impl Render for AdvancedSearchWindow {
                         format!("advanced-text-menu-{index}"), crate::ui::components::popup::PopupAnchor::point(menu.position, false),
                         close.clone(), handle.clone(), items.clone(), scroll.clone(), window, cx,
                         move |view| view.context_menus.get(index).is_some_and(|menu| std::rc::Rc::ptr_eq(&menu.scroll_handle.0, &scroll.0)),
-                        |view, _, cx| { view.context_menus.clear(); cx.notify(); },
+                        |view, _, cx| {
+                            if view.unit_menu.take().is_some_and(|unit| view.context_menus.first().is_some_and(|menu| std::rc::Rc::ptr_eq(&menu.scroll_handle.0, &unit.0))) {
+                                view.unit_menu_dismissed = Some(std::time::Instant::now());
+                            }
+                            view.context_menus.clear();
+                            cx.notify();
+                        },
                     );
                     continue;
                 }

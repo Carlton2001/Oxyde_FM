@@ -55,7 +55,7 @@ impl OxydeApp {
                         };
                         content.into_any_element()
                     },
-                    move |view, _, cx| { view.context_menus.truncate(index); view.submenu_timer = None; view.submenu_close_timer = None; cx.notify(); },
+                    move |view, _, cx| { view.note_menu_dismissed(index); view.context_menus.truncate(index); view.submenu_timer = None; view.submenu_close_timer = None; cx.notify(); },
                 );
             }
             return root;

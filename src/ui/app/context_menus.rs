@@ -75,6 +75,36 @@ fn action_paths(
 mod selection_tests;
 
 impl OxydeApp {
+    /// Closes the root menu when its own control is clicked again.
+    pub(crate) fn close_menu_owned_by(&mut self, owner: &str, cx: &mut Context<Self>) -> bool {
+        let owned = matches!((&self.context_menu_owner, self.context_menus.first()),
+            (Some((key, handle)), Some(menu)) if key.as_ref() == owner && std::rc::Rc::ptr_eq(&handle.0, &menu.scroll_handle.0));
+        if owned {
+            self.context_menus.clear();
+            self.context_menu_owner = None;
+            cx.notify();
+        }
+        let dismissed = self.dismissed_menu_owner.take()
+            .is_some_and(|(key, at)| key.as_ref() == owner && at.elapsed() < std::time::Duration::from_millis(300));
+        owned || dismissed
+    }
+
+    /// Native menus close on the owner's button-down, before its control sees the click.
+    pub(crate) fn note_menu_dismissed(&mut self, index: usize) {
+        if index != 0 { return; }
+        let owner = self.context_menu_owner.take();
+        if let (Some((key, handle)), Some(menu)) = (owner, self.context_menus.first()) {
+            if std::rc::Rc::ptr_eq(&handle.0, &menu.scroll_handle.0) {
+                self.dismissed_menu_owner = Some((key, std::time::Instant::now()));
+            }
+        }
+    }
+
+    /// Records the control that opened the current root menu.
+    pub(crate) fn mark_menu_owner(&mut self, owner: impl Into<SharedString>) {
+        self.context_menu_owner = self.context_menus.first().map(|menu| (owner.into(), menu.scroll_handle.clone()));
+    }
+
     pub(crate) fn context_action_paths(&self, clicked_path: &str) -> Vec<String> {
         action_paths(clicked_path, self.state.find_pane(&self.state.active_pane_id)
             .map(|pane| &pane.active_tab().selected_paths))
