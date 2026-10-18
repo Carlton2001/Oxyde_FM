@@ -72,6 +72,7 @@ impl AdvancedSearchWindow {
                             }),
                     )
                     .track_focus(&d.controls[if help { 7 } else { 6 }])
+                    .focus(move |style| style.bg(theme.control_hover))
                     .rounded_none()
                     .border_b(rems(0.0625))
                     .border_color(if d.help == help {

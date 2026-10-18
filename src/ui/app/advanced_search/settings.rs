@@ -116,6 +116,7 @@ impl AdvancedSearchWindow {
                 .border_color(theme.border)
                 .bg(theme.surface)
                 .track_focus(&d.controls[8])
+                .focus(move |style| style.border_color(theme.accent))
                 .child(units[d.unit])
                 .child(
                     svg()
@@ -197,6 +198,11 @@ impl AdvancedSearchWindow {
                             .items_center()
                             .justify_center()
                             .track_focus(&d.controls[if index == 5 { 9 } else { 10 }])
+                            .flex_none()
+                            .rounded_sm()
+                            .border(rems(0.0625))
+                            .border_color(transparent_black())
+                            .focus(move |style| style.border_color(theme.accent).bg(theme.control_hover))
                             .child(
                                 svg()
                                     .path("icons/calendar-days.svg")
