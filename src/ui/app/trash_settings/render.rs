@@ -385,6 +385,7 @@ fn render_body(
                                     .p(rems(0.125))
                                     .border_l(rems(0.0625))
                                     .border_color(theme.border)
+                                    .cursor(CursorStyle::Arrow)
                                     .child(
                                         action_button("trash-unit-mb")
                                             .h_full()
