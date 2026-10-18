@@ -22,6 +22,7 @@ pub(super) fn render(
                 .h(rems(1.75))
                 .flex()
                 .items_center()
+                .rounded_sm()
                 .text_size(rems(0.8125))
                 .text_color(theme.text)
                 .when(selected, |row| row.bg(theme.selected))
@@ -50,8 +51,7 @@ pub(super) fn render(
             menu.w_full()
         })
         .max_h(crate::ui::components::popup::available_size(window, cx).height)
-        .overflow_y_scroll()
-        .track_scroll(&view.completion_scroll)
+        .p(rems(0.125))
         .bg(theme.menu_surface)
         .border(rems(0.0625))
         .border_color(theme.menu_border)
@@ -59,7 +59,15 @@ pub(super) fn render(
         .shadow(crate::ui::style::rem_shadow(false))
         .occlude()
         .on_any_mouse_down(|_, _, cx| cx.stop_propagation())
-        .children(rows)
+        .child(
+            div()
+                .id("path-completion-scroll")
+                .min_h_0()
+                .max_h((crate::ui::components::popup::available_size(window, cx).height - window.rem_size() * 0.375).max(px(1.0)))
+                .overflow_y_scroll()
+                .track_scroll(&view.completion_scroll)
+                .children(rows),
+        )
         .child(
             canvas(
                 |bounds, _, _| bounds,

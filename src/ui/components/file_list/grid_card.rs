@@ -1,4 +1,4 @@
-use super::presentation::{file_type_display, grid_display_name, network_category, network_entry, selection_checkbox, size_histogram, size_loading};
+use super::presentation::{file_type_display, grid_display_name, network_category, network_entry, selection_checkbox, size_loading};
 use super::thumbnails::render_grid_thumbnail;
 use crate::ui::app::{ContextMenuContent, ContextMenuInstance, FileDragData, FileDragPreview, OxydeApp};
 use crate::ui::components::{paths_match, with_grid_sort, oxyde_context_menu_items};
@@ -67,7 +67,13 @@ pub(super) fn render_grid_card(params: GridCardParams<'_>, cx: &mut App) -> Stat
     let can_browse = is_dir || file.is_navigable_archive() || file.needs_mount_for_browsing();
     let can_drop = is_dir || file.is_writable_archive();
     let mut card = div()
-        .id(SharedString::from(format!("file-card-{path}"))).when(calculating_sizes && is_dir && !file.is_calculated, |d| d.child(size_loading(&path, theme.accent))).relative().when(histogram_total > 0, |d| d.child(size_histogram(file.size, histogram_total, theme.accent)))
+        .id(SharedString::from(format!("file-card-{path}"))).when(calculating_sizes && is_dir && !file.is_calculated, |d| d.child(size_loading(&path, theme.accent))).relative().when(histogram_total > 0, |d| d.child(
+            crate::ui::elements::rounded_fill::rounded_fill(
+                (file.size as f64 / histogram_total as f64) as f32,
+                rems(0.3125),
+                theme.accent.opacity(0.12),
+            ).absolute().left(rems(0.0625)).right(rems(0.0625)).top(rems(0.0625)).bottom(rems(0.0625))
+        ))
         .w(px(card_width - logical(4.0)))
         .h(px(crate::ui::style::grid_card_row_height() - logical(4.0)))
         .m_0p5()

@@ -129,6 +129,8 @@ impl DuplicateWindow {
             locations = locations.child(
                 div()
                     .id(("location", index))
+                    .when(index == 0, |row| row.rounded_t(rems(0.3125)))
+                    .when(index + 1 == self.locations.len(), |row| row.rounded_b(rems(0.3125)))
                     .flex_none()
                     .tab_index(0)
                     .focus_visible(move |s| s.bg(theme.selected))

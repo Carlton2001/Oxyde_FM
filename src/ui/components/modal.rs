@@ -360,6 +360,7 @@ impl RenderOnce for Modal {
                         div()
                             .id("modal-body")
                             .min_h_0()
+                            .when(self.actions.is_empty(), |body| body.rounded_b_lg())
                             .overflow_y_scroll()
                             .px(self.body_padding.0)
                             .py(self.body_padding.1)

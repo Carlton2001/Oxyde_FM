@@ -179,6 +179,8 @@ fn render_body(
                 .px(rems(0.75))
                 .py(rems(0.5))
                 .bg(theme.header)
+                .rounded_t(rems(0.3125))
+                .when(dialog.drives.is_empty(), |header| header.rounded_b(rems(0.3125)))
                 .text_size(rems(0.6875))
                 .font_weight(FontWeight::SEMIBOLD)
                 .text_color(theme.text_muted)
@@ -197,6 +199,7 @@ fn render_body(
         rows = rows.child(
             div()
                 .id(("trash-drive", index))
+                .when(index + 1 == dialog.drives.len(), |row| row.rounded_b(rems(0.3125)))
                 .flex()
                 .items_center()
                 .gap(rems(0.5))

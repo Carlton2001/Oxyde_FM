@@ -14,7 +14,7 @@ pub(super) fn render(
 ) -> AnyElement {
     let dialog = view.network_dialog.as_ref().expect("network dialog");
     let theme = *cx.theme();
-    let viewport_h = rem_pixels(rems(8.875)).as_f32();
+    let viewport_h = rem_pixels(rems(8.25)).as_f32();
     let content_h = rem_pixels(rems(1.5)).as_f32() * 26.0;
     let mut choices = div()
         .id("network-letter-options")
@@ -32,7 +32,8 @@ pub(super) fn render(
         .flex_col()
         .border(rems(0.0625))
         .border_color(theme.border)
-        .rounded_md();
+        .rounded_md()
+        .p(rems(0.3125));
     let refresh = handle.clone();
     let mut rows = div()
         .id("network-letter-scroll")
@@ -127,7 +128,7 @@ pub(super) fn render(
             .into_any_element()
         });
     }
-    choices = choices.child(rows).child(render_scrollbar_with_pointer(
+    choices = choices.child(div().relative().size_full().child(rows).child(render_scrollbar_with_pointer(
         theme,
         handle.clone(),
         ScrollbarAxis::Vertical,
@@ -143,7 +144,7 @@ pub(super) fn render(
                 update_letter_scroll(view, position, cx);
             }
         },
-    ));
+    )));
     let mouse = handle.clone();
     choices = choices.child(
         canvas(

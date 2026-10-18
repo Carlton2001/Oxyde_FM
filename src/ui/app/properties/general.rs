@@ -250,13 +250,15 @@ pub(super) fn render(
                     .rounded_sm()
                     .overflow_hidden()
                     .child(
-                        div()
+                        crate::ui::elements::rounded_fill::rounded_fill(
+                            ratio,
+                            rems(0.25),
+                            theme.drive_usage_color(drive.total_bytes, drive.free_bytes),
+                        )
                             .absolute()
                             .left_0()
                             .top_0()
-                            .h_full()
-                            .w(relative(ratio))
-                            .bg(theme.drive_usage_color(drive.total_bytes, drive.free_bytes)),
+                            .size_full(),
                     )
                     .child(
                         div()

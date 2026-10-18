@@ -73,32 +73,62 @@ pub(crate) fn render_operation_progress(app: &OxydeApp, cx: &Context<OxydeApp>) 
                         .rounded_full()
                         .bg(theme.border)
                         .overflow_hidden()
-                        .child(div().h_full().w(relative(ratio)).bg(theme.accent))
+                        .child(
+                            crate::ui::elements::rounded_fill::rounded_fill(
+                                ratio,
+                                rems(0.125),
+                                theme.accent,
+                            )
+                            .absolute()
+                            .size_full(),
+                        )
                         .when(finalizing, |bar| {
                             bar.child(
                                 div()
                                     .absolute()
-                                    .top_0()
+                                    .left(rems(0.125))
+                                    .right(rems(0.125))
                                     .h_full()
-                                    .w(relative(0.4))
-                                    .flex()
-                                    .child(div().flex_1().h_full().bg(linear_gradient(
-                                        90.0,
-                                        linear_color_stop(theme.text_on_accent.opacity(0.0), 0.0),
-                                        linear_color_stop(theme.text_on_accent.opacity(0.45), 1.0),
-                                    )))
-                                    .child(div().flex_1().h_full().bg(linear_gradient(
-                                        90.0,
-                                        linear_color_stop(theme.text_on_accent.opacity(0.45), 0.0),
-                                        linear_color_stop(theme.text_on_accent.opacity(0.0), 1.0),
-                                    )))
-                                    .with_animation(
-                                        "operation-finalizing-shimmer",
-                                        Animation::new(std::time::Duration::from_millis(1800))
-                                            .repeat(),
-                                        |reflection, delta| {
-                                            reflection.left(relative(-0.4 + 1.4 * delta))
-                                        },
+                                    .overflow_hidden()
+                                    .child(
+                                        div()
+                                            .absolute()
+                                            .top_0()
+                                            .h_full()
+                                            .w(relative(0.4))
+                                            .flex()
+                                            .child(div().flex_1().h_full().bg(linear_gradient(
+                                                90.0,
+                                                linear_color_stop(
+                                                    theme.text_on_accent.opacity(0.0),
+                                                    0.0,
+                                                ),
+                                                linear_color_stop(
+                                                    theme.text_on_accent.opacity(0.45),
+                                                    1.0,
+                                                ),
+                                            )))
+                                            .child(div().flex_1().h_full().bg(linear_gradient(
+                                                90.0,
+                                                linear_color_stop(
+                                                    theme.text_on_accent.opacity(0.45),
+                                                    0.0,
+                                                ),
+                                                linear_color_stop(
+                                                    theme.text_on_accent.opacity(0.0),
+                                                    1.0,
+                                                ),
+                                            )))
+                                            .with_animation(
+                                                "operation-finalizing-shimmer",
+                                                Animation::new(std::time::Duration::from_millis(
+                                                    1800,
+                                                ))
+                                                .repeat(),
+                                                |reflection, delta| {
+                                                    reflection.left(relative(-0.4 + 1.4 * delta))
+                                                },
+                                            ),
                                     ),
                             )
                         }),

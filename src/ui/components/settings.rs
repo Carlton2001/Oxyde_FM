@@ -212,9 +212,7 @@ fn render_settings_surface(
         .w(rems(panel_width))
         .max_w(crate::ui::components::popup::available_size(window, cx).width - margin * 2.0)
         .max_h(available_height)
-        .overflow_x_scroll()
-        .overflow_y_scroll()
-        .p(rems(0.375))
+        .p(rems(0.4375))
         .rounded_lg()
         .bg(theme.menu_surface)
         .border(rems(0.0625))
@@ -225,7 +223,7 @@ fn render_settings_surface(
         .occlude()
         .on_any_mouse_down(|_, _, cx| cx.stop_propagation())
         .on_scroll_wheel(|_, _, cx| cx.stop_propagation())
-        .child(body);
+        .child(div().id("settings-panel-scroll").max_h((available_height - window.rem_size()).max(px(1.0))).overflow_x_scroll().overflow_y_scroll().child(body));
     #[cfg(target_os = "windows")]
     if _only_picker.is_none() && crate::ui::components::popup::is_menu(window, cx) {
         if let (Some(kind), Some(bounds)) = (view.settings_picker.filter(|kind| *kind != SettingsPicker::About), view.settings_submenu_bounds) {
@@ -278,8 +276,7 @@ fn render_settings_surface(
             .id("settings-submenu")
             .w(submenu_width)
             .max_h(submenu_available_height)
-            .overflow_y_scroll()
-            .p(rems(0.25))
+            .p(rems(0.4375))
             .rounded_lg()
             .bg(theme.menu_surface)
             .border(rems(0.0625))
@@ -290,8 +287,7 @@ fn render_settings_surface(
             .text_color(theme.text)
             .on_any_mouse_down(|_, _, cx| cx.stop_propagation())
             .on_scroll_wheel(|_, _, cx| cx.stop_propagation())
-            .child(section(title, theme))
-            .children(choices);
+            .child(div().id("settings-submenu-scroll").max_h((submenu_available_height - window.rem_size()).max(px(1.0))).overflow_y_scroll().child(section(title, theme)).children(choices));
 
         #[cfg(target_os = "windows")]
         if _only_picker.is_some() { return submenu.into_any_element(); }
