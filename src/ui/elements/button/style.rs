@@ -29,7 +29,9 @@ pub fn button_style(
     let secondary = matches!(variant, ButtonVariant::Secondary);
     button
         .bg(background)
-        .when(secondary, |d| d.border(rems(0.0625)).border_color(theme.border))
+        // Reserve the focus stroke in every variant, including borderless ghosts.
+        .border(rems(0.0625))
+        .border_color(if secondary { theme.border } else { transparent_black() })
         .text_color(if enabled {
             foreground
         } else {
@@ -55,6 +57,10 @@ pub fn button_style(
                 }
             })
             // Focus styling is shared; callers retain their existing focus routing.
-            .focus_visible(move |s| s.border(rems(0.0625)).border_color(theme.accent))
+            .focus_visible(move |s| s.border_color(theme.accent))
         })
 }
+
+#[cfg(test)]
+#[path = "tests/geometry.rs"]
+mod tests;
