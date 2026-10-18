@@ -112,20 +112,23 @@ impl AdvancedSearchWindow {
         let cancel = handle.clone();
         let submit = handle.clone();
         let keyboard = handle.clone();
+        let height_limit = crate::ui::components::tool_window::content_height_limit(window, cx);
+        let body = crate::ui::components::scroll_area::scroll_area("advanced-form-scroll-state",
+            div().when(d.help, |frame| frame.flex_1()),
+            div().id("advanced-form-scroll")
+                .when(d.help, |body| body.flex_1().min_h_0())
+                .px(rems(1.0)).py(rems(1.25)).child(body), false, window, cx);
         let frame = div()
             .relative()
             .w_full()
+            .max_h(height_limit)
             .when(d.help, |frame| frame.h_full())
             .when(!d.help, |frame| {
                 frame.child(
                     canvas(
                         |bounds, _, _| bounds,
-                        |bounds, _, window, _| {
-                            // Fit the native content size to the form, not a saved oversized viewport.
-                            if (window.viewport_size().height - bounds.size.height).abs() > px(1.0)
-                            {
-                                window.on_next_frame(move |window, _| window.resize(bounds.size));
-                            }
+                        |bounds, _, window, cx| {
+                            crate::ui::components::tool_window::fit_content_height(bounds.size.height, window, cx);
                         },
                     )
                     .absolute()
@@ -143,16 +146,7 @@ impl AdvancedSearchWindow {
                 |window, cx| { crate::ui::components::tool_window::close_transients(window, cx); window.remove_window() },
             ))
             .child(tabs)
-            .child(
-                div()
-                    .id("advanced-form-scroll")
-                    .when(d.help, |body| body.flex_1().min_h_0())
-                    .when(!d.help, |body| body.flex_none())
-                    .overflow_y_scroll()
-                    .px(rems(1.0))
-                    .py(rems(1.25))
-                    .child(body),
-            )
+            .child(body)
             .child(
                 crate::ui::components::tool_window::footer(cx)
                     .child(
