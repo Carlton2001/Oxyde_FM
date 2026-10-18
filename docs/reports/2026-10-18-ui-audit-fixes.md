@@ -24,6 +24,8 @@ Dans les paramètres ouverts par **Oxyde GPUI**, en haut à gauche, **Échelle d
 
 Ces parcours sont une liste de vérification pour l’utilisateur ; ils ne sont pas présentés comme des essais visuels déjà effectués. La validation de ce changement reste sans Computer Use.
 
+Après retour visuel sur « 1 chemin copié », la largeur fixe introduite au point 12 a été retirée des notifications ordinaires et du cadre de pile : leur largeur suit à nouveau le contenu, avec un maximum pour les messages longs. La fermeture utilise une marge automatique pour rester au bord droit. Les limites de hauteur et le défilement sont conservés.
+
 ## Historique des étapes
 
 | Point | Commit / message |

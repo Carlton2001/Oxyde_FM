@@ -244,8 +244,9 @@ impl OxydeApp {
                 div()
                     .id(("toast", id))
                     .flex_none()
-                    .w(rems(width))
-                    .max_w_full()
+                    .max_w(rem_pixels(rems(width)).min(
+                        (window.viewport_size().width - rem_pixels(rems(2.25))).max(px(1.0)),
+                    ))
                     .px(rems(1.0))
                     .py(rems(0.75))
                     .rounded(rems(0.5))
@@ -305,6 +306,7 @@ impl OxydeApp {
                     .child(
                         div()
                             .id(("toast-close", id))
+                            .ml_auto()
                             .self_start()
                             .p(rems(0.25))
                             .rounded(rems(0.25))
@@ -331,7 +333,9 @@ impl OxydeApp {
             .bottom(crate::ui::style::STATUS_BAR_HEIGHT)
             .right_0()
             .child(crate::ui::components::scroll_area::scroll_area("notification-stack-scroll-state",
-                div().w(rems(stack_width + 1.0)).max_w((window.viewport_size().width - rem_pixels(rems(0.5))).max(px(0.0)))
+                div().max_w(rem_pixels(rems(stack_width + 1.75)).min(
+                    (window.viewport_size().width - rem_pixels(rems(0.5))).max(px(0.0)),
+                ))
                     .max_h(maximum_height),
                 div().id("notification-stack-scroll").flex().flex_col().items_end()
                     .gap(rems(0.5)).p(rems(0.5)).children(cards), false, window, cx))
