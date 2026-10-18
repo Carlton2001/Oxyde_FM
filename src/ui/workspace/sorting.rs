@@ -1,6 +1,45 @@
 use super::{SortColumn, SortDirection};
 use oxyde_lib::models::FileEntry;
 
+// Lowercase once when preparing keys; compare digit runs without integer parsing
+// so arbitrarily long numbers retain their numeric order.
+#[derive(Eq, PartialEq)]
+struct NaturalName(String);
+impl Ord for NaturalName {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        let (mut left, mut right) = (self.0.as_str(), other.0.as_str());
+        while !left.is_empty() && !right.is_empty() {
+            let a = left.as_bytes()[0];
+            let b = right.as_bytes()[0];
+            if a.is_ascii_digit() && b.is_ascii_digit() {
+                let alen = left.bytes().take_while(u8::is_ascii_digit).count();
+                let blen = right.bytes().take_while(u8::is_ascii_digit).count();
+                let order = oxyde_lib::utils::compare_natural(&left[..alen], &right[..blen]);
+                if !order.is_eq() {
+                    return order;
+                }
+                left = &left[alen..];
+                right = &right[blen..];
+            } else {
+                let ac = left.chars().next().unwrap();
+                let bc = right.chars().next().unwrap();
+                let order = ac.cmp(&bc);
+                if !order.is_eq() {
+                    return order;
+                }
+                left = &left[ac.len_utf8()..];
+                right = &right[bc.len_utf8()..];
+            }
+        }
+        left.len().cmp(&right.len())
+    }
+}
+impl PartialOrd for NaturalName {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
 pub(super) fn sort_files(files: &mut [FileEntry], col: SortColumn, direction: SortDirection) {
     sort(files, col, direction, false);
 }
@@ -47,7 +86,7 @@ fn sort(files: &mut [FileEntry], col: SortColumn, direction: SortDirection, list
     }
 
     let key = |file: &FileEntry| {
-        let name = file.name.to_lowercase();
+        let name = NaturalName(file.name.to_lowercase());
         let value = match col {
             SortColumn::Name => Value::Text(String::new()),
             SortColumn::Type => Value::Text(
@@ -92,3 +131,7 @@ fn sort(files: &mut [FileEntry], col: SortColumn, direction: SortDirection, list
         }),
     }
 }
+
+#[cfg(test)]
+#[path = "sorting/tests/natural.rs"]
+mod tests;

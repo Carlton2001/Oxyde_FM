@@ -15,7 +15,9 @@ fn old_sort(tab: &mut TabState) {
         }
 
         let cmp = match col {
-            SortColumn::Name => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
+            SortColumn::Name => {
+                oxyde_lib::utils::compare_natural(&a.name.to_lowercase(), &b.name.to_lowercase())
+            }
             SortColumn::Type => {
                 let ext_a = std::path::Path::new(&a.name)
                     .extension()
@@ -46,7 +48,7 @@ fn old_sort(tab: &mut TabState) {
         };
 
         let cmp = if cmp == Ordering::Equal {
-            a.name.to_lowercase().cmp(&b.name.to_lowercase())
+            oxyde_lib::utils::compare_natural(&a.name.to_lowercase(), &b.name.to_lowercase())
         } else {
             cmp
         };

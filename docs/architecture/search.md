@@ -4,7 +4,7 @@ Chaque onglet possède ses critères, résultats et annulation. Les workers pré
 
 ## Listing et filtres
 
-Les dossiers restent en tête en ordre ascendant comme descendant. L’UI trie les noms/extensions en minuscules Unicode, sans retrait d’accents ni ordre numérique naturel, avec noms en départage et égalités stables. Le tri naturel public du backend garde ses autres consommateurs.
+Les dossiers restent en tête en ordre ascendant comme descendant. L’UI trie les noms en ordre naturel, en minuscules Unicode et sans retrait d’accents : `fichier2` précède `fichier10`. Les suites de chiffres ASCII sont comparées sans limite de taille ; à valeur égale, le moins de zéros initiaux précède (`2`, `02`, `002`). Les extensions restent lexicographiques, avec les noms en départage naturel pour toutes les colonnes et des égalités stables. Le tri naturel public du backend garde ses autres consommateurs.
 
 Nom et emplacement utilisent une sous-chaîne insensible à la casse mais sensible aux accents. Préparer la requête une fois par parcours. La visibilité des fichiers cachés/système doit rester cohérente entre listing et recherche.
 

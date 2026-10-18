@@ -29,7 +29,7 @@ fn profile_background_search_preparation_and_small_ui_installation() {
         assert!(tab
             .files
             .windows(2)
-            .all(|pair| pair[0].name <= pair[1].name));
+            .all(|pair| oxyde_lib::utils::compare_natural(&pair[0].name, &pair[1].name).is_le()));
     }
 }
 
@@ -72,7 +72,7 @@ fn listing_preserves_legacy_natural_ties_and_search_preserves_arrival_order() {
 }
 
 #[test]
-fn background_preparation_keeps_lexical_order_stable_ties_filters_and_snapshot_ownership() {
+fn background_preparation_keeps_natural_order_stable_ties_filters_and_snapshot_ownership() {
     let mut tab = TabState::new("tab".into(), "C:/fixture".into());
     tab.files = vec![entry("file2"), entry("File10"), entry("file10")].into();
     tab.update_cache();
@@ -87,7 +87,7 @@ fn background_preparation_keeps_lexical_order_stable_ties_filters_and_snapshot_o
             .iter()
             .map(|file| file.name.as_str())
             .collect::<Vec<_>>(),
-        ["file1", "File10", "file10", "file2"]
+        ["file1", "file2", "File10", "file10"]
     );
     assert!(Arc::ptr_eq(&tab.files, &tab.cached_filtered_files));
     tab.filter_name = "2".into();
