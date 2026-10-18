@@ -114,8 +114,8 @@ impl DetailsColumnWidths {
         let name_min = logical(220.0);
         let available = (viewport - details_horizontal_padding()).max(0.0);
         let name_target = name_min.max(available * 0.4);
-        // Dates keep their measured width, even when the panel becomes narrow.
-        let minimums = [logical(64.0), logical(64.0), logical(date).max(logical(64.0))];
+        // Sizes and dates keep their measured width, even in narrow panes.
+        let minimums = [logical(64.0), logical(size).max(logical(64.0)), logical(date).max(logical(64.0))];
         let preferred = [
             logical(file_type).max(minimums[0]),
             logical(size).max(minimums[1]),
@@ -170,15 +170,15 @@ mod tests {
         for reference in [16, 24, 32] {
             set_reference(reference);
             let mut previous = None;
-            for width in [400.0, 736.0, 1000.0, 1400.0] {
+            for width in [400.0, 800.0, 1000.0, 1400.0] {
                 let viewport = logical(width);
                 let columns = DetailsColumnWidths::for_viewport_with_search(viewport, 100.0, 100.0, 180.0, true);
                 assert!(columns.name >= logical(220.0));
                 assert!(columns.location >= logical(180.0));
                 assert!(columns.file_type >= logical(64.0));
-                assert!(columns.size >= logical(64.0));
+                assert_eq!(columns.size, logical(100.0));
                 assert_eq!(columns.date, logical(180.0));
-                if width >= 736.0 {
+                if width >= 800.0 {
                     assert!((columns.content_width() - viewport).abs() < 0.01);
                 } else {
                     let max_offset = columns.content_width() - viewport;
@@ -227,3 +227,7 @@ mod tests {
 #[cfg(test)]
 #[path = "style/tests/shadows.rs"]
 mod shadow_tests;
+
+#[cfg(test)]
+#[path = "style/tests/size_column.rs"]
+mod size_column_tests;
