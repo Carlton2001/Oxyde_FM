@@ -51,8 +51,6 @@ pub struct AppConfig {
     pub show_grid_thumbnails: bool,
     #[serde(default)]
     pub show_checkboxes: bool,
-    #[serde(default = "default_true")]
-    pub animations: bool,
     #[serde(default)]
     pub sync_sidebar_with_path: bool,
     #[serde(default)]
@@ -109,7 +107,6 @@ impl Default for AppConfig {
             default_turbo_mode: true,
             show_grid_thumbnails: false,
             show_checkboxes: false,
-            animations: true,
             sync_sidebar_with_path: false,
             show_network: true,
             show_onedrive: true,
@@ -263,7 +260,6 @@ mod tests {
         assert_eq!(missing.ui_rem_size, 16);
         assert!(!missing.use_system_icons);
         assert!(!missing.show_checkboxes);
-        assert!(missing.animations);
         assert!(!missing.sync_sidebar_with_path);
         let legacy: AppConfig =
             serde_json::from_str(r#"{"theme":"oxyde-light","language":"en-US"}"#).unwrap();

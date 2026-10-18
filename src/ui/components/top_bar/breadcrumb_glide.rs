@@ -2,12 +2,12 @@
 use gpui::*;
 use std::{cell::Cell, time::Instant};
 
-const DURATION: f32 = 0.12;
+const DURATION: f32 = 0.22;
 
 type Glide = Cell<Option<(Instant, f32)>>;
 
-pub(super) fn start(glide: &Glide, previous: &str, current: &str, scroll: &ScrollHandle, cx: &App) {
-    let entered = !cx.reduce_motion() && entered_child(previous, current);
+pub(super) fn start(glide: &Glide, previous: &str, current: &str, scroll: &ScrollHandle) {
+    let entered = entered_child(previous, current);
     glide.set(entered.then(|| (Instant::now(), scroll.offset().x.as_f32())));
 }
 

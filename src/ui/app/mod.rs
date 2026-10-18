@@ -221,6 +221,8 @@ pub struct OxydeApp {
     pub(crate) split_highlight_last: Option<String>,
     /// Pane whose vertical scrollbar zone is under the pointer.
     pub(crate) scroll_zone_hover: Option<String>,
+    /// Start of the operations halo cycle, and when its last cycle ends once operations stop.
+    pub(crate) operations_breath: std::cell::Cell<Option<(std::time::Instant, Option<std::time::Instant>)>>,
     pub grab_offset: f32,
     pub sidebar_width: f32,
     pub(crate) sidebar_collapsed: bool,
@@ -346,7 +348,6 @@ impl OxydeApp {
         load_failed: bool,
         cx: &mut Context<Self>,
     ) -> Self {
-        cx.set_reduce_motion(!config.animations);
         let restored_workspace = config
             .workspace_state
             .as_ref()
@@ -393,6 +394,7 @@ impl OxydeApp {
             highlight_split_pane: None,
             split_highlight_last: None,
             scroll_zone_hover: None,
+            operations_breath: Default::default(),
             grab_offset: 0.0,
             sidebar_width,
             sidebar_collapsed: config

@@ -218,13 +218,8 @@ impl OxydeApp {
         .detach();
     }
 
-    /// Fades a card out, then removes it; without animations it leaves at once.
+    /// Fades a card out, then removes it.
     fn dismiss_toast(&mut self, id: u64, cx: &mut Context<Self>) {
-        if cx.reduce_motion() {
-            self.toasts.retain(|toast| toast.id != id);
-            cx.notify();
-            return;
-        }
         let Some(toast) = self.toasts.iter_mut().find(|toast| toast.id == id && !toast.leaving) else {
             return;
         };

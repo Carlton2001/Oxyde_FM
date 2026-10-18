@@ -366,10 +366,6 @@ settings-checkboxes = Casillas de selección
 
 settings-checkboxes-description = Seleccionar varios elementos sin mantener pulsado Ctrl.
 
-settings-animations = Animaciones de la interfaz
-
-settings-animations-description = Fundidos y transiciones breves de los elementos que aparecen.
-
 settings-path-tracking = Seguir ruta activa
 
 settings-path-tracking-description = Expandir las carpetas superiores y mostrar la carpeta activa en el panel lateral.

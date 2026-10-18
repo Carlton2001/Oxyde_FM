@@ -95,7 +95,7 @@ pub fn render_top_bar(
     let breadcrumb_path_changed = *active_tab.breadcrumb_scroll_path.borrow() != current_path;
     if breadcrumb_path_changed {
         let previous = active_tab.breadcrumb_scroll_path.replace(current_path.clone());
-        breadcrumb_glide::start(&active_tab.breadcrumb_glide, &previous, &current_path, &breadcrumb_scroll, _cx);
+        breadcrumb_glide::start(&active_tab.breadcrumb_glide, &previous, &current_path, &breadcrumb_scroll);
         if total_parts == 0 {
             breadcrumb_scroll.set_offset(point(px(0.0), px(0.0)));
         }

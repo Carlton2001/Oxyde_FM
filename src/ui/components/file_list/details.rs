@@ -505,7 +505,7 @@ pub(super) fn render_details_file_list(
             },
         ));
 
-    vertical_scroll_zone = vertical_scroll_zone.child(super::scroll_top::button(theme, handle.clone(), pane_id.clone(), view.scroll_zone_hover.as_deref() == Some(pane_id.as_str()), v_offset, v_v_h, content_h));
+    vertical_scroll_zone = vertical_scroll_zone.child(super::scroll_top::button(theme, handle.clone(), pane_id.clone(), view.scroll_zone_hover.as_deref() == Some(pane_id.as_str()), &active_tab.scroll_top_anchor, v_offset, v_v_h, content_h));
     container = container.child(vertical_scroll_zone);
 
     // Horizontal scrollbar overlay

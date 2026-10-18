@@ -209,8 +209,6 @@ settings-windows-icons-description = Use Windows file and folder icons in list a
 
 settings-checkboxes = Selection checkboxes
 settings-checkboxes-description = Select multiple items without holding Ctrl.
-settings-animations = Interface animations
-settings-animations-description = Short fades and transitions for appearing elements.
 
 settings-path-tracking = Follow active path
 settings-path-tracking-description = Expand parent folders and reveal the active folder in the sidebar.

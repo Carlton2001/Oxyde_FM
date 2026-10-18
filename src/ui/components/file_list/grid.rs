@@ -326,7 +326,7 @@ pub(super) fn render_grid_file_list(
                         });
                     }
                 },
-            )).child(super::scroll_top::button(theme, handle.clone(), pane_id.clone(), view.scroll_zone_hover.as_deref() == Some(pane_id.as_str()), scroll_offset, viewport_height, content_height)))
+            )).child(super::scroll_top::button(theme, handle.clone(), pane_id.clone(), view.scroll_zone_hover.as_deref() == Some(pane_id.as_str()), &tab.scroll_top_anchor, scroll_offset, viewport_height, content_height)))
             .on_mouse_down(MouseButton::Left, {
                 let h = handle.clone();
                 let pid = pane_id.clone();

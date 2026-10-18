@@ -8,7 +8,7 @@ fn settle_ms(config: SpringConfig) -> f32 {
 
 #[test]
 fn springs_never_overshoot() {
-    for config in [ENTER, EXIT, LINGER] {
+    for config in [ENTER, EXIT] {
         let (_, damping_ratio) = config.canonical();
         assert!(damping_ratio >= 1.0 - 1e-4, "damping ratio {damping_ratio}");
     }
@@ -22,8 +22,3 @@ fn transitions_stay_brief_and_exit_faster() {
     assert!(exit < enter, "exit {exit} ms, enter {enter} ms");
 }
 
-#[test]
-fn linger_stays_under_a_quarter_second() {
-    let linger = settle_ms(LINGER);
-    assert!(linger > settle_ms(ENTER) && linger <= 250.0, "linger settles in {linger} ms");
-}

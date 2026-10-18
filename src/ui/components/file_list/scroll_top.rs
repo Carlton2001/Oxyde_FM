@@ -22,6 +22,7 @@ pub(super) fn button(
     handle: Entity<OxydeApp>,
     pane_id: String,
     hovered: bool,
+    anchor: &std::cell::Cell<f32>,
     offset: f32,
     viewport: f32,
     content: f32,
@@ -36,6 +37,13 @@ pub(super) fn button(
     let thumb_top = (offset / (content - viewport).max(1.0)).clamp(0.0, 1.0) * (viewport - thumb);
     let top = (thumb_top + thumb / 2.0 - logical(16.0))
         .clamp(logical(4.0), (viewport - logical(36.0)).max(logical(4.0)));
+    // Fade out where it was last shown, not where the scrollbar jumps.
+    let top = if shown {
+        anchor.set(top);
+        top
+    } else {
+        anchor.get()
+    };
     let rise = logical(4.0);
     let presence_id = SharedString::from(format!("scroll-to-top-presence-{pane_id}"));
     div()

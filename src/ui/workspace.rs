@@ -140,6 +140,8 @@ pub struct TabState {
     pub breadcrumb_scroll_path: std::cell::RefCell<String>,
     pub breadcrumb_viewport_width: std::rc::Rc<std::cell::Cell<f32>>,
     /// Start time and offset of a breadcrumb glide toward its end.
+    /// Last position of the scroll-to-top button, kept while it fades out.
+    pub scroll_top_anchor: std::rc::Rc<std::cell::Cell<f32>>,
     pub breadcrumb_glide: std::rc::Rc<std::cell::Cell<Option<(std::time::Instant, f32)>>>,
     pub sort_column: SortColumn,
     pub sort_direction: SortDirection,
@@ -206,6 +208,11 @@ pub struct TabStripState {
     pub overflow: std::rc::Rc<std::cell::Cell<bool>>,
     pub active_id: std::rc::Rc<std::cell::RefCell<String>>,
     pub active_index: std::rc::Rc<std::cell::Cell<usize>>,
+    /// Window x of each tab insertion slot and of the strip, measured at paint.
+    pub drop_slots: std::rc::Rc<std::cell::RefCell<Vec<f32>>>,
+    pub drop_origin: std::rc::Rc<std::cell::Cell<f32>>,
+    /// Marker position kept while it fades out.
+    pub drop_marker_x: std::rc::Rc<std::cell::Cell<f32>>,
 }
 
 #[derive(Clone)]

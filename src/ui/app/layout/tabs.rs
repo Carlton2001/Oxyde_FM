@@ -66,7 +66,6 @@ impl OxydeApp {
         for (t_ix, tab_data) in pane.tabs.iter().enumerate() {
             let is_tab_active = t_ix == active_idx;
             let h = h.clone();
-            let p_id_cap = p_id.clone();
 
             let is_root =
                 tab_data.path.len() <= 3 && tab_data.path.chars().nth(1) == Some(':');
@@ -436,44 +435,9 @@ impl OxydeApp {
                                 }
                             }),
                     )
-                    // Visual Drop Indicator (Marker - Left side of this tab)
-                    .child(
-                        div()
-                            .absolute()
-                            .top_0()
-                            .left_0()
-                            .w(rems(0.125))
-                            .h_full()
-                            .bg(theme.accent)
-                            .with_spring(
-                                SharedString::from(format!("tab-drop-marker-{p_id_cap}-{t_ix}")),
-                                motion::presence(
-                                    self.drop_target_pane.as_ref() == Some(&p_id_cap)
-                                        && self.drop_target_idx == Some(t_ix),
-                                ),
-                                |s, v| s.opacity(v),
-                            ),
-                    )
-                    // Visual Drop Indicator (Marker - Right side of this tab, only for the last one)
-                    .when(t_ix == tabs_count - 1, |s| {
-                        s.child(
-                            div()
-                                .absolute()
-                                .top_0()
-                                .right_0()
-                                .w(rems(0.125))
-                                .h_full()
-                                .bg(theme.accent)
-                                .with_spring(
-                                    SharedString::from(format!("tab-drop-marker-{p_id_cap}-end")),
-                                    motion::presence(
-                                        self.drop_target_pane.as_ref() == Some(&p_id_cap)
-                                            && self.drop_target_idx == Some(tabs_count),
-                                    ),
-                                    |s, v| s.opacity(v),
-                                ),
-                        )
-                    }),
+                    // Insertion slots measured for the gliding drop marker.
+                    .child(slot_probe(&pane.tab_strip, t_ix, false))
+                    .when(t_ix == tabs_count - 1, |s| s.child(slot_probe(&pane.tab_strip, tabs_count, true))),
             );
         }
 
@@ -556,7 +520,62 @@ impl OxydeApp {
                 }
             })
             .child(tab_bar)
+            .child({
+                let origin = pane.tab_strip.drop_origin.clone();
+                canvas(|_, _, _| (), move |bounds, _, _, _| origin.set(bounds.left().as_f32()))
+                    .absolute()
+                    .inset_0()
+            })
+            .when(self.dragging_tab.is_some(), |bar| {
+                let target = (self.drop_target_pane.as_ref() == Some(&p_id))
+                    .then_some(self.drop_target_idx)
+                    .flatten();
+                bar.child(drop_marker(&pane.tab_strip, &p_id, target, theme))
+            })
     }
+}
+
+/// Records where a marker for `slot` would sit: a tab's left edge, or the last tab's right edge.
+fn slot_probe(strip: &crate::ui::workspace::TabStripState, slot: usize, end: bool) -> impl IntoElement {
+    let slots = strip.drop_slots.clone();
+    canvas(|_, _, _| (), move |bounds, _, _, _| {
+        let x = if end {
+            (bounds.right() - crate::ui::scale::rem_pixels(rems(0.125))).as_f32()
+        } else {
+            bounds.left().as_f32()
+        };
+        let mut slots = slots.borrow_mut();
+        if slots.len() <= slot {
+            slots.resize(slot + 1, x);
+        }
+        slots[slot] = x;
+    })
+    .absolute()
+    .inset_0()
+}
+
+/// One marker per strip, gliding between insertion slots and fading when no slot is targeted.
+fn drop_marker(
+    strip: &crate::ui::workspace::TabStripState,
+    pane_id: &str,
+    target: Option<usize>,
+    theme: crate::ui::theme::OxydeTheme,
+) -> impl IntoElement {
+    let slot_x = target.and_then(|slot| strip.drop_slots.borrow().get(slot).copied());
+    if let Some(x) = slot_x {
+        strip.drop_marker_x.set(x - strip.drop_origin.get());
+    }
+    let id = |part: &str| SharedString::from(format!("tab-drop-marker-{part}-{pane_id}"));
+    div()
+        .absolute()
+        .top_0()
+        .w(rems(0.125))
+        .h_full()
+        .bg(theme.accent)
+        .with_spring(id("x"), motion::glide(strip.drop_marker_x.get()), |marker, x| marker.left(px(x)))
+        .with_spring(id("presence"), motion::presence(slot_x.is_some()).from(0.0), |marker, v| {
+            marker.map_element(|marker| marker.opacity(v))
+        })
 }
 
 #[cfg(test)]

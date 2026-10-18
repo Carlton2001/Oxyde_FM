@@ -71,7 +71,6 @@ que l’entrée, sans rebond. Ne pas animer le contenu des listes, la sélection
 survol des lignes, le changement d’onglet ni le redimensionnement.
 
 `elements/motion.rs` fournit des ressorts critiquement amortis (`presence`,
-`linger`, `slide`) qui se réorientent sans saut. La préférence « Animations de
-l’interface » pilote `App::set_reduce_motion` : GPUI rend alors chaque animation
-dans son état final, sans image supplémentaire. Une animation répétée doit être
-retirée du rendu dès qu’elle n’a plus d’objet.
+`glide`, `slide`) qui se réorientent sans saut. Ne pas animer l’apparition des
+fenêtres possédées (menus) : Windows y superpose sa propre animation d’ouverture.
+Une animation répétée doit être retirée du rendu dès qu’elle n’a plus d’objet.
