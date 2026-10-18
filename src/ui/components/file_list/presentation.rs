@@ -2,8 +2,6 @@ use crate::ui::elements::button::{button_style, ButtonVariant};
 use crate::ui::components::tooltip::NativeTooltipExt;
 use crate::ui::app::OxydeApp;
 use crate::ui::components::tooltip::Tooltip;
-use crate::ui::date_groups::DateGroup;
-use crate::ui::format::format_number;
 use crate::ui::i18n::{FluentArgs, I18nContext, Message};
 use crate::ui::theme::OxydeTheme;
 use crate::ui::workspace::ViewMode;
@@ -11,48 +9,59 @@ use gpui::prelude::*;
 use gpui::*;
 use oxyde_lib::models::FileEntry;
 
-pub(super) fn date_group_header(group: DateGroup, count: usize, collapsed: bool, pane_id: String, handle: Entity<OxydeApp>, height: f32, cx: &mut App) -> AnyElement {
-    let theme = *OxydeTheme::global(cx);
-    let mut args = FluentArgs::new();
-    args.set("count", count);
-    args.set("number", format_number(count as u64, cx.i18n().language()));
-    div().id(SharedString::from(format!("date-group-{pane_id}-{group:?}"))).flex_none()
-        .h(px(height)).w_full().flex().items_center().gap(rems(0.5))
-        .px(rems(0.5)).text_size(rems(0.8125)).text_color(theme.text)
-        .border_b(rems(0.0625)).border_color(theme.border)
-        .hover(|style| style.bg(theme.control_hover))
-        .on_mouse_down(MouseButton::Left, move |_, _, cx| {
-            cx.stop_propagation();
-            handle.update(cx, |view, cx| {
-                view.finish_pointer_drag(cx);
-                view.activate_pane(&pane_id, cx);
-                if let Some(pane) = view.state.find_pane_mut(&pane_id) {
-                    let groups = &mut pane.active_tab_mut().collapsed_date_groups;
-                    if !groups.remove(&group) { groups.insert(group); }
-                }
-                cx.notify();
-            });
-        })
-        .child(svg().path(if collapsed { "icons/chevron-right.svg" } else { "icons/chevron-down.svg" }).size(rems(1.0)).text_color(theme.accent))
-        .child(cx.i18n().text(group.message()))
-        .child(div().rounded_sm().border(rems(0.0625)).border_color(theme.border).px(rems(0.375)).text_size(rems(0.75)).text_color(theme.text_muted).child(cx.i18n().text_with_args(Message::DateGroupCount, &args)))
-        .into_any_element()
-}
-
-pub(super) fn date_group_button(pane_id: &str, enabled: bool, handle: Entity<OxydeApp>, theme: OxydeTheme, cx: &mut Context<OxydeApp>) -> impl IntoElement {
+pub(super) fn grouping_button(pane_id: &str, enabled: bool, handle: Entity<OxydeApp>, theme: OxydeTheme) -> impl IntoElement {
     let pane_id = pane_id.to_string();
+    let tooltip_handle = handle.clone();
+    let tooltip_pane = pane_id.clone();
+    let reset_handle = handle.clone();
+    let reset_pane = pane_id.clone();
+    let anchor_handle = handle.clone();
+    let anchor_key = format!("grouping-{pane_id}");
     button_style(
-        div().id(SharedString::from(format!("group-by-date-{pane_id}"))),
+        div().id(SharedString::from(format!("grouping-{pane_id}"))),
         theme, ButtonVariant::Ghost, true,
     )
-        .size(rems(1.5)).flex_none().flex().items_center().justify_center().rounded_md()
+        .relative().size(rems(1.5)).flex_none().flex().items_center().justify_center().rounded_md()
         .bg(if enabled { theme.selected } else { theme.header })
-        .native_tooltip(Tooltip::text(cx.i18n().text(Message::SettingsGroupByDate)))
-        .on_mouse_down(MouseButton::Left, move |_, _, cx| {
-            cx.stop_propagation();
-            handle.update(cx, |view, cx| view.toggle_date_grouping(&pane_id, cx));
+        .native_tooltip(move |window, cx| {
+            use crate::ui::date_groups::GroupMode;
+            let mode = tooltip_handle.read(cx).state.find_pane(&tooltip_pane)
+                .map(|pane| pane.active_tab().grouping()).unwrap_or(GroupMode::None);
+            let label = mode.message();
+            let mut args = FluentArgs::new();
+            args.set("mode", cx.i18n().text(label).to_string());
+            let title = if mode == GroupMode::None {
+                cx.i18n().text(Message::Grouping)
+            } else {
+                cx.i18n().text_with_args(Message::GroupingCurrent, &args)
+            };
+            Tooltip::with_secondary_action(
+                title,
+                cx.i18n().text(Message::GroupNone),
+                cx.i18n().text(Message::MouseRightClick),
+            )(window, cx)
         })
-        .child(svg().path("icons/calendar-days.svg").size(rems(1.0)).text_color(if enabled { theme.accent } else { theme.text }))
+        .on_mouse_down(MouseButton::Left, move |event, _, cx| {
+            cx.stop_propagation();
+            handle.update(cx, |view, cx| {
+                let key = format!("grouping-{pane_id}");
+                if view.close_menu_owned_by(&key, cx) { return; }
+                let anchor = view.context_anchor_points.get(&key).copied().unwrap_or(event.position);
+                view.open_grouping_menu(&pane_id, anchor, cx);
+                view.mark_menu_owner(key);
+            });
+        })
+        .on_mouse_down(MouseButton::Right, move |_, _, cx| {
+            cx.stop_propagation();
+            reset_handle.update(cx, |view, cx| view.set_grouping(&reset_pane, crate::ui::date_groups::GroupMode::None, cx));
+        })
+        .on_mouse_up(MouseButton::Right, |_, _, cx| cx.stop_propagation())
+        .child(canvas(|bounds, _, _| bounds, move |_, bounds, _, cx| {
+            anchor_handle.update(cx, |view, _| {
+                view.context_anchor_points.insert(anchor_key.clone(), point(bounds.left(), bounds.bottom()));
+            });
+        }).absolute().left_0().top_0().size_full())
+        .child(svg().path("icons/layers.svg").size(rems(1.0)).text_color(if enabled { theme.accent } else { theme.text }))
 }
 
 /// Returns the display type label for a file entry.

@@ -92,6 +92,8 @@ impl OxydeApp {
 
 fn file_entry(entry: TrashEntry) -> FileEntry {
     FileEntry {
+        native_kind: None,
+        created: None,
         content_stamp: None,
         archive_path: None,
         name: entry.name, path: entry.path, is_dir: entry.is_dir,

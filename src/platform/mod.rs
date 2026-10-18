@@ -103,6 +103,9 @@ impl ShellDeleteOutcome {
 /// Toute fonctionnalité native (lecteurs, ouverture, raccourcis, etc.)
 /// doit passer par ce trait plutôt qu'appeler directement les API OS.
 pub trait Platform: Send + Sync {
+    /// Background-only lookup. Extension includes its leading dot; no file is opened.
+    fn file_kind_for_extension(&self, _extension: &str) -> Option<crate::models::file_entry::NativeFileKind> { None }
+
     /// Name comparison of an existing directory; newly created children inherit it.
     fn file_name_rules(&self, directory: &std::fs::File) -> std::io::Result<FileNameRules>;
     /// Available OneDrive sync roots configured for the current user.
@@ -693,3 +696,5 @@ mod windows_icon_source;
 
 #[cfg(target_os = "windows")]
 mod windows_onedrive;
+#[cfg(target_os = "windows")]
+mod windows_file_kind;

@@ -1,7 +1,16 @@
+#[path = "date_groups/families.rs"]
+mod families;
+pub use families::FileFamily;
+mod grouping;
+pub(crate) use grouping::display_data;
+pub use grouping::{GroupMode, GroupKey, group_for_file, display_rows};
+
 use crate::ui::i18n::Message;
 use chrono::{Datelike, Duration, Local, NaiveDate};
 use oxyde_lib::models::FileEntry;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
+#[cfg(test)]
+use std::collections::HashSet;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct CalendarReference {
@@ -21,7 +30,7 @@ impl CalendarReference {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum DateGroup {
     Today,
     Yesterday,
@@ -92,7 +101,7 @@ pub fn counts_by_date(files: &[FileEntry], today: NaiveDate) -> HashMap<DateGrou
 
 #[derive(Clone, Debug)]
 pub enum DisplayRow {
-    Header(DateGroup, usize),
+    Header(GroupKey, usize),
     Files(Vec<usize>),
 }
 
@@ -117,48 +126,6 @@ pub fn visible_indices(rows: &[DisplayRow]) -> Vec<usize> {
         .flatten()
         .copied()
         .collect()
-}
-
-/// Keeps the current sort inside each category. Indices refer to the filtered cache.
-pub fn display_rows(
-    files: &[FileEntry],
-    enabled: bool,
-    collapsed: &HashSet<DateGroup>,
-    columns: usize,
-) -> Vec<DisplayRow> {
-    let columns = columns.max(1);
-    if !enabled {
-        return (0..files.len())
-            .collect::<Vec<_>>()
-            .chunks(columns)
-            .map(|indices| DisplayRow::Files(indices.to_vec()))
-            .collect();
-    }
-    let today = Local::now().date_naive();
-    let mut groups: [Vec<usize>; 6] = Default::default();
-    for (index, file) in files.iter().enumerate() {
-        let group = DateGroup::for_timestamp(file.modified, today);
-        groups[DateGroup::ALL
-            .iter()
-            .position(|candidate| *candidate == group)
-            .unwrap()]
-        .push(index);
-    }
-    let mut rows = Vec::new();
-    for (group, indices) in DateGroup::ALL.into_iter().zip(groups) {
-        if indices.is_empty() {
-            continue;
-        }
-        rows.push(DisplayRow::Header(group, indices.len()));
-        if !collapsed.contains(&group) {
-            rows.extend(
-                indices
-                    .chunks(columns)
-                    .map(|chunk| DisplayRow::Files(chunk.to_vec())),
-            );
-        }
-    }
-    rows
 }
 
 #[cfg(test)]
@@ -294,20 +261,20 @@ mod tests {
             modified,
             ..FileEntry::default()
         });
-        let rows = display_rows(&files, true, &HashSet::new(), 2);
-        assert!(matches!(rows[0], DisplayRow::Header(DateGroup::Today, 3)));
+        let rows = display_rows(&files, crate::ui::date_groups::GroupMode::Date, &HashSet::new(), 2);
+        assert!(matches!(rows[0], DisplayRow::Header(GroupKey::Date(DateGroup::Today), 3)));
         assert!(matches!(&rows[1], DisplayRow::Files(indices) if indices == &[1, 2]));
         assert!(matches!(&rows[2], DisplayRow::Files(indices) if indices == &[4]));
-        assert!(matches!(rows[3], DisplayRow::Header(DateGroup::Older, 2)));
+        assert!(matches!(rows[3], DisplayRow::Header(GroupKey::Date(DateGroup::Older), 2)));
         assert_eq!(visible_indices(&rows), vec![1, 2, 4, 0, 3]);
-        let collapsed = HashSet::from([DateGroup::Today]);
-        let rows = display_rows(&files, true, &collapsed, 2);
-        assert!(matches!(rows[0], DisplayRow::Header(DateGroup::Today, 3)));
+        let collapsed = HashSet::from([GroupKey::Date(DateGroup::Today)]);
+        let rows = display_rows(&files, crate::ui::date_groups::GroupMode::Date, &collapsed, 2);
+        assert!(matches!(rows[0], DisplayRow::Header(GroupKey::Date(DateGroup::Today), 3)));
         assert_eq!(visible_indices(&rows), vec![0, 3]);
         assert_eq!(
-            visible_indices(&display_rows(&files, false, &collapsed, 2)),
+            visible_indices(&display_rows(&files, crate::ui::date_groups::GroupMode::None, &collapsed, 2)),
             vec![0, 1, 2, 3, 4]
         );
-        assert!(display_rows(&[], true, &collapsed, 1).is_empty());
+        assert!(display_rows(&[], crate::ui::date_groups::GroupMode::Date, &collapsed, 1).is_empty());
     }
 }

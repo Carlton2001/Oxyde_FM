@@ -67,7 +67,7 @@ pub struct SavedTab {
     #[serde(default)]
     pub view_mode: ViewMode,
     #[serde(default)]
-    pub group_by_date: bool,
+    pub grouping: crate::ui::date_groups::GroupMode,
     #[serde(default)]
     pub back_stack: Vec<String>,
     #[serde(default)]
@@ -154,8 +154,8 @@ pub struct TabState {
     pub selection_anchor: Option<String>,
     pub keyboard_cursor: Option<String>,
     pub view_mode: ViewMode,
-    pub group_by_date: bool,
-    pub collapsed_date_groups: std::collections::HashSet<crate::ui::date_groups::DateGroup>,
+    pub group_mode: crate::ui::date_groups::GroupMode,
+    pub collapsed_groups: std::collections::HashSet<crate::ui::date_groups::GroupKey>,
     pub cached_filtered_files: std::sync::Arc<Vec<FileEntry>>,
     presentation_cache: std::cell::RefCell<Option<std::sync::Arc<presentation::Presentation>>>,
     filter_cache_revision: u64,

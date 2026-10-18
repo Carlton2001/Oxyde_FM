@@ -148,13 +148,13 @@ mod tests {
     #[test]
     fn revealing_result_expands_its_date_group_and_consumes_pending_path() {
         let mut tab = crate::ui::workspace::TabState::new("tab".into(), "folder".into());
-        tab.group_by_date = true;
+        tab.group_mode = crate::ui::date_groups::GroupMode::Date;
         let modified = chrono::Local::now().timestamp_millis() as u64;
         let group = crate::ui::date_groups::DateGroup::for_timestamp(
             modified,
             chrono::Local::now().date_naive(),
         );
-        tab.collapsed_date_groups.insert(group);
+        tab.collapsed_groups.insert(crate::ui::date_groups::GroupKey::Date(group));
         std::sync::Arc::make_mut(&mut tab.files).push(oxyde_lib::models::FileEntry {
             name: "result.json".into(),
             path: "folder/result.json".into(),
@@ -165,7 +165,7 @@ mod tests {
         tab.update_cache();
         tab.reveal_pending_item(800.0);
         assert!(tab.pending_reveal.is_none());
-        assert!(!tab.collapsed_date_groups.contains(&group));
+        assert!(!tab.collapsed_groups.contains(&crate::ui::date_groups::GroupKey::Date(group)));
     }
 }
 

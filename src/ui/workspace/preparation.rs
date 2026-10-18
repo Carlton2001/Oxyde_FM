@@ -37,6 +37,19 @@ impl Request {
         if let FileUpdate::Append(additions) = &self.update {
             Arc::make_mut(&mut files).extend(additions.iter().cloned());
         }
+        // A batch cache avoids repeated Shell calls, including for unknown extensions.
+        // Recreated per preparation so association changes are picked up on refresh.
+        let mut native_kinds = std::collections::HashMap::new();
+        for file in Arc::make_mut(&mut files).iter_mut().filter(|file| !file.is_dir) {
+            let extension = std::path::Path::new(&file.name).extension()
+                .and_then(|value| value.to_str()).filter(|value| !value.is_empty());
+            file.native_kind = extension.and_then(|extension| {
+                let extension = format!(".{}", extension.to_ascii_lowercase());
+                *native_kinds.entry(extension).or_insert_with_key(|extension| {
+                    oxyde_lib::platform::platform().file_kind_for_extension(extension)
+                })
+            });
+        }
         let sort = if matches!(self.update, FileUpdate::Listing(_)) {
             super::sorting::sort_listed_files
         } else {
@@ -109,3 +122,7 @@ impl TabState {
 #[cfg(test)]
 #[path = "preparation/tests/revisions.rs"]
 mod tests;
+
+#[cfg(all(test, target_os = "windows"))]
+#[path = "preparation/tests/native_kinds.rs"]
+mod native_kind_tests;

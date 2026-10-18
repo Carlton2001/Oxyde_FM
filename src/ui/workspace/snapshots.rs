@@ -12,7 +12,7 @@ impl SavedLayoutNode {
                         id: tab.id.clone(),
                         path: tab.path.clone(),
                         view_mode: tab.view_mode,
-                        group_by_date: tab.group_by_date,
+                        grouping: tab.group_mode,
                         back_stack: tab.back_stack.clone(),
                         forward_stack: tab.forward_stack.clone(),
                     })
@@ -49,7 +49,7 @@ impl SavedLayoutNode {
                     .map(|tab| {
                         let mut state = TabState::new(tab.id, tab.path);
                         state.view_mode = tab.view_mode;
-                        state.group_by_date = tab.group_by_date;
+                        state.group_mode = tab.grouping;
                         state.back_stack = tab.back_stack;
                         state.forward_stack = tab.forward_stack;
                         state

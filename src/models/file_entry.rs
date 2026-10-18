@@ -9,8 +9,15 @@ pub struct NetworkDetails {
     pub location: String,
 }
 
+/// Broad native category, resolved by extension outside the UI thread.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NativeFileKind { Documents, Images, Audio, Video, Archives, Applications }
+
 #[derive(Debug, Clone, Default)]
 pub struct FileEntry {
+    pub native_kind: Option<NativeFileKind>,
+    /// Creation timestamp in Unix milliseconds, absent when unavailable.
+    pub created: Option<u64>,
     /// Full-resolution filesystem stamp captured by the listing/search worker.
     /// Virtual entries and sources without filesystem metadata leave this unset.
     pub content_stamp: Option<FileStamp>,
@@ -236,6 +243,8 @@ pub(crate) fn file_entry_from_metadata(path: &Path, metadata: &std::fs::Metadata
     let size = if is_dir { 0 } else { metadata.len() };
 
     FileEntry {
+        native_kind: None,
+        created: metadata.created().ok().and_then(|time| time.duration_since(SystemTime::UNIX_EPOCH).ok()).and_then(|duration| duration.as_millis().try_into().ok()),
         content_stamp: FileStamp::for_entry(path, metadata),
         archive_path: None,
         name,

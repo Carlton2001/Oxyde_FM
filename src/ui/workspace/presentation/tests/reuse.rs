@@ -26,7 +26,7 @@ fn repeated_large_pane_snapshots_reuse_files_rows_and_geometry() {
         let started = Instant::now();
         for _ in 0..10 {
             let files = tab.filtered_files().to_vec();
-            let rows = crate::ui::date_groups::display_rows(&files, false, &Default::default(), 1);
+            let rows = crate::ui::date_groups::display_rows(&files, crate::ui::date_groups::GroupMode::None, &Default::default(), 1);
             std::hint::black_box((files, rows));
         }
         eprintln!(
@@ -40,9 +40,9 @@ fn repeated_large_pane_snapshots_reuse_files_rows_and_geometry() {
         let resized = tab.presentation(true, 7);
         assert!(!Arc::ptr_eq(&grid.rows, &resized.rows));
         assert!(Arc::ptr_eq(&grid.files, &resized.files));
-        tab.group_by_date = true;
+        tab.group_mode = crate::ui::date_groups::GroupMode::Date;
         let grouped = tab.presentation(true, 7);
-        tab.collapsed_date_groups.insert(DateGroup::Older);
+        tab.collapsed_groups.insert(GroupKey::Date(crate::ui::date_groups::DateGroup::Older));
         let collapsed = tab.presentation(true, 7);
         assert!(collapsed.rows.len() < grouped.rows.len());
         let old = Arc::downgrade(&collapsed);

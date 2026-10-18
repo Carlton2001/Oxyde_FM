@@ -518,8 +518,8 @@ impl OxydeApp {
                         let grid = matches!(tab.view_mode, crate::ui::workspace::ViewMode::Grid);
                         let columns = if grid { crate::ui::style::GridGeometry::for_viewport(width, crate::ui::components::scrollbar::zed_track_width()).columns } else { 1 };
                         let file = &tab.filtered_files()[index];
-                        tab.collapsed_date_groups.remove(&crate::ui::date_groups::DateGroup::for_timestamp(file.modified, chrono::Local::now().date_naive()));
-                        let rows = crate::ui::date_groups::display_rows(tab.filtered_files(), tab.group_by_date, &tab.collapsed_date_groups, columns);
+                        tab.collapsed_groups.remove(&crate::ui::date_groups::group_for_file(file, tab.grouping(), chrono::Local::now().date_naive()));
+                        let rows = crate::ui::date_groups::display_rows(tab.filtered_files(), tab.grouping(), &tab.collapsed_groups, columns);
                         if let Some(row) = rows.iter().position(|row| matches!(row, crate::ui::date_groups::DisplayRow::Files(indices) if indices.contains(&index))) {
                             if grid {
                                 let y = crate::ui::date_groups::content_height(&rows[..row], true);

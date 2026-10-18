@@ -36,6 +36,7 @@ pub struct Tooltip {
     wrap_title: bool,
     meta: Option<SharedString>,
     shortcut: Option<SharedString>,
+    secondary_action: Option<(SharedString, SharedString)>,
     file_info: Option<FileInfo>,
     preview_view: Option<Entity<PreviewTask>>,
     fixed_bounds: Option<std::rc::Rc<std::cell::Cell<Bounds<Pixels>>>>,
@@ -76,7 +77,7 @@ impl Tooltip {
     }
     pub(crate) fn fixed_path(title: SharedString, bounds: std::rc::Rc<std::cell::Cell<Bounds<Pixels>>>) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
         move |_, cx| cx.new(|_| Self {
-            native_presentation: false, title: title.clone(), wrap_title: true, meta: None, shortcut: None,
+            native_presentation: false, secondary_action: None, title: title.clone(), wrap_title: true, meta: None, shortcut: None,
             file_info: None, preview_view: None, fixed_bounds: Some(bounds.clone()),
         }).into()
     }
@@ -96,7 +97,7 @@ impl Tooltip {
                     tooltip.shortcut = Some(if app.shift_delete { "Shift+Del" } else { "Del" }.into());
                     cx.notify();
                 }).detach();
-                Self { native_presentation: false, title, wrap_title: false, meta: None, shortcut: Some(if window.modifiers().shift { "Shift+Del" } else { "Del" }.into()), file_info: None, fixed_bounds: None, preview_view: None }
+                Self { native_presentation: false, secondary_action: None, title, wrap_title: false, meta: None, shortcut: Some(if window.modifiers().shift { "Shift+Del" } else { "Del" }.into()), file_info: None, fixed_bounds: None, preview_view: None }
             }).into()
         }
     }
@@ -106,7 +107,7 @@ impl Tooltip {
         move |_, cx| {
             if file.original_path.is_none() && crate::ui::components::file_list::network_entry(&file) {
                 return cx.new(|_| Self {
-                    native_presentation: false, title: file.name.clone().into(), wrap_title: false, meta: None, shortcut: None,
+                    native_presentation: false, secondary_action: None, title: file.name.clone().into(), wrap_title: false, meta: None, shortcut: None,
                     file_info: Some(FileInfo { type_label: String::new(), location: None, extra: Vec::new(), network: Some(file.clone()), size: (0, false, false), date: 0 }),
                     fixed_bounds: None, preview_view: None,
                 }).into();
@@ -141,11 +142,24 @@ impl Tooltip {
         let title = title.into();
         move |_, cx| {
             cx.new(|_| Self {
-                native_presentation: false, title: title.clone(), wrap_title: false, meta: None, shortcut: shortcut.clone(),
+                native_presentation: false, secondary_action: None, title: title.clone(), wrap_title: false, meta: None, shortcut: shortcut.clone(),
                 file_info: None, fixed_bounds: None, preview_view: None,
             }).into()
         }
     }
+    /// An alternate mouse action below the primary label, with its own shortcut.
+    pub fn with_secondary_action(
+        title: SharedString,
+        label: SharedString,
+        shortcut: SharedString,
+    ) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
+        move |_, cx| cx.new(|_| Self {
+            native_presentation: false, title: title.clone(), wrap_title: false,
+            meta: None, shortcut: None, secondary_action: Some((label.clone(), shortcut.clone())),
+            file_info: None, preview_view: None, fixed_bounds: None,
+        }).into()
+    }
+
     /// Crée un constructeur de tooltip simple affichant un texte.
     pub fn text(
         title: impl Into<SharedString>,
@@ -166,7 +180,7 @@ impl Tooltip {
     ) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
         move |_, cx| {
             cx.new(|_| Self {
-                native_presentation: false, title: title.clone(),
+                native_presentation: false, secondary_action: None, title: title.clone(),
                 wrap_title,
                 meta: None,
                 shortcut: None,
@@ -186,7 +200,7 @@ impl Tooltip {
         let meta = meta.into();
         move |_, cx| {
             cx.new(|_| Self {
-                native_presentation: false, title: title.clone(),
+                native_presentation: false, secondary_action: None, title: title.clone(),
                 wrap_title: false,
                 meta: Some(meta.clone()),
                 shortcut: None,
@@ -214,7 +228,7 @@ impl Tooltip {
             }
 
             Self {
-                native_presentation: false, title: SharedString::from(name),
+                native_presentation: false, secondary_action: None, title: SharedString::from(name),
                 wrap_title: false,
                 meta: None,
                 shortcut: None,

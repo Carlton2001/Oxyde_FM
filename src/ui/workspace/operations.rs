@@ -207,16 +207,16 @@ impl WorkspaceState {
         let duplicate = if let Some(pane) = self.find_pane(pane_id) {
             pane.tabs
                 .get(tab_idx)
-                .map(|tab| (tab.path.clone(), tab.view_mode, tab.group_by_date))
+                .map(|tab| (tab.path.clone(), tab.view_mode, tab.group_mode))
         } else {
             None
         };
 
-        if let Some((path, view_mode, group_by_date)) = duplicate {
+        if let Some((path, view_mode, group_mode)) = duplicate {
             self.add_tab(pane_id, path, true);
             if let Some(pane) = self.find_pane_mut(pane_id) {
                 pane.active_tab_mut().view_mode = view_mode;
-                pane.active_tab_mut().group_by_date = group_by_date;
+                pane.active_tab_mut().group_mode = group_mode;
             }
             self.find_pane(pane_id).map(|pane| pane.active_tab_index)
         } else {

@@ -1,6 +1,8 @@
+use super::group_header::render as group_header;
+use crate::ui::app::GroupSelection;
 use crate::ui::components::tooltip::NativeTooltipExt;
 use super::grid_card::{render_grid_card, GridCardParams};
-use super::presentation::{date_group_button, date_group_header, view_mode_button};
+use super::presentation::{grouping_button, view_mode_button};
 use super::status_bar_height;
 use crate::ui::app::{ContextMenuContent, ContextMenuInstance, DragTarget, OxydeApp};
 use crate::ui::components::{with_grid_sort, pane_context_menu_items};
@@ -137,7 +139,8 @@ pub(super) fn render_grid_file_list(
         let render_rows = {
                 let files = files.clone();
                 let rows = rows.clone();
-                let collapsed = tab.collapsed_date_groups.clone();
+                let groups = presentation.groups.clone();
+                let collapsed = tab.collapsed_groups.clone();
                 let selected = selected.clone();
                 let pane_id = pane_id.clone();
                 let handle = handle.clone();
@@ -150,7 +153,7 @@ pub(super) fn render_grid_file_list(
                         .map(|row_index| {
                             let theme = *OxydeTheme::global(cx);
                             let indices = match &rows[row_index] {
-                                DisplayRow::Header(group, count) => return div().flex_none().child(date_group_header(*group, *count, collapsed.contains(group), pane_id.clone(), handle.clone(), crate::ui::style::row_height(), cx)),
+                                DisplayRow::Header(group, count) => return div().flex_none().child(group_header(group.clone(), *count, collapsed.contains(group), GroupSelection::for_members(&files, groups.get(group).map(Vec::as_slice).unwrap_or_default(), &selected), pane_id.clone(), handle.clone(), crate::ui::style::row_height(), cx)),
                                 DisplayRow::Files(indices) => indices,
                             };
                             let cells = indices
@@ -228,9 +231,9 @@ pub(super) fn render_grid_file_list(
             if scroll.offset().y.as_f32() != -offset {
                 scroll.set_offset(point(px(0.0), px(-offset)));
             }
-            let visible = super::grid_scroll::visible_prefix(&presentation.heights, tab.group_by_date, offset, if actual_viewport > 0.0 { actual_viewport } else { viewport });
+            let visible = super::grid_scroll::visible_prefix(&presentation.heights, tab.is_grouped(), offset, if actual_viewport > 0.0 { actual_viewport } else { viewport });
             let scroll_handle = handle.clone();
-            div().id(SharedString::from(if tab.group_by_date { format!("file-grid-grouped-{pane_id}") } else { format!("file-grid-{pane_id}") }))
+            div().id(SharedString::from(if tab.is_grouped() { format!("file-grid-grouped-{pane_id}") } else { format!("file-grid-{pane_id}") }))
                 .flex_1().min_h_0().flex().flex_col().pt_1().overflow_y_scroll().track_scroll(&scroll)
                 .on_scroll_wheel(move |_, _, cx| scroll_handle.update(cx, |_, cx| cx.notify()))
                 .child(div().h(px(visible.top)).flex_none())
@@ -498,7 +501,7 @@ pub(super) fn render_grid_file_list(
                     )
                 })
                 .child(div().flex_1())
-                .child(date_group_button(&pane_id, tab.group_by_date, handle.clone(), theme, cx))
+                .child(grouping_button(&pane_id, tab.is_grouped(), handle.clone(), theme))
                 .child(div().flex_none().w(rems(0.0625)).h(rems(1.0)).bg(theme.border))
                 .child(view_mode_button(
                     &pane_id,

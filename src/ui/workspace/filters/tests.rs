@@ -338,7 +338,7 @@ fn saved_workspace_restores_split_panels_and_open_tab_paths() {
 
     let active_pane_id = state.active_pane_id.clone();
     state.add_tab(&active_pane_id, "F:/second".to_string(), true);
-    state.find_pane_mut(&active_pane_id).unwrap().active_tab_mut().group_by_date = true;
+    state.find_pane_mut(&active_pane_id).unwrap().active_tab_mut().group_mode = crate::ui::date_groups::GroupMode::Date;
     if let LayoutNode::Split { weights, .. } = &mut state.layout {
         *weights = vec![1.4, 0.6];
     } else {
@@ -367,8 +367,8 @@ fn saved_workspace_restores_split_panels_and_open_tab_paths() {
     assert_eq!(pane.tabs.len(), 2);
     assert_eq!(pane.tabs[0].path, "E:/active");
     assert_eq!(pane.active_tab().path, "F:/second");
-    assert!(pane.active_tab().group_by_date);
-    assert!(!pane.tabs[0].group_by_date);
+    assert_eq!(pane.active_tab().grouping(), crate::ui::date_groups::GroupMode::Date);
+    assert_eq!(pane.tabs[0].grouping(), crate::ui::date_groups::GroupMode::None);
     match &restored.layout {
         LayoutNode::Split { weights, .. } => assert_eq!(weights, &[1.4, 0.6]),
         LayoutNode::Pane(_) => panic!("expected split layout after restore"),
@@ -376,17 +376,17 @@ fn saved_workspace_restores_split_panels_and_open_tab_paths() {
 }
 
 #[test]
-fn date_grouping_is_optional_in_legacy_tabs_and_independent_in_duplicates() {
-    let old: SavedTab = serde_json::from_str(r#"{"id":"old","path":"C:/"}"#).unwrap();
-    assert!(!old.group_by_date);
+fn date_grouping_defaults_to_none_and_is_independent_in_duplicates() {
+    let saved: SavedTab = serde_json::from_str(r#"{"id":"tab","path":"C:/"}"#).unwrap();
+    assert_eq!(saved.grouping, crate::ui::date_groups::GroupMode::None);
     let mut state = WorkspaceState::new();
     let pane_id = state.active_pane_id.clone();
-    state.find_pane_mut(&pane_id).unwrap().active_tab_mut().group_by_date = true;
+    state.find_pane_mut(&pane_id).unwrap().active_tab_mut().group_mode = crate::ui::date_groups::GroupMode::Date;
     let index = state.duplicate_tab(&pane_id, 0).unwrap();
     let pane = state.find_pane_mut(&pane_id).unwrap();
-    assert!(pane.tabs[index].group_by_date);
-    pane.tabs[index].group_by_date = false;
-    assert!(pane.tabs[0].group_by_date);
+    assert_eq!(pane.tabs[index].grouping(), crate::ui::date_groups::GroupMode::Date);
+    pane.tabs[index].group_mode = crate::ui::date_groups::GroupMode::None;
+    assert_eq!(pane.tabs[0].grouping(), crate::ui::date_groups::GroupMode::Date);
 }
 
 #[test]

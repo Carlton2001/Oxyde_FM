@@ -53,7 +53,7 @@ fn resizing_without_focus_preserves_scroll_position() {
 #[test]
 fn shrinking_grouped_grid_reveals_focus_with_variable_row_heights() {
     let mut tab = fixture(ViewMode::Grid);
-    tab.group_by_date = true;
+    tab.group_mode = crate::ui::date_groups::GroupMode::Date;
     tab.keep_cursor_visible(size(800.0, 300.0));
     let columns = crate::ui::style::GridGeometry::for_viewport(
         800.0,
@@ -62,8 +62,8 @@ fn shrinking_grouped_grid_reveals_focus_with_variable_row_heights() {
     .columns;
     let rows = display_rows(
         tab.filtered_files(),
-        true,
-        &tab.collapsed_date_groups,
+        tab.grouping(),
+        &tab.collapsed_groups,
         columns,
     );
     let row = rows

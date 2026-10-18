@@ -11,6 +11,10 @@ impl WindowsPlatform {
 }
 
 impl Platform for WindowsPlatform {
+    fn file_kind_for_extension(&self, extension: &str) -> Option<crate::models::file_entry::NativeFileKind> {
+        super::windows_file_kind::for_extension(extension)
+    }
+
     fn file_name_rules(&self, directory: &std::fs::File) -> std::io::Result<super::FileNameRules> {
         super::windows_file_names::rules(directory)
     }

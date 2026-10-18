@@ -30,7 +30,7 @@ impl OxydeApp {
         let columns = if grid {
             crate::ui::style::GridGeometry::for_viewport(width, crate::ui::components::scrollbar::zed_track_width()).columns
         } else { 1 };
-        let rows = display_rows(tab.filtered_files(), tab.group_by_date, &tab.collapsed_date_groups, columns);
+        let rows = display_rows(tab.filtered_files(), tab.grouping(), &tab.collapsed_groups, columns);
         let file_rows: Vec<_> = rows.iter().filter_map(|row| match row {
             DisplayRow::Files(indices) => Some(indices.as_slice()), _ => None,
         }).collect();
@@ -86,7 +86,7 @@ impl OxydeApp {
             );
             let grid_width = grid.content_width;
             let grid_columns = grid.columns;
-            let rows = crate::ui::date_groups::display_rows(tab.filtered_files(), tab.group_by_date, &tab.collapsed_date_groups, if grid_mode { grid_columns } else { 1 });
+            let rows = crate::ui::date_groups::display_rows(tab.filtered_files(), tab.grouping(), &tab.collapsed_groups, if grid_mode { grid_columns } else { 1 });
 
             // --- Auto-Scroll (Intuitive & Proportional) ---
             let list_top = bounds.origin.y;
@@ -200,7 +200,7 @@ impl OxydeApp {
             let tab = pane.active_tab_mut();
             tab.keyboard_cursor = Some(path.clone());
             if shift {
-                let rows = crate::ui::date_groups::display_rows(tab.filtered_files(), tab.group_by_date, &tab.collapsed_date_groups, 1);
+                let rows = crate::ui::date_groups::display_rows(tab.filtered_files(), tab.grouping(), &tab.collapsed_groups, 1);
                 let filtered: Vec<_> = crate::ui::date_groups::visible_indices(&rows).into_iter().map(|index| &tab.filtered_files()[index]).collect();
                 let anchor_idx = tab
                     .selection_anchor

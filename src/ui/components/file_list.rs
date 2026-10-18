@@ -6,6 +6,7 @@ mod grid_scroll;
 mod grid_card;
 mod headers;
 mod presentation;
+mod group_header;
 mod selection_button;
 mod scroll_top;
 mod thumbnails;

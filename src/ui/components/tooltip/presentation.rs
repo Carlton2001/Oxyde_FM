@@ -287,6 +287,19 @@ impl Render for Tooltip {
             tooltip_width = (line.width + chrome + px(1.0)).min(maximum_width);
             location_line_ranges(&self.title, (tooltip_width - chrome - px(1.0)).as_f32().max(1.0), |index| line.x_for_index(index).as_f32())
                 .into_iter().map(|range| self.title[range].to_string().into()).collect()
+        } else if let Some((label, shortcut)) = &self.secondary_action {
+            let shape = |text: &SharedString, size: Rems, weight: FontWeight| {
+                let mut font = window.text_style().font();
+                font.family = "Inter".into(); font.weight = weight; font.features = TNUM.clone();
+                window.text_system().shape_line(text.clone(), rem_pixels(size), &[TextRun {
+                    len: text.len(), font, color: theme.text, background_color: None, underline: None, strikethrough: None,
+                }], None).width
+            };
+            let title = shape(&self.title, rems(0.75), FontWeight::MEDIUM);
+            let action = shape(label, rems(0.75), crate::ui::style::DEFAULT_FONT_WEIGHT)
+                + rem_pixels(rems(0.75)) + shape(shortcut, rems(0.6875), crate::ui::style::DEFAULT_FONT_WEIGHT);
+            tooltip_width = (title.max(action) + chrome + px(1.0)).min(maximum_width);
+            vec![self.title.clone()]
         } else if let Some(meta) = &self.meta {
             // Resolve the width before laying out percentage-width flex rows.
             // Standalone tooltips must not inherit a host row's line height.
@@ -314,7 +327,7 @@ impl Render for Tooltip {
 
         let mut box_div = div()
             .max_w(tooltip_width)
-            .when(self.file_info.is_some() || self.wrap_title || self.meta.is_some(), |tooltip| tooltip.w(tooltip_width))
+            .when(self.file_info.is_some() || self.wrap_title || self.meta.is_some() || self.secondary_action.is_some(), |tooltip| tooltip.w(tooltip_width))
             .border(rems(0.0625))
             .border_color(gpui::transparent_black())
             .when(self.preview_view.is_none(), |this| this
@@ -354,6 +367,12 @@ impl Render for Tooltip {
                             .text_size(rems(0.6875)).child(shortcut))
                     }),
             )
+            .when_some(self.secondary_action.clone(), |tooltip, (label, shortcut)| {
+                tooltip.child(div().flex_none().w_full().flex().items_center().gap(rems(0.75))
+                    .text_size(rems(0.75)).text_color(theme.text)
+                    .child(div().flex_1().whitespace_nowrap().child(label))
+                    .child(div().whitespace_nowrap().text_size(rems(0.6875)).text_color(theme.text_muted).child(shortcut)))
+            })
             .when_some(self.meta.clone(), |this, meta| {
                 this.child(
                     div()

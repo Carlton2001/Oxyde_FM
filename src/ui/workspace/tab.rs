@@ -11,6 +11,25 @@ mod prepared_sort_tests;
 mod archive_watcher_tests;
 
 impl TabState {
+    pub(crate) fn grouping(&self) -> crate::ui::date_groups::GroupMode {
+        if self.supports_grouping(self.group_mode) { self.group_mode }
+        else { crate::ui::date_groups::GroupMode::None }
+    }
+    pub(crate) fn is_grouped(&self) -> bool { self.grouping() != crate::ui::date_groups::GroupMode::None }
+    pub(crate) fn supports_grouping(&self, mode: crate::ui::date_groups::GroupMode) -> bool {
+        use crate::ui::date_groups::GroupMode;
+        if self.path == "__network_vincinity__" { return mode == GroupMode::None; }
+        match mode {
+            GroupMode::Deleted => self.path == "trash://",
+            GroupMode::Origin => self.path == "trash://" || self.quick_search.is_some(),
+            GroupMode::Created => self.path != "trash://" && self.archive_root.is_none(),
+            _ => true,
+        }
+    }
+    pub(crate) fn available_groupings(&self) -> Vec<crate::ui::date_groups::GroupMode> {
+        crate::ui::date_groups::GroupMode::ALL.into_iter().filter(|mode| self.supports_grouping(*mode)).collect()
+    }
+
     /// The archive's containing directory reports replacement/deletion events.
     /// This consumes the location resolved by the listing worker, without I/O.
     pub(crate) fn watched_path(&self) -> String {
@@ -22,11 +41,11 @@ impl TabState {
     pub(crate) fn reveal_pending_item(&mut self, width: f32) {
         let Some(path) = self.pending_reveal.take() else { return; };
         let Some(index) = self.filtered_files().iter().position(|file| file.path == path) else { return; };
-        let modified = self.filtered_files()[index].modified;
-        self.collapsed_date_groups.remove(&crate::ui::date_groups::DateGroup::for_timestamp(modified, chrono::Local::now().date_naive()));
+        let group = crate::ui::date_groups::group_for_file(&self.filtered_files()[index], self.grouping(), chrono::Local::now().date_naive());
+        self.collapsed_groups.remove(&group);
         let grid = self.view_mode == ViewMode::Grid;
         let columns = if grid { crate::ui::style::GridGeometry::for_viewport(width, crate::ui::components::scrollbar::zed_track_width()).columns } else { 1 };
-        let rows = crate::ui::date_groups::display_rows(self.filtered_files(), self.group_by_date, &self.collapsed_date_groups, columns);
+        let rows = crate::ui::date_groups::display_rows(self.filtered_files(), self.grouping(), &self.collapsed_groups, columns);
         if let Some(row) = rows.iter().position(|row| matches!(row, crate::ui::date_groups::DisplayRow::Files(indices) if indices.contains(&index))) {
             if grid {
                 let y = crate::ui::date_groups::content_height(&rows[..row], true);
@@ -70,8 +89,8 @@ impl TabState {
             selection_anchor: None,
             keyboard_cursor: None,
             view_mode: ViewMode::Grid,
-            group_by_date: false,
-            collapsed_date_groups: Default::default(),
+            group_mode: crate::ui::date_groups::GroupMode::None,
+            collapsed_groups: Default::default(),
             cached_filtered_files: Default::default(),
             presentation_cache: Default::default(),
             filter_cache_revision: 0,
@@ -109,3 +128,7 @@ impl TabState {
         super::sorting::sort_files(std::sync::Arc::make_mut(&mut self.files).as_mut_slice(), self.sort_column, self.sort_direction);
     }
 }
+
+#[cfg(test)]
+#[path = "tab/tests/grouping.rs"]
+mod grouping_tests;

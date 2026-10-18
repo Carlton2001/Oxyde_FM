@@ -58,6 +58,8 @@ pub fn list_network_entries(path: Option<String>) -> Result<Vec<FileEntry>, crat
         .filter(|r| !shares_only || r.resource_type == RESOURCETYPE_DISK.0)
         .map(|r| {
             FileEntry {
+                native_kind: None,
+                created: None,
                 content_stamp: None,
                 archive_path: None,
                 network_details: r.network_details,

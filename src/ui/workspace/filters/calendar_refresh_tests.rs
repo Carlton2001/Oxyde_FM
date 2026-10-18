@@ -204,7 +204,7 @@ fn tabs_without_date_filters_never_schedule_a_cache_rebuild() {
     let day = NaiveDate::from_ymd_opt(2026, 10, 7).unwrap();
     let mut tab = tab("grouped", day, DateGroup::Today);
     tab.filter_dates.clear();
-    tab.group_by_date = true;
+    tab.group_mode = crate::ui::date_groups::GroupMode::Date;
     tab.update_cache_on(day);
     let layout = LayoutNode::Pane(Box::new(PaneState::new(tab)));
     assert!(layout

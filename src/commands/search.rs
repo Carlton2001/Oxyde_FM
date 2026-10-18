@@ -182,6 +182,7 @@ pub fn advanced_search(
                         let (hidden, system, _) = crate::utils::get_file_attributes(&m, &name);
                         batch.push(FileEntry {
                             content_stamp: crate::models::FileStamp::for_entry(path, &m),
+                            created: m.created().ok().and_then(|time| time.duration_since(SystemTime::UNIX_EPOCH).ok()).and_then(|duration| duration.as_millis().try_into().ok()),
                             name,
                             path: path.to_string_lossy().into_owned(),
                             is_dir: m.is_dir(),
@@ -308,6 +309,7 @@ pub fn quick_search(
                     let (hidden, system, _) = crate::utils::get_file_attributes(&metadata, &name);
                     batch.push(FileEntry {
                         content_stamp: crate::models::FileStamp::for_entry(entry.path(), &metadata),
+                        created: metadata.created().ok().and_then(|time| time.duration_since(SystemTime::UNIX_EPOCH).ok()).and_then(|duration| duration.as_millis().try_into().ok()),
                         name,
                         path: entry.path().to_string_lossy().into_owned(),
                         is_dir: metadata.is_dir(),

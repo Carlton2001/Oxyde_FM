@@ -1,7 +1,9 @@
+use super::group_header::render as group_header;
+use crate::ui::app::GroupSelection;
 use crate::ui::components::tooltip::NativeTooltipExt;
 use super::details_row::{render_details_row, DetailsRowParams};
 use super::headers::render_headers;
-use super::presentation::{date_group_button, date_group_header, view_mode_button};
+use super::presentation::{grouping_button, view_mode_button};
 use super::status_bar_height;
 use crate::ui::app::{ContextMenuContent, ContextMenuInstance, DragTarget, FileDragData, OxydeApp};
 use crate::ui::components::{with_grid_sort, pane_context_menu_items};
@@ -187,7 +189,8 @@ pub(super) fn render_details_file_list(
                                 {
                                     let files = files.clone();
                                     let rows = rows.clone();
-                                    let collapsed = active_tab.collapsed_date_groups.clone();
+                                    let groups = presentation.groups.clone();
+                                    let collapsed = active_tab.collapsed_groups.clone();
                                     let h_inner = handle.clone();
                                     let p_id_for_list = pane_id.clone();
                                     let selected_paths = selected_paths.clone();
@@ -200,7 +203,7 @@ pub(super) fn render_details_file_list(
                                             }
                                             let theme = *OxydeTheme::global(cx);
                                             let index = match &rows[i] {
-                                                DisplayRow::Header(group, count) => return date_group_header(*group, *count, collapsed.contains(group), p_id_for_list.clone(), h_inner.clone(), crate::ui::style::row_height(), cx),
+                                                DisplayRow::Header(group, count) => return group_header(group.clone(), *count, collapsed.contains(group), GroupSelection::for_members(&files, groups.get(group).map(Vec::as_slice).unwrap_or_default(), &selected_paths), p_id_for_list.clone(), h_inner.clone(), crate::ui::style::row_height(), cx),
                                                 DisplayRow::Files(indices) => indices[0],
                                             };
                                             let file = &files[index];
@@ -569,7 +572,7 @@ pub(super) fn render_details_file_list(
                     )
             })
             .child(div().flex_1())
-            .child(date_group_button(&pane_id, active_tab.group_by_date, handle.clone(), theme, cx))
+            .child(grouping_button(&pane_id, active_tab.is_grouped(), handle.clone(), theme))
             .child(div().flex_none().w(rems(0.0625)).h(rems(1.0)).bg(theme.border))
             .child(view_mode_button(
                 &pane_id,

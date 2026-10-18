@@ -41,3 +41,14 @@ fn ordinary_listing_entry_consumes_existing_metadata_without_reopening_the_name(
     assert_eq!(format!("{actual:?}"), format!("{expected:?}"));
     assert!(get_file_entry_from_path(&path).is_err());
 }
+
+#[test]
+fn listing_creation_time_comes_from_the_supplied_metadata() {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("created.txt");
+    std::fs::write(&path, b"created").unwrap();
+    let metadata = std::fs::symlink_metadata(&path).unwrap();
+    let expected = metadata.created().ok().and_then(|time| time.duration_since(SystemTime::UNIX_EPOCH).ok()).and_then(|duration| duration.as_millis().try_into().ok());
+    let actual = file_entry_from_metadata(&path, &metadata);
+    assert_eq!(actual.created, expected);
+}

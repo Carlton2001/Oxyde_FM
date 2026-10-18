@@ -35,8 +35,8 @@ impl TabState {
         };
         let rows = display_rows(
             self.filtered_files(),
-            self.group_by_date,
-            &self.collapsed_date_groups,
+            self.grouping(),
+            &self.collapsed_groups,
             columns,
         );
         let viewport = (pane_size.height

@@ -221,7 +221,7 @@ impl LayoutNode {
 
     pub(crate) fn has_date_groups(&self) -> bool {
         let mut grouped = false;
-        self.visit_panes(&mut |pane| grouped |= pane.tabs.iter().any(|tab| tab.group_by_date));
+        self.visit_panes(&mut |pane| grouped |= pane.tabs.iter().any(|tab| tab.grouping().is_calendar()));
         grouped
     }
 

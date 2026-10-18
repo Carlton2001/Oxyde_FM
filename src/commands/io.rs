@@ -29,6 +29,8 @@ async fn list_dir_impl(path: String, show_hidden: Option<bool>, show_system: Opt
         let entries = trash_items
             .into_iter()
             .map(|t| FileEntry {
+                native_kind: None,
+                created: None,
                 content_stamp: None,
                 archive_path: None,
                 name: t.name,

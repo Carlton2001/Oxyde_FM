@@ -8,7 +8,7 @@ fn cached_prefix_geometry_matches_the_previous_scan_at_boundaries_and_zoom_level
         for grouped in [false, true] {
             let mut rows = Vec::new();
             for index in 0..80 {
-                if grouped && index % 10 == 0 { rows.push(DisplayRow::Header(DateGroup::Older, 10)); }
+                if grouped && index % 10 == 0 { rows.push(DisplayRow::Header(crate::ui::date_groups::GroupKey::Date(DateGroup::Older), 10)); }
                 rows.push(DisplayRow::Files(vec![index]));
             }
             let mut heights = vec![0.0];
@@ -48,9 +48,9 @@ fn final_grid_row_remains_visible_with_the_details_sized_empty_space() {
 fn grouped_grid_keeps_header_heights_and_a_compact_final_gutter() {
     crate::ui::scale::set_reference(16);
     let rows = vec![
-        DisplayRow::Header(DateGroup::Today, 2),
+        DisplayRow::Header(crate::ui::date_groups::GroupKey::Date(DateGroup::Today), 2),
         DisplayRow::Files(vec![0, 1]),
-        DisplayRow::Header(DateGroup::Older, 1),
+        DisplayRow::Header(crate::ui::date_groups::GroupKey::Date(DateGroup::Older), 1),
         DisplayRow::Files(vec![2]),
     ];
     let height = content_height(&rows, true);
