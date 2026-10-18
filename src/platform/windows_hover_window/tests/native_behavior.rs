@@ -2,6 +2,7 @@ use super::*;
 use raw_window_handle::Win32WindowHandle;
 use std::num::NonZeroIsize;
 use windows::core::w;
+use windows::Win32::UI::Input::KeyboardAndMouse::GetFocus;
 
 struct TestWindow(HWND);
 impl TestWindow {
@@ -156,7 +157,9 @@ fn interactive_menu_receives_mouse_and_submenus_share_the_same_family() {
     apply_pending(child.0);
     assert_eq!(unsafe { root_owner(child.0) }, owner.0);
     let style = unsafe { GetWindowLongPtrW(menu.0, GWL_EXSTYLE) } as u32;
-    assert_eq!(style & (WS_EX_NOACTIVATE.0 | WS_EX_TOPMOST.0), 0);
+    assert_ne!(style & WS_EX_NOACTIVATE.0, 0);
+    assert_eq!(style & WS_EX_TOPMOST.0, 0);
+    assert_eq!(unsafe { SendMessageW(menu.0, WM_MOUSEACTIVATE, None, None) }.0, MA_NOACTIVATE as isize);
     assert_ne!(
         unsafe { SendMessageW(menu.0, WM_NCHITTEST, None, None) }.0,
         HTTRANSPARENT as isize
@@ -419,4 +422,85 @@ fn completion_menu_receives_clicks_without_activating_or_stealing_focus() {
     apply_pending(menu.0);
     assert!(unsafe { IsWindowVisible(menu.0) }.as_bool());
     assert_eq!(unsafe { GetForegroundWindow() }, foreground);
+}
+
+fn show_test_menu(menu: &TestWindow) {
+    set_anchor(menu.raw(), Some((200.0, 200.0, 40.0, 20.0)), false, false).unwrap();
+    place(menu.raw(), Some((160.0, 100.0, 16.0)), 1.0).unwrap();
+    apply_pending(menu.0);
+}
+
+fn queued_recipient(owner: HWND, message: u32, value: usize) -> MSG {
+    unsafe { PostMessageW(Some(owner), message, WPARAM(value), LPARAM(0x1234)) }.unwrap();
+    let mut received = MSG::default();
+    assert!(unsafe { PeekMessageW(&mut received, Some(owner), message, message, PM_REMOVE) }.as_bool());
+    assert_eq!(received.message, message);
+    assert_eq!(received.wParam.0, value);
+    assert_eq!(received.lParam.0, 0x1234);
+    received
+}
+
+#[test]
+fn interactive_menus_route_queued_keys_and_text_without_changing_native_focus() {
+    let owner = TestWindow::new();
+    let menu = TestWindow::new();
+    super::super::windows_window_owner::set_owner(menu.0, owner.0).unwrap();
+    configure_menu(menu.raw(), owner.raw(), owner.raw(), true).unwrap();
+    let foreground = unsafe { GetForegroundWindow() };
+    let focus = unsafe { GetFocus() };
+    // A configured but unpainted menu must not swallow the form's input.
+    assert_eq!(queued_recipient(owner.0, WM_KEYDOWN, 0x28).hwnd, owner.0);
+    show_test_menu(&menu);
+    for (message, value) in [
+        (WM_KEYDOWN, 0x28), (WM_KEYUP, 0x28), // arrows
+        (WM_KEYDOWN, 0x0d), (WM_KEYDOWN, 0x1b), // Enter / Escape
+        (WM_KEYDOWN, 0x09), (WM_KEYDOWN, 0x56), // Tab / paste key
+        (WM_SYSKEYDOWN, 0x73), (WM_SYSKEYUP, 0x73), // Alt+F4
+        (WM_CHAR, 'é' as usize), (WM_CHAR, 0xd83d), (WM_CHAR, 0xde00),
+        (WM_DEADCHAR, '^' as usize),
+    ] {
+        let received = queued_recipient(owner.0, message, value);
+        assert_eq!(received.hwnd, menu.0, "message {message}");
+    }
+    // Mouse and lifecycle messages must still reach the actual form.
+    assert_eq!(queued_recipient(owner.0, WM_MOUSEMOVE, 0).hwnd, owner.0);
+    assert_eq!(queued_recipient(owner.0, WM_CLOSE, 0).hwnd, owner.0);
+    assert_eq!(unsafe { GetForegroundWindow() }, foreground);
+    assert_eq!(unsafe { GetFocus() }, focus);
+    assert_eq!(unsafe { SendMessageW(menu.0, WM_MOUSEACTIVATE, None, None) }.0, MA_NOACTIVATE as isize);
+    assert_eq!(unsafe { GetForegroundWindow() }, foreground);
+    assert_eq!(unsafe { GetFocus() }, focus);
+}
+
+#[test]
+fn keyboard_returns_from_submenus_and_stays_with_each_form_or_completion_source() {
+    let owner = TestWindow::new();
+    let menu = TestWindow::new();
+    let child = TestWindow::new();
+    let completion = TestWindow::new();
+    let other_owner = TestWindow::new();
+    let other_menu = TestWindow::new();
+    for (popup, parent, form, interactive) in [
+        (&menu, &owner, &owner, true),
+        (&child, &menu, &owner, true),
+        (&completion, &child, &owner, false),
+        (&other_menu, &other_owner, &other_owner, true),
+    ] {
+        super::super::windows_window_owner::set_owner(popup.0, parent.0).unwrap();
+        configure_menu(popup.raw(), parent.raw(), form.raw(), interactive).unwrap();
+        show_test_menu(popup);
+    }
+    // Completion keeps keyboard input in the editable field of the submenu.
+    assert_eq!(queued_recipient(owner.0, WM_CHAR, 65).hwnd, child.0);
+    assert_eq!(queued_recipient(other_owner.0, WM_KEYDOWN, 0x28).hwnd, other_menu.0);
+    drop(completion);
+    drop(child);
+    assert_eq!(queued_recipient(owner.0, WM_KEYDOWN, 0x26).hwnd, menu.0);
+    // Messages already addressed to a menu are never redirected recursively.
+    assert_eq!(queued_recipient(menu.0, WM_KEYDOWN, 0x28).hwnd, menu.0);
+    drop(menu);
+    assert_eq!(queued_recipient(owner.0, WM_CHAR, 66).hwnd, owner.0);
+    assert_eq!(queued_recipient(other_owner.0, WM_CHAR, 67).hwnd, other_menu.0);
+    drop(other_menu);
+    assert_eq!(queued_recipient(other_owner.0, WM_KEYDOWN, 0x28).hwnd, other_owner.0);
 }

@@ -33,6 +33,8 @@ Les invites sont de vraies fenêtres possédées, au gabarit des Propriétés (`
 
 Enregistrer les actions via `popup::keyboard::item`, avec le même callback que le clic, en excluant les lignes désactivées. Préserver flèches, début/fin, Entrée/Espace, Tab/Maj+Tab et Échap ; les éditeurs gardent leurs handlers. Les raccourcis métier sont routés vers la source.
 
+Toutes les surfaces `popup` conservent l’activation Windows et le focus natif dans leur formulaire propriétaire, sans variation d’ombre lors de l’ouverture. Les menus interactifs gardent leur focus logique GPUI ; un hook `WH_GETMESSAGE` limité au thread UI redirige les messages clavier vers le dernier menu interactif visible du formulaire, avant la traduction des accélérateurs GPUI. Cela couvre les sélecteurs, menus contextuels, paramètres, sous-menus et champs éditables. La fermeture d’un sous-menu rend le clavier au menu précédent ; la fermeture du dernier rend le clavier au formulaire et libère le hook. `show_passive` réserve le clavier au champ source pour les suggestions de chemin. La fermeture ne demande aucune activation native.
+
 Restituer le focus au propriétaire logique seulement si la famille reste active. Préserver le nouveau focus posé par une action. Un clic propriétaire ferme les descendants avant son action ; changer d’application ferme les menus sans réactiver Oxyde.
 
 Avant de détruire un propriétaire, fermer ses descendants avec `tool_window::close_transients` ; respecter d’abord un éventuel refus de fermeture d’un dialogue occupé. `on_window_closed` reste un filet de sécurité. Les suggestions s’annulent quand leur propriétaire devient inactif.

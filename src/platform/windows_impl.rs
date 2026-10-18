@@ -809,9 +809,9 @@ impl Platform for WindowsPlatform {
         super::windows_fixed_dialog::follow_owner(owner)
     }
 
-    fn configure_menu_window(&self, window: raw_window_handle::RawWindowHandle, owner: raw_window_handle::RawWindowHandle, coordinate_owner: raw_window_handle::RawWindowHandle, activate: bool) -> Result<(), String> {
+    fn configure_menu_window(&self, window: raw_window_handle::RawWindowHandle, owner: raw_window_handle::RawWindowHandle, coordinate_owner: raw_window_handle::RawWindowHandle, interactive: bool) -> Result<(), String> {
         self.set_window_owner(window, owner)?;
-        super::windows_hover_window::configure_menu(window, owner, coordinate_owner, activate)?;
+        super::windows_hover_window::configure_menu(window, owner, coordinate_owner, interactive)?;
         self.install_pointer_capture(window)
     }
     fn popup_point_to_owner(&self, window: raw_window_handle::RawWindowHandle, owner: raw_window_handle::RawWindowHandle, point: (f32, f32)) -> Result<(f32, f32), String> {
@@ -819,9 +819,6 @@ impl Platform for WindowsPlatform {
     }
     fn popup_family_active(&self, owner: raw_window_handle::RawWindowHandle) -> bool {
         super::windows_hover_window::family_active(owner)
-    }
-    fn request_popup_activation(&self, window: raw_window_handle::RawWindowHandle) -> Result<(), String> {
-        super::windows_hover_window::request_activation(window)
     }
     fn popup_work_area_size(&self, window: raw_window_handle::RawWindowHandle) -> Result<(f32, f32), String> {
         super::windows_hover_window::work_area_size(window)

@@ -19,7 +19,7 @@ struct Spec {
     anchor: PopupAnchor,
     rem: Pixels,
     restore: Option<FocusHandle>,
-    activate: bool,
+    interactive: bool,
     modifiers: Modifiers,
     factory: Factory,
     alive: Alive,
@@ -189,6 +189,9 @@ pub(crate) fn close_for(window: &mut Window, cx: &mut App) {
 }
 
 fn restore(spec: &Spec, cx: &mut App) {
+    if !spec.interactive {
+        return;
+    }
     if !oxyde_lib::platform::platform().popup_family_active(spec.raw_owner) {
         return;
     }
@@ -201,7 +204,6 @@ fn restore(spec: &Spec, cx: &mut App) {
             }
         }
     });
-    let _ = oxyde_lib::platform::platform().request_popup_activation(spec.raw_parent);
 }
 
 pub(crate) fn close_all(cx: &mut App) {
@@ -250,7 +252,7 @@ fn show_inner<T: 'static>(
     alive: impl Fn(&T) -> bool + 'static,
     factory: impl Fn(&mut T, &mut Window, &mut Context<T>) -> AnyElement + 'static,
     close: impl Fn(&mut T, &mut Window, &mut Context<T>) + 'static,
-    activate: bool,
+    interactive: bool,
 ) {
     if !supported(parent, cx) {
         return;
@@ -299,7 +301,7 @@ fn show_inner<T: 'static>(
         anchor,
         rem: parent.rem_size(),
         restore: restore_focus,
-        activate,
+        interactive,
         modifiers: parent.modifiers(),
         alive: Rc::new(move |cx| weak.upgrade().is_some_and(|view| alive(view.read(cx)))),
         factory: Rc::new(move |window, cx| {
@@ -425,9 +427,8 @@ fn show_inner<T: 'static>(
                             .await;
                         let alive = this
                             .update(cx, |root, cx| {
-                                if !root.spec.activate
-                                    && !oxyde_lib::platform::platform()
-                                        .popup_family_active(root.spec.raw_owner)
+                                if !oxyde_lib::platform::platform()
+                                    .popup_family_active(root.spec.raw_owner)
                                 {
                                     let close = root.spec.close.clone();
                                     cx.defer(move |cx| close(cx));
@@ -480,7 +481,7 @@ fn show_inner<T: 'static>(
                                 raw.as_raw(),
                                 spec.raw_parent,
                                 spec.raw_owner,
-                                spec.activate,
+                                spec.interactive,
                             )
                         })
                 });
@@ -506,7 +507,7 @@ fn show_inner<T: 'static>(
                     );
                 });
                 let _ = handle.update(cx, |root, window, cx| {
-                    if root.spec.activate {
+                    if root.spec.interactive {
                         window.focus(&root.focus, cx);
                     }
                     window.refresh();

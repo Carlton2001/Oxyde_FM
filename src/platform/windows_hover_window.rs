@@ -1,4 +1,5 @@
 //! Deferred Win32 placement, hit testing and ownership for transient GPUI surfaces.
+mod keyboard;
 use raw_window_handle::RawWindowHandle;
 use std::{
     cell::RefCell,
@@ -17,7 +18,6 @@ use windows::Win32::UI::WindowsAndMessaging::*;
 const SUBCLASS: usize = 0x4f585948;
 const APPLY_PLACEMENT: u32 = WM_APP + 0x348;
 const INITIALIZE_WINDOW: u32 = APPLY_PLACEMENT + 1;
-const ACTIVATE_WINDOW: u32 = APPLY_PLACEMENT + 2;
 const OWNER_SUBCLASS: usize = SUBCLASS + 1;
 
 #[derive(Clone, Copy)]
@@ -31,7 +31,6 @@ thread_local! {
     // WM_MOVE/WM_SIZE callbacks while its App/Window is already borrowed.
     static PENDING: RefCell<HashMap<isize, Placement>> = RefCell::new(HashMap::new());
     static ANCHORS: RefCell<HashMap<isize, ((f32, f32, f32, f32), bool, bool)>> = RefCell::new(HashMap::new());
-    static NOFOCUS: RefCell<HashSet<isize>> = RefCell::new(HashSet::new());
     static MENUS: RefCell<HashSet<isize>> = RefCell::new(HashSet::new());
     static COORDINATE_OWNERS: RefCell<HashMap<isize, isize>> = RefCell::new(HashMap::new());
     static INSETS: RefCell<HashMap<isize, f32>> = RefCell::new(HashMap::new());
@@ -41,7 +40,7 @@ pub(super) fn configure_menu(
     handle: RawWindowHandle,
     owner: RawWindowHandle,
     coordinate_owner: RawWindowHandle,
-    activate: bool,
+    interactive: bool,
 ) -> Result<(), String> {
     configure(handle)?;
     let window = hwnd(handle)?;
@@ -53,19 +52,13 @@ pub(super) fn configure_menu(
             .insert(window.0 as isize, coordinate_owner.0 as isize)
     });
     MENUS.with(|menus| menus.borrow_mut().insert(window.0 as isize));
-    if !activate {
-        NOFOCUS.with(|windows| windows.borrow_mut().insert(window.0 as isize));
-    }
+    keyboard::register(window, coordinate_owner, interactive)?;
     unsafe {
         let style = GetWindowLongPtrW(window, GWL_EXSTYLE) as u32;
         SetWindowLongPtrW(
             window,
             GWL_EXSTYLE,
-            (if activate {
-                style & !WS_EX_NOACTIVATE.0
-            } else {
-                style | WS_EX_NOACTIVATE.0
-            }) as isize,
+            (style | WS_EX_NOACTIVATE.0) as isize,
         );
         if !SetWindowSubclass(owner, Some(owner_subclass), OWNER_SUBCLASS, 0).as_bool() {
             return Err("Cannot observe menu owner".into());
@@ -85,10 +78,6 @@ unsafe extern "system" fn owner_subclass(
     _: usize,
     _: usize,
 ) -> LRESULT {
-    if message == ACTIVATE_WINDOW {
-        let _ = unsafe { SetForegroundWindow(window) };
-        return LRESULT(0);
-    }
     if matches!(
         message,
         WM_LBUTTONDOWN | WM_RBUTTONDOWN | WM_MBUTTONDOWN | WM_XBUTTONDOWN
@@ -134,6 +123,7 @@ unsafe extern "system" fn owner_subclass(
         }
     }
     if message == WM_NCDESTROY {
+        keyboard::remove(window);
         unsafe {
             let _ = RemoveWindowSubclass(window, Some(owner_subclass), OWNER_SUBCLASS);
         }
@@ -186,10 +176,6 @@ unsafe fn root_owner(mut window: HWND) -> HWND {
         window = owner;
     }
     window
-}
-pub(super) fn request_activation(window: RawWindowHandle) -> Result<(), String> {
-    unsafe { PostMessageW(Some(hwnd(window)?), ACTIVATE_WINDOW, WPARAM(0), LPARAM(0)) }
-        .map_err(|error| error.to_string())
 }
 pub(super) fn work_area_size(handle: RawWindowHandle) -> Result<(f32, f32), String> {
     let window = hwnd(handle)?;
@@ -250,10 +236,6 @@ unsafe extern "system" fn subclass(
     _: usize,
 ) -> LRESULT {
     match message {
-        ACTIVATE_WINDOW => {
-            let _ = unsafe { SetForegroundWindow(window) };
-            return LRESULT(0);
-        }
         WM_ACTIVATE
             if MENUS.with(|menus| menus.borrow().contains(&(window.0 as isize)))
                 && (wparam.0 & 0xffff) == WA_INACTIVE as usize =>
@@ -349,16 +331,13 @@ unsafe extern "system" fn subclass(
                 },
             );
         }
-        WM_MOUSEACTIVATE
-            if !MENUS.with(|menus| menus.borrow().contains(&(window.0 as isize)))
-                || NOFOCUS.with(|windows| windows.borrow().contains(&(window.0 as isize))) =>
-        {
+        WM_MOUSEACTIVATE => {
             return LRESULT(MA_NOACTIVATE as isize)
         }
         WM_NCDESTROY => unsafe {
+            keyboard::remove(window);
             ANCHORS.with(|anchors| anchors.borrow_mut().remove(&(window.0 as isize)));
             MENUS.with(|menus| menus.borrow_mut().remove(&(window.0 as isize)));
-            NOFOCUS.with(|windows| windows.borrow_mut().remove(&(window.0 as isize)));
             COORDINATE_OWNERS.with(|owners| owners.borrow_mut().remove(&(window.0 as isize)));
             INSETS.with(|insets| insets.borrow_mut().remove(&(window.0 as isize)));
             PENDING.with(|pending| pending.borrow_mut().remove(&(window.0 as isize)));
@@ -543,7 +522,6 @@ fn place_now(window: HWND, size: Option<(f32, f32, f32)>, scale: f32) -> Result<
         {
             return Ok(());
         }
-        let first_show = !IsWindowVisible(window).as_bool();
         SetWindowPos(
             window,
             None,
@@ -562,12 +540,6 @@ fn place_now(window: HWND, size: Option<(f32, f32, f32)>, scale: f32) -> Result<
                 },
         )
         .map_err(|error| error.to_string())?;
-        if first_show
-            && MENUS.with(|menus| menus.borrow().contains(&(window.0 as isize)))
-            && !NOFOCUS.with(|windows| windows.borrow().contains(&(window.0 as isize)))
-        {
-            let _ = SetForegroundWindow(window);
-        }
         Ok(())
     }
 }

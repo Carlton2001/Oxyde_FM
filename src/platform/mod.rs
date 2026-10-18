@@ -497,10 +497,11 @@ pub trait Platform: Send + Sync {
     /// Recenter the fixed dialogs of a moved or resized owner.
     fn follow_fixed_dialog_owner(&self, owner: raw_window_handle::RawWindowHandle) -> Result<(), String>;
 
-    fn configure_menu_window(&self, window: raw_window_handle::RawWindowHandle, owner: raw_window_handle::RawWindowHandle, coordinate_owner: raw_window_handle::RawWindowHandle, activate: bool) -> Result<(), String>;
+    /// Keep a menu non-activating; interactive menus receive their form's queued
+    /// keyboard input. Passive suggestions leave input in the source field.
+    fn configure_menu_window(&self, window: raw_window_handle::RawWindowHandle, owner: raw_window_handle::RawWindowHandle, coordinate_owner: raw_window_handle::RawWindowHandle, interactive: bool) -> Result<(), String>;
     fn popup_point_to_owner(&self, window: raw_window_handle::RawWindowHandle, owner: raw_window_handle::RawWindowHandle, point: (f32, f32)) -> Result<(f32, f32), String>;
     fn popup_family_active(&self, owner: raw_window_handle::RawWindowHandle) -> bool;
-    fn request_popup_activation(&self, window: raw_window_handle::RawWindowHandle) -> Result<(), String>;
     fn popup_work_area_size(&self, window: raw_window_handle::RawWindowHandle) -> Result<(f32, f32), String>;
 
     /// Transfers selected file paths through the native file clipboard.

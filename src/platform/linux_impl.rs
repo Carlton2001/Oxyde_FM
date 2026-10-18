@@ -758,9 +758,8 @@ impl Platform for LinuxPlatform {
         Ok(())
     }
 
-    fn configure_menu_window(&self, _window: raw_window_handle::RawWindowHandle, _owner: raw_window_handle::RawWindowHandle, _coordinate_owner: raw_window_handle::RawWindowHandle, _activate: bool) -> Result<(), String> { Err("Native popup menus unavailable".into()) }
+    fn configure_menu_window(&self, _window: raw_window_handle::RawWindowHandle, _owner: raw_window_handle::RawWindowHandle, _coordinate_owner: raw_window_handle::RawWindowHandle, _interactive: bool) -> Result<(), String> { Err("Native popup menus unavailable".into()) }
     fn popup_point_to_owner(&self, _window: raw_window_handle::RawWindowHandle, _owner: raw_window_handle::RawWindowHandle, point: (f32, f32)) -> Result<(f32, f32), String> { Ok(point) }
     fn popup_family_active(&self, _owner: raw_window_handle::RawWindowHandle) -> bool { false }
-    fn request_popup_activation(&self, _window: raw_window_handle::RawWindowHandle) -> Result<(), String> { Err("Native popup activation unavailable".into()) }
     fn popup_work_area_size(&self, _window: raw_window_handle::RawWindowHandle) -> Result<(f32, f32), String> { Err("Native popup work area unavailable".into()) }
 }
