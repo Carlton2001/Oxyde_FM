@@ -141,6 +141,18 @@ pub(super) fn cached(path: &Path) -> Option<PreviewImage> {
     CACHE.get()?.lock().unwrap().get(path, Some(&signature))
 }
 
+// Presentation hint only: never publish these pixels without worker validation.
+// A busy cache is treated as a possible hit to avoid a transient loading flash.
+pub(super) fn may_have_cached(path: &Path) -> bool {
+    CACHE.get().is_some_and(|cache| may_have_cached_in(cache, path))
+}
+
+fn may_have_cached_in(cache: &Mutex<Cache>, path: &Path) -> bool {
+    cache.try_lock()
+        .map(|cache| cache.entries.iter().any(|entry| entry.signature.path == path))
+        .unwrap_or(true)
+}
+
 pub(super) fn invalidate(path: &Path) {
     if let Some(cache) = CACHE.get() { cache.lock().unwrap().invalidate(path); }
 }

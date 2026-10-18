@@ -1,5 +1,4 @@
-//! Swap complete tooltip content, instead of showing a metadata-only frame
-//! while GPUI resolves an already cached preview through its asset future.
+//! Publish new metadata with dimmed previous pixels while a preview loads.
 use super::{scope::Scope, Sessions};
 use crate::ui::components::tooltip::Tooltip;
 use gpui::{AnyView, App, Window};
@@ -33,8 +32,33 @@ pub(super) fn replace(
         return;
     }
     let started = Instant::now();
-    // The pending view belongs to the cancellable task, not to the painted
-    // tooltip. Leaving or entering a different item releases it immediately.
+    let previous = cx
+        .default_global::<Sessions>()
+        .windows
+        .get(&id)
+        .and_then(|session| session.tooltip.clone())
+        .and_then(|view| view.downcast::<Tooltip>().ok())
+        .and_then(|tooltip| tooltip.read(cx).preview_view.clone())
+        .and_then(|preview| preview.update(cx, |preview, cx| preview.snapshot_image(cx)));
+    // Reuse the previous pixels immediately; opacity is applied only at paint.
+    if let Some(previous) = previous {
+        let preview = view
+            .clone()
+            .downcast::<Tooltip>()
+            .ok()
+            .and_then(|tooltip| tooltip.read(cx).preview_view.clone());
+        if let Some(preview) = preview {
+            // A RAM cache hit still needs asynchronous source validation before
+            // GPUI resolves its asset. Keep the old bubble intact until then.
+            if !preview.read(cx).may_have_cached_pixels() {
+                preview.update(cx, |preview, cx| {
+                    preview.transition_image = Some(previous);
+                    cx.notify();
+                });
+                super::publish_tooltip(view.clone(), window, cx);
+            }
+        }
+    }
     let task = window.spawn(cx, async move |cx| loop {
         cx.background_executor()
             .timer(Duration::from_millis(16))
@@ -57,9 +81,23 @@ pub(super) fn replace(
                     return true;
                 }
                 let preview_ready = ready(&view, cx);
-                let cached = view.clone().downcast::<Tooltip>().ok().is_some_and(|tooltip| tooltip.update(cx, |tooltip, cx| tooltip.cached_for_handover(cx)));
+                let cached = view
+                    .clone()
+                    .downcast::<Tooltip>()
+                    .ok()
+                    .is_some_and(|tooltip| {
+                        tooltip.update(cx, |tooltip, cx| tooltip.cached_for_handover(cx))
+                    });
                 if !can_publish(started.elapsed(), preview_ready, cached) {
                     return false;
+                }
+                if let Ok(tooltip) = view.clone().downcast::<Tooltip>() {
+                    if let Some(preview) = tooltip.read(cx).preview_view.clone() {
+                        preview.update(cx, |preview, cx| {
+                            preview.transition_image = None;
+                            cx.notify();
+                        });
+                    }
                 }
                 super::publish_tooltip(view.clone(), window, cx);
                 true

@@ -58,7 +58,14 @@ enum PreviewData {
     Text(String),
 }
 
+type PreviewPixels = (Arc<RenderImage>, Option<(u32, u32)>);
+
 impl Tooltip {
+    pub(super) fn ready_for_initial_display(&self, cx: &mut App) -> bool {
+        self.preview_view.as_ref().map(|preview| preview.read(cx).clone())
+            .is_none_or(|preview| preview.ready_for_initial_display(cx))
+    }
+
     pub(super) fn cached_for_handover(&self, cx: &mut App) -> bool {
         self.preview_view.as_ref().map(|preview| preview.read(cx).clone()).is_some_and(|preview| preview.cached_for_handover(cx))
     }
@@ -231,6 +238,7 @@ struct DuplicateResultTooltip {
 
 #[derive(Clone)]
 pub struct PreviewTask {
+    transition_image: Option<PreviewPixels>,
     maximum_size: Option<Size<Pixels>>,
     data: Option<PreviewData>,
     media_asset: Option<SharedString>,

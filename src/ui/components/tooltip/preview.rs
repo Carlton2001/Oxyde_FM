@@ -17,6 +17,13 @@ const PREVIEW_MAXIMUM_HEIGHT: Rems = rems(15.0);
 pub(super) const TEXT_PREVIEW_WIDTH: Rems = rems(20.0);
 
 impl PreviewTask {
+    pub(super) fn may_have_cached_pixels(&self) -> bool {
+        if let Some(path) = &self.original_image {
+            return super::image_cache::may_have_cached(path);
+        }
+        self.media_asset.as_ref().is_some_and(|path| super::pdf_cache::may_have_cached(path))
+    }
+
     /// A vector source keeps its intrinsic size; its larger raster only keeps it sharp.
     pub(super) fn preferred_size(&self, image: &RenderImage, natural_size: Option<(u32, u32)>, maximum_width: Pixels) -> Size<Pixels> {
         let height = rem_pixels(PREVIEW_MAXIMUM_HEIGHT);
@@ -35,6 +42,9 @@ impl PreviewTask {
     }
 
     pub(super) fn ready_for_handover(&self, cx: &mut App) -> bool {
+        if self.transition_image.is_some() {
+            return self.ready_for_initial_display(cx);
+        }
         // Video players share one admission slot: keeping the old player alive
         // would prevent its replacement from producing a first frame.
         if self._video_cancellation.is_some() { return true; }
@@ -42,6 +52,12 @@ impl PreviewTask {
         // content or a terminal message. The existing loading deadline ensures
         // that a slow preview does not leave the old filename visible forever.
         if self.loading_delay_elapsed { return true; }
+        self.ready_for_initial_display(cx)
+    }
+
+    /// Initial publication waits for content or a terminal error, including
+    /// the first video frame. A loading deadline is not a completed preview.
+    pub(super) fn ready_for_initial_display(&self, cx: &mut App) -> bool {
         if let Some(source) = &self.media_asset {
             return cx.fetch_asset::<TooltipPreviewAsset>(source).is_some();
         }
@@ -50,8 +66,33 @@ impl PreviewTask {
         }
         self.data.is_some() || self.message.is_some()
     }
+    /// Read cached pixels from an event handler without subscribing a rendered
+    /// view. Window::use_asset requires an active GPUI rendering phase.
+    pub(super) fn snapshot_image(&self, cx: &mut App) -> Option<super::PreviewPixels> {
+        if let Some(image) = &self.transition_image {
+            return Some(image.clone());
+        }
+        if let Some(source) = &self.media_asset {
+            return cx.fetch_asset::<TooltipPreviewAsset>(source)
+                .and_then(Result::ok).map(|(image, _)| (image, None));
+        }
+        if let Some(source) = &self.original_image {
+            return cx.fetch_asset::<TooltipImageAsset>(source)
+                .and_then(Result::ok)
+                .map(|(preview, _)| (preview.image, preview.natural_size));
+        }
+        match &self.data {
+            Some(PreviewData::Image(image)) => Some((image.clone(), None)),
+            _ => None,
+        }
+    }
+
+    /// Render-only: subscribes the current view to asset completion.
     /// The loaded raster and, for a vector source, its intrinsic size.
     pub(super) fn loaded_image(&self, window: &mut Window, cx: &mut App) -> Option<(Arc<RenderImage>, Option<(u32, u32)>)> {
+        if let Some(image) = &self.transition_image {
+            return Some(image.clone());
+        }
         if let Some(source) = &self.media_asset {
             return window
                 .use_asset::<TooltipPreviewAsset>(source, cx)
@@ -101,6 +142,7 @@ impl PreviewTask {
             let path = std::path::PathBuf::from(path);
             retain_tooltip_asset(TooltipAssetSource::Image(path.clone()), cx);
             return Self {
+                transition_image: None,
                 maximum_size: None,
                 data: None,
                 media_asset: None,
@@ -114,6 +156,7 @@ impl PreviewTask {
             let path = SharedString::from(path);
             retain_tooltip_asset(TooltipAssetSource::Pdf(path.clone()), cx);
             return Self {
+                transition_image: None,
                 maximum_size: None,
                 data: None,
                 media_asset: Some(path),
@@ -334,6 +377,7 @@ impl PreviewTask {
             original_image: None,
             message: None,
             loading_delay_elapsed: false,
+            transition_image: None,
             _video_cancellation: video_cancellation,
         }
     }
@@ -363,7 +407,7 @@ impl Render for PreviewTask {
                 size.width *= scale;
                 size.height *= scale;
             }
-            let notice = self.preview_message(window, cx);
+            let notice = if self.transition_image.is_some() { None } else { self.preview_message(window, cx) };
             return div()
                 .w_full()
                 .flex()
@@ -375,6 +419,8 @@ impl Render for PreviewTask {
                         .id("tooltip-preview-image")
                         .w(size.width)
                         .h(size.height)
+                        .opacity(if self.transition_image.is_some() { 0.15 } else { 1.0 })
+                        .grayscale(self.transition_image.is_some())
                         .object_fit(ObjectFit::Contain),
                 )
                 .when_some(notice, |this, notice| {

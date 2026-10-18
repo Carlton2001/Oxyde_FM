@@ -152,35 +152,56 @@ fn hover(
             let tooltip = builder(window, cx);
             handover::replace(scope, key, revision, tooltip, window, cx);
         } else {
+            // Prepare during the initial hover delay, without publishing a
+            // metadata-only bubble. The cancellable task owns the pending view.
+            let tooltip = builder(window, cx);
+            if let Ok(view) = tooltip.clone().downcast::<super::Tooltip>() {
+                view.update(cx, |tooltip, cx| {
+                    // Image/PDF assets are lazy: construction alone does not
+                    // start their worker load. Fetch without waiting for it.
+                    tooltip.ready_for_initial_display(cx);
+                });
+            }
             let task = window.spawn(cx, async move |cx| {
                 cx.background_executor().timer(SHOW_DELAY).await;
-                let _ = cx.update(|window, cx| {
-                    let current = cx
-                        .default_global::<Sessions>()
-                        .windows
-                        .get(&id)
-                        .is_some_and(|session| {
-                            session.timing.revision == revision
-                                && session.timing.hovered.as_deref() == Some(&key)
-                        });
-                    if !current {
-                        return;
+                loop {
+                    let done = cx.update(|window, cx| {
+                        let current = cx
+                            .default_global::<Sessions>()
+                            .windows
+                            .get(&id)
+                            .is_some_and(|session| {
+                                session.timing.revision == revision
+                                    && session.timing.hovered.as_deref() == Some(&key)
+                            });
+                        if !current {
+                            return true;
+                        }
+                        if !scope.valid(window, cx) {
+                            clear(window, cx);
+                            return true;
+                        }
+                        if let Ok(view) = tooltip.clone().downcast::<super::Tooltip>() {
+                            if !view.update(cx, |tooltip, cx| tooltip.ready_for_initial_display(cx)) {
+                                return false;
+                            }
+                        }
+                        let session = cx
+                            .default_global::<Sessions>()
+                            .windows
+                            .get_mut(&id)
+                            .unwrap();
+                        if !session.timing.show(revision, &key) {
+                            return true;
+                        }
+                        publish_tooltip(tooltip.clone(), window, cx);
+                        true
+                    }).unwrap_or(true);
+                    if done {
+                        break;
                     }
-                    if !scope.valid(window, cx) {
-                        clear(window, cx);
-                        return;
-                    }
-                    let session = cx
-                        .default_global::<Sessions>()
-                        .windows
-                        .get_mut(&id)
-                        .unwrap();
-                    if !session.timing.show(revision, &key) {
-                        return;
-                    }
-                    let tooltip = builder(window, cx);
-                    publish_tooltip(tooltip, window, cx);
-                });
+                    cx.background_executor().timer(Duration::from_millis(16)).await;
+                }
             });
             cx.default_global::<Sessions>()
                 .windows

@@ -3,6 +3,24 @@ use gpui::RenderImage;
 use std::{cell::Cell, sync::Arc};
 
 #[test]
+fn transition_hint_survives_deleted_source_but_never_bypasses_validation() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("image.png");
+    std::fs::write(&path, b"source").unwrap();
+    let cache = Mutex::new(Cache::new(32, 1024));
+    assert!(!may_have_cached_in(&cache, &path));
+    cached_load(&cache, &path, || Ok(preview(1))).unwrap();
+    std::fs::remove_file(&path).unwrap();
+    assert!(may_have_cached_in(&cache, &path), "hint must not inspect the filesystem");
+    {
+        let _locked = cache.lock().unwrap();
+        assert!(may_have_cached_in(&cache, &path), "a busy cache must not block UI or flash");
+    }
+    assert!(cache.lock().unwrap().get(&path, Signature::read(&path).as_ref()).is_none());
+    assert!(!may_have_cached_in(&cache, &path));
+}
+
+#[test]
 fn invalidation_during_decode_does_not_retain_late_pixels() {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("image.png");

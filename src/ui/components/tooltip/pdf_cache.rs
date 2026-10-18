@@ -112,6 +112,17 @@ pub(super) fn cached(path: &str) -> Option<Arc<RenderImage>> {
     CACHE.get()?.lock().unwrap().get(&signature)
 }
 
+// Presentation hint only; the worker must still validate the source signature.
+pub(super) fn may_have_cached(path: &str) -> bool {
+    CACHE.get().is_some_and(|cache| may_have_cached_in(cache, path))
+}
+
+fn may_have_cached_in(cache: &Mutex<Cache>, path: &str) -> bool {
+    cache.try_lock()
+        .map(|cache| cache.entries.iter().any(|entry| entry.key.path == path))
+        .unwrap_or(true)
+}
+
 pub(super) fn load(path: String) -> Result<(Arc<RenderImage>, bool), String> {
     let cache = CACHE.get_or_init(|| Mutex::new(Cache::default()));
     let revision = cache.lock().unwrap().revision;

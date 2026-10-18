@@ -19,6 +19,20 @@ fn image() -> Arc<RenderImage> {
 }
 
 #[test]
+fn transition_hint_is_nonblocking_and_does_not_validate_pixels() {
+    let cache = std::sync::Mutex::new(Cache::default());
+    assert!(!super::may_have_cached_in(&cache, "a"));
+    cache.lock().unwrap().insert(key("a", 10), image(), 8);
+    assert!(super::may_have_cached_in(&cache, "a"));
+    {
+        let _locked = cache.lock().unwrap();
+        assert!(super::may_have_cached_in(&cache, "a"));
+    }
+    assert!(cache.lock().unwrap().get(&key("a", 11)).is_none());
+    assert!(!super::may_have_cached_in(&cache, "a"));
+}
+
+#[test]
 fn revisit_reuses_pixels_and_changed_source_invalidates() {
     let mut cache = Cache::default();
     let pixels = image();
