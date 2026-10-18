@@ -23,7 +23,7 @@ pub fn button_style(
         ButtonVariant::Ghost => (transparent_black(), theme.text, theme.control_hover),
         ButtonVariant::Secondary => (theme.control_hover, theme.text, theme.selected),
         ButtonVariant::Primary => (theme.accent, theme.text_on_accent, theme.accent),
-        ButtonVariant::Danger => (theme.error, theme.text_on_danger, theme.danger_hover),
+        ButtonVariant::Danger => (theme.danger_background, theme.text_on_danger, theme.danger_hover),
     };
     let filled = matches!(variant, ButtonVariant::Primary | ButtonVariant::Danger);
     let secondary = matches!(variant, ButtonVariant::Secondary);

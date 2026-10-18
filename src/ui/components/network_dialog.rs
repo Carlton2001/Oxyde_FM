@@ -100,7 +100,7 @@ pub(crate) fn render_force_confirmation(
                     .border_color(if confirmation.confirm_focus.is_focused(window) {
                         theme.text
                     } else {
-                        theme.error
+                        theme.danger_background
                     })
                     .child(cx.i18n().text(Message::NetworkForceAction))
                     .on_click(move |_, window, cx| {

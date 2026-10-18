@@ -45,6 +45,7 @@ pub struct OxydeTheme {
     pub scrollbar_thumb_hover: Hsla,
     pub scrollbar_thumb_drag: Hsla,
     pub scrollbar_track: Hsla,
+    pub danger_background: Hsla, // Fond des actions destructives, distinct du texte d’erreur
     pub danger_hover: Hsla,
     pub text_on_danger: Hsla,
 }
@@ -85,7 +86,7 @@ impl OxydeTheme {
                 tab_close_hover: rgb(0xd2d5d8).into(),
                 text: rgb(0x5c6166).into(),
                 text_muted: rgb(0xabb0b6).into(),
-                text_on_accent: rgb(0xffffff).into(),
+                text_on_accent: rgb(0x242433).into(),
                 drag_hover: rgba(0xff994026).into(),
                 selected: rgba(0xff994033).into(),
                 selection_hover: rgba(0xff99404d).into(),
@@ -117,7 +118,7 @@ impl OxydeTheme {
                 tab_close_hover: rgb(0x303747).into(),
                 text: rgb(0xb3b1ad).into(),
                 text_muted: rgb(0x626a73).into(),
-                text_on_accent: rgb(0xffffff).into(),
+                text_on_accent: rgb(0x0e0c15).into(),
                 drag_hover: rgba(0xe6b45026).into(),
                 selected: rgba(0xe6b45033).into(),
                 selection_hover: rgba(0xe6b4504d).into(),
@@ -181,7 +182,7 @@ impl OxydeTheme {
                 tab_close_hover: rgb(0x373e47).into(),
                 text: rgb(0xe6edf3).into(),
                 text_muted: rgb(0x7d8590).into(),
-                text_on_accent: rgb(0xffffff).into(),
+                text_on_accent: rgb(0x0e0c15).into(),
                 drag_hover: rgba(0x2f81f726).into(),
                 selected: rgba(0x2f81f733).into(),
                 selection_hover: rgba(0x2f81f74d).into(),
@@ -213,7 +214,7 @@ impl OxydeTheme {
                 tab_close_hover: rgb(0x656456).into(),
                 text: rgb(0xf8f8f2).into(),
                 text_muted: rgb(0x88846f).into(),
-                text_on_accent: rgb(0xf8f8f2).into(),
+                text_on_accent: rgb(0x272822).into(),
                 drag_hover: rgba(0xfd971f26).into(),
                 selected: rgba(0xfd971f33).into(),
                 selection_hover: rgba(0xfd971f4d).into(),
@@ -245,7 +246,7 @@ impl OxydeTheme {
                 tab_close_hover: rgb(0xd1d1d4).into(),
                 text: rgb(0x383a42).into(),
                 text_muted: rgb(0xa0a1a7).into(),
-                text_on_accent: rgb(0xffffff).into(),
+                text_on_accent: rgb(0x101018).into(),
                 drag_hover: rgba(0x4078f226).into(),
                 selected: rgba(0x4078f233).into(),
                 selection_hover: rgba(0x4078f24d).into(),
@@ -277,7 +278,7 @@ impl OxydeTheme {
                 tab_close_hover: rgb(0x454c59).into(),
                 text: rgb(0xabb2bf).into(),
                 text_muted: rgb(0x5c6370).into(),
-                text_on_accent: rgb(0xffffff).into(),
+                text_on_accent: rgb(0x0e0c15).into(),
                 drag_hover: rgba(0x61afef26).into(),
                 selected: rgba(0x61afef33).into(),
                 selection_hover: rgba(0x61afef4d).into(),
@@ -341,7 +342,7 @@ impl OxydeTheme {
                 tab_close_hover: rgb(0x345e68).into(),
                 text: rgb(0xa9b8b8).into(),
                 text_muted: rgb(0x839496).into(),
-                text_on_accent: rgb(0xfdf6e3).into(),
+                text_on_accent: rgb(0x001e26).into(),
                 drag_hover: rgba(0x268bd226).into(),
                 selected: rgba(0x268bd247).into(),
                 selection_hover: rgba(0x268bd261).into(),
@@ -405,7 +406,7 @@ impl OxydeTheme {
                 tab_close_hover: rgb(0x404040).into(),
                 text: rgb(0xd0d0d0).into(),
                 text_muted: rgb(0x808080).into(),
-                text_on_accent: rgb(0xffffff).into(),
+                text_on_accent: rgb(0x0e0c15).into(),
                 drag_hover: rgba(0x52a8ff26).into(),
                 selected: rgba(0x52a8ff33).into(),
                 selection_hover: rgba(0x52a8ff4d).into(),
@@ -473,6 +474,7 @@ impl OxydeTheme {
             scrollbar_thumb_hover: rgb(0xcbc6ba).into(),
             scrollbar_thumb_drag: rgb(0xcbc6ba).into(),
             scrollbar_track: rgba(0x6e6b8518).into(),
+            danger_background: rgb(0xb42335).into(),
             danger_hover: rgb(0xc42b1c).into(),
             text_on_danger: rgb(0xffffff).into(),
         }
@@ -521,6 +523,7 @@ impl OxydeTheme {
             scrollbar_thumb_hover: rgb(0x3d3a50).into(),
             scrollbar_thumb_drag: rgb(0x3d3a50).into(),
             scrollbar_track: rgba(0x8b86a318).into(),
+            danger_background: rgb(0xb42335).into(),
             danger_hover: rgb(0xc42b1c).into(),
             text_on_danger: rgb(0xffffff).into(),
         }
@@ -550,6 +553,10 @@ mod tests {
         assert_eq!(ThemeId::from_id("oxyde-light"), ThemeId::Light);
     }
 }
+
+#[cfg(test)]
+#[path = "theme/tests/contrast.rs"]
+mod contrast_tests;
 
 pub trait ThemeContext {
     fn theme(&self) -> &OxydeTheme;
