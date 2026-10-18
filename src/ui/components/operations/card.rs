@@ -14,7 +14,7 @@ use oxyde_lib::systems::file_ops::{FileOpType, FileOperation, OpStatus};
 fn status_color(operation: &FileOperation, theme: OxydeTheme) -> Hsla {
     match operation.status {
         OpStatus::Error(_) => theme.error,
-        OpStatus::Completed => theme.toast_success,
+        OpStatus::Completed => theme.success_text,
         OpStatus::Paused => theme.warning_text,
         OpStatus::Cancelled => theme.text_muted,
         _ => theme.accent,

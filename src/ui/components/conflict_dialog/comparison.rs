@@ -87,7 +87,7 @@ fn card(
                 .rounded_full()
                 .px(rems(0.5))
                 .text_size(rems(0.625))
-                .text_color(t.toast_success)
+                .text_color(t.success_text)
                 .bg(t.toast_success.opacity(0.15))
                 .child(cx.i18n().text(Message::ConflictLarger).to_uppercase()),
         );

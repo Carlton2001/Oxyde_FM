@@ -9,7 +9,7 @@ pub(super) fn badge(outcome: ItemOutcome, cx: &App) -> Div {
     let (message, color) = match outcome {
         ItemOutcome::Pending => (Message::OpsQueued, theme.text_muted),
         ItemOutcome::InProgress => (Message::OpsRunning, theme.accent),
-        ItemOutcome::Completed => (Message::OpsItemDone, theme.toast_success),
+        ItemOutcome::Completed => (Message::OpsItemDone, theme.success_text),
         ItemOutcome::NotProcessed => (Message::OpsItemNotProcessed, theme.text_muted),
         ItemOutcome::Skipped => (Message::OpsItemSkipped, theme.text_muted),
         ItemOutcome::Partial => (Message::OpsItemPartial, theme.warning_text),

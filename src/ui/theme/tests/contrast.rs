@@ -40,3 +40,17 @@ fn secondary_information_remains_readable_on_its_surfaces() {
         }
     }
 }
+
+#[test]
+fn success_labels_remain_readable_on_tinted_badges() {
+    for id in ThemeId::ALL {
+        let theme = OxydeTheme::for_id(id);
+        for surface in [theme.surface, theme.active_background, theme.header] {
+            for (tint, opacity) in [(theme.success_text, 0.08), (theme.success_text, 0.10), (theme.toast_success, 0.15)] {
+                let background = surface.blend(tint.opacity(opacity));
+                let ratio = contrast(theme.success_text, background);
+                assert!(ratio >= 4.5, "{id:?} success badge: {ratio:.2}");
+            }
+        }
+    }
+}

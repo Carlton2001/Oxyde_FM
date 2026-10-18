@@ -26,6 +26,7 @@ pub struct OxydeTheme {
     pub warning_background: Hsla,
     pub warning_text: Hsla,
     pub toast_success: Hsla,
+    pub success_text: Hsla,      // Texte des statuts positifs, y compris sur un badge teinté
     pub toast_error: Hsla,
     pub error: Hsla,             // Messages d'erreur
     pub text_on_accent: Hsla,    // Texte sur une action remplie avec accent
@@ -455,6 +456,7 @@ impl OxydeTheme {
             warning_background: rgb(0xfff8df).into(),
             warning_text: rgb(0x915500).into(),
             toast_success: rgb(0x10b981).into(),
+            success_text: rgb(0x08613f).into(),
             toast_error: rgb(0xef4444).into(),
             error: rgb(0xb42335).into(),
             text_on_accent: rgb(0xffffff).into(),
@@ -504,6 +506,7 @@ impl OxydeTheme {
             warning_background: rgb(0x302618).into(),
             warning_text: rgb(0xf3c56a).into(),
             toast_success: rgb(0x10b981).into(),
+            success_text: rgb(0x49d6a4).into(),
             toast_error: rgb(0xef4444).into(),
             error: rgb(0xf87171).into(),
             text_on_accent: rgb(0x0e0c15).into(),
