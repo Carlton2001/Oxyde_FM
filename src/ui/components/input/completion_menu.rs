@@ -1,6 +1,7 @@
 use super::TextInput;
 use crate::ui::theme::ThemeContext;
 use gpui::{prelude::*, *};
+pub(super) mod scroll;
 
 pub(super) fn render(
     view: &TextInput,
@@ -8,38 +9,56 @@ pub(super) fn render(
     cx: &mut Context<TextInput>,
 ) -> AnyElement {
     let theme = *cx.theme();
-    let rows = view
-        .completions
-        .iter()
-        .enumerate()
-        .map(|(index, path)| {
-            let path = path.clone();
-            let selected = index == view.completion_index;
-            let handle = cx.entity();
-            div()
-                .id(("path-completion", index))
-                .px_3()
-                .h(rems(1.75))
-                .flex()
-                .items_center()
-                .rounded_sm()
-                .text_size(rems(0.8125))
-                .text_color(theme.text)
-                .when(selected, |row| row.bg(theme.selected))
-                .hover(|style| style.bg(theme.control_hover))
-                .child(div().min_w_0().truncate().child(path.clone()))
-                .on_mouse_down(MouseButton::Left, move |_, window, cx| {
-                    cx.stop_propagation();
-                    crate::ui::components::popup::with_owner(window, cx, |window, cx| {
-                        handle.update(cx, |this, cx| {
-                            this.accept_completion(path.clone(), window, cx)
-                        })
-                    });
+    let content_height = window.rem_size() * (1.75 * view.completions.len() as f32);
+    let viewport_height = content_height.min(window.rem_size() * 14.0).min(
+        (crate::ui::components::popup::available_size(window, cx).height
+            - window.rem_size() * 0.75)
+            .max(px(1.0)),
+    );
+    let overflowing = content_height > viewport_height;
+    let source = cx.entity();
+    let rows = uniform_list(
+        "path-completion-scroll",
+        view.completions.len(),
+        move |range, _, cx| {
+            let input = source.read(cx);
+            let selected_index = input.completion_index;
+            let paths = range
+                .filter_map(|index| {
+                    input
+                        .completions
+                        .get(index)
+                        .map(|path| (index, path.clone()))
                 })
-        })
-        .collect::<Vec<_>>();
+                .collect::<Vec<_>>();
+            paths
+                .into_iter()
+                .map(|(index, path)| {
+                    let selected = index == selected_index;
+                    let handle = source.clone();
+                    crate::ui::components::select_menu::row(
+                        div().id(("path-completion", index)),
+                        theme,
+                        selected,
+                    )
+                    .child(div().min_w_0().truncate().child(path.clone()))
+                    .on_mouse_down(MouseButton::Left, move |_, window, cx| {
+                        cx.stop_propagation();
+                        crate::ui::components::popup::with_owner(window, cx, |window, cx| {
+                            handle.update(cx, |this, cx| {
+                                this.accept_completion(path.clone(), window, cx)
+                            })
+                        });
+                    })
+                })
+                .collect::<Vec<_>>()
+        },
+    )
+    .size_full()
+    .track_scroll(&view.completion_scroll);
     let measure = cx.entity();
-    let menu = div()
+    let refresh = cx.entity();
+    let menu = crate::ui::components::select_menu::surface(theme)
         .id("path-completion-list")
         .when(crate::ui::components::popup::is_menu(window, cx), |menu| {
             menu.w(view
@@ -51,22 +70,24 @@ pub(super) fn render(
             menu.w_full()
         })
         .max_h(crate::ui::components::popup::available_size(window, cx).height)
-        .p(rems(0.125))
-        .bg(theme.menu_surface)
-        .border(rems(0.0625))
-        .border_color(theme.menu_border)
-        .rounded_sm()
-        .shadow(crate::ui::style::rem_shadow(false))
-        .occlude()
         .on_any_mouse_down(|_, _, cx| cx.stop_propagation())
         .child(
             div()
-                .id("path-completion-scroll")
-                .min_h_0()
-                .max_h((crate::ui::components::popup::available_size(window, cx).height - window.rem_size() * 0.375).max(px(1.0)))
-                .overflow_y_scroll()
-                .track_scroll(&view.completion_scroll)
-                .children(rows),
+                .relative()
+                .h(viewport_height)
+                .flex_none()
+                .child(
+                    div()
+                        .size_full()
+                        .when(overflowing, |list| {
+                            list.pr(crate::ui::components::scrollbar::ZED_TRACK_WIDTH)
+                        })
+                        .on_scroll_wheel(move |_, _, cx| refresh.update(cx, |_, cx| cx.notify()))
+                        .child(rows),
+                )
+                .when(overflowing, |body| {
+                    body.child(scroll::render(view, viewport_height, content_height, cx))
+                }),
         )
         .child(
             canvas(
@@ -77,6 +98,7 @@ pub(super) fn render(
                 },
             )
             .absolute()
+            .inset_0()
             .size_full(),
         );
     menu.into_any_element()
@@ -102,6 +124,7 @@ pub(super) fn surface(source: Entity<TextInput>) -> impl IntoElement {
                     input.completion_bounds = None;
                     input.completion_epoch += 1;
                     input.completion_task = None;
+                    input.completion_pointer = Default::default();
                     cx.notify();
                 },
             );
@@ -109,5 +132,6 @@ pub(super) fn surface(source: Entity<TextInput>) -> impl IntoElement {
         |_, _, _, _| {},
     )
     .absolute()
+    .inset_0()
     .size_full()
 }

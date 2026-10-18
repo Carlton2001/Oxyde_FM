@@ -546,6 +546,11 @@ impl OxydeApp {
     }
 
     pub fn refresh_all_tabs(&mut self, cx: &mut Context<Self>) {
+        if self.breadcrumb_editing {
+            if let Some(input) = self.editing_view.clone() {
+                input.update(cx, |input, cx| input.set_path_visibility(self.show_hidden, self.show_system, cx));
+            }
+        }
         let mut requests = Vec::new();
         self.state.layout.visit_panes(&mut |pane| {
             for (index, tab) in pane.tabs.iter().enumerate() {

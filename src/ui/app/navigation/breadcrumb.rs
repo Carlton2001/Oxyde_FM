@@ -70,7 +70,7 @@ impl OxydeApp {
                 },
                 window,
             )
-            .with_path_submit()
+            .with_path_submit(self.show_hidden, self.show_system)
         });
         let focus = input.read(cx).focus_handle.clone();
         self.editing_view = Some(input);

@@ -180,22 +180,7 @@ pub(super) fn choice_with_icon(
 ) -> impl IntoElement {
     let select = Rc::new(on_select);
     let key_select = select.clone();
-    let row = div()
-        .id(id)
-        .px(rems(0.75))
-        .py(rems(0.375))
-        .flex()
-        .items_center()
-        .gap(rems(0.5))
-        .rounded_md()
-        .text_size(rems(0.8125))
-        .bg(if selected {
-            theme.selected
-        } else {
-            theme.menu_surface
-        })
-        .text_color(theme.text)
-        .hover(|style| style.bg(theme.menu_hover))
+    let row = crate::ui::components::select_menu::row(div().id(id), theme, selected)
         .when_some(icon_path, |row, path| row.child(icon(path, theme)))
         .child(div().flex_1().child(label))
         .when(selected, |row| row.child(icon("icons/check.svg", theme)))

@@ -11,15 +11,8 @@ const FORMATS: [(&str, &str); 4] = [("zip", "Zip"), ("7z", "7z"), ("tar", "Tar")
 
 fn choices(view: &OxydeApp, handle: Entity<OxydeApp>, cx: &App) -> AnyElement {
     let theme = *cx.theme();
-    div()
+    crate::ui::components::select_menu::surface(theme)
         .w(rems(8.0))
-        .p(rems(0.25))
-        .rounded_md()
-        .bg(theme.menu_surface)
-        .border(rems(0.0625))
-        .border_color(theme.menu_border)
-        .shadow_md()
-        .occlude()
         .children(FORMATS.map(|(format, label)| {
             let handle = handle.clone();
             choice(

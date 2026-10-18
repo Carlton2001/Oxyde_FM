@@ -16,24 +16,15 @@ pub(super) fn render(
     let theme = *cx.theme();
     let viewport_h = rem_pixels(rems(8.25)).as_f32();
     let content_h = rem_pixels(rems(1.5)).as_f32() * 26.0;
-    let mut choices = div()
+    let mut choices = crate::ui::components::select_menu::surface(theme)
         .id("network-letter-options")
         .w((rem_pixels(rems(30.0)).min(
             crate::ui::components::popup::available_size(window, cx).width - rem_pixels(rems(2.0)),
         ) - rem_pixels(rems(8.375)))
         .max(rem_pixels(rems(4.0))))
-        .bg(theme.menu_surface)
-        .occlude()
         .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
         .on_scroll_wheel(|_, _, cx| cx.stop_propagation())
-        .h(rems(9.0))
-        .relative()
-        .flex()
-        .flex_col()
-        .border(rems(0.0625))
-        .border_color(theme.border)
-        .rounded_md()
-        .p(rems(0.3125));
+        .h(rems(9.0));
     let refresh = handle.clone();
     let mut rows = div()
         .id("network-letter-scroll")

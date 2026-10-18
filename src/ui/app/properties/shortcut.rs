@@ -65,6 +65,7 @@ pub(super) fn fields(
                             },
                         )
                         .absolute()
+                        .inset_0()
                         .size_full(),
                     )
                     .child(
@@ -192,11 +193,11 @@ pub(super) fn run_menu(
         let bounds = dialog.run_bounds.unwrap_or(Bounds::new(position, size(px(0.0), px(0.0))));
         crate::ui::components::popup::show("shortcut-run", crate::ui::components::popup::PopupAnchor::element(bounds), handle.clone(), window, cx,
             |view| view.properties_dialog.as_ref().is_some_and(|dialog| dialog.run_menu.is_some() && dialog.shortcut_tab),
-            |_, _, cx| run_choices(&cx.entity(), *cx.theme(), cx).into_any_element(),
+            |view, _, cx| run_choices(&cx.entity(), *cx.theme(), view.properties_dialog.as_ref().map_or(1, |dialog| dialog.run_window), cx).into_any_element(),
             |view, _, cx| { if let Some(dialog) = &mut view.properties_dialog { dialog.run_menu = None; cx.notify(); } });
         return body;
     }    if let Some(position) = dialog.run_menu {
-        let menu = run_choices(handle, theme, cx);
+        let menu = run_choices(handle, theme, dialog.run_window, cx);
         let close = handle.clone();
         body = body.child(deferred(
             anchored()
@@ -218,29 +219,23 @@ pub(super) fn run_menu(
     body
 }
 
-fn run_choices(handle: &Entity<PropertiesWindow>, theme: OxydeTheme, cx: &mut Context<PropertiesWindow>) -> Div {
-        let mut menu = div()
-            .occlude()
+fn run_choices(handle: &Entity<PropertiesWindow>, theme: OxydeTheme, selected_mode: i32, cx: &mut Context<PropertiesWindow>) -> Div {
+        let mut menu = crate::ui::components::select_menu::surface(theme)
             .on_any_mouse_down(|_, _, cx| cx.stop_propagation())
             .on_mouse_up(MouseButton::Left, |_, _, cx| cx.stop_propagation())
             .on_mouse_move(|_, _, cx| cx.stop_propagation())
             .on_scroll_wheel(|_, _, cx| cx.stop_propagation())
-            .w(rems(17.0))
-            .py(rems(0.25))
-            .bg(theme.menu_surface)
-            .border(rems(0.0625))
-            .border_color(theme.menu_border)
-            .shadow(crate::ui::style::rem_shadow(false));
+            .w(rems(17.0));
         for mode in [1, 3, 7] {
             let choice = handle.clone();
             let key_choice = handle.clone();
             let key_action = std::rc::Rc::new(move |_: &mut Window, cx: &mut App| { key_choice.update(cx, |this, cx| { if let Some(dialog) = &mut this.properties_dialog { dialog.run_window = mode; dialog.run_menu = None; cx.notify(); } }); });
             menu = menu.child(
-                crate::ui::components::popup::keyboard::item(div()
-                    .id(("shortcut-run-mode", mode as usize))
-                    .px(rems(0.75))
-                    .py(rems(0.5))
-                    .hover(|row| row.bg(theme.menu_hover))
+                crate::ui::components::popup::keyboard::item(crate::ui::components::select_menu::row(
+                    div().id(("shortcut-run-mode", mode as usize)),
+                    theme,
+                    selected_mode == mode,
+                )
                     .child(cx.i18n().text(run_window_message(mode)))
                     .on_click(move |_, _, cx| {
                         cx.stop_propagation();

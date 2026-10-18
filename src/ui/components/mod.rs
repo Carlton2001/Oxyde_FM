@@ -9,6 +9,7 @@ pub(crate) mod network_dialog;
 pub mod operations;
 pub mod rename_dialog;
 pub mod scrollbar;
+pub(crate) mod select_menu;
 pub mod settings;
 pub mod sidebar;
 pub mod tabs;

@@ -328,7 +328,7 @@ pub(crate) fn render_network_dialog(
                             if dialog.letter_bounds != Some(bounds) { dialog.letter_bounds = Some(bounds); if dialog.letter_open { cx.notify(); } }
                         }
                     });
-                }).absolute().size_full())
+                }).absolute().inset_0().size_full())
                 .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
                 .track_focus(&dialog.controls[0])
                 .flex()

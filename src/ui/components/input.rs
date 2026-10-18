@@ -54,13 +54,15 @@ pub struct TextInput {
     options: TextInputOptions,
     password: bool,
     path_submit: bool,
+    path_visibility: (bool, bool),
     completions: Vec<String>,
     completion_index: usize,
     completion_task: Option<Task<()>>,
     completion_epoch: u64,
     completion_bounds: Option<Bounds<Pixels>>,
     completion_anchor: Option<Bounds<Pixels>>,
-    completion_scroll: ScrollHandle,
+    completion_scroll: UniformListScrollHandle,
+    completion_pointer: completion_menu::scroll::PointerState,
 }
 
 fn masked_display_index(content: &str, byte: usize) -> usize {
@@ -111,9 +113,18 @@ fn masked_byte_index(content: &str, index: usize) -> usize {
 }
 
 impl TextInput {
-    pub fn with_path_submit(mut self) -> Self {
+    pub fn with_path_submit(mut self, show_hidden: bool, show_system: bool) -> Self {
         self.path_submit = true;
+        self.path_visibility = (show_hidden, show_system);
         self
+    }
+
+    pub(crate) fn set_path_visibility(&mut self, show_hidden: bool, show_system: bool, cx: &mut Context<Self>) {
+        if self.path_submit && self.path_visibility != (show_hidden, show_system) {
+            self.path_visibility = (show_hidden, show_system);
+            self.refresh_completions(cx);
+            cx.notify();
+        }
     }
 
     pub fn password(mut self) -> Self {
@@ -204,8 +215,10 @@ impl TextInput {
             completion_epoch: 0,
             completion_bounds: None,
             completion_anchor: None,
-            completion_scroll: ScrollHandle::new(),
+            completion_scroll: UniformListScrollHandle::new(),
+            completion_pointer: Default::default(),
             path_submit: false,
+            path_visibility: (false, false),
             password: false,
             focus_handle,
             content: initial_text,
@@ -544,6 +557,7 @@ impl TextInput {
             return;
         };
         let epoch = self.completion_epoch;
+        let (show_hidden, show_system) = self.path_visibility;
         let entity = cx.weak_entity();
         self.completion_task = Some(cx.spawn(move |_, cx: &mut AsyncApp| {
             let mut cx = cx.clone();
@@ -553,26 +567,29 @@ impl TextInput {
                     .await;
                 let result = oxyde_lib::commands::io::list_dir(
                     parent.clone(),
-                    Some(true),
-                    Some(true),
+                    Some(show_hidden),
+                    Some(show_system),
                 )
                 .await;
-                let mut paths = result
-                    .map(|entries| {
-                        entries
-                            .into_iter()
-                            .filter(|entry| {
-                                entry.is_dir && completion_matches(&entry.name, &prefix)
-                            })
-                            .map(|entry| format!("{}{}{}", parent, entry.name, separator))
-                            .collect::<Vec<_>>()
-                    })
-                    .unwrap_or_default();
-                paths.sort_by_cached_key(|path| path.to_lowercase());
-                paths.truncate(12);
+                let paths = cx.background_executor().spawn(async move {
+                    let mut paths = result
+                        .map(|entries| {
+                            entries
+                                .into_iter()
+                                .filter(|entry| {
+                                    entry.is_dir && completion_matches(&entry.name, &prefix)
+                                })
+                                .map(|entry| format!("{}{}{}", parent, entry.name, separator))
+                                .collect::<Vec<_>>()
+                        })
+                        .unwrap_or_default();
+                    paths.sort_by_cached_key(|path| path.to_lowercase());
+                    paths
+                }).await;
                 let _ = entity.update(&mut cx, |input, cx| {
                     if input.completion_epoch == epoch && input.content == text {
                         input.completions = paths;
+                        input.completion_scroll.0.borrow().base_handle.set_offset(point(px(0.0), px(0.0)));
                         cx.notify();
                     }
                 });
@@ -583,14 +600,14 @@ impl TextInput {
     fn completion_up(&mut self, _: &CompletionUp, _: &mut Window, cx: &mut Context<Self>) {
         if self.completions.is_empty() { cx.propagate(); return; }
         self.completion_index = (self.completion_index + self.completions.len() - 1) % self.completions.len();
-        self.completion_scroll.scroll_to_item(self.completion_index);
+        self.completion_scroll.scroll_to_item(self.completion_index, ScrollStrategy::Top);
         cx.notify();
     }
 
     fn completion_down(&mut self, _: &CompletionDown, _: &mut Window, cx: &mut Context<Self>) {
         if self.completions.is_empty() { cx.propagate(); return; }
         self.completion_index = (self.completion_index + 1) % self.completions.len();
-        self.completion_scroll.scroll_to_item(self.completion_index);
+        self.completion_scroll.scroll_to_item(self.completion_index, ScrollStrategy::Bottom);
         cx.notify();
     }
 
