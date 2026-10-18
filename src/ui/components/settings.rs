@@ -223,7 +223,9 @@ fn render_settings_surface(
         .occlude()
         .on_any_mouse_down(|_, _, cx| cx.stop_propagation())
         .on_scroll_wheel(|_, _, cx| cx.stop_propagation())
-        .child(div().id("settings-panel-scroll").max_h((available_height - window.rem_size()).max(px(1.0))).overflow_x_scroll().overflow_y_scroll().child(body));
+        .child(super::scroll_area::scroll_area("settings-panel-scroll-state",
+            div().max_h((available_height - window.rem_size()).max(px(1.0))),
+            div().id("settings-panel-scroll").child(body), true, window, cx));
     #[cfg(target_os = "windows")]
     if _only_picker.is_none() && crate::ui::components::popup::is_menu(window, cx) {
         if let (Some(kind), Some(bounds)) = (view.settings_picker.filter(|kind| *kind != SettingsPicker::About), view.settings_submenu_bounds) {
@@ -254,11 +256,11 @@ fn render_settings_surface(
         .child(anchored().position(origin).snap_to_window().child(panel));
     if let (Some(kind), Some(bounds)) = (view.settings_picker.filter(|kind| *kind != SettingsPicker::About), view.settings_submenu_bounds) {
         let (title, choices): (SharedString, Vec<AnyElement>) = match kind {
-            SettingsPicker::Theme => (i18n.text(Message::SettingsTheme), themes),
-            SettingsPicker::Language => (i18n.text(Message::SettingsLanguage), languages),
-            SettingsPicker::Date => (i18n.text(Message::SettingsDateFormat), dates),
+            SettingsPicker::Theme => (cx.i18n().text(Message::SettingsTheme), themes),
+            SettingsPicker::Language => (cx.i18n().text(Message::SettingsLanguage), languages),
+            SettingsPicker::Date => (cx.i18n().text(Message::SettingsDateFormat), dates),
             SettingsPicker::About => unreachable!("About is rendered as a settings column"),
-            SettingsPicker::Compression => (i18n.text(Message::Compression), compression),
+            SettingsPicker::Compression => (cx.i18n().text(Message::Compression), compression),
 
         };
         let submenu_width =
@@ -287,7 +289,10 @@ fn render_settings_surface(
             .text_color(theme.text)
             .on_any_mouse_down(|_, _, cx| cx.stop_propagation())
             .on_scroll_wheel(|_, _, cx| cx.stop_propagation())
-            .child(div().id("settings-submenu-scroll").max_h((submenu_available_height - window.rem_size()).max(px(1.0))).overflow_y_scroll().child(section(title, theme)).children(choices));
+            .child(super::scroll_area::scroll_area("settings-submenu-scroll-state",
+                div().max_h((submenu_available_height - window.rem_size()).max(px(1.0))),
+                div().id("settings-submenu-scroll").child(section(title, theme)).children(choices),
+                false, window, cx));
 
         #[cfg(target_os = "windows")]
         if _only_picker.is_some() { return submenu.into_any_element(); }

@@ -137,12 +137,12 @@ fn render_body(
     handle: &Entity<OxydeApp>,
     empty: Entity<OxydeApp>,
     size: String,
-    window: &Window,
+    window: &mut Window,
     cx: &mut Context<OxydeApp>,
 ) -> Div {
     let theme = *cx.theme();
     let disabled = dialog.loading || dialog.busy;
-    let section_title = |message: Message, icon: &'static str| {
+    let section_title = |label: SharedString, icon: &'static str| {
         div()
             .flex()
             .items_center()
@@ -157,7 +157,7 @@ fn render_body(
                     .flex_none()
                     .text_color(theme.text),
             )
-            .child(cx.i18n().text(message).to_uppercase())
+            .child(label.to_uppercase())
     };
     let mut count_args = FluentArgs::new();
     count_args.set("count", dialog.usage.1);
@@ -189,8 +189,6 @@ fn render_body(
         );
     let mut rows = div()
         .id("trash-drive-rows")
-        .max_h(rems(8.0))
-        .overflow_y_scroll()
         .flex()
         .flex_col();
     for (index, drive) in dialog.drives.iter().enumerate() {
@@ -250,7 +248,8 @@ fn render_body(
                 }),
         );
     }
-    table = table.child(rows);
+    table = table.child(crate::ui::components::scroll_area::scroll_area("trash-drive-scroll-state",
+        div().max_h(rems(8.0)), rows, false, window, cx));
     let mut body = div()
         .flex()
         .flex_col()
@@ -315,7 +314,7 @@ fn render_body(
                 .flex()
                 .flex_col()
                 .gap(rems(0.5))
-                .child(section_title(Message::TrashLocations, "icons/database.svg"))
+                .child(section_title(cx.i18n().text(Message::TrashLocations), "icons/database.svg"))
                 .child(table),
         );
     if let Some(config) = dialog.configs.get(dialog.selected) {
@@ -485,7 +484,7 @@ fn render_body(
                 .flex_col()
                 .gap(rems(0.5))
                 .child(section_title(
-                    Message::TrashSelectedSettings,
+                    cx.i18n().text(Message::TrashSelectedSettings),
                     "icons/settings-2.svg",
                 ))
                 .child(card),

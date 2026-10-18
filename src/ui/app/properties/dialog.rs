@@ -67,6 +67,10 @@ pub(crate) fn render(
     let ok = handle.clone();
     let system = handle.clone();
     let title_close = handle;
+    let body = crate::ui::components::scroll_area::scroll_area("properties-body-scroll-state", div(),
+        div().id("properties-body")
+            .when(!has_shortcut, |body| body.px(rems(1.0)).py(rems(1.25)))
+            .child(body), false, window, cx);
     div()
         .absolute()
         .inset_0()
@@ -188,13 +192,7 @@ pub(crate) fn render(
                     },
                 ))
                 .child(
-                    div()
-                        .id("properties-body")
-                        .flex_shrink(1.0)
-                        .min_h_0()
-                        .overflow_y_scroll()
-                        .when(!has_shortcut, |body| body.px(rems(1.0)).py(rems(1.25)))
-                        .child(body),
+                    body,
                 )
                 .child(
                     crate::ui::components::tool_window::footer(cx)

@@ -198,14 +198,17 @@ impl RenderOnce for Modal {
                     move |window, cx| if let Some(close) = &on_close { close(window, cx) },
                 ).into_any_element()
             });
+            let body = super::scroll_area::scroll_area((self.id.clone(), "body-scroll"),
+                div().when(fill_window, |frame| frame.flex_1()),
+                div().id("modal-body").px(self.body_padding.0).py(self.body_padding.1)
+                    .flex().flex_col().gap(self.body_gap)
+                    .when(fill_window, |body| body.flex_1()).child(self.body), false, window, cx);
             return div().id(self.id).relative().w_full().max_h(height_limit)
                 .when(fill_window, |frame| frame.h_full())
                 .flex().flex_col().bg(self.body_background.unwrap_or(theme.active_background))
                 .text_color(theme.text).text_size(rems(0.8125)).line_height(relative(1.25))
                 .child(header)
-                .child(div().id("modal-body").min_h_0().overflow_y_scroll().px(self.body_padding.0).py(self.body_padding.1)
-                    .flex().flex_col().gap(self.body_gap)
-                    .when(fill_window, |body| body.flex_1()).child(self.body))
+                .child(body)
                 .when(!self.actions.is_empty(), |frame| frame.child(
                     div().flex_none().px(rems(1.0)).py(rems(0.625))
                         .border_t(rems(0.0625)).border_color(theme.border).flex().justify_end()
@@ -225,6 +228,12 @@ impl RenderOnce for Modal {
         let offset = constrain_offset(placement.read(cx).offset, placement.read(cx).size, viewport);
         let title_drag = placement.clone();
         let measure = placement.clone();
+        let body = super::scroll_area::scroll_area((self.id.clone(), "body-scroll"), div(),
+            div().id("modal-body")
+                .when(self.actions.is_empty(), |body| body.rounded_b_lg())
+                .px(self.body_padding.0).py(self.body_padding.1)
+                .bg(self.body_background.unwrap_or(theme.surface))
+                .flex().flex_col().gap(self.body_gap).child(self.body), false, window, cx);
         div()
             .absolute()
             .inset_0()
@@ -357,18 +366,7 @@ impl RenderOnce for Modal {
                             })),
                     )
                     .child(
-                        div()
-                            .id("modal-body")
-                            .min_h_0()
-                            .when(self.actions.is_empty(), |body| body.rounded_b_lg())
-                            .overflow_y_scroll()
-                            .px(self.body_padding.0)
-                            .py(self.body_padding.1)
-                            .bg(self.body_background.unwrap_or(theme.surface))
-                            .flex()
-                            .flex_col()
-                            .gap(self.body_gap)
-                            .child(self.body),
+                        body,
                     )
                     .when(!self.actions.is_empty(), |panel| {
                         panel.child(
