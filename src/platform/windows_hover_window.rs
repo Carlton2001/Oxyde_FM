@@ -91,13 +91,15 @@ unsafe extern "system" fn owner_subclass(
     }
     if matches!(
         message,
-        WM_LBUTTONDOWN | WM_RBUTTONDOWN | WM_MBUTTONDOWN | WM_XBUTTONDOWN | WM_CLOSE
+        WM_LBUTTONDOWN | WM_RBUTTONDOWN | WM_MBUTTONDOWN | WM_XBUTTONDOWN
+            | WM_NCLBUTTONDOWN | WM_NCRBUTTONDOWN | WM_NCMBUTTONDOWN | WM_NCXBUTTONDOWN
+            | WM_CLOSE
     ) {
         let menus: Vec<_> = MENUS.with(|menus| menus.borrow().iter().copied().collect());
         for menu in menus {
             let menu = HWND(menu as *mut _);
             if unsafe { GetWindow(menu, GW_OWNER) }.ok() == Some(window) {
-                if message != WM_CLOSE {
+                if matches!(message, WM_LBUTTONDOWN | WM_RBUTTONDOWN | WM_MBUTTONDOWN | WM_XBUTTONDOWN) {
                     let anchor =
                         ANCHORS.with(|anchors| anchors.borrow().get(&(menu.0 as isize)).copied());
                     if let Some(((x, y, width, height), _, _)) = anchor {

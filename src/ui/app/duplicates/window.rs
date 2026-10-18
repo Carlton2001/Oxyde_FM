@@ -50,6 +50,11 @@ impl Render for DuplicateWindow {
         let disabled = self.selected.is_empty() || !self.options.iter().any(|v| *v);
         div()
             .id("duplicate-window")
+            .on_mouse_move(cx.listener(|this, event, _, cx| this.move_scrollbar(event, cx)))
+            .capture_any_mouse_up(cx.listener(|this, _, _, cx| {
+                this.scroll_drag = None;
+                cx.notify();
+            }))
             .track_focus(&self.focus)
             .tab_group()
             .tab_stop(false)
@@ -98,7 +103,11 @@ impl Render for DuplicateWindow {
                 } },
             ))
             .child(
-                div().flex_1().min_h_0().flex().child(sidebar).child(
+                div().flex_1().min_h_0().flex().child(
+                    div().relative().w(rems(17.5)).flex_none().min_h_0()
+                        .child(sidebar)
+                        .child(self.render_scrollbar(self.sources_scroll.clone(), "duplicate-sources", cx)),
+                ).child(
                     div()
                         .flex_1()
                         .min_w_0()
@@ -154,7 +163,11 @@ impl Render for DuplicateWindow {
                                         ),
                                 ),
                         )
-                        .child(results),
+                        .child(
+                            div().relative().flex().flex_col().flex_1().min_h_0()
+                                .child(results)
+                                .child(self.render_scrollbar(self.results_scroll.clone(), "duplicate-results", cx)),
+                        ),
                 ),
             )
             .child(

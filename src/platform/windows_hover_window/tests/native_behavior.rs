@@ -371,6 +371,30 @@ fn clicking_menu_anchor_leaves_the_toggle_to_the_owner() {
 }
 
 #[test]
+fn nonclient_owner_clicks_close_menus_even_over_the_anchor() {
+    for message in [WM_NCLBUTTONDOWN, WM_NCRBUTTONDOWN, WM_NCMBUTTONDOWN, WM_NCXBUTTONDOWN] {
+        let owner = TestWindow::new();
+        let menu = TestWindow::new();
+        super::super::windows_window_owner::set_owner(menu.0, owner.0).unwrap();
+        configure_menu(menu.raw(), owner.raw(), owner.raw(), true).unwrap();
+        let scale = unsafe { windows::Win32::UI::HiDpi::GetDpiForWindow(owner.0) } as f32 / 96.0;
+        let mut cursor = POINT::default();
+        unsafe { GetCursorPos(&mut cursor) }.unwrap();
+        assert!(unsafe {
+            windows::Win32::Graphics::Gdi::ScreenToClient(owner.0, &mut cursor)
+        }.as_bool());
+        set_anchor(menu.raw(), Some((
+            cursor.x as f32 / scale - 8.0,
+            cursor.y as f32 / scale - 8.0,
+            32.0, 32.0,
+        )), false, true).unwrap();
+        // HTNOWHERE avoids starting a native move/menu loop in this synthetic event.
+        unsafe { SendMessageW(owner.0, message, Some(WPARAM(HTNOWHERE as usize)), None) };
+        assert!(!unsafe { IsWindow(Some(menu.0)) }.as_bool(), "message {message}");
+    }
+}
+
+#[test]
 fn completion_menu_receives_clicks_without_activating_or_stealing_focus() {
     let owner = TestWindow::new();
     let menu = TestWindow::new();

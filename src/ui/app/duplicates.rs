@@ -1,6 +1,7 @@
 mod lifecycle;
 mod results;
 mod search;
+mod scroll;
 mod sources;
 mod title_actions;
 mod window;
@@ -26,6 +27,9 @@ pub struct DuplicateWindow {
     filtered: Vec<usize>,
     results_scroll: ScrollHandle,
     sources_scroll: ScrollHandle,
+    scrollbar_origins: std::collections::HashMap<String, gpui::Point<f32>>,
+    grab_offset: f32,
+    scroll_drag: Option<(String, f32, f32, ScrollHandle)>,
     running: bool,
     searched: bool,
     error: Option<String>,
