@@ -1,6 +1,6 @@
 use super::update_letter_scroll;
 use crate::ui::app::{network::drive_letter_used, OxydeApp};
-use crate::ui::components::scrollbar::{render_scrollbar_with_pointer, ScrollbarAxis, ZED_TRACK_WIDTH};
+use crate::ui::components::scrollbar::{render_scrollbar_on_track, ScrollbarAxis};
 use crate::ui::i18n::{FluentArgs, I18nContext, Message};
 use crate::ui::scale::rem_pixels;
 use crate::ui::theme::ThemeContext;
@@ -31,7 +31,7 @@ pub(super) fn render(
         .size_full()
         .overflow_y_scroll()
         .track_scroll(&dialog.letter_scroll)
-        .pr(ZED_TRACK_WIDTH)
+        .pr(crate::ui::components::select_menu::scrollbar_content_inset())
         .on_scroll_wheel(move |_, _, cx| refresh.update(cx, |_, cx| cx.notify()));
     for (index, character) in ('A'..='Z').rev().enumerate() {
         let value = format!("{character}:");
@@ -119,7 +119,7 @@ pub(super) fn render(
             .into_any_element()
         });
     }
-    choices = choices.child(div().relative().size_full().child(rows).child(render_scrollbar_with_pointer(
+    choices = choices.child(div().relative().size_full().child(rows).child(crate::ui::components::select_menu::scrollbar_overlay().child(render_scrollbar_on_track(
         theme,
         handle.clone(),
         ScrollbarAxis::Vertical,
@@ -129,13 +129,15 @@ pub(super) fn render(
         dialog.letter_scroll_drag.is_some(),
         "network-letters".into(),
         None,
+        crate::ui::components::select_menu::scrollbar_track_size(viewport_h),
+        crate::ui::components::select_menu::scrollbar_track_shape(),
         |view, track, viewport, content, position, cx| {
             if let Some(dialog) = &mut view.network_dialog {
                 dialog.letter_scroll_drag = Some((track, viewport, content));
                 update_letter_scroll(view, position, cx);
             }
         },
-    )));
+    ))));
     let mouse = handle.clone();
     choices = choices.child(
         canvas(

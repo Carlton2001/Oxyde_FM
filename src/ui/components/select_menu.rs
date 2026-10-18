@@ -2,12 +2,36 @@
 use crate::ui::theme::OxydeTheme;
 use gpui::{prelude::*, *};
 
+const INNER_PADDING: Rems = rems(0.3125);
+
+/// Keep the rail against all three inner edges, independently of row padding.
+pub(crate) fn scrollbar_overlay() -> Div {
+    div()
+        .absolute()
+        .top(-INNER_PADDING)
+        .bottom(-INNER_PADDING)
+        .left_0()
+        .right(-INNER_PADDING)
+}
+
+pub(crate) fn scrollbar_track_size(viewport: f32) -> f32 {
+    viewport + crate::ui::scale::rem_pixels(INNER_PADDING).as_f32() * 2.0
+}
+
+pub(crate) fn scrollbar_track_shape() -> super::scrollbar::TrackShape {
+    super::scrollbar::TrackShape::RoundedRight(INNER_PADDING)
+}
+
+pub(crate) fn scrollbar_content_inset() -> Rems {
+    rems(super::scrollbar::ZED_TRACK_WIDTH.0 - INNER_PADDING.0)
+}
+
 pub(crate) fn surface(theme: OxydeTheme) -> Div {
     div()
         .relative()
         .flex()
         .flex_col()
-        .p(rems(0.3125))
+        .p(INNER_PADDING)
         .rounded_md()
         .bg(theme.menu_surface)
         .border(rems(0.0625))

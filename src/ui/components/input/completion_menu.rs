@@ -80,7 +80,7 @@ pub(super) fn render(
                     div()
                         .size_full()
                         .when(overflowing, |list| {
-                            list.pr(crate::ui::components::scrollbar::ZED_TRACK_WIDTH)
+                            list.pr(crate::ui::components::select_menu::scrollbar_content_inset())
                         })
                         .on_scroll_wheel(move |_, _, cx| refresh.update(cx, |_, cx| cx.notify()))
                         .child(rows),

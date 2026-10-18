@@ -1,6 +1,6 @@
 use super::TextInput;
 use crate::ui::components::scrollbar::{
-    render_scrollbar_with_pointer, ScrollbarAxis, ScrollbarState,
+    render_scrollbar_on_track, ScrollbarAxis, ScrollbarState,
 };
 use crate::ui::theme::ThemeContext;
 use gpui::{prelude::*, *};
@@ -34,8 +34,10 @@ fn update_drag(input: &mut TextInput, position: Point<Pixels>) {
     let minimum = crate::ui::scale::rem_pixels(rems(2.5))
         .as_f32()
         .min(*viewport);
-    let thumb = (viewport * viewport / content).max(minimum);
-    let travel = (viewport - thumb).max(1.0);
+    let track_size = crate::ui::components::select_menu::scrollbar_track_size(*viewport);
+    let usable_track = track_size.max(0.0);
+    let thumb = (usable_track * viewport / content).max(minimum).min(usable_track);
+    let travel = (usable_track - thumb).max(1.0);
     let ratio = ((position.y.as_f32() - origin.y - state.grab_offset) / travel).clamp(0.0, 1.0);
     input
         .completion_scroll
@@ -57,10 +59,8 @@ pub(super) fn render(
     let scroll = input.completion_scroll.0.borrow().base_handle.clone();
     let rendered_offset = scroll.offset();
     let viewport = viewport.as_f32();
-    div()
-        .absolute()
-        .inset_0()
-        .child(render_scrollbar_with_pointer(
+    crate::ui::components::select_menu::scrollbar_overlay()
+        .child(render_scrollbar_on_track(
             *cx.theme(),
             handle,
             ScrollbarAxis::Vertical,
@@ -74,6 +74,8 @@ pub(super) fn render(
                     .as_f32()
                     .min(viewport),
             ),
+            crate::ui::components::select_menu::scrollbar_track_size(viewport),
+            crate::ui::components::select_menu::scrollbar_track_shape(),
             move |input, track, viewport, content, position, cx| {
                 input.completion_pointer.drag = Some((track, viewport, content));
                 update_drag(input, position);

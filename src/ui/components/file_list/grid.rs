@@ -293,7 +293,7 @@ pub(super) fn render_grid_file_list(
                 .size_full(),
             )
             .child(list)
-            .child(render_scrollbar(
+            .child(div().absolute().top_0().bottom_0().right_0().w(rems(3.625)).group("file-list-scroll-zone").child(render_scrollbar(
                 theme,
                 handle.clone(),
                 ScrollbarAxis::Vertical,
@@ -314,7 +314,7 @@ pub(super) fn render_grid_file_list(
                         });
                     }
                 },
-            ))
+            )).child(super::scroll_top::button(theme, handle.clone(), pane_id.clone(), scroll_offset, viewport_height, content_height)))
             .on_mouse_down(MouseButton::Left, {
                 let h = handle.clone();
                 let pid = pane_id.clone();

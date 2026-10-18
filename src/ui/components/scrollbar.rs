@@ -20,7 +20,16 @@ pub enum ScrollbarAxis {
     Horizontal,
 }
 
+/// Only the rail's outer contour depends on its parent. Colors, spacing and
+/// pointer behavior are shared by every scrollbar.
+#[derive(Clone, Copy)]
+pub(crate) enum TrackShape {
+    Square,
+    RoundedRight(Rems),
+}
+
 const ZED_THUMB_MIN_SIZE: Rems = rems(2.5);
+const THUMB_END_INSET: Rems = rems(0.1875);
 fn zed_thumb_min_size() -> f32 {
     rem_pixels(ZED_THUMB_MIN_SIZE).as_f32()
 }
@@ -75,6 +84,24 @@ pub fn render_scrollbar_with_pointer<T: ScrollbarState + 'static>(
     min_thumb_size: Option<f32>,
     on_drag: impl Fn(&mut T, String, f32, f32, Point<Pixels>, &mut App) + 'static,
 ) -> AnyElement {
+    render_scrollbar_on_track(theme, handle, axis, viewport_size, content_size, current_scroll, is_dragging, id_suffix, min_thumb_size, viewport_size, TrackShape::Square, on_drag)
+}
+
+/// Separate the physical rail length from the scrollable content viewport.
+pub(crate) fn render_scrollbar_on_track<T: ScrollbarState + 'static>(
+    theme: OxydeTheme,
+    handle: Entity<T>,
+    axis: ScrollbarAxis,
+    viewport_size: f32,
+    content_size: f32,
+    current_scroll: f32,
+    is_dragging: bool,
+    id_suffix: String,
+    min_thumb_size: Option<f32>,
+    track_size: f32,
+    shape: TrackShape,
+    on_drag: impl Fn(&mut T, String, f32, f32, Point<Pixels>, &mut App) + 'static,
+) -> AnyElement {
     let is_v = axis == ScrollbarAxis::Vertical;
 
     // Proportions
@@ -86,10 +113,15 @@ pub fn render_scrollbar_with_pointer<T: ScrollbarState + 'static>(
     }
 
     let m_thumb_size = min_thumb_size.unwrap_or(zed_thumb_min_size());
-    let thumb_size = (viewport_size * ratio).max(m_thumb_size);
+    let usable_track = track_size.max(0.0);
+    let thumb_size = (usable_track * ratio).max(m_thumb_size).min(usable_track);
     let max_offset = (content_size - viewport_size).max(1.0);
     let scroll_ratio = (current_scroll.max(0.0) / max_offset).clamp(0.0, 1.0);
-    let thumb_pos = scroll_ratio * (viewport_size - thumb_size);
+    let thumb_pos = scroll_ratio * (usable_track - thumb_size);
+    // Inset only the painted grip. Keep its logical bounds for hit testing and
+    // dragging so existing viewport/offset calculations retain their behavior.
+    let grip_inset = rem_pixels(THUMB_END_INSET).as_f32().min(thumb_size / 2.0);
+    let grip_size = (thumb_size - grip_inset * 2.0).max(0.0);
 
     let mut thumb = div()
         .absolute()
@@ -99,8 +131,8 @@ pub fn render_scrollbar_with_pointer<T: ScrollbarState + 'static>(
     if is_v {
         thumb = thumb
             .right(rems(0.1875))
-            .top(px(thumb_pos))
-            .h(px(thumb_size))
+            .top(px(thumb_pos + grip_inset))
+            .h(px(grip_size))
             .w(px(zed_thumb_width_normal()))
             .group_hover("scroll-track", |s| {
                 s.w(px(zed_thumb_width_hover()))
@@ -116,8 +148,8 @@ pub fn render_scrollbar_with_pointer<T: ScrollbarState + 'static>(
     } else {
         thumb = thumb
             .bottom(rems(0.1875))
-            .left(px(thumb_pos))
-            .w(px(thumb_size))
+            .left(px(thumb_pos + grip_inset))
+            .w(px(grip_size))
             .h(px(zed_thumb_width_normal()))
             .group_hover("scroll-track", |s| {
                 s.h(px(zed_thumb_width_hover()))
@@ -145,13 +177,17 @@ pub fn render_scrollbar_with_pointer<T: ScrollbarState + 'static>(
         .id(SharedString::from(track_id.clone()))
         .group("scroll-track")
         .absolute()
+        .bg(theme.scrollbar_track)
+        .map(|track| match shape {
+            TrackShape::Square => track,
+            TrackShape::RoundedRight(radius) => track.rounded_r(radius),
+        })
         .when(is_v, |s: Stateful<Div>| {
             s.top_0().right_0().bottom_0().w(px(zed_track_width()))
         })
         .when(!is_v, |s: Stateful<Div>| {
             s.left_0().bottom_0().right_0().h(px(zed_track_width()))
         })
-        .hover(|s| s.bg(theme.scrollbar_track_hover))
         .child(
             canvas(
                 |bounds, _, _| bounds,
@@ -189,9 +225,9 @@ pub fn render_scrollbar_with_pointer<T: ScrollbarState + 'static>(
                         let max_offset = (content_size - viewport_size).max(1.0);
                         let ratio = (viewport_size / content_size.max(1.0)).min(1.0);
                         let m_thumb_size = min_thumb_size.unwrap_or(zed_thumb_min_size());
-                        let t_size = (viewport_size * ratio).max(m_thumb_size);
+                        let t_size = (usable_track * ratio).max(m_thumb_size).min(usable_track);
                         let scroll_ratio = (current_scroll.max(0.0) / max_offset).clamp(0.0, 1.0);
-                        let t_pos = scroll_ratio * (viewport_size - t_size);
+                        let t_pos = scroll_ratio * (usable_track - t_size);
 
                         let grab_offset =
                             if mouse_in_track >= t_pos && mouse_in_track <= t_pos + t_size {

@@ -36,6 +36,16 @@ Un champ composé place l’éditeur dans `flex_1().min_w_0().h_full()` et les c
 
 ## Préférences et réactivité
 
+### Ascenseurs
+
+`components/scrollbar.rs` possède le rendu commun : fond de rail permanent
+(`scrollbar_track`), poignée, états de survol/glissement et marges aux extrémités.
+Ne pas masquer le fond au repos ni ajouter une apparence locale par liste.
+`TrackShape` adapte uniquement le contour au parent ; les menus de sélection
+fournissent leur rayon intérieur via `select_menu`. Leur rail peut être plus long
+que le viewport, sans modifier la plage de défilement du contenu. Conserver les
+propriétaires des événements, identifiants et conversions de coordonnées.
+
 `AppConfig` conserve les réglages ; les globals appliquent immédiatement thème et langue. La file de sauvegarde écrit en arrière-plan et dans l’ordre. Garder les anciennes configurations lisibles avec des valeurs par défaut ; ne pas écraser une configuration illisible. La réinitialisation conserve session, géométrie et préférences de doublons.
 
 Le rendu ne fait ni I/O ni calcul lourd. Réutiliser les résumés d’historique/opérations et les instantanés préparés par révision. Les réponses asynchrones doivent vérifier leur propriétaire et leur révision avant publication. Voir [opérations](operations.md) et [validation visuelle](../guides/visual-checks.md).

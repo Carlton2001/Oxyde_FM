@@ -466,13 +466,6 @@ pub(super) fn render_details_file_list(
         .as_f32();
 
     // Vertical scrollbar and its scroll-to-top affordance.
-    let v_ratio = (v_v_h / content_h.max(1.0)).min(1.0);
-    let v_thumb_size = (v_v_h * v_ratio).max(logical(40.0)).min(v_v_h);
-    let v_max_offset = (content_h - v_v_h).max(1.0);
-    let v_thumb_pos = (v_offset / v_max_offset).clamp(0.0, 1.0) * (v_v_h - v_thumb_size);
-    let scroll_button_top =
-        (v_thumb_pos + v_thumb_size / 2.0 - logical(16.0)).clamp(logical(4.0), (v_v_h - logical(36.0)).max(logical(4.0)));
-
     let mut vertical_scroll_zone = div()
         .absolute()
         .top(px(crate::ui::style::column_header_height()))
@@ -503,49 +496,7 @@ pub(super) fn render_details_file_list(
             },
         ));
 
-    if v_offset > crate::ui::style::row_height() * 2.0 && content_h > v_v_h {
-        let h_scroll_top = handle.clone();
-        let pane_id_scroll_top = pane_id.clone();
-        vertical_scroll_zone = vertical_scroll_zone.child(
-            div()
-                .id(format!("scroll-to-top-{pane_id_scroll_top}"))
-                .absolute()
-                .top(px(scroll_button_top))
-                .right(rems(1.0))
-                .w(rems(2.0))
-                .h(rems(2.0))
-                .flex()
-                .items_center()
-                .justify_center()
-                .rounded(rems(0.5))
-                .bg(theme.accent)
-                .shadow(crate::ui::style::rem_shadow(false))
-                .opacity(0.0)
-                .group_hover("file-list-scroll-zone", |style| style.opacity(1.0))
-                .hover(|style| style.opacity(0.9))
-                .on_mouse_down(MouseButton::Left, move |_, _, cx| {
-                    cx.stop_propagation();
-                    h_scroll_top.update(cx, |this, cx| {
-                        if let Some(pane) = this.state.find_pane_mut(&pane_id_scroll_top) {
-                            pane.active_tab_mut()
-                                .list_scroll
-                                .0
-                                .borrow()
-                                .base_handle
-                                .set_offset(point(px(0.0), px(0.0)));
-                        }
-                        cx.notify();
-                    });
-                })
-                .child(
-                    svg()
-                        .path("icons/arrow-up.svg")
-                        .w(rems(1.0))
-                        .h(rems(1.0))
-                        .text_color(theme.text),
-                ),
-        );
-    }
+    vertical_scroll_zone = vertical_scroll_zone.child(super::scroll_top::button(theme, handle.clone(), pane_id.clone(), v_offset, v_v_h, content_h));
     container = container.child(vertical_scroll_zone);
 
     // Horizontal scrollbar overlay
