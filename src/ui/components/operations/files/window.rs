@@ -179,8 +179,8 @@ impl Render for FilesWindow {
             .bg(theme.active_background)
             .text_color(theme.text)
             .tab_group()
-            .on_mouse_move(cx.listener(|this, event, _, cx| this.move_scrollbar(event, cx)))
-            .capture_any_mouse_up(cx.listener(|this, _, _, cx| {
+            .child(tool_window::pointer_drag(cx.entity(),
+                |this, event, cx| this.move_scrollbar(event, cx), |this, cx| {
                 this.drag = None;
                 cx.notify();
             }))

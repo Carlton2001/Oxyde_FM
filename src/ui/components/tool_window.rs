@@ -2,6 +2,32 @@ use crate::ui::theme::ThemeContext;
 use gpui::prelude::*;
 use gpui::*;
 
+/// Listen during paint so a captured drag continues outside the window's hitboxes.
+pub(crate) fn pointer_drag<T: 'static>(
+    handle: Entity<T>,
+    movement: impl Fn(&mut T, &MouseMoveEvent, &mut Context<T>) + 'static,
+    release: impl Fn(&mut T, &mut Context<T>) + 'static,
+) -> impl IntoElement {
+    let movement = std::rc::Rc::new(movement);
+    let release = std::rc::Rc::new(release);
+    canvas(|_, _, _| (), move |_, _, window, _| {
+        let moving = handle.clone();
+        let movement = movement.clone();
+        window.on_mouse_event(move |event: &MouseMoveEvent, phase, _, cx| {
+            if phase == DispatchPhase::Capture {
+                moving.update(cx, |view, cx| movement(view, event, cx));
+            }
+        });
+        let released = handle.clone();
+        let release = release.clone();
+        window.on_mouse_event(move |event: &MouseUpEvent, phase, _, cx| {
+            if phase == DispatchPhase::Capture && event.button == MouseButton::Left {
+                released.update(cx, |view, cx| release(view, cx));
+            }
+        });
+    }).absolute().size_0()
+}
+
 /// Resize content-sized tool windows after layout, avoiding layout re-entry.
 pub(crate) fn content_height_limit(window: &Window, cx: &App) -> Pixels {
     window.display(cx).map(|display| (display.visible_bounds().size.height
@@ -67,14 +93,13 @@ pub(crate) fn install_icon(path: &'static str, window: &mut Window) {
                 .flatten()
                 .map(|bytes| bytes.into_owned())
         });
-        if let (Some(icon), Ok(handle)) = (
-            icon,
-            raw_window_handle::HasWindowHandle::window_handle(window),
-        ) {
+        if let Ok(handle) = raw_window_handle::HasWindowHandle::window_handle(window) {
             if let Err(error) = oxyde_lib::platform::platform().install_pointer_capture(handle.as_raw()) {
                 log::warn!("Cannot install tool pointer capture: {error}");
             }
-            oxyde_lib::platform::platform().set_application_icon(handle.as_raw(), &icon);
+            if let Some(icon) = icon {
+                oxyde_lib::platform::platform().set_application_icon(handle.as_raw(), &icon);
+            }
         }
     });
 }

@@ -50,8 +50,8 @@ impl Render for DuplicateWindow {
         let disabled = self.selected.is_empty() || !self.options.iter().any(|v| *v);
         div()
             .id("duplicate-window")
-            .on_mouse_move(cx.listener(|this, event, _, cx| this.move_scrollbar(event, cx)))
-            .capture_any_mouse_up(cx.listener(|this, _, _, cx| {
+            .child(crate::ui::components::tool_window::pointer_drag(cx.entity(),
+                |this, event, cx| this.move_scrollbar(event, cx), |this, cx| {
                 this.scroll_drag = None;
                 cx.notify();
             }))

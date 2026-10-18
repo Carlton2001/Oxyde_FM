@@ -75,8 +75,8 @@ impl Render for OperationsPanelView {
             .flex_col()
             .bg(theme.active_background)
             .text_color(theme.text)
-            .on_mouse_move(cx.listener(|this, event, _, cx| this.move_scrollbar(event, cx)))
-            .capture_any_mouse_up(cx.listener(|this, _, _, cx| {
+            .child(super::super::tool_window::pointer_drag(cx.entity(),
+                |this, event, cx| this.move_scrollbar(event, cx), |this, cx| {
                 let _ = this.app.update(cx, |app, cx| app.finish_pointer_drag(cx));
             }))
             .font_family("Inter")
