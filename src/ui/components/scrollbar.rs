@@ -33,6 +33,12 @@ const THUMB_END_INSET: Rems = rems(0.1875);
 fn zed_thumb_min_size() -> f32 {
     rem_pixels(ZED_THUMB_MIN_SIZE).as_f32()
 }
+/// Wheel deltas reach the handle before GPUI clamps them at prepaint, so bound
+/// the raw offset by the last measured overflow.
+pub(crate) fn scrolled_from_top(handle: &ScrollHandle) -> bool {
+    (-handle.offset().y).min(handle.max_offset().y) >= px(0.5)
+}
+
 pub const ZED_TRACK_WIDTH: Rems = rems(0.75);
 pub fn zed_track_width() -> f32 {
     rem_pixels(ZED_TRACK_WIDTH).as_f32()

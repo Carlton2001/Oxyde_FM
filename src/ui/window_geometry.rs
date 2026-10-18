@@ -1,4 +1,4 @@
-use gpui::{point, px, size, Bounds, Pixels, Window, WindowBounds, WindowVisibility};
+use gpui::{point, px, size, Bounds, Pixels, Size, Window, WindowBounds, WindowVisibility};
 use oxyde_lib::models::config::WindowPlacement;
 
 pub(crate) fn capture(window: &Window) -> Option<WindowPlacement> {
@@ -31,7 +31,13 @@ fn valid(placement: &WindowPlacement) -> bool {
         && placement.y.abs() < 100000.0
 }
 
-pub(crate) fn restore(saved: Option<WindowPlacement>, screens: &[Bounds<Pixels>]) -> WindowBounds {
+/// `min` matches the window's minimum size, so a smaller saved size cannot
+/// reopen below it; the screen still bounds both.
+pub(crate) fn restore(
+    saved: Option<WindowPlacement>,
+    screens: &[Bounds<Pixels>],
+    min: Size<Pixels>,
+) -> WindowBounds {
     let saved = saved.filter(valid);
     let fallback = Bounds::new(point(px(100.0), px(100.0)), size(px(1200.0), px(800.0)));
     let requested = saved
@@ -45,8 +51,8 @@ pub(crate) fn restore(saved: Option<WindowPlacement>, screens: &[Bounds<Pixels>]
         .filter(|screen| intersection(requested, **screen) > 0.0)
         .or_else(|| screens.first());
     let bounds = if let Some(screen) = screen {
-        let width = requested.size.width.min(screen.size.width);
-        let height = requested.size.height.min(screen.size.height);
+        let width = requested.size.width.max(min.width).min(screen.size.width);
+        let height = requested.size.height.max(min.height).min(screen.size.height);
         let x = requested
             .origin
             .x
@@ -94,7 +100,7 @@ mod tests {
             Bounds::new(point(px(-1280.0), px(0.0)), size(px(1280.0), px(984.0))),
         ];
         assert_eq!(
-            restore(Some(saved), &screens),
+            restore(Some(saved), &screens, Size::default()),
             WindowBounds::Maximized(Bounds::new(
                 point(px(-1100.0), px(50.0)),
                 size(px(800.0), px(600.0))
@@ -112,13 +118,22 @@ mod tests {
             maximized: false,
         };
         assert_eq!(
-            restore(Some(saved), &[screen]),
+            restore(Some(saved), &[screen], Size::default()),
             WindowBounds::Windowed(screen)
         );
         saved.width = f32::NAN;
         assert_eq!(
-            restore(Some(saved), &[screen]),
+            restore(Some(saved), &[screen], Size::default()),
             WindowBounds::Windowed(screen)
+        );
+    }
+    #[test]
+    fn saved_size_below_minimum_reopens_at_minimum() {
+        let screen = Bounds::new(point(px(0.0), px(0.0)), size(px(1920.0), px(1040.0)));
+        let saved = WindowPlacement { x: 100.0, y: 100.0, width: 300.0, height: 200.0, maximized: false };
+        assert_eq!(
+            restore(Some(saved), &[screen], size(px(720.0), px(480.0))),
+            WindowBounds::Windowed(Bounds::new(point(px(100.0), px(100.0)), size(px(720.0), px(480.0))))
         );
     }
 }

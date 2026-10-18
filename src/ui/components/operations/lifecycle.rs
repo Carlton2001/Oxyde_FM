@@ -49,7 +49,7 @@ pub(crate) fn open_operations_window(app: Entity<OxydeApp>, cx: &mut App) {
                     point(px(160.0), px(140.0)),
                     size(px(720.0), px(560.0)),
                 ), cx)),
-                window_min_size: Some(size(px(520.0), px(320.0))),
+                window_min_size: Some(size(px(crate::ui::scale::logical(520.0)), px(crate::ui::scale::logical(320.0)))),
                 titlebar: Some(TitlebarOptions {
                     appears_transparent: true,
                     title: Some(title),

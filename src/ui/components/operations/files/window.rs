@@ -161,7 +161,7 @@ impl Render for FilesWindow {
         let outcomes = self.outcomes.clone();
         let system = owner.read(cx).use_system_icons();
         let scrollbar = self.render_scrollbar(cx);
-        let can_top = self.scroll.0.borrow().base_handle.offset().y < px(0.0);
+        let can_top = crate::ui::components::scrollbar::scrolled_from_top(&self.scroll.0.borrow().base_handle);
         let top_action = cx.listener(|this, _: &MouseDownEvent, _, cx| {
             let mut scroll = this.scroll.0.borrow_mut();
             scroll.deferred_scroll_to_item = None;
@@ -331,7 +331,7 @@ pub(super) fn open(owner: Entity<OxydeApp>, operation_id: String, cx: &mut App) 
                     point(px(200.0), px(160.0)),
                     size(px(680.0), px(520.0)),
                 ), cx)),
-                window_min_size: Some(size(px(400.0), px(300.0))),
+                window_min_size: Some(size(px(crate::ui::scale::logical(400.0)), px(crate::ui::scale::logical(300.0)))),
                 titlebar: Some(TitlebarOptions {
                     appears_transparent: true,
                     title: Some(title),

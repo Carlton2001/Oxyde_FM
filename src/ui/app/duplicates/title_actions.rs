@@ -49,7 +49,7 @@ impl DuplicateWindow {
                 Some("icons/arrow-up-to-line.svg"),
                 None,
                 *cx.theme(),
-                self.results_scroll.offset().y < px(0.0),
+                crate::ui::components::scrollbar::scrolled_from_top(&self.results_scroll),
                 move |_, _, cx| {
                     top.update(cx, |this, cx| {
                         let offset = this.results_scroll.offset();

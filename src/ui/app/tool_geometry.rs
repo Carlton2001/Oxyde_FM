@@ -30,7 +30,7 @@ pub(crate) fn restore(key: &str, fallback: Bounds<Pixels>, cx: &App) -> WindowBo
         .iter()
         .map(|display| display.visible_bounds())
         .collect::<Vec<_>>();
-    crate::ui::window_geometry::restore(Some(saved), &screens)
+    crate::ui::window_geometry::restore(Some(saved), &screens, Size::default())
 }
 
 pub(crate) fn observe(key: &'static str, window: &mut Window, cx: &mut App) {

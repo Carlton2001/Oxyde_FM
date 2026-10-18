@@ -25,7 +25,7 @@ pub(super) fn scroll_top(
 pub(super) fn panel(app: Entity<OxydeApp>, cx: &App) -> Div {
     let owner = app.read(cx);
     let can_collapse = !owner.expanded_operations.is_empty();
-    let can_top = owner.operations_panel_scroll.offset().y < px(0.0);
+    let can_top = crate::ui::components::scrollbar::scrolled_from_top(&owner.operations_panel_scroll);
     let collapse = app.clone();
     div()
         .flex()

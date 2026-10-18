@@ -125,7 +125,10 @@ fn main() {
             let mut screens = Vec::new();
             if let Some(primary) = cx.primary_display() { screens.push(primary.visible_bounds()); }
             screens.extend(cx.displays().into_iter().map(|display| display.visible_bounds()));
-            let window_bounds = crate::ui::window_geometry::restore(config.window_placement, &screens);
+            // Keep the title bar, navigation bar, sidebar and one usable file column visible.
+            let rem = crate::ui::scale::normalized_reference(config.ui_rem_size) as f32;
+            let min_size = size(px(rem * 45.0), px(rem * 30.0));
+            let window_bounds = crate::ui::window_geometry::restore(config.window_placement, &screens, min_size);
             let app = cx.new(|cx| OxydeApp::new(config, config_path, load_failed, cx));
             let operations_panel = cx.new(|cx| {
                 crate::ui::components::operations::OperationsPanelView::new(app.clone(), cx)
@@ -141,6 +144,7 @@ fn main() {
             cx.open_window(
                 WindowOptions {
                     window_bounds: Some(window_bounds),
+                    window_min_size: Some(min_size),
                     titlebar: Some(TitlebarOptions {
                         appears_transparent: true,
                         title: Some("Oxyde GPUI".into()),

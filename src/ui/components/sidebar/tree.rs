@@ -70,7 +70,7 @@ pub(super) fn render_sidebar_tree(
     let content_w = calculated_content_w.max(viewport_w);
     // Reserve scrollbar gutters only when their axis actually overflows.
     let h_overflow = content_w > viewport_w + 1.0;
-    let list_top = crate::ui::scale::rem_pixels(rems(2.5)).as_f32();
+    let list_top = crate::ui::scale::rem_pixels(crate::ui::style::TAB_BAR_HEIGHT).as_f32();
     let list_bottom = if h_overflow { crate::ui::components::scrollbar::zed_track_width() } else { 0.0 };
     let viewport_h = (view.list_height - list_top - list_bottom).max(1.0);
     let content_h = sidebar_items.iter().map(sidebar_item_height).sum::<f32>().max(1.0);
@@ -83,6 +83,17 @@ pub(super) fn render_sidebar_tree(
         .find_pane(&view.state.active_pane_id)
         .map(|pane| pane.active_tab().path.clone());
     let show_tooltips = view.context_menus.is_empty();
+
+    // Clamp before rendering the toolbar so its state matches the visible rows.
+    let scroll = view.sidebar_scroll.0.borrow().base_handle.clone();
+    let actual_viewport = scroll.bounds().size.height.as_f32();
+    let viewport = actual_viewport.max(logical(200.0));
+    let max_scroll = (content_h - if actual_viewport > 0.0 { actual_viewport } else { viewport }).max(0.0);
+    let offset = (-scroll.offset().y.as_f32()).clamp(0.0, max_scroll);
+    if scroll.offset().y.as_f32() != -offset {
+        scroll.set_offset(point(scroll.offset().x, px(-offset)));
+    }
+    let scrolled = offset >= 0.5;
 
     let mut container = div()
         .w_full()
@@ -98,11 +109,11 @@ pub(super) fn render_sidebar_tree(
         .child(
             div()
                 .size_full()
-                .child(sidebar_toolbar(view, handle.clone(), _cx))
+                .child(sidebar_toolbar(view, handle.clone(), scrolled, _cx))
                 .child(
                     div()
                         .absolute()
-                        .top(rems(2.5))
+                        .top(crate::ui::style::TAB_BAR_HEIGHT)
                         .bottom(px(list_bottom))
                         .left(rems(0.5))
                         .right(list_right) // 12 px scrollbar track + 6 px clear margin when needed.
@@ -131,14 +142,7 @@ pub(super) fn render_sidebar_tree(
                             let render_rows = move |range: std::ops::Range<usize>, cx: &mut App| {
                                 render_sidebar_rows(range, cx, &items_for_list, &h, &sel, &presentation)
                             };
-                            let scroll = view.sidebar_scroll.0.borrow().base_handle.clone();
-                            let actual_viewport = scroll.bounds().size.height.as_f32();
-                            let viewport = actual_viewport.max(logical(200.0));
-                            let max_scroll = (content_h - if actual_viewport > 0.0 { actual_viewport } else { viewport }).max(0.0);
-                            let offset = (-scroll.offset().y.as_f32()).clamp(0.0, max_scroll);
-                            if scroll.offset().y.as_f32() != -offset {
-                                scroll.set_offset(point(scroll.offset().x, px(-offset)));
-                            }
+                            let scroll = scroll.clone();
                             let mut start = 0;
                             let mut top = 0.0;
                             while start < sidebar_items.len() && top + sidebar_item_height(&sidebar_items[start]) < offset {
@@ -161,6 +165,19 @@ pub(super) fn render_sidebar_tree(
                 )
         );
 
+    // Mark the toolbar edge only once rows have scrolled beneath it.
+    if scrolled {
+        container = container.child(
+            div()
+                .absolute()
+                .top(crate::ui::style::TAB_BAR_HEIGHT - rems(0.0625))
+                .left_0()
+                .right_0()
+                .h(rems(0.0625))
+                .bg(theme.border),
+        );
+    }
+
     // Vertical scrollbar
     container = container.child({
         let offset = -view
@@ -173,7 +190,7 @@ pub(super) fn render_sidebar_tree(
             .as_f32();
         div()
             .absolute()
-            .top(rems(2.5))
+            .top(crate::ui::style::TAB_BAR_HEIGHT)
             .bottom(px(list_bottom))
             .right_0()
             .w(rems(0.75))

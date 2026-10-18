@@ -19,7 +19,7 @@ pub(super) fn render_sidebar_rail(
         .flex()
         .flex_col()
         .bg(theme.sidebar)
-        .child(sidebar_toolbar(view, handle.clone(), cx));
+        .child(sidebar_toolbar(view, handle.clone(), false, cx));
     let h = handle.clone();
     rail = rail.child(
         div().px_2().py_2().child(
@@ -58,6 +58,8 @@ pub(super) fn render_sidebar_rail(
     );
     let mut entries = div()
         .id("sidebar-rail-scroll")
+        .track_scroll(&view.sidebar_rail_scroll)
+        .size_full()
         .flex_1()
         .min_h_0()
         .overflow_y_scroll()
@@ -204,5 +206,24 @@ pub(super) fn render_sidebar_rail(
             }),
         );
     }
-    rail.child(entries)
+    // Mark the fixed header edge only once entries have scrolled beneath it.
+    let scrolled = crate::ui::components::scrollbar::scrolled_from_top(&view.sidebar_rail_scroll);
+    rail.child(
+        div()
+            .relative()
+            .flex_1()
+            .min_h_0()
+            .child(entries)
+            .when(scrolled, |d| {
+                d.child(
+                    div()
+                        .absolute()
+                        .top_0()
+                        .left_0()
+                        .right_0()
+                        .h(rems(0.0625))
+                        .bg(theme.border),
+                )
+            }),
+    )
 }

@@ -63,11 +63,11 @@ impl OxydeApp {
                     window_bounds: Some(crate::ui::app::tool_geometry::restore("icons/copy.svg", Bounds::new(
                         point(px(160.0), px(140.0)),
                         size(
-                            px(dimensions[0].clamp(660.0, 1800.0)),
-                            px(dimensions[1].clamp(420.0, 1100.0)),
+                            px(dimensions[0].clamp(660.0, 1800.0).max(crate::ui::scale::logical(660.0))),
+                            px(dimensions[1].clamp(420.0, 1100.0).max(crate::ui::scale::logical(420.0))),
                         ),
                     ), cx)),
-                    window_min_size: Some(size(px(660.0), px(420.0))),
+                    window_min_size: Some(size(px(crate::ui::scale::logical(660.0)), px(crate::ui::scale::logical(420.0)))),
                     titlebar: Some(TitlebarOptions {
                         appears_transparent: true,
                         title: Some(title),

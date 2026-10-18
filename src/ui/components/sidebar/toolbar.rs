@@ -34,11 +34,12 @@ pub(super) fn sidebar_button_with_tooltip(
 pub(super) fn sidebar_toolbar(
     view: &OxydeApp,
     handle: Entity<OxydeApp>,
+    scrolled: bool,
     cx: &mut Context<OxydeApp>,
 ) -> Div {
     let theme = *cx.theme();
     let mut toolbar = div()
-        .h(rems(2.5))
+        .h(crate::ui::style::TAB_BAR_HEIGHT)
         .flex_none()
         .flex()
         .items_center()
@@ -74,7 +75,7 @@ pub(super) fn sidebar_toolbar(
                 Some("icons/arrow-up-to-line.svg"),
                 None,
                 theme,
-                view.sidebar_scroll.0.borrow().base_handle.offset().y < px(0.0),
+                scrolled,
                 move |_, _, cx| {
                     h.update(cx, |this, cx| {
                         let mut scroll = this.sidebar_scroll.0.borrow_mut();
