@@ -43,7 +43,7 @@ impl TabState {
             - rem_pixels(crate::ui::style::TAB_BAR_HEIGHT).as_f32()
             - rem_pixels(crate::ui::style::NAV_BAR_HEIGHT).as_f32()
             - rem_pixels(rems(2.0)).as_f32()
-            - if self.quick_search.is_some() {
+            - if self.quick_search_query().is_some() {
                 rem_pixels(rems(2.0)).as_f32()
             } else {
                 0.0

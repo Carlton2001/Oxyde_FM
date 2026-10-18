@@ -11,6 +11,10 @@ mod calendar_refresh_tests;
 #[path = "filters/tests/metadata_indicators.rs"]
 mod metadata_indicator_tests;
 
+#[cfg(test)]
+#[path = "filters/tests/trash_search.rs"]
+mod trash_search_tests;
+
 impl SizeCategory {
     pub fn message(&self) -> Message {
         match self {
@@ -41,24 +45,28 @@ impl FileFilters {
         Self {
             filter_types: tab.filter_types.clone(),
             filter_name: tab.filter_name.clone(),
+            trash_search: if tab.path == "trash://" { tab.search_text.trim().to_lowercase() } else { String::new() },
             filter_original_location: tab.filter_original_location.clone(),
             filter_sizes: tab.filter_sizes.clone(),
             filter_dates: tab.filter_dates.clone(),
         }
     }
     pub(super) fn snapshot(&self, files: &std::sync::Arc<Vec<FileEntry>>, today: chrono::NaiveDate) -> std::sync::Arc<Vec<FileEntry>> {
-        if self.filter_types.is_empty() && self.filter_name.is_empty() && self.filter_original_location.is_empty() && self.filter_sizes.is_empty() && self.filter_dates.is_empty() {
+        if self.filter_types.is_empty() && self.filter_name.is_empty() && self.trash_search.is_empty() && self.filter_original_location.is_empty() && self.filter_sizes.is_empty() && self.filter_dates.is_empty() {
             files.clone()
         } else { self.filtered_files_on(files, today).into() }
     }
     pub(super) fn filtered_files_on(&self, files: &[FileEntry], today: chrono::NaiveDate) -> Vec<FileEntry> {
         if !self.filter_types.is_empty()
             || !self.filter_name.is_empty()
+            || !self.trash_search.is_empty()
             || !self.filter_original_location.is_empty()
             || !self.filter_sizes.is_empty()
             || !self.filter_dates.is_empty()
         {
             let name_filter = self.filter_name.to_lowercase();
+            let search_pattern = self.trash_search.contains(['*', '?'])
+                .then(|| glob::Pattern::new(&self.trash_search));
             let location_filter = self.filter_original_location.to_lowercase();
             files
                 .iter()
@@ -103,7 +111,12 @@ impl FileFilters {
                                     .to_lowercase()
                                     .contains(&location_filter)
                             });
-                    matches_type && matches_name && matches_size && matches_date && matches_location
+                    let matches_search = match &search_pattern {
+                        Some(Ok(pattern)) => pattern.matches(&f.name.to_lowercase()),
+                        Some(Err(_)) => false,
+                        None => self.trash_search.is_empty() || f.name.to_lowercase().contains(&self.trash_search),
+                    };
+                    matches_type && matches_name && matches_search && matches_size && matches_date && matches_location
                 })
                 .cloned()
                 .collect()

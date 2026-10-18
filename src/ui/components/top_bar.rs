@@ -782,7 +782,8 @@ pub fn render_top_bar(
                     },
                 )
         ))
-        .when(!is_trash_path && !is_network_neighborhood && !current_path.starts_with("::{"), |bar| {
+        .when(is_trash_path, |bar| bar.child(div().flex_1().min_w_0()))
+        .when(!is_network_neighborhood && !current_path.starts_with("::{"), |bar| {
             bar.child(view.render_quick_search_control(&pane_id, _cx))
         })
 }

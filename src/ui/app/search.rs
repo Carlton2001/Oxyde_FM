@@ -458,7 +458,13 @@ impl OxydeApp {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let tab = self.state.find_pane(pane_id).expect("pane").active_tab();
-        let search = tab.quick_search.as_ref().expect("search");
+        let search = tab.quick_search.as_ref();
+        let query = tab.quick_search_query().expect("search query");
+        let root = search.map_or(tab.path.as_str(), |search| search.root.as_str());
+        let running = search.is_some_and(|search| search.running);
+        let limited = search.is_some_and(|search| search.limited);
+        let empty_warnings = ArchiveSearchWarnings::default();
+        let warnings = search.map_or(&empty_warnings, |search| &search.archive_warnings);
         let theme = *cx.theme();
         let handle = cx.entity();
         let id = tab.id.clone();
@@ -502,12 +508,12 @@ impl OxydeApp {
                     .truncate()
                     .text_color(theme.accent)
                     .native_tooltip(crate::ui::components::tooltip::Tooltip::text(
-                        search.root.clone(),
+                        root.to_owned(),
                     ))
-                    .child(format!("'{}'", search.query)),
+                    .child(format!("'{query}'")),
             )
             .child(div().flex_1())
-            .when(search.archive_warnings.count > 0, |bar| {
+            .when(warnings.count > 0, |bar| {
                 bar.child(
                     div()
                         .id(SharedString::from(format!("search-archive-warning-{id}")))
@@ -515,17 +521,17 @@ impl OxydeApp {
                         .truncate()
                         .text_color(theme.warning_text)
                         .native_tooltip(crate::ui::components::tooltip::Tooltip::wrapped_text(
-                            search.archive_warnings.detail(&cx.i18n()),
+                            warnings.detail(&cx.i18n()),
                         ))
-                        .child(search.archive_warnings.label(&cx.i18n())),
+                        .child(warnings.label(&cx.i18n())),
                 )
             })
-            .when(search.running || search.limited, |bar| {
+            .when(running || limited, |bar| {
                 bar.child(
                     div()
                         .id(SharedString::from(format!("search-status-{stop_id}")))
                         .text_color(theme.text_muted)
-                        .when(search.running, |status| {
+                        .when(running, |status| {
                             status
                                 .native_tooltip(crate::ui::components::tooltip::Tooltip::text(
                                     cx.i18n().text(Message::QuickSearchStop).to_string(),
@@ -536,7 +542,7 @@ impl OxydeApp {
                                     });
                                 })
                         })
-                        .child(cx.i18n().text(if search.running {
+                        .child(cx.i18n().text(if running {
                             Message::QuickSearchRunning
                         } else {
                             Message::QuickSearchLimited
@@ -669,6 +675,9 @@ impl OxydeApp {
             return;
         };
         tab.search_text = text;
+        if tab.path == "trash://" {
+            tab.invalidate_preparation();
+        }
         tab.search_revision = tab.search_revision.wrapping_add(1);
         if let Some(search) = &tab.quick_search {
             search.cancellation.0.store(true, Ordering::Relaxed);
@@ -704,6 +713,12 @@ impl OxydeApp {
         let Some(tab) = self.state.find_tab_mut(tab_id) else {
             return;
         };
+        // Keep the trash location and item identities: only displayed names filter.
+        if tab.path == "trash://" {
+            self.prepare_current_tab(tab_id.to_owned(), cx);
+            cx.notify();
+            return;
+        }
         let query = tab.search_text.trim().to_owned();
         if query.is_empty() {
             self.clear_quick_search(tab_id, cx);
@@ -748,6 +763,11 @@ impl OxydeApp {
         tab.search_revision = tab.search_revision.wrapping_add(1);
         tab.search_text.clear();
         tab.search_input = None;
+        if tab.path == "trash://" {
+            self.prepare_current_tab(tab_id.to_owned(), cx);
+            cx.notify();
+            return;
+        }
         if let Some(search) = tab.quick_search.take() {
             search.cancellation.0.store(true, Ordering::Relaxed);
         }

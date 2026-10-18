@@ -11,6 +11,13 @@ mod prepared_sort_tests;
 mod archive_watcher_tests;
 
 impl TabState {
+    pub(crate) fn quick_search_query(&self) -> Option<&str> {
+        self.quick_search.as_ref().map(|search| search.query.as_str()).or_else(|| {
+            let query = self.search_text.trim();
+            (self.path == "trash://" && !query.is_empty()).then_some(query)
+        })
+    }
+
     pub(crate) fn grouping(&self) -> crate::ui::date_groups::GroupMode {
         if self.supports_grouping(self.group_mode) { self.group_mode }
         else { crate::ui::date_groups::GroupMode::None }

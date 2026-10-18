@@ -183,6 +183,7 @@ pub enum TabLoadStatus {
 struct FileFilters {
     filter_types: std::collections::HashSet<String>,
     filter_name: String,
+    trash_search: String,
     filter_original_location: String,
     filter_sizes: std::collections::HashSet<SizeCategory>,
     filter_dates: std::collections::HashSet<DateGroup>,

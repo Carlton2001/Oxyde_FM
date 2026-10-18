@@ -71,7 +71,7 @@ pub(super) fn render_details_file_list(
     // Reserve the horizontal track only when the columns overflow the pane.
     let h_track = if columns.content_width() + if trash_panel { logical(active_deleted_width) } else { 0.0 } > pane_viewport_w + 1.0 { crate::ui::components::scrollbar::zed_track_width() } else { 0.0 };
     let estimated_v_h =
-        (pane_size.height - rem_pixels(crate::ui::style::TAB_BAR_HEIGHT).as_f32() - rem_pixels(crate::ui::style::NAV_BAR_HEIGHT).as_f32() - if active_tab.quick_search.is_some() { logical(32.0) } else { 0.0 } - crate::ui::style::column_header_height() - status_bar_height() - h_track).max(1.0);
+        (pane_size.height - rem_pixels(crate::ui::style::TAB_BAR_HEIGHT).as_f32() - rem_pixels(crate::ui::style::NAV_BAR_HEIGHT).as_f32() - if active_tab.quick_search_query().is_some() { logical(32.0) } else { 0.0 } - crate::ui::style::column_header_height() - status_bar_height() - h_track).max(1.0);
     let content_h = (count * crate::ui::style::row_height()).max(1.0);
     let network_panel = active_tab.path == "__network_vincinity__";
     let name_w = if network_panel { columns.total() * 0.34 } else { columns.name };
