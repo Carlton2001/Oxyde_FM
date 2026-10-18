@@ -1,23 +1,41 @@
-//! Glide the breadcrumb toward its end when entering a subfolder; other jumps stay instant.
+//! Glide the breadcrumb toward its end when entering a subfolder, and along wheel scrolls.
 use gpui::*;
 use std::{cell::Cell, time::Instant};
 
-const DURATION: f32 = 0.22;
+/// Entering a subfolder reveals a new segment: slow enough to follow.
+const ENTER_DURATION: f32 = 0.22;
+/// Matches the tab strip's wheel scrolling.
+const WHEEL_DURATION: f32 = 0.18;
 
-type Glide = Cell<Option<(Instant, f32)>>;
+type Glide = Cell<Option<(Instant, f32, Option<f32>)>>;
 
 pub(super) fn start(glide: &Glide, previous: &str, current: &str, scroll: &ScrollHandle) {
     let entered = entered_child(previous, current);
-    glide.set(entered.then(|| (Instant::now(), scroll.offset().x.as_f32())));
+    glide.set(entered.then(|| (Instant::now(), scroll.offset().x.as_f32(), None)));
+}
+
+/// Retargets the glide by `delta` from the pending wheel target, so fast wheel turns accumulate.
+pub(super) fn scroll_by(glide: &Glide, scroll: &ScrollHandle, delta: Pixels) {
+    let current = scroll.offset().x.as_f32();
+    let base = match glide.get() {
+        Some((_, _, Some(target))) => target,
+        _ => current,
+    };
+    let target = (base + delta.as_f32()).clamp(-scroll.max_offset().x.as_f32(), 0.0);
+    glide.set(Some((Instant::now(), current, Some(target))));
 }
 
 /// Moves the scroll offset one frame forward; returns whether a glide is running.
 pub(super) fn advance(glide: &Glide, scroll: &ScrollHandle, window: &Window) -> bool {
-    let Some((started, from)) = glide.get() else {
+    let Some((started, from, target)) = glide.get() else {
         return false;
     };
-    let target = -scroll.max_offset().x.as_f32();
-    let t = (started.elapsed().as_secs_f32() / DURATION).min(1.0);
+    let max = scroll.max_offset().x.as_f32();
+    let (target, duration) = match target {
+        Some(target) => (target.clamp(-max, 0.0), WHEEL_DURATION),
+        None => (-max, ENTER_DURATION),
+    };
+    let t = (started.elapsed().as_secs_f32() / duration).min(1.0);
     let eased = 1.0 - (1.0 - t).powi(3);
     scroll.set_offset(point(px(from + (target - from) * eased), px(0.0)));
     if t < 1.0 {

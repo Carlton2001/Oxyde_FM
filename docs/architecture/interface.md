@@ -72,5 +72,5 @@ survol des lignes, le changement d’onglet ni le redimensionnement.
 
 `elements/motion.rs` fournit des ressorts critiquement amortis (`presence`,
 `glide`, `slide`) qui se réorientent sans saut. Ne pas animer l’apparition des
-fenêtres possédées (menus) : Windows y superpose sa propre animation d’ouverture.
+fenêtres possédées (menus, infobulles) : Windows y superpose sa propre animation d’ouverture.
 Une animation répétée doit être retirée du rendu dès qu’elle n’a plus d’objet.

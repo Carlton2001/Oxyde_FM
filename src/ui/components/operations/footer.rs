@@ -63,10 +63,10 @@ pub fn render_operations_footer(
                 .size_4());
             let halo = move |breath: f32| vec![BoxShadow {
                 inset: false,
-                color: theme.accent.opacity(0.2 + 0.5 * breath),
+                color: theme.accent.opacity(0.7 * breath),
                 offset: point(px(0.0), px(0.0)),
-                blur_radius: crate::ui::scale::rem_pixels(rems(0.375 + 0.375 * breath)),
-                spread_radius: crate::ui::scale::rem_pixels(rems(0.0625 + 0.125 * breath)),
+                blur_radius: crate::ui::scale::rem_pixels(rems(0.75 * breath)),
+                spread_radius: crate::ui::scale::rem_pixels(rems(0.1875 * breath)),
             }];
             if breathing {
                 icon.with_animation(

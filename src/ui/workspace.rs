@@ -139,10 +139,10 @@ pub struct TabState {
     pub breadcrumb_scroll: ScrollHandle,
     pub breadcrumb_scroll_path: std::cell::RefCell<String>,
     pub breadcrumb_viewport_width: std::rc::Rc<std::cell::Cell<f32>>,
-    /// Start time and offset of a breadcrumb glide toward its end.
     /// Last position of the scroll-to-top button, kept while it fades out.
     pub scroll_top_anchor: std::rc::Rc<std::cell::Cell<f32>>,
-    pub breadcrumb_glide: std::rc::Rc<std::cell::Cell<Option<(std::time::Instant, f32)>>>,
+    /// Start time, start offset and target of a breadcrumb glide; no target means its end.
+    pub breadcrumb_glide: std::rc::Rc<std::cell::Cell<Option<(std::time::Instant, f32, Option<f32>)>>>,
     pub sort_column: SortColumn,
     pub sort_direction: SortDirection,
     pub filter_types: std::collections::HashSet<String>,

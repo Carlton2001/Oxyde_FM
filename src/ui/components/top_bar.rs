@@ -734,10 +734,7 @@ pub fn render_top_bar(
                                     };
                                     let max = wheel_scroll.max_offset().x;
                                     if max > px(0.0) && amount != px(0.0) {
-                                        wheel_glide.set(None);
-                                        let offset = wheel_scroll.offset();
-                                        let x = (offset.x + amount * 1.5).clamp(-max, px(0.0));
-                                        wheel_scroll.set_offset(point(x, offset.y));
+                                        breadcrumb_glide::scroll_by(&wheel_glide, &wheel_scroll, amount * 1.5);
                                         wheel_handle.update(cx, |_, cx| cx.notify());
                                         cx.stop_propagation();
                                     }

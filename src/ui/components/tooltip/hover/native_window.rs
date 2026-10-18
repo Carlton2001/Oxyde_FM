@@ -68,8 +68,6 @@ pub(super) struct NativeTooltip {
     view: Option<AnyView>,
     measured: Option<Size<Pixels>>,
     scale: f32,
-    /// Counts appearances from an empty surface; switching tooltips does not fade again.
-    appearances: u64,
 }
 
 fn visible_size(measured: Option<Size<Pixels>>, rem: Pixels) -> Size<Pixels> {
@@ -148,8 +146,6 @@ pub(super) fn sync(parent: &mut Window, cx: &mut App) {
         if root.view.as_ref().map(|view| view.entity_id()) != view.as_ref().map(|view| view.entity_id()) {
             if let Some(old) = root.view.take() {
                 set_native(&old, false, cx);
-            } else if view.is_some() {
-                root.appearances = root.appearances.wrapping_add(1);
             }
             root.view = view;
             if let Some(view) = &root.view {
@@ -279,7 +275,6 @@ pub(super) fn present(_view: &AnyView, parent: &mut Window, cx: &mut App) -> boo
                             view: None,
                             measured: None,
                             scale,
-                            appearances: 0,
                         })
                     },
                 )
@@ -343,14 +338,7 @@ pub(super) fn present(_view: &AnyView, parent: &mut Window, cx: &mut App) -> boo
 impl Render for NativeTooltip {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let content = match &self.view {
-            Some(view) => div()
-                .child(view.clone())
-                .with_animation(
-                    SharedString::from(format!("tooltip-entrance-{}", self.appearances)),
-                    Animation::new(std::time::Duration::from_millis(80)).with_easing(ease_out_quint()),
-                    |tooltip, delta| tooltip.opacity(delta),
-                )
-                .into_any_element(),
+            Some(view) => view.clone().into_any_element(),
             None => div().into_any_element(),
         };
         MeasuredContent {
