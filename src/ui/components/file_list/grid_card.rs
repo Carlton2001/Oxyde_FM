@@ -66,8 +66,9 @@ pub(super) fn render_grid_card(params: GridCardParams<'_>, cx: &mut App) -> Stat
     } = params;
     let can_browse = is_dir || file.is_navigable_archive() || file.needs_mount_for_browsing();
     let can_drop = is_dir || file.is_writable_archive();
+    let loading_size = calculating_sizes && is_dir && !file.is_calculated;
     let mut card = div()
-        .id(SharedString::from(format!("file-card-{path}"))).when(calculating_sizes && is_dir && !file.is_calculated, |d| d.child(size_loading(&path, theme.accent))).relative().when(histogram_total > 0, |d| d.child(
+        .id(SharedString::from(format!("file-card-{path}"))).relative().when(histogram_total > 0, |d| d.child(
             crate::ui::elements::rounded_fill::rounded_fill(
                 (file.size as f64 / histogram_total as f64) as f32,
                 rems(0.3125),
@@ -240,6 +241,7 @@ pub(super) fn render_grid_card(params: GridCardParams<'_>, cx: &mut App) -> Stat
                         .flex()
                         .items_center()
                         .justify_center()
+                        .when(loading_size, |icon| icon.opacity(0.3))
                         .child(if show_grid_thumbnails
                             && !is_dir
                             && matches!(crate::ui::components::icons::get_preview_type(&path), crate::ui::components::icons::PreviewType::Image | crate::ui::components::icons::PreviewType::Pdf)
@@ -249,6 +251,17 @@ pub(super) fn render_grid_card(params: GridCardParams<'_>, cx: &mut App) -> Stat
                             render_file_icon(path.clone(), icon, rems(4.0), &theme, use_system_icons, true)
                         }),
                 )
+                .when(loading_size, |area| {
+                    area.child(
+                        div()
+                            .absolute()
+                            .inset_0()
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .child(size_loading(&path, theme.accent)),
+                    )
+                })
                 .when(has_subdirectories, |row| {
                     row.child(
                         div()
