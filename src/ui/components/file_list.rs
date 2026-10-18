@@ -25,6 +25,17 @@ use gpui::*;
 use crate::ui::style::STATUS_BAR_HEIGHT;
 fn status_bar_height() -> f32 { rem_pixels(STATUS_BAR_HEIGHT).as_f32() }
 
+/// Vertical rail placement (top, height) matching the measured list viewport,
+/// relative to the container recorded in `list_bounds`.
+fn measured_rail(view: &OxydeApp, pane_id: &str, scroll: &ScrollHandle) -> Option<(f32, f32)> {
+    let list = scroll.bounds();
+    let container = view.list_bounds.get(pane_id)?;
+    let top = list.origin.y.as_f32() - container.origin.y;
+    // Clip to the visible container: the list may overflow below its padded parent.
+    let height = list.size.height.as_f32().min(container.size.height - top);
+    (height > 0.0).then_some((top, height))
+}
+
 pub fn render_file_list(
     view: &OxydeApp,
     pane_id: String,

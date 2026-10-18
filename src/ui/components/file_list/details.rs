@@ -56,9 +56,6 @@ pub(super) fn render_details_file_list(
     });
     let pane_viewport_w = pane_size.width.max(1.0);
 
-    let v_v_h =
-        (pane_size.height - rem_pixels(crate::ui::style::TAB_BAR_HEIGHT).as_f32() - rem_pixels(crate::ui::style::NAV_BAR_HEIGHT).as_f32() - if active_tab.quick_search.is_some() { logical(32.0) } else { 0.0 } - crate::ui::style::column_header_height() - status_bar_height() - crate::ui::components::scrollbar::zed_track_width()).max(1.0);
-    let content_h = (count * crate::ui::style::row_height()).max(1.0);
 
     let trash_panel = active_tab.path == "trash://";
     let active_deleted_width = active_tab.deleted_col_width;
@@ -69,6 +66,11 @@ pub(super) fn render_details_file_list(
         active_tab.date_col_width,
         search_results || trash_panel,
     );
+    // Reserve the horizontal track only when the columns overflow the pane.
+    let h_track = if columns.content_width() + if trash_panel { logical(active_deleted_width) } else { 0.0 } > pane_viewport_w + 1.0 { crate::ui::components::scrollbar::zed_track_width() } else { 0.0 };
+    let estimated_v_h =
+        (pane_size.height - rem_pixels(crate::ui::style::TAB_BAR_HEIGHT).as_f32() - rem_pixels(crate::ui::style::NAV_BAR_HEIGHT).as_f32() - if active_tab.quick_search.is_some() { logical(32.0) } else { 0.0 } - crate::ui::style::column_header_height() - status_bar_height() - h_track).max(1.0);
+    let content_h = (count * crate::ui::style::row_height()).max(1.0);
     let network_panel = active_tab.path == "__network_vincinity__";
     let name_w = if network_panel { columns.total() * 0.34 } else { columns.name };
     let type_w = if network_panel { columns.total() * 0.22 } else { columns.file_type };
@@ -145,7 +147,7 @@ pub(super) fn render_details_file_list(
                     move |_, bounds: Bounds<Pixels>, _, cx| {
                         let b = Bounds {
                             origin: Point { x: bounds.origin.x.as_f32(), y: bounds.origin.y.as_f32() },
-                            size: Size { width: bounds.size.width.as_f32(), height: (bounds.size.height.as_f32() - status_bar_height() - crate::ui::components::scrollbar::zed_track_width()).max(1.0) },
+                            size: Size { width: bounds.size.width.as_f32(), height: (bounds.size.height.as_f32() - status_bar_height() - h_track).max(1.0) },
                         };
                         h.update(cx, |this, _| {
                             this.list_bounds.insert(p_id.clone(), b);
@@ -174,7 +176,7 @@ pub(super) fn render_details_file_list(
                         .left(active_tab.list_scroll_h.offset().x + rem_pixels(rems(0.5)))
                         .w(px(total_w))
                         .top_0()
-                        .bottom(px(status_bar_height() + crate::ui::components::scrollbar::zed_track_width()))
+                        .bottom(px(status_bar_height() + h_track))
                         .flex()
                         .flex_col()
                         .child(render_headers(view, pane_id.clone(), handle.clone(), name_w, location_w, type_w, size_w, date_w, if trash_panel { logical(active_tab.deleted_col_width) } else { 0.0 }, &theme, cx.i18n()))
@@ -455,6 +457,9 @@ pub(super) fn render_details_file_list(
         }
     }
 
+    // Prefer the measured list viewport, like the grid, so the thumb reaches the rail end.
+    let measured_v_h = active_tab.list_scroll.0.borrow().base_handle.bounds().size.height.as_f32();
+    let v_v_h = if measured_v_h > 0.0 { measured_v_h } else { estimated_v_h };
     let pane_suffix = format!("pane-{}", pane_id);
     let v_offset = -active_tab
         .list_scroll
@@ -466,11 +471,14 @@ pub(super) fn render_details_file_list(
         .as_f32();
 
     // Vertical scrollbar and its scroll-to-top affordance.
+    let rail = super::measured_rail(view, &pane_id, &active_tab.list_scroll.0.borrow().base_handle);
     let mut vertical_scroll_zone = div()
         .absolute()
-        .top(px(crate::ui::style::column_header_height()))
+        .map(|zone| match rail {
+            Some((top, height)) => zone.top(px(top)).h(px(height)),
+            None => zone.top(px(crate::ui::style::column_header_height())).bottom(px(status_bar_height() + h_track)),
+        })
         .right_0()
-        .bottom(px(status_bar_height()))
         .w(rems(3.625))
         .group("file-list-scroll-zone")
         .child(render_scrollbar(

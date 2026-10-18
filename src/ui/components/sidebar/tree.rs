@@ -68,8 +68,13 @@ pub(super) fn render_sidebar_tree(
 
     let viewport_w = view.sidebar_display_width();
     let content_w = calculated_content_w.max(viewport_w);
-    let viewport_h = (view.list_height - logical(76.0)).max(1.0);
+    // Reserve scrollbar gutters only when their axis actually overflows.
+    let h_overflow = content_w > viewport_w + 1.0;
+    let list_top = crate::ui::scale::rem_pixels(rems(2.5)).as_f32();
+    let list_bottom = if h_overflow { crate::ui::components::scrollbar::zed_track_width() } else { 0.0 };
+    let viewport_h = (view.list_height - list_top - list_bottom).max(1.0);
     let content_h = sidebar_items.iter().map(sidebar_item_height).sum::<f32>().max(1.0);
+    let list_right = if content_h > viewport_h { rems(1.125) } else { rems(0.5) };
 
     // Highlight only the folder currently open in the active pane's active tab.
     let selected_path = view
@@ -98,9 +103,9 @@ pub(super) fn render_sidebar_tree(
                     div()
                         .absolute()
                         .top(rems(2.5))
-                        .bottom(rems(2.25))
+                        .bottom(px(list_bottom))
                         .left(rems(0.5))
-                        .right(rems(1.125)) // 12 px scrollbar track + 6 px clear margin.
+                        .right(list_right) // 12 px scrollbar track + 6 px clear margin when needed.
                         .overflow_hidden()
                         .child(crate::ui::components::tooltip::hover::region_container(
                             handle.clone(), crate::ui::components::tooltip::hover::HoverRegion::DirectoryTree,
@@ -169,7 +174,7 @@ pub(super) fn render_sidebar_tree(
         div()
             .absolute()
             .top(rems(2.5))
-            .bottom(rems(2.25))
+            .bottom(px(list_bottom))
             .right_0()
             .w(rems(0.75))
             .child(render_scrollbar(

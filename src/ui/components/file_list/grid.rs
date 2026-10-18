@@ -231,7 +231,7 @@ pub(super) fn render_grid_file_list(
             let visible = super::grid_scroll::visible_prefix(&presentation.heights, tab.group_by_date, offset, if actual_viewport > 0.0 { actual_viewport } else { viewport });
             let scroll_handle = handle.clone();
             div().id(SharedString::from(if tab.group_by_date { format!("file-grid-grouped-{pane_id}") } else { format!("file-grid-{pane_id}") }))
-                .h_full().flex().flex_col().overflow_y_scroll().track_scroll(&scroll)
+                .flex_1().min_h_0().flex().flex_col().pt_1().overflow_y_scroll().track_scroll(&scroll)
                 .on_scroll_wheel(move |_, _, cx| scroll_handle.update(cx, |_, cx| cx.notify()))
                 .child(div().h(px(visible.top)).flex_none())
                 .children(render_rows(visible.range, cx))
@@ -248,7 +248,14 @@ pub(super) fn render_grid_file_list(
             .size
             .height
             .as_f32();
-        let content_height = *presentation.heights.last().unwrap() + crate::ui::style::row_height();
+        // Derive the content from GPUI's measured scroll range when available, so the
+        // thumb reaches the rail end exactly when the list cannot scroll further.
+        let measured_max = tab.list_scroll.0.borrow().base_handle.max_offset().y.as_f32();
+        let content_height = if viewport_height > 0.0 && measured_max > 0.0 {
+            viewport_height + measured_max
+        } else {
+            *presentation.heights.last().unwrap() + crate::ui::style::row_height()
+        };
         let scroll_offset = -tab
             .list_scroll
             .0
@@ -263,10 +270,11 @@ pub(super) fn render_grid_file_list(
             .relative()
             .flex_1()
             .min_h_0()
+            .flex()
+            .flex_col()
             .overflow_hidden()
             .px_2()
             .pr(px(crate::ui::components::scrollbar::zed_track_width()))
-            .pt_1()
             .child(
                 canvas(|bounds, _, _| bounds, {
                     let h = handle.clone();
@@ -293,7 +301,10 @@ pub(super) fn render_grid_file_list(
                 .size_full(),
             )
             .child(list)
-            .child(div().absolute().top_0().bottom_0().right_0().w(rems(3.625)).group("file-list-scroll-zone").child(render_scrollbar(
+            .child(div().absolute().map(|zone| match super::measured_rail(view, &pane_id, &tab.list_scroll.0.borrow().base_handle) {
+                Some((top, height)) => zone.top(px(top)).h(px(height)),
+                None => zone.top_0().bottom_0(),
+            }).right_0().w(rems(3.625)).group("file-list-scroll-zone").child(render_scrollbar(
                 theme,
                 handle.clone(),
                 ScrollbarAxis::Vertical,
