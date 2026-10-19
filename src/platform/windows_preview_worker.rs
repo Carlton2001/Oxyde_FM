@@ -157,6 +157,14 @@ pub(super) fn job(memory_bytes: usize) -> io::Result<OwnedHandle> {
 }
 
 pub(super) fn run(mode: &str, path: &Path) -> io::Result<Vec<u8>> {
+    if mode == "audio-cover" || mode == "audio-cover-thumbnail" {
+        return image_session::run(path, if mode == "audio-cover-thumbnail" {
+            image_session::AUDIO_THUMBNAIL_KIND
+        } else { image_session::AUDIO_KIND });
+    }
+    if mode == "audio-metadata" {
+        return run_audio_metadata_in(&std::env::current_exe()?.with_file_name("oxyde-image-worker.exe"), path);
+    }
     if (mode == "icon-small" || mode == "icon-large") && path.to_str().is_some_and(|path| path.len() + 5 <= crate::commands::icon_session_worker::MAX_INPUT) {
         return icon_session::run(path, mode == "icon-large");
     }
@@ -181,6 +189,18 @@ pub(super) fn run(mode: &str, path: &Path) -> io::Result<Vec<u8>> {
         run_in(&std::env::current_exe()?, mode, path, DEADLINE)
     }
 }
+
+fn run_audio_metadata_in(executable: &Path, path: &Path) -> io::Result<Vec<u8>> {
+    let source = super::platform().retain_archive_source(path)?;
+    let mut command = Command::new(executable);
+    command.arg(crate::commands::audio_handle_worker::FLAG);
+    supervise_source(command, &source.file, DEADLINE, MEMORY_BYTES,
+        crate::utils::audio_metadata::MAX_REPLY, &|| Ok(()))
+}
+
+#[cfg(test)]
+#[path = "windows_preview_worker/tests/audio_metadata.rs"]
+mod audio_metadata_tests;
 
 pub(super) fn run_image_mode_in(executable: &Path, path: &Path, deadline: Duration, thumbnail: bool) -> io::Result<Vec<u8>> {
     let source = crate::platform::platform().retain_archive_source(path)?;

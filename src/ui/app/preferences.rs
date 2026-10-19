@@ -73,6 +73,7 @@ impl OxydeApp {
     pub(crate) fn clear_cache(&mut self, cx: &mut Context<Self>) {
         if self.clearing_cache { return; }
         self.clearing_cache = true;
+        crate::ui::audio_covers::clear();
         self.settings_data_status = Some(Message::SettingsCacheClearing);
         cx.notify();
         cx.spawn(async move |this, cx| {

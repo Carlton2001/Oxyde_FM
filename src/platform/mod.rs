@@ -429,6 +429,47 @@ pub trait Platform: Send + Sync {
         thumbnails::get_office_document(path)
     }
 
+    /// Cover-only requests use a reusable codec session and raw, bounded pixels.
+    fn audio_cover(&self, path: &std::path::Path, thumbnail: bool) -> std::io::Result<Option<image::RgbaImage>> {
+        #[cfg(target_os = "windows")]
+        {
+            use crate::utils::preview_protocol::{self, Reply, Limits};
+            let side = if thumbnail { 128 } else { 512 };
+            let bytes = self.run_preview_worker(if thumbnail { "audio-cover-thumbnail" } else { "audio-cover" }, path)?;
+            match preview_protocol::decode_with(&bytes, Limits { pixels: (side * side * 4) as usize, side })? {
+                Reply::Images { mut frames, .. } if frames.len() == 1 => Ok(Some(frames.remove(0).into_buffer())),
+                Reply::Text(text) if text.is_empty() => Ok(None),
+                Reply::Error { detail, .. } => Err(std::io::Error::other(detail)),
+                _ => Err(std::io::Error::other("Invalid audio cover reply")),
+            }
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            crate::utils::audio_metadata::read_cover(self.retain_archive_source(path)?.file, thumbnail)?
+                .map(|cover| image::RgbaImage::from_raw(cover.width, cover.height, cover.pixels)
+                    .ok_or_else(|| std::io::Error::other("Invalid audio cover pixels"))).transpose()
+        }
+    }
+
+    /// Audio tags and already decoded cover pixels; called away from the UI thread.
+    fn audio_metadata(&self, path: &std::path::Path) -> std::io::Result<crate::utils::audio_metadata::AudioMetadata> {
+        #[cfg(target_os = "windows")]
+        {
+            let bytes = self.run_preview_worker("audio-metadata", path)?;
+            if bytes.len() > crate::utils::audio_metadata::MAX_REPLY {
+                return Err(std::io::Error::other("Audio metadata reply exceeds its limit"));
+            }
+            let metadata: crate::utils::audio_metadata::AudioMetadata =
+                serde_json::from_slice(&bytes).map_err(std::io::Error::other)?;
+            metadata.validate()?;
+            Ok(metadata)
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            crate::utils::audio_metadata::read(self.retain_archive_source(path)?.file)
+        }
+    }
+
     /// Starts the Viewer's image decoder ahead of its first image.
     fn warm_viewer_images(&self) {}
     /// Ends the Viewer's image decoder while it shows other content.

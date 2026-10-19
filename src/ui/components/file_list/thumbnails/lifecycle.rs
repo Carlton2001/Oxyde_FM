@@ -9,6 +9,7 @@ use std::sync::{Arc, Weak};
 pub(super) struct Source {
     pub(super) path: SharedString,
     pub(super) stamp: Option<FileStamp>,
+    pub(super) audio: bool,
     size: u64,
     modified: u64,
     generation: u64,
@@ -19,6 +20,7 @@ impl Source {
         Self {
             path: file.path.clone().into(),
             stamp: file.content_stamp.clone(),
+            audio: super::is_audio(file),
             size: file.size,
             modified: file.modified,
             generation: 0,
@@ -40,6 +42,10 @@ struct Owners {
 impl Global for Owners {}
 
 impl Owners {
+    fn shares_image(&self, image: &Arc<RenderImage>) -> bool {
+        let image = Arc::downgrade(image);
+        self.sources.values().any(|entry| entry.image.as_ref().is_some_and(|other| Weak::ptr_eq(other, &image)))
+    }
     fn retain(&mut self, source: Source) {
         self.sources.entry(source).or_default().cards += 1;
     }
@@ -77,7 +83,9 @@ fn release(source: &Source, window: Option<&mut Window>, cx: &mut App) {
         let image = entry.image.and_then(|image| image.upgrade());
         cx.remove_asset::<GridThumbnailAsset>(source);
         if let Some(image) = image {
-            cx.drop_image(image, window);
+            if !cx.default_global::<Owners>().shares_image(&image) {
+                cx.drop_image(image, window);
+            }
         }
     }
 }
@@ -129,7 +137,9 @@ fn evict(source: &Source, cx: &mut App) {
     let image = cx.default_global::<Owners>().take_image(source);
     cx.remove_asset::<GridThumbnailAsset>(source);
     if let Some(image) = image {
-        cx.drop_image(image, None);
+        if !cx.default_global::<Owners>().shares_image(&image) {
+            cx.drop_image(image, None);
+        }
     }
 }
 
@@ -147,6 +157,7 @@ pub(super) fn invalidate(path: &str, cx: &mut App) {
 }
 
 pub(crate) fn clear_grid_thumbnails(cx: &mut App) {
+    crate::ui::audio_covers::clear();
     let sources = cx.default_global::<Owners>().reset();
     for source in sources {
         crate::ui::components::tooltip::invalidate_media_preview(&source.path);

@@ -18,6 +18,10 @@ const ITALIAN: &str = include_str!("../../locales/it.ftl");
 /// Stable identifiers, independent of the text displayed to users.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Message {
+    AudioYear,
+    AudioNoTags,
+    AudioAlbum,
+    AudioTrack,
     ViewerTitle,
     ViewerLoading,
     ViewerAutoplay,
@@ -771,6 +775,10 @@ impl Message {
             Self::PreviewTimedOut => "preview-timed-out",
             Self::PreviewImageLimit => "preview-image-limit",
             Self::PreviewAnimationStatic => "preview-animation-static",
+            Self::AudioYear => "audio-year",
+            Self::AudioNoTags => "audio-no-tags",
+            Self::AudioAlbum => "audio-album",
+            Self::AudioTrack => "audio-track",
             Self::ViewerTitle => "viewer-title",
             Self::ViewerOpen => "viewer-open",
             Self::ViewerClose => "viewer-close",
@@ -1312,6 +1320,10 @@ mod tests {
         for language in Language::ALL {
             let i18n = I18n::for_language(language);
             let messages = [
+                Message::AudioYear,
+                Message::AudioNoTags,
+                Message::AudioAlbum,
+                Message::AudioTrack,
                 Message::ViewerTitle,
                 Message::ViewerLoading,
                 Message::ViewerAutoplay,

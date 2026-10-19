@@ -12,7 +12,9 @@ fn main() {
             let renderer = renderer.get_or_init(|| gpui::SvgRenderer::new(std::sync::Arc::new(())));
             svg::svg(data, renderer, policy)
         }) {
-            oxyde_lib::commands::office_handle_worker::run_if_requested();
+            if !oxyde_lib::commands::office_handle_worker::run_if_requested() {
+                oxyde_lib::commands::audio_handle_worker::run_if_requested();
+            }
         }
     }
 }

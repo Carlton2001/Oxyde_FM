@@ -72,6 +72,7 @@ unic-langid = "0.9"
 tempfile = "3.10"
 syntect = { version = "5.3.0", default-features = false, features = ["default-syntaxes", "regex-fancy", "yaml-load"] }
 pulldown-cmark = { version = "0.13", default-features = false }
+lofty = "0.25.4"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 # Required by the official COM implementation macro; already used by windows.

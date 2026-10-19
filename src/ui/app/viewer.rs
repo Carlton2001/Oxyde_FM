@@ -1,4 +1,5 @@
 mod content;
+mod audio;
 mod content_render;
 mod media;
 mod media_bar;
@@ -405,6 +406,10 @@ impl Viewer {
                 )
             );
         if self.native_media {
+            if self.audio {
+                let path = file.path.clone();
+                self.load_audio(path, cx);
+            }
             if !cfg!(target_os = "windows") {
                 self.native_media = false;
             }

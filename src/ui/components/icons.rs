@@ -304,6 +304,7 @@ pub fn get_icon_type(
 pub enum PreviewType {
     None,
     Image,
+    Audio,
     Video,
     Pdf,
     Office,
@@ -323,6 +324,9 @@ pub fn get_preview_type(name: &str) -> PreviewType {
     }
     if PREVIEWABLE_VIDEO_EXTENSIONS.contains(ext) {
         return PreviewType::Video;
+    }
+    if AUDIO_EXTENSIONS.contains(ext) {
+        return PreviewType::Audio;
     }
     if PDF_EXTENSIONS.contains(ext) {
         return PreviewType::Pdf;

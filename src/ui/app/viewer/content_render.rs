@@ -87,6 +87,7 @@ impl Viewer {
             _ => {}
         }
         match &self.content {
+            Content::Audio(_) => self.render_audio(window, cx),
             Content::None if self.preparation.is_some() => {
                 message(cx.i18n().text(Message::ViewerLoading), cx)
             }

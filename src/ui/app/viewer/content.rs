@@ -18,6 +18,7 @@ pub(super) enum Content {
     Loading,
     Unavailable,
     Image(Arc<RenderImage>),
+    Audio(super::audio::Audio),
     Pdf(super::pdf::Pdf),
     Document(Arc<Vec<Block>>, ListState),
     Text(super::text::TextFile),
@@ -79,6 +80,7 @@ impl Content {
     fn images(&self) -> Vec<Arc<RenderImage>> {
         match self {
             Self::Image(image) => vec![image.clone()],
+            Self::Audio(audio) => audio.cover.iter().cloned().collect(),
             Self::Pdf(pdf) => pdf.images().collect(),
             Self::Markdown(document) => document.images(),
             _ => Vec::new(),

@@ -6,11 +6,11 @@ Cette référence synthétise les protections livrées et les points encore ouve
 
 Le parent est de confiance ; un worker peut être compromis par un codec. Noyau, lancement et runtime font partie de la base de confiance ; administrateur hostile et parent compromis sont hors contrat.
 
-Decode/Encode d’archives, listing/index, images/SVG et texte Office utilisent des workers LPAC sans capacité, sans repli local permissif. Le parent garde les sources, les contrôles et les écritures. Le lancement suspendu attache les jobs avant reprise ; seuls les handles IPC et sources explicitement autorisés sont transmis.
+Decode/Encode d’archives, listing/index, images/SVG, texte Office et tags/pochettes audio utilisent des workers LPAC sans capacité, sans repli local permissif. Le parent garde les sources, les contrôles et les écritures. Le lancement suspendu attache les jobs avant reprise ; seuls les handles IPC et sources explicitement autorisés sont transmis.
 
 Les exceptions ACL ont été retenues par l’utilisateur : un accès explicite au SID exact du worker ou à `ALL RESTRICTED APPLICATION PACKAGES` peut rester possible. Le confinement n’est pas indépendant des ACL.
 
-PDF, vidéo, lecteur audio/vidéo du Viewer et services natifs Shell/miniatures/icônes restent hors LPAC. Leurs jobs et délais ne retirent pas les permissions ordinaires. Le Viewer utilise les codecs système dans un self-worker distinct, sans décodage multimédia dans le parent ; son heartbeat surveille la réponse IPC, pas la progression du codec. Les sessions réutilisables d’images peuvent conserver l’état d’un décodeur compromis entre demandes : [aperçus](../architecture/previews.md).
+PDF, vidéo, lecteur audio/vidéo du Viewer et services natifs Shell/miniatures/icônes restent hors LPAC. Leurs jobs et délais ne retirent pas les permissions ordinaires. Le Viewer utilise les codecs système dans un self-worker distinct, sans décodage multimédia dans le parent ; son heartbeat surveille la réponse IPC, pas la progression du codec. Les sessions réutilisables d’images et de pochettes audio peuvent conserver l’état d’un décodeur compromis entre demandes ; leurs sessions sont distinctes : [aperçus](../architecture/previews.md).
 
 ## Suivi R1–R9
 

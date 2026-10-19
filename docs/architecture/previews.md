@@ -119,6 +119,26 @@ reste actif. Fermer la fenêtre secondaire libère sa session et restaure l’ap
 dans le panneau conservé. Fermer la fenêtre principale ferme également les
 Viewers détachés.
 
+Le Viewer audio affiche les tags textuels reconnus par Lofty (titre, artiste,
+album, date, genre, piste/disque, commentaires, paroles et autres champs
+reconnus) et la pochette intégrée, avec priorité à la couverture avant. Sans
+pochette décodable, l’icône musicale reste visible ; une erreur de métadonnées
+n’empêche pas la lecture. Une carte centrée regroupe la pochette et le titre,
+puis trois colonnes Album / Piste / Année. La barre de lecture et
+de progression suit immédiatement la carte, à la même largeur. Seuls le titre,
+la piste, l’album et l’année sont affichés ; l’ensemble défile si la hauteur
+disponible est insuffisante. Les valeurs sont limitées à 4096
+caractères, 256 champs et 256 Kio de texte.
+Sous Windows, l’extraction et le décodage passent par `oxyde-image-worker`
+en LPAC avec le seul handle source hérité, 512 Mio et 15 secondes. La réponse
+JSON est bornée à 8 Mio ; le parent valide dimensions et longueur des pixels
+BGRA (512 × 512 maximum), sans redécoder l’image. Les images intégrées de plus
+de 16 Mio et les images dépassant 64 Mio de pixels source sont ignorées.
+Les réponses obsolètes sont écartées par génération et les textures libérées
+au changement de contenu. Aucun fichier ni URL de pochette externe n’est chargé.
+Linux lit les métadonnées en arrière-plan sans confinement ; la lecture audio
+native y reste indisponible.
+
 Sous Windows, audio et vidéo utilisent les codecs système via IMFMediaEngine (mode HWND) dans le
 mode `viewer-media` du self-worker. Un même lecteur natif synchronise image et
 son et reçoit play/pause (ou Espace). La toolbar propose « Lecture automatique »,
@@ -165,6 +185,47 @@ lecteur natif n’y est pas implémenté.
 | Stockage Windows | `oxyde/thumbnails` sous le cache utilisateur, ou cache portable ; quota 256 Mio / 4096 entrées |
 
 Le survol ne lit ni n’écrit le cache disque. Une miniature ne remplit pas le cache des aperçus. Les sorties trop lourdes restent affichables sans persistance ; les petites images ne sont pas agrandies. Les anciens caches d’aperçus sont ignorés jusqu’à l’action Effacer le cache.
+
+Les fichiers audio de la grille utilisent leur pochette intégrée (priorité à
+la couverture avant), extraite par le même parcours `Platform::audio_metadata`
+que le Viewer. Les pixels validés sont réduits à 128 px avec Triangle puis
+conservés dans le cache de miniatures, sous une clé audio distincte. Sans
+pochette ou en cas de format non pris en charge, la carte garde son icône.
+La reconnaissance utilise l’extension ou le type audio natif. Les fichiers
+audio reconnus par extension affichent aussi leur pochette au survol, sans
+lecture ni écriture du cache disque. Chargement, contrôles de révision et persistance
+restent en arrière-plan, avec les mêmes leases que les autres cartes.
+
+Les pochettes disposent d’un cache RAM de 32 révisions/résolutions de fichiers
+(128 px pour la grille, 512 px pour le survol ; au plus 2 Mio si les entrées
+sont uniquement des miniatures, 32 Mio si elles sont uniquement des aperçus).
+Une empreinte BLAKE3 des dimensions et pixels
+permet de partager les images identiques entre morceaux, et les miniatures
+identiques entre cartes. Ce partage ne repose pas sur le nom d’album. Sur
+disque, une référence de 40 octets par révision de morceau pointe vers une
+miniature commune nommée par son empreinte, vérifiée à la lecture. Références
+et miniatures restent dans le quota existant ; la suppression d’une miniature
+commune entraîne un cache manquant, régénéré au prochain chargement. Les
+fichiers sources conservent leurs contrôles de révision indépendants.
+
+Les pochettes de survol et de grille utilisent une session LPAC audio dédiée
+et réutilisable de `oxyde-image-worker`, distincte des sessions images et de
+l’extraction complète du Viewer. Les requêtes transmettent seulement le handle
+source et la résolution attendue ; les réponses contiennent les pixels BGRA
+binaires, sans tags ni JSON. La grille est réduite directement à 128 px dans
+le worker, le survol à 512 px. Le job audio est plafonné à 256 Mio, avec 15 s
+par requête, 15 s d’inactivité et recyclage après 32 requêtes ou 60 s. Un fichier
+valide sans pochette ne provoque pas de redémarrage ; erreur de parse/décodage,
+crash ou délai retirent la session, sans repli local. Le worker garde uniquement
+la dernière pochette décodée, par empreinte des octets intégrés et résolution
+(1 Mio au plus). Une grande source audio peut être parcourue par seek ; elle
+n’est pas chargée intégralement pour produire une pochette.
+Le survol audio et les tags du Viewer ont chacun une admission dédiée d’une
+requête, afin de ne pas attendre toute la file des miniatures. Les tags du
+Viewer conservent leur worker ponctuel et leur réponse complète, mais ne
+prennent plus le verrou global des aperçus fixes. Les budgets agrégés restent
+communs : cette séparation ne garantit pas une disponibilité immédiate sous
+pression mémoire ou lorsque toutes les places de processus sont occupées.
 
 Les clés utilisent chemin, type, taille et date ; les workers vérifient la source avant réutilisation et autour du décodage. Pas de cache des erreurs. Effacer le cache invalide les générations en cours. La signature taille/date n’est pas une preuve d’identité ou de contenu.
 

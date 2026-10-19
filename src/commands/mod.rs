@@ -14,6 +14,9 @@ pub mod image_handle_worker;
 #[doc(hidden)]
 #[cfg(target_os = "windows")]
 pub mod office_handle_worker;
+#[doc(hidden)]
+#[cfg(target_os = "windows")]
+pub mod audio_handle_worker;
 mod archive_iso_open;
 mod archive_metadata;
 mod archive_seven_open;

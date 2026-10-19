@@ -108,13 +108,8 @@ impl Render for Viewer {
                                     .relative()
                                     .items_center()
                                     .justify_center()
-                                    .when(self.audio && !failed, |content| {
-                                        content.child(
-                                            svg()
-                                                .path("icons/music.svg")
-                                                .size(rems(5.0))
-                                                .text_color(theme.text_muted),
-                                        )
+                                    .when(self.audio, |content| {
+                                        content.child(self.render_audio(window, cx))
                                     })
                                     .when(failed, |content| {
                                         content.child(cx.i18n().text(Message::PreviewUnavailable))
@@ -139,10 +134,7 @@ impl Render for Viewer {
                             }
                         },
                     )),
-            )
-            .when(self.native_media && self.audio && !failed, |surface| {
-                surface.child(self.render_media_bar(cx))
-            });
+            );
         surface.into_any_element()
     }
 }

@@ -13,6 +13,11 @@ Référence : `SHUTDOWN-PDF-INTEL-2026-10-04`. Le contournement Windows a été 
 
 Points d’entrée : `src/main.rs`, `platform/windows_impl.rs`, `platform/linux_impl.rs`, `platform/windows_preview_worker/`. Voir les [sessions d’aperçus](../architecture/previews.md).
 
+Le superviseur image arrête également la session dédiée aux pochettes audio,
+avec la même attente bornée de deux secondes par session. Le cache de pochette
+du worker ne contient que des données régénérables ; aucune sauvegarde n’est
+attendue avant son arrêt.
+
 ## Si le problème revient
 
 1. Lire la fin d’`oxyde.log` à côté de `config.json` (`%APPDATA%\oxyde` habituellement, `data` en portable) et relever le PID de session.

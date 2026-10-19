@@ -1,5 +1,5 @@
 //! One bounded LPAC session amortizes runtime staging (about 1.4 s per process)
-//! across nearby image requests. Tooltips and the Viewer use separate sessions:
+//! across nearby image requests. Tooltips, the Viewer and audio covers use separate sessions:
 //! a Viewer image needs a larger job, and neither waits for the other.
 //! A compromised decoder can retain earlier images until recycling; it gains no
 //! path access. Never reuse this session for Office, archives, PDF or video.
@@ -25,6 +25,9 @@ use windows::Win32::System::Threading::GetCurrentProcess;
 static STOPPING: AtomicBool = AtomicBool::new(false);
 static SERVICE: OnceLock<Result<Service, String>> = OnceLock::new();
 static VIEWER_SERVICE: OnceLock<Result<Service, String>> = OnceLock::new();
+static AUDIO_SERVICE: OnceLock<Result<Service, String>> = OnceLock::new();
+pub(super) const AUDIO_KIND: u8 = 3;
+pub(super) const AUDIO_THUMBNAIL_KIND: u8 = 4;
 /// Request kind of a full-resolution Viewer image.
 pub(super) const VIEWER_KIND: u8 = 2;
 
@@ -60,8 +63,15 @@ const VIEWER: Envelope = Envelope {
     max_age: Duration::from_secs(300),
 };
 
+const AUDIO: Envelope = Envelope {
+    memory: 256 * 1024 * 1024,
+    encoded_bytes: u64::MAX, // Lofty seeks over audio data; only embedded pictures are decoded.
+    max_reply: 512 * 512 * 4 + 16 * 1024,
+    ..PREVIEW
+};
+
 fn envelope(kind: u8) -> Envelope {
-    if kind == VIEWER_KIND { VIEWER } else { PREVIEW }
+    if kind == VIEWER_KIND { VIEWER } else if kind == AUDIO_KIND || kind == AUDIO_THUMBNAIL_KIND { AUDIO } else { PREVIEW }
 }
 
 struct Request {
@@ -83,7 +93,9 @@ struct Service {
 }
 
 fn service(kind: u8) -> io::Result<&'static Service> {
-    let (cell, name) = if kind == VIEWER_KIND {
+    let (cell, name) = if kind == AUDIO_KIND || kind == AUDIO_THUMBNAIL_KIND {
+        (&AUDIO_SERVICE, "audio-cover-session")
+    } else if kind == VIEWER_KIND {
         (&VIEWER_SERVICE, "image-viewer-session")
     } else {
         (&SERVICE, "image-preview-session")
@@ -227,7 +239,7 @@ fn serve_with(requests: mpsc::Receiver<Message>, executable: &Path, envelope: En
 
 pub(super) fn shutdown() {
     STOPPING.store(true, Ordering::Release);
-    for cell in [&SERVICE, &VIEWER_SERVICE] {
+    for cell in [&SERVICE, &VIEWER_SERVICE, &AUDIO_SERVICE] {
         if let Some(Ok(service)) = cell.get() {
             let _ = service.sender.try_send(Message::Stop);
             if let Ok(done) = service.done.lock() {
@@ -313,9 +325,18 @@ impl Session {
         bytes.try_reserve_exact(length).map_err(io::Error::other)?;
         bytes.resize(length, 0);
         self.read_exact(&mut bytes, started, deadline)?;
-        let limits = if kind == VIEWER_KIND { preview_protocol::VIEWER } else { preview_protocol::PREVIEW };
+        let limits = if kind == VIEWER_KIND { preview_protocol::VIEWER }
+            else if kind == AUDIO_KIND || kind == AUDIO_THUMBNAIL_KIND {
+                let side = if kind == AUDIO_THUMBNAIL_KIND { 128 } else { 512 };
+                preview_protocol::Limits { side, pixels: (side * side * 4) as usize }
+            } else { preview_protocol::PREVIEW };
         match preview_protocol::decode_with(&bytes, limits)? {
-            Reply::Images { .. } => {}
+            Reply::Images { frames, .. } => {
+                if (kind == AUDIO_KIND || kind == AUDIO_THUMBNAIL_KIND) && frames.len() != 1 {
+                    return Err(io::Error::other("Unexpected audio cover frame count"));
+                }
+            }
+            Reply::Text(text) if (kind == AUDIO_KIND || kind == AUDIO_THUMBNAIL_KIND) && text.is_empty() => {}
             // Return the typed error to the UI while ensuring the session is
             // recycled before another document is granted to it.
             Reply::Error { .. } => self.requests = SESSION_REQUESTS,
@@ -417,3 +438,7 @@ fn available(output: &std::fs::File) -> io::Result<usize> {
 #[cfg(test)]
 #[path = "image_session/tests/image_session.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "image_session/tests/audio.rs"]
+mod audio_tests;

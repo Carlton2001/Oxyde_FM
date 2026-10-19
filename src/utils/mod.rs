@@ -15,6 +15,7 @@ pub mod disk_image;
 pub mod path_security;
 pub mod preview;
 pub mod preview_protocol;
+pub mod audio_metadata;
 pub(crate) mod visibility;
 
 pub mod hardware {

@@ -15,6 +15,7 @@ const SIDE: u32 = oxyde_lib::utils::image_preview_decode::POLICY.output_side;
 const MAX_BYTES: usize = 24 * 1024;
 const GRID_SIDE: u32 = 128;
 const MARKER: &[u8; 8] = b"OXYDEpv2";
+mod audio_refs;
 static TEMP_ID: AtomicU64 = AtomicU64::new(0);
 
 fn generation_lock(key: Option<&Key>) -> Option<Arc<Mutex<()>>> {
@@ -36,6 +37,7 @@ struct Key {
     file: PathBuf,
     side: u32,
     max_bytes: usize,
+    shared_audio: bool,
 }
 struct Pixels {
     bgra: RgbaImage,
@@ -64,6 +66,7 @@ impl Key {
             file: root.join(format!("{}.jpg", key.to_hex())),
             side,
             max_bytes,
+            shared_audio: kind.starts_with("grid-audio-cover"),
         })
     }
     fn valid(&self) -> bool {
@@ -78,6 +81,9 @@ impl Key {
         file.take(self.max_bytes as u64 + 1)
             .read_to_end(&mut bytes)
             .ok()?;
+        if self.shared_audio {
+            bytes = audio_refs::resolve(&self.file, bytes, self.max_bytes)?;
+        }
         if bytes.len() > self.max_bytes || bytes.len() < 10 {
             return None;
         }
@@ -151,22 +157,24 @@ impl Key {
             if !self.valid() {
                 return Ok(());
             }
-            let temporary = destination.with_file_name(format!(
-                "{}.{}.{}.tmp",
-                destination.file_stem().unwrap().to_string_lossy(),
-                std::process::id(),
-                TEMP_ID.fetch_add(1, Ordering::Relaxed)
-            ));
-            oxyde_lib::platform::platform().write_preview_cache(
-                &destination,
-                &temporary,
-                &mut |file| file.write_all(&bytes),
-            )
+            if self.shared_audio {
+                audio_refs::publish(&self.file, &bytes, || self.valid())
+            } else {
+                publish_cache_bytes(&destination, &bytes)
+            }
         })();
         if let Err(error) = result {
             log::warn!("Cannot persist shared preview: {error}");
         }
     }
+}
+
+fn publish_cache_bytes(destination: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    let temporary = destination.with_file_name(format!("{}.{}.{}.tmp",
+        destination.file_stem().unwrap().to_string_lossy(), std::process::id(),
+        TEMP_ID.fetch_add(1, Ordering::Relaxed)));
+    oxyde_lib::platform::platform().write_preview_cache(destination, &temporary,
+        &mut |file| file.write_all(bytes))
 }
 
 fn first_frame(image: &RenderImage) -> Option<RgbaImage> {
@@ -179,8 +187,9 @@ fn first_frame(image: &RenderImage) -> Option<RgbaImage> {
 }
 
 /// All metadata checks and decoding in this function run on a preview worker.
-pub(crate) fn load_grid(path: &str, expected: Option<&Stamp>, renderer: &SvgRenderer) -> Result<Arc<RenderImage>, String> {
-    checked_grid_image(Path::new(path), expected, || load_grid_pixels(path, renderer))
+pub(crate) fn load_grid(path: &str, expected: Option<&Stamp>, audio: bool, renderer: &SvgRenderer) -> Result<Arc<RenderImage>, String> {
+    let image = checked_grid_image(Path::new(path), expected, || load_grid_pixels(path, audio, renderer))?;
+    Ok(if audio { crate::ui::audio_covers::share(image) } else { image })
 }
 
 fn checked_grid_image(path: &Path, expected: Option<&Stamp>, load: impl FnOnce() -> Result<RgbaImage, String>) -> Result<Arc<RenderImage>, String> {
@@ -211,18 +220,21 @@ fn checked_grid_image_with_metadata(
     Ok(Arc::new(RenderImage::new(vec![Frame::new(pixels)])))
 }
 
-fn load_grid_pixels(path: &str, renderer: &SvgRenderer) -> Result<RgbaImage, String> {
+fn load_grid_pixels(path: &str, audio: bool, renderer: &SvgRenderer) -> Result<RgbaImage, String> {
     let pdf = Path::new(path)
         .extension()
         .is_some_and(|extension| extension.eq_ignore_ascii_case("pdf"));
-    let key = Key::new(Path::new(path), if pdf { "grid-pdf" } else { "grid-image" });
+    let key = Key::new(Path::new(path), if audio { "grid-audio-cover-v2" } else if pdf { "grid-pdf" } else { "grid-image" });
     let lease = generation_lock(key.as_ref());
     let _guard = lease.as_ref().map(|lock| lock.lock().unwrap_or_else(std::sync::PoisonError::into_inner));
     let pixels = if let Some(cached) = key.as_ref().and_then(Key::read) {
         cached.bgra
     } else {
         // Reuse only a valid RAM preview; browsing never creates a disk preview.
-        let source = if let Some(image) = crate::ui::components::tooltip::cached_media_pixels(path, pdf) {
+        let source = if audio {
+            let cover = crate::ui::audio_covers::load_thumbnail(path)?;
+            first_frame(&cover).ok_or("Missing audio cover frame")?
+        } else if let Some(image) = crate::ui::components::tooltip::cached_media_pixels(path, pdf) {
             first_frame(&image).ok_or("Missing cached preview frame")?
         } else if pdf {
             oxyde_lib::platform::platform().pdf_thumbnail(path.into()).map_err(|error| error.to_string())?
@@ -247,3 +259,7 @@ mod tests;
 #[cfg(test)]
 #[path = "preview_disk/tests/grid_revision.rs"]
 mod grid_revision_tests;
+
+#[cfg(test)]
+#[path = "preview_disk/tests/audio.rs"]
+mod audio_tests;

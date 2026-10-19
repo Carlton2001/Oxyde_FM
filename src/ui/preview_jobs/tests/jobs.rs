@@ -6,6 +6,22 @@ use std::task::{Context, Poll};
 use std::time::Duration;
 
 #[test]
+fn preview_jobs_audio_metadata_and_hover_bypass_a_saturated_grid_queue() {
+    let runtime = runtime();
+    let occupied = still_queue().slots.clone().try_acquire_many_owned(MAX_STILL_JOBS as u32).unwrap();
+    let (metadata, hover) = {
+        let _entered = runtime.enter();
+        (load_audio_metadata(|| Ok::<_, String>(42)), load_audio_hover(|| Ok::<_, String>(7)))
+    };
+    let (metadata, hover) = runtime.block_on(async {
+        tokio::time::timeout(Duration::from_secs(2), futures::future::join(metadata, hover)).await.unwrap()
+    });
+    assert_eq!(metadata.unwrap(), 42);
+    assert_eq!(hover.unwrap(), 7);
+    drop(occupied);
+}
+
+#[test]
 fn preview_jobs_icons_bypass_saturated_previews_and_keep_their_own_limit() {
     let runtime = runtime();
     let occupied = still_queue()

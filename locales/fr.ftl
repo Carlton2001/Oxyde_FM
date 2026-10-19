@@ -696,3 +696,8 @@ viewer-loading = Chargement du fichier…
 viewer-autoplay = Lecture automatique
 viewer-enable-autoplay = Activer la lecture automatique des prochains médias
 viewer-disable-autoplay = Désactiver la lecture automatique des prochains médias
+
+audio-no-tags = Aucun tag disponible
+audio-album = Album
+audio-track = Piste
+audio-year = Année

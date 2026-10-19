@@ -6,6 +6,18 @@ mod lifecycle;
 pub(crate) use lifecycle::clear_grid_thumbnails;
 use lifecycle::Source;
 
+pub(super) fn is_audio(file: &oxyde_lib::models::FileEntry) -> bool {
+    file.native_kind == Some(oxyde_lib::models::file_entry::NativeFileKind::Audio)
+        || file.name.rsplit_once('.').is_some_and(|(_, extension)| {
+            crate::ui::components::icons::AUDIO_EXTENSIONS.contains(extension.to_ascii_lowercase().as_str())
+        })
+}
+
+pub(super) fn supports_thumbnail(file: &oxyde_lib::models::FileEntry) -> bool {
+    is_audio(file) || matches!(crate::ui::components::icons::get_preview_type(&file.name),
+        crate::ui::components::icons::PreviewType::Image | crate::ui::components::icons::PreviewType::Pdf)
+}
+
 struct GridThumbnailAsset;
 pub(crate) fn invalidate_thumbnail(path: &str, cx: &mut App) {
     crate::ui::components::tooltip::invalidate_media_preview(path);
@@ -22,7 +34,7 @@ impl Asset for GridThumbnailAsset {
     ) -> impl std::future::Future<Output = Self::Output> + Send + 'static {
         let renderer = cx.svg_renderer();
         let task = crate::ui::preview_jobs::load(move || {
-            crate::ui::preview_disk::load_grid(&source.path, source.stamp.as_ref(), &renderer)
+            crate::ui::preview_disk::load_grid(&source.path, source.stamp.as_ref(), source.audio, &renderer)
                 .map_err(|error| ImageCacheError::Asset(error.into()))
         });
         async move {
@@ -67,3 +79,7 @@ pub(super) fn render_grid_thumbnail(
         )
     })
 }
+
+#[cfg(test)]
+#[path = "thumbnails/tests/audio.rs"]
+mod audio_tests;

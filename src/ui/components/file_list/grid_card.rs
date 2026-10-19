@@ -255,7 +255,7 @@ pub(super) fn render_grid_card(params: GridCardParams<'_>, cx: &mut App) -> Stat
                         .when(loading_size, |icon| icon.opacity(0.3))
                         .child(if show_grid_thumbnails
                             && !is_dir
-                            && matches!(crate::ui::components::icons::get_preview_type(&path), crate::ui::components::icons::PreviewType::Image | crate::ui::components::icons::PreviewType::Pdf)
+                            && super::thumbnails::supports_thumbnail(file)
                         {
                             render_grid_thumbnail(file, &pid, icon, theme, use_system_icons).into_any_element()
                         } else {

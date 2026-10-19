@@ -252,6 +252,15 @@ impl PreviewTask {
 
                 let mut failure_message = None;
                 let preview = match preview_type {
+                    PreviewType::Audio => {
+                        match crate::ui::preview_jobs::load_audio_hover(move || crate::ui::audio_covers::load(&path)).await {
+                            Ok(image) => Some(PreviewData::Image(image)),
+                            Err(error) => {
+                                log::debug!("Audio tooltip cover unavailable: {error}");
+                                None
+                            }
+                        }
+                    }
                     PreviewType::Image | PreviewType::Office | PreviewType::Pdf => {
                         let rgba_img = match preview_type {
                             PreviewType::Image => {

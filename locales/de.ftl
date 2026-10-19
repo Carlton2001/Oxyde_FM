@@ -996,3 +996,8 @@ viewer-loading = Datei wird geladen…
 viewer-autoplay = Automatische Wiedergabe
 viewer-enable-autoplay = Automatische Wiedergabe für die nächsten Mediendateien aktivieren
 viewer-disable-autoplay = Automatische Wiedergabe für die nächsten Mediendateien deaktivieren
+
+audio-no-tags = Keine Tags verfügbar
+audio-album = Album
+audio-track = Titelnummer
+audio-year = Jahr

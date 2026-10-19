@@ -19,6 +19,7 @@ use gpui::*;
 use std::sync::Arc;
 
 pub(crate) fn invalidate_media_preview(path: &str) {
+    crate::ui::audio_covers::invalidate(path);
     pdf_cache::invalidate(path);
     image_cache::invalidate(std::path::Path::new(path));
 }

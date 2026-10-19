@@ -689,3 +689,8 @@ viewer-loading = Loading file…
 viewer-autoplay = Autoplay
 viewer-enable-autoplay = Enable autoplay for the next media files
 viewer-disable-autoplay = Disable autoplay for the next media files
+
+audio-no-tags = No tags available
+audio-album = Album
+audio-track = Track
+audio-year = Year
