@@ -37,11 +37,7 @@ pub fn get_type_filter_items(
                 "Junction" => i18n.text(Message::FileTypeJunction).to_string(),
                 _ => ext.clone(),
             },
-            icon: Some(if is_sel {
-                IconName::Check
-            } else {
-                IconName::Square
-            }),
+            icon: Some(IconName::Checkbox(is_sel)),
             badge: Some(crate::ui::format::format_number(exts[&ext], i18n.language())),
             stay_open: true,
             has_submenu: false,
@@ -93,11 +89,7 @@ pub fn get_date_filter_items(
 
         items.push(DropdownItem {
             label: i18n.text(cat.message()).to_string(),
-            icon: Some(if active {
-                IconName::Check
-            } else {
-                IconName::Square
-            }),
+            icon: Some(IconName::Checkbox(active)),
             badge: Some(crate::ui::format::format_number(present_categories[&cat], i18n.language())),
             stay_open: true,
             has_submenu: false,
@@ -160,11 +152,7 @@ pub fn get_size_filter_items(
 
         items.push(DropdownItem {
             label: i18n.text(cat.message()).to_string(),
-            icon: Some(if active {
-                IconName::Check
-            } else {
-                IconName::Square
-            }),
+            icon: Some(IconName::Checkbox(active)),
             badge: Some(crate::ui::format::format_number(present_categories[&cat], i18n.language())),
             stay_open: true,
             has_submenu: false,

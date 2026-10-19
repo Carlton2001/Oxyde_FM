@@ -176,16 +176,7 @@ pub(super) fn selection_checkbox(
             });
         })
         .child(
-            div()
-                .size(rems(1.0))
-                .rounded(rems(0.25))
-                .border(rems(0.0625))
-                .border_color(if selected { theme.accent } else { theme.border })
-                .bg(if selected { theme.accent } else { theme.surface })
-                .flex()
-                .items_center()
-                .justify_center()
-                .when(selected, |d| d.child(svg().path("icons/check.svg").size(rems(0.75)).text_color(theme.text_on_accent))),
+            crate::ui::elements::checkbox::checkbox(theme, selected, false),
         )
 }
 

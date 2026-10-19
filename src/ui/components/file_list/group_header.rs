@@ -102,7 +102,6 @@ fn selection_checkbox(
     let id = SharedString::from(format!("group-selection-{pane_id}-{group:?}"));
     let group = group.clone();
     let pane_id = pane_id.to_string();
-    let marked = selection != GroupSelection::None;
     div()
         .id(id)
         .size(rems(1.5))
@@ -121,25 +120,6 @@ fn selection_checkbox(
             });
         })
         .child(
-            div()
-                .size(rems(1.0))
-                .rounded(rems(0.25))
-                .border(rems(0.0625))
-                .border_color(if marked { theme.accent } else { theme.border })
-                .bg(if marked { theme.accent } else { theme.surface })
-                .flex()
-                .items_center()
-                .justify_center()
-                .when(selection == GroupSelection::All, |checkbox| {
-                    checkbox.child(
-                        svg()
-                            .path("icons/check.svg")
-                            .size(rems(0.75))
-                            .text_color(theme.text_on_accent),
-                    )
-                })
-                .when(selection == GroupSelection::Partial, |checkbox| {
-                    checkbox.child(div().w(rems(0.5)).h(rems(0.125)).bg(theme.text_on_accent))
-                }),
+            crate::ui::elements::checkbox::checkbox(theme, selection == GroupSelection::All, selection == GroupSelection::Partial),
         )
 }

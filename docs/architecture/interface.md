@@ -20,6 +20,18 @@ Garder les phrases entières dans Fluent, avec des paramètres numériques pour 
 
 ## Réutiliser les composants
 
+Les cases à cocher utilisent `elements::checkbox::checkbox` : carré de 1 rem,
+contour de 1/16 rem et rayon de 1/4 rem. Au repos, le contour neutre mélange
+la surface et le texte secondaire ; il reste moins présent que les libellés.
+L’état coché utilise un fond et un contour accent, avec une coche centrée.
+L’état partiel garde le contour accent, mais réduit le fond accent à 20 % sur
+la surface neutre, avec un tiret de couleur texte. Les vues conservent zones de clic, focus et actions.
+Les interrupteurs et les simples marques de choix gardent leur rôle distinct.
+Les interrupteurs utilisent `elements::toggle::toggle`, y compris dans les
+réglages de la corbeille : piste neutre légèrement teintée et contour fin à
+l’arrêt, bouton plus marqué ; piste accent et bouton `text_on_accent` en marche.
+Conserver le déplacement du bouton comme indication supplémentaire de l’état.
+
 | Besoin | Référence |
 | --- | --- |
 | Bouton | `elements/button/style.rs` : `button_style`, `ButtonVariant` |

@@ -170,6 +170,28 @@ pub(super) fn choice(
     choice_with_icon(id, label, selected, theme, None, on_select)
 }
 
+pub(super) fn submenu_choice(
+    id: &'static str,
+    label: SharedString,
+    selected: bool,
+    theme: OxydeTheme,
+    on_select: impl Fn(&mut App) + 'static,
+) -> impl IntoElement {
+    let select = Rc::new(on_select);
+    let key_select = select.clone();
+    let row = div().id(id)
+        .h(rems(1.75)).flex_none().px(rems(0.5))
+        .flex().items_center().gap(rems(0.5))
+        .rounded(rems(0.3125))
+        .hover(|s| s.bg(theme.menu_hover))
+        .child(div().size(rems(1.0)).flex_none().when(selected, |slot| {
+            slot.child(svg().path("icons/check.svg").size(rems(1.0)).text_color(theme.text))
+        }))
+        .child(div().whitespace_nowrap().child(label))
+        .on_mouse_down(MouseButton::Left, move |_, _, cx| select(cx));
+    crate::ui::components::popup::keyboard::item(row, Rc::new(move |_, cx| key_select(cx)), None, None)
+}
+
 pub(super) fn choice_with_icon(
     id: &'static str,
     label: SharedString,
@@ -213,23 +235,7 @@ pub(super) fn settings_row(
         .child(icon(icon_path, theme))
         .child(div().flex_1().flex_shrink_0().whitespace_nowrap().text_size(rems(0.8125)).child(label))
         .child(
-            div()
-                .w(rems(1.875))
-                .h(rems(1.125))
-                .rounded_full()
-                .bg(if value { theme.accent } else { theme.border })
-                .flex()
-                .items_center()
-                .flex_none()
-                .px(rems(0.125))
-                .when(value, |s| s.justify_end())
-                .child(
-                    div()
-                        .size(rems(0.875))
-                        .rounded_full()
-                        .bg(theme.surface)
-                        .flex_none(),
-                ),
+            crate::ui::elements::toggle::toggle(value, theme),
         )
         .on_mouse_down(MouseButton::Left, move |_, _, cx| {
             action(cx);

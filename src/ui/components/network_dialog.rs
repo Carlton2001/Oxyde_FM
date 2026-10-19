@@ -265,14 +265,7 @@ pub(crate) fn render_network_dialog(
                             });
                         })
                         .child(
-                            svg()
-                                .path(if selected {
-                                    "icons/check.svg"
-                                } else {
-                                    "icons/square.svg"
-                                })
-                                .size(rems(1.0))
-                                .text_color(theme.accent),
+                            crate::ui::elements::checkbox::checkbox(theme, selected, false),
                         )
                         .child(
                             svg()
@@ -445,19 +438,7 @@ pub(crate) fn render_network_dialog(
                     })
                 })
                 .child(
-                    div()
-                        .size(rems(1.0))
-                        .rounded_sm()
-                        .border(rems(0.0625))
-                        .border_color(theme.accent)
-                        .when(dialog.reconnect, |d| {
-                            d.bg(theme.accent).child(
-                                svg()
-                                    .path("icons/check.svg")
-                                    .size(rems(0.875))
-                                    .text_color(theme.text_on_accent),
-                            )
-                        }),
+                    crate::ui::elements::checkbox::checkbox(theme, dialog.reconnect, false),
                 )
                 .child(cx.i18n().text(Message::NetworkReconnect)),
         );

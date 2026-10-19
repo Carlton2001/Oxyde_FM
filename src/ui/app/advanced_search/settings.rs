@@ -329,7 +329,9 @@ impl AdvancedSearchWindow {
             .gap(rems(0.375))
             .track_focus(&self.advanced_search.as_ref().unwrap().controls[index])
             .focus(move |style| style.bg(theme.control_hover))
-            .child(
+            .child(if !regex {
+                crate::ui::elements::checkbox::checkbox(theme, checked, false)
+            } else {
                 div()
                     .size(rems(if regex { 1.75 } else { 1.0 }))
                     .flex()
@@ -359,8 +361,8 @@ impl AdvancedSearchWindow {
                                     theme.text
                                 }),
                         )
-                    }),
-            )
+                    })
+            })
             .when(!regex, |e| e.child(cx.i18n().text(message)))
             .native_tooltip(crate::ui::components::tooltip::Tooltip::text(
                 cx.i18n().text(message),

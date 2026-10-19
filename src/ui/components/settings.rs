@@ -5,7 +5,7 @@ mod compression;
 mod default_format;
 mod data_actions;
 
-use controls::{choice, choice_with_icon, section};
+use controls::{choice, choice_with_icon, section, submenu_choice};
 use compression::compression_table;
 
 pub(crate) use data_actions::render_settings_confirmation;
@@ -87,7 +87,7 @@ fn render_settings_surface(
     ]
     .map(|(id, label)| {
         let handle = handle.clone();
-        choice(
+        submenu_choice(
             id.as_str(),
             label.into(),
             view.language == id,
@@ -110,7 +110,7 @@ fn render_settings_surface(
     ]
     .map(|(format, label)| {
         let handle = handle.clone();
-        choice(
+        submenu_choice(
             format.as_str(),
             i18n.text(label),
             date_format(cx) == format,
@@ -158,6 +158,31 @@ fn render_settings_surface(
     ].into_iter().map(|message| label_width(message) + 4.5)
         .fold(17.5_f32, f32::max)
         .max(label_width(Message::SettingsSearchLimit) + 9.125);
+    let picker_content_width = view.settings_picker.map(|kind| {
+        let content_width = match kind {
+            SettingsPicker::Language => {
+                ["Français", "English", "Deutsch", "Español", "Italiano"]
+                    .into_iter().map(|label| {
+                        let line = window.text_system().shape_line(
+                            label.into(), crate::ui::scale::rem_pixels(rems(0.8125)),
+                            &[TextRun { len: label.len(), font: settings_font.clone(), color: theme.text,
+                                background_color: None, underline: None, strikethrough: None }], None,
+                        );
+                        line.width.as_f32() / window.rem_size().as_f32()
+                    }).fold(0.0_f32, f32::max) + 3.5
+            }
+            SettingsPicker::Date => [Message::DateFormatUs, Message::DateFormatEuropean, Message::DateFormatIso]
+                .into_iter().map(label_width).fold(0.0_f32, f32::max) + 3.5,
+            SettingsPicker::Compression => 22.0,
+            _ => 18.0,
+        };
+        let title_width = match kind {
+            SettingsPicker::Language => label_width(Message::SettingsLanguage) + 1.75,
+            SettingsPicker::Date => label_width(Message::SettingsDateFormat) + 1.75,
+            _ => 0.0,
+        };
+        content_width.max(title_width)
+    });
     let about_width = 16.5;
     let column_gap = 0.5;
     // Panel padding (2 × 0.375 rem) and borders (2 × 0.0625 rem).
@@ -264,11 +289,7 @@ fn render_settings_surface(
 
         };
         let submenu_width =
-            crate::ui::scale::rem_pixels(rems(if kind == SettingsPicker::Compression {
-                22.0
-            } else {
-                18.0
-            }))
+            crate::ui::scale::rem_pixels(rems(picker_content_width.unwrap_or(18.0)))
             .min(crate::ui::components::popup::available_size(window, cx).width - margin * 2.0);
         // Let the content determine the height. Anchoring moves the menu upwards
         // when needed; scrolling is only necessary if it exceeds the viewport.

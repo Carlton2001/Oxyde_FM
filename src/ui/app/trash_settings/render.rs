@@ -3,26 +3,7 @@ use crate::ui::components::modal::{action_button, Modal};
 use crate::ui::theme::ThemeContext;
 use crate::ui::elements::button::{button_style, ButtonVariant};
 
-fn toggle(value: bool, theme: crate::ui::theme::OxydeTheme) -> impl IntoElement {
-    div()
-        .w(rems(1.875))
-        .h(rems(1.125))
-        .rounded_full()
-        .bg(if value { theme.accent } else { theme.border })
-        .flex()
-        .items_center()
-        .flex_none()
-        .px(rems(0.125))
-        .when(value, |d| d.justify_end())
-        .child(
-            div()
-                .size(rems(0.875))
-                .rounded_full()
-                .bg(theme.surface)
-                .flex_none(),
-        )
-}
-
+use crate::ui::elements::toggle::toggle;
 
 pub(crate) fn render(
     view: &OxydeApp,

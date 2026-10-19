@@ -30,7 +30,7 @@ pub enum IconName {
     Eject,
     Unplug,
     Check,
-    Square,
+    Checkbox(bool),
     FolderOpen,
     NativeFolder(String),
     HardDrive,
@@ -429,6 +429,9 @@ impl<T: crate::ui::components::scrollbar::ScrollbarState + 'static> RenderOnce f
                                                                 rems(1.0), &theme, true, false,
                                                             )).when(item.is_dimmed, |d| d.opacity(0.5));
                                                         }
+                                                        if let IconName::Checkbox(checked) = icon {
+                                                            return d.child(crate::ui::elements::checkbox::checkbox(theme, *checked, false)).when(item.is_dimmed, |d| d.opacity(0.5));
+                                                        }
                                                         d.child(
                                                             svg()
                                                                 .path(match icon {
@@ -441,7 +444,7 @@ impl<T: crate::ui::components::scrollbar::ScrollbarState + 'static> RenderOnce f
                                                                     IconName::Check => {
                                                                         "icons/check.svg"
                                                                     }
-                                                                    IconName::Square => {
+                                                                    IconName::Checkbox(_) => {
                                                                         "icons/square.svg"
                                                                     }
                                                                     IconName::NativeFolder(_) => "icons/folder.svg",

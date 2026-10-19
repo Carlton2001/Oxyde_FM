@@ -222,24 +222,7 @@ impl DuplicateWindow {
                     .gap(rems(0.5))
                     .focus_visible(move |s| s.bg(theme.selected))
                     .child(
-                        div()
-                            .size(rems(1.0))
-                            .rounded(rems(0.25))
-                            .border(rems(0.0625))
-                            .border_color(if checked { theme.accent } else { theme.border })
-                            .bg(if checked {
-                                theme.accent
-                            } else {
-                                theme.active_background
-                            })
-                            .when(checked, |s| {
-                                s.child(
-                                    svg()
-                                        .path("icons/check.svg")
-                                        .size(rems(0.875))
-                                        .text_color(theme.text_on_accent),
-                                )
-                            }),
+                        crate::ui::elements::checkbox::checkbox(theme, checked, false),
                     )
                     .child(cx.i18n().text(message))
                     .on_click(cx.listener(move |this, _, _, cx| {

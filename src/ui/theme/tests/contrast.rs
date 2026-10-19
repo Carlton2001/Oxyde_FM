@@ -14,6 +14,17 @@ fn contrast(foreground: Hsla, background: Hsla) -> f32 {
 }
 
 #[test]
+fn checkbox_outline_and_marks_remain_visible_in_every_palette() {
+    for id in ThemeId::ALL {
+        let theme = OxydeTheme::for_id(id);
+        let outline = contrast(theme.checkbox_border, theme.surface);
+        assert!(outline >= 2.0, "{id:?} empty checkbox: {outline:.2}");
+        assert!(outline < contrast(theme.text_muted, theme.surface), "{id:?} quiet outline");
+        assert!(contrast(theme.text_on_accent, theme.accent) >= 4.5, "{id:?} checkbox mark");
+    }
+}
+
+#[test]
 fn filled_action_labels_remain_readable_in_every_palette() {
     for id in ThemeId::ALL {
         let theme = OxydeTheme::for_id(id);

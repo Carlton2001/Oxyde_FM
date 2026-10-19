@@ -11,6 +11,7 @@ pub struct OxydeTheme {
     pub surface: Hsla,           // Éléments de surface (Dropdowns, Modals)
     pub search_banner: Hsla,     // Barre des résultats, distincte de la navigation et des colonnes
     pub border: Hsla,            // Bordures subtiles
+    pub checkbox_border: Hsla,   // Contour neutre des cases vides
     pub text: Hsla,              // Texte principal
     pub text_muted: Hsla,        // Texte secondaire / Headers
     pub accent: Hsla,            // Couleur d'action propre au thème
@@ -420,6 +421,8 @@ impl OxydeTheme {
                 ..Self::dark()
             },
         };
+        // Keep empty controls between decorative borders and secondary text.
+        theme.checkbox_border = theme.surface.blend(theme.text_muted.opacity(0.65));
         theme.file_icons = crate::ui::components::icons::FileIconPalette::for_theme(id);
         // Oxyde Dark needs stronger feedback; keep other palettes unchanged.
         // Custom actions and shared buttons still use the same control token.
@@ -441,6 +444,7 @@ impl OxydeTheme {
             surface: rgb(0xfafafa).into(),
             search_banner: rgb(0xf3f0e9).into(),
             border: rgb(0xe6e1d6).into(),
+            checkbox_border: rgb(0x9997a8).into(),
             text: rgb(0x242433).into(),
             text_muted: rgb(0x6b6882).into(),
             accent: rgb(0x3d5af1).into(),
@@ -491,6 +495,7 @@ impl OxydeTheme {
             surface: rgb(0x151320).into(),
             search_banner: rgb(0x201c2c).into(),
             border: rgb(0x232031).into(),
+            checkbox_border: rgb(0x625e75).into(),
             text: rgb(0xe2e0ed).into(),
             text_muted: rgb(0x8b86a3).into(),
             accent: rgb(0xd4a54a).into(),
